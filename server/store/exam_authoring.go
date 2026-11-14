@@ -9,6 +9,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -285,6 +286,21 @@ type ExamDraftNativePolicyUpdate struct {
 	AuditAt          time.Time
 }
 
+// ExamDraftPluginSectionUpdate sets one plugin's section on the Draft, or
+// removes it when Section is nil. The application has already asked the
+// plugin to validate the section; the Store canonicalizes and fences it.
+type ExamDraftPluginSectionUpdate struct {
+	ExamID           model.ExamID
+	ActorUserID      model.UserID
+	ManagerOverride  bool
+	ExpectedRevision int64
+	PluginID         model.PluginID
+	Section          json.RawMessage
+	UpdatedAt        time.Time
+	AuditEventID     model.AuditEventID
+	AuditAt          time.Time
+}
+
 // ExamDraftBrowserPolicyUpdate replaces the complete canonical Browser Policy
 // value. Individual rules are never independently mutable Store entities.
 type ExamDraftBrowserPolicyUpdate struct {
@@ -314,6 +330,7 @@ type ExamAuthoringStore interface {
 	UpdateDraftFocusLoss(context.Context, *ExamDraftFocusLossUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftNativePolicy(context.Context, *ExamDraftNativePolicyUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftBrowserPolicy(context.Context, *ExamDraftBrowserPolicyUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
+	UpdateDraftPluginSection(context.Context, *ExamDraftPluginSectionUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	// List returns at most Limit summaries in descending (UpdatedAt, ExamID)
 	// order, strictly before the optional complete cursor pair. The adapter must
 	// apply exact-unit, archive-state, role-scope, current exact Academic Unit

@@ -28,6 +28,7 @@ import (
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform"
+	"github.com/sudosylabs/proctor/server/plugin"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
@@ -39,6 +40,7 @@ type setupOptions struct {
 	configuredMailer   bool
 	buildInfo          httpapi.BuildInfo
 	desktopBuilds      []model.DesktopBuildTuple
+	plugins            []plugin.Plugin
 }
 
 // Option customizes one concern in the test graph; everything else is
@@ -98,6 +100,14 @@ func WithBuildInfo(buildInfo httpapi.BuildInfo) Option {
 func WithDesktopBuildCatalog(builds ...model.DesktopBuildTuple) Option {
 	return func(options *setupOptions) {
 		options.desktopBuilds = append([]model.DesktopBuildTuple(nil), builds...)
+	}
+}
+
+// WithPlugins activates plugins after the built-in ones, as if they were
+// compiled in.
+func WithPlugins(plugins ...plugin.Plugin) Option {
+	return func(options *setupOptions) {
+		options.plugins = append(options.plugins, plugins...)
 	}
 }
 
@@ -217,6 +227,7 @@ func Setup(tb testing.TB, options ...Option) *Helper {
 		BuildInfo:           settings.buildInfo,
 		DesktopBuildCatalog: settings.desktopBuilds,
 		ServiceEnvironment:  settings.serviceEnvironment,
+		Plugins:             settings.plugins,
 	})
 	require.NoError(tb, err)
 	helper := &Helper{

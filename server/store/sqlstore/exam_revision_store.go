@@ -43,6 +43,9 @@ type examRevisionHeaderRow struct {
 	BrowserPolicyDocument           jsonValue      `db:"browser_policy_document"`
 	BrowserPolicyCanonical          []byte         `db:"browser_policy_canonical"`
 	BrowserPolicyDigest             string         `db:"browser_policy_digest"`
+	PluginSectionsDocument          jsonValue      `db:"plugin_sections_document"`
+	PluginSectionsCanonical         []byte         `db:"plugin_sections_canonical"`
+	PluginSectionsDigest            string         `db:"plugin_sections_digest"`
 	CandidateCorrectionSummary      sql.NullString `db:"candidate_correction_summary"`
 	CandidateCorrectionAreas        pq.StringArray `db:"candidate_correction_changed_areas"`
 	CandidateCorrectionCapabilities pq.StringArray `db:"candidate_correction_affected_capabilities"`
@@ -102,7 +105,8 @@ func (examRevisionPublicationOutcomeRow) outcomeDocument() {}
 const examRevisionHeaderSelect = `SELECT id, exam_id, number, snapshot_schema_version,
 		source_draft_revision, title, instructions_markdown, policy_schema_version, policy_document,
 		policy_canonical, policy_digest, browser_policy_document, browser_policy_canonical,
-		browser_policy_digest, candidate_correction_summary, candidate_correction_changed_areas,
+		browser_policy_digest, plugin_sections_document, plugin_sections_canonical,
+		plugin_sections_digest, candidate_correction_summary, candidate_correction_changed_areas,
 		candidate_correction_affected_capabilities, candidate_correction_acknowledgement_required,
 		exam_resource_max_count, exam_resource_max_bytes, exam_workspace_max_entries,
 		exam_workspace_max_file_bytes, exam_workspace_max_total_bytes, starter_workspace_digest,
@@ -204,6 +208,7 @@ type examRevisionDraftRow struct {
 	InstructionsMarkdown string         `db:"instructions_markdown"`
 	Policy               jsonValue      `db:"policy"`
 	BrowserPolicy        jsonValue      `db:"browser_policy"`
+	PluginSections       jsonValue      `db:"plugin_sections"`
 	BaseRevisionID       sql.NullString `db:"base_revision_id"`
 	DraftRevision        int64          `db:"draft_revision"`
 }
@@ -226,6 +231,11 @@ func publishExamRevision(
 	browserPolicy, err := model.ParseBrowserPolicyDocument([]byte(draft.BrowserPolicy))
 	if err != nil {
 		return examRevisionPublicationOutcomeRow{}, invalidPersistedState("exam_draft", "browser_policy", err)
+	}
+
+	pluginSections, err := model.DecodeExamPluginSections([]byte(draft.PluginSections))
+	if err != nil {
+		return examRevisionPublicationOutcomeRow{}, invalidPersistedState("exam_draft", "plugin_sections", err)
 	}
 
 	capacity, err := currentExamCapacityPolicy(ctx, tx)
@@ -275,6 +285,7 @@ func publishExamRevision(
 		InstructionsMarkdown: draft.InstructionsMarkdown,
 		Policy:               policy,
 		BrowserPolicy:        browserPolicy,
+		PluginSections:       pluginSections,
 		Capacity:             capacity,
 		Resources:            resourceSnapshots,
 		StarterWorkspace:     workspaceSnapshots,
@@ -345,6 +356,7 @@ func lockExamRevisionDraft(ctx context.Context, tx *sqlxTxWrapper, input *store.
 		&draft,
 		`SELECT e.academic_unit_id, e.archived_at, e.revision AS exam_revision,
 			`+examManagerExistsSQL+` AS actor_is_manager, d.title, d.instructions_markdown, d.policy, d.browser_policy,
+			d.plugin_sections,
 			d.base_revision_id, d.revision AS draft_revision
 		FROM exams e
 		JOIN exam_drafts d ON d.exam_id = e.id
@@ -546,6 +558,11 @@ func insertExamRevision(ctx context.Context, tx *sqlxTxWrapper, revision *model.
 		return fmt.Errorf("encode Exam Revision Browser Policy: %w", err)
 	}
 
+	pluginSections, err := model.EncodeExamPluginSections(revision.PluginSections)
+	if err != nil {
+		return fmt.Errorf("encode Exam Revision plugin sections: %w", err)
+	}
+
 	var correctionSummary, correctionAreas, correctionCapabilities, correctionAcknowledgement any
 	if revision.CandidateCorrection != nil {
 		correctionSummary = revision.CandidateCorrection.Summary
@@ -565,6 +582,7 @@ func insertExamRevision(ctx context.Context, tx *sqlxTxWrapper, revision *model.
 			id, exam_id, number, snapshot_schema_version, source_draft_revision, title,
 			instructions_markdown, policy_schema_version, policy_document, policy_canonical,
 			policy_digest, browser_policy_document, browser_policy_canonical, browser_policy_digest,
+			plugin_sections_document, plugin_sections_canonical, plugin_sections_digest,
 			candidate_correction_summary, candidate_correction_changed_areas,
 			candidate_correction_affected_capabilities,
 			candidate_correction_acknowledgement_required, exam_resource_max_count,
@@ -574,8 +592,8 @@ func insertExamRevision(ctx context.Context, tx *sqlxTxWrapper, revision *model.
 			published_at, base_revision_id, publication_kind
 		)
 		VALUES (
-			?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-			?, ?, ?, ?, ?, ?, ?
+			?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?::jsonb, ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 		)`,
 		revision.ID.String(),
 		revision.ExamID.String(),
@@ -591,6 +609,9 @@ func insertExamRevision(ctx context.Context, tx *sqlxTxWrapper, revision *model.
 		string(browserPolicy),
 		browserPolicy,
 		revision.BrowserPolicyDigest,
+		string(pluginSections),
+		pluginSections,
+		revision.PluginSectionsDigest,
 		correctionSummary,
 		correctionAreas,
 		correctionCapabilities,
@@ -814,6 +835,11 @@ func getExamRevisionSnapshot(
 		return nil, err
 	}
 
+	pluginSections, err := header.pluginSections()
+	if err != nil {
+		return nil, err
+	}
+
 	revision, err := model.NewExamRevision(model.ExamRevisionSpecification{
 		ID:                   id,
 		ExamID:               examID,
@@ -823,6 +849,7 @@ func getExamRevisionSnapshot(
 		InstructionsMarkdown: header.InstructionsMarkdown,
 		Policy:               policy,
 		BrowserPolicy:        browserPolicy,
+		PluginSections:       pluginSections,
 		Capacity: model.ExamCapacityPolicy{
 			ResourceMaximumCount:       header.ResourceMaximumCount,
 			ResourceMaximumBytes:       header.ResourceMaximumBytes,
@@ -852,6 +879,7 @@ func getExamRevisionSnapshot(
 		header.PolicySchemaVersion != policy.SchemaVersion ||
 		header.PolicyDigest != revision.PolicyDigest ||
 		header.BrowserPolicyDigest != revision.BrowserPolicyDigest ||
+		header.PluginSectionsDigest != revision.PluginSectionsDigest ||
 		header.StarterWorkspaceDigest != revision.StarterWorkspaceDigest ||
 		header.ContentDigest != revision.ContentDigest ||
 		header.ResourceCount != len(resources) ||
@@ -1018,6 +1046,32 @@ func (row examRevisionHeaderRow) policies() (model.ExamRevisionPolicy, model.Bro
 	return policy, browserPolicy, nil
 }
 
+// pluginSections decodes the header row's canonical plugin sections and
+// requires the stored document and digest to agree with them.
+func (row examRevisionHeaderRow) pluginSections() (model.ExamPluginSections, error) {
+	sections, err := model.DecodeExamPluginSections(row.PluginSectionsCanonical)
+	if err != nil {
+		return nil, invalidPersistedState("exam_revision", "plugin_sections_canonical", err)
+	}
+	canonical, err := model.EncodeExamPluginSections(sections)
+	if err != nil || !bytes.Equal(canonical, row.PluginSectionsCanonical) {
+		return nil, invalidPersistedState("exam_revision", "plugin_sections_canonical", errors.New("plugin sections are not canonical"))
+	}
+	document, err := model.DecodeExamPluginSections([]byte(row.PluginSectionsDocument))
+	if err != nil {
+		return nil, invalidPersistedState("exam_revision", "plugin_sections_document", err)
+	}
+	documentCanonical, err := model.EncodeExamPluginSections(document)
+	if err != nil || !bytes.Equal(documentCanonical, canonical) {
+		return nil, invalidPersistedState("exam_revision", "plugin_sections_document", errors.New("canonical plugin sections mismatch"))
+	}
+	digest, err := model.ExamPluginSectionsDigest(sections)
+	if err != nil || digest != row.PluginSectionsDigest {
+		return nil, invalidPersistedState("exam_revision", "plugin_sections_digest", errors.New("plugin sections digest mismatch"))
+	}
+	return sections, nil
+}
+
 // candidateCorrectionNotice decodes the header row's Candidate Correction Notice,
 // which is either wholly absent or wholly present.
 func (row examRevisionHeaderRow) candidateCorrectionNotice() (*model.CandidateCorrectionNotice, error) {
@@ -1099,6 +1153,11 @@ func (row examRevisionHeaderRow) summary() (*store.ExamRevisionSummary, error) {
 		return nil, invalidPersistedState("exam_revision", "summary", errors.New("invalid summary"))
 	}
 
+	pluginSections, err := row.pluginSections()
+	if err != nil {
+		return nil, err
+	}
+
 	return &store.ExamRevisionSummary{
 		ID:                     id,
 		ExamID:                 examID,
@@ -1108,6 +1167,8 @@ func (row examRevisionHeaderRow) summary() (*store.ExamRevisionSummary, error) {
 		PolicySchemaVersion:    row.PolicySchemaVersion,
 		PolicyDigest:           row.PolicyDigest,
 		BrowserPolicyDigest:    row.BrowserPolicyDigest,
+		PluginSections:         pluginSections,
+		PluginSectionsDigest:   row.PluginSectionsDigest,
 		StarterWorkspaceDigest: row.StarterWorkspaceDigest,
 		Capacity: model.ExamCapacityPolicy{
 			ResourceMaximumCount:       row.ResourceMaximumCount,
@@ -1125,6 +1186,38 @@ func (row examRevisionHeaderRow) summary() (*store.ExamRevisionSummary, error) {
 		BaseRevisionID:          baseID,
 		Kind:                    model.ExamRevisionPublicationKind(row.PublicationKind),
 	}, nil
+}
+
+// FindPluginSections reads a sealed Revision's frozen plugin sections,
+// verified against their canonical form and digest.
+func (s SQLExamRevisionStore) FindPluginSections(
+	ctx context.Context,
+	revisionID model.ExamRevisionID,
+) (model.ExamPluginSections, bool, error) {
+	if !revisionID.IsValid() {
+		return nil, false, store.NewErrInvalidInput("exam_revision", "id", nil)
+	}
+	var row examRevisionHeaderRow
+	err := s.GetMaster().Get(
+		ctx,
+		&row,
+		`SELECT plugin_sections_document, plugin_sections_canonical, plugin_sections_digest
+		FROM exam_revisions
+		WHERE id = ?
+			AND sealed`,
+		revisionID.String(),
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("find Exam Revision plugin sections: %w", err)
+	}
+	sections, err := row.pluginSections()
+	if err != nil {
+		return nil, false, err
+	}
+	return sections, true, nil
 }
 
 var _ store.ExamRevisionStore = (*SQLExamRevisionStore)(nil)

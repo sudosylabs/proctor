@@ -314,6 +314,11 @@ Unknown kinds, versions, fields, duplicates, invalid combinations, and
 oversized documents fail closed rather than being preserved as arbitrary
 authoritative JSON. Publication stores a canonical typed serialization and its
 SHA-256 digest; JSONB field ordering is never used as the digest contract.
+Plugin Sections are the one plugin-owned part: the core cannot type them, so
+it bounds each to a 64 KiB JSON object, stores the integer-only canonical
+form beside the JSONB document and its digest exactly like the policy, and
+re-canonicalizes and checks the digest on every read. Their plugin, not the
+Store, decides what a section may say.
 
 The User row is locked before any lock Invitation acceptance takes after it:
 the candidate-scoped advisory fences (Attempt admission, per-period Class

@@ -146,12 +146,14 @@ type layerOrderStore struct {
 	periods store.AcademicPeriodStore
 }
 
-func (s layerOrderStore) AcademicPeriod() store.AcademicPeriodStore   { return s.periods }
-func (layerOrderStore) ClusterDiscovery() store.ClusterDiscoveryStore { return nil }
-func (layerOrderStore) PluginSettings() store.PluginSettingsStore     { return nil }
-func (layerOrderStore) PluginRecord() store.PluginRecordStore         { return nil }
-func (layerOrderStore) PluginLease() store.PluginLeaseStore           { return nil }
-func (layerOrderStore) Close() error                                  { return nil }
+func (s layerOrderStore) AcademicPeriod() store.AcademicPeriodStore           { return s.periods }
+func (layerOrderStore) ClusterDiscovery() store.ClusterDiscoveryStore         { return nil }
+func (layerOrderStore) PluginSettings() store.PluginSettingsStore             { return nil }
+func (layerOrderStore) PluginRecord() store.PluginRecordStore                 { return nil }
+func (layerOrderStore) PluginLease() store.PluginLeaseStore                   { return nil }
+func (layerOrderStore) ExamRevision() store.ExamRevisionStore                 { return nil }
+func (layerOrderStore) ExamAttemptWorkspace() store.ExamAttemptWorkspaceStore { return nil }
+func (layerOrderStore) Close() error                                          { return nil }
 
 type layerOrderPeriods struct {
 	store.AcademicPeriodStore

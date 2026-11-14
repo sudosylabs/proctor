@@ -95,6 +95,7 @@ func runLayerConformance(
 		{"AcademicPeriod", storetest.TestAcademicPeriodStore},
 		{"ExamAuthoring", storetest.TestExamAuthoringStore},
 		{"ExamRevision", storetest.TestExamRevisionStore},
+		{"ExamPluginSection", storetest.TestExamPluginSectionStore},
 		{"ExamSitting", storetest.TestExamSittingStore},
 		{"ExamAttempt", func(t *testing.T, decorated store.Store) {
 			storetest.TestExamAttemptStore(t, decorated)
@@ -327,6 +328,18 @@ func TestExamAuthoringStore(t *testing.T) {
 
 func TestExamRevisionStore(t *testing.T) {
 	StoreTest(t, storetest.TestExamRevisionStore)
+}
+
+func TestExamPluginSectionStore(t *testing.T) {
+	StoreTest(t, storetest.TestExamPluginSectionStore)
+}
+
+func TestPluginSectionInUse(t *testing.T) {
+	PristineStoreTest(t, storetest.TestPluginSectionInUse)
+}
+
+func TestExamPluginSectionAdmission(t *testing.T) {
+	PristineStoreTest(t, storetest.TestExamPluginSectionAdmission)
 }
 
 func TestExamAttemptStore(t *testing.T) {
@@ -1117,8 +1130,8 @@ func assertExamRevisionSealCompleteness(t *testing.T, ctx context.Context, persi
 			tx, err := persistence.GetMaster().DB().BeginTxx(ctx, nil)
 			require.NoError(t, err)
 			revisionID := model.NewExamRevisionID()
-			_, err = tx.ExecContext(ctx, `INSERT INTO exam_revisions (id,exam_id,number,snapshot_schema_version,source_draft_revision,title,instructions_markdown,policy_schema_version,policy_document,policy_canonical,policy_digest,browser_policy_document,browser_policy_canonical,browser_policy_digest,starter_workspace_digest,content_digest,resource_count,starter_entry_count,starter_total_bytes,published_by_user_id,published_at,base_revision_id,publication_kind,sealed)
-				SELECT $1,exam_id,number+$2,snapshot_schema_version,source_draft_revision,title,instructions_markdown,policy_schema_version,policy_document,policy_canonical,policy_digest,browser_policy_document,browser_policy_canonical,browser_policy_digest,starter_workspace_digest,content_digest,$3,0,0,published_by_user_id,published_at,NULL,publication_kind,$4 FROM exam_revisions WHERE id=$5`, revisionID.String(), test.number, test.count, test.sealed, fixture.RevisionID.String())
+			_, err = tx.ExecContext(ctx, `INSERT INTO exam_revisions (id,exam_id,number,snapshot_schema_version,source_draft_revision,title,instructions_markdown,policy_schema_version,policy_document,policy_canonical,policy_digest,browser_policy_document,browser_policy_canonical,browser_policy_digest,plugin_sections_document,plugin_sections_canonical,plugin_sections_digest,starter_workspace_digest,content_digest,resource_count,starter_entry_count,starter_total_bytes,published_by_user_id,published_at,base_revision_id,publication_kind,sealed)
+				SELECT $1,exam_id,number+$2,snapshot_schema_version,source_draft_revision,title,instructions_markdown,policy_schema_version,policy_document,policy_canonical,policy_digest,browser_policy_document,browser_policy_canonical,browser_policy_digest,plugin_sections_document,plugin_sections_canonical,plugin_sections_digest,starter_workspace_digest,content_digest,$3,0,0,published_by_user_id,published_at,NULL,publication_kind,$4 FROM exam_revisions WHERE id=$5`, revisionID.String(), test.number, test.count, test.sealed, fixture.RevisionID.String())
 			if err != nil {
 				_ = tx.Rollback()
 				require.NoError(t, err)
@@ -1138,8 +1151,8 @@ func assertExamRevisionResourceOwnershipConstraint(t *testing.T, ctx context.Con
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback() }()
 	unsealedRevisionID := model.NewExamRevisionID()
-	_, err = tx.ExecContext(ctx, `INSERT INTO exam_revisions (id,exam_id,number,snapshot_schema_version,source_draft_revision,title,instructions_markdown,policy_schema_version,policy_document,policy_canonical,policy_digest,browser_policy_document,browser_policy_canonical,browser_policy_digest,starter_workspace_digest,content_digest,resource_count,starter_entry_count,starter_total_bytes,published_by_user_id,published_at,base_revision_id,publication_kind,sealed)
-		SELECT $1,exam_id,number+1000,snapshot_schema_version,source_draft_revision,title,instructions_markdown,policy_schema_version,policy_document,policy_canonical,policy_digest,browser_policy_document,browser_policy_canonical,browser_policy_digest,starter_workspace_digest,content_digest,resource_count,starter_entry_count,starter_total_bytes,published_by_user_id,published_at,NULL,publication_kind,FALSE FROM exam_revisions WHERE id=$2`, unsealedRevisionID.String(), fixture.RevisionID.String())
+	_, err = tx.ExecContext(ctx, `INSERT INTO exam_revisions (id,exam_id,number,snapshot_schema_version,source_draft_revision,title,instructions_markdown,policy_schema_version,policy_document,policy_canonical,policy_digest,browser_policy_document,browser_policy_canonical,browser_policy_digest,plugin_sections_document,plugin_sections_canonical,plugin_sections_digest,starter_workspace_digest,content_digest,resource_count,starter_entry_count,starter_total_bytes,published_by_user_id,published_at,base_revision_id,publication_kind,sealed)
+		SELECT $1,exam_id,number+1000,snapshot_schema_version,source_draft_revision,title,instructions_markdown,policy_schema_version,policy_document,policy_canonical,policy_digest,browser_policy_document,browser_policy_canonical,browser_policy_digest,plugin_sections_document,plugin_sections_canonical,plugin_sections_digest,starter_workspace_digest,content_digest,resource_count,starter_entry_count,starter_total_bytes,published_by_user_id,published_at,NULL,publication_kind,FALSE FROM exam_revisions WHERE id=$2`, unsealedRevisionID.String(), fixture.RevisionID.String())
 	require.NoError(t, err)
 	_, err = tx.ExecContext(ctx, `INSERT INTO exam_revision_resources (exam_revision_id,exam_id,resource_id,file_entry_id,file_revision_id,rendition_id,display_name,description_markdown,position,media_type,size_bytes,sha256) VALUES ($1,$2,$3,$4,$5,$6,'Mismatched','',0,'text/plain',1,$7)`,
 		unsealedRevisionID.String(), fixture.ExamID.String(), resourceID.String(), fixture.OldResourceEntryID.String(), fixture.OldResourceRevisionID.String(), fixture.OldResourceRenditionID.String(), strings.Repeat("a", 64))

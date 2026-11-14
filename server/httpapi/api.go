@@ -33,9 +33,10 @@ func New(application *app.App, settings Settings) (*route.API, error) {
 		return nil, fmt.Errorf("configure browser cookies: %w", err)
 	}
 
-	return newAPI(
+	return compileAPI(
 		settings,
 		application.Identity,
+		application.Attempts,
 		productionResources(application, settings.Health, settings.BuildInfo, settings.Plugins, cookies, settings.WebSocket)...,
 	)
 }
@@ -80,10 +81,16 @@ func requireApplication(application *app.App) error {
 	return nil
 }
 
-// newAPI validates the settings and hands the resources to the routing
-// kernel, which compiles them into the sealed route catalog. New passes the
+// compileAPI validates the settings and hands the resources to the routing
+// kernel, which compiles them into the sealed route catalog, then mounts the
+// plugin routes settings.PluginRoutes reports behind guards. New passes the
 // production inventory; handler tests pass resources built over their fakes.
-func newAPI(settings Settings, authenticator route.Authenticator, resources ...route.Resource) (*route.API, error) {
+func compileAPI(
+	settings Settings,
+	authenticator route.Authenticator,
+	guards PluginGuardApplication,
+	resources ...route.Resource,
+) (*route.API, error) {
 	if settings.Logger == nil {
 		return nil, errors.New("logger is required")
 	}
@@ -109,7 +116,21 @@ func newAPI(settings Settings, authenticator route.Authenticator, resources ...r
 		return nil, errors.New("websocket transport is required")
 	}
 
-	return route.New(route.Settings{
+	var plugins *pluginRouteMount
+	if settings.PluginRoutes != nil {
+		if settings.PluginSockets == nil {
+			return nil, errors.New("plugin socket transport is required with plugin routes")
+		}
+		if guards == nil {
+			return nil, errors.New("plugin route guards are required with plugin routes")
+		}
+		var err error
+		if plugins, err = newPluginRouteMount(settings.PluginRoutes, guards, settings.PluginSockets, settings.Logger); err != nil {
+			return nil, err
+		}
+	}
+
+	routeSettings := route.Settings{
 		Logger:                  settings.Logger,
 		Metrics:                 settings.Metrics,
 		Tracing:                 settings.Tracing,
@@ -120,5 +141,18 @@ func newAPI(settings Settings, authenticator route.Authenticator, resources ...r
 		WriteTimeout:            settings.WriteTimeout,
 		TrustedProxies:          settings.TrustedProxies,
 		RecentAuthenticationTTL: settings.RecentAuthenticationTTL,
-	}, authenticator, resources...)
+	}
+	if plugins != nil {
+		routeSettings.Live = plugins.live
+	}
+	api, err := route.New(routeSettings, authenticator, resources...)
+	if err != nil {
+		return nil, err
+	}
+	if plugins != nil {
+		if err := plugins.start(); err != nil {
+			return nil, fmt.Errorf("mount plugin routes: %w", err)
+		}
+	}
+	return api, nil
 }

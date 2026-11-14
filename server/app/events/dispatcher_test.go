@@ -56,6 +56,78 @@ func TestExamAttemptSubmittedDataDecodesAsThePluginDocument(t *testing.T) {
 	require.Equal(t, string(plugin.TopicExamAttemptSubmitted), string(model.DomainEventTopicExamAttemptSubmitted))
 }
 
+// TestEveryDomainEventTopicHasItsPluginTopic keeps the two closed
+// vocabularies equal, so no committed event can lack a plugin topic and no
+// plugin can subscribe to a topic nothing writes.
+func TestEveryDomainEventTopicHasItsPluginTopic(t *testing.T) {
+	topics := []model.DomainEventTopic{model.DomainEventTopicExamAttemptSubmitted,
+		model.DomainEventTopicExamAttemptParticipationStarted, model.DomainEventTopicExamAttemptParticipationEnded,
+		model.DomainEventTopicExamSittingPaused, model.DomainEventTopicExamSittingResumed, model.DomainEventTopicExamSittingClosing}
+	require.Len(t, pluginTopics, len(topics))
+	for _, topic := range topics {
+		require.True(t, topic.IsValid(), "domain event topic %q", topic)
+		published, ok := pluginTopics[topic]
+		require.True(t, ok, "domain event topic %q has no plugin topic", topic)
+		require.Equal(t, string(topic), string(published))
+		require.True(t, published.IsValid(), "plugin topic %q is not in the plugin vocabulary", published)
+	}
+}
+
+// TestTriggerWrittenDataDecodesAsThePluginDocument holds the documents the
+// schema triggers write (see the baseline migration) to the model's strict
+// decoding and the published plugin documents.
+func TestTriggerWrittenDataDecodesAsThePluginDocument(t *testing.T) {
+	attemptID, participationID := model.NewExamAttemptID(), model.NewAttemptParticipationID()
+	sittingID, examID := model.NewExamSittingID(), model.NewExamID()
+	started := `{"attempt_id":"` + attemptID.String() + `","participation_id":"` + participationID.String() +
+		`","generation":2,"sitting_id":"` + sittingID.String() + `","exam_id":"` + examID.String() + `"}`
+	ended := started[:len(started)-1] + `,"reason":"lease_expired"}`
+	sitting := `{"sitting_id":"` + sittingID.String() + `","exam_id":"` + examID.String() + `"}`
+	tests := []struct {
+		topic    model.DomainEventTopic
+		data     string
+		document any
+		want     any
+	}{
+		{model.DomainEventTopicExamAttemptParticipationStarted, started, &plugin.ExamAttemptParticipationStarted{},
+			&plugin.ExamAttemptParticipationStarted{AttemptID: attemptID.String(), ParticipationID: participationID.String(),
+				Generation: 2, SittingID: sittingID.String(), ExamID: examID.String()}},
+		{model.DomainEventTopicExamAttemptParticipationEnded, ended, &plugin.ExamAttemptParticipationEnded{},
+			&plugin.ExamAttemptParticipationEnded{AttemptID: attemptID.String(), ParticipationID: participationID.String(),
+				Generation: 2, SittingID: sittingID.String(), ExamID: examID.String(), Reason: plugin.ParticipationEndLeaseExpired}},
+		{model.DomainEventTopicExamSittingPaused, sitting, &plugin.ExamSittingChanged{},
+			&plugin.ExamSittingChanged{SittingID: sittingID.String(), ExamID: examID.String()}},
+		{model.DomainEventTopicExamSittingResumed, sitting, &plugin.ExamSittingChanged{},
+			&plugin.ExamSittingChanged{SittingID: sittingID.String(), ExamID: examID.String()}},
+		{model.DomainEventTopicExamSittingClosing, sitting, &plugin.ExamSittingChanged{},
+			&plugin.ExamSittingChanged{SittingID: sittingID.String(), ExamID: examID.String()}},
+	}
+	for _, test := range tests {
+		t.Run(string(test.topic), func(t *testing.T) {
+			event := &model.DomainEvent{ID: model.NewDomainEventID(), Topic: test.topic, OccurredAt: time.Now().UTC(),
+				Data: json.RawMessage(test.data)}
+			require.NoError(t, event.Validate())
+			offered, err := pluginEvent(event)
+			require.NoError(t, err)
+			decoder := json.NewDecoder(bytes.NewReader(offered.Data))
+			decoder.DisallowUnknownFields()
+			require.NoError(t, decoder.Decode(test.document))
+			require.Equal(t, test.want, test.document)
+		})
+	}
+}
+
+// TestParticipationEndReasonsMatchTheModel keeps the published reasons the
+// model's closed list.
+func TestParticipationEndReasonsMatchTheModel(t *testing.T) {
+	for _, reason := range []plugin.ParticipationEndReason{plugin.ParticipationEndInterrupted, plugin.ParticipationEndLeaseExpired,
+		plugin.ParticipationEndPolicySuspended, plugin.ParticipationEndKicked, plugin.ParticipationEndSubmitted,
+		plugin.ParticipationEndManagerEnded, plugin.ParticipationEndSittingClosed} {
+		require.True(t, model.AttemptParticipationEndReason(reason).IsValid(), "reason %q", reason)
+	}
+	require.False(t, model.AttemptParticipationEndReason("reallowed").IsValid())
+}
+
 func subscription(key string, handler plugin.EventHandler) Subscription {
 	return Subscription{Key: key, Topic: plugin.TopicExamAttemptSubmitted, Handler: handler}
 }

@@ -353,6 +353,15 @@ func (s *examRevisionStore) GetSnapshot(
 	})
 }
 
+func (s *examRevisionStore) FindPluginSections(
+	ctx context.Context,
+	revisionID model.ExamRevisionID,
+) (model.ExamPluginSections, bool, error) {
+	return retryCall2(ctx, s.layer, func() (model.ExamPluginSections, bool, error) {
+		return s.ExamRevisionStore.FindPluginSections(ctx, revisionID)
+	})
+}
+
 func (s *examSittingStore) Resolve(ctx context.Context, sittingID model.ExamSittingID) (*store.ExamSittingSnapshot, error) {
 	return retryCall1(ctx, s.layer, func() (*store.ExamSittingSnapshot, error) {
 		return s.ExamSittingStore.Resolve(ctx, sittingID)
@@ -589,6 +598,15 @@ func (s *examAttemptStore) GetCandidatePresentation(
 ) (*store.CandidateExamPresentation, error) {
 	return retryCall1(ctx, s.layer, func() (*store.CandidateExamPresentation, error) {
 		return s.ExamAttemptStore.GetCandidatePresentation(ctx, access)
+	})
+}
+
+func (s *examAttemptStore) ResolveCandidateAccess(
+	ctx context.Context,
+	access store.CandidateAttemptAccess,
+) (*store.CandidateAttemptAccessTarget, error) {
+	return retryCall1(ctx, s.layer, func() (*store.CandidateAttemptAccessTarget, error) {
+		return s.ExamAttemptStore.ResolveCandidateAccess(ctx, access)
 	})
 }
 

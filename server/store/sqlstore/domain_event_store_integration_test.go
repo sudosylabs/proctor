@@ -43,12 +43,61 @@ func TestExamSubmissionSealWritesOneDomainEvent(t *testing.T) {
 	resetTestStore(t, persistence)
 	storetest.TestExamSubmissionDomainEvents(t, persistence, func(t *testing.T, ctx context.Context) (int, int) {
 		t.Helper()
+		// A seal also ends the Participation, whose event the schema writes;
+		// only the seal's own exam.attempt.submitted row is counted here.
 		var events, jobs int
-		require.NoError(t, persistence.GetMaster().Get(ctx, &events, `SELECT count(*) FROM domain_events`))
-		require.NoError(t, persistence.GetMaster().Get(ctx, &jobs, `SELECT count(*) FROM jobs WHERE type=?`,
-			string(model.JobTypeDomainEventDispatch)))
+		require.NoError(t, persistence.GetMaster().Get(ctx, &events, `SELECT count(*) FROM domain_events WHERE topic=?`,
+			string(model.DomainEventTopicExamAttemptSubmitted)))
+		require.NoError(t, persistence.GetMaster().Get(ctx, &jobs, `SELECT count(*) FROM jobs j
+			JOIN domain_events e ON e.id = j.command->>'event_id'
+			WHERE j.type=? AND e.topic=?`,
+			string(model.JobTypeDomainEventDispatch), string(model.DomainEventTopicExamAttemptSubmitted)))
 		return events, jobs
 	})
+}
+
+func TestLifecycleTriggersWriteDomainEvents(t *testing.T) {
+	persistence := openTestStore(t)
+	resetTestStore(t, persistence)
+	storetest.TestLifecycleDomainEvents(t, persistence, func(t *testing.T, ctx context.Context, topic model.DomainEventTopic,
+		member, value string,
+	) []storetest.LifecycleDomainEvent {
+		t.Helper()
+		var rows []struct {
+			domainEventRow
+			JobID string `db:"job_id"`
+		}
+		require.NoError(t, persistence.GetMaster().Select(ctx, &rows, `SELECT e.id, e.topic, e.data, e.occurred_at, j.id AS job_id
+			FROM domain_events e
+			JOIN jobs j ON j.type = ? AND j.dedupe_key = e.id
+			WHERE e.topic = ? AND e.data->>? = ?
+			ORDER BY e.occurred_at, e.id`, string(model.JobTypeDomainEventDispatch), string(topic), member, value))
+		found := make([]storetest.LifecycleDomainEvent, 0, len(rows))
+		for _, row := range rows {
+			event, err := row.model()
+			require.NoError(t, err)
+			require.True(t, model.JobID(row.JobID).IsValid(), "dispatch Job id %q", row.JobID)
+			found = append(found, storetest.LifecycleDomainEvent{Event: event, JobID: model.JobID(row.JobID)})
+		}
+		return found
+	})
+}
+
+// TestNewOpaqueIDMatchesTheModel holds the schema's identifier minting to
+// model.NewID's form and randomness.
+func TestNewOpaqueIDMatchesTheModel(t *testing.T) {
+	persistence := openTestStore(t)
+	var ids []string
+	require.NoError(t, persistence.GetMaster().Select(context.Background(), &ids,
+		`SELECT new_opaque_id() FROM generate_series(1, 256)`))
+	seen := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		require.True(t, model.IsValidOpaqueID(id), "minted %q", id)
+		_, err := model.ParseDomainEventID(id)
+		require.NoError(t, err)
+		seen[id] = struct{}{}
+	}
+	require.Len(t, seen, len(ids), "minted identifiers repeat")
 }
 
 func TestDomainEventSchemaRejectsInvalidRows(t *testing.T) {

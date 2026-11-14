@@ -37,9 +37,28 @@ var allowedBaseKeys = map[string]struct{}{
 	"tags":              {},
 }
 
-// Compile discovers and merges a source tree, validates the resulting OpenAPI
-// contract, and returns its deterministic JSON representation.
-func Compile(source fs.FS) ([]byte, error) {
+// PluginExtension marks an operation a plugin serves. Its value is the
+// plugin's ID. The core mounts such an operation only while the plugin is
+// on, so a client treats it as optional.
+const PluginExtension = "x-proctor-plugin"
+
+// pluginPathPrefix is where every plugin operation lives; the plugin's ID
+// follows it.
+const pluginPathPrefix = "/api/v1/plugins/"
+
+// PluginSource is the OpenAPI fragments one compiled plugin ships in its
+// folder: every YAML file in Files, which may contain only paths under
+// /api/v1/plugins/<ID>/ and components.
+type PluginSource struct {
+	ID    string
+	Files fs.FS
+}
+
+// Compile discovers and merges a source tree and the fragments of the
+// compiled plugins, validates the resulting OpenAPI contract, and returns its
+// deterministic JSON representation. Every operation a plugin fragment
+// declares is marked with PluginExtension.
+func Compile(source fs.FS, plugins ...PluginSource) ([]byte, error) {
 	if source == nil {
 		return nil, errors.New("OpenAPI source filesystem is required")
 	}
@@ -74,6 +93,14 @@ func Compile(source fs.FS) ([]byte, error) {
 		}
 	}
 
+	sortedPlugins := append([]PluginSource(nil), plugins...)
+	sort.Slice(sortedPlugins, func(left, right int) bool { return sortedPlugins[left].ID < sortedPlugins[right].ID })
+	for _, pluginSource := range sortedPlugins {
+		if err := mergePluginFragments(document, pluginSource, owners); err != nil {
+			return nil, err
+		}
+	}
+
 	encoded, err := json.MarshalIndent(document, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("encode compiled OpenAPI document: %w", err)
@@ -105,6 +132,89 @@ func discoverFragments(source fs.FS) ([]string, error) {
 	}
 	sort.Strings(names)
 	return names, nil
+}
+
+// mergePluginFragments merges one plugin's fragments, holding every path to
+// the plugin's prefix and marking every operation as the plugin's.
+func mergePluginFragments(document map[string]any, source PluginSource, owners fragmentOwners) error {
+	if !validPluginID(source.ID) || source.Files == nil {
+		return fmt.Errorf("plugin OpenAPI source %q is invalid", source.ID)
+	}
+	var names []string
+	err := fs.WalkDir(source.Files, ".", func(name string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		extension := strings.ToLower(path.Ext(name))
+		if !entry.IsDir() && (extension == ".yaml" || extension == ".yml") {
+			names = append(names, name)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("discover plugin %q OpenAPI fragments: %w", source.ID, err)
+	}
+	sort.Strings(names)
+	prefix := pluginPathPrefix + source.ID + "/"
+	for _, name := range names {
+		fragment, decodeErr := decodeYAMLFile(source.Files, name)
+		if decodeErr != nil {
+			return fmt.Errorf("plugin %q: %w", source.ID, decodeErr)
+		}
+		label := "plugin " + source.ID + ": " + name
+		if rawPaths, exists := fragment["paths"]; exists {
+			fragmentPaths, ok := rawPaths.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%s: paths must be an object", label)
+			}
+			for route, rawItem := range fragmentPaths {
+				if !strings.HasPrefix(route, prefix) || len(route) == len(prefix) {
+					return fmt.Errorf("%s: path %q is not under %s", label, route, prefix)
+				}
+				item, ok := rawItem.(map[string]any)
+				if !ok {
+					return fmt.Errorf("%s: path %q must be an object", label, route)
+				}
+				for method, rawOperation := range item {
+					if !openAPIMethods[method] {
+						continue
+					}
+					operation, ok := rawOperation.(map[string]any)
+					if !ok {
+						return fmt.Errorf("%s: %s %s must be an object", label, method, route)
+					}
+					if marked, exists := operation[PluginExtension]; exists && marked != source.ID {
+						return fmt.Errorf("%s: %s %s names another plugin", label, method, route)
+					}
+					operation[PluginExtension] = source.ID
+				}
+			}
+		}
+		if mergeErr := mergeFragment(document, fragment, label, owners); mergeErr != nil {
+			return mergeErr
+		}
+	}
+	return nil
+}
+
+// openAPIMethods are the path-item members that hold an operation.
+var openAPIMethods = map[string]bool{
+	"get": true, "put": true, "post": true, "delete": true, "options": true, "head": true, "patch": true, "trace": true,
+}
+
+// validPluginID reports whether id is a plugin ID that can serve routes: a
+// single path segment of lowercase letters, digits and single hyphens,
+// starting with a letter.
+func validPluginID(id string) bool {
+	if id == "" || len(id) > 64 || id[0] < 'a' || id[0] > 'z' || strings.HasSuffix(id, "-") || strings.Contains(id, "--") {
+		return false
+	}
+	for _, r := range id {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 func decodeYAMLFile(source fs.FS, name string) (map[string]any, error) {
@@ -249,6 +359,12 @@ func validate(encoded []byte) error {
 			idempotency, ok := operation.Extensions["x-proctor-idempotency"].(string)
 			if !ok || idempotency != "none" && idempotency != "optional" && idempotency != "required" {
 				return fmt.Errorf("%s x-proctor-idempotency must be none, optional, or required", location)
+			}
+			if marked, exists := operation.Extensions[PluginExtension]; exists {
+				id, ok := marked.(string)
+				if !ok || !strings.HasPrefix(route, pluginPathPrefix+id+"/") {
+					return fmt.Errorf("%s %s must name the plugin its path is under", location, PluginExtension)
+				}
 			}
 		}
 	}

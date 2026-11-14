@@ -13,8 +13,8 @@
 //
 // A plugin implements Plugin. While the server starts, it activates each
 // enabled plugin, and the plugin registers what it offers on the Host it is
-// given: an IdentityProviderType, an ExportFormat, an EventHandler or a
-// Worker. It keeps its own state in Records and claims work under Leases.
+// given: an IdentityProviderType, an ExportFormat, an EventHandler, a
+// Worker or an ExamSection. It keeps its own state in Records and claims work under Leases.
 // The Host grows one typed method per capability, added when a plugin needs
 // it. There is no broad API that every plugin can reach, and no plugin
 // touches the database: records and leases are core tables the server
@@ -30,7 +30,9 @@
 //     serving.
 //   - Authority. The core keeps the decisions it owns. It resolves accounts
 //     and opens Sessions for an identity provider's Assertion, and it
-//     chooses, bounds and verifies every file an export format writes.
+//     chooses, bounds and verifies every file an export format writes. A
+//     Route runs only after a core Guard, and its handler sees what the
+//     guard verified, never a credential.
 //   - Commit order. Event handlers run after the change they describe has
 //     committed, never inside it, so they cannot block or alter it.
 //   - Minimal events. By default an Event carries identifiers, not answers,
@@ -38,7 +40,9 @@
 //     asks for it through a capability that authorizes and audits the
 //     request.
 //
-// These are defaults for the capabilities that exist today. A future
-// capability that lets a plugin act on Attempt content does so through the
-// same use cases as a person, authorized and audited in the plugin's name.
+// These are defaults for the capabilities that exist today. A capability
+// that lets a plugin act on Attempt content, such as AttemptWorkspaces, goes
+// through the same use cases as a person and is audited with the plugin
+// named as the system work that acted; the core grants it only to the
+// plugins it lists.
 package plugin

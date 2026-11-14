@@ -4,9 +4,9 @@
 
 The HTTP transport is two packages. `httpapi/route` is the routing kernel: endpoint declaration, catalog compilation, authentication/assurance wrappers, strict decoding, dispatch, Problem Details and the public error catalog; its package comment is the guide to adding an endpoint. `httpapi` holds the resources (one file per API area, with its request/response DTOs and handlers), the production constructor, and OpenAPI agreement. A resource uses only the exported names of `route`; the kernel imports no resource, and from the application only `app/apperror`, `app/invocation` and `app/paging`. It reads a DPoP nonce challenge and delivery recovery state through small interfaces on the error, and which codes advise `Retry-After` or may carry an extension member (`retry_after`, `extension`) from `error_catalog.yaml`. `httpapi` is a sibling of `app`, not an `app` child, because HTTP is an outer transport that consumes application capabilities; the directory layout now communicates the same dependency direction enforced by architecture tests.
 
-`httpapi.New` hands the production resources to `route.New`, which compiles and seals one immutable route catalog before exposing the HTTP handler. `resources.go` is the single production resource inventory; each cohesive resource module declares path templates, operations, authentication requirements, DTO mappings, and allowed public errors without receiving mutable router types. Every HTTP entry point, including the named WebSocket upgrade, uses this catalog. There is no post-construction registration surface or mutable resource-router tree. Every route has an explicit authentication classification.
+`httpapi.New` hands the production resources to `route.New`, which compiles and seals one immutable route catalog before exposing the HTTP handler. `resources.go` is the single production resource inventory; each cohesive resource module declares path templates, operations, authentication requirements, DTO mappings, and allowed public errors without receiving mutable router types. Every HTTP entry point, including the named WebSocket upgrade, uses this catalog. There is no post-construction registration surface or mutable resource-router tree; the one exception is the live plugin route set described under "Plugin routes". Every route has an explicit authentication classification.
 
-`httpapi.New(application, settings)` receives the `app.App` built by the sole composition root and a `Settings` value for everything else. It refuses a missing application service or setting before compiling any resource, except the Job and mail operator services, which are absent in a graph without a Job store and answer `job.unavailable` and `mail.unavailable` themselves. `resources.go` builds each resource from the application services that own its use cases, usually one. A resource constructor takes a consumer-owned interface listing the methods it calls; where no test needs a fake, it takes the concrete service instead. A resource retains only that service; `httpapi` does not import or reach through `store`, SQL, `platform.Service`, or concrete infrastructure. `resources.go` remains a pure ordered inventory: it contains no runtime capability assertions or fallbacks. Handler tests compile resources built over their fakes through the unexported `newAPI`, which `New` also calls and which passes them to `route.New`. This preserves transport ownership without turning the HTTP boundary into an application or infrastructure service locator.
+`httpapi.New(application, settings)` receives the `app.App` built by the sole composition root and a `Settings` value for everything else. It refuses a missing application service or setting before compiling any resource, except the Job and mail operator services, which are absent in a graph without a Job store and answer `job.unavailable` and `mail.unavailable` themselves. `resources.go` builds each resource from the application services that own its use cases, usually one. A resource constructor takes a consumer-owned interface listing the methods it calls; where no test needs a fake, it takes the concrete service instead. A resource retains only that service; `httpapi` does not import or reach through `store`, SQL, `platform.Service`, or concrete infrastructure. `resources.go` remains a pure ordered inventory: it contains no runtime capability assertions or fallbacks. Handler tests compile resources built over their fakes through the unexported `compileAPI`, which `New` also calls and which passes them to `route.New`. This preserves transport ownership without turning the HTTP boundary into an application or infrastructure service locator.
 
 Ordinary handlers return a typed status/body result and `error`. Central code validates the complete result before writing JSON, headers, cookies, or Problem Details. Redirects, bounded uploads, and binary downloads use named, protocol-specific result types recorded in the route manifest. The WebSocket handshake is the sole raw response exception because the sibling transport must take ownership of the upgraded connection; it remains a named, session-authenticated catalog operation with kernel-owned parameters, metadata, and declared pre-upgrade failures. After a successful upgrade, the sibling transport owns the connection lifecycle.
 
@@ -73,6 +73,51 @@ post-commit effects or expose whether execution occurred on this request.
 The exact route, authentication, DTO, error, and OpenAPI agreement rules live
 in the component-owned
 [HTTP API contract](../../../../server/httpapi/CONTRACT.md).
+
+### Plugin routes
+
+Plugin routes are the one part of the API that changes while it serves.
+`route.LiveRoutes` holds them under the `/plugins` prefix. `httpapi`
+replaces the whole set from the plugin host's routes after every plugin
+change. Each live route is an ordinary `route.Endpoint` compiled by the
+same path as the catalog, with its authentication, body limit, error policy
+and middleware. Three things differ:
+
+- each plugin's group has an availability check, so a failed plugin's routes
+  answer `route.not_found` at once;
+- a live route may be an `Upgrade` to its own protocol;
+- a live route may not overlap a catalog route's shape. The catalog still
+  owns `/plugins` and `/plugins/{plugin_id}/settings`.
+
+`httpapi/plugin_routes.go` holds the closed guard table: for each
+`plugin.Guard`, its path prefix, credential requirement, error codes, check
+and rate key. A route is mounted at `/plugins/<id><guard prefix>/<path>`.
+The handler runs after the rate limit (a node-local token bucket per plugin
+and guard subject; `plugin.route.rate_limited`) and the guard. Its answer is
+validated before anything is written. The transport mints
+`plugin.route.unavailable` and `plugin.route.conflict` itself; they are
+`transport` codes in the catalog.
+
+A socket route is upgraded by the WebSocket hub's `ServeBinary`, which applies
+the realtime origin rule and closes the socket when the hub stops. It is not a
+Hub connection: there are no subscriptions, events or replay, and no AsyncAPI
+message. The guard runs again on a timer, and a definitive refusal closes the
+socket with 4003.
+
+To add a guard:
+
+1. Add its access type and constant in `server/plugin`.
+2. Add its entry in `pluginGuards`.
+3. Extend `TestEveryGuardHasACoreEntry`.
+
+A plugin's OpenAPI fragments live in `server/plugin/<id>/openapi/`.
+`ptool openapi build` compiles them after the core fragments, requires every
+path to be under `/api/v1/plugins/<id>/`, and marks each operation
+`x-proctor-plugin: <id>`. `TestOpenAPIAgreesWithRuntime` holds plugin
+operations to their responses and security only.
+`TestPluginOpenAPIAgreesWithMountedRoutes` holds a mounted plugin's routes to
+its fragment through `requireOpenAPIAgreement`. When a compiled plugin ships
+routes, add its fragment and routes to that check.
 
 ## WebSocket
 

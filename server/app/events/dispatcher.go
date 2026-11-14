@@ -81,12 +81,20 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event *model.DomainEvent, del
 	return accepted, failures
 }
 
+// pluginTopics names the plugin topic of every domain event topic. The two
+// vocabularies are closed and equal; a test holds them so.
+var pluginTopics = map[model.DomainEventTopic]plugin.EventTopic{
+	model.DomainEventTopicExamAttemptSubmitted:            plugin.TopicExamAttemptSubmitted,
+	model.DomainEventTopicExamAttemptParticipationStarted: plugin.TopicExamAttemptParticipationStarted,
+	model.DomainEventTopicExamAttemptParticipationEnded:   plugin.TopicExamAttemptParticipationEnded,
+	model.DomainEventTopicExamSittingPaused:               plugin.TopicExamSittingPaused,
+	model.DomainEventTopicExamSittingResumed:              plugin.TopicExamSittingResumed,
+	model.DomainEventTopicExamSittingClosing:              plugin.TopicExamSittingClosing,
+}
+
 func pluginEvent(event *model.DomainEvent) (plugin.Event, error) {
-	var topic plugin.EventTopic
-	switch event.Topic {
-	case model.DomainEventTopicExamAttemptSubmitted:
-		topic = plugin.TopicExamAttemptSubmitted
-	default:
+	topic, ok := pluginTopics[event.Topic]
+	if !ok {
 		return plugin.Event{}, fmt.Errorf("domain event topic %q has no plugin topic", event.Topic)
 	}
 	return plugin.Event{ID: event.ID.String(), Topic: topic, OccurredAt: event.OccurredAt,

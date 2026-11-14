@@ -61,6 +61,13 @@ type Settings struct {
 	// WebSocket is the sibling transport constructed at composition root.
 	// HTTP owns only route mounting and session middleware around Accept.
 	WebSocket WebSocketTransport
+	// PluginRoutes reports the routes active plugins serve, which the API
+	// mounts under /api/v1/plugins/ and follows as plugins change. Nil
+	// mounts none.
+	PluginRoutes PluginRoutes
+	// PluginSockets upgrades a plugin socket route. It is required with
+	// PluginRoutes.
+	PluginSockets PluginSockets
 }
 
 // WebSocketTransport is the narrow mount surface HTTP needs from the sibling

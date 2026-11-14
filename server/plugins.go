@@ -33,12 +33,16 @@ func builtinPlugins() []plugin.Plugin {
 	}
 }
 
-// pluginRuntime is what the plugins' record store and workers' leases run
-// on. Its zero value gives plugins neither.
+// pluginRuntime is what the plugins' record store, workers' leases and
+// reads of frozen Exam sections run on. Its zero value gives plugins none.
 type pluginRuntime struct {
-	records pluginhost.RecordStore
-	leases  pluginhost.LeaseStore
-	nodeID  string
+	records      pluginhost.RecordStore
+	leases       pluginhost.LeaseStore
+	examSections pluginhost.ExamSectionStore
+	evidence     pluginhost.EvidenceStore
+	nodeID       string
+	// attemptWorkspaces reaches the Attempt service once it is built.
+	attemptWorkspaces *pluginAttemptWorkspaces
 }
 
 // pluginRuntime is the plugin runtime over the acquired store and cluster
@@ -48,10 +52,16 @@ func (i *ownedInfrastructure) pluginRuntime() pluginRuntime {
 	if i.resources.Persistence != nil {
 		runtime.records = newStorePluginRecords(i.resources.Persistence.PluginRecord())
 		runtime.leases = newStorePluginLeases(i.resources.Persistence.PluginLease())
+		runtime.examSections = newStoreExamSections(i.resources.Persistence.ExamRevision())
+		runtime.evidence = newStorePluginEvidence(i.resources.Persistence.ExamAttemptWorkspace())
 	}
 	if i.resources.Cluster != nil {
 		runtime.nodeID = i.resources.Cluster.NodeID()
 	}
+	if i.pluginWorkspaces == nil {
+		i.pluginWorkspaces = &pluginAttemptWorkspaces{}
+	}
+	runtime.attemptWorkspaces = i.pluginWorkspaces
 	return runtime
 }
 
@@ -83,13 +93,17 @@ func activatePlugins(
 		return nil, 0, fmt.Errorf("activate plugins: %w", err)
 	}
 	host, err := pluginhost.Activate(ctx, pluginhost.Dependencies{
-		Plugins:  plugins,
-		Settings: desiredPlugins(known, rows, cfg, logger),
-		Logger:   logger.Slog(),
-		Recorder: recorder,
-		Records:  runtime.records,
-		Leases:   runtime.leases,
-		NodeID:   runtime.nodeID,
+		Plugins:      plugins,
+		Settings:     desiredPlugins(known, rows, cfg, logger),
+		Logger:       logger.Slog(),
+		Recorder:     recorder,
+		Records:      runtime.records,
+		Leases:       runtime.leases,
+		NodeID:       runtime.nodeID,
+		ExamSections: runtime.examSections,
+		Evidence:     runtime.evidence,
+
+		AttemptWorkspaces: runtime.attemptWorkspaces,
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("activate plugins: %w", err)

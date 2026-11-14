@@ -24,12 +24,13 @@ type reviewFinalizationInventory struct {
 	discrepancies []model.IntegrityReviewInventoryDiscrepancy
 }
 
-// reviewFinalizationDelivery is the delivery and native-condition state that
-// a finalization digest and snapshot bind.
+// reviewFinalizationDelivery is the delivery, native-condition and sealed
+// capability evidence state that a finalization digest and snapshot bind.
 type reviewFinalizationDelivery struct {
-	settlement       model.BrowserSubmissionSettlement
-	deliveryRevision int64
-	nativeInventory  model.NativeConditionInventory
+	settlement          model.BrowserSubmissionSettlement
+	deliveryRevision    int64
+	nativeInventory     model.NativeConditionInventory
+	capabilityInventory model.CapabilityEvidenceInventory
 }
 
 func finalizeReview(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamIntegrityReviewFinalize) (examIntegrityReviewOutcome, error) {
@@ -280,6 +281,16 @@ func reviewFinalizationDigest(
 		return "", delivery, err
 	}
 
+	delivery.capabilityInventory, err = sealedCapabilityEvidenceInventory(ctx, tx, attemptID)
+	if err != nil {
+		return "", delivery, err
+	}
+
+	digest, err = model.IntegrityReviewCapabilityDigest(digest, delivery.capabilityInventory)
+	if err != nil {
+		return "", delivery, err
+	}
+
 	return digest, delivery, nil
 }
 
@@ -400,6 +411,7 @@ func insertReviewFinalizationSnapshot(
 
 	snapshot, err := canonicalPreflightValue(map[string]any{
 		"native_conditions":           delivery.nativeInventory,
+		"capability_evidence":         delivery.capabilityInventory,
 		"review":                      review,
 		"decisions":                   decisionRows,
 		"browser_activity":            delivery.settlement,

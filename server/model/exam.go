@@ -9,6 +9,7 @@ package model
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -142,9 +143,12 @@ type ExamDraft struct {
 	InstructionsMarkdown string
 	Policy               ExamPolicySet
 	BrowserPolicy        BrowserPolicy
-	BaseRevisionID       ExamRevisionID
-	UpdatedAt            time.Time
-	Revision             int64
+	// PluginSections are the sections an author set for plugins that offer
+	// one, frozen into each Revision published from the Draft.
+	PluginSections ExamPluginSections
+	BaseRevisionID ExamRevisionID
+	UpdatedAt      time.Time
+	Revision       int64
 }
 
 func NewExamDraft(examID ExamID, title, instructionsMarkdown string, policy ExamPolicySet, at time.Time) (*ExamDraft, error) {
@@ -154,6 +158,7 @@ func NewExamDraft(examID ExamID, title, instructionsMarkdown string, policy Exam
 		InstructionsMarkdown: instructionsMarkdown,
 		Policy:               policy.Clone(),
 		BrowserPolicy:        DisabledBrowserPolicy(),
+		PluginSections:       ExamPluginSections{},
 		UpdatedAt:            TimeUTC(at),
 		Revision:             1,
 	}
@@ -201,8 +206,54 @@ func (d *ExamDraft) Validate() error {
 	if err := browserPolicy.Validate(); err != nil {
 		return invalidModelError(where, "exam_draft", "", fmt.Sprintf("%s: browser policy", where), "").wrap(err)
 	}
+	if err := d.PluginSections.Validate(); err != nil {
+		return invalidModelError(where, "exam_draft", "", fmt.Sprintf("%s: plugin sections", where), "").wrap(err)
+	}
 
 	return nil
+}
+
+// ApplyPluginSection sets the section of plugin id, or removes it when
+// section is nil. The section is canonicalized first, so a different
+// spelling of the current section is a validated no-op that leaves revision
+// and time untouched. Whether the plugin accepts the section is the
+// application's question, not the model's.
+func (d *ExamDraft) ApplyPluginSection(id PluginID, section json.RawMessage, at time.Time) (bool, error) {
+	const where = "ExamDraft.ApplyPluginSection"
+	if d == nil {
+		return false, invalidModelError(where, "exam_draft", "value", "is required", "")
+	}
+	if !id.IsValid() {
+		return false, invalidModelError(where, "exam_draft", "plugin_id", "must be a valid plugin ID", "")
+	}
+	current, present := d.PluginSections[id]
+	candidate := *d
+	candidate.PluginSections = d.PluginSections.Clone()
+	if section == nil {
+		if !present {
+			return false, nil
+		}
+		delete(candidate.PluginSections, id)
+	} else {
+		canonical, err := CanonicalizeExamPluginSection(section)
+		if err != nil {
+			return false, err
+		}
+		if present && bytes.Equal(current, canonical) {
+			return false, nil
+		}
+		candidate.PluginSections[id] = canonical
+	}
+	candidate.Revision++
+	candidate.UpdatedAt = TimeUTC(at)
+	if candidate.UpdatedAt.Before(d.UpdatedAt) {
+		candidate.UpdatedAt = d.UpdatedAt
+	}
+	if err := candidate.Validate(); err != nil {
+		return false, err
+	}
+	*d = candidate
+	return true, nil
 }
 
 // ApplyBrowserPolicy replaces the complete authored browser enforcement value.

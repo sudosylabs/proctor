@@ -40,6 +40,7 @@ type examAuthoringRow struct {
 	InstructionsMarkdown string         `db:"instructions_markdown"`
 	Policy               jsonValue      `db:"policy"`
 	BrowserPolicy        jsonValue      `db:"browser_policy"`
+	PluginSections       jsonValue      `db:"plugin_sections"`
 	BaseRevisionID       sql.NullString `db:"base_revision_id"`
 	DraftUpdatedAt       time.Time      `db:"draft_updated_at"`
 	DraftRevision        int64          `db:"draft_revision"`
@@ -67,6 +68,7 @@ type examAuthoringOutcome struct {
 	InstructionsMarkdown string             `json:"instructions_markdown"`
 	Policy               json.RawMessage    `json:"policy"`
 	BrowserPolicy        json.RawMessage    `json:"browser_policy,omitempty"`
+	PluginSections       json.RawMessage    `json:"plugin_sections"`
 	BaseRevisionID       string             `json:"base_revision_id,omitempty"`
 	DraftUpdatedAt       time.Time          `json:"draft_updated_at"`
 	DraftRevision        int64              `json:"draft_revision"`
@@ -108,6 +110,7 @@ func newExamAuthoringOutcome(snapshot *store.ExamAuthoringSnapshot) (examAuthori
 		InstructionsMarkdown:  row.InstructionsMarkdown,
 		Policy:                json.RawMessage(row.Policy),
 		BrowserPolicy:         json.RawMessage(row.BrowserPolicy),
+		PluginSections:        json.RawMessage(row.PluginSections),
 		BaseRevisionID:        outcomeString(row.BaseRevisionID),
 		DraftUpdatedAt:        row.DraftUpdatedAt,
 		DraftRevision:         row.DraftRevision,
@@ -135,6 +138,7 @@ func (o examAuthoringOutcome) model() (*store.ExamAuthoringSnapshot, error) {
 		InstructionsMarkdown:  o.InstructionsMarkdown,
 		Policy:                jsonValue(o.Policy),
 		BrowserPolicy:         jsonValue(o.BrowserPolicy),
+		PluginSections:        jsonValue(o.PluginSections),
 		BaseRevisionID:        outcomeNullString(o.BaseRevisionID),
 		DraftUpdatedAt:        o.DraftUpdatedAt,
 		DraftRevision:         o.DraftRevision,
@@ -412,7 +416,7 @@ const examAccessSelect = `SELECT e.id, e.academic_unit_id, e.creator_user_id, e.
 const examAuthoringSelect = `SELECT e.id, e.academic_unit_id, e.creator_user_id, e.owner_user_id,
 		e.default_revision_id, e.created_at, e.updated_at, e.archived_at,
 		e.revision AS exam_revision, d.title AS draft_title, d.instructions_markdown, d.policy,
-		d.base_revision_id, d.browser_policy, d.updated_at AS draft_updated_at,
+		d.base_revision_id, d.browser_policy, d.plugin_sections, d.updated_at AS draft_updated_at,
 		d.revision AS draft_revision,
 		(
 			SELECT COUNT(*)
@@ -834,12 +838,12 @@ func createExamAuthoring(
 	}
 
 	if _, err := tx.NamedExec(ctx, `INSERT INTO exam_drafts (
-			exam_id, title, instructions_markdown, policy, browser_policy, base_revision_id,
-				updated_at, revision
+			exam_id, title, instructions_markdown, policy, browser_policy, plugin_sections,
+				base_revision_id, updated_at, revision
 		)
 		VALUES (
-			:id, :draft_title, :instructions_markdown, :policy, :browser_policy, :base_revision_id,
-				:draft_updated_at, :draft_revision
+			:id, :draft_title, :instructions_markdown, :policy, :browser_policy, :plugin_sections,
+				:base_revision_id, :draft_updated_at, :draft_revision
 		)`, &row); err != nil {
 		return nil, fmt.Errorf("create exam draft: %w", translateError("exam_draft", input.Exam.ID.String(), err))
 	}
@@ -879,6 +883,11 @@ func newExamAuthoringRow(snapshot *store.ExamAuthoringSnapshot, actorIsManager b
 		return examAuthoringRow{}, err
 	}
 
+	pluginSections, err := model.EncodeExamPluginSections(snapshot.Draft.PluginSections)
+	if err != nil {
+		return examAuthoringRow{}, err
+	}
+
 	capacity := snapshot.Capacity
 	if err := capacity.Validate(); err != nil {
 		return examAuthoringRow{}, store.NewErrInvalidInput("exam", "capacity", nil).Wrap(err)
@@ -899,6 +908,7 @@ func newExamAuthoringRow(snapshot *store.ExamAuthoringSnapshot, actorIsManager b
 		Policy:               jsonValue(policy),
 		BaseRevisionID:       nullableString(snapshot.Draft.BaseRevisionID.String()),
 		BrowserPolicy:        jsonValue(browserPolicyBytes),
+		PluginSections:       jsonValue(pluginSections),
 		DraftUpdatedAt:       snapshot.Draft.UpdatedAt,
 		DraftRevision:        snapshot.Draft.Revision,
 		ManagerCount:         snapshot.ManagerCount,
@@ -942,12 +952,19 @@ func (r examAuthoringRow) model() (*store.ExamAuthoringSnapshot, error) {
 		return nil, invalidPersistedState("exam_draft", "browser_policy", err)
 	}
 
+	// PostgreSQL re-spells jsonb on read; decoding restores canonical form.
+	pluginSections, err := model.DecodeExamPluginSections([]byte(r.PluginSections))
+	if err != nil {
+		return nil, invalidPersistedState("exam_draft", "plugin_sections", err)
+	}
+
 	draft := &model.ExamDraft{
 		ExamID:               exam.ID,
 		Title:                r.DraftTitle,
 		InstructionsMarkdown: r.InstructionsMarkdown,
 		Policy:               policy,
 		BrowserPolicy:        browserPolicy,
+		PluginSections:       pluginSections,
 		BaseRevisionID:       baseRevisionID,
 		UpdatedAt:            r.DraftUpdatedAt,
 		Revision:             r.DraftRevision,

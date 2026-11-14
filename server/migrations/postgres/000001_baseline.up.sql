@@ -250,9 +250,54 @@ CREATE TABLE domain_events (
     data jsonb NOT NULL,
     occurred_at timestamptz NOT NULL,
     CONSTRAINT domain_events_id_canonical_check CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
-    CONSTRAINT domain_events_topic_check CHECK (topic IN ('exam.attempt.submitted')),
+    CONSTRAINT domain_events_topic_check CHECK (topic IN (
+        'exam.attempt.submitted', 'exam.attempt.participation.started', 'exam.attempt.participation.ended',
+        'exam.sitting.paused', 'exam.sitting.resumed', 'exam.sitting.closing'
+    )),
     CONSTRAINT domain_events_data_check CHECK (jsonb_typeof(data) = 'object' AND octet_length(data::text) <= 4096)
 );
+
+-- new_opaque_id mints an identifier in the form model.NewID does: a random
+-- version 4 UUID in unpadded z-base-32, 26 characters.
+CREATE FUNCTION new_opaque_id() RETURNS varchar
+LANGUAGE plpgsql VOLATILE AS $$
+DECLARE
+    raw bytea := uuid_send(gen_random_uuid());
+    alphabet constant text := 'ybndrfg8ejkmcpqxot1uwisza345h769';
+    encoded text := '';
+    buffer integer := 0;
+    bits integer := 0;
+BEGIN
+    FOR i IN 0..15 LOOP
+        buffer := (buffer << 8) | get_byte(raw, i);
+        bits := bits + 8;
+        WHILE bits >= 5 LOOP
+            encoded := encoded || substr(alphabet, ((buffer >> (bits - 5)) & 31) + 1, 1);
+            bits := bits - 5;
+        END LOOP;
+        buffer := buffer & ((1 << bits) - 1);
+    END LOOP;
+    RETURN encoded || substr(alphabet, ((buffer << (5 - bits)) & 31) + 1, 1);
+END;
+$$;
+
+-- enqueue_domain_event writes one outbox row and its queued dispatch Job,
+-- deduplicated by the event ID, in the calling transaction. The schema
+-- triggers that describe lifecycle changes call it; the Submission seals
+-- write their row and Job from the application instead. The Job's type,
+-- attempt budget and command document are model.NewDomainEventDispatchJob's.
+CREATE FUNCTION enqueue_domain_event(event_topic varchar, event_data jsonb, event_at timestamptz) RETURNS void
+LANGUAGE plpgsql AS $$
+DECLARE
+    event_id varchar(26) := new_opaque_id();
+BEGIN
+    INSERT INTO domain_events (id, topic, data, occurred_at) VALUES (event_id, event_topic, event_data, event_at);
+    INSERT INTO jobs (id, type, status, created_at, updated_at, available_at, command, dedupe_key, dedupe_policy,
+        maximum_attempts, revision)
+    VALUES (new_opaque_id(), 'domain_event.dispatch', 'queued', event_at, event_at, event_at,
+        jsonb_build_object('event_id', event_id), event_id, 'active', 8, 1);
+END;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Identity domain
@@ -967,6 +1012,9 @@ CREATE TABLE exam_drafts (
     instructions_markdown text NOT NULL DEFAULT '',
     policy jsonb NOT NULL,
     browser_policy jsonb NOT NULL DEFAULT '{"enabled":false}'::jsonb,
+    -- One member per plugin with a section, keyed by plugin ID; the model
+    -- bounds each section to 64 KiB and the count to 32.
+    plugin_sections jsonb NOT NULL DEFAULT '{}'::jsonb,
     base_revision_id varchar(26),
     updated_at timestamptz NOT NULL,
     revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
@@ -974,7 +1022,10 @@ CREATE TABLE exam_drafts (
     CONSTRAINT exam_drafts_instructions_markdown_check
         CHECK (octet_length(instructions_markdown) <= 65536),
     CONSTRAINT exam_drafts_policy_size_check CHECK (octet_length(policy::text) <= 65536),
-    CONSTRAINT exam_drafts_browser_policy_size_check CHECK (octet_length(browser_policy::text) <= 65536)
+    CONSTRAINT exam_drafts_browser_policy_size_check CHECK (octet_length(browser_policy::text) <= 65536),
+    CONSTRAINT exam_drafts_plugin_sections_check CHECK (
+        jsonb_typeof(plugin_sections) = 'object' AND octet_length(plugin_sections::text) <= 4194304
+    )
 );
 
 CREATE INDEX exam_drafts_title_search_idx
@@ -1163,6 +1214,11 @@ CREATE TABLE exam_revisions (
     browser_policy_document jsonb NOT NULL CHECK (octet_length(browser_policy_document::text) <= 65536),
     browser_policy_canonical bytea NOT NULL CHECK (octet_length(browser_policy_canonical) BETWEEN 1 AND 32768),
     browser_policy_digest varchar(71) NOT NULL CHECK (browser_policy_digest ~ '^sha256:[0-9a-f]{64}$'),
+    plugin_sections_document jsonb NOT NULL CHECK (
+        jsonb_typeof(plugin_sections_document) = 'object' AND octet_length(plugin_sections_document::text) <= 4194304
+    ),
+    plugin_sections_canonical bytea NOT NULL CHECK (octet_length(plugin_sections_canonical) BETWEEN 2 AND 4194304),
+    plugin_sections_digest char(64) NOT NULL CHECK (plugin_sections_digest ~ '^[0-9a-f]{64}$'),
     candidate_correction_summary text,
     candidate_correction_changed_areas text[],
     candidate_correction_affected_capabilities text[],
@@ -1415,6 +1471,30 @@ CREATE TABLE exam_sittings (
             reason_code IN ('manager_canceled', 'schedule_elapsed', 'academic_structure_invalid'))
     )
 );
+
+-- Pausing, resuming and entering Closing record their domain event in the
+-- transaction that changes the state, whichever path changes it.
+CREATE FUNCTION record_exam_sitting_state_event() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+    sitting_data jsonb := jsonb_build_object('sitting_id', NEW.id, 'exam_id', NEW.exam_id);
+BEGIN
+    IF NEW.state = OLD.state THEN
+        RETURN NEW;
+    END IF;
+    IF NEW.state = 'paused' THEN
+        PERFORM enqueue_domain_event('exam.sitting.paused', sitting_data, NEW.paused_at);
+    ELSIF OLD.state = 'paused' AND NEW.state = 'open' THEN
+        PERFORM enqueue_domain_event('exam.sitting.resumed', sitting_data, NEW.updated_at);
+    ELSIF NEW.state = 'closing' THEN
+        PERFORM enqueue_domain_event('exam.sitting.closing', sitting_data, NEW.closing_at);
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER exam_sittings_state_events
+    AFTER UPDATE OF state ON exam_sittings FOR EACH ROW
+    EXECUTE FUNCTION record_exam_sitting_state_event();
 
 CREATE INDEX exam_sittings_exam_schedule_idx
     ON exam_sittings (exam_id, scheduled_start_at DESC, id DESC);
@@ -2288,24 +2368,52 @@ CREATE TRIGGER exam_attempt_participations_guard
     BEFORE UPDATE ON exam_attempt_participations FOR EACH ROW
     EXECUTE FUNCTION guard_attempt_participation_mutation();
 
+-- attempt_participation_event_data is the identifier-only document of the
+-- Participation events: model's examAttemptParticipationData.
+CREATE FUNCTION attempt_participation_event_data(participation exam_attempt_participations) RETURNS jsonb
+LANGUAGE sql STABLE AS $$
+    SELECT jsonb_build_object('attempt_id', a.id, 'participation_id', participation.id,
+        'generation', participation.generation, 'sitting_id', a.exam_sitting_id, 'exam_id', a.exam_id)
+      FROM exam_attempts a
+     WHERE a.id = participation.exam_attempt_id
+$$;
+
+-- A Participation generation becomes active only by being inserted, at
+-- admission, including the admission that follows a re-allow.
+CREATE FUNCTION start_attempt_participation_generation() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM enqueue_domain_event('exam.attempt.participation.started', attempt_participation_event_data(NEW),
+        NEW.started_at);
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER exam_attempt_participations_started
+    AFTER INSERT ON exam_attempt_participations FOR EACH ROW
+    EXECUTE FUNCTION start_attempt_participation_generation();
+
 -- Every path that ends a Participation generation (lease expiry, Kick, policy
 -- suspension, Session revocation, Submission, manager end, automatic seal)
--- ends that generation's live environment binding in the same transaction.
--- A trigger makes this hold for paths added later too.
-CREATE FUNCTION end_environment_binding_with_participation() RETURNS trigger
+-- ends that generation's live environment binding and records the
+-- exam.attempt.participation.ended event in the same transaction. One
+-- trigger does both, so the two can never disagree about which transitions
+-- end a generation, and paths added later are covered too.
+CREATE FUNCTION end_attempt_participation_generation() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
     IF OLD.state = 'active' AND NEW.state = 'ended' THEN
         UPDATE exam_attempt_environment_bindings b
            SET ended_at = GREATEST(NEW.ended_at, b.created_at)
          WHERE b.participation_id = NEW.id AND b.ended_at IS NULL;
+        PERFORM enqueue_domain_event('exam.attempt.participation.ended',
+            attempt_participation_event_data(NEW) || jsonb_build_object('reason', NEW.end_reason), NEW.ended_at);
     END IF;
     RETURN NEW;
 END;
 $$;
-CREATE TRIGGER exam_attempt_participations_end_environment_binding
+CREATE TRIGGER exam_attempt_participations_ended
     AFTER UPDATE OF state ON exam_attempt_participations FOR EACH ROW
-    EXECUTE FUNCTION end_environment_binding_with_participation();
+    EXECUTE FUNCTION end_attempt_participation_generation();
 
 CREATE FUNCTION guard_attempt_environment_binding_mutation() RETURNS trigger
 LANGUAGE plpgsql AS $$
@@ -5576,6 +5684,119 @@ BEGIN
  RETURN NEW;
 END $$;
 CREATE TRIGGER native_condition_evidence_guard BEFORE UPDATE OR DELETE ON native_condition_evidence FOR EACH ROW EXECUTE FUNCTION guard_native_condition_evidence();
+
+-- Capability evidence is what a capability plugin appends for an Attempt
+-- through its live execution environment binding: bounded canonical records
+-- of kind "<plugin-id>.<kind>", never a Flag. A gap record marks missing
+-- coverage. The binding, kind and stream sequence identify a record, so a
+-- repeated append finds the stored one. Records are append-only, accepted
+-- only before the Attempt's Submission exists, and leave only with integrity
+-- retirement.
+CREATE TABLE capability_evidence (
+    id varchar(26) PRIMARY KEY,
+    exam_attempt_id varchar(26) NOT NULL REFERENCES exam_attempts(id),
+    participation_id varchar(26) NOT NULL,
+    generation bigint NOT NULL CHECK (generation > 0),
+    environment_binding_id varchar(26) NOT NULL REFERENCES exam_attempt_environment_bindings(id),
+    policy_kind varchar(97) NOT NULL CHECK (
+        policy_kind ~ '^[a-z][a-z0-9.-]{0,63}\.[a-z][a-z0-9_]{0,31}$' AND policy_kind NOT LIKE 'native.%'
+    ),
+    sequence bigint NOT NULL CHECK (sequence BETWEEN 1 AND 9007199254740991),
+    gap boolean NOT NULL,
+    canonical bytea NOT NULL CHECK (octet_length(canonical) BETWEEN 1 AND 67584),
+    recorded_at timestamptz NOT NULL,
+    UNIQUE (environment_binding_id, policy_kind, sequence),
+    CONSTRAINT capability_evidence_id_canonical_check CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    CONSTRAINT capability_evidence_participation_fkey
+        FOREIGN KEY (participation_id, exam_attempt_id, generation)
+        REFERENCES exam_attempt_participations(id, exam_attempt_id, generation)
+);
+CREATE INDEX capability_evidence_attempt_idx ON capability_evidence (exam_attempt_id, id);
+CREATE INDEX capability_evidence_participation_idx
+    ON capability_evidence (participation_id, exam_attempt_id, generation);
+
+-- The running inventory of an Attempt's capability evidence: counts, bytes,
+-- gaps, refused appends and a digest chained over the kept records. The
+-- Submission seal fixes it: inserting the Submission binds the inventory to
+-- it, creating an empty one when the Attempt has none, and from then on it
+-- never changes. It leaves only with integrity retirement.
+CREATE TABLE exam_attempt_capability_evidence_inventories (
+    exam_attempt_id varchar(26) PRIMARY KEY REFERENCES exam_attempts(id),
+    records bigint NOT NULL CHECK (records BETWEEN 0 AND 4096),
+    bytes bigint NOT NULL CHECK (bytes BETWEEN 0 AND 8388608),
+    gaps bigint NOT NULL CHECK (gaps BETWEEN 0 AND records),
+    overflow bigint NOT NULL CHECK (overflow BETWEEN 0 AND 9007199254740991),
+    digest varchar(71) NOT NULL CHECK (digest ~ '^sha256:[0-9a-f]{64}$'),
+    submission_id varchar(26) UNIQUE REFERENCES exam_submissions(id)
+);
+
+CREATE FUNCTION capability_evidence_retired(attempt_id varchar) RETURNS boolean
+LANGUAGE sql STABLE AS $$
+    SELECT EXISTS (
+        SELECT 1
+          FROM retention_retirements r
+          JOIN exam_submissions sub ON sub.id = r.submission_id
+         WHERE sub.exam_attempt_id = attempt_id AND r.category = 'integrity' AND r.state = 'retired'
+    )
+$$;
+
+CREATE FUNCTION guard_capability_evidence() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        IF EXISTS (SELECT 1 FROM exam_submissions WHERE exam_attempt_id = NEW.exam_attempt_id) THEN
+            RAISE EXCEPTION 'capability evidence is sealed with the Submission' USING ERRCODE = '55000';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF TG_OP = 'DELETE' AND capability_evidence_retired(OLD.exam_attempt_id) THEN
+        RETURN OLD;
+    END IF;
+    RAISE EXCEPTION 'capability evidence is immutable' USING ERRCODE = '55000';
+END;
+$$;
+CREATE TRIGGER capability_evidence_guard BEFORE INSERT OR UPDATE OR DELETE ON capability_evidence
+    FOR EACH ROW EXECUTE FUNCTION guard_capability_evidence();
+
+CREATE FUNCTION guard_capability_evidence_inventory() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        IF capability_evidence_retired(OLD.exam_attempt_id) THEN
+            RETURN OLD;
+        END IF;
+    ELSIF OLD.submission_id IS NULL AND
+          (NEW.submission_id IS NULL OR
+           ROW(NEW.records, NEW.bytes, NEW.gaps, NEW.overflow, NEW.digest) =
+           ROW(OLD.records, OLD.bytes, OLD.gaps, OLD.overflow, OLD.digest)) THEN
+        RETURN NEW;
+    END IF;
+    RAISE EXCEPTION 'sealed capability evidence inventory is immutable' USING ERRCODE = '55000';
+END;
+$$;
+CREATE TRIGGER exam_attempt_capability_evidence_inventories_guard
+    BEFORE UPDATE OR DELETE ON exam_attempt_capability_evidence_inventories
+    FOR EACH ROW EXECUTE FUNCTION guard_capability_evidence_inventory();
+
+-- Every seal path (voluntary, manager end, automatic) inserts the Submission;
+-- this binds the Attempt's capability evidence inventory to it in the same
+-- transaction. The empty digest is model.NewCapabilityEvidenceInventory's.
+CREATE FUNCTION seal_capability_evidence_inventory() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO exam_attempt_capability_evidence_inventories (
+        exam_attempt_id, records, bytes, gaps, overflow, digest, submission_id
+    ) VALUES (
+        NEW.exam_attempt_id, 0, 0, 0, 0,
+        'sha256:' || encode(sha256(convert_to('proctor.capability_evidence', 'UTF8')), 'hex'), NEW.id
+    )
+    ON CONFLICT (exam_attempt_id) DO UPDATE SET submission_id = EXCLUDED.submission_id;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER exam_submissions_seal_capability_evidence
+    AFTER INSERT ON exam_submissions
+    FOR EACH ROW EXECUTE FUNCTION seal_capability_evidence_inventory();
 
 -- Canonical domain identifiers remain constrained independently of foreign keys.
 ALTER TABLE exam_security_preflights

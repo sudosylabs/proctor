@@ -91,6 +91,10 @@ func (p *Publication) PublishExamRevision(
 		return store.ExamRevisionSummary{}, err
 	}
 
+	if err = p.validateDraftPluginSections(ctx, command, principal.UserID); err != nil {
+		return store.ExamRevisionSummary{}, err
+	}
+
 	auditID, err := p.auditor.Begin(ctx, access.Mutation{
 		Invocation: inv,
 		Action:     action,
@@ -200,6 +204,26 @@ func (p *Publication) ListExamRevisions(
 	}
 
 	return page, nil
+}
+
+// validateDraftPluginSections asks each plugin with a section on the Draft
+// to accept it once more before it is frozen. It checks only the Draft at
+// the expected revision: the Store publishes nothing else, and refuses a
+// stale or already published Draft on its own, so an exact replay still
+// returns its recorded Revision after the plugin is turned off.
+func (p *Publication) validateDraftPluginSections(
+	ctx context.Context,
+	command PublishRevisionCommand,
+	actorID model.UserID,
+) error {
+	snapshot, err := p.exams.Get(ctx, command.ExamID, actorID)
+	if err != nil {
+		return examStoreErrors.Translate(err)
+	}
+	if snapshot.Draft.Revision != command.ExpectedDraftRevision {
+		return nil
+	}
+	return validatePluginSections(ctx, p.pluginSections, snapshot.Draft.PluginSections)
 }
 
 func (p *Publication) authorizeView(ctx context.Context, inv invocation.Invocation, examID model.ExamID) error {

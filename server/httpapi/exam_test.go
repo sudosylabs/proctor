@@ -379,6 +379,9 @@ type examHTTPApplication struct {
 	configureFocusLoss     exam.ConfigureDraftFocusLossCommand
 	configureNativePolicy  exam.ConfigureDraftNativePolicyCommand
 	configureBrowserPolicy exam.ConfigureDraftBrowserPolicyCommand
+	replaceSection         exam.ReplaceDraftPluginSectionCommand
+	sectionView            exam.DraftPluginSectionView
+	sectionErr             error
 	list                   exam.ListQuery
 	catalog                exam.CatalogPage
 	archive                exam.ArchiveCommand

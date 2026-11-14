@@ -178,6 +178,15 @@ func replacePluginSettings(
 	if currentRevision != input.ExpectedRevision {
 		return pluginSettingsReplacementOutcome{}, &store.ErrPluginSettingsRevisionConflict{CurrentRevision: currentRevision}
 	}
+	if !input.Change.Enabled {
+		inUse, inUseErr := pluginSectionInUse(ctx, tx, input.PluginID)
+		if inUseErr != nil {
+			return pluginSettingsReplacementOutcome{}, inUseErr
+		}
+		if inUse {
+			return pluginSettingsReplacementOutcome{}, store.NewErrConflict("plugin_settings", "plugin_in_use", nil)
+		}
+	}
 
 	var outcome pluginSettingsReplacementOutcome
 	if !saved {
@@ -208,6 +217,23 @@ func replacePluginSettings(
 		return pluginSettingsReplacementOutcome{}, err
 	}
 	return outcome, nil
+}
+
+// pluginSectionInUse reports whether any Sitting that is not Closed or
+// Canceled delivers a Revision carrying a section of the plugin. It reads
+// core rows only; no plugin is asked.
+func pluginSectionInUse(ctx context.Context, tx *sqlxTxWrapper, id model.PluginID) (bool, error) {
+	var inUse bool
+	if err := tx.Get(ctx, &inUse, `SELECT EXISTS (
+			SELECT 1
+			FROM exam_sittings s
+			JOIN exam_revisions r ON r.id = s.exam_revision_id
+			WHERE s.state NOT IN ('closed', 'canceled')
+				AND (r.plugin_sections_document -> ?::text) IS NOT NULL
+		)`, id.String()); err != nil {
+		return false, fmt.Errorf("check plugin section use: %w", err)
+	}
+	return inUse, nil
 }
 
 // getPluginSettingsForUpdate locks and returns a plugin's saved settings.

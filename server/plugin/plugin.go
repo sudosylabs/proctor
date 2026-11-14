@@ -158,6 +158,28 @@ type Host interface {
 	// underscores, dots or hyphens, starting with a letter, and unique
 	// within the plugin. It fails after Activate has returned.
 	AddWorker(name string, run Worker) error
+	// AddExamSection offers the plugin's section of Exam policy. A plugin
+	// offers at most one. It fails after Activate has returned.
+	AddExamSection(ExamSection) error
+	// ExamSections reads the plugin's own sections frozen into Exam
+	// Revisions. Once the plugin is deactivated or failed, every call
+	// returns ErrUnavailable.
+	ExamSections() ExamSections
+	// AddRoute serves route under /api/v1/plugins/<plugin ID>/ behind its
+	// Guard while the plugin is active. It fails for an invalid route, a
+	// method and path the plugin already serves, a plugin ID that is not a
+	// single path segment (IsRoutableID), or after Activate has returned.
+	AddRoute(route Route) error
+	// AttemptWorkspaces is the execution environment's access to Attempt
+	// Workspaces. Only the plugins the core lists may use it; for any other
+	// plugin, and once the plugin is deactivated or failed, every call
+	// returns ErrUnavailable.
+	AttemptWorkspaces() AttemptWorkspaces
+	// Evidence appends the plugin's capability evidence for an Attempt
+	// through a live environment binding, under the plugin's own policy
+	// kinds. Once the plugin is deactivated or failed, every call returns
+	// ErrUnavailable.
+	Evidence() Evidence
 }
 
 // PresentDocument returns document, or nil when it is absent, empty or JSON

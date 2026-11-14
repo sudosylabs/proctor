@@ -220,3 +220,7 @@ func (f *reviewMailFake) PrepareResultRelease(_ context.Context,
 func (f *reviewStoreFake) ListNativeConditions(context.Context, store.NativeConditionListOptions) (*store.NativeConditionPage, error) {
 	return &store.NativeConditionPage{Items: []model.NativeConditionEvidence{}}, nil
 }
+
+func (f *reviewStoreFake) ListCapabilityEvidence(context.Context, store.CapabilityEvidenceListOptions) (*store.CapabilityEvidencePage, error) {
+	return &store.CapabilityEvidencePage{Items: []model.CapabilityEvidence{}}, nil
+}

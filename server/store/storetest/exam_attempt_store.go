@@ -206,6 +206,14 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	require.True(t, presentation.RuntimeCapabilities.FocusLossCollectionEnabled)
 	require.NotEmpty(t, connected.Configuration.Digest)
 	require.Equal(t, connected.Configuration.Digest, presentation.RuntimeCapabilities.AttemptConfiguration.Digest)
+	resolved, err := ss.ExamAttempt().ResolveCandidateAccess(ctx, access)
+	require.NoError(t, err)
+	require.True(t, resolved.ConsistentWith(access), "ResolveCandidateAccess returned a result inconsistent with its request")
+	require.Equal(t, store.CandidateAttemptAccessTarget{
+		AttemptID: input.AttemptID, SittingID: fixture.sitting.ID, ClassID: fixture.sitting.ClassID,
+		CandidateUserID: fixture.candidate.ID, ParticipationID: connected.Participation.ID,
+		Generation: connected.Participation.Generation,
+	}, *resolved)
 	pausedFocusInput := testExamAttemptFocusLoss(t, ctx, ss, fixture, connected, credentialHash, probes...)
 	page, err := ss.ExamAttemptWorkspace().List(ctx, store.CandidateWorkspaceListOptions{Access: access, ExpectedCursor: -1, Limit: 200})
 	require.NoError(t, err)
@@ -294,6 +302,8 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	wrongSession.SessionID = model.NewSessionID()
 	_, err = ss.ExamAttempt().GetCandidatePresentation(ctx, wrongSession)
 	require.True(t, store.IsNotFound(err), "candidate access from another Session error")
+	_, err = ss.ExamAttempt().ResolveCandidateAccess(ctx, wrongSession)
+	require.True(t, store.IsNotFound(err), "resolved candidate access from another Session error")
 
 	manager, err := ss.ExamAttempt().Get(ctx, fixture.examID, input.AttemptID)
 	require.NoError(t, err)
@@ -451,6 +461,8 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	require.Equal(t, model.AttemptConnectionCloseTransport, closedReplay.Connection.CloseReason)
 	_, err = ss.ExamAttempt().GetCandidatePresentation(ctx, access)
 	require.True(t, store.IsNotFound(err), "candidate access after close error")
+	_, err = ss.ExamAttempt().ResolveCandidateAccess(ctx, access)
+	require.True(t, store.IsNotFound(err), "resolved candidate access after close error")
 	if len(probes) != 0 && probes[0].SetParticipationLeaseExpired != nil {
 		probes[0].SetParticipationLeaseExpired(t, ctx, input.ParticipationID)
 		expiredReplay := *input
@@ -1204,6 +1216,7 @@ func newExamAttemptFixtureWithOptions(t *testing.T, ctx context.Context, ss stor
 		examCommand(manager.ID, "exam.starter_workspace.file.create", "attempt-file", "attempt-file"))
 	require.NoError(t, err)
 	draftRevision++
+	draftRevision = setFixturePluginSections(t, ctx, ss, created.Value.Exam.ID, manager.ID, draftRevision, now.Add(2*time.Millisecond))
 	publication := examRevisionPublication(t, ctx, ss, created.Value.Exam.ID, manager.ID, programme.AcademicUnitID, draftRevision, now.Add(3*time.Millisecond))
 	published, err := ss.ExamRevision().Publish(ctx, publication, examCommand(manager.ID, "exam.revision.publish", "attempt-revision", "attempt-revision"))
 	require.NoError(t, err)

@@ -1,0 +1,166 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/submissions/{submission_id}/capability-evidence:
+    parameters:
+      - $ref: '#/components/parameters/SubmissionID'
+    get:
+      operationId: listCapabilityEvidence
+      summary: Inspect the capability evidence sealed with a Submission
+      tags:
+        - Integrity review
+      description: >-
+        Requires the same current Submission integrity-view authorization as detailed evidence. Returns the records
+        capability plugins appended for the Attempt through its execution environment binding, such as the process
+        log, in identity order. They raise no Flag and carry no decision: a record with gap set says coverage was
+        missing. Each item names the binding, Participation and generation it was accepted under, the plugin's kind
+        and stream sequence, and its bounded detail object, which the server stores as given. The Submission seal
+        fixed the set, whose inventory the Review response carries. Pages contain at most 100 records. Integrity
+        retirement removes them. No-store; cursors are purpose-specific opaque keysets.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.integrity_review.invalid
+        - exam.integrity_review.unavailable
+        - exam.sitting.invalid
+        - exam.sitting.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+          description: Maximum number of capability evidence records to return.
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            description: Opaque capability evidence identity cursor.
+          description: Opaque continuation from the preceding capability evidence page.
+      responses:
+        '200':
+          $ref: '#/components/responses/CapabilityEvidenceListOK'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  schemas:
+    CapabilityEvidence:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - attempt_id
+        - participation_id
+        - generation
+        - environment_binding_id
+        - policy_kind
+        - sequence
+        - gap
+        - detail
+        - observed_at
+        - recorded_at
+      properties:
+        id:
+          type: string
+          minLength: 26
+          maxLength: 26
+        attempt_id:
+          type: string
+          minLength: 26
+          maxLength: 26
+        participation_id:
+          type: string
+          minLength: 26
+          maxLength: 26
+        generation:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9007199254740991
+        environment_binding_id:
+          type: string
+          minLength: 26
+          maxLength: 26
+        policy_kind:
+          type: string
+          maxLength: 97
+          pattern: ^[a-z][a-z0-9.-]{0,63}\.[a-z][a-z0-9_]{0,31}$
+          description: The plugin's "<plugin-id>.<kind>"; never a native kind. Treat an unknown kind as opaque.
+        sequence:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9007199254740991
+        gap:
+          type: boolean
+          description: True when the record says coverage was missing rather than what was observed.
+        detail:
+          type: object
+          additionalProperties: true
+          description: The plugin's own evidence object of at most 64 KiB, stored as given.
+        observed_at:
+          type: string
+          format: date-time
+          description: The plugin's observation time, never later than recorded_at.
+        recorded_at:
+          type: string
+          format: date-time
+    CapabilityEvidenceListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/CapabilityEvidence'
+        next_cursor:
+          type: string
+  responses:
+    CapabilityEvidenceListOK:
+      description: Bounded private capability evidence, never a Flag or a guilt finding.
+      headers:
+        Cache-Control:
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CapabilityEvidenceListResponse'
+          example:
+            items: []

@@ -97,6 +97,18 @@ type Dependencies struct {
 	// WorkerRestartDelay is the first wait before a failed worker starts
 	// again; zero means DefaultWorkerRestartDelay.
 	WorkerRestartDelay time.Duration
+	// AttemptWorkspaces runs the Attempt Workspace use cases for the
+	// plugins granted plugin.AttemptWorkspaces. Nil leaves every plugin
+	// without it: every call answers plugin.ErrUnavailable.
+	AttemptWorkspaces AttemptWorkspaceService
+	// ExamSections reads the plugin sections frozen into Exam Revisions;
+	// each plugin's Host.ExamSections is it, scoped to that plugin. Nil
+	// leaves plugins without it: every call answers plugin.ErrUnavailable.
+	ExamSections ExamSectionStore
+	// Evidence stores capability evidence for the plugins granted
+	// environment bindings. Nil leaves every plugin without it: every call
+	// answers plugin.ErrUnavailable.
+	Evidence EvidenceStore
 }
 
 // Status is what the server reports about one plugin.
@@ -124,6 +136,10 @@ type Host struct {
 	nodeID        string
 	leaseLifetime time.Duration
 	restartDelay  time.Duration
+
+	attemptWorkspaces AttemptWorkspaceService
+	examSections      ExamSectionStore
+	evidence          EvidenceStore
 
 	// lifecycle serializes Reconcile, StartWorkers and Close; closed stops
 	// Reconcile, and workersStarted makes every later activation start its
@@ -202,6 +218,10 @@ func Activate(ctx context.Context, deps Dependencies) (*Host, error) {
 		nodeID:        deps.NodeID,
 		leaseLifetime: leaseLifetime,
 		restartDelay:  restartDelay,
+
+		attemptWorkspaces: deps.AttemptWorkspaces,
+		examSections:      deps.ExamSections,
+		evidence:          deps.Evidence,
 	}
 	seen := make(map[string]struct{}, len(deps.Plugins))
 	for _, p := range deps.Plugins {

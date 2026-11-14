@@ -74,6 +74,10 @@ type Dependencies struct {
 	// Plugins describes and validates the compiled-in plugins for plugin
 	// administration; nil makes it unavailable.
 	Plugins administration.PluginCatalog
+	// PluginSections asks plugins about the Exam policy sections they offer
+	// while an author saves or publishes one; nil treats every plugin as
+	// offering none.
+	PluginSections exam.PluginSections
 	// EventSubscriptions reports the plugins' domain-event handlers at the
 	// moment it is called. The domain-event dispatch Job offers each
 	// committed event to them.

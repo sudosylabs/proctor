@@ -1301,6 +1301,12 @@ func (s *timedExamAuthoringStore) UpdateDraftBrowserPolicy(arg0 context.Context,
 	})
 }
 
+func (s *timedExamAuthoringStore) UpdateDraftPluginSection(arg0 context.Context, arg1 *store.ExamDraftPluginSectionUpdate, arg2 *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodUpdateDraftPluginSection), func(callCtx context.Context) (*store.ExamAuthoringCommandResult, error) {
+		return s.next.UpdateDraftPluginSection(callCtx, arg1, arg2)
+	})
+}
+
 func (s *timedExamAuthoringStore) List(arg0 context.Context, arg1 store.ExamListOptions) ([]store.ExamSummary, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodList), func(callCtx context.Context) ([]store.ExamSummary, error) {
 		return s.next.List(callCtx, arg1)
@@ -1376,6 +1382,12 @@ func (s *timedExamRevisionStore) List(arg0 context.Context, arg1 store.ExamRevis
 func (s *timedExamRevisionStore) GetSnapshot(arg0 context.Context, arg1 model.ExamID, arg2 model.ExamRevisionID) (*model.ExamRevision, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamRevision, methodGetSnapshot), func(callCtx context.Context) (*model.ExamRevision, error) {
 		return s.next.GetSnapshot(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedExamRevisionStore) FindPluginSections(ctx context.Context, revisionID model.ExamRevisionID) (model.ExamPluginSections, bool, error) {
+	return timeStoreCall2(ctx, s.layer, storeOperation(aggregateExamRevision, methodFindPluginSections), func(callCtx context.Context) (model.ExamPluginSections, bool, error) {
+		return s.next.FindPluginSections(callCtx, revisionID)
 	})
 }
 
@@ -1679,6 +1691,12 @@ func (s *timedExamAttemptStore) GetCandidatePresentation(arg0 context.Context, a
 	})
 }
 
+func (s *timedExamAttemptStore) ResolveCandidateAccess(arg0 context.Context, arg1 store.CandidateAttemptAccess) (*store.CandidateAttemptAccessTarget, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodResolveCandidateAccess), func(callCtx context.Context) (*store.CandidateAttemptAccessTarget, error) {
+		return s.next.ResolveCandidateAccess(callCtx, arg1)
+	})
+}
+
 func (s *timedExamAttemptStore) ResolveCandidateResource(arg0 context.Context, arg1 store.CandidateAttemptAccess, arg2 model.ExamResourceID) (*store.CandidateResourceContent, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodResolveCandidateResource), func(callCtx context.Context) (*store.CandidateResourceContent, error) {
 		return s.next.ResolveCandidateResource(callCtx, arg1, arg2)
@@ -1889,6 +1907,12 @@ func (s *timedExamAttemptWorkspaceStore) EndEnvironmentBinding(arg0 context.Cont
 	})
 }
 
+func (s *timedExamAttemptWorkspaceStore) AppendEnvironmentEvidence(arg0 context.Context, arg1 *store.ExamAttemptEnvironmentEvidenceAppend) (*store.ExamAttemptEnvironmentEvidenceAppendResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodAppendEnvironmentEvidence), func(callCtx context.Context) (*store.ExamAttemptEnvironmentEvidenceAppendResult, error) {
+		return s.next.AppendEnvironmentEvidence(callCtx, arg1)
+	})
+}
+
 func (s *timedExamAttemptWorkspaceStore) List(arg0 context.Context, arg1 store.CandidateWorkspaceListOptions) (*store.CandidateAttemptWorkspacePage, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodList), func(callCtx context.Context) (*store.CandidateAttemptWorkspacePage, error) {
 		return s.next.List(callCtx, arg1)
@@ -2024,6 +2048,12 @@ func (s *timedExamSubmissionStore) ResolveFile(arg0 context.Context, arg1 model.
 func (s *timedExamIntegrityReviewStore) ListNativeConditions(arg0 context.Context, arg1 store.NativeConditionListOptions) (*store.NativeConditionPage, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamIntegrityReview, methodListNativeConditions), func(callCtx context.Context) (*store.NativeConditionPage, error) {
 		return s.next.ListNativeConditions(callCtx, arg1)
+	})
+}
+
+func (s *timedExamIntegrityReviewStore) ListCapabilityEvidence(arg0 context.Context, arg1 store.CapabilityEvidenceListOptions) (*store.CapabilityEvidencePage, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamIntegrityReview, methodListCapabilityEvidence), func(callCtx context.Context) (*store.CapabilityEvidencePage, error) {
+		return s.next.ListCapabilityEvidence(callCtx, arg1)
 	})
 }
 

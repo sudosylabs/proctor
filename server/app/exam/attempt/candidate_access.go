@@ -8,6 +8,9 @@
 package attempt
 
 import (
+	"context"
+	"errors"
+
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -43,6 +46,54 @@ func candidateSelector(inv invocation.Invocation, candidateAccess CandidateAcces
 		DPoPKeyThumbprint:        principal.DPoPKeyThumbprint,
 		ConnectionID:             candidateAccess.ConnectionID,
 		ContinuityCredentialHash: model.HashToken(candidateAccess.ContinuityCredential),
+	}, nil
+}
+
+// VerifiedCandidateAccess is what VerifyCandidateAttemptAccess proved: the
+// candidate's active Attempt, its Sitting and Class, and the current
+// Participation generation the Connection belongs to. It carries no
+// credential.
+type VerifiedCandidateAccess struct {
+	AttemptID       model.ExamAttemptID
+	SittingID       model.ExamSittingID
+	ClassID         model.ClassID
+	CandidateUserID model.UserID
+	ParticipationID model.AttemptParticipationID
+	Generation      int64
+}
+
+// VerifyCandidateAttemptAccess runs the checks every candidate Attempt read
+// runs, and nothing else: a Desktop Session with its registered key, the
+// Attempt's open Connection and continuity credential, an active
+// Participation with an unexpired lease, an active Attempt and a Sitting
+// that is open or paused before its end. The plugin route guard calls it
+// before any plugin code sees the request.
+func (s *Service) VerifyCandidateAttemptAccess(
+	ctx context.Context,
+	inv invocation.Invocation,
+	candidateAccess CandidateAccess,
+) (_ VerifiedCandidateAccess, resultErr error) {
+	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
+	selector, err := candidateSelector(inv, candidateAccess)
+	if err != nil {
+		return VerifiedCandidateAccess{}, err
+	}
+
+	target, err := s.attempts.ResolveCandidateAccess(ctx, selector)
+	if err != nil {
+		return VerifiedCandidateAccess{}, storeError(storeErrors, err)
+	}
+	if !target.ConsistentWith(selector) {
+		return VerifiedCandidateAccess{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent candidate Attempt access"))
+	}
+
+	return VerifiedCandidateAccess{
+		AttemptID:       target.AttemptID,
+		SittingID:       target.SittingID,
+		ClassID:         target.ClassID,
+		CandidateUserID: target.CandidateUserID,
+		ParticipationID: target.ParticipationID,
+		Generation:      target.Generation,
 	}, nil
 }
 

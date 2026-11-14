@@ -193,6 +193,7 @@ type ExamRevisionSpecification struct {
 	InstructionsMarkdown string
 	Policy               ExamRevisionPolicy
 	BrowserPolicy        BrowserPolicy
+	PluginSections       ExamPluginSections
 	Capacity             ExamCapacityPolicy
 	Resources            []ExamRevisionResource
 	StarterWorkspace     []ExamRevisionStarterWorkspaceEntry
@@ -207,16 +208,21 @@ type ExamRevisionSpecification struct {
 // make unchanged-Draft detection and later live-correction constraints
 // independent of SQL JSON rendering and row order.
 type ExamRevision struct {
-	ID                     ExamRevisionID
-	ExamID                 ExamID
-	Number                 int64
-	SourceDraftRevision    int64
-	Title                  string
-	InstructionsMarkdown   string
-	Policy                 ExamRevisionPolicy
-	PolicyDigest           string
-	BrowserPolicy          BrowserPolicy
-	BrowserPolicyDigest    string
+	ID                   ExamRevisionID
+	ExamID               ExamID
+	Number               int64
+	SourceDraftRevision  int64
+	Title                string
+	InstructionsMarkdown string
+	Policy               ExamRevisionPolicy
+	PolicyDigest         string
+	BrowserPolicy        BrowserPolicy
+	BrowserPolicyDigest  string
+	// PluginSections are the plugin sections frozen from the Draft. After
+	// publication the core reads them as stored and never asks the plugin
+	// about them again.
+	PluginSections         ExamPluginSections
+	PluginSectionsDigest   string
 	Capacity               ExamCapacityPolicy
 	Resources              []ExamRevisionResource
 	StarterWorkspace       []ExamRevisionStarterWorkspaceEntry
@@ -240,6 +246,7 @@ func NewExamRevision(spec ExamRevisionSpecification) (*ExamRevision, error) {
 		Policy:               cloneExamRevisionPolicy(spec.Policy),
 		PolicyDigest:         spec.Policy.SHA256,
 		BrowserPolicy:        spec.BrowserPolicy.Clone(),
+		PluginSections:       spec.PluginSections.Clone(),
 		Capacity:             spec.Capacity,
 		Resources:            append([]ExamRevisionResource(nil), spec.Resources...),
 		StarterWorkspace:     append([]ExamRevisionStarterWorkspaceEntry(nil), spec.StarterWorkspace...),
@@ -260,6 +267,10 @@ func NewExamRevision(spec ExamRevisionSpecification) (*ExamRevision, error) {
 	if err != nil {
 		return nil, err
 	}
+	revision.PluginSectionsDigest, err = ExamPluginSectionsDigest(revision.PluginSections)
+	if err != nil {
+		return nil, err
+	}
 
 	workspaceDigest, contentDigest, err := revision.computeDigests()
 	if err != nil {
@@ -277,8 +288,8 @@ func NewExamRevision(spec ExamRevisionSpecification) (*ExamRevision, error) {
 
 // NewLiveCorrectionExamRevision derives one immutable live correction from an
 // already published Revision. Only candidate-visible instructions and the
-// complete ordered resource manifest may change; policy and Starter Workspace
-// remain pinned byte-for-byte to the base Revision.
+// complete ordered resource manifest may change; policy, plugin sections and
+// Starter Workspace remain pinned byte-for-byte to the base Revision.
 type LiveCorrectionExamRevisionSpecification struct {
 	ID                   ExamRevisionID
 	Number               int64
@@ -325,6 +336,7 @@ func NewLiveCorrectionExamRevision(base *ExamRevision, spec LiveCorrectionExamRe
 		InstructionsMarkdown: spec.InstructionsMarkdown,
 		Policy:               cloneExamRevisionPolicy(base.Policy),
 		BrowserPolicy:        browserPolicy,
+		PluginSections:       base.PluginSections.Clone(),
 		Capacity:             base.Capacity,
 		Resources:            append([]ExamRevisionResource(nil), spec.Resources...),
 		StarterWorkspace:     append([]ExamRevisionStarterWorkspaceEntry(nil), base.StarterWorkspace...),
@@ -418,6 +430,10 @@ func (r *ExamRevision) Validate() error {
 	if err != nil || r.BrowserPolicyDigest != browserDigest {
 		return invalidModelError("ExamRevision.Validate", "exam_revision", "", "invalid Exam Revision Browser Policy", "")
 	}
+	sectionsDigest, err := ExamPluginSectionsDigest(r.PluginSections)
+	if err != nil || r.PluginSectionsDigest != sectionsDigest {
+		return invalidModelError("ExamRevision.Validate", "exam_revision", "", "invalid Exam Revision plugin sections", "")
+	}
 	if err = validateExamRevisionResources(r.Resources, r.Capacity); err != nil {
 		return err
 	}
@@ -440,6 +456,7 @@ func (r *ExamRevision) Clone() *ExamRevision {
 	clone := *r
 	clone.Policy = cloneExamRevisionPolicy(r.Policy)
 	clone.BrowserPolicy = r.BrowserPolicy.Clone()
+	clone.PluginSections = r.PluginSections.Clone()
 	clone.CandidateCorrection = r.CandidateCorrection.Clone()
 	clone.Resources = append([]ExamRevisionResource(nil), r.Resources...)
 	clone.StarterWorkspace = append([]ExamRevisionStarterWorkspaceEntry(nil), r.StarterWorkspace...)
@@ -626,6 +643,11 @@ func (r *ExamRevision) computeDigests() (string, string, error) {
 		return "", "", err
 	}
 
+	pluginSections, err := EncodeExamPluginSections(r.PluginSections)
+	if err != nil {
+		return "", "", err
+	}
+
 	resources := make([]examRevisionResourceWire, len(r.Resources))
 	for index, resource := range r.Resources {
 		resources[index] = examRevisionResourceWire{
@@ -674,6 +696,7 @@ func (r *ExamRevision) computeDigests() (string, string, error) {
 		Policy                 json.RawMessage                `json:"policy"`
 		BrowserPolicy          json.RawMessage                `json:"browser_policy"`
 		BrowserPolicyDigest    string                         `json:"browser_policy_digest"`
+		PluginSections         json.RawMessage                `json:"plugin_sections"`
 		Capacity               ExamCapacityPolicy             `json:"capacity"`
 		Resources              []examRevisionResourceWire     `json:"resources"`
 		StarterWorkspaceDigest string                         `json:"starter_workspace_digest"`
@@ -687,6 +710,7 @@ func (r *ExamRevision) computeDigests() (string, string, error) {
 		json.RawMessage(r.Policy.Bytes),
 		json.RawMessage(browserPolicy),
 		r.BrowserPolicyDigest,
+		json.RawMessage(pluginSections),
 		r.Capacity,
 		resources,
 		workspaceDigest,

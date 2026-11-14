@@ -40,6 +40,7 @@ type openAPIOperation struct {
 	Auth        route.AuthRequirement        `json:"x-proctor-auth"`
 	ErrorCodes  []string                     `json:"x-proctor-error-codes"`
 	Idempotency route.IdempotencyRequirement `json:"x-proctor-idempotency"`
+	Plugin      string                       `json:"x-proctor-plugin"`
 	Security    []map[string][]string        `json:"security"`
 	Parameters  []openAPIParameter           `json:"parameters"`
 	RequestBody openAPIRequestBody           `json:"requestBody"`

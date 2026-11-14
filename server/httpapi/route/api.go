@@ -42,11 +42,16 @@ type API struct {
 	cookies                 Cookies
 	browserRequests         browserRequestPolicy
 	recentAuthenticationTTL time.Duration
+	apiPrefix               string
 	routes                  []Entry
 	routeMatchers           []routeMatcher
-	maxBodyBytes            int64
-	transferDeadlines       transferDeadlines
-	middleware              middlewarePolicy
+	live                    *LiveRoutes
+	// staticShapes are the catalog's normalized paths, which live routes
+	// may not overlap.
+	staticShapes      []string
+	maxBodyBytes      int64
+	transferDeadlines transferDeadlines
+	middleware        middlewarePolicy
 }
 
 // Settings holds what the kernel needs from composition: the logging,
@@ -74,6 +79,9 @@ type Settings struct {
 	// RecentAuthenticationTTL is how long ago a Principal may have
 	// authenticated and still satisfy a "recent" requirement.
 	RecentAuthenticationTTL time.Duration
+	// Live is the live route set the API serves beside its sealed catalog,
+	// or nil for none. New binds it; it serves no other API.
+	Live *LiveRoutes
 }
 
 // New validates the settings and compiles the resources into the sealed route
@@ -119,6 +127,12 @@ func New(settings Settings, authenticator Authenticator, resources ...Resource) 
 			trustedProxies: trustedProxies(slices.Clone(settings.TrustedProxies)),
 			tracing:        settings.Tracing,
 		},
+		live: settings.Live,
+	}
+	if api.live != nil {
+		if err := api.live.bind(api); err != nil {
+			return nil, err
+		}
 	}
 	if err := api.compileRoutes(model.APIURLSuffix, settings.MaxBodyBytes, resources...); err != nil {
 		return nil, err
@@ -171,6 +185,9 @@ func (a *API) Routes() []Entry {
 func (a *API) serveRoutes(writer http.ResponseWriter, request *http.Request) {
 	match := &mux.RouteMatch{}
 	if !a.router.Match(request, match) {
+		if a.live != nil && a.live.under(a.apiPrefix, request.URL.Path) && a.live.serve(writer, request) {
+			return
+		}
 		if a.metrics != nil {
 			method := boundedHTTPMethod(request.Method)
 			recorder, observation := beginRequestMetrics(writer, request, a.metrics, "unmatched", method)
@@ -247,8 +264,12 @@ func (a *API) writeMethodNotAllowed(writer http.ResponseWriter, request *http.Re
 
 func (a *API) allowedMethods(request *http.Request) []string {
 	allowed := make(map[string]struct{})
-	for _, matcher := range a.routeMatchers {
-		if matcher.pathRegexp.MatchString(request.URL.Path) {
+	matchers := a.routeMatchers
+	if a.live != nil {
+		matchers = append(slices.Clip(matchers), a.live.matchers()...)
+	}
+	for _, matcher := range matchers {
+		if matcher.serves(request.URL.Path) {
 			allowed[matcher.route.Method] = struct{}{}
 		}
 	}

@@ -734,9 +734,11 @@ var dependencyRules = []dependencyRule{
 		// The resources name the application surface, the area packages whose
 		// command, query and result types they map, store result types, and
 		// the domain and presentation leaves; the routing kernel owns the
-		// router library and browser origins.
+		// router library and browser origins. The plugin contracts are named
+		// for the plugin routes the resources mount behind core guards.
 		project: only(
 			exact(serverModule+"/httpapi/route"),
+			exact(serverModule+"/plugin"),
 			exact(serverModule+"/logging"),
 			exact(serverModule+"/app"),
 			exact(serverModule+"/app/academic"),

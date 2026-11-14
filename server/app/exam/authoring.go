@@ -81,6 +81,7 @@ type Authoring struct {
 	newID             func() model.ExamID
 	institutionOrigin string
 	operational       OperationalRecorder
+	pluginSections    PluginSections
 }
 
 // OperationalRecorder receives the outcome of each use case the module
@@ -104,6 +105,9 @@ type AuthoringDependencies struct {
 	NewID             func() model.ExamID
 	InstitutionOrigin string
 	Operational       OperationalRecorder
+	// PluginSections asks plugins about the sections an author sets. Nil
+	// treats every plugin as offering none.
+	PluginSections PluginSections
 }
 
 // NewAuthoring returns an Authoring service, or an error when a required
@@ -135,5 +139,6 @@ func NewAuthoring(deps AuthoringDependencies) (*Authoring, error) {
 		newID:               deps.NewID,
 		institutionOrigin:   deps.InstitutionOrigin,
 		operational:         deps.Operational,
+		pluginSections:      deps.PluginSections,
 	}, nil
 }

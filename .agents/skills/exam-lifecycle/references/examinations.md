@@ -64,6 +64,24 @@ freezes title, instructions, policy, resource snapshots, Starter Workspace,
 publisher, publication time, optional base revision, and
 whether it is a standard publication or live correction.
 
+The Draft also carries Plugin Sections: at most 32, keyed by plugin ID, each
+one JSON object of at most 64 KiB that only its plugin interprets. The model
+keeps a section in canonical form (sorted keys, no insignificant whitespace,
+integer numbers only), so spelling cannot manufacture a Draft change or a
+digest difference. Saving a section requires the same management authority as
+the Draft policy and the same revision, idempotency, and audit fences; the
+plugin must be active, offer a section, and accept it, and its refusal reason
+is never shown. Removing a section never asks the plugin. Publication asks
+each section's plugin again before the audit begins, against the Draft at the
+expected revision only, and refuses with `exam.plugin_section.plugin_inactive`
+while one is off, failed, or offers none, or `exam.plugin_section.invalid`
+when one refuses. The Revision freezes the sections with their own digest and
+inside the content digest; a live correction copies them unchanged.
+Admission and everything after publication read the frozen sections and call
+no plugin code. Turning a plugin off is refused with `plugin.in_use` while any
+Sitting that is not Closed or Canceled delivers a Revision with its section;
+the Store decides from core rows in the settings transaction.
+
 Manager-facing Revision discovery is a separate bounded metadata projection.
 It exposes immutable identity, ordering, provenance, digests and aggregate
 counts needed to select and compare Revisions, but not instructions, canonical
@@ -368,6 +386,17 @@ that generation's live binding in the same transaction, through a trigger on
 the Participation row, so a path added later cannot forget it. Re-allow
 creates no generation, so nothing can be bound until the candidate reconnects,
 and then only to the new generation.
+
+The same triggers write the identifier-only domain events plugins receive
+after commit. Inserting a generation writes
+`exam.attempt.participation.started`; its active-to-ended transition writes
+`exam.attempt.participation.ended` with the closed end reason, in the one
+trigger function that ends the binding, so the event and the binding can never
+disagree. A Sitting's change to Paused, from Paused back to Open, and to
+Closing writes `exam.sitting.paused`, `exam.sitting.resumed` and
+`exam.sitting.closing`. Each event and its dispatch Job are written in the
+transaction of the change by `enqueue_domain_event`; the seals write
+`exam.attempt.submitted` themselves. No plugin code runs before commit.
 
 The first secure admission freezes the complete proposed Attempt Configuration
 under the current User Settings revision and exact admitted Desktop build,
@@ -928,6 +957,26 @@ prevents new intake. Operational retirement removes delivery state while
 preserving separately retained integrity material. Native evidence rows remain
 bounded by admitted native record quotas; SQL physical copies are not
 additional client receipt or quota allocations.
+
+Capability evidence is what a capability plugin appends for an Attempt
+through its live execution environment binding, such as the process log. The
+binding check is the environment's read guard; the record is attributed to the
+binding's Participation and generation, stamped with PostgreSQL time, and
+stored as canonical JSON under the plugin's `<plugin-id>.<kind>` (never
+`native.`). The binding, kind and stream sequence identify a record: the same
+claim repeats it, a different one conflicts. It never raises a Flag; missing
+coverage is a record marked as a gap. One Attempt keeps at most 4,096 records
+and 8 MiB; a refused append is counted. A per-Attempt inventory (records,
+bytes, gaps, refusals and a digest chained in append order) extends in the
+append's transaction. Inserting the Submission binds the inventory to it,
+creating an empty one if needed, and from then on the schema refuses new
+records and any change to the inventory, so the seal fixes the set without
+reading it. Review finalization binds the sealed inventory's digest; the
+review snapshot carries it and a separate reviewer-only list pages the
+records. The integrity export category carries the records and the sealed
+inventory, which the bounds keep within export limits. Integrity retirement
+deletes both. Large payloads such as terminal input recordings are to become
+VFS chunks a record references; today a record is only its bounded detail.
 
 Current live controls validate all Browser watermark selectors and claimed
 contiguous receipts before processing. Owned closed sources and position limits

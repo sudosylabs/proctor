@@ -87,6 +87,45 @@ func TestIntegrityReviewHTTPUsesBoundedOpaqueEvidenceCursor(t *testing.T) {
 	require.Error(t, err, "cursor accepted an unknown private field")
 }
 
+func TestIntegrityReviewHTTPListsCapabilityEvidenceWithItsDetail(t *testing.T) {
+	t.Parallel()
+	fake := newExamIntegrityReviewHTTPFake(t)
+	at := time.Date(2026, 11, 14, 9, 0, 0, 0, time.UTC)
+	record := model.CapabilityEvidence{ID: model.NewIntegrityEvidenceID(), AttemptID: fake.attemptID,
+		ParticipationID: model.NewAttemptParticipationID(), Generation: 1, BindingID: model.NewAttemptEnvironmentBindingID(),
+		Kind: "execution.process_log", Sequence: 3, Gap: true, Detail: json.RawMessage(`{"reason":"log_broke_off"}`),
+		ObservedAt: at, RecordedAt: at}
+	fake.capabilityPage = &store.CapabilityEvidencePage{Items: []model.CapabilityEvidence{record}, HasMore: true}
+	httpAPI := newExamIntegrityReviewFocusedAPI(t, fake)
+	after := model.NewIntegrityEvidenceID()
+	cursor, err := encodeExamIntegrityReviewCursor("capability_evidence", after.String())
+	require.NoError(t, err)
+	path := "/api/v1/submissions/" + fake.submission.ID.String() + "/capability-evidence?limit=1&cursor=" + cursor
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+	request.Header.Set("Authorization", "Bearer credential")
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code, "body=%s", response.Body.String())
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	require.Equal(t, store.CapabilityEvidenceListOptions{SubmissionID: fake.submission.ID, AfterID: after, Limit: 1}, fake.capabilityQuery)
+	var page struct {
+		Items      []map[string]any `json:"items"`
+		NextCursor string           `json:"next_cursor"`
+	}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+	require.Len(t, page.Items, 1)
+	require.Equal(t, "execution.process_log", page.Items[0]["policy_kind"])
+	require.Equal(t, true, page.Items[0]["gap"])
+	require.Equal(t, map[string]any{"reason": "log_broke_off"}, page.Items[0]["detail"])
+	require.Equal(t, record.BindingID.String(), page.Items[0]["environment_binding_id"])
+	id, err := decodeExamIntegrityReviewCursor(page.NextCursor, "capability_evidence")
+	require.NoError(t, err)
+	require.Equal(t, record.ID.String(), id)
+
+	_, err = decodeExamIntegrityReviewCursor(page.NextCursor, "native_condition")
+	require.Error(t, err, "a capability evidence cursor is not a native condition cursor")
+}
+
 func TestIntegrityReviewEndpointsForwardExactCursorsAndMapMalformedCursors(t *testing.T) {
 	t.Parallel()
 	fake := newExamIntegrityReviewHTTPFake(t)
@@ -195,6 +234,8 @@ type examIntegrityReviewHTTPFake struct {
 	evidenceQuery    review.ListEvidenceQuery
 	evidencePage     store.ExamIntegrityEvidencePage
 	discrepancyQuery review.ListDiscrepanciesQuery
+	capabilityQuery  store.CapabilityEvidenceListOptions
+	capabilityPage   *store.CapabilityEvidencePage
 }
 
 func newExamIntegrityReviewHTTPFake(t *testing.T) *examIntegrityReviewHTTPFake {
@@ -256,7 +297,8 @@ func (f *examIntegrityReviewHTTPFake) AuthenticateBearer(context.Context, string
 func (f *examIntegrityReviewHTTPFake) GetExamIntegrityReview(context.Context, invocation.Invocation,
 	model.SubmissionID,
 ) (*store.ExamSubmissionReviewSnapshot, error) {
-	return &store.ExamSubmissionReviewSnapshot{NativeConditions: model.NewNativeConditionInventory(), Authorization: f.authorization, Submission: f.submission,
+	return &store.ExamSubmissionReviewSnapshot{NativeConditions: model.NewNativeConditionInventory(),
+		CapabilityEvidence: model.NewCapabilityEvidenceInventory(), Authorization: f.authorization, Submission: f.submission,
 		Review: f.review, Decisions: []model.IntegrityReviewDecision{*f.decisionValue}}, nil
 }
 
@@ -318,6 +360,16 @@ func (f *examIntegrityReviewHTTPFake) GetStudentExamResult(context.Context, invo
 
 func (f *examIntegrityReviewHTTPFake) ListNativeConditions(context.Context, invocation.Invocation, store.NativeConditionListOptions) (*store.NativeConditionPage, error) {
 	return &store.NativeConditionPage{Items: []model.NativeConditionEvidence{}}, nil
+}
+
+func (f *examIntegrityReviewHTTPFake) ListCapabilityEvidence(_ context.Context, _ invocation.Invocation,
+	query store.CapabilityEvidenceListOptions,
+) (*store.CapabilityEvidencePage, error) {
+	f.capabilityQuery = query
+	if f.capabilityPage != nil {
+		return f.capabilityPage, nil
+	}
+	return &store.CapabilityEvidencePage{Items: []model.CapabilityEvidence{}}, nil
 }
 
 func TestExamIntegrityReviewOpenAPIDocument(t *testing.T) {

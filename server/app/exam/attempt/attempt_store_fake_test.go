@@ -42,6 +42,7 @@ type attemptStoreFake struct {
 	participation                   *store.ExamAttemptParticipationView
 	connection                      *model.AttemptConnection
 	presentation                    *store.CandidateExamPresentation
+	accessTarget                    *store.CandidateAttemptAccessTarget
 	candidateAccess                 store.CandidateAttemptAccess
 	authorizedSession               model.SessionID
 	managerOptions                  store.ExamAttemptManagerListOptions
@@ -306,6 +307,14 @@ func (f *attemptStoreFake) GetCandidatePresentation(_ context.Context, candidate
 		return nil, store.NewErrNotFound("exam_attempt_access", candidateAccess.AttemptID.String())
 	}
 	return f.presentation, nil
+}
+
+func (f *attemptStoreFake) ResolveCandidateAccess(_ context.Context, candidateAccess store.CandidateAttemptAccess) (*store.CandidateAttemptAccessTarget, error) {
+	f.candidateAccess = candidateAccess
+	if f.authorizedSession.IsValid() && candidateAccess.SessionID != f.authorizedSession {
+		return nil, store.NewErrNotFound("exam_attempt_access", candidateAccess.AttemptID.String())
+	}
+	return f.accessTarget, nil
 }
 
 func (f *attemptStoreFake) StartBrowserActivity(context.Context, *store.BrowserActivitySourceStart) (*model.BrowserSourceStatus, error) {

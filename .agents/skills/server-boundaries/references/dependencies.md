@@ -99,7 +99,7 @@ exists.
 | application | `app` | `logging`, `app/academic`, `app/access`, `app/administration`, `app/identity`, `app/onboarding`, `app/user`, `app/apperror`, `app/invocation`, `model`, `store`, `app/job`, `app/jobs`, `app/events`, `app/realtime`, `app/mail`, `app/search`, `secretseal`, `app/exam` and below | none | infrastructure |
 | hosted webapp transport | `webui` | none | none | none |
 | HTTP routing kernel | `httpapi/route` | `logging`, `app/apperror`, `app/invocation`, `app/paging`, `model`, `localization`, `internal/weborigin` | below `github.com/gorilla` | infrastructure except `net/http` |
-| HTTP resources | `httpapi` and below | `httpapi/route`, `logging`, `app`, `app/academic`, `app/administration`, `app/apperror`, `app/identity`, `app/invocation`, `app/job`, `app/mail`, `app/onboarding`, `app/paging`, `app/search`, `app/user`, `app/exam` and below, `model`, `store`, `localization` | none | infrastructure except `net/http` |
+| HTTP resources | `httpapi` and below | `httpapi/route`, `plugin`, `logging`, `app`, `app/academic`, `app/administration`, `app/apperror`, `app/identity`, `app/invocation`, `app/job`, `app/mail`, `app/onboarding`, `app/paging`, `app/search`, `app/user`, `app/exam` and below, `model`, `store`, `localization` | none | infrastructure except `net/http` |
 | WebSocket transport | `websocket` and below | `logging`, `app/apperror`, `app/exam/attempt`, `app/invocation`, `app/realtime`, `model`, `store`, `localization`, `internal/weborigin` | below `github.com/gorilla` | infrastructure except `net/http` |
 | cluster contracts | `cluster` | none | none | none |
 | cluster adapters | `cluster/local` and below, `cluster/memberlist` and below | `cluster` | any | none |

@@ -104,6 +104,9 @@ type ownedInfrastructure struct {
 	// pluginSettingsCount is the saved-settings change count the plugins
 	// were activated with; the reconciler continues from it.
 	pluginSettingsCount int64
+	// pluginWorkspaces is the plugins' Attempt Workspace capability, which
+	// composition attaches to the Attempt service once it exists.
+	pluginWorkspaces *pluginAttemptWorkspaces
 }
 
 // constructionCapabilities is a short-lived, non-owning projection used only
@@ -126,6 +129,7 @@ type constructionCapabilities struct {
 	// then to the Server, which deactivates it.
 	plugins             *pluginhost.Host
 	pluginSettingsCount int64
+	pluginWorkspaces    *pluginAttemptWorkspaces
 }
 
 type borrowedCache interface {
@@ -541,6 +545,7 @@ func (i *ownedInfrastructure) acceptPlatform(
 		tracing:                i.tracing,
 		plugins:                i.plugins,
 		pluginSettingsCount:    i.pluginSettingsCount,
+		pluginWorkspaces:       i.pluginWorkspaces,
 	}
 	if resources.Cluster != nil {
 		capabilities.nodeID = resources.Cluster.NodeID()

@@ -357,6 +357,23 @@ func (p *CandidateWorkspaceJournalPage) NotBehind(afterCursor int64) bool {
 // path, ends its binding in the same transaction. EndEnvironmentBinding ends
 // one binding and repeats its terminal result.
 //
+// AppendEnvironmentEvidence stores one capability evidence record through an
+// environment access, under the same binding check as the environment's
+// reads: the binding live and matching, its generation the Attempt's active
+// Participation with an unexpired lease, the Attempt Active, the Sitting
+// readable before its deadline, and the candidate account active; otherwise
+// the Attempt is concealed as not found. The record is attributed to the
+// binding's Participation and generation and stamped with PostgreSQL time; an
+// observation time after it is clamped to it. Its kind must be a plugin's.
+// The binding, kind and sequence identify it: the same claim again returns the
+// stored record with Repeated, and a different claim for them conflicts with
+// capability_evidence_sequence. A record that would pass the Attempt's record
+// or byte bound is not stored: the refusal is counted in the inventory and
+// returned as Refused. A stored record extends the inventory's chained digest
+// in the same transaction. Nothing raises a Flag, writes audit or changes the
+// Attempt. Once the Submission exists the inventory is fixed and nothing more
+// is accepted.
+//
 // ApplyBatch atomically applies every mutation in order: it changes the
 // logical hierarchy and current content pointers, advances the Workspace
 // Cursor once per mutation, appends one journal record per mutation, marks
@@ -388,6 +405,7 @@ func (p *CandidateWorkspaceJournalPage) NotBehind(afterCursor int64) bool {
 type ExamAttemptWorkspaceStore interface {
 	BindEnvironment(context.Context, *ExamAttemptEnvironmentBind) (*ExamAttemptEnvironmentBindResult, error)
 	EndEnvironmentBinding(context.Context, *ExamAttemptEnvironmentBindingEnd) (*ExamAttemptEnvironmentBindingEndResult, error)
+	AppendEnvironmentEvidence(context.Context, *ExamAttemptEnvironmentEvidenceAppend) (*ExamAttemptEnvironmentEvidenceAppendResult, error)
 	List(context.Context, CandidateWorkspaceListOptions) (*CandidateAttemptWorkspacePage, error)
 	ResolveFile(context.Context, ExamAttemptWorkspaceReadAccess, model.AttemptWorkspaceEntryID) (*CandidateWorkspaceContent, error)
 	ListJournal(context.Context, CandidateWorkspaceJournalOptions) (*CandidateWorkspaceJournalPage, error)

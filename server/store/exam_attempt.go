@@ -663,6 +663,30 @@ type CandidateAttemptAccess struct {
 	ContinuityCredentialHash string
 }
 
+// CandidateAttemptAccessTarget is what a verified CandidateAttemptAccess
+// resolves to: the Candidate's active Attempt, its Sitting and Class, and the
+// active Participation generation the open Connection belongs to.
+type CandidateAttemptAccessTarget struct {
+	AttemptID       model.ExamAttemptID
+	SittingID       model.ExamSittingID
+	ClassID         model.ClassID
+	CandidateUserID model.UserID
+	ParticipationID model.AttemptParticipationID
+	Generation      int64
+}
+
+// ConsistentWith reports whether the target is valid and names the Attempt
+// and Candidate of access.
+func (t *CandidateAttemptAccessTarget) ConsistentWith(access CandidateAttemptAccess) bool {
+	return t != nil &&
+		t.AttemptID == access.AttemptID &&
+		t.CandidateUserID == access.CandidateUserID &&
+		t.SittingID.IsValid() &&
+		t.ClassID.IsValid() &&
+		t.ParticipationID.IsValid() &&
+		t.Generation > 0
+}
+
 type ExamAttemptCorrectionAcknowledgement struct {
 	Access                    CandidateAttemptAccess
 	ParticipationID           model.AttemptParticipationID
@@ -1409,6 +1433,10 @@ type ExamAttemptStore interface {
 	// GetCandidatePresentation returns the Exam content, capacity and runtime
 	// capabilities the Candidate sees for their live Attempt.
 	GetCandidatePresentation(context.Context, CandidateAttemptAccess) (*CandidateExamPresentation, error)
+	// ResolveCandidateAccess verifies the Candidate's live Attempt access
+	// and returns the Attempt, Sitting, Class and current Participation it
+	// resolves to.
+	ResolveCandidateAccess(context.Context, CandidateAttemptAccess) (*CandidateAttemptAccessTarget, error)
 	// ResolveCandidateResource returns the stored file behind an Exam Resource
 	// the Candidate's live Attempt may read.
 	ResolveCandidateResource(context.Context, CandidateAttemptAccess, model.ExamResourceID) (*CandidateResourceContent, error)

@@ -28,7 +28,22 @@ const (
 	WebSocketPath         = "websocket"
 )
 
+// catalogRules says which catalog validateCatalog checks. livePrefix is the
+// live route prefix relative to the API root, under which every live route
+// must lie, and staticShapes are the sealed catalog's normalized paths, none
+// of which a live route may overlap. live marks the live route set, whose
+// Upgrade endpoints may name their own protocol.
+type catalogRules struct {
+	livePrefix   string
+	live         bool
+	staticShapes []string
+}
+
 func validateResourceCatalog(apiPrefix string, resources []Resource) error {
+	return validateCatalog(apiPrefix, resources, catalogRules{})
+}
+
+func validateCatalog(apiPrefix string, resources []Resource, rules catalogRules) error {
 	if err := validateDeclaredKernelCodes(resources); err != nil {
 		return err
 	}
@@ -100,7 +115,23 @@ func validateResourceCatalog(apiPrefix string, resources []Resource) error {
 				return fmt.Errorf("resource %q %s path: %w", resource.Name, route.Method, err)
 			}
 
-			if upgrade &&
+			if rules.live {
+				root := apiPrefix + rules.livePrefix
+				if route.RootMounted || !strings.HasPrefix(path, root+"/") {
+					return fmt.Errorf("resource %q %s %s is not under the live route prefix %s", resource.Name, route.Method, path, root)
+				}
+				for _, static := range rules.staticShapes {
+					if shapesMayOverlap(normalized, static) {
+						return fmt.Errorf("resource %q %s %s may match the same requests as the catalog route %s", resource.Name, route.Method, path, static)
+					}
+				}
+			}
+
+			if upgrade && rules.live &&
+				(route.Method != http.MethodGet || !authRequiresPrincipal(route.Auth) || route.ProtocolName == WebSocketProtocolName) {
+				return fmt.Errorf("resource %q %s %s is not a valid live upgrade", resource.Name, route.Method, path)
+			}
+			if upgrade && !rules.live &&
 				(resource.Name != WebSocketResourceName ||
 					route.ProtocolName != WebSocketProtocolName ||
 					route.Auth != AuthSessionRequired ||
@@ -155,6 +186,24 @@ func validateDeclaredKernelCodes(resources []Resource) error {
 		return errors.New(strings.Join(problems, "; "))
 	}
 	return nil
+}
+
+// shapesMayOverlap reports whether two normalized route paths could match
+// one request path: they have as many segments, and each pair of segments is
+// equal or has a parameter on either side. It does not compare parameter
+// patterns, so it errs toward reporting an overlap.
+func shapesMayOverlap(left, right string) bool {
+	leftSegments, rightSegments := strings.Split(left, "/"), strings.Split(right, "/")
+	if len(leftSegments) != len(rightSegments) {
+		return false
+	}
+	for index := range leftSegments {
+		leftSegment, rightSegment := leftSegments[index], rightSegments[index]
+		if leftSegment != rightSegment && !strings.HasPrefix(leftSegment, "{") && !strings.HasPrefix(rightSegment, "{") {
+			return false
+		}
+	}
+	return true
 }
 
 func validRouteProtocolKind(kind ProtocolKind) bool {

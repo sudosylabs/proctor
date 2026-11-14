@@ -23,10 +23,14 @@ type contributions struct {
 	identityTypes []*guardedIdentityProviderType
 	exportFormats []*guardedExportFormat
 	eventHandlers []EventSubscription
+	routes        []*registeredRoute
+	examSections  []*guardedExamSection
 }
 
 // discard forgets what e registered.
 func (c *contributions) discard(e *entry) {
+	c.routes = slices.DeleteFunc(c.routes, func(r *registeredRoute) bool { return r.entry == e })
+	c.examSections = slices.DeleteFunc(c.examSections, func(s *guardedExamSection) bool { return s.entry == e })
 	c.identityTypes = slices.DeleteFunc(c.identityTypes, func(t *guardedIdentityProviderType) bool { return t.entry == e })
 	c.exportFormats = slices.DeleteFunc(c.exportFormats, func(f *guardedExportFormat) bool { return f.entry == e })
 	c.eventHandlers = slices.DeleteFunc(c.eventHandlers, func(s EventSubscription) bool { return s.Plugin == e.manifest.ID })
@@ -114,8 +118,8 @@ func (r *registrar) AddEventHandler(topic plugin.EventTopic, handler plugin.Even
 	if handler == nil {
 		return errors.New("event handler is nil")
 	}
-	if topic == "" {
-		return errors.New("event topic is empty")
+	if !topic.IsValid() {
+		return fmt.Errorf("event topic %q is unknown", topic)
 	}
 	subscription := EventSubscription{
 		Plugin:  r.entry.manifest.ID,

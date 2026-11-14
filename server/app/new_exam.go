@@ -116,6 +116,7 @@ func newExamAuthoring(
 		NewID:             model.NewExamID,
 		InstitutionOrigin: deps.PublicURL,
 		Operational:       operationalRecorderAdapter{recorder: deps.OperationalRecorder},
+		PluginSections:    deps.PluginSections,
 	})
 }
 
@@ -170,6 +171,7 @@ func newExamPublication(
 		NewID:             model.NewExamRevisionID,
 		InstitutionOrigin: deps.PublicURL,
 		Operational:       operationalRecorderAdapter{recorder: deps.OperationalRecorder},
+		PluginSections:    deps.PluginSections,
 	})
 }
 

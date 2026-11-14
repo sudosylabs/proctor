@@ -8,6 +8,13 @@
 -- Rolls back the pre-release schema baseline. Development databases should
 -- normally be dropped and recreated rather than rolled back.
 
+DROP TRIGGER IF EXISTS exam_submissions_seal_capability_evidence ON exam_submissions;
+DROP FUNCTION IF EXISTS seal_capability_evidence_inventory();
+DROP TABLE IF EXISTS exam_attempt_capability_evidence_inventories;
+DROP TABLE IF EXISTS capability_evidence;
+DROP FUNCTION IF EXISTS guard_capability_evidence_inventory();
+DROP FUNCTION IF EXISTS guard_capability_evidence();
+DROP FUNCTION IF EXISTS capability_evidence_retired(varchar);
 DROP TABLE IF EXISTS native_condition_evidence;
 DROP TABLE IF EXISTS submission_review_finalizations;
 DROP TABLE IF EXISTS browser_integrity_overflow;
@@ -61,6 +68,8 @@ DROP TABLE IF EXISTS browser_authentication_transactions;
 DROP TABLE IF EXISTS invitations;
 DROP TABLE IF EXISTS job_attempts;
 DROP TABLE IF EXISTS job_permanent_occurrences;
+DROP FUNCTION IF EXISTS enqueue_domain_event(varchar, jsonb, timestamptz);
+DROP FUNCTION IF EXISTS new_opaque_id();
 DROP TABLE IF EXISTS domain_events;
 DROP TABLE IF EXISTS jobs;
 DROP TABLE IF EXISTS administrator_recovery_records;
@@ -126,8 +135,12 @@ DROP TABLE IF EXISTS exam_attempt_connections;
 DROP FUNCTION IF EXISTS guard_attempt_connection_mutation();
 DROP TABLE IF EXISTS exam_attempt_environment_bindings;
 DROP FUNCTION IF EXISTS guard_attempt_environment_binding_mutation();
+DROP TRIGGER IF EXISTS exam_attempt_participations_started ON exam_attempt_participations;
+DROP TRIGGER IF EXISTS exam_attempt_participations_ended ON exam_attempt_participations;
+DROP FUNCTION IF EXISTS start_attempt_participation_generation();
+DROP FUNCTION IF EXISTS end_attempt_participation_generation();
+DROP FUNCTION IF EXISTS attempt_participation_event_data(exam_attempt_participations);
 DROP TABLE IF EXISTS exam_attempt_participations;
-DROP FUNCTION IF EXISTS end_environment_binding_with_participation();
 DROP FUNCTION IF EXISTS guard_attempt_participation_mutation();
 DROP TABLE IF EXISTS exam_attempt_workspace_journal;
 DROP TABLE IF EXISTS exam_attempt_workspace_entries;
@@ -147,6 +160,7 @@ DROP TABLE IF EXISTS roles;
 DROP TABLE IF EXISTS class_members;
 DROP TABLE IF EXISTS exam_correction_resource_stages;
 DROP TABLE IF EXISTS exam_sittings;
+DROP FUNCTION IF EXISTS record_exam_sitting_state_event();
 ALTER TABLE IF EXISTS exams DROP CONSTRAINT IF EXISTS exams_owner_manager_fkey;
 ALTER TABLE IF EXISTS exams DROP CONSTRAINT IF EXISTS exams_default_revision_fkey;
 ALTER TABLE IF EXISTS exam_drafts DROP CONSTRAINT IF EXISTS exam_drafts_base_revision_fkey;

@@ -481,6 +481,10 @@ codes:
     description: "The Exam does not exist or is not visible to the caller."
   - code: exam.owner.no_changes
     description: "The ownership transfer would not change the owner."
+  - code: exam.plugin_section.invalid
+    description: "The plugin named in `fields.plugin_id` refused its section of the Exam Draft; the plugin's reason is not shown."
+  - code: exam.plugin_section.plugin_inactive
+    description: "The plugin named in `fields.plugin_id` is off, has failed, or offers no Exam section, so its section cannot be saved or published."
   - code: exam.resource.conflict
     description: "The Exam Resource change conflicts with current state."
   - code: exam.resource.content_invalid
@@ -708,6 +712,8 @@ codes:
     description: "The account reached its maximum number of Personal Access Tokens."
   - code: personal_access_token.unavailable
     description: "The Personal Access Token operation failed; retry later."
+  - code: plugin.in_use
+    description: "The plugin cannot be turned off while a Sitting that is not Closed or Canceled delivers an Exam Revision with its section."
   - code: plugin.invalid
     description: "The plugin settings are not a JSON object of at most 64 KiB, or the plugin refused them."
   - code: plugin.not_found
@@ -716,6 +722,16 @@ codes:
     description: "The plugin is required and cannot be turned off."
   - code: plugin.revision_conflict
     description: "The supplied plugin settings revision is stale; `fields.current_revision` carries the current revision, 0 when nothing is saved."
+  - code: plugin.route.conflict
+    description: "The plugin route refused the request because it does not fit the plugin's current state."
+    transport: true
+  - code: plugin.route.rate_limited
+    description: "Too many requests to the plugin's routes from this Session; retry after the `Retry-After` interval."
+    transport: true
+    retry_after: 1
+  - code: plugin.route.unavailable
+    description: "The plugin serving the route failed while answering; retry later."
+    transport: true
   - code: plugin.unavailable
     description: "Plugin administration could not read or save plugin settings; retry later."
   - code: profile_picture.invalid

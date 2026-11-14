@@ -69,6 +69,10 @@ func (f *attemptWorkspaceStoreFake) EndEnvironmentBinding(_ context.Context, inp
 	return f.endResult, nil
 }
 
+func (*attemptWorkspaceStoreFake) AppendEnvironmentEvidence(context.Context, *store.ExamAttemptEnvironmentEvidenceAppend) (*store.ExamAttemptEnvironmentEvidenceAppendResult, error) {
+	panic("attempt use cases do not append capability evidence")
+}
+
 func (f *attemptWorkspaceStoreFake) List(_ context.Context, options store.CandidateWorkspaceListOptions) (*store.CandidateAttemptWorkspacePage, error) {
 	f.lists++
 	f.readAccess = options.Access

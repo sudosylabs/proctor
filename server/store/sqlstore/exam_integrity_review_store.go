@@ -252,6 +252,10 @@ func (s *SQLExamIntegrityReviewStore) Get(
 		if err != nil {
 			return nil, err
 		}
+		snapshot.CapabilityEvidence, err = sealedCapabilityEvidenceInventory(ctx, tx, authorization.AttemptID)
+		if err != nil {
+			return nil, err
+		}
 
 		if getErr := tx.Get(ctx, &snapshot.DeliveryInventoryRevision, `SELECT review_inventory_revision
 			FROM exam_attempt_delivery_budgets

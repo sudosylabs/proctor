@@ -1163,6 +1163,8 @@ components:
         - exam.manager.owner_protected
         - exam.not_found
         - exam.owner.no_changes
+        - exam.plugin_section.invalid
+        - exam.plugin_section.plugin_inactive
         - exam.resource.conflict
         - exam.resource.content_invalid
         - exam.resource.invalid
@@ -1270,10 +1272,14 @@ components:
         - personal_access_token.invalid
         - personal_access_token.maximum_reached
         - personal_access_token.unavailable
+        - plugin.in_use
         - plugin.invalid
         - plugin.not_found
         - plugin.required
         - plugin.revision_conflict
+        - plugin.route.conflict
+        - plugin.route.rate_limited
+        - plugin.route.unavailable
         - plugin.unavailable
         - profile_picture.invalid
         - profile_picture.unavailable

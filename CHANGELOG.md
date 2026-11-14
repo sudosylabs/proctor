@@ -42,7 +42,7 @@ module when a change is not server-only. No module has been released yet.
   play them back with byte ranges. Requests and playback are audited, and
   integrity retirement purges the chunks. A recording Exam starts only when
   the recorder is permitted and has at least 3072 MiB free (registry
-  `be7d0c62`, capability `screen_recording`). The readiness overview and the
+  `e4c05771`, capability `screen_recording`). The readiness overview and the
   prepared preflight carry a `screen_recording_disclosure` for Desktop to show
   before Start.
 

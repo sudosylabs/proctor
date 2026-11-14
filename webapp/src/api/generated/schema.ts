@@ -8146,7 +8146,7 @@ export interface components {
             ordinal: number;
             policy_id: string;
             /** @constant */
-            registry_digest: "sha256:be7d0c62fe770b76cad13e36874d1acde3ca81bd53655d3abd263b6bc74e17fa";
+            registry_digest: "sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d";
             resolved_exception_refs: string[];
             /** @constant */
             retention_class_id: "native_minimized";
@@ -10202,7 +10202,7 @@ export interface components {
                 }
             ];
             /** @constant */
-            registry_digest: "sha256:be7d0c62fe770b76cad13e36874d1acde3ca81bd53655d3abd263b6bc74e17fa";
+            registry_digest: "sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d";
             screen_recording: components["schemas"]["NativeScreenRecordingPolicy"];
         };
         NativeSecurityStreamStatus: {
@@ -15687,7 +15687,7 @@ export interface components {
                  *             "outcome": "flag"
                  *           }
                  *         ],
-                 *         "registry_digest": "sha256:be7d0c62fe770b76cad13e36874d1acde3ca81bd53655d3abd263b6bc74e17fa",
+                 *         "registry_digest": "sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d",
                  *         "screen_recording": {
                  *           "enabled": true
                  *         }
@@ -16344,7 +16344,7 @@ export interface components {
                 /**
                  * @example {
                  *       "configuration_manifest_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                 *       "native_registry_digest": "sha256:be7d0c62fe770b76cad13e36874d1acde3ca81bd53655d3abd263b6bc74e17fa"
+                 *       "native_registry_digest": "sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d"
                  *     }
                  */
                 "application/json": components["schemas"]["PrepareSecurityPreflightRequest"];

@@ -20,7 +20,7 @@ import (
 // It does not certify any Desktop release or native implementation; a
 // release's own registry must have exactly this digest. New registry meaning
 // requires coordinated server and Desktop admission.
-const NativeRegistryDigest = "sha256:be7d0c62fe770b76cad13e36874d1acde3ca81bd53655d3abd263b6bc74e17fa"
+const NativeRegistryDigest = "sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d"
 
 type NativeMode string
 

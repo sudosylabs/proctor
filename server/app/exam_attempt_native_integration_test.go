@@ -364,7 +364,7 @@ const (
 	flowOneDisplay    = `{"targets":[{"target_id":"t1","active":true,"built_in":true,"kind":"physical","connection":"direct","power":"awake","primary":"primary","mirror_of":null}]}`
 	flowWindowAbsent  = `{"presence":"absent","focus":"unknown","visibility":"unknown","placement":"unknown","content_protection":"unknown","occlusion":"unknown","close_attempts":0}`
 	flowWindowMounted = `{"presence":"present","focus":"focused","visibility":"visible","placement":"maximized","content_protection":"verified","occlusion":"none","close_attempts":0}`
-	flowSession       = `{"coverage":"full_lifecycle","console_owner":"candidate","lock":"unlocked","remote_attachment":"absent","other_human_sessions":0,"component":"running"}`
+	flowSession       = `{"coverage":"snapshot_only","console_owner":"candidate","lock":"unlocked","remote_attachment":"absent","other_human_sessions":0}`
 )
 
 // flowProcesses is the process state with both rules matched or not.
@@ -373,7 +373,7 @@ func flowProcesses(matched bool) string {
 	if matched {
 		blocked = `["teamviewer"]`
 	}
-	return fmt.Sprintf(`{"coverage":"full_lifecycle","checking":0,"component":"running","rule_matches":[`+
+	return fmt.Sprintf(`{"coverage":"snapshot_only","checking":0,"rule_matches":[`+
 		`{"rule_id":"process_application.blocked","matched":%t,"catalog_app_ids":%s},`+
 		`{"rule_id":"process_application.allowlist","matched":%t,"catalog_app_ids":[]}]}`, matched, blocked, matched)
 }

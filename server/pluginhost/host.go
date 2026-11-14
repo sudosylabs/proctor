@@ -474,7 +474,11 @@ func (h *Host) StartWorkers(context.Context) error {
 		e.mu.Lock()
 		current := e.current
 		e.mu.Unlock()
-		current.startWorkers()
+		// A disabled or failed plugin has no activation; it starts its
+		// workers when it is enabled.
+		if current != nil {
+			current.startWorkers()
+		}
 	}
 	return nil
 }

@@ -128,6 +128,20 @@ func TestWorkersStartWithTheNodeAndStopBeforeDeactivate(t *testing.T) {
 	}, log.all(), "a plugin turned on after start runs its worker at once, and Close stops it")
 }
 
+func TestStartingWorkersSkipsAPluginThatIsOff(t *testing.T) {
+	t.Parallel()
+
+	log := &callLog{}
+	host := activateWorkers(t, pluginhost.Dependencies{
+		Settings: map[string]pluginhost.Settings{"alpha": {Enable: boolPointer(false)}},
+	}, newWorkerPlugin(log, "alpha", blockingWorker(log, "alpha")))
+	require.NoError(t, host.StartWorkers(context.Background()), "a plugin that is off has no workers to start")
+	require.Empty(t, log.all())
+
+	host.Reconcile(context.Background(), map[string]pluginhost.Settings{"alpha": {Enable: boolPointer(true)}})
+	waitForCalls(t, log, "activate:alpha", "run:alpha")
+}
+
 func TestWorkersRestartWhenANewActivationReplacesTheOld(t *testing.T) {
 	t.Parallel()
 

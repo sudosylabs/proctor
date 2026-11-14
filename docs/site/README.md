@@ -230,11 +230,12 @@ Remove an override once its upstream declares a patched range. The production
 build, which renders through the worker pool and minifies every stylesheet,
 covers their runtime compatibility.
 
-With the OpenAPI plugin removed, `npm audit --omit=dev` reports no high or
-critical advisory. The vulnerability workflow still accepts
-`GHSA-vfj7-8cjw-p6xm` and `GHSA-qxc2-j82w-r537`; both came from the plugin's
-dependency tree and can be dropped from `.github/workflows/security.yml` and
-`build/ci/npm-audit.test.mjs`. Re-run the audit after each Docusaurus upgrade.
+`npm audit --omit=dev` reports no high or critical advisory, and the
+vulnerability workflow accepts none: `build/ci/npm-audit.mjs` fails on any
+high or critical advisory. Accepting one means adding its GHSA ID to the docs
+audit step in `.github/workflows/security.yml`, explaining here why no
+compatible fix exists, and updating `build/ci/npm-audit.test.mjs`. Re-run the
+audit after each Docusaurus upgrade.
 
 ## Image boundary
 

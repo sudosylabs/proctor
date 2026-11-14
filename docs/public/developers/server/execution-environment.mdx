@@ -98,11 +98,16 @@ must survive the loss of its client.
 
 - **A grace period.** A detached shell is kept alive for a while.
 - **An output ring.** The host keeps recent output with byte offsets.
-- **A screen snapshot.** A headless terminal emulator keeps the current screen,
-  so a resumed vim, top or less redraws correctly, which raw byte replay cannot
-  do.
-- **Resume and takeover.** `Attach` can resume from an offset, through any
-  connection, and a fenced takeover replaces the previous attacher.
+- **Exact resume.** Desktop's terminal still holds its screen after a network
+  blip or a node failover. It resumes from the offset of the next byte it has
+  not seen, and gets exactly the bytes it missed, so even vim, top or less come
+  back intact.
+- **Redraw after a lost screen.** A client with no screen of its own, such as a
+  restarted Desktop, gets the last few kilobytes and a forced redraw: two
+  resizes make full-screen programs repaint. That needs no terminal emulator on
+  the host.
+- **Takeover.** `Attach` works through any connection, and the latest attach
+  replaces the previous attacher.
 
 ### When something fails
 
@@ -326,7 +331,8 @@ An `environment` origin on a file is review context, not an accusation.
    - the unfenced freeze and thaw;
    - the journal opt-in switch.
 2. **Terminals that survive client loss:** a grace period, an output ring with
-   offsets, a screen snapshot, resume, and fenced takeover.
+   offsets, exact resume, a forced redraw for a client without a screen, and
+   takeover.
 3. **Per-terminal flow control and a bounded client buffer.** A slow candidate
    then stalls only their own terminal.
 4. **Certification of the journal on `vm` hosts.**

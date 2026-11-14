@@ -9,22 +9,29 @@ package attempt
 
 import (
 	"context"
-	"strings"
-	"time"
+	"slices"
 
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// attemptWorkspaceStoreFake records every batch write call. Unless respond is
+// set, ApplyBatch acknowledges the batch it was given: one valid journal
+// change per mutation at consecutive cursors after cursor.
 type attemptWorkspaceStoreFake struct {
 	f               *fixture
-	resolvedAccess  store.ExamAttemptWorkspaceMutationAccess
 	target          *store.ExamAttemptWorkspaceMutationTarget
-	mutation        *store.ExamAttemptWorkspaceMutation
-	mutationResult  *store.ExamAttemptWorkspaceMutationResult
-	mutationErr     error
-	reservation     *store.ExamAttemptWorkspaceObjectReservation
-	ready           *store.ExamAttemptWorkspaceObjectReady
+	reservations    []*store.ExamAttemptWorkspaceObjectReservation
+	reserveErr      error
+	readied         []*store.ExamAttemptWorkspaceObjectsReady
+	readyErr        error
+	batches         []*store.ExamAttemptWorkspaceBatch
+	batchErr        error
+	respond         func(*store.ExamAttemptWorkspaceBatch) *store.ExamAttemptWorkspaceBatchResult
+	cursor          int64
+	replayed        bool
+	idempotency     *store.CommandIdempotency
+	reclaimCalls    int
 	reclaimable     []model.AttemptWorkspaceObjectID
 	lists           int
 	options         store.CandidateWorkspaceListOptions
@@ -34,7 +41,6 @@ type attemptWorkspaceStoreFake struct {
 	journalPage     *store.CandidateWorkspaceJournalPage
 	proposedEntryID model.AttemptWorkspaceEntryID
 	proposedVersion model.WorkspaceContentVersion
-	idempotency     *store.CommandIdempotency
 }
 
 func (f *attemptWorkspaceStoreFake) List(_ context.Context, options store.CandidateWorkspaceListOptions) (*store.CandidateAttemptWorkspacePage, error) {
@@ -52,61 +58,114 @@ func (f *attemptWorkspaceStoreFake) ListJournal(_ context.Context, options store
 	return f.journalPage, nil
 }
 
-func (f *attemptWorkspaceStoreFake) ResolveMutationTarget(_ context.Context, workspaceAccess store.ExamAttemptWorkspaceMutationAccess) (*store.ExamAttemptWorkspaceMutationTarget, error) {
-	f.f.order = append(f.f.order, "workspace.resolve")
-	f.resolvedAccess = workspaceAccess
+func (f *attemptWorkspaceStoreFake) ReserveObjects(_ context.Context, input *store.ExamAttemptWorkspaceObjectReservation) (*store.ExamAttemptWorkspaceMutationTarget, error) {
+	f.f.order = append(f.f.order, "workspace.reserve")
+	f.reservations = append(f.reservations, input)
+	if f.reserveErr != nil {
+		return nil, f.reserveErr
+	}
 	return f.target, nil
 }
 
-func (f *attemptWorkspaceStoreFake) ReserveObject(_ context.Context, input *store.ExamAttemptWorkspaceObjectReservation) (*model.AttemptWorkspaceObject, error) {
-	f.f.order = append(f.f.order, "workspace.reserve")
-	f.reservation = input
-	return model.NewStagedAttemptWorkspaceObject(input.ObjectID, f.target.WorkspaceID, f.f.at, f.f.at.Add(time.Hour))
-}
-
-func (f *attemptWorkspaceStoreFake) MarkObjectReady(_ context.Context, input *store.ExamAttemptWorkspaceObjectReady) (*model.AttemptWorkspaceObject, error) {
+func (f *attemptWorkspaceStoreFake) MarkObjectsReady(_ context.Context, input *store.ExamAttemptWorkspaceObjectsReady) error {
 	f.f.order = append(f.f.order, "workspace.ready")
-	f.ready = input
-	object, err := model.NewStagedAttemptWorkspaceObject(input.ObjectID, f.target.WorkspaceID, f.f.at, f.f.at.Add(time.Hour))
-	if err != nil {
-		return nil, err
-	}
-	if err = object.MarkContentReady(input.ContentVersion, input.Content.MediaType, input.Content.SizeBytes, input.Content.SHA256, f.f.at.Add(time.Second)); err != nil {
-		return nil, err
-	}
-	return object, nil
+	f.readied = append(f.readied, input)
+	return f.readyErr
 }
 
-func (f *attemptWorkspaceStoreFake) ApplyMutation(_ context.Context, mutation *store.ExamAttemptWorkspaceMutation, command *store.CommandIdempotency) (*store.ExamAttemptWorkspaceMutationResult, error) {
+func (f *attemptWorkspaceStoreFake) ApplyBatch(_ context.Context, batch *store.ExamAttemptWorkspaceBatch, command *store.CommandIdempotency) (*store.ExamAttemptWorkspaceBatchResult, error) {
 	f.f.order = append(f.f.order, "workspace.apply")
-	f.mutation, f.idempotency = mutation, command
-	return f.mutationResult, f.mutationErr
+	f.batches = append(f.batches, batch)
+	f.idempotency = command
+	if f.batchErr != nil {
+		return nil, f.batchErr
+	}
+	if f.respond != nil {
+		return f.respond(batch), nil
+	}
+	return f.acknowledge(batch), nil
 }
 
-func (f *attemptWorkspaceStoreFake) MarkObjectReclaimable(_ context.Context, id model.AttemptWorkspaceObjectID) error {
-	f.reclaimable = append(f.reclaimable, id)
+func (f *attemptWorkspaceStoreFake) MarkObjectsReclaimable(_ context.Context, ids []model.AttemptWorkspaceObjectID) error {
+	f.f.order = append(f.f.order, "workspace.reclaim")
+	f.reclaimCalls++
+	f.reclaimable = append(f.reclaimable, ids...)
 	return nil
 }
 
-func (*attemptWorkspaceStoreFake) ClaimObjectsForCleanup(ctx context.Context, input *store.AttemptWorkspaceCleanupClaim) ([]model.AttemptWorkspaceObject, error) {
+func (*attemptWorkspaceStoreFake) ClaimObjectsForCleanup(context.Context, *store.AttemptWorkspaceCleanupClaim) ([]model.AttemptWorkspaceObject, error) {
 	return nil, nil
 }
 
-func (*attemptWorkspaceStoreFake) CompleteObjectCleanup(ctx context.Context, input *store.AttemptWorkspaceCleanupCompletion) error {
+func (*attemptWorkspaceStoreFake) CompleteObjectCleanup(context.Context, *store.AttemptWorkspaceCleanupCompletion) error {
 	return nil
 }
 
-func (*attemptWorkspaceStoreFake) ReleaseObjectCleanup(ctx context.Context, input *store.AttemptWorkspaceCleanupRelease) error {
+func (*attemptWorkspaceStoreFake) ReleaseObjectCleanup(context.Context, *store.AttemptWorkspaceCleanupRelease) error {
 	return nil
+}
+
+// acknowledge is the result a real Store returns for batch: one journal
+// change per mutation, carrying the content version each staged object was
+// readied with.
+func (f *attemptWorkspaceStoreFake) acknowledge(batch *store.ExamAttemptWorkspaceBatch) *store.ExamAttemptWorkspaceBatchResult {
+	versions := map[model.AttemptWorkspaceObjectID]model.WorkspaceContentVersion{}
+	for _, ready := range f.readied {
+		for _, object := range ready.Objects {
+			versions[object.ObjectID] = object.ContentVersion
+		}
+	}
+
+	changes := make([]model.AttemptWorkspaceJournalEntry, len(batch.Mutations))
+	for index, mutation := range batch.Mutations {
+		change := model.AttemptWorkspaceJournalEntry{WorkspaceID: f.target.WorkspaceID, Cursor: f.cursor + int64(index) + 1,
+			EntryID: mutation.EntryID, Operation: mutation.Operation, ChangedAt: f.f.at}
+		if f.replayed {
+			change.EntryID = model.NewAttemptWorkspaceEntryID()
+		}
+		switch mutation.Operation {
+		case model.AttemptWorkspaceMutationCreateFile:
+			change.EntryKind, change.NewPath, change.ContentVersion = model.StarterWorkspaceEntryFile, mutation.DestinationPath, versions[mutation.ObjectID]
+		case model.AttemptWorkspaceMutationCreateDirectory:
+			change.EntryKind, change.NewPath = model.StarterWorkspaceEntryDirectory, mutation.DestinationPath
+		case model.AttemptWorkspaceMutationReplaceFile:
+			change.EntryKind, change.OldPath, change.NewPath = model.StarterWorkspaceEntryFile, mutation.ExpectedPath, mutation.ExpectedPath
+			change.ContentVersion = versions[mutation.ObjectID]
+		case model.AttemptWorkspaceMutationMoveEntry:
+			change.EntryKind, change.OldPath, change.NewPath = model.StarterWorkspaceEntryDirectory, mutation.ExpectedPath, mutation.DestinationPath
+		case model.AttemptWorkspaceMutationDeleteEntry:
+			change.EntryKind, change.OldPath, change.Recursive = model.StarterWorkspaceEntryFile, mutation.ExpectedPath, mutation.Recursive
+			if mutation.Recursive || mutation.ExpectedContentVersion.IsZero() {
+				change.EntryKind = model.StarterWorkspaceEntryDirectory
+			}
+		}
+		changes[index] = change
+	}
+
+	return &store.ExamAttemptWorkspaceBatchResult{SittingID: f.target.SittingID, ClassID: f.target.ClassID,
+		CandidateUserID: f.target.CandidateUserID, WorkspaceID: f.target.WorkspaceID, Changes: changes, Replayed: f.replayed}
+}
+
+// batch is the one batch ApplyBatch received, or nil.
+func (f *attemptWorkspaceStoreFake) batch() *store.ExamAttemptWorkspaceBatch {
+	if len(f.batches) == 0 {
+		return nil
+	}
+	return f.batches[len(f.batches)-1]
+}
+
+// reservedObjectIDs is every object ID the batch reserved, in order.
+func (f *attemptWorkspaceStoreFake) reservedObjectIDs() []model.AttemptWorkspaceObjectID {
+	var ids []model.AttemptWorkspaceObjectID
+	for _, reservation := range f.reservations {
+		ids = append(ids, reservation.ObjectIDs...)
+	}
+	return slices.Clip(ids)
 }
 
 func entryIDOrNew(fake *attemptWorkspaceStoreFake) model.AttemptWorkspaceEntryID {
 	if fake.proposedEntryID.IsValid() {
 		return fake.proposedEntryID
-	}
-	result := fake.mutationResult
-	if result != nil && result.Entry != nil && result.Entry.EntryID.IsValid() {
-		return result.Entry.EntryID
 	}
 	return model.NewAttemptWorkspaceEntryID()
 }
@@ -115,18 +174,7 @@ func workspaceVersionOrNew(fake *attemptWorkspaceStoreFake) model.WorkspaceConte
 	if fake.proposedVersion.IsValid() {
 		return fake.proposedVersion
 	}
-	result := fake.mutationResult
-	if result != nil && result.Change.ContentVersion.IsValid() {
-		return result.Change.ContentVersion
-	}
 	return model.NewWorkspaceContentVersion()
-}
-
-func resultVersion(result *store.ExamAttemptWorkspaceMutationResult) model.WorkspaceContentVersion {
-	if result == nil {
-		return ""
-	}
-	return result.Change.ContentVersion
 }
 
 func validWorkspaceMutationAccess(f *fixture) WorkspaceMutationAccess {
@@ -134,23 +182,11 @@ func validWorkspaceMutationAccess(f *fixture) WorkspaceMutationAccess {
 		ContinuityCredential: model.NewCredentialToken()}, ParticipationID: model.NewAttemptParticipationID(), Generation: 1}
 }
 
-func workspaceMutationResultFixture(f *fixture, workspaceID model.ExamAttemptWorkspaceID, entryID model.AttemptWorkspaceEntryID,
-	kind model.StarterWorkspaceEntryKind, operation model.AttemptWorkspaceMutationKind, oldPath, newPath string,
-	version model.WorkspaceContentVersion, replayed bool,
-) *store.ExamAttemptWorkspaceMutationResult {
-	path := newPath
-	if path == "" {
-		path = oldPath
-	}
-	entry := &store.CandidateAttemptWorkspaceItem{EntryID: entryID, Kind: kind, Path: path}
-	if kind == model.StarterWorkspaceEntryFile {
-		entry.ContentVersion, entry.MediaType, entry.SizeBytes, entry.SHA256 = version, "text/plain", 1, strings.Repeat("a", 64)
-	}
-	change := model.AttemptWorkspaceJournalEntry{WorkspaceID: workspaceID, Cursor: 2, EntryID: entryID, EntryKind: kind,
-		Operation: operation, OldPath: oldPath, NewPath: newPath, ContentVersion: version, ChangedAt: f.at}
-	if operation == model.AttemptWorkspaceMutationDeleteEntry {
-		change.ContentVersion = ""
-	}
-	return &store.ExamAttemptWorkspaceMutationResult{SittingID: f.sitting.ID, ClassID: f.sitting.ClassID,
-		CandidateUserID: f.userID, WorkspaceID: workspaceID, Entry: entry, Change: change, Replayed: replayed}
+// workspaceTargetFixture points the fake Store at a fresh Attempt Workspace of
+// the fixture's Sitting and candidate.
+func workspaceTargetFixture(f *fixture) model.ExamAttemptWorkspaceID {
+	workspaceID := model.NewExamAttemptWorkspaceID()
+	f.workspace.target = &store.ExamAttemptWorkspaceMutationTarget{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
+		ClassID: f.sitting.ClassID, CandidateUserID: f.userID, WorkspaceID: workspaceID}
+	return workspaceID
 }

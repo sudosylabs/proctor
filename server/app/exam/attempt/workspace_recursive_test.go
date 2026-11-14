@@ -8,35 +8,47 @@
 package attempt
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/model"
-	"github.com/sudosylabs/proctor/server/store"
 )
+
+func recursiveDelete(path string) WorkspaceBatchMutation {
+	return WorkspaceBatchMutation{Operation: model.AttemptWorkspaceMutationDeleteEntry, EntryID: model.NewAttemptWorkspaceEntryID(),
+		ExpectedPath: path, Recursive: true}
+}
 
 func TestRecursiveWorkspaceDeletionRequiresCandidateSnapshot(t *testing.T) {
 	t.Parallel()
+	zero, negative := int64(0), int64(-1)
+	plainDelete := recursiveDelete("src")
+	plainDelete.Recursive = false
+	versioned := recursiveDelete("src")
+	versioned.ExpectedContentVersion = model.NewWorkspaceContentVersion()
 	for _, test := range []struct {
 		name      string
-		configure func(*DeleteWorkspaceEntryCommand)
+		mutations []WorkspaceBatchMutation
+		cursor    *int64
+		field     string
+		item      string
 	}{
-		{"missing cursor", func(c *DeleteWorkspaceEntryCommand) { c.ExpectedWorkspaceCursor = nil }},
-		{"negative cursor", func(c *DeleteWorkspaceEntryCommand) { value := int64(-1); c.ExpectedWorkspaceCursor = &value }},
-		{"content version", func(c *DeleteWorkspaceEntryCommand) { c.ExpectedContentVersion = model.NewWorkspaceContentVersion() }},
-		{"cursor without recursive", func(c *DeleteWorkspaceEntryCommand) { c.Recursive = false }},
+		{name: "missing cursor", mutations: []WorkspaceBatchMutation{recursiveDelete("src")}, field: "workspace_recursive_delete"},
+		{name: "missing cursor later in the batch", mutations: []WorkspaceBatchMutation{createDirectory("lib"), recursiveDelete("src")},
+			field: "workspace_recursive_delete"},
+		{name: "negative cursor", mutations: []WorkspaceBatchMutation{recursiveDelete("src")}, cursor: &negative, field: "workspace_recursive_delete"},
+		{name: "content version", mutations: []WorkspaceBatchMutation{versioned}, cursor: &zero, field: "workspace_command", item: "0"},
+		{name: "cursor without recursive", mutations: []WorkspaceBatchMutation{plainDelete}, cursor: &zero, field: "workspace_recursive_delete"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			f := newFixture(t)
-			cursor := int64(0)
-			command := DeleteWorkspaceEntryCommand{Access: validWorkspaceMutationAccess(f),
-				EntryID: model.NewAttemptWorkspaceEntryID(), ExpectedPath: "src", Recursive: true, ExpectedWorkspaceCursor: &cursor, IdempotencyKey: "recursive"}
-			test.configure(&command)
-			_, err := f.service.DeleteCandidateExamWorkspaceEntry(context.Background(), f.inv, command)
-			require.Error(t, err)
-			require.Nil(t, f.workspace.mutation)
+			workspaceTargetFixture(f)
+			_, err := applyBatch(f, nil, test.cursor, test.mutations...)
+			requireBatchFault(t, err, "exam.attempt.invalid", test.field, test.item)
+			require.Empty(t, f.workspace.reservations)
+			require.Empty(t, f.workspace.batches)
 		})
 	}
 }
@@ -44,27 +56,25 @@ func TestRecursiveWorkspaceDeletionRequiresCandidateSnapshot(t *testing.T) {
 func TestRecursiveWorkspaceDeletionCarriesSnapshotAndSemanticIdentity(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	workspaceID, entryID := model.NewExamAttemptWorkspaceID(), model.NewAttemptWorkspaceEntryID()
-	f.workspace.target = &store.ExamAttemptWorkspaceMutationTarget{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
-		ClassID: f.sitting.ClassID, CandidateUserID: f.userID, WorkspaceID: workspaceID}
-	f.workspace.mutationResult = workspaceMutationResultFixture(f, workspaceID, entryID, model.StarterWorkspaceEntryDirectory,
-		model.AttemptWorkspaceMutationDeleteEntry, "src", "", "", false)
-	f.workspace.mutationResult.Entry = nil
-	f.workspace.mutationResult.Change.Recursive = true
+	workspaceTargetFixture(f)
+	mutation := recursiveDelete("src")
 	cursor := int64(0)
-	command := DeleteWorkspaceEntryCommand{Access: validWorkspaceMutationAccess(f),
-		EntryID: entryID, ExpectedPath: "src", Recursive: true, ExpectedWorkspaceCursor: &cursor, IdempotencyKey: "recursive"}
-	result, err := f.service.DeleteCandidateExamWorkspaceEntry(context.Background(), f.inv, command)
-	require.NoError(t, err, "result=%#v error=%v mutation", result, err)
-	require.True(t, result.Change.Recursive, "result=%#v error=%v mutation", result, err)
-	require.NotNil(t, f.workspace.mutation, "result=%#v error=%v mutation", result, err)
-	require.True(t, f.workspace.mutation.Recursive, "result=%#v error=%v mutation", result, err)
-	require.NotNil(t, f.workspace.mutation.ExpectedWorkspaceCursor, "result=%#v error=%v mutation", result, err)
-	require.Equal(t, int64(0), *f.workspace.mutation.ExpectedWorkspaceCursor, "result=%#v error=%v mutation", result, err)
+	result, err := applyBatch(f, nil, &cursor, createDirectory("lib"), mutation)
+	require.NoError(t, err, "result=%#v error=%v", result, err)
+	require.Len(t, result.Changes, 2)
+	require.True(t, result.Changes[1].Recursive)
+	batch := f.workspace.batch()
+	require.NotNil(t, batch)
+	require.True(t, batch.Mutations[1].Recursive)
+	require.False(t, batch.Mutations[0].Recursive)
+	require.NotNil(t, batch.ExpectedWorkspaceCursor, "the batch carries the snapshot it starts from")
+	require.Equal(t, int64(0), *batch.ExpectedWorkspaceCursor)
 	first := *f.workspace.idempotency
+
 	cursor = 1
-	_, err = f.service.DeleteCandidateExamWorkspaceEntry(context.Background(), f.inv, command)
+	_, err = applyBatch(f, nil, &cursor, createDirectory("lib"), mutation)
 	require.NoError(t, err)
-	require.NotEqual(t, f.workspace.idempotency.Fingerprint, first.Fingerprint, "recursive snapshot was not part of the semantic fingerprint")
-	require.Equal(t, f.workspace.idempotency.KeyDigest, first.KeyDigest, "recursive snapshot was not part of the semantic fingerprint")
+	require.Equal(t, int64(1), *f.workspace.batch().ExpectedWorkspaceCursor)
+	require.NotEqual(t, first.Fingerprint, f.workspace.idempotency.Fingerprint, "recursive snapshot was not part of the semantic fingerprint")
+	require.Equal(t, first.KeyDigest, f.workspace.idempotency.KeyDigest)
 }

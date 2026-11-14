@@ -380,6 +380,9 @@ codes:
     description: "The uploaded Attempt Workspace object is in an unexpected state."
   - code: exam.attempt.workspace.path_conflict
     description: "Another Attempt Workspace entry already uses the path."
+  - code: exam.attempt.workspace.rate_limited
+    description: "The Attempt changed its Workspace too fast; retry after the `Retry-After` interval."
+    retry_after: 1
   - code: exam.attempt.workspace.size_limit
     description: "The Attempt Workspace reached its size limit."
   - code: exam.browser.source_budget_exhausted

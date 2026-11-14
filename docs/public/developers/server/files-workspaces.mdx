@@ -102,10 +102,18 @@ or application node. Replacement stages new bytes, then
 conditionally swaps the PostgreSQL pointer and content version. A response is
 success only after that durable commit.
 
-Each mutation carries:
+Every write is one batch of 1 to 128 mutations, applied in order and all or
+nothing. The editor and the execution environment use the same path. Access is
+checked once for the whole batch. The batch writes one idempotency outcome and
+one audit pair, and sends one realtime hint after commit. Capacity is checked
+against the state the whole batch leaves behind.
+
+A batch carries:
 
 - an idempotency key;
-- the expected Workspace Entry, Path, and Content Version conditions;
+- for each mutation, its expected Workspace Entry, Path, and Content Version
+  conditions;
+- the Workspace Cursor it starts from, when it deletes a directory recursively;
 - the active protected Attempt credential and Connection selector; and
 - explicit Participation identity and generation.
 

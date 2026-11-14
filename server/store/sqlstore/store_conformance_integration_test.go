@@ -528,8 +528,13 @@ func examSubmissionSQLProbe(t *testing.T, persistence *SQLStore) storetest.ExamS
 			workspaceStore := NewSQLExamAttemptWorkspaceStore(persistence)
 			attemptObjectID, err := model.ParseAttemptWorkspaceObjectID(selectors.AttemptID)
 			require.NoError(t, err)
-			err = workspaceStore.MarkObjectReclaimable(ctx, attemptObjectID)
-			require.True(t, store.IsConflict(err), "MarkObjectReclaimable(Submission pinned) error")
+			// The bulk release silently skips an object a Submission still
+			// references, so the pinned object stays staged.
+			require.NoError(t, workspaceStore.MarkObjectsReclaimable(ctx, []model.AttemptWorkspaceObjectID{attemptObjectID}))
+			var pinnedState string
+			require.NoError(t, persistence.GetMaster().Get(ctx, &pinnedState,
+				`SELECT state FROM exam_attempt_workspace_objects WHERE id=?`, selectors.AttemptID))
+			require.Equal(t, "staged", pinnedState, "MarkObjectsReclaimable(Submission pinned) released the object")
 			_, err = runSQLTransaction(ctx, persistence.GetMaster().Begin, "make Submission object cleanup due", func(ctx context.Context, tx *sqlxTxWrapper) (struct{}, error) {
 				if _, execErr := tx.Exec(ctx, `ALTER TABLE exam_attempt_workspace_objects DISABLE TRIGGER exam_attempt_workspace_objects_immutable`); execErr != nil {
 					return struct{}{}, execErr

@@ -130,31 +130,11 @@ type ExamAttemptApplication interface {
 		invocation.Invocation,
 		attempt.WorkspaceJournalQuery,
 	) (attempt.WorkspaceJournalPage, error)
-	CreateCandidateExamWorkspaceDirectory(
+	ApplyCandidateExamWorkspaceBatch(
 		context.Context,
 		invocation.Invocation,
-		attempt.CreateWorkspaceDirectoryCommand,
-	) (attempt.WorkspaceMutationResult, error)
-	CreateCandidateExamWorkspaceFile(
-		context.Context,
-		invocation.Invocation,
-		attempt.CreateWorkspaceFileCommand,
-	) (attempt.WorkspaceMutationResult, error)
-	ReplaceCandidateExamWorkspaceFile(
-		context.Context,
-		invocation.Invocation,
-		attempt.ReplaceWorkspaceFileCommand,
-	) (attempt.WorkspaceMutationResult, error)
-	MoveCandidateExamWorkspaceEntry(
-		context.Context,
-		invocation.Invocation,
-		attempt.MoveWorkspaceEntryCommand,
-	) (attempt.WorkspaceMutationResult, error)
-	DeleteCandidateExamWorkspaceEntry(
-		context.Context,
-		invocation.Invocation,
-		attempt.DeleteWorkspaceEntryCommand,
-	) (attempt.WorkspaceMutationResult, error)
+		attempt.ApplyWorkspaceBatchCommand,
+	) (attempt.WorkspaceBatchResult, error)
 	OpenCandidateExamResource(context.Context, invocation.Invocation, attempt.OpenResourceQuery) (attempt.OpenedContent, error)
 	OpenCandidateExamWorkspaceFile(context.Context, invocation.Invocation, attempt.OpenWorkspaceFileQuery) (attempt.OpenedContent, error)
 	ReallowExamAttempt(context.Context, invocation.Invocation, attempt.ReallowCommand) (attempt.ReallowResult, error)
@@ -202,9 +182,7 @@ func examAttemptResource(app ExamAttemptApplication) route.Resource {
 	presentation := "/exam-attempts/{exam_attempt_id}/presentation"
 	workspace := "/exam-attempts/{exam_attempt_id}/workspace"
 	workspaceChanges := "/exam-attempts/{exam_attempt_id}/workspace/changes"
-	workspaceDirectories := "/exam-attempts/{exam_attempt_id}/workspace/directories"
-	workspaceFiles := "/exam-attempts/{exam_attempt_id}/workspace/files"
-	workspaceEntry := "/exam-attempts/{exam_attempt_id}/workspace/entries/{attempt_workspace_entry_id}"
+	workspaceBatches := "/exam-attempts/{exam_attempt_id}/workspace/batches"
 	resourceContent := "/exam-attempts/{exam_attempt_id}/resources/{exam_resource_id}/content"
 	workspaceContent := "/exam-attempts/{exam_attempt_id}/workspace/files/{attempt_workspace_entry_id}/content"
 	candidateSubmissions := "/exam-attempts/{exam_attempt_id}/submissions"
@@ -579,127 +557,13 @@ func examAttemptResource(app ExamAttemptApplication) route.Resource {
 			Handle: h.workspaceChanges,
 		},
 		route.Endpoint{
-			Method:      http.MethodPost,
-			Path:        workspaceDirectories,
-			Auth:        route.AuthSessionRequired,
-			Idempotency: route.IdempotencyRequired,
-			Errors: []string{
-				"audit.unavailable",
-				"request.invalid",
-				"resource.not_found",
-				"exam.attempt.invalid",
-				"exam.attempt.sitting_not_open",
-				"exam.attempt.state_conflict",
-				"exam.attempt.connection_closed",
-				"exam.attempt.conflict",
-				"exam.attempt.unavailable",
-				"idempotency.key_required",
-				"idempotency.key_invalid",
-				"idempotency.conflict",
-				"idempotency.in_progress",
-				"exam.attempt.workspace.path_conflict",
-				"exam.attempt.workspace.entry_conflict",
-				"exam.attempt.workspace.entry_limit",
-				"exam.attempt.registered_desktop_required",
-				"exam.delivery.metadata_capacity",
-			},
-			Handle: h.createWorkspaceDirectory,
-		},
-		route.Endpoint{
 			Method:       http.MethodPost,
-			Path:         workspaceFiles,
+			Path:         workspaceBatches,
 			Auth:         route.AuthSessionRequired,
 			Idempotency:  route.IdempotencyRequired,
-			MaxBodyBytes: model.AttemptWorkspaceMaximumRequestBytes,
-			ProtocolName: "candidate-exam-workspace-file-upload",
+			MaxBodyBytes: model.AttemptWorkspaceBatchMaximumRequestBytes,
+			ProtocolName: "candidate-exam-workspace-batch",
 			ProtocolKind: route.ProtocolStreamingUpload,
-			Errors: []string{
-				"audit.unavailable",
-				"request.invalid",
-				"resource.not_found",
-				"exam.attempt.invalid",
-				"exam.attempt.sitting_not_open",
-				"exam.attempt.state_conflict",
-				"exam.attempt.connection_closed",
-				"exam.attempt.conflict",
-				"exam.attempt.unavailable",
-				"idempotency.key_required",
-				"idempotency.key_invalid",
-				"idempotency.conflict",
-				"idempotency.in_progress",
-				"exam.attempt.workspace.path_conflict",
-				"exam.attempt.workspace.entry_conflict",
-				"exam.attempt.workspace.entry_limit",
-				"exam.attempt.workspace.size_limit",
-				"exam.attempt.workspace.object_conflict",
-				"exam.attempt.registered_desktop_required",
-				"exam.delivery.metadata_capacity",
-			},
-			Protocol: h.createWorkspaceFile,
-		},
-		route.Endpoint{
-			Method:      http.MethodPatch,
-			Path:        workspaceEntry,
-			Auth:        route.AuthSessionRequired,
-			Idempotency: route.IdempotencyRequired,
-			Errors: []string{
-				"audit.unavailable",
-				"request.invalid",
-				"resource.not_found",
-				"exam.attempt.invalid",
-				"exam.attempt.sitting_not_open",
-				"exam.attempt.state_conflict",
-				"exam.attempt.connection_closed",
-				"exam.attempt.conflict",
-				"exam.attempt.unavailable",
-				"idempotency.key_required",
-				"idempotency.key_invalid",
-				"idempotency.conflict",
-				"idempotency.in_progress",
-				"exam.attempt.workspace.path_conflict",
-				"exam.attempt.workspace.entry_conflict",
-				"exam.attempt.registered_desktop_required",
-				"exam.delivery.metadata_capacity",
-			},
-			Handle: h.moveWorkspaceEntry,
-		},
-		route.Endpoint{
-			Method:       http.MethodPut,
-			Path:         workspaceContent,
-			Auth:         route.AuthSessionRequired,
-			Idempotency:  route.IdempotencyRequired,
-			MaxBodyBytes: model.AttemptWorkspaceMaximumRequestBytes,
-			ProtocolName: "candidate-exam-workspace-file-replacement",
-			ProtocolKind: route.ProtocolStreamingUpload,
-			Errors: []string{
-				"audit.unavailable",
-				"request.invalid",
-				"resource.not_found",
-				"exam.attempt.invalid",
-				"exam.attempt.sitting_not_open",
-				"exam.attempt.state_conflict",
-				"exam.attempt.connection_closed",
-				"exam.attempt.conflict",
-				"exam.attempt.unavailable",
-				"idempotency.key_required",
-				"idempotency.key_invalid",
-				"idempotency.conflict",
-				"idempotency.in_progress",
-				"exam.attempt.workspace.path_conflict",
-				"exam.attempt.workspace.entry_conflict",
-				"exam.attempt.workspace.content_conflict",
-				"exam.attempt.workspace.size_limit",
-				"exam.attempt.workspace.object_conflict",
-				"exam.attempt.registered_desktop_required",
-				"exam.delivery.metadata_capacity",
-			},
-			Protocol: h.replaceWorkspaceFile,
-		},
-		route.Endpoint{
-			Method:      http.MethodDelete,
-			Path:        workspaceEntry,
-			Auth:        route.AuthSessionRequired,
-			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"audit.unavailable",
 				"request.invalid",
@@ -719,10 +583,14 @@ func examAttemptResource(app ExamAttemptApplication) route.Resource {
 				"exam.attempt.workspace.content_conflict",
 				"exam.attempt.workspace.directory_not_empty",
 				"exam.attempt.workspace.cursor_conflict",
+				"exam.attempt.workspace.entry_limit",
+				"exam.attempt.workspace.size_limit",
+				"exam.attempt.workspace.object_conflict",
+				"exam.attempt.workspace.rate_limited",
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			Handle: h.deleteWorkspaceEntry,
+			Protocol: h.applyWorkspaceBatch,
 		},
 		route.Endpoint{
 			Method:       http.MethodGet,

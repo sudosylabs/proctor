@@ -1,13 +1,12 @@
 {
   "title": "Attempt Workspace changed",
-  "description": "A refetch hint for the candidate's Attempt Workspace. Paths, content and mutation bodies are never included.",
+  "description": "A refetch hint for the candidate's Attempt Workspace after one committed batch. The batch took the cursors from first_workspace_cursor to workspace_cursor. Paths, content and mutation bodies are never included.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "exam_sitting_id",
     "exam_attempt_id",
-    "entry_id",
-    "operation",
+    "first_workspace_cursor",
     "workspace_cursor",
     "changed_at"
   ],
@@ -18,18 +17,9 @@
     "exam_attempt_id": {
       "$ref": "id.json"
     },
-    "entry_id": {
-      "$ref": "id.json"
-    },
-    "operation": {
-      "type": "string",
-      "enum": [
-        "create_file",
-        "create_directory",
-        "replace_file",
-        "move_entry",
-        "delete_entry"
-      ]
+    "first_workspace_cursor": {
+      "type": "integer",
+      "minimum": 1
     },
     "workspace_cursor": {
       "type": "integer",

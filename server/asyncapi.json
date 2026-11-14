@@ -1865,7 +1865,7 @@
         "title": "Attempt suspended"
       },
       "exam_attempt_workspace_changed": {
-        "description": "Refetch the candidate's Attempt Workspace after one committed mutation. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.",
+        "description": "Refetch the candidate's Attempt Workspace after one committed batch. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.",
         "examples": [
           {
             "name": "example",
@@ -1873,10 +1873,9 @@
               "action": "exam.sitting.participate",
               "data": {
                 "changed_at": "2026-08-01T09:30:00Z",
-                "entry_id": "nfemqtwz47ydgjcx1ia56br8kp",
                 "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
                 "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
-                "operation": "replace_file",
+                "first_workspace_cursor": 7,
                 "workspace_cursor": 9
               },
               "event": "exam_attempt_workspace_changed",
@@ -1920,7 +1919,7 @@
             }
           ]
         },
-        "summary": "Refetch the candidate's Attempt Workspace after one committed mutation.",
+        "summary": "Refetch the candidate's Attempt Workspace after one committed batch.",
         "tags": [
           {
             "name": "event"
@@ -4898,13 +4897,10 @@
       },
       "exam_attempt_workspace_changed": {
         "additionalProperties": false,
-        "description": "A refetch hint for the candidate's Attempt Workspace. Paths, content and mutation bodies are never included.",
+        "description": "A refetch hint for the candidate's Attempt Workspace after one committed batch. The batch took the cursors from first_workspace_cursor to workspace_cursor. Paths, content and mutation bodies are never included.",
         "properties": {
           "changed_at": {
             "$ref": "#/components/schemas/instant"
-          },
-          "entry_id": {
-            "$ref": "#/components/schemas/id"
           },
           "exam_attempt_id": {
             "$ref": "#/components/schemas/id"
@@ -4912,15 +4908,9 @@
           "exam_sitting_id": {
             "$ref": "#/components/schemas/id"
           },
-          "operation": {
-            "enum": [
-              "create_file",
-              "create_directory",
-              "replace_file",
-              "move_entry",
-              "delete_entry"
-            ],
-            "type": "string"
+          "first_workspace_cursor": {
+            "minimum": 1,
+            "type": "integer"
           },
           "workspace_cursor": {
             "minimum": 1,
@@ -4930,8 +4920,7 @@
         "required": [
           "exam_sitting_id",
           "exam_attempt_id",
-          "entry_id",
-          "operation",
+          "first_workspace_cursor",
           "workspace_cursor",
           "changed_at"
         ],

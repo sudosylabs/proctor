@@ -201,9 +201,7 @@
         "listCandidateExamActivity", "connectWebSocket",
         "getCandidateExamPresentation", "getCandidateExamResourceContent",
         "listCandidateExamWorkspace", "listCandidateExamWorkspaceChanges",
-        "createCandidateExamWorkspaceDirectory", "createCandidateExamWorkspaceFile",
-        "moveCandidateExamWorkspaceEntry", "replaceCandidateExamWorkspaceFile",
-        "deleteCandidateExamWorkspaceEntry", "acknowledgeExamAttemptCorrection",
+        "applyCandidateExamWorkspaceBatch", "acknowledgeExamAttemptCorrection",
         "submitExamAttempt"
       ]
     },

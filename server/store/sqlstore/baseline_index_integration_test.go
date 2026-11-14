@@ -41,6 +41,7 @@ func TestBaselineHotPathIndexes(t *testing.T) {
 		"exam_attempt_workspace_objects_retired_by_audit_event_id_idx": "(retired_by_audit_event_id) WHERE (retired_by_audit_event_id IS NOT NULL)",
 		"browser_authentication_transactions_invitation_id_idx":        "(invitation_id) WHERE (invitation_id IS NOT NULL)",
 		"integrity_review_decisions_integrity_flag_id_idx":             "(integrity_flag_id, exam_attempt_id)",
+		"exam_attempt_workspace_entries_current_object_idx":            "(current_object_id) WHERE (current_object_id IS NOT NULL)",
 	} {
 		var definitions []string
 		require.NoError(t, persistence.GetMaster().Select(ctx, &definitions, `SELECT indexdef FROM pg_indexes
@@ -55,6 +56,45 @@ func TestBaselineHotPathIndexes(t *testing.T) {
 	require.NoError(t, persistence.GetMaster().Get(ctx, &stale,
 		`SELECT to_regclass('sessions_user_id_last_activity_at_idx') IS NOT NULL`))
 	assert.False(t, stale, "misnamed sessions_user_id_last_activity_at_idx still exists")
+}
+
+// TestAttemptWorkspaceOutcomeProtectionUsesItsIndex proves that the protected
+// object lookup shared by reclaim and cleanup can probe the partial GIN index
+// once per object. On an empty table any btree that names the operation costs
+// the same, so the test hides those, inside a transaction it rolls back, and
+// asks only whether the index is eligible. A change to the operation literal,
+// the expression or the operator breaks the match.
+func TestAttemptWorkspaceOutcomeProtectionUsesItsIndex(t *testing.T) {
+	persistence := openTestStore(t)
+	resetTestStore(t, persistence)
+	ctx := context.Background()
+
+	tx, err := persistence.GetMaster().Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback() }()
+	for _, statement := range []string{
+		`DROP INDEX command_outcomes_expires_at_idx`,
+		`ALTER TABLE command_outcomes DROP CONSTRAINT command_outcomes_pkey CASCADE`,
+		`SET LOCAL enable_seqscan = off`,
+	} {
+		_, err = tx.Exec(ctx, statement)
+		require.NoError(t, err, statement)
+	}
+
+	var plan []string
+	require.NoError(t, tx.Select(ctx, &plan, `EXPLAIN SELECT 1
+		FROM exam_attempt_workspace_objects objects
+		WHERE objects.id = 'ybndrfg8ejkmcpqxot1uwisza3'
+			AND NOT `+attemptWorkspaceOutcomeProtects))
+	joined := strings.Join(plan, "\n")
+	assert.Contains(t, joined, "Bitmap Index Scan on command_outcomes_workspace_objects_idx", "plan:\n%s", joined)
+	assert.Contains(t, joined, "@> to_jsonb((objects.id)::text)", "the probe is per object:\n%s", joined)
+	require.NoError(t, tx.Rollback())
+
+	var definition string
+	require.NoError(t, persistence.GetMaster().Get(ctx, &definition, `SELECT indexdef FROM pg_indexes
+		WHERE schemaname = current_schema() AND indexname = 'command_outcomes_workspace_objects_idx'`))
+	assert.Contains(t, definition, "USING gin")
 }
 
 // TestBaselineHasNoRedundantIndexes rejects a non-unique btree index whose key

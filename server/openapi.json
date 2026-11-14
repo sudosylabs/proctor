@@ -1130,22 +1130,6 @@
         "description": "Relationship kind and optional effective interval for the route User.",
         "required": true
       },
-      "CreateCandidateWorkspaceDirectory": {
-        "content": {
-          "application/json": {
-            "example": {
-              "generation": 2,
-              "participation_id": "ybndrfg8ejkmcpqxot1uwisza3",
-              "path": "answers/part-a"
-            },
-            "schema": {
-              "$ref": "#/components/schemas/CreateCandidateWorkspaceDirectoryRequest"
-            }
-          }
-        },
-        "description": "Identifies the active Participation generation and the canonical Workspace path of the new empty directory.",
-        "required": true
-      },
       "CreateClass": {
         "content": {
           "application/json": {
@@ -1349,23 +1333,6 @@
           }
         },
         "description": "Closed bounded native delivery control; unknown, missing, duplicate, and invalid members are rejected.",
-        "required": true
-      },
-      "DeleteCandidateWorkspaceEntry": {
-        "content": {
-          "application/json": {
-            "example": {
-              "expected_content_version": "ybndrfg8ejkmcpqxot1uwisza4",
-              "expected_path": "answers/draft.txt",
-              "generation": 2,
-              "participation_id": "ybndrfg8ejkmcpqxot1uwisza3"
-            },
-            "schema": {
-              "$ref": "#/components/schemas/DeleteCandidateWorkspaceEntryRequest"
-            }
-          }
-        },
-        "description": "Supplies the active Participation generation and expected entry state that must still match before deletion.",
         "required": true
       },
       "DesktopAuthorizationExchange": {
@@ -1713,23 +1680,6 @@
           }
         },
         "description": "Supplies a current TOTP code or, where permitted, one unused recovery code; clients must treat the value as sensitive.",
-        "required": true
-      },
-      "MoveCandidateWorkspaceEntry": {
-        "content": {
-          "application/json": {
-            "example": {
-              "destination_path": "answers/final.txt",
-              "expected_path": "answers/draft.txt",
-              "generation": 2,
-              "participation_id": "ybndrfg8ejkmcpqxot1uwisza3"
-            },
-            "schema": {
-              "$ref": "#/components/schemas/MoveCandidateWorkspaceEntryRequest"
-            }
-          }
-        },
-        "description": "Supplies the active Participation generation, expected current path, and canonical destination path for the atomic move.",
         "required": true
       },
       "MoveExamStarterWorkspaceEntry": {
@@ -3269,36 +3219,6 @@
           }
         },
         "description": "Bounded ordered acknowledged Workspace changes or an explicit full-refresh signal",
-        "headers": {
-          "Cache-Control": {
-            "$ref": "#/components/headers/NoStore"
-          }
-        }
-      },
-      "CandidateWorkspaceMutationCreated": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/CandidateWorkspaceMutationResponse"
-            }
-          }
-        },
-        "description": "Candidate Workspace mutation acknowledged",
-        "headers": {
-          "Cache-Control": {
-            "$ref": "#/components/headers/NoStore"
-          }
-        }
-      },
-      "CandidateWorkspaceMutationOK": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/CandidateWorkspaceMutationResponse"
-            }
-          }
-        },
-        "description": "Candidate Workspace mutation acknowledged",
         "headers": {
           "Cache-Control": {
             "$ref": "#/components/headers/NoStore"
@@ -11158,35 +11078,103 @@
         ],
         "type": "object"
       },
-      "CandidateWorkspaceFileUploadMetadata": {
+      "CandidateWorkspaceBatchManifest": {
         "additionalProperties": false,
         "properties": {
+          "expected_workspace_cursor": {
+            "description": "Required exactly when a mutation deletes a directory recursively; the Workspace Cursor the batch starts from.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
           "generation": {
-            "description": "The active Participation connection generation.",
             "format": "int64",
             "minimum": 1,
             "type": "integer"
           },
+          "mutations": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateWorkspaceBatchMutation"
+            },
+            "maxItems": 128,
+            "minItems": 1,
+            "type": "array"
+          },
+          "participation_id": {
+            "$ref": "#/components/schemas/ID"
+          }
+        },
+        "required": [
+          "participation_id",
+          "generation",
+          "mutations"
+        ],
+        "type": "object"
+      },
+      "CandidateWorkspaceBatchMultipart": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "description": "One body per create_file and replace_file mutation, in manifest order.",
+            "items": {
+              "format": "binary",
+              "maxLength": 104857600,
+              "type": "string"
+            },
+            "maxItems": 128,
+            "type": "array"
+          },
+          "manifest": {
+            "$ref": "#/components/schemas/CandidateWorkspaceBatchManifest"
+          }
+        },
+        "required": [
+          "manifest"
+        ],
+        "type": "object"
+      },
+      "CandidateWorkspaceBatchMutation": {
+        "additionalProperties": false,
+        "description": "create_file takes path, media_type, size and sha256. create_directory takes path. replace_file takes entry_id, expected_path, expected_content_version, media_type, size and sha256. move_entry takes entry_id, expected_path and destination_path. delete_entry takes entry_id and expected_path, plus expected_content_version for a file; recursive deletes a directory and everything under it. A create names its entry by path only: the server chooses its entry_id, returned in the change.",
+        "properties": {
+          "destination_path": {
+            "$ref": "#/components/schemas/StarterWorkspacePath"
+          },
+          "entry_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "expected_content_version": {
+            "$ref": "#/components/schemas/WorkspaceContentVersion"
+          },
+          "expected_path": {
+            "$ref": "#/components/schemas/StarterWorkspacePath"
+          },
           "media_type": {
-            "description": "The declared media type of the file content.",
             "maxLength": 255,
             "minLength": 1,
             "type": "string"
           },
-          "participation_id": {
-            "$ref": "#/components/schemas/ID",
-            "description": "The active Participation identifier returned by the successful Attempt connection."
+          "operation": {
+            "enum": [
+              "create_file",
+              "create_directory",
+              "replace_file",
+              "move_entry",
+              "delete_entry"
+            ],
+            "type": "string"
           },
           "path": {
-            "$ref": "#/components/schemas/StarterWorkspacePath",
-            "description": "The canonical destination path within the Attempt Workspace."
+            "$ref": "#/components/schemas/StarterWorkspacePath"
+          },
+          "recursive": {
+            "type": "boolean"
           },
           "sha256": {
-            "$ref": "#/components/schemas/SHA256",
-            "description": "The lowercase SHA-256 digest of the uploaded content."
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
           },
           "size": {
-            "description": "The exact content byte length, bounded by the admission Revision and the hard API limit.",
             "format": "int64",
             "maximum": 104857600,
             "minimum": 0,
@@ -11194,30 +11182,41 @@
           }
         },
         "required": [
-          "participation_id",
-          "generation",
-          "path",
-          "media_type",
-          "size",
-          "sha256"
+          "operation"
         ],
         "type": "object"
       },
-      "CandidateWorkspaceFileUploadMultipart": {
+      "CandidateWorkspaceBatchResponse": {
         "additionalProperties": false,
-        "description": "Exactly two parts in order: strict JSON metadata first, then bounded file content. The complete request is limited to 100 MiB plus 64 KiB.",
         "properties": {
-          "content": {
-            "format": "binary",
-            "type": "string"
+          "changes": {
+            "description": "One journal change per mutation, in batch order, at consecutive cursors.",
+            "items": {
+              "$ref": "#/components/schemas/CandidateWorkspaceJournalEntryResponse"
+            },
+            "maxItems": 128,
+            "minItems": 1,
+            "type": "array"
           },
-          "metadata": {
-            "$ref": "#/components/schemas/CandidateWorkspaceFileUploadMetadata"
+          "first_workspace_cursor": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "workspace_cursor": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "workspace_id": {
+            "$ref": "#/components/schemas/ID"
           }
         },
         "required": [
-          "metadata",
-          "content"
+          "workspace_id",
+          "first_workspace_cursor",
+          "workspace_cursor",
+          "changes"
         ],
         "type": "object"
       },
@@ -11306,56 +11305,6 @@
           "current_cursor",
           "items",
           "refresh_required"
-        ],
-        "type": "object"
-      },
-      "CandidateWorkspaceMutationAccess": {
-        "additionalProperties": false,
-        "properties": {
-          "generation": {
-            "format": "int64",
-            "minimum": 1,
-            "type": "integer"
-          },
-          "participation_id": {
-            "$ref": "#/components/schemas/ID"
-          }
-        },
-        "required": [
-          "participation_id",
-          "generation"
-        ],
-        "type": "object"
-      },
-      "CandidateWorkspaceMutationResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "entry": {
-            "$ref": "#/components/schemas/CandidateExamWorkspaceItemResponse"
-          },
-          "operation": {
-            "enum": [
-              "create_file",
-              "create_directory",
-              "replace_file",
-              "move_entry",
-              "delete_entry"
-            ],
-            "type": "string"
-          },
-          "workspace_cursor": {
-            "format": "int64",
-            "minimum": 1,
-            "type": "integer"
-          },
-          "workspace_id": {
-            "$ref": "#/components/schemas/ID"
-          }
-        },
-        "required": [
-          "workspace_id",
-          "workspace_cursor",
-          "operation"
         ],
         "type": "object"
       },
@@ -11867,28 +11816,6 @@
         },
         "required": [
           "kind"
-        ],
-        "type": "object"
-      },
-      "CreateCandidateWorkspaceDirectoryRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "generation": {
-            "format": "int64",
-            "minimum": 1,
-            "type": "integer"
-          },
-          "participation_id": {
-            "$ref": "#/components/schemas/ID"
-          },
-          "path": {
-            "$ref": "#/components/schemas/StarterWorkspacePath"
-          }
-        },
-        "required": [
-          "participation_id",
-          "generation",
-          "path"
         ],
         "type": "object"
       },
@@ -12501,74 +12428,6 @@
           "allocated_through_sequence",
           "ranges",
           "reason"
-        ],
-        "type": "object"
-      },
-      "DeleteCandidateWorkspaceEntryRequest": {
-        "additionalProperties": false,
-        "allOf": [
-          {
-            "else": {
-              "not": {
-                "required": [
-                  "expected_workspace_cursor"
-                ]
-              }
-            },
-            "if": {
-              "properties": {
-                "recursive": {
-                  "const": true
-                }
-              },
-              "required": [
-                "recursive"
-              ]
-            },
-            "then": {
-              "not": {
-                "required": [
-                  "expected_content_version"
-                ]
-              },
-              "required": [
-                "expected_workspace_cursor"
-              ]
-            }
-          }
-        ],
-        "properties": {
-          "expected_content_version": {
-            "$ref": "#/components/schemas/WorkspaceContentVersion",
-            "description": "Required for file deletion; omitted for directories."
-          },
-          "expected_path": {
-            "$ref": "#/components/schemas/StarterWorkspacePath"
-          },
-          "expected_workspace_cursor": {
-            "description": "Required only when recursive is true. The complete Workspace cursor observed by the client; any intervening mutation causes a conflict.",
-            "format": "int64",
-            "minimum": 0,
-            "type": "integer"
-          },
-          "generation": {
-            "format": "int64",
-            "minimum": 1,
-            "type": "integer"
-          },
-          "participation_id": {
-            "$ref": "#/components/schemas/ID"
-          },
-          "recursive": {
-            "default": false,
-            "description": "Delete this directory and every descendant atomically. Requires expected_workspace_cursor and cannot be used for a file.",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "participation_id",
-          "generation",
-          "expected_path"
         ],
         "type": "object"
       },
@@ -15039,6 +14898,7 @@
           "exam.attempt.workspace.entry_limit",
           "exam.attempt.workspace.object_conflict",
           "exam.attempt.workspace.path_conflict",
+          "exam.attempt.workspace.rate_limited",
           "exam.attempt.workspace.size_limit",
           "exam.browser.source_budget_exhausted",
           "exam.conflict",
@@ -20584,32 +20444,6 @@
         ],
         "type": "string"
       },
-      "MoveCandidateWorkspaceEntryRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "destination_path": {
-            "$ref": "#/components/schemas/StarterWorkspacePath"
-          },
-          "expected_path": {
-            "$ref": "#/components/schemas/StarterWorkspacePath"
-          },
-          "generation": {
-            "format": "int64",
-            "minimum": 1,
-            "type": "integer"
-          },
-          "participation_id": {
-            "$ref": "#/components/schemas/ID"
-          }
-        },
-        "required": [
-          "participation_id",
-          "generation",
-          "expected_path",
-          "destination_path"
-        ],
-        "type": "object"
-      },
       "MoveExamStarterWorkspaceEntryRequest": {
         "additionalProperties": false,
         "properties": {
@@ -24278,74 +24112,6 @@
         "required": [
           "expected_revision",
           "resource_ids"
-        ],
-        "type": "object"
-      },
-      "ReplaceCandidateWorkspaceFileMetadata": {
-        "additionalProperties": false,
-        "properties": {
-          "expected_content_version": {
-            "$ref": "#/components/schemas/WorkspaceContentVersion",
-            "description": "Last acknowledged file content version; a mismatch fails instead of overwriting concurrent work."
-          },
-          "expected_path": {
-            "$ref": "#/components/schemas/StarterWorkspacePath",
-            "description": "Canonical path the file must still occupy before its content can be replaced."
-          },
-          "generation": {
-            "description": "Active Participation generation, used to reject writes from superseded client generations.",
-            "format": "int64",
-            "minimum": 1,
-            "type": "integer"
-          },
-          "media_type": {
-            "description": "Declared media type of the replacement file content.",
-            "maxLength": 255,
-            "minLength": 1,
-            "type": "string"
-          },
-          "participation_id": {
-            "$ref": "#/components/schemas/ID",
-            "description": "Active Participation identifier returned when the candidate connected to this Attempt."
-          },
-          "sha256": {
-            "$ref": "#/components/schemas/SHA256",
-            "description": "Lowercase SHA-256 digest of the replacement content used to verify the upload."
-          },
-          "size": {
-            "description": "Exact byte length of the replacement content, bounded by the admitted Revision and hard API limit.",
-            "format": "int64",
-            "maximum": 104857600,
-            "minimum": 0,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "participation_id",
-          "generation",
-          "expected_path",
-          "expected_content_version",
-          "media_type",
-          "size",
-          "sha256"
-        ],
-        "type": "object"
-      },
-      "ReplaceCandidateWorkspaceFileMultipart": {
-        "additionalProperties": false,
-        "description": "Exactly two ordered parts containing strict JSON replacement metadata followed by bounded binary content.",
-        "properties": {
-          "content": {
-            "format": "binary",
-            "type": "string"
-          },
-          "metadata": {
-            "$ref": "#/components/schemas/ReplaceCandidateWorkspaceFileMetadata"
-          }
-        },
-        "required": [
-          "metadata",
-          "content"
         ],
         "type": "object"
       },
@@ -37369,6 +37135,146 @@
         }
       ]
     },
+    "/api/v1/exam-attempts/{exam_attempt_id}/workspace/batches": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ],
+      "post": {
+        "description": "The one way the candidate's Attempt Workspace changes. A batch holds 1 to 128 mutations, applied in order and all or nothing: create a file or directory, replace a file, move or rename an entry, or delete one. Each mutation keeps its own fence, so unrelated entries commute; a recursive directory delete also fences the batch on expected_workspace_cursor. The body is multipart: a strict JSON manifest first, then one content part for each create_file and replace_file mutation, in manifest order. Access is checked once for the whole batch against the Session-bound Attempt credential, open Connection and active Participation generation. When one mutation refuses the batch, nothing changes and the problem's item field names it by its position. One audit record and one realtime hint cover the whole batch. Each Attempt may change its Workspace only so fast, by mutations and by bytes, whoever writes; a faster writer gets 429 with Retry-After and nothing is staged.",
+        "operationId": "applyCandidateExamWorkspaceBatch",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "encoding": {
+                "content": {
+                  "contentType": "application/octet-stream"
+                },
+                "manifest": {
+                  "contentType": "application/json"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/CandidateWorkspaceBatchMultipart"
+              }
+            }
+          },
+          "description": "A strict JSON manifest part first, then exactly one content part per create_file and replace_file mutation, in manifest order, and no other part. The manifest and every body together are bounded by the hard API limit; each file is also bounded by the admitted Revision. The Attempt credential and Connection remain headers, never form fields.",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateWorkspaceBatchResponse"
+                }
+              }
+            },
+            "description": "Every mutation of the batch was acknowledged",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Apply one atomic batch of Workspace changes",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/exam-attempts/\u003cexam-attempt-id\u003e/workspace/batches' \\\n  --header 'Authorization: DPoP \u003cdesktop-session-access-credential\u003e' \\\n  --header 'DPoP: \u003cfresh-proof-for-this-post-target-and-current-nonce\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003cattempt-credential\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e' \\\n  --header 'Idempotency-Key: docs-workspace-batch-019' \\\n  --form 'manifest={\"participation_id\":\"\u003cparticipation-id\u003e\",\"generation\":2,\"mutations\":[{\"operation\":\"create_directory\",\"path\":\"answers\"},{\"operation\":\"create_file\",\"path\":\"answers/main.go\",\"media_type\":\"text/plain\",\"size\":128,\"sha256\":\"\u003csha256\u003e\"}]};type=application/json' \\\n  --form 'content=@main.go;type=application/octet-stream'"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.sitting_not_open",
+          "exam.attempt.state_conflict",
+          "exam.attempt.connection_closed",
+          "exam.attempt.conflict",
+          "exam.attempt.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "exam.attempt.workspace.path_conflict",
+          "exam.attempt.workspace.entry_conflict",
+          "exam.attempt.workspace.content_conflict",
+          "exam.attempt.workspace.directory_not_empty",
+          "exam.attempt.workspace.cursor_conflict",
+          "exam.attempt.workspace.entry_limit",
+          "exam.attempt.workspace.size_limit",
+          "exam.attempt.workspace.object_conflict",
+          "exam.attempt.workspace.rate_limited",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
     "/api/v1/exam-attempts/{exam_attempt_id}/workspace/changes": {
       "get": {
         "description": "Returns acknowledged Workspace mutations after the supplied workspace_cursor in strict order for the active candidate Attempt. If retained history can no longer bridge the cursor, the response explicitly instructs the client to reload the full manifest.",
@@ -37465,415 +37371,6 @@
           "$ref": "#/components/parameters/ExamAttemptID"
         }
       ]
-    },
-    "/api/v1/exam-attempts/{exam_attempt_id}/workspace/directories": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/ExamAttemptID"
-        }
-      ],
-      "post": {
-        "description": "Creates one empty directory at the canonical Workspace path for the active Participation generation. The mutation requires the Session-bound Attempt credential, open Connection, CSRF protection where applicable, and an Idempotency-Key for safe replay.",
-        "operationId": "createCandidateExamWorkspaceDirectory",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/CandidateAttemptCredential"
-          },
-          {
-            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
-          },
-          {
-            "$ref": "#/components/parameters/RequiredIdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "$ref": "#/components/requestBodies/CreateCandidateWorkspaceDirectory"
-        },
-        "responses": {
-          "201": {
-            "$ref": "#/components/responses/CandidateWorkspaceMutationCreated"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "dpopAuth": []
-          },
-          {
-            "csrfToken": [],
-            "sessionCookie": []
-          }
-        ],
-        "summary": "Create one acknowledged empty Workspace directory",
-        "tags": [
-          "Attempts and workspaces"
-        ],
-        "x-proctor-auth": "session_required",
-        "x-proctor-error-codes": [
-          "audit.unavailable",
-          "request.invalid",
-          "resource.not_found",
-          "exam.attempt.invalid",
-          "exam.attempt.sitting_not_open",
-          "exam.attempt.state_conflict",
-          "exam.attempt.connection_closed",
-          "exam.attempt.conflict",
-          "exam.attempt.unavailable",
-          "idempotency.key_required",
-          "idempotency.key_invalid",
-          "idempotency.conflict",
-          "idempotency.in_progress",
-          "exam.attempt.workspace.path_conflict",
-          "exam.attempt.workspace.entry_conflict",
-          "exam.attempt.workspace.entry_limit",
-          "exam.attempt.registered_desktop_required",
-          "exam.delivery.metadata_capacity",
-          "authentication.required",
-          "authentication.token_invalid",
-          "authentication.credential_ambiguous",
-          "authentication.dpop.invalid",
-          "authentication.dpop.replayed",
-          "authentication.dpop.use_nonce",
-          "authentication.dpop.unavailable",
-          "authentication.csrf.invalid"
-        ],
-        "x-proctor-idempotency": "required"
-      }
-    },
-    "/api/v1/exam-attempts/{exam_attempt_id}/workspace/entries/{attempt_workspace_entry_id}": {
-      "delete": {
-        "description": "Deletes the exact Workspace entry only when its expected path and, for files, required content version still match. A directory must be empty unless recursive is true. Recursive deletion requires the expected_workspace_cursor from the client's manifest, rejects any intervening Workspace change, and atomically removes the directory and all descendants with one recursive journal record. Other mutations do not require a Workspace cursor.",
-        "operationId": "deleteCandidateExamWorkspaceEntry",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/CandidateAttemptCredential"
-          },
-          {
-            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
-          },
-          {
-            "$ref": "#/components/parameters/RequiredIdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "$ref": "#/components/requestBodies/DeleteCandidateWorkspaceEntry"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/CandidateWorkspaceMutationOK"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "dpopAuth": []
-          },
-          {
-            "csrfToken": [],
-            "sessionCookie": []
-          }
-        ],
-        "summary": "Delete a Workspace entry or a guarded directory subtree",
-        "tags": [
-          "Attempts and workspaces"
-        ],
-        "x-proctor-auth": "session_required",
-        "x-proctor-error-codes": [
-          "audit.unavailable",
-          "request.invalid",
-          "resource.not_found",
-          "exam.attempt.invalid",
-          "exam.attempt.sitting_not_open",
-          "exam.attempt.state_conflict",
-          "exam.attempt.connection_closed",
-          "exam.attempt.conflict",
-          "exam.attempt.unavailable",
-          "idempotency.key_required",
-          "idempotency.key_invalid",
-          "idempotency.conflict",
-          "idempotency.in_progress",
-          "exam.attempt.workspace.path_conflict",
-          "exam.attempt.workspace.entry_conflict",
-          "exam.attempt.workspace.content_conflict",
-          "exam.attempt.workspace.directory_not_empty",
-          "exam.attempt.workspace.cursor_conflict",
-          "exam.attempt.registered_desktop_required",
-          "exam.delivery.metadata_capacity",
-          "authentication.required",
-          "authentication.token_invalid",
-          "authentication.credential_ambiguous",
-          "authentication.dpop.invalid",
-          "authentication.dpop.replayed",
-          "authentication.dpop.use_nonce",
-          "authentication.dpop.unavailable",
-          "authentication.csrf.invalid"
-        ],
-        "x-proctor-idempotency": "required"
-      },
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/ExamAttemptID"
-        },
-        {
-          "$ref": "#/components/parameters/AttemptWorkspaceEntryID"
-        }
-      ],
-      "patch": {
-        "description": "Atomically renames or moves the exact file or directory from its expected canonical path to a new canonical path in the active Workspace. Stale paths, invalid descendants, and destination conflicts fail without partially changing the manifest.",
-        "operationId": "moveCandidateExamWorkspaceEntry",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/CandidateAttemptCredential"
-          },
-          {
-            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
-          },
-          {
-            "$ref": "#/components/parameters/RequiredIdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "$ref": "#/components/requestBodies/MoveCandidateWorkspaceEntry"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/CandidateWorkspaceMutationOK"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "dpopAuth": []
-          },
-          {
-            "csrfToken": [],
-            "sessionCookie": []
-          }
-        ],
-        "summary": "Rename or move one Workspace entry",
-        "tags": [
-          "Attempts and workspaces"
-        ],
-        "x-proctor-auth": "session_required",
-        "x-proctor-error-codes": [
-          "audit.unavailable",
-          "request.invalid",
-          "resource.not_found",
-          "exam.attempt.invalid",
-          "exam.attempt.sitting_not_open",
-          "exam.attempt.state_conflict",
-          "exam.attempt.connection_closed",
-          "exam.attempt.conflict",
-          "exam.attempt.unavailable",
-          "idempotency.key_required",
-          "idempotency.key_invalid",
-          "idempotency.conflict",
-          "idempotency.in_progress",
-          "exam.attempt.workspace.path_conflict",
-          "exam.attempt.workspace.entry_conflict",
-          "exam.attempt.registered_desktop_required",
-          "exam.delivery.metadata_capacity",
-          "authentication.required",
-          "authentication.token_invalid",
-          "authentication.credential_ambiguous",
-          "authentication.dpop.invalid",
-          "authentication.dpop.replayed",
-          "authentication.dpop.use_nonce",
-          "authentication.dpop.unavailable",
-          "authentication.csrf.invalid"
-        ],
-        "x-proctor-idempotency": "required"
-      }
-    },
-    "/api/v1/exam-attempts/{exam_attempt_id}/workspace/files": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/ExamAttemptID"
-        }
-      ],
-      "post": {
-        "description": "Stages and acknowledges one file in the active candidate Attempt Workspace. The request is metadata-first multipart, bounded by both hard API limits and the admitted Revision, and requires the Session-bound Attempt credential, open Connection, active Participation generation, content digest, and an Idempotency-Key.",
-        "operationId": "createCandidateExamWorkspaceFile",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/CandidateAttemptCredential"
-          },
-          {
-            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
-          },
-          {
-            "$ref": "#/components/parameters/RequiredIdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "encoding": {
-                "content": {
-                  "contentType": "application/octet-stream"
-                },
-                "metadata": {
-                  "contentType": "application/json"
-                }
-              },
-              "schema": {
-                "$ref": "#/components/schemas/CandidateWorkspaceFileUploadMultipart"
-              }
-            }
-          },
-          "description": "Exactly two multipart parts in order: strict JSON metadata first, followed by bounded file content. The Attempt credential and Connection remain headers, never form fields.",
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "$ref": "#/components/responses/CandidateWorkspaceMutationCreated"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "dpopAuth": []
-          },
-          {
-            "csrfToken": [],
-            "sessionCookie": []
-          }
-        ],
-        "summary": "Stage and acknowledge one Workspace file",
-        "tags": [
-          "Attempts and workspaces"
-        ],
-        "x-codeSamples": [
-          {
-            "lang": "Shell",
-            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/exam-attempts/\u003cexam-attempt-id\u003e/workspace/files' \\\n  --header 'Authorization: DPoP \u003cdesktop-session-access-credential\u003e' \\\n  --header 'DPoP: \u003cfresh-proof-for-this-post-target-and-current-nonce\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003cattempt-credential\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e' \\\n  --header 'Idempotency-Key: docs-workspace-file-019' \\\n  --form 'metadata={\"participation_id\":\"\u003cparticipation-id\u003e\",\"generation\":2,\"path\":\"answers/main.go\",\"media_type\":\"text/plain\",\"size\":128,\"sha256\":\"\u003csha256\u003e\"};type=application/json' \\\n  --form 'content=@main.go;type=application/octet-stream'"
-          }
-        ],
-        "x-proctor-auth": "session_required",
-        "x-proctor-error-codes": [
-          "audit.unavailable",
-          "request.invalid",
-          "resource.not_found",
-          "exam.attempt.invalid",
-          "exam.attempt.sitting_not_open",
-          "exam.attempt.state_conflict",
-          "exam.attempt.connection_closed",
-          "exam.attempt.conflict",
-          "exam.attempt.unavailable",
-          "idempotency.key_required",
-          "idempotency.key_invalid",
-          "idempotency.conflict",
-          "idempotency.in_progress",
-          "exam.attempt.workspace.path_conflict",
-          "exam.attempt.workspace.entry_conflict",
-          "exam.attempt.workspace.entry_limit",
-          "exam.attempt.workspace.size_limit",
-          "exam.attempt.workspace.object_conflict",
-          "exam.attempt.registered_desktop_required",
-          "exam.delivery.metadata_capacity",
-          "authentication.required",
-          "authentication.token_invalid",
-          "authentication.credential_ambiguous",
-          "authentication.dpop.invalid",
-          "authentication.dpop.replayed",
-          "authentication.dpop.use_nonce",
-          "authentication.dpop.unavailable",
-          "authentication.csrf.invalid"
-        ],
-        "x-proctor-idempotency": "required"
-      }
     },
     "/api/v1/exam-attempts/{exam_attempt_id}/workspace/files/{attempt_workspace_entry_id}/content": {
       "get": {
@@ -37973,122 +37470,7 @@
         {
           "$ref": "#/components/parameters/AttemptWorkspaceEntryID"
         }
-      ],
-      "put": {
-        "description": "Replaces the content of one Workspace file only when its expected path and content version still match the acknowledged state. The metadata-first multipart upload, digest, active Participation generation, open Connection, and Idempotency-Key are validated before the new content is acknowledged.",
-        "operationId": "replaceCandidateExamWorkspaceFile",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/CandidateAttemptCredential"
-          },
-          {
-            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
-          },
-          {
-            "$ref": "#/components/parameters/RequiredIdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "encoding": {
-                "content": {
-                  "contentType": "application/octet-stream"
-                },
-                "metadata": {
-                  "contentType": "application/json"
-                }
-              },
-              "schema": {
-                "$ref": "#/components/schemas/ReplaceCandidateWorkspaceFileMultipart"
-              }
-            }
-          },
-          "description": "Contains strict replacement metadata first and bounded file content second; both parts describe the same exact content state and are validated before acknowledgement.",
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/CandidateWorkspaceMutationOK"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "dpopAuth": []
-          },
-          {
-            "csrfToken": [],
-            "sessionCookie": []
-          }
-        ],
-        "summary": "Replace one exact Workspace file content state",
-        "tags": [
-          "Attempts and workspaces"
-        ],
-        "x-codeSamples": [
-          {
-            "label": "Replace acknowledged Workspace content",
-            "lang": "Shell",
-            "source": "curl --request PUT \\\n  --header \"Authorization: DPoP $PROCTOR_DESKTOP_ACCESS_CREDENTIAL\" \\\n  --header \"DPoP: $PROCTOR_DPOP_PROOF\" \\\n  --header \"X-Proctor-Attempt-Credential: $ATTEMPT_CREDENTIAL\" \\\n  --header \"X-Proctor-Attempt-Connection-ID: $ATTEMPT_CONNECTION_ID\" \\\n  --header \"Idempotency-Key: workspace-replace-020\" \\\n  --form 'metadata={\"participation_id\":\"ybndrfg8ejkmcpqxot1uwisza3\",\"generation\":2,\"expected_path\":\"answers/main.go\",\"expected_content_version\":3,\"media_type\":\"text/plain\",\"size\":128,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"};type=application/json' \\\n  --form 'content=@./main.go;type=application/octet-stream' \\\n  https://proctor.example.edu/api/v1/exam-attempts/ybndrfg8ejkmcpqxot1uwisza4/workspace/files/ybndrfg8ejkmcpqxot1uwisza5/content"
-          }
-        ],
-        "x-proctor-auth": "session_required",
-        "x-proctor-error-codes": [
-          "audit.unavailable",
-          "request.invalid",
-          "resource.not_found",
-          "exam.attempt.invalid",
-          "exam.attempt.sitting_not_open",
-          "exam.attempt.state_conflict",
-          "exam.attempt.connection_closed",
-          "exam.attempt.conflict",
-          "exam.attempt.unavailable",
-          "idempotency.key_required",
-          "idempotency.key_invalid",
-          "idempotency.conflict",
-          "idempotency.in_progress",
-          "exam.attempt.workspace.path_conflict",
-          "exam.attempt.workspace.entry_conflict",
-          "exam.attempt.workspace.content_conflict",
-          "exam.attempt.workspace.size_limit",
-          "exam.attempt.workspace.object_conflict",
-          "exam.attempt.registered_desktop_required",
-          "exam.delivery.metadata_capacity",
-          "authentication.required",
-          "authentication.token_invalid",
-          "authentication.credential_ambiguous",
-          "authentication.dpop.invalid",
-          "authentication.dpop.replayed",
-          "authentication.dpop.use_nonce",
-          "authentication.dpop.unavailable",
-          "authentication.csrf.invalid"
-        ],
-        "x-proctor-idempotency": "required"
-      }
+      ]
     },
     "/api/v1/exam-sittings/{exam_sitting_id}/security-policy": {
       "get": {

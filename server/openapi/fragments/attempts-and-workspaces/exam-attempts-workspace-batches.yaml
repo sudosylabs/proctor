@@ -1,0 +1,223 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/exam-attempts/{exam_attempt_id}/workspace/batches:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+    post:
+      operationId: applyCandidateExamWorkspaceBatch
+      summary: Apply one atomic batch of Workspace changes
+      tags:
+        - Attempts and workspaces
+      description: >-
+        The one way the candidate's Attempt Workspace changes. A batch holds 1 to 128 mutations, applied in order and all or nothing: create a file or directory, replace a file, move or rename an entry, or delete one. Each mutation keeps its own fence, so unrelated entries commute; a recursive directory delete also fences the batch on expected_workspace_cursor. The body is multipart: a strict JSON manifest first, then one content part for each create_file and replace_file mutation, in manifest order. Access is checked once for the whole batch against the Session-bound Attempt credential, open Connection and active Participation generation. When one mutation refuses the batch, nothing changes and the problem's item field names it by its position. One audit record and one realtime hint cover the whole batch. Each Attempt may change its Workspace only so fast, by mutations and by bytes, whoever writes; a faster writer gets 429 with Retry-After and nothing is staged.
+      x-codeSamples:
+        - lang: Shell
+          source: |-
+            curl --fail-with-body \
+              --request POST \
+              --url 'https://proctor.example.edu/api/v1/exam-attempts/<exam-attempt-id>/workspace/batches' \
+              --header 'Authorization: DPoP <desktop-session-access-credential>' \
+              --header 'DPoP: <fresh-proof-for-this-post-target-and-current-nonce>' \
+              --header 'X-Proctor-Attempt-Credential: <attempt-credential>' \
+              --header 'X-Proctor-Attempt-Connection-ID: <attempt-connection-id>' \
+              --header 'Idempotency-Key: docs-workspace-batch-019' \
+              --form 'manifest={"participation_id":"<participation-id>","generation":2,"mutations":[{"operation":"create_directory","path":"answers"},{"operation":"create_file","path":"answers/main.go","media_type":"text/plain","size":128,"sha256":"<sha256>"}]};type=application/json' \
+              --form 'content=@main.go;type=application/octet-stream'
+      x-proctor-auth: session_required
+      x-proctor-idempotency: required
+      x-proctor-error-codes:
+        - audit.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.sitting_not_open
+        - exam.attempt.state_conflict
+        - exam.attempt.connection_closed
+        - exam.attempt.conflict
+        - exam.attempt.unavailable
+        - idempotency.key_required
+        - idempotency.key_invalid
+        - idempotency.conflict
+        - idempotency.in_progress
+        - exam.attempt.workspace.path_conflict
+        - exam.attempt.workspace.entry_conflict
+        - exam.attempt.workspace.content_conflict
+        - exam.attempt.workspace.directory_not_empty
+        - exam.attempt.workspace.cursor_conflict
+        - exam.attempt.workspace.entry_limit
+        - exam.attempt.workspace.size_limit
+        - exam.attempt.workspace.object_conflict
+        - exam.attempt.workspace.rate_limited
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/CandidateAttemptCredential'
+        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CandidateWorkspaceBatchMultipart'
+            encoding:
+              manifest:
+                contentType: application/json
+              content:
+                contentType: application/octet-stream
+        description: >-
+          A strict JSON manifest part first, then exactly one content part per create_file and replace_file mutation, in manifest order, and no other part. The manifest and every body together are bounded by the hard API limit; each file is also bounded by the admitted Revision. The Attempt credential and Connection remain headers, never form fields.
+      responses:
+        "200":
+          description: Every mutation of the batch was acknowledged
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidateWorkspaceBatchResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "429":
+          $ref: '#/components/responses/TooManyRequests'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  schemas:
+    CandidateWorkspaceBatchMultipart:
+      type: object
+      additionalProperties: false
+      required:
+        - manifest
+      properties:
+        manifest:
+          $ref: '#/components/schemas/CandidateWorkspaceBatchManifest'
+        content:
+          type: array
+          maxItems: 128
+          description: One body per create_file and replace_file mutation, in manifest order.
+          items:
+            type: string
+            format: binary
+            maxLength: 104857600
+    CandidateWorkspaceBatchManifest:
+      type: object
+      additionalProperties: false
+      required:
+        - participation_id
+        - generation
+        - mutations
+      properties:
+        participation_id:
+          $ref: '#/components/schemas/ID'
+        generation:
+          type: integer
+          format: int64
+          minimum: 1
+        expected_workspace_cursor:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Required exactly when a mutation deletes a directory recursively; the Workspace Cursor the batch starts from.
+        mutations:
+          type: array
+          minItems: 1
+          maxItems: 128
+          items:
+            $ref: '#/components/schemas/CandidateWorkspaceBatchMutation'
+    CandidateWorkspaceBatchMutation:
+      type: object
+      additionalProperties: false
+      required:
+        - operation
+      description: >-
+        create_file takes path, media_type, size and sha256. create_directory takes path. replace_file takes entry_id, expected_path, expected_content_version, media_type, size and sha256. move_entry takes entry_id, expected_path and destination_path. delete_entry takes entry_id and expected_path, plus expected_content_version for a file; recursive deletes a directory and everything under it. A create names its entry by path only: the server chooses its entry_id, returned in the change.
+      properties:
+        operation:
+          type: string
+          enum:
+            - create_file
+            - create_directory
+            - replace_file
+            - move_entry
+            - delete_entry
+        entry_id:
+          $ref: '#/components/schemas/ID'
+        path:
+          $ref: '#/components/schemas/StarterWorkspacePath'
+        expected_path:
+          $ref: '#/components/schemas/StarterWorkspacePath'
+        destination_path:
+          $ref: '#/components/schemas/StarterWorkspacePath'
+        expected_content_version:
+          $ref: '#/components/schemas/WorkspaceContentVersion'
+        recursive:
+          type: boolean
+        media_type:
+          type: string
+          minLength: 1
+          maxLength: 255
+        size:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 104857600
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+    CandidateWorkspaceBatchResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - workspace_id
+        - first_workspace_cursor
+        - workspace_cursor
+        - changes
+      properties:
+        workspace_id:
+          $ref: '#/components/schemas/ID'
+        first_workspace_cursor:
+          type: integer
+          format: int64
+          minimum: 1
+        workspace_cursor:
+          type: integer
+          format: int64
+          minimum: 1
+        changes:
+          type: array
+          minItems: 1
+          maxItems: 128
+          description: One journal change per mutation, in batch order, at consecutive cursors.
+          items:
+            $ref: '#/components/schemas/CandidateWorkspaceJournalEntryResponse'

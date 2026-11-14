@@ -2221,6 +2221,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/exam-attempts/{exam_attempt_id}/workspace/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply one atomic batch of Workspace changes
+         * @description The one way the candidate's Attempt Workspace changes. A batch holds 1 to 128 mutations, applied in order and all or nothing: create a file or directory, replace a file, move or rename an entry, or delete one. Each mutation keeps its own fence, so unrelated entries commute; a recursive directory delete also fences the batch on expected_workspace_cursor. The body is multipart: a strict JSON manifest first, then one content part for each create_file and replace_file mutation, in manifest order. Access is checked once for the whole batch against the Session-bound Attempt credential, open Connection and active Participation generation. When one mutation refuses the batch, nothing changes and the problem's item field names it by its position. One audit record and one realtime hint cover the whole batch. Each Attempt may change its Workspace only so fast, by mutations and by bytes, whoever writes; a faster writer gets 429 with Retry-After and nothing is staged.
+         */
+        post: operations["applyCandidateExamWorkspaceBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/exam-attempts/{exam_attempt_id}/workspace/changes": {
         parameters: {
             query?: never;
@@ -2244,81 +2267,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/exam-attempts/{exam_attempt_id}/workspace/directories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The Exam Attempt identifier. */
-                exam_attempt_id: components["parameters"]["ExamAttemptID"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create one acknowledged empty Workspace directory
-         * @description Creates one empty directory at the canonical Workspace path for the active Participation generation. The mutation requires the Session-bound Attempt credential, open Connection, CSRF protection where applicable, and an Idempotency-Key for safe replay.
-         */
-        post: operations["createCandidateExamWorkspaceDirectory"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/exam-attempts/{exam_attempt_id}/workspace/entries/{attempt_workspace_entry_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The Exam Attempt identifier. */
-                exam_attempt_id: components["parameters"]["ExamAttemptID"];
-                /** @description The active Attempt Workspace entry identifier. */
-                attempt_workspace_entry_id: components["parameters"]["AttemptWorkspaceEntryID"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Delete a Workspace entry or a guarded directory subtree
-         * @description Deletes the exact Workspace entry only when its expected path and, for files, required content version still match. A directory must be empty unless recursive is true. Recursive deletion requires the expected_workspace_cursor from the client's manifest, rejects any intervening Workspace change, and atomically removes the directory and all descendants with one recursive journal record. Other mutations do not require a Workspace cursor.
-         */
-        delete: operations["deleteCandidateExamWorkspaceEntry"];
-        options?: never;
-        head?: never;
-        /**
-         * Rename or move one Workspace entry
-         * @description Atomically renames or moves the exact file or directory from its expected canonical path to a new canonical path in the active Workspace. Stale paths, invalid descendants, and destination conflicts fail without partially changing the manifest.
-         */
-        patch: operations["moveCandidateExamWorkspaceEntry"];
-        trace?: never;
-    };
-    "/api/v1/exam-attempts/{exam_attempt_id}/workspace/files": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The Exam Attempt identifier. */
-                exam_attempt_id: components["parameters"]["ExamAttemptID"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Stage and acknowledge one Workspace file
-         * @description Stages and acknowledges one file in the active candidate Attempt Workspace. The request is metadata-first multipart, bounded by both hard API limits and the admitted Revision, and requires the Session-bound Attempt credential, open Connection, active Participation generation, content digest, and an Idempotency-Key.
-         */
-        post: operations["createCandidateExamWorkspaceFile"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/exam-attempts/{exam_attempt_id}/workspace/files/{attempt_workspace_entry_id}/content": {
         parameters: {
             query?: never;
@@ -2336,11 +2284,7 @@ export interface paths {
          * @description Streams one protected active Workspace file only after rechecking the authenticated Session, Attempt credential, open Connection, current Participation, and readable Attempt state. It never exposes a VFS or object-store identity. Private no-store caching, nosniff, ETag, and conditional 304 behavior apply.
          */
         get: operations["getCandidateExamWorkspaceContent"];
-        /**
-         * Replace one exact Workspace file content state
-         * @description Replaces the content of one Workspace file only when its expected path and content version still match the acknowledged state. The metadata-first multipart upload, digest, active Participation generation, open Connection, and Idempotency-Key are validated before the new content is acknowledged.
-         */
-        put: operations["replaceCandidateExamWorkspaceFile"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -7331,31 +7275,45 @@ export interface components {
             submission_allowed: boolean;
             workspace_mutation_allowed: boolean;
         };
-        CandidateWorkspaceFileUploadMetadata: {
+        CandidateWorkspaceBatchManifest: {
             /**
              * Format: int64
-             * @description The active Participation connection generation.
+             * @description Required exactly when a mutation deletes a directory recursively; the Workspace Cursor the batch starts from.
              */
+            expected_workspace_cursor?: number;
+            /** Format: int64 */
             generation: number;
-            /** @description The declared media type of the file content. */
-            media_type: string;
-            /** @description The active Participation identifier returned by the successful Attempt connection. */
+            mutations: components["schemas"]["CandidateWorkspaceBatchMutation"][];
             participation_id: components["schemas"]["ID"];
-            /** @description The canonical destination path within the Attempt Workspace. */
-            path: components["schemas"]["StarterWorkspacePath"];
-            /** @description The lowercase SHA-256 digest of the uploaded content. */
-            sha256: components["schemas"]["SHA256"];
-            /**
-             * Format: int64
-             * @description The exact content byte length, bounded by the admission Revision and the hard API limit.
-             */
-            size: number;
         };
-        /** @description Exactly two parts in order: strict JSON metadata first, then bounded file content. The complete request is limited to 100 MiB plus 64 KiB. */
-        CandidateWorkspaceFileUploadMultipart: {
-            /** Format: binary */
-            content: string;
-            metadata: components["schemas"]["CandidateWorkspaceFileUploadMetadata"];
+        CandidateWorkspaceBatchMultipart: {
+            /** @description One body per create_file and replace_file mutation, in manifest order. */
+            content?: string[];
+            manifest: components["schemas"]["CandidateWorkspaceBatchManifest"];
+        };
+        /** @description create_file takes path, media_type, size and sha256. create_directory takes path. replace_file takes entry_id, expected_path, expected_content_version, media_type, size and sha256. move_entry takes entry_id, expected_path and destination_path. delete_entry takes entry_id and expected_path, plus expected_content_version for a file; recursive deletes a directory and everything under it. A create names its entry by path only: the server chooses its entry_id, returned in the change. */
+        CandidateWorkspaceBatchMutation: {
+            destination_path?: components["schemas"]["StarterWorkspacePath"];
+            entry_id?: components["schemas"]["ID"];
+            expected_content_version?: components["schemas"]["WorkspaceContentVersion"];
+            expected_path?: components["schemas"]["StarterWorkspacePath"];
+            media_type?: string;
+            /** @enum {string} */
+            operation: "create_file" | "create_directory" | "replace_file" | "move_entry" | "delete_entry";
+            path?: components["schemas"]["StarterWorkspacePath"];
+            recursive?: boolean;
+            sha256?: string;
+            /** Format: int64 */
+            size?: number;
+        };
+        CandidateWorkspaceBatchResponse: {
+            /** @description One journal change per mutation, in batch order, at consecutive cursors. */
+            changes: components["schemas"]["CandidateWorkspaceJournalEntryResponse"][];
+            /** Format: int64 */
+            first_workspace_cursor: number;
+            /** Format: int64 */
+            workspace_cursor: number;
+            workspace_id: components["schemas"]["ID"];
         };
         CandidateWorkspaceJournalEntryResponse: {
             /** Format: date-time */
@@ -7379,19 +7337,6 @@ export interface components {
             items: components["schemas"]["CandidateWorkspaceJournalEntryResponse"][];
             next_cursor?: components["schemas"]["NextCursor"];
             refresh_required: boolean;
-            workspace_id: components["schemas"]["ID"];
-        };
-        CandidateWorkspaceMutationAccess: {
-            /** Format: int64 */
-            generation: number;
-            participation_id: components["schemas"]["ID"];
-        };
-        CandidateWorkspaceMutationResponse: {
-            entry?: components["schemas"]["CandidateExamWorkspaceItemResponse"];
-            /** @enum {string} */
-            operation: "create_file" | "create_directory" | "replace_file" | "move_entry" | "delete_entry";
-            /** Format: int64 */
-            workspace_cursor: number;
             workspace_id: components["schemas"]["ID"];
         };
         ChangePasswordRequest: {
@@ -7561,12 +7506,6 @@ export interface components {
             kind: components["schemas"]["AffiliationKind"];
             /** Format: date-time */
             start_at?: string;
-        };
-        CreateCandidateWorkspaceDirectoryRequest: {
-            /** Format: int64 */
-            generation: number;
-            participation_id: components["schemas"]["ID"];
-            path: components["schemas"]["StarterWorkspacePath"];
         };
         /** @description Academic Period and presentation for a concrete student roster. */
         CreateClassRequest: {
@@ -7746,24 +7685,6 @@ export interface components {
             /** @enum {string} */
             reason: "spool_corrupt" | "spool_lost" | "local_capacity_exhausted";
         };
-        DeleteCandidateWorkspaceEntryRequest: {
-            /** @description Required for file deletion; omitted for directories. */
-            expected_content_version?: components["schemas"]["WorkspaceContentVersion"];
-            expected_path: components["schemas"]["StarterWorkspacePath"];
-            /**
-             * Format: int64
-             * @description Required only when recursive is true. The complete Workspace cursor observed by the client; any intervening mutation causes a conflict.
-             */
-            expected_workspace_cursor?: number;
-            /** Format: int64 */
-            generation: number;
-            participation_id: components["schemas"]["ID"];
-            /**
-             * @description Delete this directory and every descendant atomically. Requires expected_workspace_cursor and cannot be used for a file.
-             * @default false
-             */
-            recursive: boolean;
-        } & unknown;
         DeliveryBudgetSnapshot: {
             browser: components["schemas"]["DeliveryFamilyBudget"];
             /** Format: int64 */
@@ -8215,7 +8136,7 @@ export interface components {
          * @description Stable public problem code. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
          * @enum {string}
          */
-        ErrorCode: "academic_administration_preview.authorization_lost" | "academic_administration_preview.conflict" | "academic_administration_preview.expired" | "academic_administration_preview.target_conflict" | "academic_administration_preview.too_many_users" | "academic_period.conflict" | "academic_period.invalid" | "academic_unit.conflict" | "academic_unit.invalid" | "academic_unit_member.conflict" | "academic_unit_member.invalid" | "access_policy.blocked" | "access_policy.invalid" | "access_policy.revision_conflict" | "access_policy.unavailable" | "administration.unavailable" | "administrator_recovery.invalid" | "administrator_recovery.unavailable" | "affiliation.conflict" | "affiliation.invalid" | "affiliation.student_has_active_enrollment" | "audit.internal" | "audit.query.invalid" | "audit.unavailable" | "authentication.account_recovery.unavailable" | "authentication.account_token.invalid" | "authentication.client_type.invalid" | "authentication.credential_ambiguous" | "authentication.credentials_invalid" | "authentication.csrf.invalid" | "authentication.desktop_authorization.account_session_locked" | "authentication.desktop_authorization.disabled" | "authentication.desktop_authorization.incompatible" | "authentication.desktop_authorization.invalid" | "authentication.desktop_authorization.rejected" | "authentication.desktop_authorization.unavailable" | "authentication.desktop_reauthentication.denied" | "authentication.desktop_reauthentication.invalid" | "authentication.dpop.invalid" | "authentication.dpop.replayed" | "authentication.dpop.unavailable" | "authentication.dpop.use_nonce" | "authentication.email_change_undo.conflict" | "authentication.external.account_conflict" | "authentication.external.account_not_linked" | "authentication.external.invalid" | "authentication.external.provider_not_found" | "authentication.external.rejected" | "authentication.external.request.invalid" | "authentication.external.unavailable" | "authentication.internal" | "authentication.method.conflict" | "authentication.method.disabled" | "authentication.method.last_usable" | "authentication.method.not_found" | "authentication.method.provider_conflict" | "authentication.method.unavailable" | "authentication.mfa.code_invalid" | "authentication.mfa.conflict" | "authentication.mfa.disabled" | "authentication.mfa.enrollment_required" | "authentication.mfa.not_found" | "authentication.mfa.rekey.conflict" | "authentication.mfa.rekey.invalid" | "authentication.mfa.required" | "authentication.mfa.reset_invalid" | "authentication.mfa.unavailable" | "authentication.password.common_invalid" | "authentication.password.identity_invalid" | "authentication.password.invalid" | "authentication.password.pattern_invalid" | "authentication.password.reused" | "authentication.rate_limit_unavailable" | "authentication.rate_limited" | "authentication.reauthentication_method_required" | "authentication.reauthentication_required" | "authentication.registration.invalid" | "authentication.registration.invitation_required" | "authentication.registration.unavailable" | "authentication.required" | "authentication.session.invalid" | "authentication.session_required" | "authentication.sessions.maximum_reached" | "authentication.strong_required" | "authentication.token_invalid" | "authentication.user.conflict" | "authentication.user.invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "class.conflict" | "class.enrollment_conflict" | "class.invalid" | "class_member.invalid" | "class_member.student_affiliation_required" | "desktop_compatibility_policy.invalid" | "desktop_compatibility_policy.revision_conflict" | "desktop_compatibility_policy.unavailable" | "desktop_registration.invalid" | "desktop_registration.revoked" | "desktop_registration.unavailable" | "exam.archived" | "exam.attempt.already_connected" | "exam.attempt.browser_activity_conflict" | "exam.attempt.configuration_frozen" | "exam.attempt.configuration_required" | "exam.attempt.configuration_stale" | "exam.attempt.configuration_unsupported" | "exam.attempt.conflict" | "exam.attempt.connection_closed" | "exam.attempt.connection_lost" | "exam.attempt.continuity_invalid" | "exam.attempt.correction_conflict" | "exam.attempt.desktop_incompatible" | "exam.attempt.focus_loss_conflict" | "exam.attempt.invalid" | "exam.attempt.management_authority_conflict" | "exam.attempt.not_found" | "exam.attempt.registered_desktop_required" | "exam.attempt.renewal_conflict" | "exam.attempt.revision_conflict" | "exam.attempt.screen_clip_incomplete" | "exam.attempt.screen_clip_limit_reached" | "exam.attempt.screen_clip_too_large" | "exam.attempt.screen_recording_off" | "exam.attempt.sitting_not_open" | "exam.attempt.state_conflict" | "exam.attempt.suspension_conflict" | "exam.attempt.unavailable" | "exam.attempt.workspace.content_conflict" | "exam.attempt.workspace.cursor_conflict" | "exam.attempt.workspace.directory_not_empty" | "exam.attempt.workspace.entry_conflict" | "exam.attempt.workspace.entry_limit" | "exam.attempt.workspace.object_conflict" | "exam.attempt.workspace.path_conflict" | "exam.attempt.workspace.size_limit" | "exam.browser.source_budget_exhausted" | "exam.conflict" | "exam.delivery.append_rate_limited" | "exam.delivery.batch_conflict" | "exam.delivery.control_rate_limited" | "exam.delivery.declaration_conflict" | "exam.delivery.detail_budget_exhausted" | "exam.delivery.metadata_capacity" | "exam.delivery.pending_capacity" | "exam.delivery.replay_window_exceeded" | "exam.delivery.sequence_limit" | "exam.delivery.summary_rate_limited" | "exam.delivery.upload_expired" | "exam.draft.no_changes" | "exam.draft.revision_conflict" | "exam.export.claim_lost" | "exam.export.conflict" | "exam.export.expired" | "exam.export.limit" | "exam.export.not_found" | "exam.export.not_ready" | "exam.export.policy_unconfigured" | "exam.export.scope_changed" | "exam.export.source_retired" | "exam.export.unavailable" | "exam.integrity_review.incomplete" | "exam.integrity_review.invalid" | "exam.integrity_review.not_found" | "exam.integrity_review.revision_conflict" | "exam.integrity_review.state_conflict" | "exam.integrity_review.too_large" | "exam.integrity_review.unavailable" | "exam.invalid" | "exam.manager.candidate_conflict" | "exam.manager.exists" | "exam.manager.ineligible" | "exam.manager.not_found" | "exam.manager.owner_protected" | "exam.not_found" | "exam.owner.no_changes" | "exam.resource.conflict" | "exam.resource.content_invalid" | "exam.resource.invalid" | "exam.resource.limit" | "exam.resource.no_changes" | "exam.resource.not_found" | "exam.resource.order_invalid" | "exam.resource.revision_conflict" | "exam.resource.unavailable" | "exam.resource.upload_invalid" | "exam.revision.capacity_exceeded" | "exam.revision.no_changes" | "exam.revision_conflict" | "exam.security.attempt_not_ready" | "exam.security.catalog_missing" | "exam.security.configuration_unsupported" | "exam.security.control_conflict" | "exam.security.interaction_blocked" | "exam.security.policy_changed" | "exam.security.preflight_consumed" | "exam.security.preflight_expired" | "exam.security.preflight_rate_limited" | "exam.security.preflight_report_changed" | "exam.security.preflight_required" | "exam.security.preflight_superseded" | "exam.security.readiness_unmet" | "exam.security.resume_required" | "exam.security.session_changed" | "exam.security.unsupported_capability" | "exam.sitting.class_ineligible" | "exam.sitting.conflict" | "exam.sitting.correction.conflict" | "exam.sitting.correction.content_invalid" | "exam.sitting.correction.invalid" | "exam.sitting.correction.limit" | "exam.sitting.correction.manifest_conflict" | "exam.sitting.correction.no_changes" | "exam.sitting.correction.not_found" | "exam.sitting.correction.stage_conflict" | "exam.sitting.correction.unavailable" | "exam.sitting.deadline_reached" | "exam.sitting.extension_not_later" | "exam.sitting.invalid" | "exam.sitting.no_changes" | "exam.sitting.not_found" | "exam.sitting.revision_conflict" | "exam.sitting.schedule_not_future" | "exam.sitting.schedule_outside_period" | "exam.sitting.state_conflict" | "exam.sitting.unavailable" | "exam.starter_workspace.conflict" | "exam.starter_workspace.content_conflict" | "exam.starter_workspace.directory_not_empty" | "exam.starter_workspace.entry_kind" | "exam.starter_workspace.entry_limit" | "exam.starter_workspace.invalid" | "exam.starter_workspace.move_conflict" | "exam.starter_workspace.no_changes" | "exam.starter_workspace.not_found" | "exam.starter_workspace.object_conflict" | "exam.starter_workspace.parent_not_found" | "exam.starter_workspace.path_conflict" | "exam.starter_workspace.total_size_limit" | "exam.starter_workspace.unavailable" | "exam.starter_workspace.upload_expired" | "exam.unavailable" | "health.not_live" | "health.not_ready" | "idempotency.conflict" | "idempotency.in_progress" | "idempotency.key_invalid" | "idempotency.key_required" | "idempotency.not_supported" | "installation.already_initialized" | "installation.bootstrap_denied" | "installation.unavailable" | "institution.conflict" | "institution.invalid" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.query.invalid" | "invitation.role_not_delegable" | "invitation.unavailable" | "invitation.user_invalid" | "job.cancel.unsupported" | "job.conflict" | "job.query.invalid" | "job.retry.unsupported" | "job.unavailable" | "mail.conflict" | "mail.query.invalid" | "mail.recipient_ineligible" | "mail.recipient_unverified" | "mail.rekey.conflict" | "mail.rekey.invalid" | "mail.test.rate_limited" | "mail.unavailable" | "mfa.required_by_policy" | "onboarding_batch.duplicate" | "onboarding_import.conflict" | "onboarding_import.file_invalid" | "onboarding_import.unavailable" | "personal_access_token.invalid" | "personal_access_token.maximum_reached" | "personal_access_token.unavailable" | "plugin.invalid" | "plugin.not_found" | "plugin.required" | "plugin.revision_conflict" | "plugin.unavailable" | "profile_picture.invalid" | "profile_picture.unavailable" | "programme.conflict" | "programme.invalid" | "programme_level.conflict" | "programme_level.invalid" | "request.invalid" | "request.too_large" | "resource.not_found" | "retention.conflict" | "retention.invalid" | "retention.unavailable" | "retention_policy.invalid" | "retention_policy.revision_conflict" | "retention_policy.unavailable" | "role.built_in.protected" | "role.conflict" | "role.invalid" | "role.permission.invalid" | "role_binding.conflict" | "role_binding.invalid" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "route.method_not_allowed" | "route.not_found" | "search.query.invalid" | "server.internal" | "service.busy" | "session.desktop_named_by_registration" | "session.id.invalid" | "session.invalid" | "session.not_found" | "student_progression.conflict" | "student_progression.effective_date_conflict" | "student_progression.lineage_conflict" | "student_progression.roster_too_large" | "student_progression.target_conflict" | "student_progression.unavailable" | "user.conflict" | "user.invalid" | "user.last_system_admin" | "user_settings.format_unsupported" | "user_settings.invalid" | "user_settings.revision_conflict" | "user_settings.unavailable" | "websocket.action.unknown" | "websocket.internal" | "websocket.origin.invalid" | "websocket.rate_limited" | "websocket.request.invalid" | "websocket.subscription.invalid" | "websocket.subscription.limit" | "websocket.unavailable";
+        ErrorCode: "academic_administration_preview.authorization_lost" | "academic_administration_preview.conflict" | "academic_administration_preview.expired" | "academic_administration_preview.target_conflict" | "academic_administration_preview.too_many_users" | "academic_period.conflict" | "academic_period.invalid" | "academic_unit.conflict" | "academic_unit.invalid" | "academic_unit_member.conflict" | "academic_unit_member.invalid" | "access_policy.blocked" | "access_policy.invalid" | "access_policy.revision_conflict" | "access_policy.unavailable" | "administration.unavailable" | "administrator_recovery.invalid" | "administrator_recovery.unavailable" | "affiliation.conflict" | "affiliation.invalid" | "affiliation.student_has_active_enrollment" | "audit.internal" | "audit.query.invalid" | "audit.unavailable" | "authentication.account_recovery.unavailable" | "authentication.account_token.invalid" | "authentication.client_type.invalid" | "authentication.credential_ambiguous" | "authentication.credentials_invalid" | "authentication.csrf.invalid" | "authentication.desktop_authorization.account_session_locked" | "authentication.desktop_authorization.disabled" | "authentication.desktop_authorization.incompatible" | "authentication.desktop_authorization.invalid" | "authentication.desktop_authorization.rejected" | "authentication.desktop_authorization.unavailable" | "authentication.desktop_reauthentication.denied" | "authentication.desktop_reauthentication.invalid" | "authentication.dpop.invalid" | "authentication.dpop.replayed" | "authentication.dpop.unavailable" | "authentication.dpop.use_nonce" | "authentication.email_change_undo.conflict" | "authentication.external.account_conflict" | "authentication.external.account_not_linked" | "authentication.external.invalid" | "authentication.external.provider_not_found" | "authentication.external.rejected" | "authentication.external.request.invalid" | "authentication.external.unavailable" | "authentication.internal" | "authentication.method.conflict" | "authentication.method.disabled" | "authentication.method.last_usable" | "authentication.method.not_found" | "authentication.method.provider_conflict" | "authentication.method.unavailable" | "authentication.mfa.code_invalid" | "authentication.mfa.conflict" | "authentication.mfa.disabled" | "authentication.mfa.enrollment_required" | "authentication.mfa.not_found" | "authentication.mfa.rekey.conflict" | "authentication.mfa.rekey.invalid" | "authentication.mfa.required" | "authentication.mfa.reset_invalid" | "authentication.mfa.unavailable" | "authentication.password.common_invalid" | "authentication.password.identity_invalid" | "authentication.password.invalid" | "authentication.password.pattern_invalid" | "authentication.password.reused" | "authentication.rate_limit_unavailable" | "authentication.rate_limited" | "authentication.reauthentication_method_required" | "authentication.reauthentication_required" | "authentication.registration.invalid" | "authentication.registration.invitation_required" | "authentication.registration.unavailable" | "authentication.required" | "authentication.session.invalid" | "authentication.session_required" | "authentication.sessions.maximum_reached" | "authentication.strong_required" | "authentication.token_invalid" | "authentication.user.conflict" | "authentication.user.invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "class.conflict" | "class.enrollment_conflict" | "class.invalid" | "class_member.invalid" | "class_member.student_affiliation_required" | "desktop_compatibility_policy.invalid" | "desktop_compatibility_policy.revision_conflict" | "desktop_compatibility_policy.unavailable" | "desktop_registration.invalid" | "desktop_registration.revoked" | "desktop_registration.unavailable" | "exam.archived" | "exam.attempt.already_connected" | "exam.attempt.browser_activity_conflict" | "exam.attempt.configuration_frozen" | "exam.attempt.configuration_required" | "exam.attempt.configuration_stale" | "exam.attempt.configuration_unsupported" | "exam.attempt.conflict" | "exam.attempt.connection_closed" | "exam.attempt.connection_lost" | "exam.attempt.continuity_invalid" | "exam.attempt.correction_conflict" | "exam.attempt.desktop_incompatible" | "exam.attempt.focus_loss_conflict" | "exam.attempt.invalid" | "exam.attempt.management_authority_conflict" | "exam.attempt.not_found" | "exam.attempt.registered_desktop_required" | "exam.attempt.renewal_conflict" | "exam.attempt.revision_conflict" | "exam.attempt.screen_clip_incomplete" | "exam.attempt.screen_clip_limit_reached" | "exam.attempt.screen_clip_too_large" | "exam.attempt.screen_recording_off" | "exam.attempt.sitting_not_open" | "exam.attempt.state_conflict" | "exam.attempt.suspension_conflict" | "exam.attempt.unavailable" | "exam.attempt.workspace.content_conflict" | "exam.attempt.workspace.cursor_conflict" | "exam.attempt.workspace.directory_not_empty" | "exam.attempt.workspace.entry_conflict" | "exam.attempt.workspace.entry_limit" | "exam.attempt.workspace.object_conflict" | "exam.attempt.workspace.path_conflict" | "exam.attempt.workspace.rate_limited" | "exam.attempt.workspace.size_limit" | "exam.browser.source_budget_exhausted" | "exam.conflict" | "exam.delivery.append_rate_limited" | "exam.delivery.batch_conflict" | "exam.delivery.control_rate_limited" | "exam.delivery.declaration_conflict" | "exam.delivery.detail_budget_exhausted" | "exam.delivery.metadata_capacity" | "exam.delivery.pending_capacity" | "exam.delivery.replay_window_exceeded" | "exam.delivery.sequence_limit" | "exam.delivery.summary_rate_limited" | "exam.delivery.upload_expired" | "exam.draft.no_changes" | "exam.draft.revision_conflict" | "exam.export.claim_lost" | "exam.export.conflict" | "exam.export.expired" | "exam.export.limit" | "exam.export.not_found" | "exam.export.not_ready" | "exam.export.policy_unconfigured" | "exam.export.scope_changed" | "exam.export.source_retired" | "exam.export.unavailable" | "exam.integrity_review.incomplete" | "exam.integrity_review.invalid" | "exam.integrity_review.not_found" | "exam.integrity_review.revision_conflict" | "exam.integrity_review.state_conflict" | "exam.integrity_review.too_large" | "exam.integrity_review.unavailable" | "exam.invalid" | "exam.manager.candidate_conflict" | "exam.manager.exists" | "exam.manager.ineligible" | "exam.manager.not_found" | "exam.manager.owner_protected" | "exam.not_found" | "exam.owner.no_changes" | "exam.resource.conflict" | "exam.resource.content_invalid" | "exam.resource.invalid" | "exam.resource.limit" | "exam.resource.no_changes" | "exam.resource.not_found" | "exam.resource.order_invalid" | "exam.resource.revision_conflict" | "exam.resource.unavailable" | "exam.resource.upload_invalid" | "exam.revision.capacity_exceeded" | "exam.revision.no_changes" | "exam.revision_conflict" | "exam.security.attempt_not_ready" | "exam.security.catalog_missing" | "exam.security.configuration_unsupported" | "exam.security.control_conflict" | "exam.security.interaction_blocked" | "exam.security.policy_changed" | "exam.security.preflight_consumed" | "exam.security.preflight_expired" | "exam.security.preflight_rate_limited" | "exam.security.preflight_report_changed" | "exam.security.preflight_required" | "exam.security.preflight_superseded" | "exam.security.readiness_unmet" | "exam.security.resume_required" | "exam.security.session_changed" | "exam.security.unsupported_capability" | "exam.sitting.class_ineligible" | "exam.sitting.conflict" | "exam.sitting.correction.conflict" | "exam.sitting.correction.content_invalid" | "exam.sitting.correction.invalid" | "exam.sitting.correction.limit" | "exam.sitting.correction.manifest_conflict" | "exam.sitting.correction.no_changes" | "exam.sitting.correction.not_found" | "exam.sitting.correction.stage_conflict" | "exam.sitting.correction.unavailable" | "exam.sitting.deadline_reached" | "exam.sitting.extension_not_later" | "exam.sitting.invalid" | "exam.sitting.no_changes" | "exam.sitting.not_found" | "exam.sitting.revision_conflict" | "exam.sitting.schedule_not_future" | "exam.sitting.schedule_outside_period" | "exam.sitting.state_conflict" | "exam.sitting.unavailable" | "exam.starter_workspace.conflict" | "exam.starter_workspace.content_conflict" | "exam.starter_workspace.directory_not_empty" | "exam.starter_workspace.entry_kind" | "exam.starter_workspace.entry_limit" | "exam.starter_workspace.invalid" | "exam.starter_workspace.move_conflict" | "exam.starter_workspace.no_changes" | "exam.starter_workspace.not_found" | "exam.starter_workspace.object_conflict" | "exam.starter_workspace.parent_not_found" | "exam.starter_workspace.path_conflict" | "exam.starter_workspace.total_size_limit" | "exam.starter_workspace.unavailable" | "exam.starter_workspace.upload_expired" | "exam.unavailable" | "health.not_live" | "health.not_ready" | "idempotency.conflict" | "idempotency.in_progress" | "idempotency.key_invalid" | "idempotency.key_required" | "idempotency.not_supported" | "installation.already_initialized" | "installation.bootstrap_denied" | "installation.unavailable" | "institution.conflict" | "institution.invalid" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.query.invalid" | "invitation.role_not_delegable" | "invitation.unavailable" | "invitation.user_invalid" | "job.cancel.unsupported" | "job.conflict" | "job.query.invalid" | "job.retry.unsupported" | "job.unavailable" | "mail.conflict" | "mail.query.invalid" | "mail.recipient_ineligible" | "mail.recipient_unverified" | "mail.rekey.conflict" | "mail.rekey.invalid" | "mail.test.rate_limited" | "mail.unavailable" | "mfa.required_by_policy" | "onboarding_batch.duplicate" | "onboarding_import.conflict" | "onboarding_import.file_invalid" | "onboarding_import.unavailable" | "personal_access_token.invalid" | "personal_access_token.maximum_reached" | "personal_access_token.unavailable" | "plugin.invalid" | "plugin.not_found" | "plugin.required" | "plugin.revision_conflict" | "plugin.unavailable" | "profile_picture.invalid" | "profile_picture.unavailable" | "programme.conflict" | "programme.invalid" | "programme_level.conflict" | "programme_level.invalid" | "request.invalid" | "request.too_large" | "resource.not_found" | "retention.conflict" | "retention.invalid" | "retention.unavailable" | "retention_policy.invalid" | "retention_policy.revision_conflict" | "retention_policy.unavailable" | "role.built_in.protected" | "role.conflict" | "role.invalid" | "role.permission.invalid" | "role_binding.conflict" | "role_binding.invalid" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "route.method_not_allowed" | "route.not_found" | "search.query.invalid" | "server.internal" | "service.busy" | "session.desktop_named_by_registration" | "session.id.invalid" | "session.invalid" | "session.not_found" | "student_progression.conflict" | "student_progression.effective_date_conflict" | "student_progression.lineage_conflict" | "student_progression.roster_too_large" | "student_progression.target_conflict" | "student_progression.unavailable" | "user.conflict" | "user.invalid" | "user.last_system_admin" | "user_settings.format_unsupported" | "user_settings.invalid" | "user_settings.revision_conflict" | "user_settings.unavailable" | "websocket.action.unknown" | "websocket.internal" | "websocket.origin.invalid" | "websocket.rate_limited" | "websocket.request.invalid" | "websocket.subscription.invalid" | "websocket.subscription.limit" | "websocket.unavailable";
         ExamAttemptConnectionResponse: {
             close_reason?: components["schemas"]["AttemptConnectionCloseReason"];
             /** Format: date-time */
@@ -9918,13 +9839,6 @@ export interface components {
          * @enum {string}
          */
         MailTemplateKey: "academic.academic_unit_assigned" | "academic.academic_unit_assignment_ended" | "academic.class_enrolled" | "academic.class_enrollment_ended" | "academic.class_transferred" | "access.academic_unit_role_invitation" | "access.institution_role_invitation" | "access.invitation_accepted" | "access.invitation_revoked" | "access.student_class_invitation" | "access.teacher_academic_unit_invitation" | "authorization.institution_role_assigned" | "authorization.institution_role_ended" | "authorization.scoped_role_assigned" | "authorization.scoped_role_ended" | "exam.manager_added" | "exam.manager_removed" | "exam.ownership_transferred_from_you" | "exam.ownership_transferred_to_you" | "exam.result_released" | "exam.retention_scheduled" | "exam.sitting_assignment_removed" | "exam.sitting_canceled" | "exam.sitting_rescheduled" | "exam.sitting_scheduled" | "exam.submission_automatically_sealed" | "exam.submission_manager_ended" | "exam.submission_received" | "identity.account_disabled" | "identity.account_enabled" | "identity.email_change_verify_new" | "identity.email_change_warning_old" | "identity.email_verified_by_admin" | "identity.mfa_disabled" | "identity.mfa_enabled" | "identity.mfa_recovery_codes_regenerated" | "identity.mfa_reset" | "identity.password_changed" | "identity.password_reset" | "identity.personal_access_token_created" | "identity.personal_access_token_disabled" | "identity.personal_access_token_enabled" | "identity.personal_access_token_revoked" | "identity.sessions_revoked_by_admin" | "identity.verify_email" | "system.mail_test";
-        MoveCandidateWorkspaceEntryRequest: {
-            destination_path: components["schemas"]["StarterWorkspacePath"];
-            expected_path: components["schemas"]["StarterWorkspacePath"];
-            /** Format: int64 */
-            generation: number;
-            participation_id: components["schemas"]["ID"];
-        };
         MoveExamStarterWorkspaceEntryRequest: {
             /** Format: int64 */
             expected_revision: number;
@@ -10729,34 +10643,6 @@ export interface components {
             /** Format: int64 */
             expected_revision: number;
             resource_ids: components["schemas"]["ID"][];
-        };
-        ReplaceCandidateWorkspaceFileMetadata: {
-            /** @description Last acknowledged file content version; a mismatch fails instead of overwriting concurrent work. */
-            expected_content_version: components["schemas"]["WorkspaceContentVersion"];
-            /** @description Canonical path the file must still occupy before its content can be replaced. */
-            expected_path: components["schemas"]["StarterWorkspacePath"];
-            /**
-             * Format: int64
-             * @description Active Participation generation, used to reject writes from superseded client generations.
-             */
-            generation: number;
-            /** @description Declared media type of the replacement file content. */
-            media_type: string;
-            /** @description Active Participation identifier returned when the candidate connected to this Attempt. */
-            participation_id: components["schemas"]["ID"];
-            /** @description Lowercase SHA-256 digest of the replacement content used to verify the upload. */
-            sha256: components["schemas"]["SHA256"];
-            /**
-             * Format: int64
-             * @description Exact byte length of the replacement content, bounded by the admitted Revision and hard API limit.
-             */
-            size: number;
-        };
-        /** @description Exactly two ordered parts containing strict JSON replacement metadata followed by bounded binary content. */
-        ReplaceCandidateWorkspaceFileMultipart: {
-            /** Format: binary */
-            content: string;
-            metadata: components["schemas"]["ReplaceCandidateWorkspaceFileMetadata"];
         };
         ReplaceInvitationRequest: {
             academic_unit_id?: components["schemas"]["ID"];
@@ -12648,26 +12534,6 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["CandidateWorkspaceJournalResponse"];
-            };
-        };
-        /** @description Candidate Workspace mutation acknowledged */
-        CandidateWorkspaceMutationCreated: {
-            headers: {
-                "Cache-Control": components["headers"]["NoStore"];
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["CandidateWorkspaceMutationResponse"];
-            };
-        };
-        /** @description Candidate Workspace mutation acknowledged */
-        CandidateWorkspaceMutationOK: {
-            headers: {
-                "Cache-Control": components["headers"]["NoStore"];
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["CandidateWorkspaceMutationResponse"];
             };
         };
         /** @description Class archived */
@@ -15769,19 +15635,6 @@ export interface components {
                 "application/json": components["schemas"]["CreateAffiliationRequest"];
             };
         };
-        /** @description Identifies the active Participation generation and the canonical Workspace path of the new empty directory. */
-        CreateCandidateWorkspaceDirectory: {
-            content: {
-                /**
-                 * @example {
-                 *       "generation": 2,
-                 *       "participation_id": "ybndrfg8ejkmcpqxot1uwisza3",
-                 *       "path": "answers/part-a"
-                 *     }
-                 */
-                "application/json": components["schemas"]["CreateCandidateWorkspaceDirectoryRequest"];
-            };
-        };
         /** @description Academic Period and canonical presentation for a new Class under the route Programme Level. */
         CreateClass: {
             content: {
@@ -15949,20 +15802,6 @@ export interface components {
                  *     }
                  */
                 "application/json": components["schemas"]["DeclareDeliveryGaps"];
-            };
-        };
-        /** @description Supplies the active Participation generation and expected entry state that must still match before deletion. */
-        DeleteCandidateWorkspaceEntry: {
-            content: {
-                /**
-                 * @example {
-                 *       "expected_content_version": "ybndrfg8ejkmcpqxot1uwisza4",
-                 *       "expected_path": "answers/draft.txt",
-                 *       "generation": 2,
-                 *       "participation_id": "ybndrfg8ejkmcpqxot1uwisza3"
-                 *     }
-                 */
-                "application/json": components["schemas"]["DeleteCandidateWorkspaceEntryRequest"];
             };
         };
         /** @description One-use code, pinned state, S256 verifier, identical public key, and exact verified Desktop build declarations for Session issuance. */
@@ -16247,20 +16086,6 @@ export interface components {
                  *     }
                  */
                 "application/json": components["schemas"]["MFACodeRequest"];
-            };
-        };
-        /** @description Supplies the active Participation generation, expected current path, and canonical destination path for the atomic move. */
-        MoveCandidateWorkspaceEntry: {
-            content: {
-                /**
-                 * @example {
-                 *       "destination_path": "answers/final.txt",
-                 *       "expected_path": "answers/draft.txt",
-                 *       "generation": 2,
-                 *       "participation_id": "ybndrfg8ejkmcpqxot1uwisza3"
-                 *     }
-                 */
-                "application/json": components["schemas"]["MoveCandidateWorkspaceEntryRequest"];
             };
         };
         /** @description Supplies the expected Draft revision and new canonical path for the exact entry identified in the route. */
@@ -19733,6 +19558,50 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    applyCandidateExamWorkspaceBatch: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. */
+                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
+                /** @description The durable open Attempt Connection bound to the current authenticated Session. */
+                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
+                /** @description Required opaque client key. Identical semantic commands replay the committed outcome for at least 24 hours; reuse with different input is a conflict. */
+                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
+            };
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        /** @description A strict JSON manifest part first, then exactly one content part per create_file and replace_file mutation, in manifest order, and no other part. The manifest and every body together are bounded by the hard API limit; each file is also bounded by the admitted Revision. The Attempt credential and Connection remain headers, never form fields. */
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["CandidateWorkspaceBatchMultipart"];
+            };
+        };
+        responses: {
+            /** @description Every mutation of the batch was acknowledged */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateWorkspaceBatchResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     listCandidateExamWorkspaceChanges: {
         parameters: {
             query?: {
@@ -19767,131 +19636,6 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
-    createCandidateExamWorkspaceDirectory: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. */
-                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
-                /** @description The durable open Attempt Connection bound to the current authenticated Session. */
-                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
-                /** @description Required opaque client key. Identical semantic commands replay the committed outcome for at least 24 hours; reuse with different input is a conflict. */
-                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
-            };
-            path: {
-                /** @description The Exam Attempt identifier. */
-                exam_attempt_id: components["parameters"]["ExamAttemptID"];
-            };
-            cookie?: never;
-        };
-        requestBody: components["requestBodies"]["CreateCandidateWorkspaceDirectory"];
-        responses: {
-            201: components["responses"]["CandidateWorkspaceMutationCreated"];
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalError"];
-            503: components["responses"]["ServiceUnavailable"];
-        };
-    };
-    deleteCandidateExamWorkspaceEntry: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. */
-                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
-                /** @description The durable open Attempt Connection bound to the current authenticated Session. */
-                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
-                /** @description Required opaque client key. Identical semantic commands replay the committed outcome for at least 24 hours; reuse with different input is a conflict. */
-                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
-            };
-            path: {
-                /** @description The Exam Attempt identifier. */
-                exam_attempt_id: components["parameters"]["ExamAttemptID"];
-                /** @description The active Attempt Workspace entry identifier. */
-                attempt_workspace_entry_id: components["parameters"]["AttemptWorkspaceEntryID"];
-            };
-            cookie?: never;
-        };
-        requestBody: components["requestBodies"]["DeleteCandidateWorkspaceEntry"];
-        responses: {
-            200: components["responses"]["CandidateWorkspaceMutationOK"];
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalError"];
-            503: components["responses"]["ServiceUnavailable"];
-        };
-    };
-    moveCandidateExamWorkspaceEntry: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. */
-                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
-                /** @description The durable open Attempt Connection bound to the current authenticated Session. */
-                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
-                /** @description Required opaque client key. Identical semantic commands replay the committed outcome for at least 24 hours; reuse with different input is a conflict. */
-                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
-            };
-            path: {
-                /** @description The Exam Attempt identifier. */
-                exam_attempt_id: components["parameters"]["ExamAttemptID"];
-                /** @description The active Attempt Workspace entry identifier. */
-                attempt_workspace_entry_id: components["parameters"]["AttemptWorkspaceEntryID"];
-            };
-            cookie?: never;
-        };
-        requestBody: components["requestBodies"]["MoveCandidateWorkspaceEntry"];
-        responses: {
-            200: components["responses"]["CandidateWorkspaceMutationOK"];
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalError"];
-            503: components["responses"]["ServiceUnavailable"];
-        };
-    };
-    createCandidateExamWorkspaceFile: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. */
-                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
-                /** @description The durable open Attempt Connection bound to the current authenticated Session. */
-                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
-                /** @description Required opaque client key. Identical semantic commands replay the committed outcome for at least 24 hours; reuse with different input is a conflict. */
-                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
-            };
-            path: {
-                /** @description The Exam Attempt identifier. */
-                exam_attempt_id: components["parameters"]["ExamAttemptID"];
-            };
-            cookie?: never;
-        };
-        /** @description Exactly two multipart parts in order: strict JSON metadata first, followed by bounded file content. The Attempt credential and Connection remain headers, never form fields. */
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["CandidateWorkspaceFileUploadMultipart"];
-            };
-        };
-        responses: {
-            201: components["responses"]["CandidateWorkspaceMutationCreated"];
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalError"];
-            503: components["responses"]["ServiceUnavailable"];
-        };
-    };
     getCandidateExamWorkspaceContent: {
         parameters: {
             query?: never;
@@ -19915,42 +19659,6 @@ export interface operations {
         responses: {
             200: components["responses"]["CandidateExamProtectedContent"];
             304: components["responses"]["CandidateExamContentNotModified"];
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalError"];
-            503: components["responses"]["ServiceUnavailable"];
-        };
-    };
-    replaceCandidateExamWorkspaceFile: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. */
-                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
-                /** @description The durable open Attempt Connection bound to the current authenticated Session. */
-                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
-                /** @description Required opaque client key. Identical semantic commands replay the committed outcome for at least 24 hours; reuse with different input is a conflict. */
-                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
-            };
-            path: {
-                /** @description The Exam Attempt identifier. */
-                exam_attempt_id: components["parameters"]["ExamAttemptID"];
-                /** @description The active Attempt Workspace entry identifier. */
-                attempt_workspace_entry_id: components["parameters"]["AttemptWorkspaceEntryID"];
-            };
-            cookie?: never;
-        };
-        /** @description Contains strict replacement metadata first and bounded file content second; both parts describe the same exact content state and are validated before acknowledgement. */
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["ReplaceCandidateWorkspaceFileMultipart"];
-            };
-        };
-        responses: {
-            200: components["responses"]["CandidateWorkspaceMutationOK"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

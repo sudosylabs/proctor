@@ -10,6 +10,7 @@ package attempt
 import (
 	"crypto/sha256"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,63 +37,91 @@ func assertPreparedIdempotency(t *testing.T, got *store.CommandIdempotency, user
 	require.Equal(t, 2*time.Second, got.Wait, "prepared idempotency")
 }
 
-func TestWorkspaceMutationFingerprintCompatibility(t *testing.T) {
+func TestWorkspaceBatchFingerprintCompatibility(t *testing.T) {
 	t.Parallel()
 	userID, attemptID := model.NewUserID(), model.NewExamAttemptID()
 	entryID := model.NewAttemptWorkspaceEntryID()
 	version := model.WorkspaceContentVersion("aaaaaaaaaaaaaaaaaaaaaaaaaa")
+	digest := strings.Repeat("a", 64)
 	inv := invocation.New(model.Principal{UserID: userID}, model.RequestMetadata{})
+	cursor := int64(7)
 	tests := []struct {
-		name      string
-		operation model.AttemptWorkspaceMutationKind
-		semantic  any
-		document  string
+		name     string
+		mutation WorkspaceBatchMutation
+		cursor   *int64
+		document string
 	}{
 		{
-			name: "create directory", operation: model.AttemptWorkspaceMutationCreateDirectory,
-			semantic: struct {
-				Path string `json:"path"`
-			}{"src"}, document: `{"path":"src"}`,
+			name:     "create directory",
+			mutation: WorkspaceBatchMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory, DestinationPath: "src"},
+			document: `{"operation":"create_directory","destination_path":"src"}`,
 		},
 		{
-			name: "create file", operation: model.AttemptWorkspaceMutationCreateFile,
-			semantic: struct {
-				Path, MediaType, SHA256 string
-				Size                    int64
-			}{"main.go", "application/octet-stream", "digest", 12},
-			document: `{"Path":"main.go","MediaType":"application/octet-stream","SHA256":"digest","Size":12}`,
+			name: "create file",
+			mutation: WorkspaceBatchMutation{Operation: model.AttemptWorkspaceMutationCreateFile, DestinationPath: "main.go",
+				MediaType: "application/octet-stream", SHA256: digest, Size: 12},
+			document: fmt.Sprintf(`{"operation":"create_file","destination_path":"main.go","media_type":"application/octet-stream","sha256":%q,"size":12}`, digest),
 		},
 		{
-			name: "replace file", operation: model.AttemptWorkspaceMutationReplaceFile,
-			semantic: struct {
-				EntryID, Path, Version, MediaType, SHA256 string
-				Size                                      int64
-			}{entryID.String(), "main.go", version.String(), "application/octet-stream", "digest", 12},
-			document: fmt.Sprintf(`{"EntryID":%q,"Path":"main.go","Version":%q,"MediaType":"application/octet-stream","SHA256":"digest","Size":12}`,
-				entryID, version),
+			name: "replace file",
+			mutation: WorkspaceBatchMutation{Operation: model.AttemptWorkspaceMutationReplaceFile, EntryID: entryID, ExpectedPath: "main.go",
+				ExpectedContentVersion: version, MediaType: "application/octet-stream", SHA256: digest, Size: 12},
+			document: fmt.Sprintf(`{"operation":"replace_file","entry_id":%q,"expected_path":"main.go","expected_content_version":%q,"media_type":"application/octet-stream","sha256":%q,"size":12}`,
+				entryID, version, digest),
 		},
 		{
-			name: "move", operation: model.AttemptWorkspaceMutationMoveEntry,
-			semantic: struct{ EntryID, ExpectedPath, DestinationPath string }{entryID.String(), "old", "new"},
-			document: fmt.Sprintf(`{"EntryID":%q,"ExpectedPath":"old","DestinationPath":"new"}`, entryID),
+			name:     "move",
+			mutation: WorkspaceBatchMutation{Operation: model.AttemptWorkspaceMutationMoveEntry, EntryID: entryID, ExpectedPath: "old", DestinationPath: "new"},
+			document: fmt.Sprintf(`{"operation":"move_entry","entry_id":%q,"expected_path":"old","destination_path":"new"}`, entryID),
 		},
 		{
-			name: "delete", operation: model.AttemptWorkspaceMutationDeleteEntry,
-			semantic: struct{ EntryID, ExpectedPath, ExpectedContentVersion string }{entryID.String(), "old", version.String()},
-			document: fmt.Sprintf(`{"EntryID":%q,"ExpectedPath":"old","ExpectedContentVersion":%q}`, entryID, version),
+			name:     "delete",
+			mutation: WorkspaceBatchMutation{Operation: model.AttemptWorkspaceMutationDeleteEntry, EntryID: entryID, ExpectedPath: "old", ExpectedContentVersion: version},
+			document: fmt.Sprintf(`{"operation":"delete_entry","entry_id":%q,"expected_path":"old","expected_content_version":%q}`, entryID, version),
+		},
+		{
+			name:     "recursive delete",
+			mutation: WorkspaceBatchMutation{Operation: model.AttemptWorkspaceMutationDeleteEntry, EntryID: entryID, ExpectedPath: "old", Recursive: true},
+			cursor:   &cursor,
+			document: fmt.Sprintf(`{"operation":"delete_entry","entry_id":%q,"expected_path":"old","recursive":true}`, entryID),
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			prepared, err := prepareWorkspaceMutationIdempotency(inv, "execution-key", attemptID, test.operation, test.semantic)
+			prepared, err := prepareWorkspaceBatchIdempotency(inv, "execution-key", attemptID, []WorkspaceBatchMutation{test.mutation}, test.cursor)
 			require.NoError(t, err)
-			outer := fmt.Sprintf(`{"exam_attempt_id":%q,"operation":%q,"command":%s}`,
-				attemptID, test.operation, test.document)
-			assertPreparedIdempotency(t, prepared, userID, store.ExamAttemptWorkspaceMutationOperation,
+			outer := fmt.Sprintf(`{"exam_attempt_id":%q,"mutations":[%s]}`, attemptID, test.document)
+			if test.cursor != nil {
+				outer = fmt.Sprintf(`{"exam_attempt_id":%q,"mutations":[%s],"expected_workspace_cursor":%d}`, attemptID, test.document, *test.cursor)
+			}
+			assertPreparedIdempotency(t, prepared, userID, store.ExamAttemptWorkspaceBatchOperation,
 				"execution-key", outer)
 		})
 	}
+}
+
+func TestWorkspaceBatchFingerprintFollowsOrderAndPaths(t *testing.T) {
+	t.Parallel()
+	inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+	attemptID := model.NewExamAttemptID()
+	directory := WorkspaceBatchMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory, DestinationPath: "src"}
+	file := WorkspaceBatchMutation{Operation: model.AttemptWorkspaceMutationCreateFile, DestinationPath: "src/main.go",
+		MediaType: "text/plain", SHA256: strings.Repeat("a", 64), Size: 4}
+	fingerprint := func(mutations ...WorkspaceBatchMutation) [32]byte {
+		t.Helper()
+		prepared, err := prepareWorkspaceBatchIdempotency(inv, "batch-key", attemptID, mutations, nil)
+		require.NoError(t, err)
+		return prepared.Fingerprint
+	}
+
+	original := fingerprint(directory, file)
+	require.Equal(t, original, fingerprint(directory, file), "an exact retry must match")
+	require.NotEqual(t, original, fingerprint(file, directory), "order is part of the batch")
+	renamed := file
+	renamed.DestinationPath = "src/other.go"
+	require.NotEqual(t, original, fingerprint(directory, renamed), "paths are part of the batch")
+	require.NotEqual(t, original, fingerprint(directory), "every mutation is part of the batch")
 }
 
 func TestCommandIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) {
@@ -131,10 +160,10 @@ func TestCommandIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) 
 func TestIdempotencyOperationCompatibility(t *testing.T) {
 	t.Parallel()
 	tests := map[string]string{
-		store.ExamAttemptConnectOperation:           "exam.attempt.connect",
-		store.ExamAttemptReallowOperation:           "exam.attempt.reallow",
-		store.ExamAttemptWorkspaceMutationOperation: "exam.attempt.workspace.mutate",
-		store.ExamSubmissionSealOperation:           "exam.attempt.submit",
+		store.ExamAttemptConnectOperation:        "exam.attempt.connect",
+		store.ExamAttemptReallowOperation:        "exam.attempt.reallow",
+		store.ExamAttemptWorkspaceBatchOperation: "exam.attempt.workspace.batch",
+		store.ExamSubmissionSealOperation:        "exam.attempt.submit",
 	}
 	require.Len(t, tests, 4)
 	for operation, want := range tests {

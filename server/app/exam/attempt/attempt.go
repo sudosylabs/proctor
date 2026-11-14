@@ -224,6 +224,7 @@ type Service struct {
 
 	liveControls     controlAdmission
 	deliveryControls controlAdmission
+	workspaceBudget  *workspaceWriteBudget
 }
 
 // New builds the Service, or fails when a required collaborator is missing.
@@ -302,5 +303,6 @@ func New(deps Dependencies) (*Service, error) {
 		newJobID:             deps.NewJob,
 		liveControls:         controlAdmission{lane: liveControlLane},
 		deliveryControls:     controlAdmission{lane: deliveryControlLane},
+		workspaceBudget:      newWorkspaceWriteBudget(workspaceWriteRates),
 	}, nil
 }

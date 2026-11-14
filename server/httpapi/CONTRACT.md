@@ -1536,11 +1536,7 @@ candidates use Attempt-scoped protected delivery routes:
 | `PUT /api/v1/exam-attempts/{exam_attempt_id}/corrections/{exam_revision_id}/acknowledgement` | bound registered-key Desktop Session plus Attempt credential and Connection; required idempotency | retained correction acknowledgement |
 | `GET /api/v1/exam-attempts/{exam_attempt_id}/workspace` | Session plus Attempt credential and Connection | bounded logical Workspace page |
 | `GET /api/v1/exam-attempts/{exam_attempt_id}/workspace/changes` | Session plus Attempt credential and Connection | bounded journal page or explicit full-refresh signal |
-| `POST /api/v1/exam-attempts/{exam_attempt_id}/workspace/directories` | Session plus Attempt credential and Connection; required idempotency | acknowledged directory and Cursor |
-| `POST /api/v1/exam-attempts/{exam_attempt_id}/workspace/files` | Session plus Attempt credential and Connection; required idempotency | staged and acknowledged file and Cursor |
-| `PATCH /api/v1/exam-attempts/{exam_attempt_id}/workspace/entries/{attempt_workspace_entry_id}` | Session plus Attempt credential and Connection; required idempotency | acknowledged rename/move and Cursor |
-| `PUT /api/v1/exam-attempts/{exam_attempt_id}/workspace/files/{attempt_workspace_entry_id}/content` | Session plus Attempt credential and Connection; required idempotency | acknowledged replacement and Cursor |
-| `DELETE /api/v1/exam-attempts/{exam_attempt_id}/workspace/entries/{attempt_workspace_entry_id}` | Session plus Attempt credential and Connection; required idempotency | acknowledged deletion and Cursor |
+| `POST /api/v1/exam-attempts/{exam_attempt_id}/workspace/batches` | Session plus Attempt credential and Connection; required idempotency | 1–128 mutations applied all or nothing; one journal change per mutation at consecutive Cursors |
 | `GET /api/v1/exam-attempts/{exam_attempt_id}/resources/{exam_resource_id}/content` | Session plus Attempt credential and Connection | protected inline bytes or `304` |
 | `GET /api/v1/exam-attempts/{exam_attempt_id}/workspace/files/{attempt_workspace_entry_id}/content` | Session plus Attempt credential and Connection | protected inline bytes or `304` |
 | `POST /api/v1/exam-attempts/{exam_attempt_id}/submissions` | Session plus Attempt credential and Connection; required idempotency | `201` candidate-safe retained receipt |

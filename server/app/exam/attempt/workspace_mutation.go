@@ -52,82 +52,45 @@ func validWorkspaceTarget(target *store.ExamAttemptWorkspaceMutationTarget, work
 		target.WorkspaceID.IsValid()
 }
 
-func projectWorkspaceMutation(
-	stored *store.ExamAttemptWorkspaceMutationResult,
-	attemptID model.ExamAttemptID,
-	operation model.AttemptWorkspaceMutationKind,
-) (WorkspaceMutationResult, error) {
-	if operation == model.AttemptWorkspaceMutationDeleteEntry {
-		if stored.Entry != nil {
-			return WorkspaceMutationResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("deleted Workspace entry remained visible"))
-		}
-		return WorkspaceMutationResult{
-			AttemptID:       attemptID,
-			SittingID:       stored.SittingID,
-			CandidateUserID: stored.CandidateUserID,
-			WorkspaceID:     stored.WorkspaceID,
-			Change:          stored.Change,
-			Replayed:        stored.Replayed,
-		}, nil
-	}
-
-	entry := *stored.Entry
-	return WorkspaceMutationResult{
-		AttemptID:       attemptID,
-		SittingID:       stored.SittingID,
-		CandidateUserID: stored.CandidateUserID,
-		WorkspaceID:     stored.WorkspaceID,
-		Entry:           &entry,
-		Change:          stored.Change,
-		Replayed:        stored.Replayed,
-	}, nil
-}
-
-func (s *Service) resolveWorkspaceMutationTarget(
-	ctx context.Context,
-	workspaceAccess store.ExamAttemptWorkspaceMutationAccess,
-) (*store.ExamAttemptWorkspaceMutationTarget, error) {
-	target, err := s.workspaces.ResolveMutationTarget(ctx, workspaceAccess)
-	if err != nil {
-		return nil, storeError(storeErrors, err)
-	}
-	if !validWorkspaceTarget(target, workspaceAccess) {
-		return nil, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt Workspace mutation target"))
-	}
-
-	return target, nil
-}
-
-func (s *Service) applyWorkspaceMutation(
+func (s *Service) applyWorkspaceBatch(
 	ctx context.Context,
 	inv invocation.Invocation,
 	target *store.ExamAttemptWorkspaceMutationTarget,
-	mutation *store.ExamAttemptWorkspaceMutation,
+	batch *store.ExamAttemptWorkspaceBatch,
 	commandIdempotency *store.CommandIdempotency,
-) (WorkspaceMutationResult, error) {
+) (WorkspaceBatchResult, error) {
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
 		Invocation: inv,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
 		ScopeType:  model.RoleScopeClass,
 		ScopeID:    target.ClassID.String(),
-		Operation:  store.ExamAttemptWorkspaceMutationOperation,
-		Value: map[string]any{"exam_attempt_id": mutation.Access.AttemptID.String(),
-			"operation": string(mutation.Operation)},
+		Operation:  store.ExamAttemptWorkspaceBatchOperation,
+		Value: map[string]any{
+			"exam_attempt_id": batch.Access.AttemptID.String(),
+			"mutation_count":  len(batch.Mutations),
+		},
 	})
 	if err != nil {
-		return WorkspaceMutationResult{}, err
+		return WorkspaceBatchResult{}, err
 	}
 
-	mutation.AuditEventID, mutation.AuditAt = auditID, model.TimeUTC(s.now())
-	stored, err := s.workspaces.ApplyMutation(ctx, mutation, commandIdempotency)
+	batch.AuditEventID, batch.AuditAt = auditID, model.TimeUTC(s.now())
+	stored, err := s.workspaces.ApplyBatch(ctx, batch, commandIdempotency)
 	if err != nil {
-		return WorkspaceMutationResult{}, s.failAudit(ctx, auditID, err)
+		return WorkspaceBatchResult{}, s.failAudit(ctx, auditID, workspaceBatchStoreError(err))
+	}
+	if !stored.ConsistentWith(target, batch.Mutations) {
+		return WorkspaceBatchResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt Workspace batch result"))
 	}
 
-	result, err := projectWorkspaceMutation(stored, mutation.Access.AttemptID, mutation.Operation)
-	if err != nil {
-		return WorkspaceMutationResult{}, err
+	result := WorkspaceBatchResult{
+		AttemptID:       batch.Access.AttemptID,
+		SittingID:       stored.SittingID,
+		CandidateUserID: stored.CandidateUserID,
+		WorkspaceID:     stored.WorkspaceID,
+		Changes:         stored.Changes,
+		Replayed:        stored.Replayed,
 	}
 
 	if !result.Replayed {

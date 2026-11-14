@@ -630,48 +630,39 @@ func (s *examAttemptWorkspaceStore) ListJournal(
 	})
 }
 
-func (s *examAttemptWorkspaceStore) ResolveMutationTarget(
-	ctx context.Context,
-	access store.ExamAttemptWorkspaceMutationAccess,
-) (*store.ExamAttemptWorkspaceMutationTarget, error) {
-	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptWorkspaceMutationTarget, error) {
-		return s.ExamAttemptWorkspaceStore.ResolveMutationTarget(ctx, access)
-	})
-}
-
-func (s *examAttemptWorkspaceStore) ReserveObject(
+func (s *examAttemptWorkspaceStore) ReserveObjects(
 	ctx context.Context,
 	input *store.ExamAttemptWorkspaceObjectReservation,
-) (*model.AttemptWorkspaceObject, error) {
-	return retryCall1(ctx, s.layer, func() (*model.AttemptWorkspaceObject, error) {
-		return s.ExamAttemptWorkspaceStore.ReserveObject(ctx, input)
+) (*store.ExamAttemptWorkspaceMutationTarget, error) {
+	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptWorkspaceMutationTarget, error) {
+		return s.ExamAttemptWorkspaceStore.ReserveObjects(ctx, input)
 	})
 }
 
-func (s *examAttemptWorkspaceStore) MarkObjectReady(
+func (s *examAttemptWorkspaceStore) MarkObjectsReady(
 	ctx context.Context,
-	input *store.ExamAttemptWorkspaceObjectReady,
-) (*model.AttemptWorkspaceObject, error) {
-	return retryCall1(ctx, s.layer, func() (*model.AttemptWorkspaceObject, error) {
-		return s.ExamAttemptWorkspaceStore.MarkObjectReady(ctx, input)
+	input *store.ExamAttemptWorkspaceObjectsReady,
+) error {
+	return retryCall0(ctx, s.layer, func() error {
+		return s.ExamAttemptWorkspaceStore.MarkObjectsReady(ctx, input)
 	})
 }
 
-func (s *examAttemptWorkspaceStore) ApplyMutation(
+func (s *examAttemptWorkspaceStore) ApplyBatch(
 	ctx context.Context,
-	input *store.ExamAttemptWorkspaceMutation,
+	input *store.ExamAttemptWorkspaceBatch,
 	command *store.CommandIdempotency,
-) (*store.ExamAttemptWorkspaceMutationResult, error) {
+) (*store.ExamAttemptWorkspaceBatchResult, error) {
 	if command == nil {
-		return s.ExamAttemptWorkspaceStore.ApplyMutation(ctx, input, command)
+		return s.ExamAttemptWorkspaceStore.ApplyBatch(ctx, input, command)
 	}
-	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptWorkspaceMutationResult, error) {
-		return s.ExamAttemptWorkspaceStore.ApplyMutation(ctx, input, command)
+	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptWorkspaceBatchResult, error) {
+		return s.ExamAttemptWorkspaceStore.ApplyBatch(ctx, input, command)
 	})
 }
 
-func (s *examAttemptWorkspaceStore) MarkObjectReclaimable(ctx context.Context, objectID model.AttemptWorkspaceObjectID) error {
-	return s.ExamAttemptWorkspaceStore.MarkObjectReclaimable(ctx, objectID)
+func (s *examAttemptWorkspaceStore) MarkObjectsReclaimable(ctx context.Context, objectIDs []model.AttemptWorkspaceObjectID) error {
+	return s.ExamAttemptWorkspaceStore.MarkObjectsReclaimable(ctx, objectIDs)
 }
 
 func (s *examAttemptWorkspaceStore) ClaimObjectsForCleanup(

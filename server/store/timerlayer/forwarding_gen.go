@@ -1861,33 +1861,27 @@ func (s *timedExamAttemptWorkspaceStore) ListJournal(arg0 context.Context, arg1 
 	})
 }
 
-func (s *timedExamAttemptWorkspaceStore) ResolveMutationTarget(arg0 context.Context, arg1 store.ExamAttemptWorkspaceMutationAccess) (*store.ExamAttemptWorkspaceMutationTarget, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodResolveMutationTarget), func(callCtx context.Context) (*store.ExamAttemptWorkspaceMutationTarget, error) {
-		return s.next.ResolveMutationTarget(callCtx, arg1)
+func (s *timedExamAttemptWorkspaceStore) ReserveObjects(arg0 context.Context, arg1 *store.ExamAttemptWorkspaceObjectReservation) (*store.ExamAttemptWorkspaceMutationTarget, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodReserveObjects), func(callCtx context.Context) (*store.ExamAttemptWorkspaceMutationTarget, error) {
+		return s.next.ReserveObjects(callCtx, arg1)
 	})
 }
 
-func (s *timedExamAttemptWorkspaceStore) ReserveObject(arg0 context.Context, arg1 *store.ExamAttemptWorkspaceObjectReservation) (*model.AttemptWorkspaceObject, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodReserveObject), func(callCtx context.Context) (*model.AttemptWorkspaceObject, error) {
-		return s.next.ReserveObject(callCtx, arg1)
+func (s *timedExamAttemptWorkspaceStore) MarkObjectsReady(arg0 context.Context, arg1 *store.ExamAttemptWorkspaceObjectsReady) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodMarkObjectsReady), func(callCtx context.Context) error {
+		return s.next.MarkObjectsReady(callCtx, arg1)
 	})
 }
 
-func (s *timedExamAttemptWorkspaceStore) MarkObjectReady(arg0 context.Context, arg1 *store.ExamAttemptWorkspaceObjectReady) (*model.AttemptWorkspaceObject, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodMarkObjectReady), func(callCtx context.Context) (*model.AttemptWorkspaceObject, error) {
-		return s.next.MarkObjectReady(callCtx, arg1)
+func (s *timedExamAttemptWorkspaceStore) ApplyBatch(arg0 context.Context, arg1 *store.ExamAttemptWorkspaceBatch, arg2 *store.CommandIdempotency) (*store.ExamAttemptWorkspaceBatchResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodApplyBatch), func(callCtx context.Context) (*store.ExamAttemptWorkspaceBatchResult, error) {
+		return s.next.ApplyBatch(callCtx, arg1, arg2)
 	})
 }
 
-func (s *timedExamAttemptWorkspaceStore) ApplyMutation(arg0 context.Context, arg1 *store.ExamAttemptWorkspaceMutation, arg2 *store.CommandIdempotency) (*store.ExamAttemptWorkspaceMutationResult, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodApplyMutation), func(callCtx context.Context) (*store.ExamAttemptWorkspaceMutationResult, error) {
-		return s.next.ApplyMutation(callCtx, arg1, arg2)
-	})
-}
-
-func (s *timedExamAttemptWorkspaceStore) MarkObjectReclaimable(arg0 context.Context, arg1 model.AttemptWorkspaceObjectID) error {
-	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodMarkObjectReclaimable), func(callCtx context.Context) error {
-		return s.next.MarkObjectReclaimable(callCtx, arg1)
+func (s *timedExamAttemptWorkspaceStore) MarkObjectsReclaimable(arg0 context.Context, arg1 []model.AttemptWorkspaceObjectID) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodMarkObjectsReclaimable), func(callCtx context.Context) error {
+		return s.next.MarkObjectsReclaimable(callCtx, arg1)
 	})
 }
 

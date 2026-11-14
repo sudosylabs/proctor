@@ -17,18 +17,47 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-func prepareWorkspaceMutationIdempotency(
+// prepareWorkspaceBatchIdempotency fingerprints a batch by everything the
+// candidate asked for, in order. Server-chosen identities are not part of it,
+// so an exact retry matches.
+func prepareWorkspaceBatchIdempotency(
 	inv invocation.Invocation,
 	key string,
 	attemptID model.ExamAttemptID,
-	operation model.AttemptWorkspaceMutationKind,
-	semantic any,
+	mutations []WorkspaceBatchMutation,
+	expectedWorkspaceCursor *int64,
 ) (*store.CommandIdempotency, error) {
-	return idempotency.Require(inv, store.ExamAttemptWorkspaceMutationOperation, key, struct {
-		AttemptID string `json:"exam_attempt_id"`
-		Operation string `json:"operation"`
-		Command   any    `json:"command"`
-	}{attemptID.String(), string(operation), semantic})
+	type semanticMutation struct {
+		Operation              string `json:"operation"`
+		EntryID                string `json:"entry_id,omitempty"`
+		ExpectedPath           string `json:"expected_path,omitempty"`
+		DestinationPath        string `json:"destination_path,omitempty"`
+		ExpectedContentVersion string `json:"expected_content_version,omitempty"`
+		Recursive              bool   `json:"recursive,omitempty"`
+		MediaType              string `json:"media_type,omitempty"`
+		SHA256                 string `json:"sha256,omitempty"`
+		Size                   int64  `json:"size,omitempty"`
+	}
+	semantic := make([]semanticMutation, len(mutations))
+	for index, mutation := range mutations {
+		semantic[index] = semanticMutation{
+			Operation:              string(mutation.Operation),
+			EntryID:                mutation.EntryID.String(),
+			ExpectedPath:           mutation.ExpectedPath,
+			DestinationPath:        mutation.DestinationPath,
+			ExpectedContentVersion: mutation.ExpectedContentVersion.String(),
+			Recursive:              mutation.Recursive,
+			MediaType:              mutation.MediaType,
+			SHA256:                 mutation.SHA256,
+			Size:                   mutation.Size,
+		}
+	}
+
+	return idempotency.Require(inv, store.ExamAttemptWorkspaceBatchOperation, key, struct {
+		AttemptID               string             `json:"exam_attempt_id"`
+		Mutations               []semanticMutation `json:"mutations"`
+		ExpectedWorkspaceCursor *int64             `json:"expected_workspace_cursor,omitempty"`
+	}{attemptID.String(), semantic, expectedWorkspaceCursor})
 }
 
 func prepareConnectIdempotency(inv invocation.Invocation, command ConnectCommand) (*store.CommandIdempotency, error) {

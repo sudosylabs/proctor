@@ -223,18 +223,17 @@ func (s *Service) publishAttemptSuspendedByManager(ctx context.Context, result M
 	)
 }
 
-// publishWorkspaceChanged tells the candidate's other clients which Attempt
-// Workspace entry changed and at which journal cursor. The event carries no
-// path or content.
-func (s *Service) publishWorkspaceChanged(ctx context.Context, result WorkspaceMutationResult) error {
+// publishWorkspaceChanged tells the candidate's other clients, once per batch,
+// which journal cursors the batch took. The event carries no path or content.
+func (s *Service) publishWorkspaceChanged(ctx context.Context, result WorkspaceBatchResult) error {
+	first, last := result.Changes[0], result.Changes[len(result.Changes)-1]
 	event, err := realtime.NewCandidateExamAttemptWorkspaceChangedEvent(
 		result.SittingID,
 		result.AttemptID,
 		result.CandidateUserID,
-		result.Change.EntryID,
-		result.Change.Operation,
-		result.Change.Cursor,
-		result.Change.ChangedAt,
+		first.Cursor,
+		last.Cursor,
+		last.ChangedAt,
 	)
 	if err != nil {
 		return err

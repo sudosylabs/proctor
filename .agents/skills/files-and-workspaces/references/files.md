@@ -434,25 +434,44 @@ outcome-unknown client work remains protected until acknowledged replacement
 or explicit discard.
 
 Directory deletion defaults to empty directories. Explicit recursive deletion
-requires the complete expected Workspace Cursor, including zero, in addition
-to the root Entry identity and expected path. Any intervening accepted
-mutation conflicts; unrelated ordinary entry mutations still omit this
-aggregate cursor fence. Success removes all descendants atomically and emits
+requires the batch's expected Workspace Cursor, including zero, in addition
+to the root Entry identity and expected path; the cursor fences the state the
+batch starts from. Any intervening accepted batch conflicts; batches without a
+recursive deletion still omit this aggregate cursor fence. Success removes all descendants atomically and emits
 one deletion journal record marked recursive. Clients remove the root and
 paths beneath its slash boundary. Retired attempt-owned objects remain
 protected by the retained command outcome without an unbounded object-ID list;
 published Starter content and submitted manifests retain their pins.
 
-The public protocol is deliberately asymmetric. Authoritative create,
-replace, move/rename, and delete commands are HTTP-only, require the active
-Session-bound Attempt credential and Connection headers, explicitly repeat the
-current Participation identity and generation, and require an idempotency key.
-File creation and replacement use exactly two multipart parts in order: strict
-JSON metadata, then content, with a hard 100 MiB plus 64 KiB envelope. The
+The public protocol is deliberately asymmetric. The one authoritative write is
+an HTTP-only batch of 1 to 128 create, replace, move/rename, and delete
+mutations, applied in order and all or nothing. Every writer, the editor and the
+execution environment alike, uses it; never add a per-file write path beside
+it. A batch requires the active Session-bound Attempt credential and
+Connection headers, explicitly repeats the current Participation identity and
+generation, and requires an idempotency key. Its multipart body is a
+duplicate-free strict JSON manifest of at most 512 KiB, then one content part
+for each file creation or replacement in manifest order, and no other part. The
+manifest and bodies together have a hard 100 MiB plus 512 KiB envelope. The
 admission Revision's frozen Exam Capacity Policy may impose a lower per-file
-limit. Other commands use duplicate-free strict JSON. WebSocket publishes only the targeted
-`exam_attempt_workspace_changed` refetch hint; it carries no path, content,
-object selector, credential, Session, Participation, or generation.
+limit, and capacity is checked once against the state the batch leaves.
+
+Each Attempt may change its Workspace only so fast, whoever writes: a
+token bucket on each node bounds mutations and bytes per second, with a burst
+that always fits one maximum batch. A faster writer gets
+`exam.attempt.workspace.rate_limited` (429 with Retry-After) before anything
+is reserved or staged. The bucket is per node, so it protects storage traffic
+rather than enforcing an exact cluster-wide quota.
+
+A batch checks access once, reserves all its objects in one transaction,
+stages every body, records them ready in one transaction, and applies every
+mutation in one transaction. That transaction holds one idempotency outcome and
+one audit pair, with counts and the cursor range but never paths. It writes one
+journal record per mutation at consecutive cursors. A mutation that refuses the
+batch is named by its position in the problem's `item` field. After commit,
+WebSocket publishes one targeted `exam_attempt_workspace_changed` refetch hint
+per batch with its first and last cursor; it carries no path, content, object
+selector, credential, Session, Participation, or generation.
 
 The bounded live contract uses the admission Revision's frozen Workspace entry,
 per-file, and total-byte limits. Defaults are 500 entries, 10 MiB per file, and

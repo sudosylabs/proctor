@@ -267,8 +267,8 @@ components:
     exam_attempt_workspace_changed:
       name: exam_attempt_workspace_changed
       title: Attempt Workspace changed
-      summary: Refetch the candidate's Attempt Workspace after one committed mutation.
-      description: Refetch the candidate's Attempt Workspace after one committed mutation. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.
+      summary: Refetch the candidate's Attempt Workspace after one committed batch.
+      description: Refetch the candidate's Attempt Workspace after one committed batch. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.
       tags:
         - name: event
         - name: Attempts
@@ -304,8 +304,7 @@ components:
             data:
               exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
               exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
-              entry_id: nfemqtwz47ydgjcx1ia56br8kp
-              operation: replace_file
+              first_workspace_cursor: 7
               workspace_cursor: 9
               changed_at: '2026-08-01T09:30:00Z'
     exam_attempt_focus_warning:

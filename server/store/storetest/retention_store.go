@@ -333,15 +333,10 @@ func newRetentionFixture(t *testing.T, ctx context.Context, ss store.Store) (exa
 	access := store.ExamAttemptWorkspaceMutationAccess{AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, CandidateUserID: f.candidate.ID, SessionID: f.session.ID, DesktopRegistrationID: f.session.DesktopRegistrationID, DPoPKeyThumbprint: f.session.DPoPKeyThumbprint, ConnectionID: connected.Connection.ID, ContinuityCredentialHash: focus.ContinuityCredentialHash}
 	// This reservation models a remote write whose process disappeared before
 	// confirming readiness. Retirement must keep its exact reconciliation key.
-	_, err := ss.ExamAttemptWorkspace().ReserveObject(ctx, &store.ExamAttemptWorkspaceObjectReservation{Access: access, ObjectID: model.NewAttemptWorkspaceObjectID()})
-	require.NoError(t, err)
-	object, err := ss.ExamAttemptWorkspace().ReserveObject(ctx, &store.ExamAttemptWorkspaceObjectReservation{Access: access, ObjectID: model.NewAttemptWorkspaceObjectID()})
-	require.NoError(t, err)
-	_, err = ss.ExamAttemptWorkspace().MarkObjectReady(ctx, &store.ExamAttemptWorkspaceObjectReady{Access: access, ObjectID: object.ID, ContentVersion: model.NewWorkspaceContentVersion(), Content: model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: 12, SHA256: strings.Repeat("a", 64)}})
-	require.NoError(t, err)
-	created, err := ss.ExamAttemptWorkspace().ApplyMutation(ctx, &store.ExamAttemptWorkspaceMutation{Access: access, Operation: model.AttemptWorkspaceMutationCreateFile, EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "private-answer.txt", ObjectID: object.ID, AuditEventID: saveExamAttemptAudit(t, ctx, ss, f).ID, AuditAt: model.NowUTC()}, examCommand(f.candidate.ID, store.ExamAttemptWorkspaceMutationOperation, "retention-file", "retention-file"))
-	require.NoError(t, err)
-	sealAccess := store.ExamSubmissionSealAccess{AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, ConnectionID: connected.Connection.ID, CandidateUserID: f.candidate.ID, SessionID: f.session.ID, ContinuityCredentialHash: focus.ContinuityCredentialHash, ExpectedCurrentRevisionID: f.sitting.ExamRevisionID, ExpectedWorkspaceCursor: created.Change.Cursor}
+	stageAttemptWorkspaceReservations(t, ctx, ss.ExamAttemptWorkspace(), access, 1)
+	object, created := createAttemptWorkspaceTestFile(t, ctx, ss, f, access, "private-answer.txt",
+		model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: 12, SHA256: strings.Repeat("a", 64)}, "retention-file")
+	sealAccess := store.ExamSubmissionSealAccess{AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, ConnectionID: connected.Connection.ID, CandidateUserID: f.candidate.ID, SessionID: f.session.ID, ContinuityCredentialHash: focus.ContinuityCredentialHash, ExpectedCurrentRevisionID: f.sitting.ExamRevisionID, ExpectedWorkspaceCursor: created.Changes[0].Cursor}
 	target, err := ss.ExamSubmission().ResolveSealTarget(ctx, sealAccess)
 	require.NoError(t, err)
 	input := &store.ExamSubmissionSeal{SubmissionID: model.NewSubmissionID(), ReceiptCode: model.NewSubmissionReceiptCode(), Access: sealAccess, AuditEventID: saveExamAttemptAudit(t, ctx, ss, f).ID, AuditAt: target.SealAt}
@@ -349,5 +344,5 @@ func newRetentionFixture(t *testing.T, ctx context.Context, ss store.Store) (exa
 	key := examCommand(f.candidate.ID, store.ExamSubmissionSealOperation, "retention-seal", "retention-seal")
 	sealed, err := ss.ExamSubmission().Seal(ctx, input, key)
 	require.NoError(t, err)
-	return f, sealed.Receipt.SubmissionID, object.ID, input, key
+	return f, sealed.Receipt.SubmissionID, object.ObjectID, input, key
 }

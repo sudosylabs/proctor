@@ -576,9 +576,9 @@ func TestCandidateWorkspacePagesRejectEachInconsistency(t *testing.T) {
 	})
 }
 
-func TestExamAttemptWorkspaceMutationResultConsistentWithRejectsEachInconsistency(t *testing.T) {
+func TestExamAttemptWorkspaceBatchResultConsistentWithRejectsEachInconsistency(t *testing.T) {
 	t.Parallel()
-	type result = ExamAttemptWorkspaceMutationResult
+	type result = ExamAttemptWorkspaceBatchResult
 	target := &ExamAttemptWorkspaceMutationTarget{
 		ExamID:          model.NewExamID(),
 		SittingID:       model.NewExamSittingID(),
@@ -586,39 +586,59 @@ func TestExamAttemptWorkspaceMutationResultConsistentWithRejectsEachInconsistenc
 		CandidateUserID: model.NewUserID(),
 		WorkspaceID:     model.NewExamAttemptWorkspaceID(),
 	}
-	entryID := model.NewAttemptWorkspaceEntryID()
+	fileID, directoryID := model.NewAttemptWorkspaceEntryID(), model.NewAttemptWorkspaceEntryID()
+	mutations := []ExamAttemptWorkspaceMutation{
+		{Operation: model.AttemptWorkspaceMutationCreateFile, EntryID: fileID, DestinationPath: "main.go"},
+		{Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: directoryID, DestinationPath: "cmd"},
+	}
 	consistent := func(t *testing.T) *result {
+		file := journalEntryFixture(t, target.WorkspaceID, fileID)
+		directory := model.AttemptWorkspaceJournalEntry{WorkspaceID: target.WorkspaceID, Cursor: file.Cursor + 1,
+			EntryID: directoryID, EntryKind: model.StarterWorkspaceEntryDirectory,
+			Operation: model.AttemptWorkspaceMutationCreateDirectory, NewPath: "cmd", ChangedAt: file.ChangedAt}
+		require.NoError(t, directory.Validate())
 		return &result{
 			SittingID:       target.SittingID,
 			ClassID:         target.ClassID,
 			CandidateUserID: target.CandidateUserID,
 			WorkspaceID:     target.WorkspaceID,
-			Change:          journalEntryFixture(t, target.WorkspaceID, entryID),
+			Changes:         []model.AttemptWorkspaceJournalEntry{file, directory},
 		}
 	}
 	check := func(r *result) bool {
-		return r.ConsistentWith(target, model.AttemptWorkspaceMutationCreateFile, entryID)
+		return r.ConsistentWith(target, mutations)
 	}
 
-	require.False(t, (*result)(nil).ConsistentWith(target, model.AttemptWorkspaceMutationCreateFile, entryID))
+	require.False(t, (*result)(nil).ConsistentWith(target, mutations))
 	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[result]{
 		{"another Sitting", func(r *result) { r.SittingID = model.NewExamSittingID() }},
 		{"another Class", func(r *result) { r.ClassID = model.NewClassID() }},
 		{"another candidate", func(r *result) { r.CandidateUserID = model.NewUserID() }},
 		{"another Attempt Workspace", func(r *result) {
 			r.WorkspaceID = model.NewExamAttemptWorkspaceID()
-			r.Change.WorkspaceID = r.WorkspaceID
+			for index := range r.Changes {
+				r.Changes[index].WorkspaceID = r.WorkspaceID
+			}
 		}},
-		{"invalid change", func(r *result) { r.Change.ChangedAt = time.Time{} }},
-		{"change in another Attempt Workspace", func(r *result) { r.Change.WorkspaceID = model.NewExamAttemptWorkspaceID() }},
-		{"fresh change for another entry", func(r *result) { r.Change.EntryID = model.NewAttemptWorkspaceEntryID() }},
+		{"missing change", func(r *result) { r.Changes = r.Changes[:1] }},
+		{"extra change", func(r *result) { r.Changes = append(r.Changes, r.Changes[1]) }},
+		{"no changes", func(r *result) { r.Changes = nil }},
+		{"invalid change", func(r *result) { r.Changes[1].ChangedAt = time.Time{} }},
+		{"change in another Attempt Workspace", func(r *result) { r.Changes[0].WorkspaceID = model.NewExamAttemptWorkspaceID() }},
+		{"fresh change for another entry", func(r *result) { r.Changes[1].EntryID = model.NewAttemptWorkspaceEntryID() }},
+		{"non-consecutive cursors", func(r *result) { r.Changes[1].Cursor++ }},
+		{"repeated cursor", func(r *result) { r.Changes[1].Cursor = r.Changes[0].Cursor }},
+		{"changes out of order", func(r *result) { r.Changes[0], r.Changes[1] = r.Changes[1], r.Changes[0] }},
 	})
-	require.False(t, consistent(t).ConsistentWith(target, model.AttemptWorkspaceMutationDeleteEntry, entryID),
-		"change of another operation")
+	swapped := []ExamAttemptWorkspaceMutation{mutations[0], mutations[1]}
+	swapped[1].Operation = model.AttemptWorkspaceMutationDeleteEntry
+	require.False(t, consistent(t).ConsistentWith(target, swapped), "change of another operation")
+	require.False(t, consistent(t).ConsistentWith(target, mutations[:1]), "fewer mutations than changes")
 
 	replayed := consistent(t)
-	replayed.Replayed, replayed.Change.EntryID = true, model.NewAttemptWorkspaceEntryID()
-	require.True(t, check(replayed), "a replay keeps the entry of the earlier mutation")
+	replayed.Replayed = true
+	replayed.Changes[0].EntryID, replayed.Changes[1].EntryID = model.NewAttemptWorkspaceEntryID(), model.NewAttemptWorkspaceEntryID()
+	require.True(t, check(replayed), "a replay keeps the entries of the earlier batch")
 }
 
 func TestIsValidWorkspaceSHA256AcceptsOnlyLowercaseHexDigests(t *testing.T) {

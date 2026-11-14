@@ -1930,6 +1930,11 @@ CREATE TABLE exam_attempt_workspace_entries (
 
 CREATE UNIQUE INDEX exam_attempt_workspace_entries_path_key
     ON exam_attempt_workspace_entries (workspace_id, path);
+-- Object reclaim and cleanup ask whether any entry still points at an object;
+-- without this they scan every entry of every Workspace.
+CREATE INDEX exam_attempt_workspace_entries_current_object_idx
+    ON exam_attempt_workspace_entries (current_object_id)
+    WHERE current_object_id IS NOT NULL;
 
 CREATE TABLE exam_attempt_workspace_journal (
     workspace_id varchar(26) NOT NULL REFERENCES exam_attempt_workspaces(id),
@@ -3844,6 +3849,13 @@ CREATE INDEX command_outcomes_expires_at_idx
 
 CREATE INDEX command_outcomes_original_audit_event_idx
     ON command_outcomes (original_audit_event_id) WHERE original_audit_event_id IS NOT NULL;
+
+-- Attempt Workspace object reclaim and cleanup ask whether a retained batch
+-- outcome still protects an object. Without this every check scans every
+-- retained batch outcome.
+CREATE INDEX command_outcomes_workspace_objects_idx
+    ON command_outcomes USING gin ((outcome->'o'))
+    WHERE operation = 'exam.attempt.workspace.batch';
 
 ALTER TABLE exam_starter_workspace_objects
     ADD CONSTRAINT exam_starter_workspace_objects_retirement_fkey

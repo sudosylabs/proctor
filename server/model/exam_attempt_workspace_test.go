@@ -24,7 +24,9 @@ func TestAttemptWorkspaceLimitsAndPathsAreBounded(t *testing.T) {
 	require.Equal(t, 1024, AttemptWorkspaceMaximumPathBytes, "Attempt Workspace limits changed")
 	require.Equal(t, AttemptWorkspaceMaximumFileBytes, int64(100<<20), "Attempt Workspace limits changed")
 	require.Equal(t, AttemptWorkspaceMaximumTotalBytes, int64(1<<30), "Attempt Workspace limits changed")
-	require.Equal(t, AttemptWorkspaceMaximumRequestBytes, int64((100<<20)+(64<<10)), "Attempt Workspace limits changed")
+	require.Equal(t, 128, AttemptWorkspaceBatchMaximumMutations, "Attempt Workspace limits changed")
+	require.Equal(t, 512<<10, AttemptWorkspaceBatchManifestMaximumBytes, "Attempt Workspace limits changed")
+	require.Equal(t, AttemptWorkspaceBatchMaximumRequestBytes, int64((100<<20)+(512<<10)), "Attempt Workspace limits changed")
 	require.Equal(t, 4096, AttemptWorkspaceJournalRetention, "Attempt Workspace limits changed")
 	require.Equal(t, 200, AttemptWorkspaceJournalReadMaximum, "Attempt Workspace limits changed")
 	for _, path := range []string{"main.go", "cmd/proctor/main.go", strings.Repeat("a", 255)} {

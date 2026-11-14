@@ -7,24 +7,6 @@
 
 components:
   responses:
-    CandidateWorkspaceMutationCreated:
-      description: Candidate Workspace mutation acknowledged
-      headers:
-        Cache-Control:
-          $ref: '#/components/headers/NoStore'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/CandidateWorkspaceMutationResponse'
-    CandidateWorkspaceMutationOK:
-      description: Candidate Workspace mutation acknowledged
-      headers:
-        Cache-Control:
-          $ref: '#/components/headers/NoStore'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/CandidateWorkspaceMutationResponse'
     CandidateExamProtectedContent:
       description: Authorized inline candidate Exam content; not a public URL or export response
       headers:
@@ -111,27 +93,3 @@ components:
                   - size
               - required:
                   - sha256
-    CandidateWorkspaceMutationResponse:
-      type: object
-      additionalProperties: false
-      required:
-        - workspace_id
-        - workspace_cursor
-        - operation
-      properties:
-        workspace_id:
-          $ref: '#/components/schemas/ID'
-        workspace_cursor:
-          type: integer
-          format: int64
-          minimum: 1
-        operation:
-          type: string
-          enum:
-            - create_file
-            - create_directory
-            - replace_file
-            - move_entry
-            - delete_entry
-        entry:
-          $ref: '#/components/schemas/CandidateExamWorkspaceItemResponse'

@@ -150,6 +150,7 @@ var applicationErrorMappings = map[string]applicationErrorMapping{
 	"exam.attempt.workspace.entry_limit":                          {status: http.StatusConflict},
 	"exam.attempt.workspace.object_conflict":                      {status: http.StatusConflict},
 	"exam.attempt.workspace.path_conflict":                        {status: http.StatusConflict},
+	"exam.attempt.workspace.rate_limited":                         {status: http.StatusTooManyRequests, retryAfter: 1},
 	"exam.attempt.workspace.size_limit":                           {status: http.StatusConflict},
 	"exam.browser.source_budget_exhausted":                        {status: http.StatusConflict},
 	"exam.conflict":                                               {status: http.StatusConflict},

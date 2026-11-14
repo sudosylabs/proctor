@@ -89,52 +89,33 @@ type candidateWorkspaceMutationAccessRequest struct {
 	Generation      int64  `json:"generation"`
 }
 
-type createCandidateWorkspaceDirectoryRequest struct {
-	ParticipationID string `json:"participation_id"`
-	Generation      int64  `json:"generation"`
-	Path            string `json:"path"`
+// candidateWorkspaceBatchManifest is the first multipart part of a batch. Its
+// file mutations' bodies follow it as "content" parts, in the same order.
+type candidateWorkspaceBatchManifest struct {
+	ParticipationID         string                            `json:"participation_id"`
+	Generation              int64                             `json:"generation"`
+	ExpectedWorkspaceCursor route.Optional[int64]             `json:"expected_workspace_cursor,omitempty"`
+	Mutations               []candidateWorkspaceBatchMutation `json:"mutations"`
 }
 
-type candidateWorkspaceFileUploadMetadata struct {
-	ParticipationID string `json:"participation_id"`
-	Generation      int64  `json:"generation"`
-	Path            string `json:"path"`
-	MediaType       string `json:"media_type"`
-	Size            *int64 `json:"size"`
-	SHA256          string `json:"sha256"`
+type candidateWorkspaceBatchMutation struct {
+	Operation              string `json:"operation"`
+	EntryID                string `json:"entry_id,omitempty"`
+	Path                   string `json:"path,omitempty"`
+	ExpectedPath           string `json:"expected_path,omitempty"`
+	DestinationPath        string `json:"destination_path,omitempty"`
+	ExpectedContentVersion string `json:"expected_content_version,omitempty"`
+	Recursive              bool   `json:"recursive,omitempty"`
+	MediaType              string `json:"media_type,omitempty"`
+	Size                   *int64 `json:"size,omitempty"`
+	SHA256                 string `json:"sha256,omitempty"`
 }
 
-type replaceCandidateWorkspaceFileMetadata struct {
-	ParticipationID        string `json:"participation_id"`
-	Generation             int64  `json:"generation"`
-	ExpectedPath           string `json:"expected_path"`
-	ExpectedContentVersion string `json:"expected_content_version"`
-	MediaType              string `json:"media_type"`
-	Size                   *int64 `json:"size"`
-	SHA256                 string `json:"sha256"`
-}
-
-type moveCandidateWorkspaceEntryRequest struct {
-	ParticipationID string `json:"participation_id"`
-	Generation      int64  `json:"generation"`
-	ExpectedPath    string `json:"expected_path"`
-	DestinationPath string `json:"destination_path"`
-}
-
-type deleteCandidateWorkspaceEntryRequest struct {
-	ParticipationID         string                `json:"participation_id"`
-	Generation              int64                 `json:"generation"`
-	ExpectedPath            string                `json:"expected_path"`
-	ExpectedContentVersion  string                `json:"expected_content_version,omitempty"`
-	Recursive               bool                  `json:"recursive,omitempty"`
-	ExpectedWorkspaceCursor route.Optional[int64] `json:"expected_workspace_cursor,omitempty"`
-}
-
-type candidateWorkspaceMutationResponse struct {
-	WorkspaceID     string                              `json:"workspace_id"`
-	WorkspaceCursor int64                               `json:"workspace_cursor"`
-	Operation       string                              `json:"operation"`
-	Entry           *candidateExamWorkspaceItemResponse `json:"entry,omitempty"`
+type candidateWorkspaceBatchResponse struct {
+	WorkspaceID          string                                   `json:"workspace_id"`
+	FirstWorkspaceCursor int64                                    `json:"first_workspace_cursor"`
+	WorkspaceCursor      int64                                    `json:"workspace_cursor"`
+	Changes              []candidateWorkspaceJournalEntryResponse `json:"changes"`
 }
 
 type candidateWorkspaceJournalEntryResponse struct {
@@ -300,235 +281,24 @@ func (h examAttemptHandlers) workspaceChanges(request route.Request) (route.Resu
 	}
 
 	for _, entry := range page.Entries {
-		response.Items = append(response.Items, candidateWorkspaceJournalEntryResponse{
-			Cursor:         entry.Cursor,
-			EntryID:        entry.EntryID.String(),
-			Kind:           string(entry.EntryKind),
-			Operation:      string(entry.Operation),
-			OldPath:        entry.OldPath,
-			NewPath:        entry.NewPath,
-			ContentVersion: entry.ContentVersion.String(),
-			ChangedAt:      model.FormatRFC3339(entry.ChangedAt),
-			Recursive:      entry.Recursive,
-		})
+		response.Items = append(response.Items, candidateWorkspaceJournalEntry(entry))
 	}
 
 	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h examAttemptHandlers) createWorkspaceDirectory(request route.Request) (route.Result, error) {
-	access, err := candidateAccess(request)
-	if err != nil {
-		return route.Result{}, err
+func candidateWorkspaceJournalEntry(entry model.AttemptWorkspaceJournalEntry) candidateWorkspaceJournalEntryResponse {
+	return candidateWorkspaceJournalEntryResponse{
+		Cursor:         entry.Cursor,
+		EntryID:        entry.EntryID.String(),
+		Kind:           string(entry.EntryKind),
+		Operation:      string(entry.Operation),
+		OldPath:        entry.OldPath,
+		NewPath:        entry.NewPath,
+		ContentVersion: entry.ContentVersion.String(),
+		ChangedAt:      model.FormatRFC3339(entry.ChangedAt),
+		Recursive:      entry.Recursive,
 	}
-
-	var body createCandidateWorkspaceDirectoryRequest
-	if err = decodeCandidateWorkspaceJSON(request, &body); err != nil {
-		return route.Result{}, err
-	}
-
-	mutationAccess, err := candidateWorkspaceMutationAccess(
-		access,
-		candidateWorkspaceMutationAccessRequest{ParticipationID: body.ParticipationID, Generation: body.Generation},
-	)
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	result, err := h.app.CreateCandidateExamWorkspaceDirectory(
-		request.Context,
-		request.Invocation(),
-		attempt.CreateWorkspaceDirectoryCommand{
-			Access:         mutationAccess,
-			Path:           body.Path,
-			IdempotencyKey: request.IdempotencyKey,
-		},
-	)
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	return route.JSON(http.StatusCreated, candidateWorkspaceMutationResult(result)).WithHeaders(noStoreHeaders()), nil
-}
-
-func (h examAttemptHandlers) createWorkspaceFile(request route.Request) (route.ProtocolResult, error) {
-	access, err := candidateAccess(request)
-	if err != nil {
-		return route.ProtocolResult{}, err
-	}
-
-	var metadata candidateWorkspaceFileUploadMetadata
-	content, err := decodeExamResourceMultipart(request.HTTP, &metadata)
-	if err != nil || metadata.Size == nil {
-		return route.ProtocolResult{}, route.InvalidRequest(errors.New("valid metadata and size are required"))
-	}
-
-	mutationAccess, err := candidateWorkspaceMutationAccess(
-		access,
-		candidateWorkspaceMutationAccessRequest{ParticipationID: metadata.ParticipationID, Generation: metadata.Generation},
-	)
-	if err != nil {
-		return route.ProtocolResult{}, err
-	}
-
-	result, err := h.app.CreateCandidateExamWorkspaceFile(
-		request.Context,
-		request.Invocation(),
-		attempt.CreateWorkspaceFileCommand{
-			Access:         mutationAccess,
-			Path:           metadata.Path,
-			MediaType:      metadata.MediaType,
-			ExpectedSHA256: metadata.SHA256,
-			Body:           content,
-			Size:           *metadata.Size,
-			IdempotencyKey: request.IdempotencyKey,
-		},
-	)
-	if err != nil {
-		return route.ProtocolResult{}, err
-	}
-
-	return route.StreamingUpload(http.StatusCreated, candidateWorkspaceMutationResult(result)).WithHeaders(noStoreHeaders()), nil
-}
-
-func (h examAttemptHandlers) moveWorkspaceEntry(request route.Request) (route.Result, error) {
-	access, entryID, err := candidateWorkspaceEntryAccess(request)
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	var body moveCandidateWorkspaceEntryRequest
-	if err = decodeCandidateWorkspaceJSON(request, &body); err != nil {
-		return route.Result{}, err
-	}
-
-	mutationAccess, err := candidateWorkspaceMutationAccess(
-		access,
-		candidateWorkspaceMutationAccessRequest{ParticipationID: body.ParticipationID, Generation: body.Generation},
-	)
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	result, err := h.app.MoveCandidateExamWorkspaceEntry(
-		request.Context,
-		request.Invocation(),
-		attempt.MoveWorkspaceEntryCommand{
-			Access:          mutationAccess,
-			EntryID:         entryID,
-			ExpectedPath:    body.ExpectedPath,
-			DestinationPath: body.DestinationPath,
-			IdempotencyKey:  request.IdempotencyKey,
-		},
-	)
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	return route.JSON(http.StatusOK, candidateWorkspaceMutationResult(result)).WithHeaders(noStoreHeaders()), nil
-}
-
-func (h examAttemptHandlers) replaceWorkspaceFile(request route.Request) (route.ProtocolResult, error) {
-	access, entryID, err := candidateWorkspaceEntryAccess(request)
-	if err != nil {
-		return route.ProtocolResult{}, err
-	}
-
-	var metadata replaceCandidateWorkspaceFileMetadata
-	content, err := decodeExamResourceMultipart(request.HTTP, &metadata)
-	if err != nil || metadata.Size == nil {
-		return route.ProtocolResult{}, route.InvalidRequest(errors.New("valid metadata and size are required"))
-	}
-
-	mutationAccess, err := candidateWorkspaceMutationAccess(
-		access,
-		candidateWorkspaceMutationAccessRequest{ParticipationID: metadata.ParticipationID, Generation: metadata.Generation},
-	)
-	if err != nil {
-		return route.ProtocolResult{}, err
-	}
-
-	version, err := model.ParseWorkspaceContentVersion(metadata.ExpectedContentVersion)
-	if err != nil {
-		return route.ProtocolResult{}, route.InvalidRequest(err)
-	}
-
-	result, err := h.app.ReplaceCandidateExamWorkspaceFile(
-		request.Context,
-		request.Invocation(),
-		attempt.ReplaceWorkspaceFileCommand{
-			Access:                 mutationAccess,
-			EntryID:                entryID,
-			ExpectedPath:           metadata.ExpectedPath,
-			ExpectedContentVersion: version,
-			MediaType:              metadata.MediaType,
-			ExpectedSHA256:         metadata.SHA256,
-			Body:                   content,
-			Size:                   *metadata.Size,
-			IdempotencyKey:         request.IdempotencyKey,
-		},
-	)
-	if err != nil {
-		return route.ProtocolResult{}, err
-	}
-
-	return route.StreamingUpload(http.StatusOK, candidateWorkspaceMutationResult(result)).WithHeaders(noStoreHeaders()), nil
-}
-
-func (h examAttemptHandlers) deleteWorkspaceEntry(request route.Request) (route.Result, error) {
-	access, entryID, err := candidateWorkspaceEntryAccess(request)
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	var body deleteCandidateWorkspaceEntryRequest
-	if err = decodeCandidateWorkspaceJSON(request, &body); err != nil {
-		return route.Result{}, err
-	}
-
-	cursor := body.ExpectedWorkspaceCursor.ValuePointer()
-	if body.ExpectedWorkspaceCursor.IsNull() ||
-		(body.Recursive && (cursor == nil || *cursor < 0 || body.ExpectedContentVersion != "")) ||
-		(!body.Recursive && cursor != nil) {
-		return route.Result{}, route.InvalidRequest(
-			errors.New("recursive directory deletion requires expected_workspace_cursor and no content version"),
-		)
-	}
-
-	mutationAccess, err := candidateWorkspaceMutationAccess(
-		access,
-		candidateWorkspaceMutationAccessRequest{ParticipationID: body.ParticipationID, Generation: body.Generation},
-	)
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	var version model.WorkspaceContentVersion
-	if body.ExpectedContentVersion != "" {
-		version, err = model.ParseWorkspaceContentVersion(body.ExpectedContentVersion)
-		if err != nil {
-			return route.Result{}, route.InvalidRequest(err)
-		}
-	}
-
-	result, err := h.app.DeleteCandidateExamWorkspaceEntry(
-		request.Context,
-		request.Invocation(),
-		attempt.DeleteWorkspaceEntryCommand{
-			Access:                  mutationAccess,
-			EntryID:                 entryID,
-			ExpectedPath:            body.ExpectedPath,
-			ExpectedContentVersion:  version,
-			Recursive:               body.Recursive,
-			ExpectedWorkspaceCursor: cursor,
-			IdempotencyKey:          request.IdempotencyKey,
-		},
-	)
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	return route.JSON(http.StatusOK, candidateWorkspaceMutationResult(result)).WithHeaders(noStoreHeaders()), nil
 }
 
 func candidateWorkspaceMutationAccess(access attempt.CandidateAccess,
@@ -567,44 +337,6 @@ func decodeCandidateWorkspaceJSON(request route.Request, target any) error {
 		return route.InvalidRequest(errors.New("request body must contain one JSON value"))
 	}
 	return nil
-}
-
-func candidateWorkspaceEntryAccess(request route.Request) (attempt.CandidateAccess, model.AttemptWorkspaceEntryID, error) {
-	access, err := candidateAccess(request)
-	if err != nil {
-		return attempt.CandidateAccess{}, "", err
-	}
-	entryID, err := route.PathID[model.AttemptWorkspaceEntryID](request, "attempt_workspace_entry_id")
-	if err != nil {
-		return attempt.CandidateAccess{}, "", err
-	}
-	return access, entryID, nil
-}
-
-func candidateWorkspaceMutationResult(result attempt.WorkspaceMutationResult) candidateWorkspaceMutationResponse {
-	response := candidateWorkspaceMutationResponse{
-		WorkspaceID:     result.WorkspaceID.String(),
-		WorkspaceCursor: result.Change.Cursor,
-		Operation:       string(result.Change.Operation),
-	}
-	if result.Entry != nil {
-		entry := candidateExamWorkspaceItemResponse{
-			ID:             result.Entry.EntryID.String(),
-			Kind:           string(result.Entry.Kind),
-			Path:           result.Entry.Path,
-			ContentVersion: result.Entry.ContentVersion.String(),
-			MediaType:      result.Entry.MediaType,
-			SHA256:         result.Entry.SHA256,
-		}
-		if result.Entry.Kind == model.StarterWorkspaceEntryFile {
-			size := result.Entry.SizeBytes
-			entry.Size = &size
-		}
-
-		response.Entry = &entry
-	}
-
-	return response
 }
 
 func (h examAttemptHandlers) openWorkspaceFile(request route.Request) (route.ProtocolResult, error) {

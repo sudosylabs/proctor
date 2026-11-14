@@ -20,15 +20,22 @@ const (
 	AttemptWorkspaceMaximumPathBytes    = 1024
 	AttemptWorkspaceMaximumFileBytes    = ExamWorkspaceMaximumFileBytes
 	AttemptWorkspaceMaximumTotalBytes   = ExamWorkspaceMaximumTotalBytes
-	// AttemptWorkspaceMaximumRequestBytes leaves 64 KiB for the bounded
-	// multipart/JSON envelope around one maximum-size staged file.
-	AttemptWorkspaceMaximumRequestBytes = AttemptWorkspaceMaximumFileBytes + (64 << 10)
 	AttemptWorkspaceJournalRetention    = 4096
-	AttemptWorkspaceJournalReadMaximum  = 200
-	AttemptWorkspaceStageLifetime       = time.Hour
-	AttemptWorkspaceReclaimSafetyWindow = 24 * time.Hour
-	AttemptWorkspaceCleanupClaimLease   = 5 * time.Minute
-	AttemptWorkspaceClaimTokenMaxBytes  = 128
+	// AttemptWorkspaceBatchMaximumMutations bounds one atomic Workspace batch,
+	// the only way Workspace content changes. It matches the execution
+	// environment's journal batch, so one harvest is at most one batch.
+	AttemptWorkspaceBatchMaximumMutations = 128
+	// AttemptWorkspaceBatchManifestMaximumBytes bounds the JSON manifest of
+	// one batch: 128 mutations with two maximal paths each fit.
+	AttemptWorkspaceBatchManifestMaximumBytes = 512 << 10
+	// AttemptWorkspaceBatchMaximumRequestBytes bounds one batch request: its
+	// manifest and, together, the bodies of its files.
+	AttemptWorkspaceBatchMaximumRequestBytes = AttemptWorkspaceMaximumFileBytes + AttemptWorkspaceBatchManifestMaximumBytes
+	AttemptWorkspaceJournalReadMaximum       = 200
+	AttemptWorkspaceStageLifetime            = time.Hour
+	AttemptWorkspaceReclaimSafetyWindow      = 24 * time.Hour
+	AttemptWorkspaceCleanupClaimLease        = 5 * time.Minute
+	AttemptWorkspaceClaimTokenMaxBytes       = 128
 )
 
 type AttemptWorkspaceObjectState string

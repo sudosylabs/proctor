@@ -105,6 +105,9 @@ type IntegrityDiscrepancyID string
 // AttemptSuspensionID identifies one reversible Attempt suspension episode.
 type AttemptSuspensionID string
 
+// ScreenClipID identifies one requested range of a candidate's recorded screen.
+type ScreenClipID string
+
 // AttemptWorkspaceEntryID identifies one logical path in an Attempt Workspace.
 type AttemptWorkspaceEntryID string
 
@@ -179,6 +182,9 @@ type MailOccurrenceID string
 
 // MailDeliveryID identifies one frozen single-recipient delivery.
 type MailDeliveryID string
+
+// DomainEventID identifies one committed domain event awaiting delivery.
+type DomainEventID string
 
 // ExternalLoginStateID identifies a one-use external login transaction.
 type ExternalLoginStateID string

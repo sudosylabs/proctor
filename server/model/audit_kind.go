@@ -94,6 +94,7 @@ var auditActionKinds = map[Action]AuditKind{
 	ActionMailManage:                AuditKindChange,
 	ActionMailRekey:                 AuditKindChange,
 	ActionOnboardingBatchManage:     AuditKindChange,
+	ActionPluginManage:              AuditKindChange,
 	ActionProgrammeLevelManage:      AuditKindChange,
 	ActionProgrammeManage:           AuditKindChange,
 	ActionRetentionCleanupManage:    AuditKindChange,

@@ -22,7 +22,7 @@ import (
 func nativeObservePolicy(t *testing.T) model.NativeSecurityPolicy {
 	t.Helper()
 	policy := model.DefaultNativeSecurityPolicy()
-	require.NoError(t, json.Unmarshal([]byte(`{"id":"interactive_session","mode":"observe"}`), &policy.Families[1]))
+	require.NoError(t, json.Unmarshal([]byte(`{"id":"interactive_session","mode":"observe","outcome":"flag"}`), &policy.Families[1]))
 	return policy
 }
 func TestConfigureDraftNativePolicyOrderAndFailures(t *testing.T) {

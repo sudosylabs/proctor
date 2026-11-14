@@ -15,6 +15,7 @@ import (
 	"net"
 	netmail "net/mail"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -57,6 +58,9 @@ type Config struct {
 	Authentication Authentication `json:"Authentication"`
 	Localization   Localization   `json:"Localization"`
 	Log            Log            `json:"Log"`
+	// Plugins configures the plugins compiled into the server, keyed by
+	// plugin ID.
+	Plugins map[string]Plugin `json:"Plugins"`
 }
 
 func Default() Config {
@@ -152,6 +156,7 @@ func Default() Config {
 				QueueSize: 256,
 			}},
 		},
+		Plugins: map[string]Plugin{},
 	}
 }
 
@@ -165,6 +170,7 @@ func (c Config) Clone() Config {
 	cloned.Mail.SecretSealing.DecryptionKeys = cloneSlice(c.Mail.SecretSealing.DecryptionKeys)
 	cloned.Authentication.MFA.DecryptionKeys = cloneSlice(c.Authentication.MFA.DecryptionKeys)
 	cloned.Tracing.Headers = maps.Clone(c.Tracing.Headers)
+	cloned.Plugins = clonePlugins(c.Plugins)
 	if c.Authentication.External.Providers != nil {
 		cloned.Authentication.External.Providers = append(
 			make([]ExternalAuthenticationProvider, 0, len(c.Authentication.External.Providers)),
@@ -174,32 +180,8 @@ func (c Config) Clone() Config {
 
 	for index := range cloned.Authentication.External.Providers {
 		provider := &cloned.Authentication.External.Providers[index]
-		sourceProvider := c.Authentication.External.Providers[index]
-		source := sourceProvider.Claims
-		if source.AllowedHomeOrganizations != nil {
-			provider.Claims.AllowedHomeOrganizations = append(
-				make([]string, 0, len(source.AllowedHomeOrganizations)),
-				source.AllowedHomeOrganizations...,
-			)
-		}
-
-		if source.MultiFactorValues != nil {
-			provider.Claims.MultiFactorValues = append(
-				make([]string, 0, len(source.MultiFactorValues)),
-				source.MultiFactorValues...,
-			)
-		}
-
-		if sourceProvider.CAS != nil {
-			cas := *sourceProvider.CAS
-			provider.CAS = &cas
-		}
-
-		if sourceProvider.OIDC != nil {
-			oidc := *sourceProvider.OIDC
-			oidc.Scopes = cloneSlice(sourceProvider.OIDC.Scopes)
-			provider.OIDC = &oidc
-		}
+		provider.Settings = slices.Clone(provider.Settings)
+		provider.Secrets = slices.Clone(provider.Secrets)
 	}
 
 	return cloned
@@ -233,6 +215,7 @@ func (c Config) Redacted() Config {
 	}
 
 	redacted.Mail.SMTP.Password = redactSecret(redacted.Mail.SMTP.Password)
+	redactPlugins(redacted.Plugins)
 	redacted.Mail.SecretSealing.EncryptionKey = redactSecret(
 		redacted.Mail.SecretSealing.EncryptionKey,
 	)
@@ -259,10 +242,8 @@ func (c Config) Redacted() Config {
 	)
 	for index := range redacted.Authentication.External.Providers {
 		provider := &redacted.Authentication.External.Providers[index]
-		if provider.OIDC != nil {
-			provider.OIDC.ClientSecret = redactSecret(
-				provider.OIDC.ClientSecret,
-			)
+		if provider.SecretsDocument() != nil {
+			provider.Secrets = json.RawMessage(`"[redacted]"`)
 		}
 	}
 
@@ -344,6 +325,7 @@ func (c Config) Validate() error {
 	}
 
 	validateLog(c.Log, add)
+	validatePlugins(c.Plugins, add)
 
 	if len(fields) != 0 {
 		return &ValidationError{Fields: fields}

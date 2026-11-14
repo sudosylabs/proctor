@@ -26,6 +26,7 @@ type SittingAuthorizer interface {
 	AuthorizeSittingManage(context.Context, invocation.Invocation, model.ExamSittingID) (access.ManagerAuthorization, error)
 	AuthorizeBrowserActivityView(context.Context, invocation.Invocation, model.ExamSittingID) (access.BrowserActivityAuthorization, error)
 	AuthorizeSubmissionView(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) error
+	AuthorizeSubmissionReview(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) (access.ManagerAuthorization, error)
 }
 
 // DecisionRecorder durably records an authorization decision this package
@@ -144,4 +145,55 @@ func (a SittingManagerAuthorizer) AuthorizeSubmissionView(
 		authorization.ExamID,
 		submissionID,
 	)
+}
+
+// ScreenClipViewAuthorization is what allowed a caller to see an Attempt's
+// screen clips, and so the audit a playback is recorded under. A Sitting
+// management decision is scoped to the Sitting's Class, which the caller
+// fills in once it has resolved the Sitting.
+type ScreenClipViewAuthorization struct {
+	Action    model.Action
+	Resource  model.Resource
+	ScopeType model.RoleScopeType
+	ScopeID   string
+}
+
+// AuthorizeScreenClipView lets the Sitting's Exam Managers see an Attempt's
+// clips, and once the Attempt is submitted, those allowed to review its
+// Submission. The candidate never sees their own.
+func (a SittingManagerAuthorizer) AuthorizeScreenClipView(
+	ctx context.Context,
+	inv invocation.Invocation,
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+) (ScreenClipViewAuthorization, error) {
+	management, err := a.Sittings.AuthorizeSittingManage(ctx, inv, sittingID)
+	if err == nil {
+		action := model.ActionExamSittingManage
+		if management.Override {
+			action = model.ActionExamSittingManageOverride
+		}
+		return ScreenClipViewAuthorization{Action: action,
+			Resource:  model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+			ScopeType: model.RoleScopeClass}, nil
+	}
+	if a.Submissions == nil {
+		return ScreenClipViewAuthorization{}, err
+	}
+	submission, resolveErr := a.Submissions.ResolveAttempt(ctx, attemptID)
+	if resolveErr != nil || submission.SittingID != sittingID ||
+		submission.CandidateUserID == inv.Principal().UserID {
+		return ScreenClipViewAuthorization{}, err
+	}
+	review, reviewErr := a.Sittings.AuthorizeSubmissionReview(ctx, inv, submission.ExamID, submission.SubmissionID)
+	if reviewErr != nil {
+		return ScreenClipViewAuthorization{}, err
+	}
+	action := model.ActionSubmissionReview
+	if review.Override {
+		action = model.ActionSubmissionReviewOverride
+	}
+	return ScreenClipViewAuthorization{Action: action,
+		Resource:  model.Resource{Type: model.ResourceSubmission, ID: submission.SubmissionID.String()},
+		ScopeType: model.RoleScopeAcademicUnit, ScopeID: submission.AcademicUnitID.String()}, nil
 }

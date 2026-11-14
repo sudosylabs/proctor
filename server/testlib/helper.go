@@ -256,8 +256,9 @@ func NewLifecycleStore() *LifecycleStore {
 	return &LifecycleStore{}
 }
 
-func (s *LifecycleStore) Institution() store.InstitutionStore   { return lifecycleInstitutionStore{} }
-func (s *LifecycleStore) AccessPolicy() store.AccessPolicyStore { return lifecycleAccessPolicyStore{} }
+func (s *LifecycleStore) Institution() store.InstitutionStore       { return lifecycleInstitutionStore{} }
+func (s *LifecycleStore) AccessPolicy() store.AccessPolicyStore     { return lifecycleAccessPolicyStore{} }
+func (s *LifecycleStore) PluginSettings() store.PluginSettingsStore { return nil }
 func (s *LifecycleStore) DesktopCompatibilityPolicy() store.DesktopCompatibilityPolicyStore {
 	return lifecycleDesktopCompatibilityPolicyStore{}
 }
@@ -325,9 +326,10 @@ func (s *LifecycleStore) User() store.UserStore   { return lifecycleUserStore{} 
 func (s *LifecycleStore) UserSettings() store.UserSettingsStore {
 	return lifecycleUserSettingsStore{}
 }
-func (s *LifecycleStore) File() store.FileStore { return nil }
-func (s *LifecycleStore) Job() store.JobStore   { return nil }
-func (s *LifecycleStore) Mail() store.MailStore { return nil }
+func (s *LifecycleStore) File() store.FileStore               { return nil }
+func (s *LifecycleStore) Job() store.JobStore                 { return nil }
+func (s *LifecycleStore) DomainEvent() store.DomainEventStore { return nil }
+func (s *LifecycleStore) Mail() store.MailStore               { return nil }
 func (s *LifecycleStore) ExternalIdentity() store.ExternalIdentityStore {
 	return lifecycleExternalIdentityStore{}
 }

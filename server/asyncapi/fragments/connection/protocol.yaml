@@ -124,6 +124,282 @@ components:
             sequence: 1
             data:
               pong: true
+    exam_attempt.connect:
+      name: exam_attempt.connect
+      title: Connect to the Exam Attempt
+      summary: Binds this WebSocket to the candidate's Attempt as its Attempt Connection.
+      description: >-
+        Sent by the registered Desktop. First admission and Ready rejoin consume a reported preflight
+        (kind preflight); a same-generation reconnect resumes the current Participation (kind resume). A connection
+        holds at most one Attempt binding. The reply starts the lease; renew it with exam_attempt.renew.
+      tags:
+        - name: command
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/command_request.json'
+          - type: object
+            required:
+              - action
+              - data
+            properties:
+              action:
+                type: string
+                const: exam_attempt.connect
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_connect.json'
+      examples:
+        - name: first admission
+          payload:
+            sequence: 4
+            action: exam_attempt.connect
+            data:
+              security:
+                kind: preflight
+                preflight_id: preflight-1
+                report_digest: sha256:9b1e4c7a2d5f8e0b3c6a9d2f5e8b1c4a7d0e3f6b9c2a5d8e1f4b7c0a3d6e9f2b
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              idempotency_key: connect-1
+              continuity_credential: Y29udGludWl0eS1jcmVkZW50aWFsLWV4YW1wbGUtMzI
+              configuration_manifest_fingerprint: sha256:4f0c2ad3b81e29e6c5f0b7f3a1d9e8c2b6a4f1e0d3c7b9a2e5f8c1d4b7a0e3f6
+    exam_attempt_connect_reply:
+      name: exam_attempt_connect_reply
+      title: Connect reply
+      summary: The admitted Attempt, its Participation lease and what the candidate may do.
+      description: >-
+        security, candidate_runtime_capabilities, browser_policy and live_corrections have exactly the shapes of
+        the OpenAPI components AdmittedSecurity, CandidateRuntimeCapabilities, CandidateBrowserPolicy and
+        CandidateLiveCorrection.
+      tags:
+        - name: reply
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/command_reply.json'
+          - type: object
+            required:
+              - data
+            properties:
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_connect_reply.json'
+      examples:
+        - name: admitted
+          payload:
+            status: ok
+            sequence: 4
+            data:
+              security: {}
+              attempt_id: qtwz47ydgjcx1ia56br8kpous3
+              workspace_id: br8kpous3h9nfemqtwz47ydgjc
+              participation_id: 8kpous3h9nfemqtwz47ydgjcx1
+              attempt_connection_id: nfemqtwz47ydgjcx1ia56br8kp
+              generation: 1
+              renewal_interval_seconds: 5
+              started_at: '2026-11-13T09:00:00.000Z'
+              lease_expires_at: '2026-11-13T09:00:15.000Z'
+              first_admission: true
+              replayed: false
+              candidate_runtime_capabilities: {}
+              browser_policy: null
+              live_corrections: []
+    exam_attempt.focus_loss:
+      name: exam_attempt.focus_loss
+      title: Report a Focus Loss
+      summary: Reports one completed loss of focus of the candidate window.
+      description: >-
+        The server applies the Exam's Focus Loss policy. When it raises a Flag on an Exam that records the screen,
+        it also asks for the minute either side of it and sends exam_attempt_screen_clips_requested.
+      tags:
+        - name: command
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/command_request.json'
+          - type: object
+            required:
+              - action
+              - data
+            properties:
+              action:
+                type: string
+                const: exam_attempt.focus_loss
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_focus_loss.json'
+      examples:
+        - name: window hidden
+          payload:
+            sequence: 10
+            action: exam_attempt.focus_loss
+            data:
+              schema_version: 1
+              generation: 1
+              sequence: 3
+              duration_milliseconds: 2500
+              source: document_hidden
+              continuity_credential: Y29udGludWl0eS1jcmVkZW50aWFsLWV4YW1wbGUtMzI
+    exam_attempt_focus_loss_reply:
+      name: exam_attempt_focus_loss_reply
+      title: Focus Loss reply
+      summary: Acknowledges the Focus Loss and says what the candidate's Desktop must act on.
+      tags:
+        - name: reply
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/command_reply.json'
+          - type: object
+            required:
+              - data
+            properties:
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_focus_loss_reply.json'
+      examples:
+        - name: warned
+          payload:
+            status: ok
+            sequence: 10
+            data:
+              generation: 1
+              accepted_sequence: 3
+              received_at: '2026-11-13T09:05:00.000Z'
+              duplicate: false
+              gap_detected: false
+              policy_disabled: false
+              warning_created: true
+              suspension_created: false
+              discrepancy_recorded: false
+    exam_attempt.renew:
+      name: exam_attempt.renew
+      title: Renew the Exam Attempt Participation
+      summary: Extends the Participation lease and carries Desktop's security control.
+      description: >-
+        Sent every renewal interval by the Desktop holding the Attempt Connection. The reply carries the new lease
+        and how the server processed the security control. A repeated renewal sequence is a duplicate and does not
+        extend the lease again.
+      tags:
+        - name: command
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/command_request.json'
+          - type: object
+            required:
+              - action
+              - data
+            properties:
+              action:
+                type: string
+                const: exam_attempt.renew
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_renew.json'
+      examples:
+        - name: renewal
+          payload:
+            sequence: 8
+            action: exam_attempt.renew
+            data:
+              generation: 1
+              sequence: 5
+              continuity_credential: Y29udGludWl0eS1jcmVkZW50aWFsLWV4YW1wbGUtMzI
+              security_control:
+                control_sequence: 12
+                policy_digest: sha256:4f0c2ad3b81e29e6c5f0b7f3a1d9e8c2b6a4f1e0d3c7b9a2e5f8c1d4b7a0e3f6
+                security_session_id: security-session-1
+                stream_id: native-stream-1
+                delivery_watermarks:
+                  - family: native
+                    source_id: native-stream-1
+                    allocated_through_sequence: 40
+                    acknowledged_through_sequence: 38
+    exam_attempt_renew_reply:
+      name: exam_attempt_renew_reply
+      title: Renewal reply
+      summary: The renewed lease and the processed security control.
+      tags:
+        - name: reply
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/command_reply.json'
+          - type: object
+            required:
+              - data
+            properties:
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_renew_reply.json'
+      examples:
+        - name: renewed
+          payload:
+            status: ok
+            sequence: 8
+            data:
+              generation: 1
+              accepted_sequence: 5
+              database_time: '2026-11-13T09:00:00.000Z'
+              lease_expires_at: '2026-11-13T09:00:15.000Z'
+              duplicate: false
+              security_control:
+                processed_control_sequence: 12
+                processed_control_digest: sha256:9b1e4c7a2d5f8e0b3c6a9d2f5e8b1c4a7d0e3f6b9c2a5d8e1f4b7c0a3d6e9f2b
+                security_interaction_allowed: true
+                delivery_watermark_rejections: []
+    exam_attempt.security.update:
+      name: exam_attempt.security.update
+      title: Update the security control
+      summary: Carries Desktop's security control between renewals.
+      description: Uses the same processed-control boundary as exam_attempt.renew and never extends the lease.
+      tags:
+        - name: command
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/command_request.json'
+          - type: object
+            required:
+              - action
+              - data
+            properties:
+              action:
+                type: string
+                const: exam_attempt.security.update
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_security_update.json'
+      examples:
+        - name: security update
+          payload:
+            sequence: 9
+            action: exam_attempt.security.update
+            data:
+              generation: 1
+              continuity_credential: Y29udGludWl0eS1jcmVkZW50aWFsLWV4YW1wbGUtMzI
+              security_control:
+                control_sequence: 12
+                policy_digest: sha256:4f0c2ad3b81e29e6c5f0b7f3a1d9e8c2b6a4f1e0d3c7b9a2e5f8c1d4b7a0e3f6
+                security_session_id: security-session-1
+                stream_id: native-stream-1
+                delivery_watermarks:
+                  - family: native
+                    source_id: native-stream-1
+                    allocated_through_sequence: 40
+                    acknowledged_through_sequence: 38
+    security_control_reply:
+      name: security_control_reply
+      title: Security control reply
+      summary: How the server processed the security control.
+      tags:
+        - name: reply
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/command_reply.json'
+          - type: object
+            required:
+              - data
+            properties:
+              data:
+                $ref: '../../../schemas/realtime/security_control_result.json'
+      examples:
+        - name: processed
+          payload:
+            status: ok
+            sequence: 9
+            data:
+              processed_control_sequence: 12
+              processed_control_digest: sha256:9b1e4c7a2d5f8e0b3c6a9d2f5e8b1c4a7d0e3f6b9c2a5d8e1f4b7c0a3d6e9f2b
+              security_interaction_allowed: true
+              delivery_watermark_rejections: []
     subscribe:
       name: subscribe
       title: Subscribe

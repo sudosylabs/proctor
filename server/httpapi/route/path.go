@@ -29,6 +29,7 @@ const (
 	parameterProviderID
 	parameterPositiveSequence
 	parameterCanonicalUUID
+	parameterPluginID
 )
 
 type pathPart interface {
@@ -68,6 +69,10 @@ func providerID(name string) pathPart {
 	return pathParameter{name: name, kind: parameterProviderID}
 }
 
+func pluginID(name string) pathPart {
+	return pathParameter{name: name, kind: parameterPluginID}
+}
+
 func (p pathParameter) compile() (string, string, error) {
 	if !regexp.MustCompile(`^[a-z][a-z0-9_]*$`).MatchString(p.name) {
 		return "", "", fmt.Errorf("path parameter name %q is not canonical", p.name)
@@ -86,6 +91,9 @@ func (p pathParameter) compile() (string, string, error) {
 	case parameterProviderID:
 		pattern = providerIDRoutePattern()
 		normalized = "provider_id"
+	case parameterPluginID:
+		pattern = "[a-z][a-z0-9.-]{0,63}"
+		normalized = "plugin_id"
 	default:
 		return "", "", fmt.Errorf("path parameter %q has unsupported parameter kind %d", p.name, p.kind)
 	}
@@ -157,6 +165,8 @@ func parsePathTemplate(template string) ([]pathPart, error) {
 			parts = append(parts, positiveSequence(name))
 		case kind == "provider":
 			parts = append(parts, providerID(name))
+		case kind == "plugin":
+			parts = append(parts, pluginID(name))
 		default:
 			return nil, fmt.Errorf("route template %q has unknown parameter kind %q", template, kind)
 		}

@@ -194,6 +194,17 @@ func evaluateOpenAPIShapeAgreement(
 	if goType == reflect.TypeOf(model.NativeFamilyPolicy{}) {
 		return evaluateNativeFamilyCodecAgreement(violations, document, target, shape, requestSchema)
 	}
+	if goType == reflect.TypeOf(model.NativeRule{}) {
+		return evaluateNativeRuleCodecAgreement(violations, document, target, shape)
+	}
+	if goType == reflect.TypeOf(json.RawMessage{}) {
+		// An opaque document whose own codec bounds it; the schema states the
+		// JSON type it must be.
+		if shape.Ref == "" && !openAPITypesEqual(shape.Type, []string{"object"}) {
+			return appendAgreementViolation(violations, target, "type", "an opaque document must be a JSON object")
+		}
+		return violations
+	}
 	if goType == reflect.TypeOf(model.SecurityPolicyScope{}) {
 		return evaluateSecurityScopeCodecAgreement(violations, document, target, shape, requestSchema)
 	}
@@ -417,6 +428,52 @@ func openAPITypesEqual(value any, want []string) bool {
 
 // The native family is a custom codec with private typed state. Verify every
 // branch against its actual serialized fields instead of reflecting that state.
+// evaluateNativeRuleCodecAgreement checks a rule's schema names exactly the
+// members its closed codec writes, all required, with the requirement
+// described by the condition schema.
+func evaluateNativeRuleCodecAgreement(
+	violations []openAPIAgreementViolation,
+	document openAPIDocument,
+	target string,
+	shape openAPISchemaShape,
+) []openAPIAgreementViolation {
+	if shape.Ref != "#/components/schemas/NativeRule" {
+		return appendAgreementViolation(violations, target, "reference", "a native rule must reference NativeRule")
+	}
+	encoded, err := json.Marshal(document.Components.Schemas["NativeRule"])
+	if err != nil {
+		panic(err)
+	}
+	var rule openAPISchemaShape
+	if err = json.Unmarshal(encoded, &rule); err != nil {
+		panic(err)
+	}
+	sample := model.NativeRule{RuleID: "baseline.single_display", Capability: "display", Mode: model.NativeRuleEnforce,
+		Phase: model.NativeRuleBoth, Reason: "display.single_display_required",
+		Requirement: model.NativeCondition{Compare: &model.NativeComparison{
+			Field: "display.summary.active_physical", Op: model.NativeCompareEq, Value: model.NativeCount(1),
+		}}}
+	raw, err := json.Marshal(sample)
+	if err != nil {
+		panic(err)
+	}
+	var members map[string]json.RawMessage
+	if err = json.Unmarshal(raw, &members); err != nil {
+		panic(err)
+	}
+	want := sortedMapKeys(members)
+	required := slices.Clone(rule.Required)
+	sort.Strings(required)
+	if !slices.Equal(sortedMapKeys(rule.Properties), want) || !slices.Equal(required, want) {
+		return appendAgreementViolation(violations, target, "fields", fmt.Sprintf("got %v, want the rule codec's members %v", sortedMapKeys(rule.Properties), want))
+	}
+	var requirement openAPISchemaShape
+	if json.Unmarshal(rule.Properties["requirement"], &requirement) != nil || requirement.Ref != "#/components/schemas/NativeCondition" {
+		return appendAgreementViolation(violations, target, "requirement", "a rule's requirement must reference NativeCondition")
+	}
+	return violations
+}
+
 func evaluateNativeFamilyCodecAgreement(violations []openAPIAgreementViolation, document openAPIDocument, target string, shape openAPISchemaShape, requestSchema bool) []openAPIAgreementViolation {
 	families := model.DefaultNativeSecurityPolicy().Families
 	if len(shape.OneOf) != len(families) {
@@ -449,13 +506,13 @@ func evaluateNativeFamilyCodecAgreement(violations []openAPIAgreementViolation, 
 			Const string `json:"const"`
 		}
 		_ = json.Unmarshal(branch.Properties["id"], &id)
-		if id.Const != family.ID() {
+		if id.Const != string(family.ID()) {
 			violations = appendAgreementViolation(violations, target, "family id", fmt.Sprintf("branch %d must identify %s", index, family.ID()))
 		}
 		if string(branch.AdditionalProperties) != "false" {
 			violations = appendAgreementViolation(violations, target, "family shape", "must reject extra fields")
 		}
-		violations = evaluateOpenAPIShapeAgreement(violations, document, target+"."+family.ID(), branch, reflect.StructOf(fields), requestSchema, false, false, false, nil, nil)
+		violations = evaluateOpenAPIShapeAgreement(violations, document, target+"."+string(family.ID()), branch, reflect.StructOf(fields), requestSchema, false, false, false, nil, nil)
 	}
 	return violations
 }
@@ -583,9 +640,13 @@ func evaluateNativeRecordCodecAgreement(violations []openAPIAgreementViolation, 
 			panic(err)
 		}
 	}
-	variants := []reflect.Type{reflect.TypeOf(model.NativeOccurrence{}), reflect.TypeOf(model.NativeCoverageTransition{}), reflect.TypeOf(model.NativeSourceReset{}), reflect.TypeOf(model.NativeSourceGap{})}
+	variants := []reflect.Type{
+		reflect.TypeOf(model.NativeCapabilityFact{}), reflect.TypeOf(model.NativeParticipationConfirmed{}),
+		reflect.TypeOf(model.NativeRuleStatusReport{}),
+		reflect.TypeOf(model.NativeSourceReset{}), reflect.TypeOf(model.NativeSourceGap{}),
+	}
 	if len(shape.OneOf) != len(variants) {
-		return appendAgreementViolation(violations, target, "oneOf", "must describe the four closed native record variants")
+		return appendAgreementViolation(violations, target, "oneOf", "must describe the five closed native record variants")
 	}
 	for i, variant := range variants {
 		violations = evaluateOpenAPIShapeAgreement(violations, document, target+"."+variant.Name(), shape.OneOf[i], variant, requestSchema, false, false, false, nil, nil)

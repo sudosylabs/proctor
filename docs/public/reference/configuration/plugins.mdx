@@ -1,0 +1,66 @@
+---
+title: Plugins Configuration
+description: Give Proctor's compiled-in plugins their secrets; administrators turn plugins on or off and change their settings at runtime.
+audience: operator
+maturity: preview
+slug: /reference/configuration/plugins/
+---
+
+# Plugins Configuration
+
+A plugin is an optional feature compiled into the Proctor server. Proctor
+never loads plugins from outside its own binary.
+
+Whether a plugin runs, and its settings, are not configuration. A System
+Administrator changes them while the server runs, with
+`PUT /api/v1/plugins/{plugin_id}/settings`, and every node applies the
+change within about five seconds, without a restart. `GET /api/v1/plugins`
+lists every compiled-in plugin with its state, its saved settings and the
+JSON Schema its settings form is drawn from. Both are audited and closed to
+Personal Access Tokens. A plugin nobody has configured keeps its built-in
+default.
+
+The configuration file holds only what must not go through an API: each
+plugin's secrets, such as a service token. Changing them needs a restart.
+
+| Path and default | Meaning and accepted value |
+| --- | --- |
+| `Plugins`<br />Default: `{}` | Secrets for each plugin, keyed by its ID: 1–64 lowercase letters, digits, dots or hyphens, starting with a letter. Each value is an object with one member, `Secrets`: the plugin's own JSON object of at most 64 KiB, or `null`. The plugin validates its secrets when it starts, and `proctor config show` always redacts them. A key that names no compiled-in plugin stops the server from starting. |
+
+## Built-in plugins
+
+| Plugin | ID | Default |
+| --- | --- | --- |
+| The CAS sign-in protocol for [external authentication providers](./authentication.mdx) | `cas` | On |
+| The OpenID Connect sign-in protocol for [external authentication providers](./authentication.mdx) | `oidc` | On |
+| The zip encoding of Exam exports | `export.zip` | Always on |
+
+`export.zip` is required and cannot be turned off. If it fails to start,
+Exam exports are unavailable and the server logs a warning.
+
+When `cas` or `oidc` is turned off or fails, the server keeps running. Each
+configured provider of that type is left out of sign-in, and a warning naming
+the provider is logged at startup, on every reload, and whenever plugins
+change. Turning the plugin back on restores its providers. Every other provider,
+and local sign-in, keep working. If the Access Policy turns local sign-in off
+and the only provider is affected, nobody can sign in until the plugin is
+back. Use `proctor administrator recover` on the host in that case.
+
+A plugin that needs a secret reads it from the file:
+
+```json
+{
+  "Plugins": {
+    "example-plugin": {"Secrets": {"token": "<from your secret store>"}}
+  }
+}
+```
+
+## When a plugin fails
+
+A plugin that fails to start, or does not finish starting within 30 seconds,
+is left out, and the server starts and serves without it. After a plugin
+panics three times, Proctor stops calling it until its settings change or
+the server restarts. Either way the reason is in the server log, labeled with
+the plugin's ID. Signed-in clients can list the plugins that are active with
+`GET /api/v1/system/plugins`.

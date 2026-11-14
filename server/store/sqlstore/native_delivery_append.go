@@ -84,6 +84,10 @@ type nativeAppendOutcome struct {
 	Receipt  *model.NativeBatchReceipt
 	Refusal  string
 	Progress model.NativeDeliveryProgress
+	// Flagged and StatusDiscrepancies are never persisted: a replay raises
+	// and counts nothing.
+	Flagged             []store.NativeIntegrityFlagged
+	StatusDiscrepancies int64
 }
 
 // nativeAppendOutcomeDocument is the persisted outcome of a native append.
@@ -104,7 +108,7 @@ func (s *SQLNativeDeliveryStore) AppendNativeDelivery(
 	ctx context.Context,
 	input *store.NativeDeliveryAppend,
 	command *store.CommandIdempotency,
-) (*model.NativeSecurityAcknowledgement, error) {
+) (*store.NativeDeliveryAppended, error) {
 	if input == nil ||
 		input.Batch.Validate() != nil ||
 		command == nil ||
@@ -160,7 +164,11 @@ func (s *SQLNativeDeliveryStore) AppendNativeDelivery(
 		return nil, &store.NativeDeliveryRefusal{Reason: result.Value.Refusal}
 	}
 
-	return &model.NativeSecurityAcknowledgement{Receipt: *result.Value.Receipt, NativeDeliveryProgress: result.Value.Progress}, nil
+	return &store.NativeDeliveryAppended{
+		Acknowledgement:     &model.NativeSecurityAcknowledgement{Receipt: *result.Value.Receipt, NativeDeliveryProgress: result.Value.Progress},
+		Flagged:             result.Value.Flagged,
+		StatusDiscrepancies: result.Value.StatusDiscrepancies,
+	}, nil
 }
 
 // encodeNativeAppendOutcome encodes a native append outcome for persistence.
@@ -264,7 +272,7 @@ func (s *SQLNativeDeliveryStore) executeNativeAppend(
 		return s.finishNativeAppend(ctx, tx, input, digest, &nativeAppendOutcome{Receipt: prior}, true)
 	}
 
-	if slices.ContainsFunc(b.Records, func(record model.NativeRecord) bool { return record.Occurrence != nil }) {
+	if slices.ContainsFunc(b.Records, func(record model.NativeRecord) bool { return record.Fact != nil || record.RuleStatus != nil }) {
 		var retired bool
 		if err = tx.Get(
 			ctx,
@@ -350,33 +358,17 @@ func checkNativeAppendPosition(
 	return base, nil
 }
 
-// admitNativeBatchSources validates the batch's record sources under the
-// native_sources savepoint and returns the metadata capacity it latched when
-// the sources exceed it.
+// admitNativeBatchSources checks every record of the batch against the
+// admitted policy. It charges no metadata: a batch's records carry their own
+// counted bytes.
 func admitNativeBatchSources(
-	ctx context.Context,
-	tx *sqlxTxWrapper,
+	_ context.Context,
+	_ *sqlxTxWrapper,
 	input *store.NativeDeliveryAppend,
-	owner nativeDeliveryOwner,
+	_ nativeDeliveryOwner,
 	resolved model.ResolvedNativePolicy,
 ) (*model.DeliveryMetadataCapacity, error) {
-	if _, err := tx.Exec(ctx, `SAVEPOINT native_sources`); err != nil {
-		return nil, err
-	}
-	if err := validateNativeBatchSources(ctx, tx, owner, resolved, input.DesktopBuild.NativeAgreement, input.Batch.Records); err != nil {
-		var capacity *model.DeliveryMetadataCapacity
-		if !errors.As(err, &capacity) {
-			return nil, err
-		}
-		if _, err := tx.Exec(ctx, `ROLLBACK TO SAVEPOINT native_sources`); err != nil {
-			return nil, err
-		}
-		if err := latchDeliveryMetadata(ctx, tx, input.Access.Access.AttemptID); err != nil {
-			return nil, err
-		}
-		return capacity, nil
-	}
-	return nil, nil
+	return nil, validateNativeBatchRecords(resolved, input.Batch.Records)
 }
 
 // nativeAppendBatch is the canonical receipt, envelope and records one native
@@ -391,7 +383,13 @@ type nativeAppendBatch struct {
 
 // encodeNativeAppendBatch canonicalizes the receipt, envelope and records of a
 // native batch and enforces their counted size limits.
-func encodeNativeAppendBatch(b model.NativeSecurityBatch, raw []byte, digest string, now time.Time) (nativeAppendBatch, error) {
+func encodeNativeAppendBatch(
+	b model.NativeSecurityBatch,
+	raw []byte,
+	digest string,
+	now time.Time,
+	registry *model.NativeCapabilityRegistry,
+) (nativeAppendBatch, error) {
 	receipt := model.NativeBatchReceipt{StreamID: b.StreamID, BatchSequence: b.BatchSequence, RequestDigest: digest, ReceivedAt: now}
 	receiptRaw, err := canonicalPreflightValue(receipt)
 	if err != nil {
@@ -414,7 +412,7 @@ func encodeNativeAppendBatch(b model.NativeSecurityBatch, raw []byte, digest str
 	counted := int64(len(envelopeRaw) + len(receiptRaw))
 	metadata := int64(len(receiptRaw))
 	for i, record := range b.Records {
-		records[i], err = encodeNativeRecord(record, b.BatchSequence, i)
+		records[i], err = encodeNativeRecord(record, b.BatchSequence, i, registry)
 		if err != nil {
 			return nativeAppendBatch{}, err
 		}
@@ -442,7 +440,7 @@ func retainNativeAppendBatch(
 	base int64,
 ) (*nativeAppendOutcome, error) {
 	b := input.Batch
-	batch, err := encodeNativeAppendBatch(b, raw, digest, owner.Now)
+	batch, err := encodeNativeAppendBatch(b, raw, digest, owner.Now, input.DesktopBuild.NativeAgreement.CapabilityRegistry())
 	if err != nil {
 		return nil, err
 	}
@@ -511,24 +509,22 @@ func retainNativeAppendBatch(
 	}
 
 	repair := b.BatchSequence == base+1
-	if !model.CanRetainPendingDelivery(budget.Pending, part.Bytes, model.DeliveryParticipationByteLimit, batch.counted, repair, !repair) ||
-		!model.CanRetainPendingDelivery(budget.Pending, budget.Bytes, model.DeliveryAttemptByteLimit, batch.counted, repair, !repair) {
+	if !model.CanRetainPendingDelivery(budget.Pending, part.Bytes, model.NativeParticipationByteLimit, batch.counted, repair, !repair) ||
+		!model.CanRetainPendingDelivery(budget.Pending, budget.Bytes, model.NativeAttemptByteLimit, batch.counted, repair, !repair) {
 		return nil, nativeAppendConflict("pending_capacity")
 	}
 
 	if err := storeNativeAppendBatch(ctx, tx, input, owner, batch, delta, pq, aq); err != nil {
 		return nil, err
 	}
-	// Pending records cannot become authoritative projections ahead of a gap.
-	// Validate their known neighbors now, then interpret only the settled prefix.
-	if err := validateNativeOccurrenceNeighbors(ctx, tx, *owner, batch.records); err != nil {
-		return nil, err
-	}
-	if err := advanceNativeInterpretation(ctx, tx, *owner); err != nil {
+	// Pending records cannot become authoritative ahead of a gap, so only the
+	// settled prefix is interpreted.
+	effects, err := advanceNativeInterpretation(ctx, tx, *owner)
+	if err != nil {
 		return nil, err
 	}
 
-	return &nativeAppendOutcome{Receipt: &batch.receipt}, nil
+	return &nativeAppendOutcome{Receipt: &batch.receipt, Flagged: effects.Flagged, StatusDiscrepancies: effects.StatusDiscrepancies}, nil
 }
 
 // storeNativeAppendBatch inserts the batch and its records and writes the

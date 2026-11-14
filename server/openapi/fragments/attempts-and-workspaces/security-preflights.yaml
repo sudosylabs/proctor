@@ -13,11 +13,12 @@ paths:
       operationId: prepareSecurityPreflight
       summary: Prepare a secure Desktop admission challenge
       description: >-
-        Requires an eligible registered Desktop Session and an exact admitted build, registry, source manifest
-        and configuration manifest. Stores one pending 120-second challenge per Session and Sitting; a
+        Requires an eligible registered Desktop Session and an exact admitted build, capability registry and
+        configuration manifest. Stores one pending 120-second challenge per Session and Sitting; a
         successor supersedes it. Does not create an Attempt, Workspace or Participation. Ready rejoin returns
         frozen configuration; active and suspended Attempts cannot obtain a replacement preflight. Unavailable
-        Institution catalogs or enforced native coverage fail closed.
+        Institution catalogs, or a family enforced where the release does not certify enforcement on the
+        candidate's platform, fail closed.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -87,6 +88,69 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exam-sittings/{exam_sitting_id}/security-policy:
+    parameters:
+      - $ref: '#/components/parameters/ExamSittingID'
+    get:
+      operationId: getSecurityPolicyOverview
+      summary: Read the policy for the readiness overview
+      description: >-
+        Resolves the Sitting's current native policy, under the same eligibility checks as preparing a preflight,
+        for the overview a candidate's Desktop shows before Start: the capabilities it activates, the rules it
+        checks, the recorder switch and the disclosure. It creates no preflight, records nothing and grants nothing,
+        so the overview may hold it for as long as it is open. At Start, compare readiness_digest with the one the
+        prepared preflight returns; if they differ, refresh the overview.
+      tags:
+        - Attempts and workspaces
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.registered_desktop_required
+        - exam.attempt.desktop_incompatible
+        - exam.attempt.sitting_not_open
+        - exam.attempt.management_authority_conflict
+        - exam.attempt.unavailable
+        - exam.security.unsupported_capability
+        - exam.security.catalog_missing
+        - exam.delivery.metadata_capacity
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The policy the readiness overview checks the machine against
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/PrivateNoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecurityPolicyOverviewResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /api/v1/security-preflights/{security_preflight_id}/report:
     parameters:
       - $ref: '#/components/parameters/SecurityPreflightID'
@@ -95,8 +159,8 @@ paths:
       summary: Report minimized privileged preflight results
       description: >-
         Rechecks the same registered Session, candidate, build, Sitting and policy before storing the bounded
-        report and its canonical digest. Enforced and baseline requirements must be ready; truthful degraded
-        observe-only coverage can remain eligible. A blocked report creates no Attempt or misconduct Flag.
+        report and its canonical digest. The server evaluates every readiness rule on the reported facts; each
+        enforced and baseline rule must be met, and an unknown status blocks. Observed rules never block. A blocked report creates no Attempt or misconduct Flag.
         Retry preserves the original receipt time; Connect must consume a current eligible report within 30
         seconds.
       tags:
@@ -260,8 +324,7 @@ components:
           schema:
             $ref: '#/components/schemas/PrepareSecurityPreflightRequest'
           example:
-            native_registry_digest: sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0
-            source_manifest_digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+            native_registry_digest: sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d
             configuration_manifest_fingerprint: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
     SecurityPreflightReport:
       required: true
@@ -274,17 +337,9 @@ components:
             challenge: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
             policy_digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
             policy_content_digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-            capability_matrix_digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
             security_session_id: synthetic-security-session
-            source_manifest_digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-            selected_source_categories: []
-            sources: []
-            coverage: []
-            baseline:
-              constrained_window: unavailable
-              single_physical_display: unavailable
-              content_protection: unavailable
-            posture: failed
+            capabilities: []
+            rules: []
             reported_at: '2026-09-08T08:00:00.000Z'
   responses:
     SecurityPolicyResponseOK:
@@ -318,7 +373,6 @@ components:
       additionalProperties: false
       required:
         - native_registry_digest
-        - source_manifest_digest
         - configuration_manifest_fingerprint
       properties:
         attempt_id:
@@ -327,9 +381,6 @@ components:
           maxLength: 26
           pattern: ^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$
         native_registry_digest:
-          type: string
-          pattern: ^sha256:[0-9a-f]{64}$
-        source_manifest_digest:
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         configuration_manifest_fingerprint:
@@ -385,7 +436,24 @@ components:
         - visibility_class_id
         - retention_class_id
         - capabilities
+        - screen_recording
+        - activations
+        - rules
       properties:
+        activations:
+          type: array
+          maxItems: 32
+          description: The capabilities Desktop runs for this policy, with the sub-categories each selects.
+          items:
+            $ref: '#/components/schemas/NativeActivation'
+        rules:
+          type: array
+          maxItems: 64
+          description: >-
+            The compiled native rules: the release's baseline, unchanged, then the rules compiled from the Exam's
+            family selections. Desktop evaluates them on the device; the server evaluates them again on the same facts.
+          items:
+            $ref: '#/components/schemas/NativeRule'
         policy_id:
           type: string
           minLength: 1
@@ -472,7 +540,7 @@ components:
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         registry_digest:
           type: string
-          const: sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0
+          const: sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d
         focus_loss_mode:
           type: string
           enum:
@@ -500,6 +568,8 @@ components:
         retention_class_id:
           type: string
           const: native_minimized
+        screen_recording:
+          $ref: '#/components/schemas/NativeScreenRecordingPolicy'
         capabilities:
           type: array
           minItems: 10
@@ -514,6 +584,7 @@ components:
                 required:
                   - id
                   - mode
+                  - outcome
                   - allowed_application_ids
                 properties:
                   id:
@@ -525,13 +596,20 @@ components:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   allowed_application_ids:
                     type: array
                     maxItems: 256
                     uniqueItems: true
                     description: >-
-                      Sorted unique opaque catalog IDs; executable paths, names, commands and regular
-                      expressions are not accepted.
+                      The only catalog applications the candidate may run, sorted and unique: IDs from the Desktop release's
+                      application catalog, each one it marks allowable. Empty adds no allowlist. When the family is on, the
+                      catalog's never-allowable applications are always blocked.
                     items:
                       type: string
                       minLength: 1
@@ -551,6 +629,7 @@ components:
                 required:
                   - id
                   - mode
+                  - outcome
                 properties:
                   id:
                     type: string
@@ -561,11 +640,18 @@ components:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
               - type: object
                 additionalProperties: false
                 required:
                   - id
                   - mode
+                  - outcome
                   - observe_os_clipboard_changes
                   - strategy
                 properties:
@@ -578,6 +664,12 @@ components:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   observe_os_clipboard_changes:
                     type: boolean
                   strategy:
@@ -619,6 +711,7 @@ components:
                 required:
                   - id
                   - mode
+                  - outcome
                   - candidate_print_commands
                   - monitored_spooler
                 properties:
@@ -631,6 +724,12 @@ components:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   candidate_print_commands:
                     type: string
                     enum:
@@ -675,7 +774,7 @@ components:
                 required:
                   - id
                   - mode
-                  - allowed_storage_function_class_ids
+                  - outcome
                   - enabled_sub_capabilities
                 properties:
                   id:
@@ -687,18 +786,12 @@ components:
                       - disabled
                       - observe
                       - enforce
-                  allowed_storage_function_class_ids:
-                    type: array
-                    maxItems: 256
-                    uniqueItems: true
-                    description: >-
-                      Sorted unique opaque catalog IDs; executable paths, names, commands and regular
-                      expressions are not accepted.
-                    items:
-                      type: string
-                      minLength: 1
-                      maxLength: 128
-                      pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   enabled_sub_capabilities:
                     type: array
                     maxItems: 2
@@ -715,8 +808,6 @@ components:
                           const: disabled
                     then:
                       properties:
-                        allowed_storage_function_class_ids:
-                          const: []
                         enabled_sub_capabilities:
                           const: []
                   - if:
@@ -740,6 +831,7 @@ components:
                 required:
                   - id
                   - mode
+                  - outcome
                   - rule
                 properties:
                   id:
@@ -751,6 +843,12 @@ components:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   rule:
                     type: string
                     enum:
@@ -791,9 +889,7 @@ components:
                 required:
                   - id
                   - mode
-                  - allowed_adapter_class_ids
-                  - allowed_managed_profile_ids
-                  - allowed_tunnel_class_ids
+                  - outcome
                   - enabled_sub_capabilities
                 properties:
                   id:
@@ -805,45 +901,15 @@ components:
                       - disabled
                       - observe
                       - enforce
-                  allowed_adapter_class_ids:
-                    type: array
-                    maxItems: 256
-                    uniqueItems: true
-                    description: >-
-                      Sorted unique opaque catalog IDs; executable paths, names, commands and regular
-                      expressions are not accepted.
-                    items:
-                      type: string
-                      minLength: 1
-                      maxLength: 128
-                      pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
-                  allowed_managed_profile_ids:
-                    type: array
-                    maxItems: 256
-                    uniqueItems: true
-                    description: >-
-                      Sorted unique opaque catalog IDs; executable paths, names, commands and regular
-                      expressions are not accepted.
-                    items:
-                      type: string
-                      minLength: 1
-                      maxLength: 128
-                      pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
-                  allowed_tunnel_class_ids:
-                    type: array
-                    maxItems: 256
-                    uniqueItems: true
-                    description: >-
-                      Sorted unique opaque catalog IDs; executable paths, names, commands and regular
-                      expressions are not accepted.
-                    items:
-                      type: string
-                      minLength: 1
-                      maxLength: 128
-                      pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   enabled_sub_capabilities:
                     type: array
-                    maxItems: 5
+                    maxItems: 3
                     uniqueItems: true
                     items:
                       type: string
@@ -851,8 +917,6 @@ components:
                         - system_proxy_state
                         - os_managed_vpn_state
                         - tunnel_interface_state
-                        - route_change
-                        - network_source_health
                 allOf:
                   - if:
                       properties:
@@ -860,12 +924,6 @@ components:
                           const: disabled
                     then:
                       properties:
-                        allowed_adapter_class_ids:
-                          const: []
-                        allowed_managed_profile_ids:
-                          const: []
-                        allowed_tunnel_class_ids:
-                          const: []
                         enabled_sub_capabilities:
                           const: []
                   - if:
@@ -889,6 +947,7 @@ components:
                 required:
                   - id
                   - mode
+                  - outcome
                   - concurrent_use_check
                   - require_ready
                 properties:
@@ -901,6 +960,12 @@ components:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   concurrent_use_check:
                     type: string
                     enum:
@@ -938,6 +1003,7 @@ components:
                 required:
                   - id
                   - mode
+                  - outcome
                   - concurrent_use_check
                   - require_ready
                 properties:
@@ -950,6 +1016,12 @@ components:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   concurrent_use_check:
                     type: string
                     enum:
@@ -987,6 +1059,7 @@ components:
                 required:
                   - id
                   - mode
+                  - outcome
                 properties:
                   id:
                     type: string
@@ -995,6 +1068,12 @@ components:
                     type: string
                     enum:
                       - disabled
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
           prefixItems:
             - properties:
                 id:
@@ -1031,6 +1110,7 @@ components:
         with issued_at <= active_from <= activation time. There is no policy expiry; the renewable
         Participation lease is the sole live authority. The digest excludes only digest; scope rebinding
         preserves the separately computed content digest.
+
     SecurityCatalogBinding:
       type: object
       additionalProperties: false
@@ -1044,11 +1124,6 @@ components:
           type: string
           enum:
             - application
-            - storage_function
-            - managed_network_profile
-            - network_adapter_class
-            - tunnel_class
-            - detector
         catalog_id:
           type: string
           minLength: 1
@@ -1156,6 +1231,94 @@ components:
         Localized collection notice, not consent or history-read authority. Zero days means no configured
         automatic expiry. Holds, approval, grace and source reconciliation still apply; minimized integrity
         evidence can have a different period.
+    ScreenRecordingDisclosure:
+      type: object
+      additionalProperties: false
+      required:
+        - notice_id
+        - audience
+        - local_recording
+        - uploads
+        - retention_policy_revision
+        - clip_retention_days
+        - retention_anchor
+      properties:
+        notice_id:
+          type: string
+          const: screen_recording
+        audience:
+          type: string
+          const: exam_managers_of_the_sitting
+          description: Who may play an uploaded clip.
+        local_recording:
+          type: string
+          const: whole_session_deleted_at_submission
+          description: Desktop records the whole session on the device and deletes it at submission.
+        uploads:
+          type: string
+          const: requested_and_flagged_ranges_only
+          description: Only ranges the Sitting's Exam Managers ask for, or the minute either side of a Flag, leave the device.
+        retention_policy_revision:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9007199254740991
+        clip_retention_days:
+          type: integer
+          minimum: 0
+          maximum: 36500
+          description: Uploaded clips are integrity evidence and follow its retention period.
+        retention_anchor:
+          type: string
+          const: eligible_closed_sitting_records_completion
+      description: >-
+        Localized recorder notice, not consent or playback authority. Zero days means no configured automatic
+        expiry; holds still apply.
+    SecurityPolicyOverviewResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - server_time
+        - policy
+        - readiness_digest
+        - capability_matrix_digest
+        - catalog_bindings
+        - browser_activity_disclosure
+        - screen_recording_disclosure
+      properties:
+        server_time:
+          type: string
+          format: date-time
+        policy:
+          $ref: '#/components/schemas/EffectiveExamSecurityPolicy'
+        readiness_digest:
+          $ref: '#/components/schemas/ReadinessDigest'
+        capability_matrix_digest:
+          type: string
+          pattern: ^sha256:[0-9a-f]{64}$
+          description: SHA-256 of the exact signed bytes of the release's certification document.
+        catalog_bindings:
+          type: array
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/SecurityCatalogBinding'
+        browser_activity_disclosure:
+          $ref: '#/components/schemas/BrowserActivityDisclosure'
+        screen_recording_disclosure:
+          description: The recorder notice to show before Start; null when the Exam does not record the screen.
+          oneOf:
+            - $ref: '#/components/schemas/ScreenRecordingDisclosure'
+            - type: 'null'
+    ReadinessDigest:
+      type: string
+      pattern: ^sha256:[0-9a-f]{64}$
+      description: >-
+        Identifies what the readiness overview shows and Desktop enforces: the activations and rules, family
+        selections, recorder switch, and the registry, matrix and catalogs they rest on. Unlike the policy content
+        digest it leaves out the policy's own identity, so the overview and the preflight prepared at Start carry the
+        same value exactly when nothing that matters changed. It is the SHA-256 of the canonical JSON object
+        {activations, rules, capabilities, screen_recording, focus_loss_mode, connection_loss_mode, registry_digest,
+        capability_matrix_digest, catalog_bindings}, taken from the policy and its resolution.
     SecurityPolicyResponse:
       type: object
       additionalProperties: false
@@ -1163,11 +1326,13 @@ components:
         - server_time
         - policy
         - policy_content_digest
+        - readiness_digest
         - capability_matrix_digest
         - catalog_bindings
         - preflight_challenge
         - frozen_attempt_configuration
         - browser_activity_disclosure
+        - screen_recording_disclosure
       properties:
         server_time:
           type: string
@@ -1177,9 +1342,12 @@ components:
         policy_content_digest:
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
+        readiness_digest:
+          $ref: '#/components/schemas/ReadinessDigest'
         capability_matrix_digest:
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
+          description: SHA-256 of the exact signed bytes of the release's certification document.
         catalog_bindings:
           type: array
           minItems: 0
@@ -1194,132 +1362,15 @@ components:
             - type: 'null'
         browser_activity_disclosure:
           $ref: '#/components/schemas/BrowserActivityDisclosure'
+        screen_recording_disclosure:
+          description: The recorder notice to show before Start; null when the Exam does not record the screen.
+          oneOf:
+            - $ref: '#/components/schemas/ScreenRecordingDisclosure'
+            - type: 'null'
       description: >-
         Privileged registered-Desktop response bounded to 128 KiB. Catalog bindings are unique and sorted by
         kind then catalog_id. First admission returns null configuration; Ready rejoin returns the original
         immutable configuration.
-    NativeSourceCoverage:
-      type: object
-      additionalProperties: false
-      required:
-        - source_id
-        - source_instance_id
-        - sequence
-        - source_schema_digest
-        - adapter_version
-        - health
-        - permission
-        - complete
-        - gap_count
-      properties:
-        source_id:
-          type: string
-          enum:
-            - display-topology
-            - candidate-window
-            - capture-session
-            - process-application
-            - interactive-session
-            - clipboard
-            - print-spooler
-            - removable-storage
-            - virtualization
-            - network-configuration
-            - media-device
-        source_instance_id:
-          type: string
-          minLength: 1
-          maxLength: 128
-          pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
-        sequence:
-          type: integer
-          format: int64
-          minimum: 0
-          maximum: 9007199254740991
-        source_schema_digest:
-          type: string
-          pattern: ^sha256:[0-9a-f]{64}$
-        adapter_version:
-          type: string
-          minLength: 1
-          maxLength: 128
-          pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
-        health:
-          type: string
-          enum:
-            - starting
-            - healthy
-            - degraded
-            - failed
-            - recovering
-            - stopped
-        permission:
-          type: string
-          enum:
-            - denied
-            - granted
-            - not_determined
-            - restricted
-            - unavailable
-        complete:
-          type: boolean
-        gap_count:
-          type: integer
-          format: int64
-          minimum: 0
-          maximum: 9007199254740991
-    NativeCoverageClaim:
-      type: object
-      additionalProperties: false
-      required:
-        - coverage_key
-        - source_schema_digest
-        - claim
-        - state
-      properties:
-        coverage_key:
-          type: string
-          minLength: 1
-          maxLength: 128
-          pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
-        source_schema_digest:
-          type: string
-          pattern: ^sha256:[0-9a-f]{64}$
-        claim:
-          type: string
-          enum:
-            - enforce
-            - observe
-            - unavailable
-        state:
-          type: string
-          enum:
-            - ready
-            - degraded
-            - unavailable
-    NativeBaselineReport:
-      type: object
-      additionalProperties: false
-      required:
-        - constrained_window
-        - single_physical_display
-        - content_protection
-      properties:
-        constrained_window:
-          type: string
-          enum:
-            - verified
-            - unavailable
-        single_physical_display:
-          type: string
-          enum:
-            - verified
-            - unavailable
-        content_protection:
-          type: string
-          enum:
-            - verified
-            - unavailable
     SecurityPreflightReport:
       type: object
       additionalProperties: false
@@ -1327,14 +1378,9 @@ components:
         - challenge
         - policy_digest
         - policy_content_digest
-        - capability_matrix_digest
         - security_session_id
-        - source_manifest_digest
-        - selected_source_categories
-        - sources
-        - coverage
-        - baseline
-        - posture
+        - capabilities
+        - rules
         - reported_at
       properties:
         challenge:
@@ -1348,64 +1394,33 @@ components:
         policy_content_digest:
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
-        capability_matrix_digest:
-          type: string
-          pattern: ^sha256:[0-9a-f]{64}$
         security_session_id:
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
-        source_manifest_digest:
-          type: string
-          pattern: ^sha256:[0-9a-f]{64}$
-        selected_source_categories:
+        capabilities:
           type: array
-          minItems: 0
-          maxItems: 10
+          maxItems: 32
+          description: One fresh fact for every activated capability at Start, in the policy's activation order.
           items:
-            type: string
-            enum:
-              - os-clipboard-change
-              - removable-block-storage
-              - portable-mtp
-              - system-proxy-state
-              - os-managed-vpn-state
-              - tunnel-interface-state
-              - route-change
-              - network-source-health
-              - camera
-              - microphone
-          uniqueItems: true
-        sources:
+            $ref: '#/components/schemas/NativeCapabilityReadiness'
+        rules:
           type: array
-          minItems: 0
-          maxItems: 11
-          items:
-            $ref: '#/components/schemas/NativeSourceCoverage'
-        coverage:
-          type: array
-          minItems: 0
           maxItems: 64
+          description: Desktop's own status for every readiness rule.
           items:
-            $ref: '#/components/schemas/NativeCoverageClaim'
-        baseline:
-          $ref: '#/components/schemas/NativeBaselineReport'
-        posture:
-          type: string
-          enum:
-            - compliant
-            - degraded
-            - contained
-            - failed
+            $ref: '#/components/schemas/NativeRuleReport'
         reported_at:
           type: string
           format: date-time
       description: >-
-        Minimized assertions, at most 64 KiB. Source order and categories must match the resolved policy;
-        coverage keys are sorted and exact. No inventories, media, clipboard bytes, OS errors or arbitrary
-        details are accepted. The server computes the report digest. Client reported_at is provenance; server
-        time controls challenge expiry and admission freshness.
+        What Desktop observed at Start, at most 128 KiB: one fresh fact for each activated capability and its own
+        status for each readiness rule. No inventories, media, clipboard bytes, OS errors or arbitrary details are
+        accepted. The server evaluates the readiness rules on these facts and its result decides admission. The
+        server computes the report digest. Client reported_at is provenance; server time controls challenge expiry
+        and admission freshness.
+
     SecurityPreflightResult:
       type: object
       additionalProperties: false
@@ -1414,9 +1429,18 @@ components:
         - report_digest
         - admission
         - reason_codes
+        - rules
         - server_time
         - expires_at
       properties:
+        rules:
+          type: array
+          maxItems: 64
+          description: >-
+            The server's own status for every readiness rule, evaluated on the reported state. Where it differs from
+            Desktop's, the server's decides admission.
+          items:
+            $ref: '#/components/schemas/NativeRuleReport'
         preflight_id:
           type: string
           minLength: 1
@@ -1437,16 +1461,8 @@ components:
           items:
             type: string
             enum:
-              - policy_changed
-              - unsupported_capability
-              - source_unavailable
-              - permission_required
-              - baseline_unavailable
               - preflight_expired
-              - preflight_superseded
-              - posture_blocked
-              - configuration_unsupported
-              - session_changed
+              - native_rule_unmet
           uniqueItems: true
         server_time:
           type: string
@@ -1454,6 +1470,7 @@ components:
         expires_at:
           type: string
           format: date-time
+
     AdmittedSecurity:
       type: object
       additionalProperties: false
@@ -1503,6 +1520,9 @@ components:
           type: string
           minLength: 1
           maxLength: 128
+          description: >-
+            The native delivery stream this admission opened. Desktop sends it as the security control's stream_id
+            and as the native delivery watermark's source_id.
         renewal_interval_seconds:
           type: integer
           format: int64
@@ -1514,10 +1534,7 @@ components:
         - server_time
         - security
         - frozen_attempt_configuration
-        - current_sources
-        - current_coverage
-        - source_reset_receipts
-        - security_coverage
+        - security_control
       properties:
         server_time:
           type: string
@@ -1526,37 +1543,8 @@ components:
           $ref: '#/components/schemas/AdmittedSecurity'
         frozen_attempt_configuration:
           $ref: '#/components/schemas/FrozenAttemptConfiguration'
-        current_sources:
-          type: array
-          maxItems: 11
-          items:
-            $ref: '#/components/schemas/NativeSourceCoverage'
-        current_coverage:
-          type: array
-          maxItems: 64
-          items:
-            $ref: '#/components/schemas/NativeCoverageClaim'
-        source_reset_receipts:
-          type: array
-          maxItems: 11
-          items:
-            $ref: '#/components/schemas/SourceResetReceipt'
-        security_coverage:
-          $ref: '#/components/schemas/SecurityCoverageResult'
-    SourceResetReceipt:
-      type: object
-      additionalProperties: false
-      required:
-        - reset_id
-        - reset_digest
-      properties:
-        reset_id:
-          type: string
-          minLength: 1
-          maxLength: 128
-        reset_digest:
-          type: string
-          pattern: ^sha256:[0-9a-f]{64}$
+        security_control:
+          $ref: '#/components/schemas/SecurityControlResult'
     DeliveryWatermarkRejection:
       type: object
       additionalProperties: false
@@ -1579,14 +1567,15 @@ components:
           enum:
             - closed_source
             - position_limit
-    SecurityCoverageResult:
+    SecurityControlResult:
       type: object
       additionalProperties: false
+      description: >-
+        How the server processed Desktop's latest security control: the lease renewal and its delivery watermarks.
+        A renewal never changes whether the candidate may interact; only closing native delivery does.
       required:
         - processed_control_sequence
         - processed_control_digest
-        - coverage_result
-        - source_reset_receipts
         - security_interaction_allowed
         - delivery_watermark_rejections
       properties:
@@ -1598,18 +1587,6 @@ components:
         processed_control_digest:
           type: [string, 'null']
           pattern: ^sha256:[0-9a-f]{64}$
-        coverage_result:
-          type: string
-          enum:
-            - accepted
-            - stale_control
-            - reset_required
-            - reset_conflict
-        source_reset_receipts:
-          type: array
-          maxItems: 11
-          items:
-            $ref: '#/components/schemas/SourceResetReceipt'
         security_interaction_allowed:
           type: boolean
         delivery_watermark_rejections:
@@ -1617,3 +1594,242 @@ components:
           maxItems: 50
           items:
             $ref: '#/components/schemas/DeliveryWatermarkRejection'
+    NativeActivation:
+      type: object
+      additionalProperties: false
+      required:
+        - capability
+        - categories
+      properties:
+        capability:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,63}$
+        categories:
+          type: array
+          maxItems: 16
+          description: The sub-categories the capability runs; empty means every registered one.
+          items:
+            type: string
+            pattern: ^[a-z][a-z0-9_]{0,63}$
+    NativeRule:
+      type: object
+      additionalProperties: false
+      description: One requirement, in the rule grammar Desktop publishes.
+      required:
+        - rule_id
+        - capability
+        - mode
+        - phase
+        - reason
+        - requirement
+      properties:
+        rule_id:
+          type: string
+          maxLength: 128
+          pattern: ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$
+        capability:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,63}$
+        mode:
+          type: string
+          enum:
+            - enforce
+            - observe
+        phase:
+          type: string
+          enum:
+            - readiness
+            - participation
+            - both
+        reason:
+          type: string
+          maxLength: 128
+          description: A reason registered for the capability; Desktop owns its localized text.
+        requirement:
+          $ref: '#/components/schemas/NativeCondition'
+    NativeCondition:
+      description: >-
+        Exactly one of a comparison of a registered field with a typed value, a combination of conditions, or an
+        application condition matched on the device. Nesting is at most three deep.
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - Compare
+          properties:
+            Compare:
+              type: object
+              additionalProperties: false
+              required:
+                - field
+                - op
+                - value
+              properties:
+                field:
+                  type: string
+                  maxLength: 128
+                op:
+                  type: string
+                  enum:
+                    - eq
+                    - ne
+                    - lt
+                    - le
+                    - gt
+                    - ge
+                    - in
+                    - not_in
+                value:
+                  description: A whole number, one of an enumerated field's values, a boolean, or a list of them for in and not_in.
+        - type: object
+          additionalProperties: false
+          required:
+            - All
+          properties:
+            All:
+              $ref: '#/components/schemas/NativeConditionList'
+        - type: object
+          additionalProperties: false
+          required:
+            - Any
+          properties:
+            Any:
+              $ref: '#/components/schemas/NativeConditionList'
+        - type: object
+          additionalProperties: false
+          required:
+            - Not
+          properties:
+            Not:
+              type: object
+              additionalProperties: false
+              required:
+                - condition
+              properties:
+                condition:
+                  $ref: '#/components/schemas/NativeCondition'
+        - type: object
+          additionalProperties: false
+          required:
+            - AppsAbsent
+          properties:
+            AppsAbsent:
+              $ref: '#/components/schemas/NativeCatalogApplications'
+        - type: object
+          additionalProperties: false
+          required:
+            - AppsOnly
+          properties:
+            AppsOnly:
+              $ref: '#/components/schemas/NativeCatalogApplications'
+    NativeConditionList:
+      type: object
+      additionalProperties: false
+      required:
+        - conditions
+      properties:
+        conditions:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/NativeCondition'
+    NativeCatalogApplications:
+      type: object
+      additionalProperties: false
+      required:
+        - catalog_app_ids
+      properties:
+        catalog_app_ids:
+          type: array
+          minItems: 1
+          maxItems: 256
+          description: Catalog application IDs in ASCII order.
+          items:
+            type: string
+            pattern: ^[a-z][a-z0-9_]{0,63}$
+    NativeCapabilityReadiness:
+      type: object
+      additionalProperties: false
+      required:
+        - capability
+        - source_instance_id
+        - sequence
+        - permission
+        - health
+        - certainty
+        - state
+        - summary
+      properties:
+        capability:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,63}$
+        source_instance_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
+        sequence:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 9007199254740991
+          description: The sequence the capability's event stream continues from.
+        permission:
+          type: string
+          enum:
+            - not_determined
+            - granted
+            - denied
+            - restricted
+            - unavailable
+        health:
+          type: string
+          enum:
+            - unsupported
+            - healthy
+            - degraded
+            - failed
+            - stopped
+        certainty:
+          type: string
+          enum:
+            - complete
+            - partial
+            - unknown
+        state:
+          type: object
+          description: >-
+            The capability's minimized full state, valid against its published state schema, at most 16 KiB. It never
+            holds what must not leave the device. A field named "<capability>.<name>" is read from state.<name>.
+        summary:
+          type: object
+          description: >-
+            The counts Desktop derives from the state, valid against its published summary schema, at most 16 KiB. A
+            field named "<capability>.summary.<name>" is read from summary.<name>.
+    NativeRuleReport:
+      type: object
+      additionalProperties: false
+      required:
+        - rule_id
+        - status
+      properties:
+        rule_id:
+          type: string
+          maxLength: 128
+        status:
+          type: string
+          enum:
+            - met
+            - not_met
+            - unknown
+        unknown_cause:
+          type: string
+          description: Why the rule is unknown; present only when status is unknown.
+          enum:
+            - unavailable
+            - gap
+            - unhealthy
+            - permission
+            - partial
+            - checking

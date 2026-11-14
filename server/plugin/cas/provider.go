@@ -25,42 +25,66 @@ import (
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform/externalauth"
+	"github.com/sudosylabs/proctor/server/plugin"
 )
 
-type Factory struct{}
-
-func NewFactory() Factory {
-	return Factory{}
+// Settings is a CAS provider's settings document.
+type Settings struct {
+	BaseURL          string                    `json:"BaseURL"`
+	ValidationPath   string                    `json:"ValidationPath"`
+	Timeout          config.Duration           `json:"Timeout"`
+	MaxResponseBytes int64                     `json:"MaxResponseBytes"`
+	Claims           externalauth.ClaimMapping `json:"Claims"`
 }
 
-func (Factory) Type() string {
-	return config.ExternalAuthenticationTypeCAS
-}
-
-func (Factory) New(
-	settings config.ExternalAuthenticationProvider,
-) (externalauth.Provider, error) {
-	if settings.CAS == nil {
-		return nil, errors.New("CAS settings are missing")
+// Validate checks settings for a provider that may or may not create
+// accounts.
+func (s Settings) Validate(autoProvision bool) error {
+	var problems externalauth.SettingsErrors
+	externalauth.ValidateHTTPSURL("Settings.BaseURL", s.BaseURL, &problems)
+	if parsed, _ := url.Parse(s.BaseURL); parsed != nil && (parsed.RawQuery != "" || parsed.Fragment != "") {
+		problems.Add("Settings.BaseURL", "must not contain a query or fragment")
 	}
-	base, err := url.Parse(settings.CAS.BaseURL)
+	if s.ValidationPath == "" ||
+		!strings.HasPrefix(s.ValidationPath, "/") ||
+		strings.HasPrefix(s.ValidationPath, "//") ||
+		strings.ContainsAny(s.ValidationPath, "?#\x00\r\n") {
+		problems.Add("Settings.ValidationPath", "must be an absolute path without a query or fragment")
+	}
+	externalauth.ValidateHTTPBounds(s.Timeout.Duration, s.MaxResponseBytes, &problems)
+	externalauth.ValidateClaims(s.Claims, autoProvision, &problems)
+	return problems.Err()
+}
+
+// New builds the CAS provider definition describes. CAS takes no secrets.
+func New(definition plugin.IdentityProviderDefinition) (plugin.IdentityProvider, error) {
+	var settings Settings
+	if err := externalauth.DecodeSettings(definition.Settings, &settings); err != nil {
+		return nil, err
+	}
+	if definition.Secrets != nil {
+		return nil, errors.New("invalid provider settings: Secrets: CAS takes no secrets")
+	}
+	if err := settings.Validate(definition.AutoProvision); err != nil {
+		return nil, err
+	}
+	base, err := url.Parse(settings.BaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse base URL: %w", err)
 	}
 	loginURL := *base
 	loginURL.Path = strings.TrimSuffix(base.Path, "/") + "/login"
 	validateURL := *base
-	validateURL.Path = strings.TrimSuffix(base.Path, "/") +
-		settings.CAS.ValidationPath
+	validateURL.Path = strings.TrimSuffix(base.Path, "/") + settings.ValidationPath
 	return &Provider{
-		mapper:      externalauth.NewProfileMapper(settings),
+		mapper:      externalauth.NewProfileMapper(definition.ID, definition.AutoProvision, settings.Claims),
 		loginURL:    &loginURL,
 		validateURL: &validateURL,
 		client: externalauth.NewHTTPClient(
-			settings.CAS.Timeout.Duration,
-			settings.CAS.MaxResponseBytes,
+			settings.Timeout.Duration,
+			settings.MaxResponseBytes,
 		),
-		maximumResponseBytes: settings.CAS.MaxResponseBytes,
+		maximumResponseBytes: settings.MaxResponseBytes,
 		now:                  time.Now,
 	}, nil
 }
@@ -74,22 +98,14 @@ type Provider struct {
 	now                  func() time.Time
 }
 
-func (p *Provider) Descriptor() model.ExternalAuthenticationProvider {
-	return p.mapper.Descriptor()
-}
-
-func (p *Provider) AutoProvision() bool {
-	return p.mapper.AutoProvision()
-}
-
 func (p *Provider) State(
-	callback model.ExternalAuthenticationCallback,
+	callback plugin.Callback,
 ) (string, error) {
 	state, err := callback.SingleValue("state", 256)
 	if err != nil || !model.IsValidCredentialToken(state) {
 		return "", externalauth.Rejected(
 			"resolve CAS callback state",
-			model.ErrInvalidExternalAuthenticationCallback,
+			plugin.ErrInvalidCallback,
 		)
 	}
 	return state, nil
@@ -97,11 +113,11 @@ func (p *Provider) State(
 
 func (p *Provider) Begin(
 	_ context.Context,
-	request externalauth.BeginRequest,
-) (*externalauth.BeginResponse, error) {
+	request plugin.BeginRequest,
+) (plugin.BeginResponse, error) {
 	serviceURL, err := casServiceURL(request.CallbackURL, request.State)
 	if err != nil || !model.IsValidCredentialToken(request.Proof) {
-		return nil, externalauth.InvalidResponse(
+		return plugin.BeginResponse{}, externalauth.InvalidResponse(
 			"construct CAS login",
 			errors.New("invalid external authentication transaction"),
 		)
@@ -113,28 +129,28 @@ func (p *Provider) Begin(
 		query.Set("renew", "true")
 	}
 	loginURL.RawQuery = query.Encode()
-	return &externalauth.BeginResponse{RedirectURL: loginURL.String()}, nil
+	return plugin.BeginResponse{RedirectURL: loginURL.String()}, nil
 }
 
 func (p *Provider) Complete(
 	ctx context.Context,
-	request externalauth.CompleteRequest,
-) (*model.ExternalAuthenticationAssertion, error) {
+	request plugin.CompleteRequest,
+) (plugin.Assertion, error) {
 	callbackState, err := p.State(request.Callback)
 	if err != nil ||
 		subtle.ConstantTimeCompare(
 			[]byte(callbackState),
 			[]byte(request.State),
 		) != 1 {
-		return nil, externalauth.Rejected(
+		return plugin.Assertion{}, externalauth.Rejected(
 			"validate CAS callback",
-			model.ErrInvalidExternalAuthenticationCallback,
+			plugin.ErrInvalidCallback,
 		)
 	}
 
 	ticket, err := request.Callback.SingleValue("ticket", 2048)
 	if err != nil {
-		return nil, externalauth.Rejected(
+		return plugin.Assertion{}, externalauth.Rejected(
 			"validate CAS callback",
 			err,
 		)
@@ -142,7 +158,7 @@ func (p *Provider) Complete(
 
 	serviceURL, err := casServiceURL(request.CallbackURL, request.State)
 	if err != nil {
-		return nil, externalauth.InvalidResponse(
+		return plugin.Assertion{}, externalauth.InvalidResponse(
 			"construct CAS validation",
 			err,
 		)
@@ -165,7 +181,7 @@ func (p *Provider) Complete(
 		nil,
 	)
 	if err != nil {
-		return nil, externalauth.InvalidResponse(
+		return plugin.Assertion{}, externalauth.InvalidResponse(
 			"construct CAS validation",
 			err,
 		)
@@ -174,7 +190,7 @@ func (p *Provider) Complete(
 	httpRequest.Header.Set("Accept", "application/xml, text/xml")
 	response, err := p.client.Do(httpRequest)
 	if err != nil {
-		return nil, externalauth.Unavailable(
+		return plugin.Assertion{}, externalauth.Unavailable(
 			"validate CAS ticket",
 			err,
 		)
@@ -183,7 +199,7 @@ func (p *Provider) Complete(
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, response.Body)
-		return nil, externalauth.Unavailable(
+		return plugin.Assertion{}, externalauth.Unavailable(
 			"validate CAS ticket",
 			fmt.Errorf("provider status %d", response.StatusCode),
 		)
@@ -191,21 +207,21 @@ func (p *Provider) Complete(
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		return nil, externalauth.InvalidResponse(
+		return plugin.Assertion{}, externalauth.InvalidResponse(
 			"read CAS validation",
 			err,
 		)
 	}
 
 	if int64(len(body)) > p.maximumResponseBytes {
-		return nil, externalauth.InvalidResponse(
+		return plugin.Assertion{}, externalauth.InvalidResponse(
 			"read CAS validation",
 			externalauth.ErrResponseTooLarge,
 		)
 	}
 
 	if bytes.Contains(bytes.ToUpper(body), []byte("<!DOCTYPE")) {
-		return nil, externalauth.InvalidResponse(
+		return plugin.Assertion{}, externalauth.InvalidResponse(
 			"decode CAS validation",
 			errors.New("document type is not allowed"),
 		)
@@ -215,21 +231,21 @@ func (p *Provider) Complete(
 	decoder := xml.NewDecoder(bytes.NewReader(body))
 	decoder.Strict = true
 	if err := decoder.Decode(&envelope); err != nil {
-		return nil, externalauth.InvalidResponse(
+		return plugin.Assertion{}, externalauth.InvalidResponse(
 			"decode CAS validation",
 			err,
 		)
 	}
 
 	if envelope.Failure != nil {
-		return nil, externalauth.Rejected(
+		return plugin.Assertion{}, externalauth.Rejected(
 			"validate CAS ticket",
 			errors.New("CAS rejected authentication"),
 		)
 	}
 
 	if envelope.Success == nil {
-		return nil, externalauth.InvalidResponse(
+		return plugin.Assertion{}, externalauth.InvalidResponse(
 			"decode CAS validation",
 			errors.New("missing authentication result"),
 		)
@@ -260,7 +276,7 @@ func (p *Provider) Complete(
 		// Use the transaction start as a conservative proof instant: the
 		// service-bound ticket required primary credentials after that start.
 		if request.AuthenticationStartedAt.After(authenticatedAt) {
-			return nil, externalauth.Rejected("verify fresh CAS authentication", errors.New("fresh authentication time is invalid"))
+			return plugin.Assertion{}, externalauth.Rejected("verify fresh CAS authentication", errors.New("fresh authentication time is invalid"))
 		}
 
 		authenticatedAt = request.AuthenticationStartedAt
@@ -269,7 +285,7 @@ func (p *Provider) Complete(
 	return p.mapper.Assertion(
 		values,
 		emailVerified,
-		authenticatedAt.UnixMilli(),
+		authenticatedAt,
 	)
 }
 
@@ -291,7 +307,7 @@ func (p *Provider) mapperEmailVerified(values map[string][]string) bool {
 	return false
 }
 
-func (p *Provider) mapperClaims() config.ExternalClaimMapping {
+func (p *Provider) mapperClaims() externalauth.ClaimMapping {
 	return p.mapper.Claims()
 }
 
@@ -338,7 +354,4 @@ type attribute struct {
 	Value   string `xml:",chardata"`
 }
 
-var (
-	_ externalauth.Factory  = Factory{}
-	_ externalauth.Provider = (*Provider)(nil)
-)
+var _ plugin.IdentityProvider = (*Provider)(nil)

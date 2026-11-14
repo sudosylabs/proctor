@@ -36,12 +36,15 @@ type Health interface {
 // observation and localization ports, node health, build information, and
 // the server's request limits. New validates it before compiling any route.
 type Settings struct {
-	Logger       *logging.Logger
-	Metrics      route.Metrics
-	Tracing      route.Tracing
-	Localizer    route.Localizer
-	Health       Health
-	BuildInfo    BuildInfo
+	Logger    *logging.Logger
+	Metrics   route.Metrics
+	Tracing   route.Tracing
+	Localizer route.Localizer
+	Health    Health
+	BuildInfo BuildInfo
+	// Plugins reports the active plugins GET /system/plugins lists and
+	// whether readiness is degraded by a failed plugin.
+	Plugins      Plugins
 	PublicURL    string
 	MaxBodyBytes int64
 	// ReadTimeout and WriteTimeout repeat the server-wide connection

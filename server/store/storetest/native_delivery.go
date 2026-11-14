@@ -10,7 +10,6 @@ package storetest
 import (
 	"context"
 	"encoding/json"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -31,60 +30,54 @@ func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, probes ...Nativ
 	connected, err := ss.ExamAttempt().Connect(ctx, connect, examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "native-intake-connect", "native-intake-connect"))
 	require.NoError(t, err)
 	access := store.NativeDeliveryAccess{Access: store.CandidateAttemptAccess{AttemptID: connected.Attempt.ID, ConnectionID: connected.Connection.ID, CandidateUserID: connect.CandidateUserID, SessionID: connect.SessionID, DesktopRegistrationID: connect.DesktopRegistrationID, DPoPKeyThumbprint: connect.DPoPKeyThumbprint, ContinuityCredentialHash: connect.ContinuityCredentialHash}, StreamID: connected.Security.DeliveryStreamID, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation}
-	recovery, err := ss.SecurityPreflight().RecoverSecurityPolicy(ctx, store.SecurityPreflightAccess{CandidateUserID: connect.CandidateUserID, SessionID: connect.SessionID, DesktopRegistrationID: connect.DesktopRegistrationID, DPoPKeyThumbprint: connect.DPoPKeyThumbprint, DesktopBuild: connect.DesktopBuild, DesktopCompatibilityPolicyRevision: connect.DesktopCompatibilityPolicyRevision}, connected.Attempt.ID)
-	require.NoError(t, err)
-	source := model.NativeSourceCoverage{}
-	for _, candidate := range recovery.CurrentSources {
-		if candidate.SourceID == model.NativeSourceCapture {
-			source = candidate
-		}
-	}
 	at := time.Now().UTC().Truncate(time.Millisecond)
-	opened := model.NativeOccurrence{Kind: "occurrence", OccurrenceID: model.NewID(), ConditionID: "baseline.capture", DetectorID: "synthetic-baseline", DetectorVersion: 1, CapabilityID: "baseline", Mode: model.NativeClaimEnforce, Status: "opened", FirstObservedAt: at, LastConfirmedAt: at, RepeatCount: 1, Certainty: "complete", SourceRanges: []model.NativeSourceRange{{SourceID: source.SourceID, SourceInstanceID: source.SourceInstanceID, FirstSequence: 0, LastSequence: 1}}}
-	batch := func(seq int64, record model.NativeOccurrence) model.NativeSecurityBatch {
-		return model.NativeSecurityBatch{StreamID: access.StreamID, BatchSequence: seq, ParticipationID: access.ParticipationID, Generation: access.Generation, SecuritySessionID: connected.Security.SecuritySessionID, PolicyDigest: connected.Security.Policy.Digest, ApplicationReleaseID: connected.Security.Policy.ApplicationReleaseID, MatrixID: connected.Security.Policy.MatrixID, Records: []model.NativeRecord{{Occurrence: &record}}}
+	batch := func(seq int64, records ...model.NativeRecord) model.NativeSecurityBatch {
+		return model.NativeSecurityBatch{StreamID: access.StreamID, BatchSequence: seq, ParticipationID: access.ParticipationID, Generation: access.Generation, SecuritySessionID: connected.Security.SecuritySessionID, PolicyDigest: connected.Security.Policy.Digest, ApplicationReleaseID: connected.Security.Policy.ApplicationReleaseID, MatrixID: connected.Security.Policy.MatrixID, Records: records}
 	}
-	appendBatch := func(b model.NativeSecurityBatch, key string) (*model.NativeSecurityAcknowledgement, error) {
+	appendBatch := func(b model.NativeSecurityBatch, key string) (*store.NativeDeliveryAppended, error) {
 		t.Helper()
 		raw, canonicalErr := b.Canonical()
 		require.NoError(t, canonicalErr)
 		return ss.NativeDelivery().AppendNativeDelivery(ctx, &store.NativeDeliveryAppend{Access: access, Batch: b, DesktopBuild: connect.DesktopBuild, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}, examCommand(fixture.candidate.ID, store.NativeDeliveryAppendOperation, key, model.SHA256Fingerprint(raw)))
 	}
-	repeated := opened
-	repeated.Status = "repeated"
-	repeated.RepeatCount = 2
-	two := batch(2, repeated)
+	// The window mounts and the exam is confirmed: the window rule starts.
+	window := nativeFact("candidate_window", 2, at.Add(time.Second), windowMounted, `{}`)
+	two := batch(2, window, model.NativeRecord{Confirmed: &model.NativeParticipationConfirmed{Kind: "participation_confirmed", ObservedAt: at.Add(time.Second)}})
 	pending, err := appendBatch(two, "native-two")
 	require.NoError(t, err)
-	require.Equal(t, int64(0), pending.HighestContiguousBatchSequence)
-	require.Equal(t, int64(0), pending.SettledThroughBatchSequence)
-	require.Len(t, pending.MissingBatchRanges, 1)
-	require.Equal(t, model.SequenceRange{First: 1, Last: 1}, pending.MissingBatchRanges[0])
-	first, err := appendBatch(batch(1, opened), "native-one")
+	require.Equal(t, int64(0), pending.Acknowledgement.HighestContiguousBatchSequence)
+	require.Equal(t, int64(0), pending.Acknowledgement.SettledThroughBatchSequence)
+	require.Len(t, pending.Acknowledgement.MissingBatchRanges, 1)
+	require.Equal(t, model.SequenceRange{First: 1, Last: 1}, pending.Acknowledgement.MissingBatchRanges[0])
+	first, err := appendBatch(batch(1, singleDisplay(2, at.Add(500*time.Millisecond))), "native-one")
 	require.NoError(t, err)
-	require.Equal(t, int64(2), first.HighestContiguousBatchSequence)
-	require.Equal(t, int64(2), first.SettledThroughBatchSequence)
+	require.Equal(t, int64(2), first.Acknowledgement.HighestContiguousBatchSequence)
+	require.Equal(t, int64(2), first.Acknowledgement.SettledThroughBatchSequence)
+	require.Empty(t, first.Flagged, "a compliant start raises nothing")
 	replay, err := appendBatch(two, "native-two-repacked-key")
 	require.NoError(t, err)
-	require.Equal(t, pending.Receipt, replay.Receipt, "replay changed receipt or returned stale progress")
-	require.Equal(t, int64(2), replay.HighestContiguousBatchSequence, "replay changed receipt or returned stale progress")
+	require.Equal(t, pending.Acknowledgement.Receipt, replay.Acknowledgement.Receipt, "replay changed receipt or returned stale progress")
+	require.Equal(t, int64(2), replay.Acknowledgement.HighestContiguousBatchSequence, "replay changed receipt or returned stale progress")
 	changed := two
 	changed.PriorAcknowledgement = 2
 	_, err = appendBatch(changed, "native-two-conflict")
 	require.Error(t, err, "changed original prior acknowledgement accepted as exact replay")
-	recovered := repeated
-	recovered.Status = "recovered"
-	third, err := appendBatch(batch(3, recovered), "native-three")
+	third, err := appendBatch(batch(3, secondDisplay(3, at.Add(2*time.Second))), "native-three")
 	require.NoError(t, err)
-	require.Equal(t, int64(3), third.HighestContiguousBatchSequence, "recovery was not retained")
-	_, err = appendBatch(batch(4, recovered), "native-double-recovery")
-	require.Error(t, err, "duplicate lifecycle recovery accepted")
-	lost := repeated
-	lost.OccurrenceID = model.NewID()
-	fifth, err := appendBatch(batch(5, lost), "native-five")
+	require.Equal(t, int64(3), third.Acknowledgement.HighestContiguousBatchSequence)
+	require.Len(t, third.Flagged, 1, "a second display opens an enforce occurrence")
+	require.Equal(t, model.IntegrityPolicyKind("native.display"), third.Flagged[0].Kind)
+	require.Equal(t, 1, third.Flagged[0].RetainedEvidence)
+	thirdReplay, err := appendBatch(batch(3, secondDisplay(3, at.Add(2*time.Second))), "native-three-replay")
 	require.NoError(t, err)
-	require.Equal(t, int64(3), fifth.HighestContiguousBatchSequence, "invented missing opener")
-	require.Equal(t, int64(3), fifth.SettledThroughBatchSequence, "invented missing opener")
+	require.Empty(t, thirdReplay.Flagged, "a replay raises nothing")
+	_, err = appendBatch(batch(4, nativeFact("process_application", 1, at.Add(3*time.Second), windowMounted, `{}`)), "native-unactivated")
+	require.Error(t, err, "a fact for a capability the policy does not activate was accepted")
+	desktop := model.NativeRuleStatusReport{Kind: "rule_status", RuleID: "baseline.single_display", Status: model.NativeRuleNotMet, Contained: true, ObservedAt: at.Add(3 * time.Second)}
+	fifth, err := appendBatch(batch(5, model.NativeRecord{RuleStatus: &desktop}), "native-five")
+	require.NoError(t, err)
+	require.Equal(t, int64(3), fifth.Acknowledgement.HighestContiguousBatchSequence, "interpreted past a missing batch")
+	require.Equal(t, int64(3), fifth.Acknowledgement.SettledThroughBatchSequence, "interpreted past a missing batch")
 	gap := &store.NativeDeliveryGapDeclaration{Access: access, Declaration: model.DeclareDeliveryGaps{DeclarationID: model.NewID(), AllocatedThroughSequence: 5, Ranges: []model.SequenceRange{{First: 4, Last: 4}}, Reason: "spool_lost"}, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
 	settled, err := ss.NativeDelivery().DeclareNativeDeliveryGaps(ctx, gap, examCommand(fixture.candidate.ID, store.NativeDeliveryGapsOperation, "native-gap", "native-gap"))
 	require.NoError(t, err)
@@ -95,9 +88,9 @@ func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, probes ...Nativ
 	require.Equal(t, int64(5), status.SettledThroughBatchSequence, "gap fabricated actual receipt")
 	receipt, err := ss.NativeDelivery().NativeDeliveryReceipt(ctx, access, 5)
 	require.NoError(t, err)
-	require.Equal(t, fifth.Receipt, *receipt, "exact receipt behind terminal gap lost")
+	require.Equal(t, fifth.Acknowledgement.Receipt, *receipt, "exact receipt behind terminal gap lost")
 	for _, probe := range probes {
-		probe(access.ParticipationID, 4, 2)
+		probe(access.ParticipationID, 5, 1)
 	}
 	foreign := access
 	foreign.Access.ConnectionID = ""
@@ -112,9 +105,17 @@ func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, probes ...Nativ
 			found = true
 			require.NotNil(t, candidate.NativeSecurity, "manager board lacks bounded native coverage summary")
 			require.NoError(t, candidate.NativeSecurity.Validate(), "manager board lacks bounded native coverage summary")
-			require.Equal(t, int64(4), candidate.NativeSecurity.RetainedConditionRecords, "manager board lacks bounded native coverage summary")
+			require.Equal(t, int64(7), candidate.NativeSecurity.RetainedConditionRecords, "manager board lacks bounded native coverage summary")
 			require.True(t, candidate.NativeSecurity.LiveCoverageAvailable, "manager board lacks bounded native coverage summary")
-			require.NotEmpty(t, candidate.NativeSecurity.Sources, "manager board lacks bounded native coverage summary")
+			rules := candidate.NativeSecurity.Rules
+			require.Len(t, rules, 3, "the board shows every enforce rule of the live Participation")
+			for _, rule := range rules {
+				require.Equal(t, model.NativeRuleUnknown, rule.Rule.Status, "the lost batch left %s unknown", rule.Rule.RuleID)
+			}
+			require.Equal(t, "baseline.single_display", rules[1].Rule.RuleID)
+			require.Equal(t, int64(1), rules[1].OpenOccurrence, "the second display's occurrence is still open")
+			require.True(t, candidate.NativeSecurity.Contained, "Desktop said it contains the window")
+			require.Equal(t, model.ScreenClipCounts{}, candidate.NativeSecurity.ScreenClips)
 		}
 	}
 	require.True(t, found, "candidate absent from board")
@@ -125,18 +126,33 @@ func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, probes ...Nativ
 	sub := sealed.Receipt.SubmissionID
 	page, err := ss.ExamIntegrityReview().ListNativeConditions(ctx, store.NativeConditionListOptions{SubmissionID: sub, Limit: 100})
 	require.NoError(t, err)
-	require.Len(t, page.Items, 4)
+	// Start (2), the confirmed window (1), the second display (1) and the
+	// lost batch 4, which made every rule unknown (3).
+	require.Len(t, page.Items, 7)
 	require.False(t, page.HasMore)
+	positions := map[int64][]model.NativeRuleTransition{}
 	for _, v := range page.Items {
 		require.NoError(t, v.Validate())
-		require.Equal(t, connected.Attempt.ID, v.AttemptID, "native review lost provenance or uncertainty")
-		require.Equal(t, connected.Security.Policy.Digest, v.PolicyDigest, "native review lost provenance or uncertainty")
-		require.Equal(t, access.StreamID, v.StreamID, "native review lost provenance or uncertainty")
-		require.Equal(t, v.BatchSequence == 5, v.UnresolvedOpener, "native review lost provenance or uncertainty")
+		require.Equal(t, connected.Attempt.ID, v.AttemptID, "native review lost provenance")
+		require.Equal(t, connected.Security.Policy.Digest, v.PolicyDigest, "native review lost provenance")
+		require.Equal(t, access.StreamID, v.StreamID, "native review lost provenance")
+		positions[v.BatchSequence] = append(positions[v.BatchSequence], v.Transition)
+	}
+	require.Len(t, positions[0], 2, "the readiness rules start at Start")
+	require.Len(t, positions[2], 1)
+	require.Equal(t, "baseline.window", positions[2][0].RuleID)
+	require.Len(t, positions[3], 1)
+	require.Equal(t, model.NativeOccurrenceOpened, positions[3][0].Event)
+	require.Len(t, positions[5], 3, "a lost batch makes every rule unknown")
+	for _, transition := range positions[5] {
+		require.Equal(t, model.NativeUnknownGap, transition.To.UnknownCause)
 	}
 	flags, err := ss.ExamIntegrityReview().ListFlags(ctx, store.ExamIntegrityFlagListOptions{SubmissionID: sub, Limit: 200})
 	require.NoError(t, err)
-	require.Empty(t, flags.Items, "native occurrence created a misconduct Flag")
+	require.Len(t, flags.Items, 1, "the enforce occurrence raised one native Flag")
+	require.Equal(t, model.IntegrityPolicyKind("native.display"), flags.Items[0].Flag.Kind)
+	require.Equal(t, "baseline.single_display", flags.Items[0].Flag.NativeRuleID, "the Flag is the display rule's")
+	require.Equal(t, 1, flags.Items[0].EvidenceCount)
 	access.Access.ConnectionID = ""
 	access.Access.ContinuityCredentialHash = ""
 	_, err = ss.NativeDelivery().SealNativeDelivery(ctx, &store.NativeDeliveryFinalDeclaration{Access: access, Declaration: model.FinalDeliveryDeclaration{DeclarationID: "native-review-final", FinalSequence: 6, ExpectedDeclarationRevision: 1}, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}, examCommand(fixture.candidate.ID, store.NativeDeliveryFinalOperation, "native-review-final", "native-review-final"))
@@ -144,26 +160,27 @@ func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, probes ...Nativ
 	audit := func() model.AuditEventID {
 		return saveIntegrityReviewAudit(t, ctx, ss, fixture, sub, model.ActionSubmissionReview).ID
 	}
-	draft, err := ss.ExamIntegrityReview().UpdateDraft(ctx, &store.ExamIntegrityReviewDraftMutation{SubmissionID: sub, ReviewID: model.NewSubmissionReviewID(), ActorUserID: fixture.manager.ID, ChangedAt: model.NowUTC(), AuditEventID: audit(), AuditAt: model.NowUTC()}, examCommand(fixture.manager.ID, store.ExamIntegrityReviewDraftOperation, "native-review-draft", "native-review-draft"))
+	decided, err := ss.ExamIntegrityReview().SaveDecision(ctx, &store.ExamIntegrityReviewDecisionMutation{SubmissionID: sub, ReviewID: model.NewSubmissionReviewID(), DecisionID: model.NewIntegrityReviewDecisionID(), FlagID: flags.Items[0].Flag.ID, ActorUserID: fixture.manager.ID, Outcome: model.IntegrityReviewInconclusive, PrivateRationale: "The second display was reported once.", ChangedAt: model.NowUTC(), AuditEventID: audit(), AuditAt: model.NowUTC()}, examCommand(fixture.manager.ID, store.ExamIntegrityReviewDecisionOperation, "native-review-decision", "native-review-decision"))
 	require.NoError(t, err)
-	final, err := ss.ExamIntegrityReview().Finalize(ctx, &store.ExamIntegrityReviewFinalize{SubmissionID: sub, ReviewID: draft.Review.ID, ExpectedRevision: draft.Review.Revision, ActorUserID: fixture.manager.ID, ChangedAt: model.NowUTC(), AuditEventID: audit(), AuditAt: model.NowUTC()}, examCommand(fixture.manager.ID, store.ExamIntegrityReviewFinalizeOperation, "native-review-finalize", "native-review-finalize"))
+	final, err := ss.ExamIntegrityReview().Finalize(ctx, &store.ExamIntegrityReviewFinalize{SubmissionID: sub, ReviewID: decided.Review.ID, ExpectedRevision: decided.Review.Revision, ActorUserID: fixture.manager.ID, ChangedAt: model.NowUTC(), AuditEventID: audit(), AuditAt: model.NowUTC()}, examCommand(fixture.manager.ID, store.ExamIntegrityReviewFinalizeOperation, "native-review-finalize", "native-review-finalize"))
 	require.NoError(t, err)
 	before, err := ss.ExamIntegrityReview().Get(ctx, sub)
 	require.NoError(t, err)
-	require.Equal(t, int64(4), before.NativeConditions.Records, "native finalization inventory is absent")
+	require.Equal(t, int64(7), before.NativeConditions.Records, "native finalization inventory is absent")
 	require.NoError(t, before.NativeConditions.Validate(), "native finalization inventory is absent")
-	late := lost
-	late.Status = "recovered"
 	time.Sleep(time.Second) // Allow the real shared append allowance to refill.
-	_, err = appendBatch(batch(6, late), "native-review-late")
+	// A fresh display state ends the gap: the rule is not met again, inside
+	// the occurrence already open, so no further Flag evidence.
+	late, err := appendBatch(batch(6, secondDisplay(4, at.Add(5*time.Second))), "native-review-late")
 	require.NoError(t, err)
+	require.Empty(t, late.Flagged, "an occurrence still open raises no new evidence")
 	after, err := ss.ExamIntegrityReview().Get(ctx, sub)
 	require.NoError(t, err)
 	require.Equal(t, model.SubmissionReviewDraft, after.Review.State, "late native evidence inherited finalized review")
 	require.Greater(t, after.Review.Revision, final.Review.Revision, "late native evidence inherited finalized review")
-	require.Equal(t, int64(5), after.NativeConditions.Records, "late native evidence inherited finalized review")
+	require.Equal(t, int64(8), after.NativeConditions.Records, "late native evidence inherited finalized review")
 	require.NotEqual(t, before.NativeConditions.Digest, after.NativeConditions.Digest, "late native evidence inherited finalized review")
-	_, err = appendBatch(batch(6, late), "native-review-late-replay")
+	_, err = appendBatch(batch(6, secondDisplay(4, at.Add(5*time.Second))), "native-review-late-replay")
 	require.NoError(t, err)
 	replayedReview, err := ss.ExamIntegrityReview().Get(ctx, sub)
 	require.NoError(t, err)
@@ -180,26 +197,14 @@ func TestNativeMaximumRecordStore(t *testing.T, ss store.Store) {
 	input := &store.ExamAttemptConnect{CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID, DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint, AttemptID: model.NewExamAttemptID(), WorkspaceID: model.NewExamAttemptWorkspaceID(), ParticipationID: model.NewAttemptParticipationID(), ConnectionID: model.NewAttemptConnectionID(), ContinuityCredentialHash: model.HashToken(model.NewCredentialToken()), AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
 	prepareExamAttemptConnect(t, ctx, ss, input)
 	input.SittingID = fixture.sitting.ID
-	schema := model.SHA256Fingerprint([]byte("maximum-source-schema"))
-	definitions := []model.NativeCoverageDefinition{}
-	matrix := model.NativeCapabilityMatrix{RegistryDigest: model.NativeRegistryDigest, MatrixID: input.DesktopBuild.CapabilityMatrixIdentity, ReleaseID: "synthetic-release", TargetTuple: input.DesktopBuild.DesktopTarget}
-	for _, source := range model.NativeSources() {
-		key := "baseline." + string(source)
-		definitions = append(definitions, model.NativeCoverageDefinition{CoverageKey: key, CapabilityID: "baseline", SourceID: source, SourceSchemaDigest: schema, PermittedClaims: []model.NativeCapabilityClaim{model.NativeClaimEnforce}, RequiredPermissions: []string{}, Baseline: true})
-		matrix.Entries = append(matrix.Entries, model.NativeCapabilityMatrixEntry{CoverageKey: key, SourceSchemaDigest: schema, Claim: model.NativeClaimEnforce, ComponentID: "synthetic-component", AdapterVersion: "synthetic-adapter", RequiredPermissions: []string{}, Limitations: []string{}, Verification: "passed"})
-	}
-	slices.SortFunc(definitions, func(a, b model.NativeCoverageDefinition) int { return strings.Compare(a.CoverageKey, b.CoverageKey) })
-	slices.SortFunc(matrix.Entries, func(a, b model.NativeCapabilityMatrixEntry) int { return strings.Compare(a.CoverageKey, b.CoverageKey) })
-	agreement, err := model.NewDesktopNativeAgreement(model.NativeRegistryDigest, model.SHA256Fingerprint([]byte("maximum-manifest")), model.SHA256Fingerprint([]byte("maximum-matrix")), model.SHA256Fingerprint([]byte("maximum-detectors")), definitions, matrix, []model.NativeDetectorDefinition{{DetectorID: "synthetic-baseline", Version: 1, CapabilityID: "baseline", ConditionIDs: []string{"baseline.capture"}, SourceIDs: model.NativeSources(), AllowedModes: []model.NativeCapabilityClaim{model.NativeClaimEnforce}}})
-	require.NoError(t, err)
-	input.DesktopBuild.NativeAgreement = agreement
+	agreement := input.DesktopBuild.NativeAgreement
 	access := store.SecurityPreflightAccess{SittingID: input.SittingID, CandidateUserID: input.CandidateUserID, SessionID: input.SessionID, DesktopRegistrationID: input.DesktopRegistrationID, DPoPKeyThumbprint: input.DPoPKeyThumbprint, DesktopBuild: input.DesktopBuild, DesktopCompatibilityPolicyRevision: input.DesktopCompatibilityPolicyRevision}
-	prepare := &store.SecurityPreflightPrepare{Access: access, PreflightID: model.NewID(), Challenge: model.NewCredentialToken(), NativeRegistryDigest: agreement.RegistryDigest(), SourceManifestDigest: agreement.SourceManifestDigest(), ConfigurationManifestFingerprint: input.ConfigurationManifestFingerprint, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
+	prepare := &store.SecurityPreflightPrepare{Access: access, PreflightID: model.NewID(), Challenge: model.NewCredentialToken(), NativeRegistryDigest: agreement.RegistryDigest(), ConfigurationManifestFingerprint: input.ConfigurationManifestFingerprint, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
 	prepared, err := ss.SecurityPreflight().PrepareSecurityPreflight(ctx, prepare, examCommand(input.CandidateUserID, store.SecurityPreflightPrepareOperation, "maximum-prepare", "maximum-prepare"))
 	require.NoError(t, err)
 	report := syntheticPreflightReport(prepared, agreement)
-	for i := range report.Sources {
-		report.Sources[i].SourceInstanceID = strings.Repeat("i", 128)
+	for i := range report.Capabilities {
+		report.Capabilities[i].SourceInstanceID = strings.Repeat("i", 128)
 	}
 	accepted, err := ss.SecurityPreflight().ReportSecurityPreflight(ctx, &store.SecurityPreflightReport{Access: access, PreflightID: prepare.PreflightID, Report: report, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}, examCommand(input.CandidateUserID, store.SecurityPreflightReportOperation, "maximum-report", "maximum-report"))
 	require.NoError(t, err)
@@ -207,35 +212,35 @@ func TestNativeMaximumRecordStore(t *testing.T, ss store.Store) {
 	connected, err := ss.ExamAttempt().Connect(ctx, input, examCommand(input.CandidateUserID, store.ExamAttemptConnectOperation, "maximum-connect", "maximum-connect"))
 	require.NoError(t, err)
 	at := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
-	occurrence := model.NativeOccurrence{Kind: "occurrence", OccurrenceID: strings.Repeat("o", 128), ConditionID: "baseline.capture", DetectorID: "synthetic-baseline", DetectorVersion: 1, CapabilityID: "baseline", Mode: model.NativeClaimEnforce, Status: "opened", FirstObservedAt: at, LastConfirmedAt: at, RepeatCount: 1, Certainty: "complete", SourceRanges: []model.NativeSourceRange{}}
-	for _, source := range report.Sources {
-		occurrence.SourceRanges = append(occurrence.SourceRanges, model.NativeSourceRange{SourceID: source.SourceID, SourceInstanceID: source.SourceInstanceID, FirstSequence: 0, LastSequence: 1})
+	record := singleDisplay(2, at)
+	fact := *record.Fact
+	batch := model.NativeSecurityBatch{StreamID: connected.Security.DeliveryStreamID, BatchSequence: 1, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, SecuritySessionID: connected.Security.SecuritySessionID, PolicyDigest: connected.Security.Policy.Digest, ApplicationReleaseID: connected.Security.Policy.ApplicationReleaseID, MatrixID: connected.Security.Policy.MatrixID, Records: []model.NativeRecord{{Fact: &fact}}}
+	// A lexical zero tail on the observation time fills the request exactly.
+	spell := func(zeros int) {
+		raw, marshalErr := json.Marshal(fact)
+		require.NoError(t, marshalErr)
+		var fields map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(raw, &fields))
+		fields["observed_at"], marshalErr = json.Marshal("2026-09-09T12:00:00." + strings.Repeat("0", zeros) + "Z")
+		require.NoError(t, marshalErr)
+		raw, marshalErr = json.Marshal(fields)
+		require.NoError(t, marshalErr)
+		require.NoError(t, json.Unmarshal(raw, &fact))
 	}
-	raw, err := json.Marshal(occurrence)
-	require.NoError(t, err)
-	var fields map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal(raw, &fields))
-	fields["first_observed_at"], err = json.Marshal("2026-09-09T12:00:00." + strings.Repeat("0", 240000) + "Z")
-	require.NoError(t, err)
-	raw, err = json.Marshal(fields)
-	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(raw, &occurrence))
-	require.Greater(t, len(raw), 8192, "maximum fixture missed record bounds")
-	require.Len(t, occurrence.SourceRanges, 11, "maximum fixture missed record bounds")
-	batch := model.NativeSecurityBatch{StreamID: connected.Security.DeliveryStreamID, BatchSequence: 1, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, SecuritySessionID: connected.Security.SecuritySessionID, PolicyDigest: connected.Security.Policy.Digest, ApplicationReleaseID: connected.Security.Policy.ApplicationReleaseID, MatrixID: connected.Security.Policy.MatrixID, Records: []model.NativeRecord{{Occurrence: &occurrence}}}
+	spell(240000)
 	canonical, err := batch.Canonical()
 	require.NoError(t, err)
-	fields["first_observed_at"], err = json.Marshal("2026-09-09T12:00:00." + strings.Repeat("0", 240000+256*1024-len(canonical)) + "Z")
-	require.NoError(t, err)
-	raw, err = json.Marshal(fields)
-	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(raw, &occurrence))
+	spell(240000 + 256*1024 - len(canonical))
 	canonical, err = batch.Canonical()
 	require.NoError(t, err)
-	require.Len(t, canonical, 256*1024, "occurrence batch did not reach exact request limit")
+	require.Len(t, canonical, 256*1024, "fact batch did not reach exact request limit")
 	deliveryAccess := store.NativeDeliveryAccess{Access: store.CandidateAttemptAccess{AttemptID: connected.Attempt.ID, CandidateUserID: input.CandidateUserID, SessionID: input.SessionID, DesktopRegistrationID: input.DesktopRegistrationID, DPoPKeyThumbprint: input.DPoPKeyThumbprint, ConnectionID: connected.Connection.ID, ContinuityCredentialHash: input.ContinuityCredentialHash}, StreamID: batch.StreamID, ParticipationID: batch.ParticipationID, Generation: batch.Generation}
 	appendBatch := func(key string) (*model.NativeSecurityAcknowledgement, error) {
-		return ss.NativeDelivery().AppendNativeDelivery(ctx, &store.NativeDeliveryAppend{Access: deliveryAccess, Batch: batch, DesktopBuild: input.DesktopBuild, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}, examCommand(input.CandidateUserID, store.NativeDeliveryAppendOperation, key, model.SHA256Fingerprint(canonical)))
+		appended, appendErr := ss.NativeDelivery().AppendNativeDelivery(ctx, &store.NativeDeliveryAppend{Access: deliveryAccess, Batch: batch, DesktopBuild: input.DesktopBuild, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}, examCommand(input.CandidateUserID, store.NativeDeliveryAppendOperation, key, model.SHA256Fingerprint(canonical)))
+		if appendErr != nil {
+			return nil, appendErr
+		}
+		return appended.Acknowledgement, nil
 	}
 	result, err := appendBatch("maximum-append")
 	require.NoError(t, err)
@@ -250,13 +255,8 @@ func TestNativeMaximumRecordStore(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	page, err := ss.ExamIntegrityReview().ListNativeConditions(ctx, store.NativeConditionListOptions{SubmissionID: sealed.Receipt.SubmissionID, Limit: 10})
 	require.NoError(t, err)
-	require.Len(t, page.Items, 1, "large occurrence was not interpreted and copied")
-	copied, err := json.Marshal(page.Items[0].Occurrence)
-	require.NoError(t, err)
-	original, err := json.Marshal(occurrence)
-	require.NoError(t, err)
-	require.Equal(t, string(original), string(copied), "evidence copy changed timestamp spelling")
-	reset := nativeResetWithLongTimestamp(t, model.NativeSourceReset{Kind: "source_reset", ResetID: model.NewID(), SourceID: report.Sources[0].SourceID, PreviousSourceInstanceID: report.Sources[0].SourceInstanceID, PreviousFinalSequence: 1, NewSourceInstanceID: model.NewID(), Reason: "restart", OccurredAt: at}, 240000)
+	require.Len(t, page.Items, 2, "the large fact changed no rule; only Start's statuses are kept")
+	reset := nativeResetWithLongTimestamp(t, model.NativeSourceReset{Kind: "source_reset", ResetID: model.NewID(), Capability: report.Capabilities[0].Capability, PreviousSourceInstanceID: report.Capabilities[0].SourceInstanceID, PreviousFinalSequence: 1, NewSourceInstanceID: model.NewID(), Reason: "restart", OccurredAt: at}, 240000)
 	deliveryAccess.Access.ConnectionID = ""
 	deliveryAccess.Access.ContinuityCredentialHash = ""
 	_, err = ss.NativeDelivery().SealNativeDelivery(ctx, &store.NativeDeliveryFinalDeclaration{Access: deliveryAccess, Declaration: model.FinalDeliveryDeclaration{DeclarationID: model.NewID(), FinalSequence: 2, ExpectedDeclarationRevision: 0}, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}, examCommand(fixture.candidate.ID, store.NativeDeliveryFinalOperation, "maximum-final", "maximum-final"))
@@ -291,4 +291,50 @@ func nativeResetWithLongTimestamp(t *testing.T, reset model.NativeSourceReset, z
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(raw, &reset))
 	return reset
+}
+
+// TestNativeSuspensionStore covers a family whose outcome is
+// flag_and_suspend: its enforce occurrence raises the Flag and suspends the
+// Attempt as Focus Loss does, ending the Participation and closing its
+// Connection, with the Suspension linked to the Flag.
+func TestNativeSuspensionStore(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	fixture := newExamAttemptFixtureWithOptions(t, ctx, ss, nil, nil, model.ExamCapacityPolicy{}, false,
+		func(native *model.NativeSecurityPolicy) {
+			for i, family := range native.Families {
+				if family.ID() == "virtualization" {
+					require.NoError(t, json.Unmarshal(
+						[]byte(`{"id":"virtualization","mode":"enforce","rule":"block_recognized_guest","outcome":"flag_and_suspend"}`),
+						&native.Families[i]))
+				}
+			}
+		})
+	connect := &store.ExamAttemptConnect{SittingID: fixture.sitting.ID, CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID, DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint, AttemptID: model.NewExamAttemptID(), WorkspaceID: model.NewExamAttemptWorkspaceID(), ParticipationID: model.NewAttemptParticipationID(), ConnectionID: model.NewAttemptConnectionID(), ContinuityCredentialHash: model.HashToken(model.NewCredentialToken()), AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
+	prepareExamAttemptConnect(t, ctx, ss, connect)
+	connected, err := ss.ExamAttempt().Connect(ctx, connect, examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "native-suspend-connect", "native-suspend-connect"))
+	require.NoError(t, err)
+	require.Contains(t, connected.Security.Policy.Activations, model.NativeActivation{Capability: "virtualization", Categories: []string{}},
+		"the enforced family runs")
+	access := store.NativeDeliveryAccess{Access: store.CandidateAttemptAccess{AttemptID: connected.Attempt.ID, ConnectionID: connected.Connection.ID, CandidateUserID: connect.CandidateUserID, SessionID: connect.SessionID, DesktopRegistrationID: connect.DesktopRegistrationID, DPoPKeyThumbprint: connect.DPoPKeyThumbprint, ContinuityCredentialHash: connect.ContinuityCredentialHash}, StreamID: connected.Security.DeliveryStreamID, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation}
+
+	guest := nativeFact("virtualization", 2, model.NowUTC().Truncate(time.Millisecond), `{"classification":"recognized_guest","hypervisor":"vmware"}`, `{}`)
+	batch := model.NativeSecurityBatch{StreamID: access.StreamID, BatchSequence: 1, ParticipationID: access.ParticipationID, Generation: access.Generation, SecuritySessionID: connected.Security.SecuritySessionID, PolicyDigest: connected.Security.Policy.Digest, ApplicationReleaseID: connected.Security.Policy.ApplicationReleaseID, MatrixID: connected.Security.Policy.MatrixID, Records: []model.NativeRecord{guest}}
+	raw, err := batch.Canonical()
+	require.NoError(t, err)
+	appended, err := ss.NativeDelivery().AppendNativeDelivery(ctx, &store.NativeDeliveryAppend{Access: access, Batch: batch, DesktopBuild: connect.DesktopBuild, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}, examCommand(fixture.candidate.ID, store.NativeDeliveryAppendOperation, "native-suspend", model.SHA256Fingerprint(raw)))
+	require.NoError(t, err)
+	require.Len(t, appended.Flagged, 1)
+	flagged := appended.Flagged[0]
+	require.Equal(t, model.IntegrityPolicyKind("native.virtualization"), flagged.Kind)
+	require.NotNil(t, flagged.Suspended, "the family's outcome suspends")
+	require.Equal(t, flagged.FlagID, flagged.Suspended.Suspension.FlagID)
+	require.Equal(t, model.AttemptSuspensionCandidateReasonNativePolicy, flagged.Suspended.Suspension.CandidateReason)
+	require.Equal(t, connected.Connection.ID, flagged.Suspended.ClosedConnection.ID)
+
+	snapshot, err := ss.ExamAttempt().Get(ctx, fixture.examID, connected.Attempt.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.ExamAttemptSuspended, snapshot.Attempt.State)
+	require.NotNil(t, snapshot.ActiveSuspension)
+	require.Equal(t, flagged.Suspended.Suspension.ID, snapshot.ActiveSuspension.ID)
+	require.Equal(t, model.AttemptParticipationEndPolicySuspended, snapshot.LatestParticipation.EndReason)
 }

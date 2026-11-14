@@ -100,7 +100,7 @@ paths:
               --header 'X-Proctor-Attempt-Connection-ID: <attempt-connection-id>' \
               --header 'Idempotency-Key: docs-submit-001' \
               --header 'Content-Type: application/json' \
-              --data '{"participation_id":"<participation-id>","generation":2,"expected_current_revision_id":"<revision-id>","expected_workspace_cursor":18,"final_focus_loss_sequence":3,"browser_activity":{"state":"not_applicable"}}'
+              --data '{"participation_id":"<participation-id>","generation":2,"expected_current_revision_id":"<revision-id>","expected_workspace_cursor":18,"final_focus_loss_sequence":3}'
       x-proctor-auth: session_required
       x-proctor-idempotency: required
       x-proctor-error-codes:

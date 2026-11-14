@@ -701,6 +701,7 @@ components:
           enum:
             - secure_connectivity_lost
             - focus_policy_review_required
+            - native_policy_review_required
             - manager_suspended
         started_at:
           type: string
@@ -813,6 +814,7 @@ components:
           enum:
             - secure_connectivity_lost
             - focus_policy_review_required
+            - native_policy_review_required
             - manager_suspended
         reallowed_by_user_id:
           $ref: '#/components/schemas/ID'

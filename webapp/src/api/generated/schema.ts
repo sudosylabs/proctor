@@ -1873,6 +1873,135 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List the screen clip requests the candidate's Desktop has not taken
+         * @description Lists, newest first, the screen clip requests waiting for the candidate's Desktop, after validating the Session-bound Attempt credential and open Connection. Requests queued while the Attempt was suspended appear once the candidate resumes. Each item carries the range to cut; never who asked or why.
+         */
+        get: operations["listCandidateScreenClipRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/take": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The screen clip identifier. */
+                screen_clip_id: components["parameters"]["ScreenClipID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take one screen clip request
+         * @description Records that the candidate's Desktop took a request and is recording what remains of its range. The request then belongs to the Participation that took it. Taking it again through the same Participation returns it unchanged.
+         */
+        post: operations["takeCandidateScreenClipRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The screen clip identifier. */
+                screen_clip_id: components["parameters"]["ScreenClipID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read where a screen clip upload stands
+         * @description Returns the clip and the numbers of the chunks that arrived, so Desktop resumes an interrupted upload with the rest.
+         */
+        get: operations["getCandidateScreenClipUpload"];
+        put?: never;
+        /**
+         * Declare the screen clip about to be uploaded
+         * @description Declares a taken clip's media type, exact size and the SHA-256 of every chunk in order. Every chunk is chunk_bytes long except the last, which holds the rest. The clip's content digest is the SHA-256 of that manifest. A clip that would take the Attempt's clips past 6 GiB is refused. Declaring the same clip again returns it unchanged. Once the Participation that took the clip has closed, as at submission, Desktop continues the upload without the Attempt credential and Connection headers until that Participation's upload deadline; a clip not complete by then fails with upload_deadline.
+         */
+        post: operations["beginCandidateScreenClipUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/upload/chunks/{chunk}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The screen clip identifier. */
+                screen_clip_id: components["parameters"]["ScreenClipID"];
+                /** @description The chunk's number, from 1. */
+                chunk: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Upload one chunk of a screen clip
+         * @description Streams one chunk as the raw request body, with its exact Content-Length. The bytes are checked against the hash the clip declared for that chunk and kept only if they match. Sending a stored chunk again changes nothing, so a chunk whose response was lost can be sent again.
+         */
+        put: operations["uploadCandidateScreenClipChunk"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/upload/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The screen clip identifier. */
+                screen_clip_id: components["parameters"]["ScreenClipID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish a screen clip upload
+         * @description Makes a clip whose every chunk arrived ready to play. The body carries the clip's content digest and the installation key's ES256 signature over the exact bytes of that digest (its 64 lowercase hexadecimal characters), raw r and s in unpadded base64url. The signature must verify with the key of the Desktop registration uploading the clip; it is stored with the clip so a reviewer can check the clip later from the clip and its record alone. Completing it again returns it unchanged.
+         */
+        post: operations["completeCandidateScreenClipUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/exam-attempts/{exam_attempt_id}/security-batches": {
         parameters: {
             query?: never;
@@ -1887,7 +2016,7 @@ export interface paths {
         put?: never;
         /**
          * Append minimized native security evidence
-         * @description Atomically accepts one closed batch under its original verified release, matrix, policy, source instances, and Participation generation. Live delivery requires exact Connection continuity; closed streams use current owning registered-key authentication until the fixed upload deadline. Exact retries preserve the submitted prior acknowledgement and recover the original receipt. Out-of-order records wait behind recoverable holes; terminal gaps preserve unresolved openers. Native conditions do not automatically create Flags, warnings or suspension. Lifetime quotas include pending bytes, envelopes, receipts and bounded metadata. Repair has reserved headroom. Native append is limited across Sessions and transports to two requests per second with burst eight; replay consumes allowance. A 429 response supplies Retry-After.
+         * @description Atomically accepts one closed batch under its original verified release, matrix, policy, source instances, and Participation generation. Live delivery requires exact Connection continuity; closed streams use current owning registered-key authentication until the fixed upload deadline. Exact retries preserve the submitted prior acknowledgement and recover the original receipt. Out-of-order records wait behind recoverable holes; terminal gaps preserve unresolved openers. The server evaluates the policy's rules on the facts in stream order; an enforce rule that stops being met raises its native Flag and, for a flag_and_suspend family, suspends the Attempt. Observe rules, unknown status and gaps never flag. Lifetime quotas include pending bytes, envelopes, receipts and bounded metadata. Repair has reserved headroom. Native append is limited across Sessions and transports to two requests per second with burst eight; replay consumes allowance. A 429 response supplies Retry-After.
          */
         post: operations["appendNativeDelivery"];
         delete?: never;
@@ -2219,6 +2348,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/exam-sittings/{exam_sitting_id}/security-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Sitting identifier. */
+                exam_sitting_id: components["parameters"]["ExamSittingID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read the policy for the readiness overview
+         * @description Resolves the Sitting's current native policy, under the same eligibility checks as preparing a preflight, for the overview a candidate's Desktop shows before Start: the capabilities it activates, the rules it checks, the recorder switch and the disclosure. It creates no preflight, records nothing and grants nothing, so the overview may hold it for as long as it is open. At Start, compare readiness_digest with the one the prepared preflight returns; if they differ, refresh the overview.
+         */
+        get: operations["getSecurityPolicyOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/exam-sittings/{exam_sitting_id}/security-preflights": {
         parameters: {
             query?: never;
@@ -2233,7 +2385,7 @@ export interface paths {
         put?: never;
         /**
          * Prepare a secure Desktop admission challenge
-         * @description Requires an eligible registered Desktop Session and an exact admitted build, registry, source manifest and configuration manifest. Stores one pending 120-second challenge per Session and Sitting; a successor supersedes it. Does not create an Attempt, Workspace or Participation. Ready rejoin returns frozen configuration; active and suspended Attempts cannot obtain a replacement preflight. Unavailable Institution catalogs or enforced native coverage fail closed.
+         * @description Requires an eligible registered Desktop Session and an exact admitted build, capability registry and configuration manifest. Stores one pending 120-second challenge per Session and Sitting; a successor supersedes it. Does not create an Attempt, Workspace or Participation. Ready rejoin returns frozen configuration; active and suspended Attempts cannot obtain a replacement preflight. Unavailable Institution catalogs, or a family enforced where the release does not certify enforcement on the candidate's platform, fail closed.
          */
         post: operations["prepareSecurityPreflight"];
         delete?: never;
@@ -2993,6 +3145,66 @@ export interface paths {
          * @description Closes only the identified active suspension episode and moves the Attempt to ready. It preserves integrity evidence and creates no continuity credential, Participation, Session binding, or Connection; the candidate must rejoin through full admission validation.
          */
         post: operations["reallowExamAttempt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam identifier. */
+                exam_id: components["parameters"]["ExamID"];
+                /** @description The Exam Sitting identifier. */
+                exam_sitting_id: components["parameters"]["ExamSittingID"];
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List an Attempt's screen clips
+         * @description Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. Managers' reasons are never returned.
+         */
+        get: operations["listExamAttemptScreenClips"];
+        put?: never;
+        /**
+         * Request a range of a candidate's recorded screen
+         * @description An Exam Manager's request for part of the screen Desktop records on the candidate's device, for an Exam whose native policy turns the screen recorder on. The range is either from the start of the session or an explicit start and end of at most six hours; it may end up to ten minutes after the request, and Desktop waits for that part before cutting the clip. A request made while the Attempt is suspended waits until the candidate resumes. The manager's reason is required, audited as an attempt, and stored with the request; it is never returned. An Attempt takes at most ten manager requests. Requests stop once the Attempt has ended.
+         */
+        post: operations["requestExamAttemptScreenClip"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips/{screen_clip_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam identifier. */
+                exam_id: components["parameters"]["ExamID"];
+                /** @description The Exam Sitting identifier. */
+                exam_sitting_id: components["parameters"]["ExamSittingID"];
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The screen clip identifier. */
+                screen_clip_id: components["parameters"]["ScreenClipID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Play a ready screen clip
+         * @description Streams a ready clip to one of the Sitting's Exam Managers, or once the Attempt is submitted to someone allowed to review its Submission, whole or by one byte range so a player can seek. Each playback, a request from the clip's first byte, is audited. Multiple ranges, or a range past the clip's end, are refused.
+         */
+        get: operations["playExamAttemptScreenClip"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4250,6 +4462,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plugins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the plugins compiled into the server
+         * @description Lists every plugin compiled into the server, ordered by name, with its state on the serving node, whether it should run, its saved settings and the JSON Schema an administration UI draws its settings form from. A Session with plugin.manage is required; Personal Access Tokens cannot read it. Plugin secrets never appear: they stay in the configuration file. A plugin nobody configured shows its default and revision 0.
+         */
+        get: operations["listPlugins"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/{plugin_id}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The plugin's ID, for example display-topology. */
+                plugin_id: components["parameters"]["PluginID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save a plugin's settings
+         * @description Turns one plugin on or off and replaces its settings document, under an optimistic revision fence. Requires a strong recent interactive system-administrator Session, an Idempotency-Key, and durable audit; the audit records the plugin and whether it is enabled, never setting values. Use expected_revision 0 for a plugin nobody has configured. The plugin checks the settings before they are saved and may refuse them with plugin.invalid. A required plugin cannot be turned off. A saved change applies on every node within about five seconds, without a restart, and plugin_settings_changed tells administrators' clients to refetch. A no-op keeps the revision.
+         */
+        put: operations["replacePluginSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/programme-levels/{programme_level_id}": {
         parameters: {
             query?: never;
@@ -4610,7 +4865,7 @@ export interface paths {
         put?: never;
         /**
          * Report minimized privileged preflight results
-         * @description Rechecks the same registered Session, candidate, build, Sitting and policy before storing the bounded report and its canonical digest. Enforced and baseline requirements must be ready; truthful degraded observe-only coverage can remain eligible. A blocked report creates no Attempt or misconduct Flag. Retry preserves the original receipt time; Connect must consume a current eligible report within 30 seconds.
+         * @description Rechecks the same registered Session, candidate, build, Sitting and policy before storing the bounded report and its canonical digest. The server evaluates every readiness rule on the reported facts; each enforced and baseline rule must be met, and an unknown status blocks. Observed rules never block. A blocked report creates no Attempt or misconduct Flag. Retry preserves the original receipt time; Connect must consume a current eligible report within 30 seconds.
          */
         post: operations["reportSecurityPreflight"];
         delete?: never;
@@ -4817,8 +5072,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Inspect minimized native condition transitions for a Submission
-         * @description Requires the same current Submission integrity-view authorization as detailed evidence. Returns selected catalog-validated occurrence transitions without creating a Flag or declaring a violation. Includes original receipt and interpretation times, immutable stream/policy provenance and unresolved-opener state. Operational health, gaps and resets are excluded. Pages contain at most 100 records. Integrity retirement removes this material independently of native operational retention. No-store; cursors are purpose-specific opaque keysets.
+         * Inspect the native rule status changes of a Submission
+         * @description Requires the same current Submission integrity-view authorization as detailed evidence. Returns every change of a native rule's status as the server evaluated it on the facts Desktop reported, with the delivery position that caused it (batch 0 is the state reported at Start), original receipt and interpretation times, and immutable stream and policy provenance. An occurrence opens when a rule becomes not met and closes when it is met again; an enforce occurrence that opens also raises its capability's native Flag. The facts themselves are not returned. Pages contain at most 100 records. Integrity retirement removes this material independently of native operational retention. No-store; cursors are purpose-specific opaque keysets.
          */
         get: operations["listNativeConditions"];
         put?: never;
@@ -4939,6 +5194,26 @@ export interface paths {
          * @description Returns a request-specific, fail-closed compatibility result for one declared Proctor Desktop build. The declarations are consistency metadata rather than binary attestation. Every well-formed request returns 200, including unsupported builds and temporary unavailability; malformed selectors return Problem Details. The response deliberately omits Installation identity, authentication policy, providers, build provenance, and update destinations.
          */
         get: operations["pingSystem"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/plugins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the plugins active on this server
+         * @description Lists the optional features compiled into the server that are active on the serving node, ordered by name, so a client can show only what this server supports. A plugin that is turned off, failed to activate, or has since failed is not listed. The response carries no plugin settings or diagnostics.
+         */
+        get: operations["listActiveSystemPlugins"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6270,6 +6545,7 @@ export interface components {
             pending_invitations_is_lower_bound?: boolean;
         };
         AdmittedSecurity: {
+            /** @description The native delivery stream this admission opened. Desktop sends it as the security control's stream_id and as the native delivery watermark's source_id. */
             delivery_stream_id: string;
             /** Format: int64 */
             generation: number;
@@ -6385,7 +6661,7 @@ export interface components {
          * @description Stable name of an audited action. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
          * @enum {string}
          */
-        AuditAction: "academic.progression.manage" | "academic_audit.view" | "academic_period.manage" | "academic_period.view" | "academic_unit.manage" | "academic_unit.members.manage" | "academic_unit.members.view" | "academic_unit.view" | "access_policy.manage" | "access_policy.view" | "audit.view" | "authentication.administrator_mfa_reset" | "authentication.administrator_recovery" | "authentication.desktop_authorization" | "authentication.desktop_session_issue" | "authentication.email_change.undo" | "authentication.email_verification.complete" | "authentication.email_verification.request" | "authentication.external_login" | "authentication.external_provision" | "authentication.login" | "authentication.password_reset.complete" | "authentication.password_reset.request" | "authentication.public_registration" | "authentication.reauthenticate" | "class.manage" | "class.members.manage" | "class.members.view" | "class.view" | "desktop_compatibility_policy.manage" | "desktop_registration.rename" | "desktop_registration.revoke" | "exam.attempt.browser_activity.view" | "exam.create" | "exam.create.override" | "exam.manage" | "exam.manage.override" | "exam.publish" | "exam.publish.override" | "exam.records.complete" | "exam.records.complete.override" | "exam.records.export" | "exam.records.export.override" | "exam.records.hold" | "exam.records.hold.override" | "exam.sitting.create" | "exam.sitting.create.override" | "exam.sitting.manage" | "exam.sitting.manage.override" | "exam.sitting.participate" | "exam.sitting.view" | "exam.sitting.view.override" | "exam.view" | "exam.view.override" | "external_identity.manage" | "installation.bootstrap" | "institution.manage" | "invitation.accept" | "invitation.create" | "invitation.manage" | "invitation.view" | "job.manage" | "job.view" | "mail.manage" | "mail.rekey" | "mail.view" | "mfa.activate" | "mfa.challenge" | "mfa.disable" | "mfa.recovery_codes.regenerate" | "mfa.rekey" | "mfa.setup" | "onboarding_batch.manage" | "onboarding_batch.view" | "personal_access_token.create" | "personal_access_token.disable" | "personal_access_token.enable" | "personal_access_token.revoke" | "programme.manage" | "programme.view" | "programme_level.manage" | "programme_level.view" | "retention_cleanup.manage" | "retention_hold.release" | "retention_policy.manage" | "retention_policy.view" | "role.manage" | "role.system_admin.reconcile" | "role.view" | "role_binding.manage" | "role_binding.view" | "session.manage" | "session.view" | "submission.release" | "submission.release.override" | "submission.review" | "submission.review.override" | "submission.view" | "submission.view.override" | "user.manage" | "user.mfa.reset" | "user.profile_picture.manage" | "user.search" | "user.settings.replace" | "user.view";
+        AuditAction: "academic.progression.manage" | "academic_audit.view" | "academic_period.manage" | "academic_period.view" | "academic_unit.manage" | "academic_unit.members.manage" | "academic_unit.members.view" | "academic_unit.view" | "access_policy.manage" | "access_policy.view" | "audit.view" | "authentication.administrator_mfa_reset" | "authentication.administrator_recovery" | "authentication.desktop_authorization" | "authentication.desktop_session_issue" | "authentication.email_change.undo" | "authentication.email_verification.complete" | "authentication.email_verification.request" | "authentication.external_login" | "authentication.external_provision" | "authentication.login" | "authentication.password_reset.complete" | "authentication.password_reset.request" | "authentication.public_registration" | "authentication.reauthenticate" | "class.manage" | "class.members.manage" | "class.members.view" | "class.view" | "desktop_compatibility_policy.manage" | "desktop_registration.rename" | "desktop_registration.revoke" | "exam.attempt.browser_activity.view" | "exam.create" | "exam.create.override" | "exam.manage" | "exam.manage.override" | "exam.publish" | "exam.publish.override" | "exam.records.complete" | "exam.records.complete.override" | "exam.records.export" | "exam.records.export.override" | "exam.records.hold" | "exam.records.hold.override" | "exam.sitting.create" | "exam.sitting.create.override" | "exam.sitting.manage" | "exam.sitting.manage.override" | "exam.sitting.participate" | "exam.sitting.view" | "exam.sitting.view.override" | "exam.view" | "exam.view.override" | "external_identity.manage" | "installation.bootstrap" | "institution.manage" | "invitation.accept" | "invitation.create" | "invitation.manage" | "invitation.view" | "job.manage" | "job.view" | "mail.manage" | "mail.rekey" | "mail.view" | "mfa.activate" | "mfa.challenge" | "mfa.disable" | "mfa.recovery_codes.regenerate" | "mfa.rekey" | "mfa.setup" | "onboarding_batch.manage" | "onboarding_batch.view" | "personal_access_token.create" | "personal_access_token.disable" | "personal_access_token.enable" | "personal_access_token.revoke" | "plugin.manage" | "programme.manage" | "programme.view" | "programme_level.manage" | "programme_level.view" | "retention_cleanup.manage" | "retention_hold.release" | "retention_policy.manage" | "retention_policy.view" | "role.manage" | "role.system_admin.reconcile" | "role.view" | "role_binding.manage" | "role_binding.view" | "session.manage" | "session.view" | "submission.release" | "submission.release.override" | "submission.review" | "submission.review.override" | "submission.view" | "submission.view.override" | "user.manage" | "user.mfa.reset" | "user.profile_picture.manage" | "user.search" | "user.settings.replace" | "user.view";
         /** @description Safe durable audit fact visible to the authorized caller. */
         AuditEventResponse: {
             /** @description Stable permission-style name of the attempted action. */
@@ -6464,6 +6740,14 @@ export interface components {
             refresh_token: string;
             /** @enum {string} */
             token_type: "Bearer" | "DPoP";
+        };
+        BeginCandidateScreenClipUploadRequest: {
+            /** @description The lowercase hexadecimal SHA-256 of every chunk, in order. */
+            chunk_sha256: string[];
+            /** @enum {string} */
+            media_type: "video/mp4" | "video/webm";
+            /** Format: int64 */
+            size_bytes: number;
         };
         BeginProviderConnectionRequest: {
             return_to?: string;
@@ -6912,7 +7196,7 @@ export interface components {
             /** @enum {string} */
             state: "ready" | "active" | "suspended" | "submitted";
             /** @enum {string|null} */
-            suspension_reason_code: "secure_connectivity_lost" | "focus_policy_review_required" | "manager_suspended" | null;
+            suspension_reason_code: "secure_connectivity_lost" | "focus_policy_review_required" | "native_policy_review_required" | "manager_suspended" | null;
         };
         CandidateExamActivityItemResponse: {
             academic_unit: components["schemas"]["CandidateExamActivityRelationResponse"];
@@ -7201,6 +7485,12 @@ export interface components {
             revision: number;
             /** Format: date-time */
             updated_at: string;
+        };
+        CompleteCandidateScreenClipUploadRequest: {
+            /** @description The clip's content digest, as the upload status reports it. */
+            content_digest: string;
+            /** @description The installation key's ES256 signature over the content digest, raw r and s in unpadded base64url. */
+            signature: string;
         };
         CompleteExamRecordsRequest: {
             /** Format: int64 */
@@ -7792,6 +8082,8 @@ export interface components {
         };
         /** @description Frozen native semantics for a Participation. issued_at and active_from use millisecond UTC precision, with issued_at <= active_from <= activation time. There is no policy expiry; the renewable Participation lease is the sole live authority. The digest excludes only digest; scope rebinding preserves the separately computed content digest. */
         EffectiveExamSecurityPolicy: {
+            /** @description The capabilities Desktop runs for this policy, with the sub-categories each selects. */
+            activations: components["schemas"]["NativeActivation"][];
             /** Format: date-time */
             active_from: string;
             application_release_id: string;
@@ -7854,11 +8146,13 @@ export interface components {
             ordinal: number;
             policy_id: string;
             /** @constant */
-            registry_digest: "sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0";
+            registry_digest: "sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d";
             resolved_exception_refs: string[];
             /** @constant */
             retention_class_id: "native_minimized";
             revision: string;
+            /** @description The compiled native rules: the release's baseline, unchanged, then the rules compiled from the Exam's family selections. Desktop evaluates them on the device; the server evaluates them again on the same facts. */
+            rules: components["schemas"]["NativeRule"][];
             scope: {
                 admission_scope_id: string;
                 /** @constant */
@@ -7868,6 +8162,7 @@ export interface components {
                 /** @constant */
                 kind: "attempt";
             };
+            screen_recording: components["schemas"]["NativeScreenRecordingPolicy"];
             sitting_id: string;
             target_tuple: string;
             /** @constant */
@@ -7920,7 +8215,7 @@ export interface components {
          * @description Stable public problem code. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
          * @enum {string}
          */
-        ErrorCode: "academic_administration_preview.authorization_lost" | "academic_administration_preview.conflict" | "academic_administration_preview.expired" | "academic_administration_preview.target_conflict" | "academic_administration_preview.too_many_users" | "academic_period.conflict" | "academic_period.invalid" | "academic_unit.conflict" | "academic_unit.invalid" | "academic_unit_member.conflict" | "academic_unit_member.invalid" | "access_policy.blocked" | "access_policy.invalid" | "access_policy.revision_conflict" | "access_policy.unavailable" | "administration.unavailable" | "administrator_recovery.invalid" | "administrator_recovery.unavailable" | "affiliation.conflict" | "affiliation.invalid" | "affiliation.student_has_active_enrollment" | "audit.internal" | "audit.query.invalid" | "audit.unavailable" | "authentication.account_recovery.unavailable" | "authentication.account_token.invalid" | "authentication.client_type.invalid" | "authentication.credential_ambiguous" | "authentication.credentials_invalid" | "authentication.csrf.invalid" | "authentication.desktop_authorization.account_session_locked" | "authentication.desktop_authorization.disabled" | "authentication.desktop_authorization.incompatible" | "authentication.desktop_authorization.invalid" | "authentication.desktop_authorization.rejected" | "authentication.desktop_authorization.unavailable" | "authentication.desktop_reauthentication.denied" | "authentication.desktop_reauthentication.invalid" | "authentication.dpop.invalid" | "authentication.dpop.replayed" | "authentication.dpop.unavailable" | "authentication.dpop.use_nonce" | "authentication.email_change_undo.conflict" | "authentication.external.account_conflict" | "authentication.external.account_not_linked" | "authentication.external.invalid" | "authentication.external.provider_not_found" | "authentication.external.rejected" | "authentication.external.request.invalid" | "authentication.external.unavailable" | "authentication.internal" | "authentication.method.conflict" | "authentication.method.disabled" | "authentication.method.last_usable" | "authentication.method.not_found" | "authentication.method.provider_conflict" | "authentication.method.unavailable" | "authentication.mfa.code_invalid" | "authentication.mfa.conflict" | "authentication.mfa.disabled" | "authentication.mfa.enrollment_required" | "authentication.mfa.not_found" | "authentication.mfa.rekey.conflict" | "authentication.mfa.rekey.invalid" | "authentication.mfa.required" | "authentication.mfa.reset_invalid" | "authentication.mfa.unavailable" | "authentication.password.common_invalid" | "authentication.password.identity_invalid" | "authentication.password.invalid" | "authentication.password.pattern_invalid" | "authentication.password.reused" | "authentication.rate_limit_unavailable" | "authentication.rate_limited" | "authentication.reauthentication_method_required" | "authentication.reauthentication_required" | "authentication.registration.invalid" | "authentication.registration.invitation_required" | "authentication.registration.unavailable" | "authentication.required" | "authentication.session.invalid" | "authentication.session_required" | "authentication.sessions.maximum_reached" | "authentication.strong_required" | "authentication.token_invalid" | "authentication.user.conflict" | "authentication.user.invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "class.conflict" | "class.enrollment_conflict" | "class.invalid" | "class_member.invalid" | "class_member.student_affiliation_required" | "desktop_compatibility_policy.invalid" | "desktop_compatibility_policy.revision_conflict" | "desktop_compatibility_policy.unavailable" | "desktop_registration.invalid" | "desktop_registration.revoked" | "desktop_registration.unavailable" | "exam.archived" | "exam.attempt.already_connected" | "exam.attempt.browser_activity_conflict" | "exam.attempt.configuration_frozen" | "exam.attempt.configuration_required" | "exam.attempt.configuration_stale" | "exam.attempt.configuration_unsupported" | "exam.attempt.conflict" | "exam.attempt.connection_closed" | "exam.attempt.connection_lost" | "exam.attempt.continuity_invalid" | "exam.attempt.correction_conflict" | "exam.attempt.desktop_incompatible" | "exam.attempt.focus_loss_conflict" | "exam.attempt.invalid" | "exam.attempt.management_authority_conflict" | "exam.attempt.not_found" | "exam.attempt.registered_desktop_required" | "exam.attempt.renewal_conflict" | "exam.attempt.revision_conflict" | "exam.attempt.sitting_not_open" | "exam.attempt.state_conflict" | "exam.attempt.suspension_conflict" | "exam.attempt.unavailable" | "exam.attempt.workspace.content_conflict" | "exam.attempt.workspace.cursor_conflict" | "exam.attempt.workspace.directory_not_empty" | "exam.attempt.workspace.entry_conflict" | "exam.attempt.workspace.entry_limit" | "exam.attempt.workspace.object_conflict" | "exam.attempt.workspace.path_conflict" | "exam.attempt.workspace.size_limit" | "exam.browser.source_budget_exhausted" | "exam.conflict" | "exam.delivery.append_rate_limited" | "exam.delivery.batch_conflict" | "exam.delivery.control_rate_limited" | "exam.delivery.declaration_conflict" | "exam.delivery.detail_budget_exhausted" | "exam.delivery.metadata_capacity" | "exam.delivery.pending_capacity" | "exam.delivery.replay_window_exceeded" | "exam.delivery.sequence_limit" | "exam.delivery.summary_rate_limited" | "exam.delivery.upload_expired" | "exam.draft.no_changes" | "exam.draft.revision_conflict" | "exam.export.claim_lost" | "exam.export.conflict" | "exam.export.expired" | "exam.export.limit" | "exam.export.not_found" | "exam.export.not_ready" | "exam.export.policy_unconfigured" | "exam.export.scope_changed" | "exam.export.source_retired" | "exam.export.unavailable" | "exam.integrity_review.incomplete" | "exam.integrity_review.invalid" | "exam.integrity_review.not_found" | "exam.integrity_review.revision_conflict" | "exam.integrity_review.state_conflict" | "exam.integrity_review.too_large" | "exam.integrity_review.unavailable" | "exam.invalid" | "exam.manager.candidate_conflict" | "exam.manager.exists" | "exam.manager.ineligible" | "exam.manager.not_found" | "exam.manager.owner_protected" | "exam.not_found" | "exam.owner.no_changes" | "exam.resource.conflict" | "exam.resource.content_invalid" | "exam.resource.invalid" | "exam.resource.limit" | "exam.resource.no_changes" | "exam.resource.not_found" | "exam.resource.order_invalid" | "exam.resource.revision_conflict" | "exam.resource.unavailable" | "exam.resource.upload_invalid" | "exam.revision.capacity_exceeded" | "exam.revision.no_changes" | "exam.revision_conflict" | "exam.security.attempt_not_ready" | "exam.security.catalog_missing" | "exam.security.configuration_unsupported" | "exam.security.control_conflict" | "exam.security.policy_changed" | "exam.security.posture_blocked" | "exam.security.preflight_consumed" | "exam.security.preflight_expired" | "exam.security.preflight_rate_limited" | "exam.security.preflight_report_changed" | "exam.security.preflight_required" | "exam.security.preflight_superseded" | "exam.security.resume_required" | "exam.security.session_changed" | "exam.security.unsupported_capability" | "exam.sitting.class_ineligible" | "exam.sitting.conflict" | "exam.sitting.correction.conflict" | "exam.sitting.correction.content_invalid" | "exam.sitting.correction.invalid" | "exam.sitting.correction.limit" | "exam.sitting.correction.manifest_conflict" | "exam.sitting.correction.no_changes" | "exam.sitting.correction.not_found" | "exam.sitting.correction.stage_conflict" | "exam.sitting.correction.unavailable" | "exam.sitting.deadline_reached" | "exam.sitting.extension_not_later" | "exam.sitting.invalid" | "exam.sitting.no_changes" | "exam.sitting.not_found" | "exam.sitting.revision_conflict" | "exam.sitting.schedule_not_future" | "exam.sitting.schedule_outside_period" | "exam.sitting.state_conflict" | "exam.sitting.unavailable" | "exam.starter_workspace.conflict" | "exam.starter_workspace.content_conflict" | "exam.starter_workspace.directory_not_empty" | "exam.starter_workspace.entry_kind" | "exam.starter_workspace.entry_limit" | "exam.starter_workspace.invalid" | "exam.starter_workspace.move_conflict" | "exam.starter_workspace.no_changes" | "exam.starter_workspace.not_found" | "exam.starter_workspace.object_conflict" | "exam.starter_workspace.parent_not_found" | "exam.starter_workspace.path_conflict" | "exam.starter_workspace.total_size_limit" | "exam.starter_workspace.unavailable" | "exam.starter_workspace.upload_expired" | "exam.unavailable" | "health.not_live" | "health.not_ready" | "idempotency.conflict" | "idempotency.in_progress" | "idempotency.key_invalid" | "idempotency.key_required" | "idempotency.not_supported" | "installation.already_initialized" | "installation.bootstrap_denied" | "installation.unavailable" | "institution.conflict" | "institution.invalid" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.query.invalid" | "invitation.role_not_delegable" | "invitation.unavailable" | "invitation.user_invalid" | "job.cancel.unsupported" | "job.conflict" | "job.query.invalid" | "job.retry.unsupported" | "job.unavailable" | "mail.conflict" | "mail.query.invalid" | "mail.recipient_ineligible" | "mail.recipient_unverified" | "mail.rekey.conflict" | "mail.rekey.invalid" | "mail.test.rate_limited" | "mail.unavailable" | "mfa.required_by_policy" | "onboarding_batch.duplicate" | "onboarding_import.conflict" | "onboarding_import.file_invalid" | "onboarding_import.unavailable" | "personal_access_token.invalid" | "personal_access_token.maximum_reached" | "personal_access_token.unavailable" | "profile_picture.invalid" | "profile_picture.unavailable" | "programme.conflict" | "programme.invalid" | "programme_level.conflict" | "programme_level.invalid" | "request.invalid" | "request.too_large" | "resource.not_found" | "retention.conflict" | "retention.invalid" | "retention.unavailable" | "retention_policy.invalid" | "retention_policy.revision_conflict" | "retention_policy.unavailable" | "role.built_in.protected" | "role.conflict" | "role.invalid" | "role.permission.invalid" | "role_binding.conflict" | "role_binding.invalid" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "route.method_not_allowed" | "route.not_found" | "search.query.invalid" | "server.internal" | "service.busy" | "session.desktop_named_by_registration" | "session.id.invalid" | "session.invalid" | "session.not_found" | "student_progression.conflict" | "student_progression.effective_date_conflict" | "student_progression.lineage_conflict" | "student_progression.roster_too_large" | "student_progression.target_conflict" | "student_progression.unavailable" | "user.conflict" | "user.invalid" | "user.last_system_admin" | "user_settings.format_unsupported" | "user_settings.invalid" | "user_settings.revision_conflict" | "user_settings.unavailable" | "websocket.action.unknown" | "websocket.internal" | "websocket.origin.invalid" | "websocket.rate_limited" | "websocket.request.invalid" | "websocket.subscription.invalid" | "websocket.subscription.limit" | "websocket.unavailable";
+        ErrorCode: "academic_administration_preview.authorization_lost" | "academic_administration_preview.conflict" | "academic_administration_preview.expired" | "academic_administration_preview.target_conflict" | "academic_administration_preview.too_many_users" | "academic_period.conflict" | "academic_period.invalid" | "academic_unit.conflict" | "academic_unit.invalid" | "academic_unit_member.conflict" | "academic_unit_member.invalid" | "access_policy.blocked" | "access_policy.invalid" | "access_policy.revision_conflict" | "access_policy.unavailable" | "administration.unavailable" | "administrator_recovery.invalid" | "administrator_recovery.unavailable" | "affiliation.conflict" | "affiliation.invalid" | "affiliation.student_has_active_enrollment" | "audit.internal" | "audit.query.invalid" | "audit.unavailable" | "authentication.account_recovery.unavailable" | "authentication.account_token.invalid" | "authentication.client_type.invalid" | "authentication.credential_ambiguous" | "authentication.credentials_invalid" | "authentication.csrf.invalid" | "authentication.desktop_authorization.account_session_locked" | "authentication.desktop_authorization.disabled" | "authentication.desktop_authorization.incompatible" | "authentication.desktop_authorization.invalid" | "authentication.desktop_authorization.rejected" | "authentication.desktop_authorization.unavailable" | "authentication.desktop_reauthentication.denied" | "authentication.desktop_reauthentication.invalid" | "authentication.dpop.invalid" | "authentication.dpop.replayed" | "authentication.dpop.unavailable" | "authentication.dpop.use_nonce" | "authentication.email_change_undo.conflict" | "authentication.external.account_conflict" | "authentication.external.account_not_linked" | "authentication.external.invalid" | "authentication.external.provider_not_found" | "authentication.external.rejected" | "authentication.external.request.invalid" | "authentication.external.unavailable" | "authentication.internal" | "authentication.method.conflict" | "authentication.method.disabled" | "authentication.method.last_usable" | "authentication.method.not_found" | "authentication.method.provider_conflict" | "authentication.method.unavailable" | "authentication.mfa.code_invalid" | "authentication.mfa.conflict" | "authentication.mfa.disabled" | "authentication.mfa.enrollment_required" | "authentication.mfa.not_found" | "authentication.mfa.rekey.conflict" | "authentication.mfa.rekey.invalid" | "authentication.mfa.required" | "authentication.mfa.reset_invalid" | "authentication.mfa.unavailable" | "authentication.password.common_invalid" | "authentication.password.identity_invalid" | "authentication.password.invalid" | "authentication.password.pattern_invalid" | "authentication.password.reused" | "authentication.rate_limit_unavailable" | "authentication.rate_limited" | "authentication.reauthentication_method_required" | "authentication.reauthentication_required" | "authentication.registration.invalid" | "authentication.registration.invitation_required" | "authentication.registration.unavailable" | "authentication.required" | "authentication.session.invalid" | "authentication.session_required" | "authentication.sessions.maximum_reached" | "authentication.strong_required" | "authentication.token_invalid" | "authentication.user.conflict" | "authentication.user.invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "class.conflict" | "class.enrollment_conflict" | "class.invalid" | "class_member.invalid" | "class_member.student_affiliation_required" | "desktop_compatibility_policy.invalid" | "desktop_compatibility_policy.revision_conflict" | "desktop_compatibility_policy.unavailable" | "desktop_registration.invalid" | "desktop_registration.revoked" | "desktop_registration.unavailable" | "exam.archived" | "exam.attempt.already_connected" | "exam.attempt.browser_activity_conflict" | "exam.attempt.configuration_frozen" | "exam.attempt.configuration_required" | "exam.attempt.configuration_stale" | "exam.attempt.configuration_unsupported" | "exam.attempt.conflict" | "exam.attempt.connection_closed" | "exam.attempt.connection_lost" | "exam.attempt.continuity_invalid" | "exam.attempt.correction_conflict" | "exam.attempt.desktop_incompatible" | "exam.attempt.focus_loss_conflict" | "exam.attempt.invalid" | "exam.attempt.management_authority_conflict" | "exam.attempt.not_found" | "exam.attempt.registered_desktop_required" | "exam.attempt.renewal_conflict" | "exam.attempt.revision_conflict" | "exam.attempt.screen_clip_incomplete" | "exam.attempt.screen_clip_limit_reached" | "exam.attempt.screen_clip_too_large" | "exam.attempt.screen_recording_off" | "exam.attempt.sitting_not_open" | "exam.attempt.state_conflict" | "exam.attempt.suspension_conflict" | "exam.attempt.unavailable" | "exam.attempt.workspace.content_conflict" | "exam.attempt.workspace.cursor_conflict" | "exam.attempt.workspace.directory_not_empty" | "exam.attempt.workspace.entry_conflict" | "exam.attempt.workspace.entry_limit" | "exam.attempt.workspace.object_conflict" | "exam.attempt.workspace.path_conflict" | "exam.attempt.workspace.size_limit" | "exam.browser.source_budget_exhausted" | "exam.conflict" | "exam.delivery.append_rate_limited" | "exam.delivery.batch_conflict" | "exam.delivery.control_rate_limited" | "exam.delivery.declaration_conflict" | "exam.delivery.detail_budget_exhausted" | "exam.delivery.metadata_capacity" | "exam.delivery.pending_capacity" | "exam.delivery.replay_window_exceeded" | "exam.delivery.sequence_limit" | "exam.delivery.summary_rate_limited" | "exam.delivery.upload_expired" | "exam.draft.no_changes" | "exam.draft.revision_conflict" | "exam.export.claim_lost" | "exam.export.conflict" | "exam.export.expired" | "exam.export.limit" | "exam.export.not_found" | "exam.export.not_ready" | "exam.export.policy_unconfigured" | "exam.export.scope_changed" | "exam.export.source_retired" | "exam.export.unavailable" | "exam.integrity_review.incomplete" | "exam.integrity_review.invalid" | "exam.integrity_review.not_found" | "exam.integrity_review.revision_conflict" | "exam.integrity_review.state_conflict" | "exam.integrity_review.too_large" | "exam.integrity_review.unavailable" | "exam.invalid" | "exam.manager.candidate_conflict" | "exam.manager.exists" | "exam.manager.ineligible" | "exam.manager.not_found" | "exam.manager.owner_protected" | "exam.not_found" | "exam.owner.no_changes" | "exam.resource.conflict" | "exam.resource.content_invalid" | "exam.resource.invalid" | "exam.resource.limit" | "exam.resource.no_changes" | "exam.resource.not_found" | "exam.resource.order_invalid" | "exam.resource.revision_conflict" | "exam.resource.unavailable" | "exam.resource.upload_invalid" | "exam.revision.capacity_exceeded" | "exam.revision.no_changes" | "exam.revision_conflict" | "exam.security.attempt_not_ready" | "exam.security.catalog_missing" | "exam.security.configuration_unsupported" | "exam.security.control_conflict" | "exam.security.interaction_blocked" | "exam.security.policy_changed" | "exam.security.preflight_consumed" | "exam.security.preflight_expired" | "exam.security.preflight_rate_limited" | "exam.security.preflight_report_changed" | "exam.security.preflight_required" | "exam.security.preflight_superseded" | "exam.security.readiness_unmet" | "exam.security.resume_required" | "exam.security.session_changed" | "exam.security.unsupported_capability" | "exam.sitting.class_ineligible" | "exam.sitting.conflict" | "exam.sitting.correction.conflict" | "exam.sitting.correction.content_invalid" | "exam.sitting.correction.invalid" | "exam.sitting.correction.limit" | "exam.sitting.correction.manifest_conflict" | "exam.sitting.correction.no_changes" | "exam.sitting.correction.not_found" | "exam.sitting.correction.stage_conflict" | "exam.sitting.correction.unavailable" | "exam.sitting.deadline_reached" | "exam.sitting.extension_not_later" | "exam.sitting.invalid" | "exam.sitting.no_changes" | "exam.sitting.not_found" | "exam.sitting.revision_conflict" | "exam.sitting.schedule_not_future" | "exam.sitting.schedule_outside_period" | "exam.sitting.state_conflict" | "exam.sitting.unavailable" | "exam.starter_workspace.conflict" | "exam.starter_workspace.content_conflict" | "exam.starter_workspace.directory_not_empty" | "exam.starter_workspace.entry_kind" | "exam.starter_workspace.entry_limit" | "exam.starter_workspace.invalid" | "exam.starter_workspace.move_conflict" | "exam.starter_workspace.no_changes" | "exam.starter_workspace.not_found" | "exam.starter_workspace.object_conflict" | "exam.starter_workspace.parent_not_found" | "exam.starter_workspace.path_conflict" | "exam.starter_workspace.total_size_limit" | "exam.starter_workspace.unavailable" | "exam.starter_workspace.upload_expired" | "exam.unavailable" | "health.not_live" | "health.not_ready" | "idempotency.conflict" | "idempotency.in_progress" | "idempotency.key_invalid" | "idempotency.key_required" | "idempotency.not_supported" | "installation.already_initialized" | "installation.bootstrap_denied" | "installation.unavailable" | "institution.conflict" | "institution.invalid" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.query.invalid" | "invitation.role_not_delegable" | "invitation.unavailable" | "invitation.user_invalid" | "job.cancel.unsupported" | "job.conflict" | "job.query.invalid" | "job.retry.unsupported" | "job.unavailable" | "mail.conflict" | "mail.query.invalid" | "mail.recipient_ineligible" | "mail.recipient_unverified" | "mail.rekey.conflict" | "mail.rekey.invalid" | "mail.test.rate_limited" | "mail.unavailable" | "mfa.required_by_policy" | "onboarding_batch.duplicate" | "onboarding_import.conflict" | "onboarding_import.file_invalid" | "onboarding_import.unavailable" | "personal_access_token.invalid" | "personal_access_token.maximum_reached" | "personal_access_token.unavailable" | "plugin.invalid" | "plugin.not_found" | "plugin.required" | "plugin.revision_conflict" | "plugin.unavailable" | "profile_picture.invalid" | "profile_picture.unavailable" | "programme.conflict" | "programme.invalid" | "programme_level.conflict" | "programme_level.invalid" | "request.invalid" | "request.too_large" | "resource.not_found" | "retention.conflict" | "retention.invalid" | "retention.unavailable" | "retention_policy.invalid" | "retention_policy.revision_conflict" | "retention_policy.unavailable" | "role.built_in.protected" | "role.conflict" | "role.invalid" | "role.permission.invalid" | "role_binding.conflict" | "role_binding.invalid" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "route.method_not_allowed" | "route.not_found" | "search.query.invalid" | "server.internal" | "service.busy" | "session.desktop_named_by_registration" | "session.id.invalid" | "session.invalid" | "session.not_found" | "student_progression.conflict" | "student_progression.effective_date_conflict" | "student_progression.lineage_conflict" | "student_progression.roster_too_large" | "student_progression.target_conflict" | "student_progression.unavailable" | "user.conflict" | "user.invalid" | "user.last_system_admin" | "user_settings.format_unsupported" | "user_settings.invalid" | "user_settings.revision_conflict" | "user_settings.unavailable" | "websocket.action.unknown" | "websocket.internal" | "websocket.origin.invalid" | "websocket.rate_limited" | "websocket.request.invalid" | "websocket.subscription.invalid" | "websocket.subscription.limit" | "websocket.unavailable";
         ExamAttemptConnectionResponse: {
             close_reason?: components["schemas"]["AttemptConnectionCloseReason"];
             /** Format: date-time */
@@ -7976,7 +8271,7 @@ export interface components {
             /** Format: int64 */
             attempt_revision: number;
             /** @enum {string} */
-            candidate_reason: "secure_connectivity_lost" | "focus_policy_review_required" | "manager_suspended";
+            candidate_reason: "secure_connectivity_lost" | "focus_policy_review_required" | "native_policy_review_required" | "manager_suspended";
             exam_attempt_id: components["schemas"]["ID"];
             exam_sitting_id: components["schemas"]["ID"];
             reallowed_by_user_id: components["schemas"]["ID"];
@@ -8009,7 +8304,7 @@ export interface components {
         /** @description One suspension episode. A policy episode links its Integrity Flag in integrity_flag_id; a manual episode (an Exam Manager's kick) links no Flag and names its manager in suspended_by_user_id. */
         ExamAttemptSuspensionResponse: {
             /** @enum {string} */
-            candidate_reason: "secure_connectivity_lost" | "focus_policy_review_required" | "manager_suspended";
+            candidate_reason: "secure_connectivity_lost" | "focus_policy_review_required" | "native_policy_review_required" | "manager_suspended";
             /** Format: date-time */
             ended_at?: string;
             /** Format: int64 */
@@ -8175,8 +8470,8 @@ export interface components {
             /** Format: date-time */
             observed_at: string;
             participation_id: components["schemas"]["ID"];
-            /** @enum {string} */
-            policy_kind: "connection_loss" | "focus_loss" | "browser_navigation";
+            /** @description The policy that raised the flag: a core policy (connection_loss, focus_loss or browser_navigation) or a capability's "<plugin-id>.<kind>". Treat an unknown kind as opaque. */
+            policy_kind: string;
             /** Format: date-time */
             recorded_at: string;
             /** Format: int64 */
@@ -8206,8 +8501,8 @@ export interface components {
             /** Format: int64 */
             generation: number;
             id: components["schemas"]["ID"];
-            /** @enum {string} */
-            policy_kind: "connection_loss" | "focus_loss" | "browser_navigation";
+            /** @description The policy that raised the flag: a core policy (connection_loss, focus_loss or browser_navigation) or a capability's "<plugin-id>.<kind>". Treat an unknown kind as opaque. */
+            policy_kind: string;
             /** @enum {string} */
             state: "open" | "closed";
             /**
@@ -8869,10 +9164,10 @@ export interface components {
         /** @description Minimal successful health-check projection. */
         HealthResponse: {
             /**
-             * @description The literal successful health state.
+             * @description The successful health state. Readiness answers `degraded` when an enabled plugin has failed: the node still serves, without that plugin. The server log and the `proctor_plugin_state` metric name the plugin.
              * @enum {string}
              */
-            status: "ok";
+            status: "ok" | "degraded";
         };
         ID: string;
         /** @description Initial admission and sign-in policy created during bootstrap. */
@@ -9228,7 +9523,7 @@ export interface components {
          * @description Stable type of a background Job. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
          * @enum {string}
          */
-        JobType: "academic_administration_preview.resolve" | "audit.attempt_sweep" | "command_outcome.cleanup" | "exam_export.build" | "exam_export.cleanup" | "exam_sitting.lifecycle" | "exam_sitting.lifecycle_recovery" | "exam_sitting.sealing" | "file.purge_expired_content" | "invitation.maintenance" | "job.cleanup" | "mail.cleanup" | "mail.deliver" | "mail.deliver_credential" | "mail.expand_sitting" | "mail.rekey" | "mfa.rekey" | "onboarding_import.execute" | "onboarding_import.parse" | "profile_picture.generate_default" | "profile_picture.reconcile_defaults" | "retention.expire" | "retention.notices" | "retention.purge" | "retention.reconcile" | "session.purge_retired" | "student_progression.preview";
+        JobType: "academic_administration_preview.resolve" | "audit.attempt_sweep" | "command_outcome.cleanup" | "domain_event.dispatch" | "exam_export.build" | "exam_export.cleanup" | "exam_sitting.lifecycle" | "exam_sitting.lifecycle_recovery" | "exam_sitting.sealing" | "file.purge_expired_content" | "invitation.maintenance" | "job.cleanup" | "mail.cleanup" | "mail.deliver" | "mail.deliver_credential" | "mail.expand_sitting" | "mail.rekey" | "mfa.rekey" | "onboarding_import.execute" | "onboarding_import.parse" | "profile_picture.generate_default" | "profile_picture.reconcile_defaults" | "retention.expire" | "retention.notices" | "retention.purge" | "retention.reconcile" | "session.purge_retired" | "student_progression.preview";
         LoginRequest: {
             /**
              * @description The client family for the Session being created.
@@ -9635,13 +9930,10 @@ export interface components {
             expected_revision: number;
             path: components["schemas"]["StarterWorkspacePath"];
         };
-        NativeBaselineReport: {
-            /** @enum {string} */
-            constrained_window: "verified" | "unavailable";
-            /** @enum {string} */
-            content_protection: "verified" | "unavailable";
-            /** @enum {string} */
-            single_physical_display: "verified" | "unavailable";
+        NativeActivation: {
+            capability: string;
+            /** @description The sub-categories the capability runs; empty means every registered one. */
+            categories: string[];
         };
         NativeBatchReceipt: {
             /** Format: int64 */
@@ -9650,6 +9942,78 @@ export interface components {
             received_at: string;
             request_digest: string;
             stream_id: string;
+        };
+        /** @description One activated capability's full minimized state as Desktop observed it, with its envelope. Desktop sends a fact whenever the state or the envelope changes; the server checks it against the capability's published schemas and evaluates the policy's rules on it again. A fact no newer than the latest of its source instance changes nothing. */
+        NativeCapabilityFact: {
+            capability: string;
+            /** @enum {string} */
+            certainty: "complete" | "partial" | "unknown";
+            /** @enum {string} */
+            health: "unsupported" | "healthy" | "degraded" | "failed" | "stopped";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "capability_fact";
+            /**
+             * Format: date-time
+             * @description The device time of the observation, in whole milliseconds.
+             */
+            observed_at: string;
+            /** @enum {string} */
+            permission: "not_determined" | "granted" | "denied" | "restricted" | "unavailable";
+            /** Format: int64 */
+            sequence: number;
+            source_instance_id: string;
+            /** @description The full state, valid against its published state schema. State and summary are at most 16 KiB together. */
+            state: Record<string, never>;
+            /** @description The counts derived from the state, valid against its published summary schema. */
+            summary: Record<string, never>;
+        };
+        NativeCapabilityReadiness: {
+            capability: string;
+            /** @enum {string} */
+            certainty: "complete" | "partial" | "unknown";
+            /** @enum {string} */
+            health: "unsupported" | "healthy" | "degraded" | "failed" | "stopped";
+            /** @enum {string} */
+            permission: "not_determined" | "granted" | "denied" | "restricted" | "unavailable";
+            /**
+             * Format: int64
+             * @description The sequence the capability's event stream continues from.
+             */
+            sequence: number;
+            source_instance_id: string;
+            /** @description The capability's minimized full state, valid against its published state schema, at most 16 KiB. It never holds what must not leave the device. A field named "<capability>.<name>" is read from state.<name>. */
+            state: Record<string, never>;
+            /** @description The counts Desktop derives from the state, valid against its published summary schema, at most 16 KiB. A field named "<capability>.summary.<name>" is read from summary.<name>. */
+            summary: Record<string, never>;
+        };
+        NativeCatalogApplications: {
+            /** @description Catalog application IDs in ASCII order. */
+            catalog_app_ids: string[];
+        };
+        /** @description Exactly one of a comparison of a registered field with a typed value, a combination of conditions, or an application condition matched on the device. Nesting is at most three deep. */
+        NativeCondition: {
+            Compare: {
+                field: string;
+                /** @enum {string} */
+                op: "eq" | "ne" | "lt" | "le" | "gt" | "ge" | "in" | "not_in";
+                /** @description A whole number, one of an enumerated field's values, a boolean, or a list of them for in and not_in. */
+                value: unknown;
+            };
+        } | {
+            All: components["schemas"]["NativeConditionList"];
+        } | {
+            Any: components["schemas"]["NativeConditionList"];
+        } | {
+            Not: {
+                condition: components["schemas"]["NativeCondition"];
+            };
+        } | {
+            AppsAbsent: components["schemas"]["NativeCatalogApplications"];
+        } | {
+            AppsOnly: components["schemas"]["NativeCatalogApplications"];
         };
         NativeConditionEvidence: {
             application_release_id: string;
@@ -9662,7 +10026,6 @@ export interface components {
             /** Format: date-time */
             interpreted_at: string;
             matrix_id: string;
-            occurrence: components["schemas"]["NativeOccurrence"];
             participation_id: string;
             policy_digest: string;
             policy_revision_id: string;
@@ -9671,66 +10034,98 @@ export interface components {
             record_index: number;
             security_session_id: string;
             stream_id: string;
-            unresolved_opener: boolean;
+            transition: components["schemas"]["NativeRuleTransition"];
         };
         NativeConditionInventory: {
             digest: string;
             /** Format: int64 */
             records: number;
         };
+        NativeConditionList: {
+            conditions: components["schemas"]["NativeCondition"][];
+        };
         NativeConditionListResponse: {
             items: components["schemas"]["NativeConditionEvidence"][];
             next_cursor?: string;
         };
-        NativeCoverageClaim: {
-            /** @enum {string} */
-            claim: "enforce" | "observe" | "unavailable";
-            coverage_key: string;
-            source_schema_digest: string;
-            /** @enum {string} */
-            state: "ready" | "degraded" | "unavailable";
-        };
-        NativeCoverageTransition: {
+        /** @description Where the exam begins on the stream: Desktop sends it once, when the candidate window mounts after admission. Before it the server applies the policy's readiness rules; from it, the participation rules, on the latest facts. Send the mounted candidate window's fact before it, in the same or an earlier batch; otherwise the window rule is evaluated on the window Desktop reported at Start and fails. */
+        NativeParticipationConfirmed: {
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            kind: "coverage_transition";
+            kind: "participation_confirmed";
             /** Format: date-time */
-            occurred_at: string;
-            /** @enum {string} */
-            reason: "initial" | "health_changed" | "permission_changed" | "reconciled" | "stopped";
-            source: components["schemas"]["NativeSourceCoverage"];
+            observed_at: string;
         };
-        NativeOccurrence: {
-            capability_id: string;
+        NativeRecord: components["schemas"]["NativeCapabilityFact"] | components["schemas"]["NativeParticipationConfirmed"] | components["schemas"]["NativeRuleStatusReport"] | components["schemas"]["NativeSourceReset"] | components["schemas"]["NativeSourceGap"];
+        /** @description One requirement, in the rule grammar Desktop publishes. */
+        NativeRule: {
+            capability: string;
             /** @enum {string} */
-            certainty: "complete" | "partial" | "unknown";
-            condition_id: string;
-            detector_id: string;
-            /** Format: int64 */
-            detector_version: number;
-            /** Format: date-time */
-            first_observed_at: string;
-            /** Format: int64 */
-            gap_count: number;
+            mode: "enforce" | "observe";
+            /** @enum {string} */
+            phase: "readiness" | "participation" | "both";
+            /** @description A reason registered for the capability; Desktop owns its localized text. */
+            reason: string;
+            requirement: components["schemas"]["NativeCondition"];
+            rule_id: string;
+        };
+        NativeRuleReport: {
+            rule_id: string;
+            /** @enum {string} */
+            status: "met" | "not_met" | "unknown";
+            /**
+             * @description Why the rule is unknown; present only when status is unknown.
+             * @enum {string}
+             */
+            unknown_cause?: "unavailable" | "gap" | "unhealthy" | "permission" | "partial" | "checking";
+        };
+        /** @description Desktop's own status for one participation rule and whether it is containing the candidate window because of it. The server's status is authoritative; a disagreement is counted, never applied. */
+        NativeRuleStatusReport: {
+            contained: boolean;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            kind: "occurrence";
+            kind: "rule_status";
             /** Format: date-time */
-            last_confirmed_at: string;
+            observed_at: string;
+            rule_id: string;
             /** @enum {string} */
-            mode: "observe" | "enforce";
-            occurrence_id: string;
-            /** Format: int64 */
-            repeat_count: number;
-            source_ranges: components["schemas"]["NativeSourceRange"][];
-            /** @enum {string} */
-            status: "opened" | "repeated" | "recovered";
+            status: "met" | "not_met" | "unknown";
+            /**
+             * @description Why the rule is unknown; present only when status is unknown.
+             * @enum {string}
+             */
+            unknown_cause?: "unavailable" | "gap" | "unhealthy" | "permission" | "partial" | "checking";
         };
-        NativeRecord: components["schemas"]["NativeOccurrence"] | components["schemas"]["NativeCoverageTransition"] | components["schemas"]["NativeSourceReset"] | components["schemas"]["NativeSourceGap"];
+        NativeRuleTransition: {
+            /**
+             * Format: date-time
+             * @description The device time of the change; it never moves backwards within a Participation.
+             */
+            at: string;
+            capability: string;
+            /** @enum {string} */
+            event?: "opened" | "closed";
+            from?: components["schemas"]["NativeRuleReport"];
+            /** @enum {string} */
+            mode: "enforce" | "observe";
+            /**
+             * Format: int64
+             * @description The rule's occurrence this change opened or closed, counted from 1 per Participation.
+             */
+            occurrence?: number;
+            /** @description The reason ID Desktop's registry publishes for the rule; Desktop owns its wording. */
+            reason: string;
+            rule_id: string;
+            to: components["schemas"]["NativeRuleReport"];
+        };
+        /** @description Whether Desktop records the candidate's screen on the device for the whole session, uploading only the ranges the server requests. Off by default; the candidate is told before the Attempt starts. When on, the policy activates the screen_recording capability with the readiness rule screen_recording.free_space: Start is refused unless the recorder is permitted and the device has at least 3072 MiB free. */
+        NativeScreenRecordingPolicy: {
+            enabled: boolean;
+        };
         NativeSecurityAcknowledgement: {
             /** Format: int64 */
             highest_contiguous_batch_sequence: number;
@@ -9807,7 +10202,8 @@ export interface components {
                 }
             ];
             /** @constant */
-            registry_digest: "sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0";
+            registry_digest: "sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d";
+            screen_recording: components["schemas"]["NativeScreenRecordingPolicy"];
         };
         NativeSecurityStreamStatus: {
             /** Format: int64 */
@@ -9846,37 +10242,43 @@ export interface components {
             /** Format: int64 */
             terminal_missing_through_sequence: number;
         };
-        /** @description Content-free native condition count and currently live source health. Contains no detector, occurrence or source-instance identities and makes no misconduct finding. */
+        /** @description The candidate's live native standing: how many rule status changes are kept, whether the live Participation's native delivery is open, each enforce rule's status as the server evaluates it, whether Desktop is containing the candidate window, and the Attempt's screen clips by state. It contains no facts, source-instance or application identities, and an application outside the catalog is never named. A rule that is not met is not a misconduct finding; its Flag is reviewed like any other. */
         NativeSecuritySummary: {
+            /** @description Whether Desktop reports it is containing the candidate window right now. */
+            contained: boolean;
+            /** @description Whether the live Participation's native delivery is open, so rule statuses are current. */
             live_coverage_available: boolean;
             /** Format: int64 */
             retained_condition_records: number;
-            sources: {
-                complete: boolean;
+            /** @description The live Participation's enforce rules, by rule ID; empty when nothing is live. */
+            rules: {
+                capability: string;
+                /** Format: int64 */
+                occurrences: number;
+                /**
+                 * Format: int64
+                 * @description The occurrence open now, counted from 1 in this Participation; absent when none is open.
+                 */
+                open_occurrence?: number;
+                /** @description The registry's reason ID for the rule, such as display.single_display_required. */
+                reason: string;
+                rule_id: string;
                 /** @enum {string} */
-                health: "starting" | "healthy" | "degraded" | "failed" | "recovering" | "stopped";
+                status: "met" | "not_met" | "unknown";
                 /** @enum {string} */
-                permission: "denied" | "granted" | "not_determined" | "restricted" | "unavailable";
-                source_id: string;
+                unknown_cause?: "unavailable" | "gap" | "unhealthy" | "permission" | "partial" | "checking";
             }[];
-        };
-        NativeSourceCoverage: {
-            adapter_version: string;
-            complete: boolean;
-            /** Format: int64 */
-            gap_count: number;
-            /** @enum {string} */
-            health: "starting" | "healthy" | "degraded" | "failed" | "recovering" | "stopped";
-            /** @enum {string} */
-            permission: "denied" | "granted" | "not_determined" | "restricted" | "unavailable";
-            /** Format: int64 */
-            sequence: number;
-            /** @enum {string} */
-            source_id: "display-topology" | "candidate-window" | "capture-session" | "process-application" | "interactive-session" | "clipboard" | "print-spooler" | "removable-storage" | "virtualization" | "network-configuration" | "media-device";
-            source_instance_id: string;
-            source_schema_digest: string;
+            screen_clips: {
+                failed: number;
+                ready: number;
+                recording: number;
+                requested: number;
+                uploading: number;
+            };
         };
         NativeSourceGap: {
+            /** @description The activated capability whose source this names. */
+            capability: string;
             /** Format: int64 */
             first_missing_sequence: number;
             /**
@@ -9890,20 +10292,11 @@ export interface components {
             occurred_at: string;
             /** @enum {string} */
             reason: "overflow" | "source_loss" | "corruption";
-            /** @enum {string} */
-            source_id: "display-topology" | "candidate-window" | "capture-session" | "process-application" | "interactive-session" | "clipboard" | "print-spooler" | "removable-storage" | "virtualization" | "network-configuration" | "media-device";
-            source_instance_id: string;
-        };
-        NativeSourceRange: {
-            /** Format: int64 */
-            first_sequence: number;
-            /** Format: int64 */
-            last_sequence: number;
-            /** @enum {string} */
-            source_id: "display-topology" | "candidate-window" | "capture-session" | "process-application" | "interactive-session" | "clipboard" | "print-spooler" | "removable-storage" | "virtualization" | "network-configuration" | "media-device";
             source_instance_id: string;
         };
         NativeSourceReset: {
+            /** @description The activated capability whose source this names. */
+            capability: string;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -9918,8 +10311,6 @@ export interface components {
             /** @enum {string} */
             reason: "restart" | "resume" | "permission_changed";
             reset_id: string;
-            /** @enum {string} */
-            source_id: "display-topology" | "candidate-window" | "capture-session" | "process-application" | "interactive-session" | "clipboard" | "print-spooler" | "removable-storage" | "virtualization" | "network-configuration" | "media-device";
         };
         /** @description Opaque continuation for the next page, omitted on the last page. Clients return it unchanged as cursor. */
         NextCursor: string;
@@ -10078,11 +10469,51 @@ export interface components {
          * @enum {string}
          */
         PersonalAccessTokenScope: "academic.progression.manage" | "academic_audit.view" | "academic_period.manage" | "academic_period.view" | "academic_unit.manage" | "academic_unit.members.manage" | "academic_unit.members.view" | "academic_unit.view" | "audit.view" | "class.manage" | "class.members.manage" | "class.members.view" | "class.view" | "exam.attempt.browser_activity.view" | "exam.create" | "exam.create.override" | "exam.manage" | "exam.manage.override" | "exam.publish" | "exam.publish.override" | "exam.sitting.create" | "exam.sitting.create.override" | "exam.sitting.manage" | "exam.sitting.manage.override" | "exam.sitting.view" | "exam.sitting.view.override" | "exam.view" | "exam.view.override" | "institution.manage" | "invitation.create" | "invitation.manage" | "invitation.view" | "job.manage" | "job.view" | "mail.manage" | "mail.view" | "onboarding_batch.manage" | "onboarding_batch.view" | "programme.manage" | "programme.view" | "programme_level.manage" | "programme_level.view" | "session.manage" | "session.view" | "submission.release" | "submission.release.override" | "submission.review" | "submission.review.override" | "submission.view" | "submission.view.override" | "user.manage" | "user.profile_picture.manage" | "user.view";
+        /** @description One page of the collection in its stable order. */
+        PluginListResponse: {
+            items: components["schemas"]["PluginResponse"][];
+            next_cursor?: components["schemas"]["NextCursor"];
+        };
+        /** @description One compiled-in plugin as an administrator sees it. */
+        PluginResponse: {
+            /** @description Whether the plugin should run, from its saved settings or its default. */
+            enabled: boolean;
+            /** @description Whether the plugin runs when nobody has configured it. */
+            enabled_by_default: boolean;
+            id: string;
+            name: string;
+            /** @description A required plugin always runs. */
+            required: boolean;
+            /**
+             * Format: int64
+             * @description The saved settings revision, 0 when nothing is saved.
+             */
+            revision: number;
+            /** @description The saved settings document as JSON text, or "{}" when nothing is saved. */
+            settings: string;
+            /** @description The JSON Schema of the plugin's settings as JSON text, absent when the plugin has none. */
+            settings_schema?: string;
+            /**
+             * @description The plugin's state on the serving node.
+             * @enum {string}
+             */
+            state: "disabled" | "active" | "failed";
+        };
+        PluginSettingsRequest: {
+            /** @description Whether the plugin should run. A required plugin cannot be turned off. */
+            enabled: boolean;
+            /**
+             * Format: int64
+             * @description The settings revision the editor read, 0 when nothing is saved. A stale revision cannot overwrite newer settings.
+             */
+            expected_revision: number;
+            /** @description The plugin's settings document as JSON text, a JSON object of at most 64 KiB, as its settings_schema describes. */
+            settings: string;
+        };
         PrepareSecurityPreflightRequest: {
             attempt_id?: string;
             configuration_manifest_fingerprint: string;
             native_registry_digest: string;
-            source_manifest_digest: string;
         };
         ProblemDetails: {
             code: string | components["schemas"]["ErrorCode"];
@@ -10246,6 +10677,8 @@ export interface components {
              */
             expected_revision: number;
         };
+        /** @description Identifies what the readiness overview shows and Desktop enforces: the activations and rules, family selections, recorder switch, and the registry, matrix and catalogs they rest on. Unlike the policy content digest it leaves out the policy's own identity, so the overview and the preflight prepared at Start carry the same value exactly when nothing that matters changed. It is the SHA-256 of the canonical JSON object {activations, rules, capabilities, screen_recording, focus_loss_mode, connection_loss_mode, registry_digest, capability_matrix_digest, catalog_bindings}, taken from the policy and its resolution. */
+        ReadinessDigest: string;
         ReallowExamAttemptRequest: {
             /** Format: int64 */
             expected_revision: number;
@@ -10348,6 +10781,22 @@ export interface components {
             suggested_locale?: string;
             suggested_timezone?: string;
             suggested_username?: string;
+        };
+        RequestExamAttemptScreenClipRequest: {
+            /**
+             * Format: date-time
+             * @description The range's end, at most ten minutes after the request.
+             */
+            end: string;
+            /** @description True for a range from the moment the candidate window opened; start is then omitted. */
+            from_session_start: boolean;
+            /** @description The manager's private reason. It is stored with the request and never returned. */
+            reason: string;
+            /**
+             * Format: date-time
+             * @description The range's start, required unless from_session_start is true, and omitted then.
+             */
+            start?: string;
         };
         ResetUserMFARequest: {
             /**
@@ -10754,6 +11203,80 @@ export interface components {
             /** Format: date-time */
             scheduled_start_at: string;
         };
+        ScreenClipChunkResponse: {
+            chunk: number;
+        };
+        /** @description One page of the collection in its stable order. */
+        ScreenClipListResponse: {
+            items: components["schemas"]["ScreenClipResponse"][];
+            next_cursor?: components["schemas"]["NextCursor"];
+        };
+        ScreenClipRange: {
+            /** Format: date-time */
+            end: string;
+            from_session_start: boolean;
+            /** Format: date-time */
+            start?: string;
+        };
+        ScreenClipResponse: {
+            exam_attempt_id: components["schemas"]["ID"];
+            /**
+             * @description Why the clip failed; present only when state is failed.
+             * @enum {string}
+             */
+            failure?: "attempt_ended" | "not_recorded" | "upload_deadline" | "rejected";
+            id: components["schemas"]["ID"];
+            range: components["schemas"]["ScreenClipRange"];
+            /** Format: date-time */
+            requested_at: string;
+            /** Format: int64 */
+            revision: number;
+            /** @enum {string} */
+            source: "manager" | "incident";
+            /** @enum {string} */
+            state: "requested" | "recording" | "uploading" | "ready" | "failed";
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ScreenClipUploadResponse: {
+            /**
+             * Format: int64
+             * @description The size of every chunk but the last.
+             */
+            chunk_bytes: number;
+            chunk_count: number;
+            clip: components["schemas"]["ScreenClipResponse"];
+            /** @description The SHA-256 of the clip's manifest: "proctor-screen-clip-v1", the media type, size, chunk size and every chunk hash in order, each followed by a line feed. */
+            content_digest: string;
+            /** @description The numbers, from 1, of the chunks that arrived, in order. */
+            received_chunks: number[];
+        };
+        /** @description Localized recorder notice, not consent or playback authority. Zero days means no configured automatic expiry; holds still apply. */
+        ScreenRecordingDisclosure: {
+            /**
+             * @description Who may play an uploaded clip.
+             * @constant
+             */
+            audience: "exam_managers_of_the_sitting";
+            /** @description Uploaded clips are integrity evidence and follow its retention period. */
+            clip_retention_days: number;
+            /**
+             * @description Desktop records the whole session on the device and deletes it at submission.
+             * @constant
+             */
+            local_recording: "whole_session_deleted_at_submission";
+            /** @constant */
+            notice_id: "screen_recording";
+            /** @constant */
+            retention_anchor: "eligible_closed_sitting_records_completion";
+            /** Format: int64 */
+            retention_policy_revision: number;
+            /**
+             * @description Only ranges the Sitting's Exam Managers ask for, or the minute either side of a Flag, leave the device.
+             * @constant
+             */
+            uploads: "requested_and_flagged_ranges_only";
+        };
         /** @description An unarchived Class within the caller's class.view scope. */
         SearchClassItem: {
             display_name: string;
@@ -10804,38 +11327,49 @@ export interface components {
             catalog_id: string;
             digest: string;
             /** @enum {string} */
-            kind: "application" | "storage_function" | "managed_network_profile" | "network_adapter_class" | "tunnel_class" | "detector";
+            kind: "application";
             revision: string;
         };
-        SecurityCoverageResult: {
-            /** @enum {string} */
-            coverage_result: "accepted" | "stale_control" | "reset_required" | "reset_conflict";
+        /** @description How the server processed Desktop's latest security control: the lease renewal and its delivery watermarks. A renewal never changes whether the candidate may interact; only closing native delivery does. */
+        SecurityControlResult: {
             delivery_watermark_rejections: components["schemas"]["DeliveryWatermarkRejection"][];
             processed_control_digest: string | null;
             /** Format: int64 */
             processed_control_sequence: number;
             security_interaction_allowed: boolean;
-            source_reset_receipts: components["schemas"]["SourceResetReceipt"][];
         };
-        SecurityPolicyRecovery: {
-            current_coverage: components["schemas"]["NativeCoverageClaim"][];
-            current_sources: components["schemas"]["NativeSourceCoverage"][];
-            frozen_attempt_configuration: components["schemas"]["FrozenAttemptConfiguration"];
-            security: components["schemas"]["AdmittedSecurity"];
-            security_coverage: components["schemas"]["SecurityCoverageResult"];
+        SecurityPolicyOverviewResponse: {
+            browser_activity_disclosure: components["schemas"]["BrowserActivityDisclosure"];
+            /** @description SHA-256 of the exact signed bytes of the release's certification document. */
+            capability_matrix_digest: string;
+            catalog_bindings: components["schemas"]["SecurityCatalogBinding"][];
+            policy: components["schemas"]["EffectiveExamSecurityPolicy"];
+            readiness_digest: components["schemas"]["ReadinessDigest"];
+            /** @description The recorder notice to show before Start; null when the Exam does not record the screen. */
+            screen_recording_disclosure: components["schemas"]["ScreenRecordingDisclosure"] | null;
             /** Format: date-time */
             server_time: string;
-            source_reset_receipts: components["schemas"]["SourceResetReceipt"][];
+        };
+        SecurityPolicyRecovery: {
+            frozen_attempt_configuration: components["schemas"]["FrozenAttemptConfiguration"];
+            security: components["schemas"]["AdmittedSecurity"];
+            security_control: components["schemas"]["SecurityControlResult"];
+            /** Format: date-time */
+            server_time: string;
         };
         /** @description Privileged registered-Desktop response bounded to 128 KiB. Catalog bindings are unique and sorted by kind then catalog_id. First admission returns null configuration; Ready rejoin returns the original immutable configuration. */
         SecurityPolicyResponse: {
             browser_activity_disclosure: components["schemas"]["BrowserActivityDisclosure"];
+            /** @description SHA-256 of the exact signed bytes of the release's certification document. */
             capability_matrix_digest: string;
             catalog_bindings: components["schemas"]["SecurityCatalogBinding"][];
             frozen_attempt_configuration: components["schemas"]["FrozenAttemptConfiguration"] | null;
             policy: components["schemas"]["EffectiveExamSecurityPolicy"];
             policy_content_digest: string;
             preflight_challenge: components["schemas"]["SecurityPreflightChallenge"];
+            readiness_digest: components["schemas"]["ReadinessDigest"];
+            /** @description The recorder notice to show before Start; null when the Exam does not record the screen. */
+            screen_recording_disclosure: components["schemas"]["ScreenRecordingDisclosure"] | null;
             /** Format: date-time */
             server_time: string;
         };
@@ -10847,22 +11381,18 @@ export interface components {
             issued_at: string;
             preflight_id: string;
         };
-        /** @description Minimized assertions, at most 64 KiB. Source order and categories must match the resolved policy; coverage keys are sorted and exact. No inventories, media, clipboard bytes, OS errors or arbitrary details are accepted. The server computes the report digest. Client reported_at is provenance; server time controls challenge expiry and admission freshness. */
+        /** @description What Desktop observed at Start, at most 128 KiB: one fresh fact for each activated capability and its own status for each readiness rule. No inventories, media, clipboard bytes, OS errors or arbitrary details are accepted. The server evaluates the readiness rules on these facts and its result decides admission. The server computes the report digest. Client reported_at is provenance; server time controls challenge expiry and admission freshness. */
         SecurityPreflightReport: {
-            baseline: components["schemas"]["NativeBaselineReport"];
-            capability_matrix_digest: string;
+            /** @description One fresh fact for every activated capability at Start, in the policy's activation order. */
+            capabilities: components["schemas"]["NativeCapabilityReadiness"][];
             challenge: string;
-            coverage: components["schemas"]["NativeCoverageClaim"][];
             policy_content_digest: string;
             policy_digest: string;
-            /** @enum {string} */
-            posture: "compliant" | "degraded" | "contained" | "failed";
             /** Format: date-time */
             reported_at: string;
+            /** @description Desktop's own status for every readiness rule. */
+            rules: components["schemas"]["NativeRuleReport"][];
             security_session_id: string;
-            selected_source_categories: ("os-clipboard-change" | "removable-block-storage" | "portable-mtp" | "system-proxy-state" | "os-managed-vpn-state" | "tunnel-interface-state" | "route-change" | "network-source-health" | "camera" | "microphone")[];
-            source_manifest_digest: string;
-            sources: components["schemas"]["NativeSourceCoverage"][];
         };
         SecurityPreflightResult: {
             /** @enum {string} */
@@ -10870,8 +11400,10 @@ export interface components {
             /** Format: date-time */
             expires_at: string;
             preflight_id: string;
-            reason_codes: ("policy_changed" | "unsupported_capability" | "source_unavailable" | "permission_required" | "baseline_unavailable" | "preflight_expired" | "preflight_superseded" | "posture_blocked" | "configuration_unsupported" | "session_changed")[];
+            reason_codes: ("preflight_expired" | "native_rule_unmet")[];
             report_digest: string;
+            /** @description The server's own status for every readiness rule, evaluated on the reported state. Where it differs from Desktop's, the server's decides admission. */
+            rules: components["schemas"]["NativeRuleReport"][];
             /** Format: date-time */
             server_time: string;
         };
@@ -11101,13 +11633,9 @@ export interface components {
         };
         SittingCandidateSuspensionResponse: {
             /** @enum {string} */
-            candidate_reason: "secure_connectivity_lost" | "focus_policy_review_required" | "manager_suspended";
+            candidate_reason: "secure_connectivity_lost" | "focus_policy_review_required" | "native_policy_review_required" | "manager_suspended";
             id: components["schemas"]["ID"];
             reallow_available: boolean;
-        };
-        SourceResetReceipt: {
-            reset_digest: string;
-            reset_id: string;
         };
         /** @description An already-canonical, case-sensitive POSIX-relative path: at most 16 segments and 255 UTF-8 bytes per segment. Empty, absolute, dot, dot-dot, repeated/trailing separators, backslashes, NUL/control characters, and the reserved .proctor root are rejected. */
         StarterWorkspacePath: string;
@@ -11252,6 +11780,18 @@ export interface components {
              * @description Authoritative serving-node time in RFC 3339 format.
              */
             server_time: string;
+        };
+        /** @description One active plugin. */
+        SystemPlugin: {
+            /** @description Stable plugin identifier, also its key in the Plugins configuration section. */
+            id: string;
+            /** @description Short human-readable plugin name. */
+            name: string;
+        };
+        /** @description One page of the active plugins, ordered by name. */
+        SystemPluginsResponse: {
+            items: components["schemas"]["SystemPlugin"][];
+            next_cursor?: components["schemas"]["NextCursor"];
         };
         /** @description Existing Review identity and exact revision for a terminal transition. */
         TerminalExamIntegrityReviewRequest: {
@@ -12090,6 +12630,16 @@ export interface components {
                 "application/json": components["schemas"]["CandidateExamWorkspaceListResponse"];
             };
         };
+        /** @description The request the candidate's Desktop took */
+        CandidateScreenClipOK: {
+            headers: {
+                "Cache-Control": components["headers"]["PrivateNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ScreenClipResponse"];
+            };
+        };
         /** @description Bounded ordered acknowledged Workspace changes or an explicit full-refresh signal */
         CandidateWorkspaceJournalOK: {
             headers: {
@@ -12482,6 +13032,16 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["ExamAttemptReallowResponse"];
+            };
+        };
+        /** @description The saved request, without the manager's reason; 201 when created, 200 when replayed */
+        ExamAttemptScreenClipOK: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ScreenClipResponse"];
             };
         };
         /** @description Exam Attempt suspended by a manager without exposing the private manager reason */
@@ -13660,6 +14220,38 @@ export interface components {
                 "application/json": components["schemas"]["PersonalAccessTokenResponse"];
             };
         };
+        /** @description One page of the compiled-in plugins. */
+        PluginListOK: {
+            headers: {
+                "Cache-Control": components["headers"]["PrivateNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["PluginListResponse"];
+            };
+        };
+        /** @description The plugin with its saved settings. */
+        PluginOK: {
+            headers: {
+                "Cache-Control": components["headers"]["PrivateNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "enabled": true,
+                 *       "enabled_by_default": true,
+                 *       "id": "oidc",
+                 *       "name": "OpenID Connect",
+                 *       "required": false,
+                 *       "revision": 2,
+                 *       "settings": "{}",
+                 *       "state": "active"
+                 *     }
+                 */
+                "application/json": components["schemas"]["PluginResponse"];
+            };
+        };
         /** @description Normalized private profile-picture rendition */
         ProfilePictureOK: {
             headers: {
@@ -14042,6 +14634,72 @@ export interface components {
                 "application/json": components["schemas"]["RoleResponse"];
             };
         };
+        /** @description The chunk is stored */
+        ScreenClipChunkOK: {
+            headers: {
+                "Cache-Control": components["headers"]["PrivateNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "chunk": 1
+                 *     }
+                 */
+                "application/json": components["schemas"]["ScreenClipChunkResponse"];
+            };
+        };
+        /** @description The whole clip */
+        ScreenClipContent: {
+            headers: {
+                "Accept-Ranges"?: "bytes";
+                "Cache-Control"?: "private, no-store";
+                [name: string]: unknown;
+            };
+            content: {
+                "video/mp4": string;
+                "video/webm": string;
+            };
+        };
+        /** @description One byte range of the clip */
+        ScreenClipPartialContent: {
+            headers: {
+                "Accept-Ranges"?: "bytes";
+                "Cache-Control"?: "private, no-store";
+                /** @description The range served, as bytes first-last/size. */
+                "Content-Range"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "video/mp4": string;
+                "video/webm": string;
+            };
+        };
+        /** @description The requests waiting for the candidate's Desktop */
+        ScreenClipRequestListOK: {
+            headers: {
+                "Cache-Control": components["headers"]["PrivateNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "items": []
+                 *     }
+                 */
+                "application/json": components["schemas"]["ScreenClipListResponse"];
+            };
+        };
+        /** @description Where the clip's upload stands */
+        ScreenClipUploadOK: {
+            headers: {
+                "Cache-Control": components["headers"]["PrivateNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ScreenClipUploadResponse"];
+            };
+        };
         /** @description Matches of each requested type within the caller's list visibility. */
         SearchOK: {
             headers: {
@@ -14373,6 +15031,34 @@ export interface components {
                 "application/json": components["schemas"]["SystemPingResponse"];
             };
         };
+        /** @description The active plugins */
+        SystemPluginsOK: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "items": [
+                 *         {
+                 *           "id": "cas",
+                 *           "name": "CAS"
+                 *         },
+                 *         {
+                 *           "id": "oidc",
+                 *           "name": "OpenID Connect"
+                 *         },
+                 *         {
+                 *           "id": "export.zip",
+                 *           "name": "Zip export"
+                 *         }
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["SystemPluginsResponse"];
+            };
+        };
         /** @description Rate limited */
         TooManyRequests: {
             headers: {
@@ -14537,6 +15223,8 @@ export interface components {
         PageLimit: number;
         /** @description The Personal Access Token record identifier; this is not the token secret. */
         PersonalAccessTokenID: components["schemas"]["ID"];
+        /** @description The plugin's ID, for example display-topology. */
+        PluginID: string;
         /** @description The Programme identifier. */
         ProgrammeID: components["schemas"]["ID"];
         /** @description The Programme Level identifier. */
@@ -14553,6 +15241,8 @@ export interface components {
         RoleBindingID: components["schemas"]["ID"];
         /** @description The Role identifier. */
         RoleID: components["schemas"]["ID"];
+        /** @description The screen clip identifier. */
+        ScreenClipID: components["schemas"]["ID"];
         /** @description Server-issued canonical preflight transaction ID returned by preparation. */
         SecurityPreflightID: string;
         /** @description The interactive Session identifier. */
@@ -14640,6 +15330,22 @@ export interface components {
                  *     }
                  */
                 "application/json": components["schemas"]["ArchiveExamRequest"];
+            };
+        };
+        /** @description The clip's media type, exact size and the SHA-256 of every chunk in order. */
+        BeginCandidateScreenClipUpload: {
+            content: {
+                /**
+                 * @example {
+                 *       "chunk_sha256": [
+                 *         "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+                 *         "fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9"
+                 *       ],
+                 *       "media_type": "video/mp4",
+                 *       "size_bytes": 8388618
+                 *     }
+                 */
+                "application/json": components["schemas"]["BeginCandidateScreenClipUploadRequest"];
             };
         };
         /** @description Supplies the one-time Invitation claim plus the validated post-authentication destination and optional device presentation. */
@@ -14832,6 +15538,18 @@ export interface components {
                 "application/json": components["schemas"]["StudentProgressionCommitRequest"];
             };
         };
+        /** @description The clip's content digest and the installation key's signature over it. */
+        CompleteCandidateScreenClipUpload: {
+            content: {
+                /**
+                 * @example {
+                 *       "content_digest": "7d1a54127b222502f5b79b5fb0803061152a44f92b37e23c6527baf665d4da9a",
+                 *       "signature": "IcHJ1bNctXFVhTF0-ay6LIFS44MN3zPJw36YbQsF8C0haUjE4cuDhg0o1daUkq3Rf_VIJ_Me5s6cnjdzIYeWdQ"
+                 *     }
+                 */
+                "application/json": components["schemas"]["CompleteCandidateScreenClipUploadRequest"];
+            };
+        };
         /** @description Supplies the one-time email-verification token delivered through the configured mail channel. */
         CompleteEmailVerification: {
             content: {
@@ -14909,61 +15627,70 @@ export interface components {
                  *           {
                  *             "allowed_application_ids": [],
                  *             "id": "process_application",
-                 *             "mode": "disabled"
+                 *             "mode": "disabled",
+                 *             "outcome": "flag"
                  *           },
                  *           {
                  *             "id": "interactive_session",
-                 *             "mode": "disabled"
+                 *             "mode": "disabled",
+                 *             "outcome": "flag"
                  *           },
                  *           {
                  *             "id": "clipboard",
                  *             "mode": "disabled",
                  *             "observe_os_clipboard_changes": false,
+                 *             "outcome": "flag",
                  *             "strategy": "disabled"
                  *           },
                  *           {
                  *             "candidate_print_commands": "not_applied",
                  *             "id": "printing",
                  *             "mode": "disabled",
-                 *             "monitored_spooler": "not_required"
+                 *             "monitored_spooler": "not_required",
+                 *             "outcome": "flag"
                  *           },
                  *           {
-                 *             "allowed_storage_function_class_ids": [],
                  *             "enabled_sub_capabilities": [],
                  *             "id": "removable_storage",
-                 *             "mode": "disabled"
+                 *             "mode": "disabled",
+                 *             "outcome": "flag"
                  *           },
                  *           {
                  *             "id": "virtualization",
                  *             "mode": "disabled",
+                 *             "outcome": "flag",
                  *             "rule": "not_applied"
                  *           },
                  *           {
-                 *             "allowed_adapter_class_ids": [],
-                 *             "allowed_managed_profile_ids": [],
-                 *             "allowed_tunnel_class_ids": [],
                  *             "enabled_sub_capabilities": [],
                  *             "id": "network_configuration",
-                 *             "mode": "disabled"
+                 *             "mode": "disabled",
+                 *             "outcome": "flag"
                  *           },
                  *           {
                  *             "concurrent_use_check": "not_required",
                  *             "id": "camera",
                  *             "mode": "disabled",
+                 *             "outcome": "flag",
                  *             "require_ready": false
                  *           },
                  *           {
                  *             "concurrent_use_check": "not_required",
                  *             "id": "microphone",
                  *             "mode": "disabled",
+                 *             "outcome": "flag",
                  *             "require_ready": false
                  *           },
                  *           {
                  *             "id": "external_capture",
-                 *             "mode": "disabled"
+                 *             "mode": "disabled",
+                 *             "outcome": "flag"
                  *           }
                  *         ],
-                 *         "registry_digest": "sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0"
+                 *         "registry_digest": "sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d",
+                 *         "screen_recording": {
+                 *           "enabled": true
+                 *         }
                  *       }
                  *     }
                  */
@@ -15617,8 +16344,7 @@ export interface components {
                 /**
                  * @example {
                  *       "configuration_manifest_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                 *       "native_registry_digest": "sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0",
-                 *       "source_manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                 *       "native_registry_digest": "sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d"
                  *     }
                  */
                 "application/json": components["schemas"]["PrepareSecurityPreflightRequest"];
@@ -15802,6 +16528,19 @@ export interface components {
                 "application/json": components["schemas"]["ReplaceInvitationRequest"];
             };
         };
+        /** @description Whether the plugin runs and its complete settings document. Every member is required. */
+        ReplacePluginSettings: {
+            content: {
+                /**
+                 * @example {
+                 *       "enabled": true,
+                 *       "expected_revision": 0,
+                 *       "settings": "{\"mode\":\"observe\"}"
+                 *     }
+                 */
+                "application/json": components["schemas"]["PluginSettingsRequest"];
+            };
+        };
         /** @description Complete configuration replacement. Every period is required, including zero values. Automatic deletion cannot be enabled. */
         ReplaceRetentionPolicy: {
             content: {
@@ -15831,6 +16570,20 @@ export interface components {
                  *     }
                  */
                 "application/json": components["schemas"]["UserSettingsReplaceRequest"];
+            };
+        };
+        /** @description The range to cut, either from the start of the session or from an explicit start, and the manager's private reason. */
+        RequestExamAttemptScreenClip: {
+            content: {
+                /**
+                 * @example {
+                 *       "end": "2026-11-12T10:00:00Z",
+                 *       "from_session_start": false,
+                 *       "reason": "The candidate seemed to read from a second screen.",
+                 *       "start": "2026-11-12T09:58:00Z"
+                 *     }
+                 */
+                "application/json": components["schemas"]["RequestExamAttemptScreenClipRequest"];
             };
         };
         /** @description Supplies the account email address to which an eligible password-reset message should be sent. */
@@ -15951,22 +16704,13 @@ export interface components {
             content: {
                 /**
                  * @example {
-                 *       "baseline": {
-                 *         "constrained_window": "unavailable",
-                 *         "content_protection": "unavailable",
-                 *         "single_physical_display": "unavailable"
-                 *       },
-                 *       "capability_matrix_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                 *       "capabilities": [],
                  *       "challenge": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                 *       "coverage": [],
                  *       "policy_content_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                  *       "policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                 *       "posture": "failed",
                  *       "reported_at": "2026-09-08T08:00:00.000Z",
-                 *       "security_session_id": "synthetic-security-session",
-                 *       "selected_source_categories": [],
-                 *       "source_manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                 *       "sources": []
+                 *       "rules": [],
+                 *       "security_session_id": "synthetic-security-session"
                  *     }
                  */
                 "application/json": components["schemas"]["SecurityPreflightReport"];
@@ -18526,6 +19270,190 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    listCandidateScreenClipRequests: {
+        parameters: {
+            query?: {
+                /** @description Maximum number of items in the page. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Opaque next_cursor from the previous page, returned unchanged; omit it for the first page. */
+                cursor?: components["parameters"]["PageCursor"];
+            };
+            header: {
+                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. */
+                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
+                /** @description The durable open Attempt Connection bound to the current authenticated Session. */
+                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
+            };
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ScreenClipRequestListOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    takeCandidateScreenClipRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. */
+                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
+                /** @description The durable open Attempt Connection bound to the current authenticated Session. */
+                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
+            };
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The screen clip identifier. */
+                screen_clip_id: components["parameters"]["ScreenClipID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["CandidateScreenClipOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getCandidateScreenClipUpload: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. Required together while the source is live. May be omitted after server-owned closure; omission never establishes historical authority. */
+                "X-Proctor-Attempt-Credential"?: components["parameters"]["NativeDeliveryCredential"];
+                /** @description The durable open Attempt Connection bound to the current authenticated Session. Required together while the source is live. May be omitted after server-owned closure; omission never establishes historical authority. */
+                "X-Proctor-Attempt-Connection-ID"?: components["parameters"]["NativeDeliveryConnectionID"];
+            };
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The screen clip identifier. */
+                screen_clip_id: components["parameters"]["ScreenClipID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ScreenClipUploadOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    beginCandidateScreenClipUpload: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. Required together while the source is live. May be omitted after server-owned closure; omission never establishes historical authority. */
+                "X-Proctor-Attempt-Credential"?: components["parameters"]["NativeDeliveryCredential"];
+                /** @description The durable open Attempt Connection bound to the current authenticated Session. Required together while the source is live. May be omitted after server-owned closure; omission never establishes historical authority. */
+                "X-Proctor-Attempt-Connection-ID"?: components["parameters"]["NativeDeliveryConnectionID"];
+            };
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The screen clip identifier. */
+                screen_clip_id: components["parameters"]["ScreenClipID"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["BeginCandidateScreenClipUpload"];
+        responses: {
+            200: components["responses"]["ScreenClipUploadOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    uploadCandidateScreenClipChunk: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. Required together while the source is live. May be omitted after server-owned closure; omission never establishes historical authority. */
+                "X-Proctor-Attempt-Credential"?: components["parameters"]["NativeDeliveryCredential"];
+                /** @description The durable open Attempt Connection bound to the current authenticated Session. Required together while the source is live. May be omitted after server-owned closure; omission never establishes historical authority. */
+                "X-Proctor-Attempt-Connection-ID"?: components["parameters"]["NativeDeliveryConnectionID"];
+            };
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The screen clip identifier. */
+                screen_clip_id: components["parameters"]["ScreenClipID"];
+                /** @description The chunk's number, from 1. */
+                chunk: number;
+            };
+            cookie?: never;
+        };
+        /** @description The chunk's raw bytes, exactly the size the declared upload gives that chunk: 8 MiB (8388608 bytes) for every chunk but the last. */
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            200: components["responses"]["ScreenClipChunkOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    completeCandidateScreenClipUpload: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. Required together while the source is live. May be omitted after server-owned closure; omission never establishes historical authority. */
+                "X-Proctor-Attempt-Credential"?: components["parameters"]["NativeDeliveryCredential"];
+                /** @description The durable open Attempt Connection bound to the current authenticated Session. Required together while the source is live. May be omitted after server-owned closure; omission never establishes historical authority. */
+                "X-Proctor-Attempt-Connection-ID"?: components["parameters"]["NativeDeliveryConnectionID"];
+            };
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The screen clip identifier. */
+                screen_clip_id: components["parameters"]["ScreenClipID"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["CompleteCandidateScreenClipUpload"];
+        responses: {
+            200: components["responses"]["CandidateScreenClipOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     appendNativeDelivery: {
         parameters: {
             query?: never;
@@ -19023,6 +19951,37 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["CandidateWorkspaceMutationOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getSecurityPolicyOverview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Sitting identifier. */
+                exam_sitting_id: components["parameters"]["ExamSittingID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The policy the readiness overview checks the machine against */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["PrivateNoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityPolicyOverviewResponse"];
+                };
+            };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -20159,6 +21118,113 @@ export interface operations {
         requestBody: components["requestBodies"]["ReallowExamAttempt"];
         responses: {
             200: components["responses"]["ExamAttemptReallowed"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    listExamAttemptScreenClips: {
+        parameters: {
+            query?: {
+                /** @description Maximum number of items in the page. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Opaque next_cursor from the previous page, returned unchanged; omit it for the first page. */
+                cursor?: components["parameters"]["PageCursor"];
+            };
+            header?: never;
+            path: {
+                /** @description The Exam identifier. */
+                exam_id: components["parameters"]["ExamID"];
+                /** @description The Exam Sitting identifier. */
+                exam_sitting_id: components["parameters"]["ExamSittingID"];
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The Attempt's screen clips */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": []
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ScreenClipListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    requestExamAttemptScreenClip: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required opaque client key. Identical semantic commands replay the committed outcome for at least 24 hours; reuse with different input is a conflict. */
+                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
+            };
+            path: {
+                /** @description The Exam identifier. */
+                exam_id: components["parameters"]["ExamID"];
+                /** @description The Exam Sitting identifier. */
+                exam_sitting_id: components["parameters"]["ExamSittingID"];
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["RequestExamAttemptScreenClip"];
+        responses: {
+            200: components["responses"]["ExamAttemptScreenClipOK"];
+            201: components["responses"]["ExamAttemptScreenClipOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    playExamAttemptScreenClip: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description One byte range, such as bytes=0-1048575, bytes=1048576- or bytes=-4096. */
+                Range?: string;
+            };
+            path: {
+                /** @description The Exam identifier. */
+                exam_id: components["parameters"]["ExamID"];
+                /** @description The Exam Sitting identifier. */
+                exam_sitting_id: components["parameters"]["ExamSittingID"];
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The screen clip identifier. */
+                screen_clip_id: components["parameters"]["ScreenClipID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ScreenClipContent"];
+            206: components["responses"]["ScreenClipPartialContent"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -21708,6 +22774,54 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    listPlugins: {
+        parameters: {
+            query?: {
+                /** @description Maximum number of items in the page. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Opaque next_cursor from the previous page, returned unchanged; omit it for the first page. */
+                cursor?: components["parameters"]["PageCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PluginListOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    replacePluginSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required opaque client key. Identical semantic commands replay the committed outcome for at least 24 hours; reuse with different input is a conflict. */
+                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
+            };
+            path: {
+                /** @description The plugin's ID, for example display-topology. */
+                plugin_id: components["parameters"]["PluginID"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["ReplacePluginSettings"];
+        responses: {
+            200: components["responses"]["PluginOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     getProgrammeLevel: {
         parameters: {
             query?: never;
@@ -22717,6 +23831,27 @@ export interface operations {
             200: components["responses"]["SystemPingOK"];
             400: components["responses"]["BadRequest"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    listActiveSystemPlugins: {
+        parameters: {
+            query?: {
+                /** @description Maximum number of items in the page. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Opaque next_cursor from the previous page, returned unchanged; omit it for the first page. */
+                cursor?: components["parameters"]["PageCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["SystemPluginsOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };
     };

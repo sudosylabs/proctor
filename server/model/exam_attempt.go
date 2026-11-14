@@ -8,6 +8,7 @@
 package model
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -449,25 +450,14 @@ func (c *AttemptConnection) Close(reason AttemptConnectionCloseReason, at time.T
 	return nil
 }
 
-// IntegrityPolicyKind identifies the bounded detector policy that caused
-// evidence and a flag. It is not a verdict or severity supplied by a client.
-type IntegrityPolicyKind string
-
-const (
-	IntegrityPolicyConnectionLoss    IntegrityPolicyKind = "connection_loss"
-	IntegrityPolicyFocusLoss         IntegrityPolicyKind = "focus_loss"
-	IntegrityPolicyBrowserNavigation IntegrityPolicyKind = "browser_navigation"
-)
-
-func (k IntegrityPolicyKind) IsValid() bool {
-	return k == IntegrityPolicyConnectionLoss || k == IntegrityPolicyFocusLoss || k == IntegrityPolicyBrowserNavigation
-}
-
 // IntegrityEvidence is neutral server-owned evidence for one policy flag.
 // Connection Loss evidence intentionally has no accusation, free-form text,
 // client time, credential, Session identity, or transport payload.
 type IntegrityEvidence struct {
-	Browser              *BrowserIntegrityEvidence
+	Browser *BrowserIntegrityEvidence
+	// Detail is a capability's own evidence: one bounded JSON object the
+	// core stores and presents but does not read. Core kinds carry none.
+	Detail               json.RawMessage
 	ID                   IntegrityEvidenceID
 	AttemptID            ExamAttemptID
 	ParticipationID      AttemptParticipationID
@@ -520,6 +510,12 @@ func (e *IntegrityEvidence) Validate() error {
 		e.RecordedAt.Before(e.ObservedAt) {
 		return invalidModelError("IntegrityEvidence.Validate", "integrity_evidence", "", "invalid Integrity Evidence", "")
 	}
+	if e.Kind.IsCapability() {
+		return e.validateCapability()
+	}
+	if e.Detail != nil {
+		return invalidModelError("IntegrityEvidence.Validate", "integrity_evidence", "", "core Integrity Evidence carries no detail", "")
+	}
 
 	switch e.Kind {
 	case IntegrityPolicyBrowserNavigation:
@@ -559,6 +555,21 @@ func (e *IntegrityEvidence) Validate() error {
 	return nil
 }
 
+func (e *IntegrityEvidence) validateCapability() error {
+	if e.Browser != nil ||
+		!e.FlagID.IsValid() ||
+		!e.SignalID.IsZero() ||
+		e.Sequence != 0 ||
+		e.DurationMilliseconds != 0 ||
+		e.Source != "" ||
+		e.MissingBefore != 0 ||
+		!validCapabilityEvidenceDetail(e.Detail) {
+		return invalidModelError("IntegrityEvidence.Validate", "integrity_evidence", "", "invalid capability Integrity Evidence", "")
+	}
+
+	return nil
+}
+
 type IntegrityFlagState string
 
 const IntegrityFlagOpen IntegrityFlagState = "open"
@@ -570,8 +581,11 @@ type IntegrityFlag struct {
 	AttemptID  ExamAttemptID
 	Generation int64
 	Kind       IntegrityPolicyKind
-	State      IntegrityFlagState
-	CreatedAt  time.Time
+	// NativeRuleID is the rule a native Flag is for: each rule that stops
+	// being met has its own Flag. It is empty for every other kind.
+	NativeRuleID string
+	State        IntegrityFlagState
+	CreatedAt    time.Time
 }
 
 func NewIntegrityFlag(
@@ -589,6 +603,25 @@ func NewIntegrityFlag(
 	return flag, nil
 }
 
+// NewNativeIntegrityFlag opens the Flag of one native rule on its
+// capability.
+func NewNativeIntegrityFlag(
+	id IntegrityFlagID,
+	attemptID ExamAttemptID,
+	generation int64,
+	capability NativeCapabilityID,
+	ruleID string,
+	at time.Time,
+) (*IntegrityFlag, error) {
+	flag := &IntegrityFlag{ID: id, AttemptID: attemptID, Generation: generation, Kind: NativeIntegrityPolicyKind(capability),
+		NativeRuleID: ruleID, State: IntegrityFlagOpen, CreatedAt: TimeUTC(at)}
+	if err := flag.Validate(); err != nil {
+		return nil, err
+	}
+
+	return flag, nil
+}
+
 func (f *IntegrityFlag) Validate() error {
 	if f == nil ||
 		!f.ID.IsValid() ||
@@ -596,7 +629,9 @@ func (f *IntegrityFlag) Validate() error {
 		f.Generation < 1 ||
 		!f.Kind.IsValid() ||
 		f.State != IntegrityFlagOpen ||
-		f.CreatedAt.IsZero() {
+		f.CreatedAt.IsZero() ||
+		strings.HasPrefix(string(f.Kind), NativeIntegrityPolicyNamespace+".") != (f.NativeRuleID != "") ||
+		f.NativeRuleID != "" && !isNativeRuleID(f.NativeRuleID) {
 		return invalidModelError("IntegrityFlag.Validate", "integrity_flag", "", "invalid Integrity Flag", "")
 	}
 
@@ -627,6 +662,9 @@ type AttemptSuspensionCandidateReason string
 const (
 	AttemptSuspensionCandidateReasonSecureContinuityLost AttemptSuspensionCandidateReason = "secure_connectivity_lost"
 	AttemptSuspensionCandidateReasonFocusLossPolicy      AttemptSuspensionCandidateReason = "focus_policy_review_required"
+	// AttemptSuspensionCandidateReasonNativePolicy is a native capability's
+	// enforced rule that stayed not met.
+	AttemptSuspensionCandidateReasonNativePolicy AttemptSuspensionCandidateReason = "native_policy_review_required"
 	// AttemptSuspensionCandidateReasonManagerSuspended is the only safe
 	// candidate explanation of a manual suspension; the manager's private
 	// reason is never shown to the candidate.
@@ -641,7 +679,7 @@ func (r AttemptSuspensionCandidateReason) IsValid() bool {
 
 // IsPolicy reports whether the reason belongs to automatic policy enforcement.
 func (r AttemptSuspensionCandidateReason) IsPolicy() bool {
-	return r == AttemptSuspensionCandidateReasonSecureContinuityLost || r == AttemptSuspensionCandidateReasonFocusLossPolicy
+	return integrityPolicySuspends(r)
 }
 
 // AttemptSuspension is one append-preserving blocking episode. A policy

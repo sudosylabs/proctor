@@ -189,7 +189,7 @@ func TestFocusLossEventsSeparateNeutralCandidateWarningFromBoundedManagerFlag(t 
 	at := time.Date(2026, time.August, 20, 9, 5, 0, 0, time.UTC)
 	warning, err := NewCandidateExamAttemptFocusLossWarningEvent(sittingID, attemptID, candidateID, at)
 	require.NoError(t, err)
-	flagged, err := NewExamAttemptIntegrityFlaggedEvent(sittingID, attemptID, candidateID, flagID,
+	flagged, err := NewExamAttemptIntegrityFlaggedEvent(sittingID, attemptID, candidateID, flagID, model.IntegrityPolicyFocusLoss,
 		model.IntegrityOutcomeFlagAndWarn, 100, 17, at)
 	require.NoError(t, err)
 	require.Equal(t, "exam_attempt_focus_warning", warning.Name)
@@ -279,4 +279,19 @@ func TestExamAttemptSuspendedEventsValidateProvenancePerSource(t *testing.T) {
 			require.Equal(t, test.valid, err == nil, "error = %v", err)
 		})
 	}
+}
+
+func TestTheScreenClipHintReachesOnlyTheCandidateAndCarriesNoRequest(t *testing.T) {
+	t.Parallel()
+	sittingID, attemptID, candidateID := model.NewExamSittingID(), model.NewExamAttemptID(), model.NewUserID()
+	at := time.Date(2026, time.November, 13, 9, 5, 0, 0, time.UTC)
+	hint, err := NewCandidateScreenClipsRequestedEvent(sittingID, attemptID, candidateID, at)
+	require.NoError(t, err)
+	require.Equal(t, "exam_attempt_screen_clips_requested", hint.Name)
+	require.Equal(t, candidateID, hint.UserID)
+	require.Equal(t, model.ActionExamSittingParticipate, hint.Action)
+	require.JSONEq(t, `{"exam_sitting_id":"`+sittingID.String()+`","exam_attempt_id":"`+attemptID.String()+`","changed_at":"2026-11-13T09:05:00Z"}`,
+		string(hint.Data))
+	_, err = NewCandidateScreenClipsRequestedEvent(sittingID, attemptID, "", at)
+	require.Error(t, err)
 }

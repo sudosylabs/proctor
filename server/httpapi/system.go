@@ -32,19 +32,38 @@ type healthResponse struct {
 type systemHandlers struct {
 	health    Health
 	buildInfo BuildInfo
+	plugins   Plugins
 	app       DesktopCompatibilityApplication
 	now       func() time.Time
+}
+
+// PluginSummary is one active plugin as clients see it.
+type PluginSummary struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// Plugins is what the HTTP API reports about the node's plugins. A nil
+// Plugins reports none, and none degraded.
+type Plugins interface {
+	// Active lists the plugins that are active on this node.
+	Active() []PluginSummary
+	// Degraded reports whether an enabled plugin has failed. The node still
+	// serves; readiness says "degraded" rather than failing.
+	Degraded() bool
 }
 
 func systemResourceWithApplication(
 	health Health,
 	buildInfo BuildInfo,
+	plugins Plugins,
 	app DesktopCompatibilityApplication,
 	now func() time.Time,
 ) route.Resource {
 	h := systemHandlers{
 		health:    health,
 		buildInfo: buildInfo,
+		plugins:   plugins,
 		app:       app,
 		now:       now,
 	}
@@ -78,6 +97,13 @@ func systemResourceWithApplication(
 			Path:   "/system/version",
 			Auth:   route.AuthPublic,
 			Handle: h.version,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/system/plugins",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{"request.invalid"},
+			Handle: h.activePlugins,
 		},
 	)
 }
@@ -126,11 +152,35 @@ func (h systemHandlers) readiness(request route.Request) (route.Result, error) {
 			RequestID: route.RequestID(request.Context),
 		}), nil
 	}
+	if h.plugins != nil && h.plugins.Degraded() {
+		return route.JSON(http.StatusOK, healthResponse{Status: "degraded"}), nil
+	}
 	return route.JSON(http.StatusOK, healthResponse{Status: "ok"}), nil
 }
 
 func (h systemHandlers) version(route.Request) (route.Result, error) {
 	return route.JSON(http.StatusOK, h.buildInfo), nil
+}
+
+// activePlugins pages the active plugins in name order.
+func (h systemHandlers) activePlugins(request route.Request) (route.Result, error) {
+	var plugins []PluginSummary
+	if h.plugins != nil {
+		plugins = h.plugins.Active()
+	}
+	response, err := route.BoundedList(
+		request,
+		"plugin",
+		plugins,
+		func(plugin PluginSummary) route.BoundedKey { return route.BoundedKey{Name: plugin.Name, ID: plugin.ID} },
+		func(plugin PluginSummary) PluginSummary { return plugin },
+	)
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, response).WithHeaders(http.Header{
+		"Cache-Control": {"no-store"},
+	}), nil
 }
 
 func (h systemHandlers) ping(request route.Request) (route.Result, error) {

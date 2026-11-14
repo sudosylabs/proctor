@@ -31,14 +31,15 @@ var storeErrors = apperror.StoreTable{
 		apperror.Conflicts("security_preflight", map[string]apperror.Code{
 			"attempt_not_ready":         "exam.security.attempt_not_ready",
 			"configuration_unsupported": "exam.security.configuration_unsupported",
+			"interaction_blocked":       "exam.security.interaction_blocked",
 			"policy_changed":            "exam.security.policy_changed",
-			"posture_blocked":           "exam.security.posture_blocked",
 			"preflight_consumed":        "exam.security.preflight_consumed",
 			"preflight_expired":         "exam.security.preflight_expired",
 			"preflight_rate_limited":    "exam.security.preflight_rate_limited",
 			"preflight_report_changed":  "exam.security.preflight_report_changed",
 			"preflight_required":        "exam.security.preflight_required",
 			"preflight_superseded":      "exam.security.preflight_superseded",
+			"readiness_unmet":           "exam.security.readiness_unmet",
 			"resume_required":           "exam.security.resume_required",
 			"session_changed":           "exam.security.session_changed",
 		}),
@@ -49,6 +50,11 @@ var storeErrors = apperror.StoreTable{
 		"exam_sitting_state":                       "exam.attempt.sitting_not_open",
 		"exam_sitting_deadline_reached":            "exam.attempt.sitting_not_open",
 		"exam_attempt_state":                       "exam.attempt.state_conflict",
+		"screen_recording_disabled":                "exam.attempt.screen_recording_off",
+		"screen_clip_limit":                        "exam.attempt.screen_clip_limit_reached",
+		"screen_clip_bytes":                        "exam.attempt.screen_clip_too_large",
+		"screen_clip_incomplete":                   "exam.attempt.screen_clip_incomplete",
+		"screen_clip_state":                        "exam.attempt.state_conflict",
 		"exam_attempt_management_authority":        "exam.attempt.management_authority_conflict",
 		"desktop_compatibility_policy_revision":    "exam.attempt.desktop_incompatible",
 		"exam_attempt_revision":                    "exam.attempt.revision_conflict",
@@ -159,6 +165,15 @@ func (s *Service) failAudit(ctx context.Context, auditID model.AuditEventID, err
 		return errors.Join(mapped, auditErr)
 	}
 	return mapped
+}
+
+// recordStatusDiscrepancies counts, as operational events, the native rule
+// statuses on which Desktop disagreed with the server. The server's status
+// always decides; a disagreement is only measured.
+func (s *Service) recordStatusDiscrepancies(count int64) {
+	for range count {
+		s.recordOperational("native_status_discrepancy", nil)
+	}
 }
 
 func (s *Service) recordOperational(event string, err error) {

@@ -113,6 +113,7 @@ type SQLStoreStores struct {
 	userSettings               store.UserSettingsStore
 	file                       store.FileStore
 	job                        store.JobStore
+	domainEvent                store.DomainEventStore
 	mail                       store.MailStore
 	externalIdentity           store.ExternalIdentityStore
 	externalLoginState         store.ExternalLoginStateStore
@@ -135,6 +136,7 @@ type SQLStoreStores struct {
 	installation               store.InstallationStore
 	accessPolicy               store.AccessPolicyStore
 	desktopCompatibilityPolicy store.DesktopCompatibilityPolicyStore
+	pluginSettings             store.PluginSettingsStore
 	retentionPolicy            store.RetentionPolicyStore
 	retention                  store.RetentionStore
 	clusterDiscovery           store.ClusterDiscoveryStore
@@ -267,6 +269,7 @@ func New(ctx context.Context, settings Settings) (*SQLStore, error) {
 	sqlStore.stores.installation = newSQLInstallationStore(sqlStore)
 	sqlStore.stores.accessPolicy = newSQLAccessPolicyStore(sqlStore)
 	sqlStore.stores.desktopCompatibilityPolicy = newSQLDesktopCompatibilityPolicyStore(sqlStore)
+	sqlStore.stores.pluginSettings = newSQLPluginSettingsStore(sqlStore)
 	sqlStore.stores.retentionPolicy = newSQLRetentionPolicyStore(sqlStore)
 	sqlStore.stores.retention = newSQLRetentionStore(sqlStore)
 	sqlStore.stores.examRecords = newSQLExamRecordsStore(sqlStore)
@@ -274,6 +277,7 @@ func New(ctx context.Context, settings Settings) (*SQLStore, error) {
 	sqlStore.stores.clusterDiscovery = newSQLClusterDiscoveryStore(sqlStore)
 	sqlStore.stores.servingNodeLease = newSQLServingNodeLeaseStore(sqlStore)
 	sqlStore.stores.commandOutcome = newSQLCommandOutcomeStore(sqlStore)
+	sqlStore.stores.domainEvent = newSQLDomainEventStore(sqlStore)
 	return sqlStore, nil
 }
 
@@ -480,6 +484,8 @@ func (ss *SQLStore) DesktopCompatibilityPolicy() store.DesktopCompatibilityPolic
 	return ss.stores.desktopCompatibilityPolicy
 }
 
+func (ss *SQLStore) PluginSettings() store.PluginSettingsStore { return ss.stores.pluginSettings }
+
 func (ss *SQLStore) ClusterDiscovery() store.ClusterDiscoveryStore {
 	return ss.stores.clusterDiscovery
 }
@@ -489,6 +495,9 @@ func (ss *SQLStore) ServingNodeLease() store.ServingNodeLeaseStore {
 }
 
 func (ss *SQLStore) CommandOutcome() store.CommandOutcomeStore { return ss.stores.commandOutcome }
+
+// DomainEvent returns the domain-event outbox adapter.
+func (ss *SQLStore) DomainEvent() store.DomainEventStore { return ss.stores.domainEvent }
 
 func (ss *SQLStore) GetMaster() *sqlxDBWrapper {
 	return ss.masterX

@@ -23,7 +23,6 @@ type PrepareSecurityPreflightCommand struct {
 	SittingID                        model.ExamSittingID
 	AttemptID                        model.ExamAttemptID
 	NativeRegistryDigest             string
-	SourceManifestDigest             string
 	ConfigurationManifestFingerprint string
 	IdempotencyKey                   string
 }
@@ -102,7 +101,6 @@ func (s *Service) PrepareExamSecurityPreflight(
 	if !command.SittingID.IsValid() ||
 		command.AttemptID != "" && !command.AttemptID.IsValid() ||
 		!model.IsValidSHA256Fingerprint(command.NativeRegistryDigest) ||
-		!model.IsValidSHA256Fingerprint(command.SourceManifestDigest) ||
 		!model.IsValidSHA256Fingerprint(command.ConfigurationManifestFingerprint) {
 		return nil, apperror.Invalid("exam.attempt.invalid", "security_preflight")
 	}
@@ -120,13 +118,11 @@ func (s *Service) PrepareExamSecurityPreflight(
 			SittingID     model.ExamSittingID `json:"sitting_id"`
 			AttemptID     model.ExamAttemptID `json:"attempt_id,omitempty"`
 			Registry      string              `json:"native_registry_digest"`
-			Manifest      string              `json:"source_manifest_digest"`
 			Configuration string              `json:"configuration_manifest_fingerprint"`
 		}{
 			command.SittingID,
 			command.AttemptID,
 			command.NativeRegistryDigest,
-			command.SourceManifestDigest,
 			command.ConfigurationManifestFingerprint,
 		},
 	)
@@ -147,7 +143,6 @@ func (s *Service) PrepareExamSecurityPreflight(
 			PreflightID:                      model.NewID(),
 			Challenge:                        model.NewCredentialToken(),
 			NativeRegistryDigest:             command.NativeRegistryDigest,
-			SourceManifestDigest:             command.SourceManifestDigest,
 			ConfigurationManifestFingerprint: command.ConfigurationManifestFingerprint,
 			AuditEventID:                     audit,
 			AuditAt:                          s.now(),
@@ -228,6 +223,7 @@ func (s *Service) ReportExamSecurityPreflight(
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(errors.New("preflight Store returned an invalid report receipt"))
 	}
 
+	s.recordStatusDiscrepancies(preflightStatusDiscrepancies(command.Report.Rules, result.Rules))
 	return result, nil
 }
 
@@ -274,56 +270,99 @@ func (s *Service) RecoverExamSecurityPolicy(
 	return result, nil
 }
 
-type UpdateSecurityCoverageCommand struct {
+// UpdateExamSecurityCommand is a security update sent on the candidate's live
+// Participation, fenced by its generation.
+type UpdateExamSecurityCommand struct {
 	Access          CandidateAccess
 	ParticipationID model.AttemptParticipationID
 	Generation      int64
-	Coverage        model.SecurityCoverageRenewal
+	Control         model.SecurityControl
 }
 
-// UpdateExamSecurityCoverage renews the security coverage reported by the
-// candidate's live Attempt Participation, fenced by participation generation
-// and checked against the caller's desktop build.
-func (s *Service) UpdateExamSecurityCoverage(
+// UpdateExamSecurity applies the security control reported on the
+// candidate's live Attempt Participation (its sequence, binding and delivery
+// watermarks), fenced by participation generation and checked against the
+// caller's desktop build.
+func (s *Service) UpdateExamSecurity(
 	ctx context.Context,
 	inv invocation.Invocation,
-	command UpdateSecurityCoverageCommand,
-) (_ model.SecurityCoverageResult, resultErr error) {
+	command UpdateExamSecurityCommand,
+) (_ model.SecurityControlResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	// Malformed updates are refused before they can occupy the live lane.
 	selector, err := candidateSelector(inv, command.Access)
 	if err != nil {
-		return model.SecurityCoverageResult{}, err
+		return model.SecurityControlResult{}, err
 	}
-	if !command.ParticipationID.IsValid() || command.Generation < 1 || command.Coverage.Validate() != nil {
-		return model.SecurityCoverageResult{}, apperror.Invalid("exam.attempt.invalid", "security_coverage")
+	if !command.ParticipationID.IsValid() || command.Generation < 1 || command.Control.Validate() != nil {
+		return model.SecurityControlResult{}, apperror.Invalid("exam.attempt.invalid", "security_control")
 	}
 
 	release, admissionErr := s.enterControl(ctx, inv, true)
 	if admissionErr != nil {
-		return model.SecurityCoverageResult{}, admissionErr
+		return model.SecurityControlResult{}, admissionErr
 	}
 	defer release()
 
 	build, err := s.desktopBuilds.ResolveAttemptDesktopBuild(ctx, inv.Principal())
 	if err != nil || build.Build.Validate() != nil || build.Build.NativeAgreement == nil || build.CompatibilityPolicyRevision < 1 {
-		return model.SecurityCoverageResult{}, apperror.New("exam.attempt.desktop_incompatible").Wrap(err)
+		return model.SecurityControlResult{}, apperror.New("exam.attempt.desktop_incompatible").Wrap(err)
 	}
 
-	result, err := s.attempts.UpdateSecurityCoverage(ctx, &store.ExamAttemptSecurityCoverageUpdate{
+	result, err := s.attempts.UpdateSecurity(ctx, &store.ExamAttemptSecurityUpdate{
 		Access:                             selector,
 		ParticipationID:                    command.ParticipationID,
 		Generation:                         command.Generation,
 		DesktopBuild:                       build.Build,
 		DesktopCompatibilityPolicyRevision: build.CompatibilityPolicyRevision,
-		Coverage:                           command.Coverage,
+		Control:                            command.Control,
 	})
 	if err != nil {
-		return model.SecurityCoverageResult{}, storeError(securityPreflightStoreErrors, err)
+		return model.SecurityControlResult{}, storeError(securityPreflightStoreErrors, err)
 	}
 	if result.Validate() != nil {
-		return model.SecurityCoverageResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent security coverage result"))
+		return model.SecurityControlResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent security control result"))
 	}
 
 	return result, nil
+}
+
+// SecurityPolicyOverview resolves the Sitting's current policy for the
+// candidate's readiness overview, under the same eligibility checks as
+// preparation. It creates no preflight, records nothing, and grants nothing:
+// the preflight prepared at Start is still the binding check.
+func (s *Service) SecurityPolicyOverview(
+	ctx context.Context,
+	inv invocation.Invocation,
+	sittingID model.ExamSittingID,
+) (_ *store.SecurityPolicyOverview, resultErr error) {
+	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
+	if !sittingID.IsValid() {
+		return nil, apperror.Invalid("exam.attempt.invalid", "exam_sitting_id")
+	}
+	preflightAccess, err := s.securityPreflightAccess(ctx, inv, sittingID)
+	if err != nil {
+		return nil, err
+	}
+	overview, err := s.securityPreflight.ReadSecurityPolicyOverview(ctx, preflightAccess)
+	if err != nil {
+		return nil, storeError(securityPreflightStoreErrors, err)
+	}
+	return overview, nil
+}
+
+// preflightStatusDiscrepancies counts the readiness rules whose status
+// Desktop reported differently from the server's own.
+func preflightStatusDiscrepancies(desktop, server []model.NativeRuleReport) int64 {
+	decided := make(map[string]model.NativeRuleReport, len(server))
+	for _, status := range server {
+		decided[status.RuleID] = status
+	}
+	var disagreed int64
+	for _, status := range desktop {
+		if own, known := decided[status.RuleID]; known && own != status {
+			disagreed++
+		}
+	}
+	return disagreed
 }

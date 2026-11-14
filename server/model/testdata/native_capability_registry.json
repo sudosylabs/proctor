@@ -1,0 +1,1727 @@
+{
+  "description": "Proctor native capability registry: capabilities, typed rule fields, reasons, baseline rules and fact schemas, generated from the Rust types.",
+  "fact_schemas": {
+    "camera": {
+      "state": {
+        "$defs": {
+          "Coverage": {
+            "oneOf": [
+              {
+                "enum": [
+                  "readiness_and_use",
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "readiness_only",
+                "description": "Devices and readiness are read; other-application use is not readable here.",
+                "type": "string"
+              }
+            ]
+          },
+          "Known": {
+            "enum": [
+              "yes",
+              "no",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Readiness": {
+            "enum": [
+              "ready",
+              "not_ready",
+              "unknown"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "The camera state. The permission is in the envelope.",
+        "properties": {
+          "coverage": {
+            "$ref": "#/$defs/Coverage"
+          },
+          "in_use_by_other_app": {
+            "$ref": "#/$defs/Known"
+          },
+          "physical_devices": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "ready": {
+            "$ref": "#/$defs/Readiness",
+            "description": "A physical camera is connected and not suspended, and the permission is granted."
+          },
+          "virtual_devices": {
+            "description": "Software cameras, and cameras that cannot be classified. They never make the camera ready.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "coverage",
+          "physical_devices",
+          "virtual_devices",
+          "ready",
+          "in_use_by_other_app"
+        ],
+        "title": "CameraState",
+        "type": "object"
+      },
+      "summary": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "physical_devices": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "virtual_devices": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "physical_devices",
+          "virtual_devices"
+        ],
+        "title": "CameraSummary",
+        "type": "object"
+      }
+    },
+    "candidate_window": {
+      "state": {
+        "$defs": {
+          "Focus": {
+            "enum": [
+              "focused",
+              "not_focused",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Occlusion": {
+            "enum": [
+              "none",
+              "covered",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Placement": {
+            "enum": [
+              "maximized",
+              "normal",
+              "minimized",
+              "fullscreen",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Presence": {
+            "enum": [
+              "present",
+              "absent"
+            ],
+            "type": "string"
+          },
+          "Protection": {
+            "enum": [
+              "verified",
+              "failed",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Visibility": {
+            "enum": [
+              "visible",
+              "hidden",
+              "unknown"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "close_attempts": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "content_protection": {
+            "$ref": "#/$defs/Protection"
+          },
+          "focus": {
+            "$ref": "#/$defs/Focus"
+          },
+          "occlusion": {
+            "$ref": "#/$defs/Occlusion"
+          },
+          "placement": {
+            "$ref": "#/$defs/Placement"
+          },
+          "presence": {
+            "$ref": "#/$defs/Presence"
+          },
+          "visibility": {
+            "$ref": "#/$defs/Visibility"
+          }
+        },
+        "required": [
+          "presence",
+          "focus",
+          "visibility",
+          "placement",
+          "content_protection",
+          "occlusion",
+          "close_attempts"
+        ],
+        "title": "CandidateWindowState",
+        "type": "object"
+      },
+      "summary": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "clipboard": {
+      "state": {
+        "$defs": {
+          "Coverage": {
+            "enum": [
+              "counter_polling",
+              "unavailable"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "description": "Host clipboard changes since this capability was activated.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "coverage": {
+            "$ref": "#/$defs/Coverage"
+          }
+        },
+        "required": [
+          "coverage",
+          "changes"
+        ],
+        "title": "ClipboardState",
+        "type": "object"
+      },
+      "summary": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "display": {
+      "state": {
+        "$defs": {
+          "Connection": {
+            "enum": [
+              "direct",
+              "indirect",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "DisplayKind": {
+            "enum": [
+              "physical",
+              "virtual",
+              "wireless",
+              "remote",
+              "specialized",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "DisplayTarget": {
+            "additionalProperties": false,
+            "description": "One display. `target_id` is opaque and stable only within one agent session.",
+            "properties": {
+              "active": {
+                "type": "boolean"
+              },
+              "built_in": {
+                "type": "boolean"
+              },
+              "connection": {
+                "$ref": "#/$defs/Connection"
+              },
+              "kind": {
+                "$ref": "#/$defs/DisplayKind"
+              },
+              "mirror_of": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "power": {
+                "$ref": "#/$defs/Power"
+              },
+              "primary": {
+                "$ref": "#/$defs/Primary"
+              },
+              "target_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "target_id",
+              "active",
+              "built_in",
+              "kind",
+              "connection",
+              "power",
+              "primary"
+            ],
+            "type": "object"
+          },
+          "Power": {
+            "enum": [
+              "awake",
+              "asleep",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Primary": {
+            "enum": [
+              "primary",
+              "not_primary",
+              "unknown"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "targets": {
+            "items": {
+              "$ref": "#/$defs/DisplayTarget"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "targets"
+        ],
+        "title": "DisplayState",
+        "type": "object"
+      },
+      "summary": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Derived only from the targets; sent with every fact.",
+        "properties": {
+          "active_physical": {
+            "description": "Physical, active and not a mirror.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "active_total": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "connected_total": {
+            "description": "Every connected target, including inactive, asleep and mirrored ones.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "mirrored": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "remote": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "specialized": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unknown_kind": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "virtual": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "wireless": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "active_physical",
+          "active_total",
+          "connected_total",
+          "mirrored",
+          "virtual",
+          "wireless",
+          "remote",
+          "specialized",
+          "unknown_kind"
+        ],
+        "title": "DisplaySummary",
+        "type": "object"
+      }
+    },
+    "interactive_session": {
+      "state": {
+        "$defs": {
+          "ConsoleOwner": {
+            "enum": [
+              "candidate",
+              "other_human",
+              "none",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Coverage": {
+            "oneOf": [
+              {
+                "enum": [
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "snapshot_only",
+                "description": "Read every [`POLL_INTERVAL`]: a change shorter than one interval can go unseen.",
+                "type": "string"
+              }
+            ]
+          },
+          "Lock": {
+            "enum": [
+              "unlocked",
+              "locked",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "RemoteAttachment": {
+            "enum": [
+              "absent",
+              "present",
+              "unknown"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "console_owner": {
+            "$ref": "#/$defs/ConsoleOwner"
+          },
+          "coverage": {
+            "$ref": "#/$defs/Coverage"
+          },
+          "lock": {
+            "$ref": "#/$defs/Lock"
+          },
+          "other_human_sessions": {
+            "description": "`None` when the platform cannot count other sessions.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "remote_attachment": {
+            "$ref": "#/$defs/RemoteAttachment",
+            "description": "`unknown` where the platform cannot see remote attachment unprivileged (macOS screen\nsharing)."
+          }
+        },
+        "required": [
+          "coverage",
+          "console_owner",
+          "lock",
+          "remote_attachment"
+        ],
+        "title": "InteractiveSessionState",
+        "type": "object"
+      },
+      "summary": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "microphone": {
+      "state": {
+        "$defs": {
+          "Coverage": {
+            "oneOf": [
+              {
+                "enum": [
+                  "readiness_and_use",
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "readiness_only",
+                "description": "Devices and readiness are read; other-application use is not readable here.",
+                "type": "string"
+              }
+            ]
+          },
+          "Known": {
+            "enum": [
+              "yes",
+              "no",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Readiness": {
+            "enum": [
+              "ready",
+              "not_ready",
+              "unknown"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "The microphone state. The permission is in the envelope.",
+        "properties": {
+          "coverage": {
+            "$ref": "#/$defs/Coverage"
+          },
+          "devices": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "in_use_by_other_app": {
+            "$ref": "#/$defs/Known"
+          },
+          "ready": {
+            "$ref": "#/$defs/Readiness",
+            "description": "A microphone is available and the permission is granted."
+          }
+        },
+        "required": [
+          "coverage",
+          "devices",
+          "ready",
+          "in_use_by_other_app"
+        ],
+        "title": "MicrophoneState",
+        "type": "object"
+      },
+      "summary": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "devices": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "devices"
+        ],
+        "title": "MicrophoneSummary",
+        "type": "object"
+      }
+    },
+    "network": {
+      "state": {
+        "$defs": {
+          "ManagedVpn": {
+            "enum": [
+              "inactive",
+              "active",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Proxy": {
+            "enum": [
+              "none",
+              "manual",
+              "automatic_config",
+              "auto_detect",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Tunnel": {
+            "additionalProperties": false,
+            "description": "One active tunnel. `interface_id` is opaque and stable within one agent session.",
+            "properties": {
+              "class": {
+                "$ref": "#/$defs/TunnelClass"
+              },
+              "interface_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "interface_id",
+              "class"
+            ],
+            "type": "object"
+          },
+          "TunnelClass": {
+            "enum": [
+              "point_to_point",
+              "packet_tunnel",
+              "virtual_ethernet",
+              "managed_vpn",
+              "other"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Only selected sub-categories appear; an unselected one is absent, not empty.",
+        "properties": {
+          "managed_vpn": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ManagedVpn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "route_generation": {
+            "description": "Rises each time the routing table changes. A route change alone is never a violation.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "system_proxy": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Proxy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tunnels": {
+            "items": {
+              "$ref": "#/$defs/Tunnel"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "title": "NetworkState",
+        "type": "object"
+      },
+      "summary": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Tunnel counts by class, derived only from `tunnels`.",
+        "properties": {
+          "managed_vpn_tunnels": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "packet_tunnel": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "point_to_point": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tunnels_total": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "virtual_ethernet": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tunnels_total",
+          "point_to_point",
+          "packet_tunnel",
+          "virtual_ethernet",
+          "managed_vpn_tunnels"
+        ],
+        "title": "NetworkSummary",
+        "type": "object"
+      }
+    },
+    "printing": {
+      "state": {
+        "$defs": {
+          "Coverage": {
+            "oneOf": [
+              {
+                "enum": [
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "monitored_scheduler",
+                "description": "Every job the scheduler accepts is seen, including jobs that finish between reads.",
+                "type": "string"
+              },
+              {
+                "const": "snapshot_only",
+                "description": "One read of the jobs present now; a job that came and went is not seen.",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "blocked_print_commands": {
+            "description": "Print commands the `CandidateWindow` refused since observation started.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "candidate_jobs": {
+            "description": "Active jobs owned by the candidate's account.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "candidate_jobs_since_start": {
+            "description": "Candidate jobs the scheduler accepted since observation started, finished ones included.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "coverage": {
+            "$ref": "#/$defs/Coverage"
+          },
+          "other_jobs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unknown_jobs": {
+            "description": "Active jobs whose owner the scheduler did not state.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "coverage",
+          "candidate_jobs",
+          "other_jobs",
+          "unknown_jobs",
+          "candidate_jobs_since_start",
+          "blocked_print_commands"
+        ],
+        "title": "PrintState",
+        "type": "object"
+      },
+      "summary": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "candidate_jobs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unknown_jobs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "candidate_jobs",
+          "unknown_jobs"
+        ],
+        "title": "PrintSummary",
+        "type": "object"
+      }
+    },
+    "process_application": {
+      "state": {
+        "$defs": {
+          "Coverage": {
+            "oneOf": [
+              {
+                "enum": [
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "snapshot_only",
+                "description": "Read every [`POLL_INTERVAL`]: a process shorter than one interval can come and go unseen,\nbut each read classifies every process it sees, so its matches are complete.",
+                "type": "string"
+              }
+            ]
+          },
+          "RuleMatch": {
+            "additionalProperties": false,
+            "description": "One application rule's match. `matched` means the condition is violated.",
+            "properties": {
+              "catalog_app_ids": {
+                "description": "Blocklist rules: the catalog applications found. Always empty for allowlist rules.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "matched": {
+                "type": "boolean"
+              },
+              "rule_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "rule_id",
+              "matched",
+              "catalog_app_ids"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "checking": {
+            "description": "New processes whose identity is still being verified.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "coverage": {
+            "$ref": "#/$defs/Coverage"
+          },
+          "rule_matches": {
+            "items": {
+              "$ref": "#/$defs/RuleMatch"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "coverage",
+          "checking",
+          "rule_matches"
+        ],
+        "title": "ProcessState",
+        "type": "object"
+      },
+      "summary": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "checking": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "checking"
+        ],
+        "title": "ProcessSummary",
+        "type": "object"
+      }
+    },
+    "removable_storage": {
+      "state": {
+        "$defs": {
+          "Coverage": {
+            "oneOf": [
+              {
+                "enum": [
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "block_and_portable",
+                "description": "Disks and portable devices are both read.",
+                "type": "string"
+              },
+              {
+                "const": "block_only",
+                "description": "Disks are read; this platform cannot read portable devices.",
+                "type": "string"
+              }
+            ]
+          },
+          "Device": {
+            "additionalProperties": false,
+            "description": "One attached device. `device_id` is opaque and stable within one agent session.",
+            "properties": {
+              "device_id": {
+                "type": "string"
+              },
+              "kind": {
+                "$ref": "#/$defs/Kind"
+              },
+              "mounted": {
+                "$ref": "#/$defs/Known",
+                "description": "Whether a file system on it is mounted. Unmounted storage still counts as attached."
+              },
+              "transport": {
+                "$ref": "#/$defs/Transport"
+              },
+              "writable": {
+                "$ref": "#/$defs/Known"
+              }
+            },
+            "required": [
+              "device_id",
+              "kind",
+              "transport",
+              "mounted",
+              "writable"
+            ],
+            "type": "object"
+          },
+          "Kind": {
+            "enum": [
+              "block_storage",
+              "portable_device"
+            ],
+            "type": "string"
+          },
+          "Known": {
+            "description": "A yes/no the OS may not state.",
+            "enum": [
+              "yes",
+              "no",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Transport": {
+            "enum": [
+              "usb",
+              "thunderbolt",
+              "sd",
+              "other",
+              "unknown"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "coverage": {
+            "$ref": "#/$defs/Coverage"
+          },
+          "devices": {
+            "description": "At most [`MAX_DEVICES`], ordered by identity.",
+            "items": {
+              "$ref": "#/$defs/Device"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "coverage",
+          "devices"
+        ],
+        "title": "StorageState",
+        "type": "object"
+      },
+      "summary": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Device counts by kind, derived only from the read devices.",
+        "properties": {
+          "block_storage": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "portable_devices": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "block_storage",
+          "portable_devices"
+        ],
+        "title": "StorageSummary",
+        "type": "object"
+      }
+    },
+    "screen_recording": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "free_space_mib": {
+            "description": "Free space for this account on the app's data volume; absent when unreadable.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "title": "ScreenRecordingState",
+        "type": "object"
+      },
+      "summary": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "free_space_mib": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "title": "ScreenRecordingSummary",
+        "type": "object"
+      }
+    },
+    "virtualization": {
+      "state": {
+        "$defs": {
+          "Classification": {
+            "enum": [
+              "recognized_guest",
+              "recognized_physical_or_root",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Hypervisor": {
+            "enum": [
+              "hyperv",
+              "vmware",
+              "virtualbox",
+              "parallels",
+              "qemu_kvm",
+              "apple_virtualization",
+              "xen",
+              "other",
+              "none_detected"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "classification": {
+            "$ref": "#/$defs/Classification"
+          },
+          "hypervisor": {
+            "$ref": "#/$defs/Hypervisor"
+          }
+        },
+        "required": [
+          "classification",
+          "hypervisor"
+        ],
+        "title": "VirtualizationState",
+        "type": "object"
+      },
+      "summary": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
+    }
+  },
+  "registry": {
+    "applications": [
+      {
+        "allowable": false,
+        "id": "terminal"
+      },
+      {
+        "allowable": false,
+        "id": "script_editor"
+      },
+      {
+        "allowable": false,
+        "id": "screen_sharing"
+      },
+      {
+        "allowable": false,
+        "id": "quicktime_player"
+      },
+      {
+        "allowable": false,
+        "id": "teamviewer"
+      },
+      {
+        "allowable": false,
+        "id": "zoom"
+      },
+      {
+        "allowable": true,
+        "id": "discord"
+      },
+      {
+        "allowable": true,
+        "id": "slack"
+      },
+      {
+        "allowable": true,
+        "id": "visual_studio_code"
+      },
+      {
+        "allowable": true,
+        "id": "google_chrome"
+      },
+      {
+        "allowable": true,
+        "id": "firefox"
+      },
+      {
+        "allowable": true,
+        "id": "safari"
+      }
+    ],
+    "baseline_rules": [
+      {
+        "capability": "display",
+        "mode": "enforce",
+        "phase": "both",
+        "reason": "display.single_display_required",
+        "requirement": {
+          "All": {
+            "conditions": [
+              {
+                "Compare": {
+                  "field": "display.summary.connected_total",
+                  "op": "eq",
+                  "value": 1
+                }
+              },
+              {
+                "Compare": {
+                  "field": "display.summary.active_physical",
+                  "op": "eq",
+                  "value": 1
+                }
+              }
+            ]
+          }
+        },
+        "rule_id": "baseline.single_display"
+      },
+      {
+        "capability": "candidate_window",
+        "mode": "enforce",
+        "phase": "participation",
+        "reason": "candidate_window.window_required",
+        "requirement": {
+          "All": {
+            "conditions": [
+              {
+                "Compare": {
+                  "field": "candidate_window.presence",
+                  "op": "eq",
+                  "value": "present"
+                }
+              },
+              {
+                "Compare": {
+                  "field": "candidate_window.placement",
+                  "op": "eq",
+                  "value": "maximized"
+                }
+              },
+              {
+                "Compare": {
+                  "field": "candidate_window.content_protection",
+                  "op": "eq",
+                  "value": "verified"
+                }
+              }
+            ]
+          }
+        },
+        "rule_id": "baseline.window"
+      },
+      {
+        "capability": "interactive_session",
+        "mode": "enforce",
+        "phase": "both",
+        "reason": "interactive_session.single_session_required",
+        "requirement": {
+          "All": {
+            "conditions": [
+              {
+                "Compare": {
+                  "field": "interactive_session.console_owner",
+                  "op": "eq",
+                  "value": "candidate"
+                }
+              },
+              {
+                "Compare": {
+                  "field": "interactive_session.lock",
+                  "op": "eq",
+                  "value": "unlocked"
+                }
+              },
+              {
+                "Compare": {
+                  "field": "interactive_session.other_human_sessions",
+                  "op": "eq",
+                  "value": 0
+                }
+              }
+            ]
+          }
+        },
+        "rule_id": "baseline.session"
+      }
+    ],
+    "capabilities": [
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "max": 32,
+            "name": "display.summary.active_physical",
+            "type": "count"
+          },
+          {
+            "max": 32,
+            "name": "display.summary.active_total",
+            "type": "count"
+          },
+          {
+            "max": 32,
+            "name": "display.summary.connected_total",
+            "type": "count"
+          },
+          {
+            "max": 32,
+            "name": "display.summary.mirrored",
+            "type": "count"
+          },
+          {
+            "max": 32,
+            "name": "display.summary.virtual",
+            "type": "count"
+          },
+          {
+            "max": 32,
+            "name": "display.summary.wireless",
+            "type": "count"
+          },
+          {
+            "max": 32,
+            "name": "display.summary.remote",
+            "type": "count"
+          },
+          {
+            "max": 32,
+            "name": "display.summary.specialized",
+            "type": "count"
+          },
+          {
+            "max": 32,
+            "name": "display.summary.unknown_kind",
+            "type": "count"
+          }
+        ],
+        "id": "display",
+        "permission_prompt": false,
+        "reasons": [
+          "display.single_display_required"
+        ],
+        "sensitive": false,
+        "stability_ms": 1000
+      },
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "name": "candidate_window.presence",
+            "type": "symbol",
+            "values": [
+              "present",
+              "absent"
+            ]
+          },
+          {
+            "name": "candidate_window.focus",
+            "type": "symbol",
+            "values": [
+              "focused",
+              "not_focused",
+              "unknown"
+            ]
+          },
+          {
+            "name": "candidate_window.visibility",
+            "type": "symbol",
+            "values": [
+              "visible",
+              "hidden",
+              "unknown"
+            ]
+          },
+          {
+            "name": "candidate_window.placement",
+            "type": "symbol",
+            "values": [
+              "maximized",
+              "normal",
+              "minimized",
+              "fullscreen",
+              "unknown"
+            ]
+          },
+          {
+            "name": "candidate_window.content_protection",
+            "type": "symbol",
+            "values": [
+              "verified",
+              "failed",
+              "unknown"
+            ]
+          },
+          {
+            "name": "candidate_window.occlusion",
+            "type": "symbol",
+            "values": [
+              "none",
+              "covered",
+              "unknown"
+            ]
+          },
+          {
+            "max": 1000000,
+            "name": "candidate_window.close_attempts",
+            "type": "count"
+          }
+        ],
+        "id": "candidate_window",
+        "permission_prompt": false,
+        "reasons": [
+          "candidate_window.window_required",
+          "candidate_window.covered",
+          "candidate_window.focus_lost"
+        ],
+        "sensitive": false,
+        "stability_ms": 1000
+      },
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "name": "interactive_session.console_owner",
+            "type": "symbol",
+            "values": [
+              "candidate",
+              "other_human",
+              "none",
+              "unknown"
+            ]
+          },
+          {
+            "name": "interactive_session.lock",
+            "type": "symbol",
+            "values": [
+              "unlocked",
+              "locked",
+              "unknown"
+            ]
+          },
+          {
+            "name": "interactive_session.remote_attachment",
+            "type": "symbol",
+            "values": [
+              "absent",
+              "present",
+              "unknown"
+            ]
+          },
+          {
+            "max": 1024,
+            "name": "interactive_session.other_human_sessions",
+            "type": "count"
+          }
+        ],
+        "id": "interactive_session",
+        "permission_prompt": false,
+        "reasons": [
+          "interactive_session.single_session_required"
+        ],
+        "sensitive": true,
+        "stability_ms": 2000
+      },
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "max": 1000000000,
+            "name": "clipboard.changes",
+            "type": "count"
+          }
+        ],
+        "id": "clipboard",
+        "permission_prompt": false,
+        "reasons": [
+          "clipboard.changed"
+        ],
+        "sensitive": false,
+        "stability_ms": 0
+      },
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "name": "virtualization.classification",
+            "type": "symbol",
+            "values": [
+              "recognized_guest",
+              "recognized_physical_or_root",
+              "unknown"
+            ]
+          },
+          {
+            "name": "virtualization.hypervisor",
+            "type": "symbol",
+            "values": [
+              "hyperv",
+              "vmware",
+              "virtualbox",
+              "parallels",
+              "qemu_kvm",
+              "apple_virtualization",
+              "xen",
+              "other",
+              "none_detected"
+            ]
+          }
+        ],
+        "id": "virtualization",
+        "permission_prompt": false,
+        "reasons": [
+          "virtualization.guest_detected",
+          "virtualization.physical_required"
+        ],
+        "sensitive": false,
+        "stability_ms": 0
+      },
+      {
+        "app_conditions": false,
+        "categories": [
+          "system_proxy",
+          "managed_vpn",
+          "tunnel_interfaces",
+          "route_change"
+        ],
+        "fields": [
+          {
+            "name": "network.system_proxy",
+            "type": "symbol",
+            "values": [
+              "none",
+              "manual",
+              "automatic_config",
+              "auto_detect",
+              "unknown"
+            ]
+          },
+          {
+            "name": "network.managed_vpn",
+            "type": "symbol",
+            "values": [
+              "inactive",
+              "active",
+              "unknown"
+            ]
+          },
+          {
+            "max": 1000000000,
+            "name": "network.route_generation",
+            "type": "count"
+          },
+          {
+            "max": 256,
+            "name": "network.summary.tunnels_total",
+            "type": "count"
+          },
+          {
+            "max": 256,
+            "name": "network.summary.point_to_point",
+            "type": "count"
+          },
+          {
+            "max": 256,
+            "name": "network.summary.packet_tunnel",
+            "type": "count"
+          },
+          {
+            "max": 256,
+            "name": "network.summary.virtual_ethernet",
+            "type": "count"
+          },
+          {
+            "max": 256,
+            "name": "network.summary.managed_vpn_tunnels",
+            "type": "count"
+          }
+        ],
+        "id": "network",
+        "permission_prompt": false,
+        "reasons": [
+          "network.proxy_detected",
+          "network.vpn_detected",
+          "network.tunnel_detected"
+        ],
+        "sensitive": true,
+        "stability_ms": 3000
+      },
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "max": 1024,
+            "name": "removable_storage.summary.block_storage",
+            "type": "count"
+          },
+          {
+            "max": 1024,
+            "name": "removable_storage.summary.portable_devices",
+            "type": "count"
+          }
+        ],
+        "id": "removable_storage",
+        "permission_prompt": false,
+        "reasons": [
+          "removable_storage.attached"
+        ],
+        "sensitive": true,
+        "stability_ms": 2000
+      },
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "max": 1000000,
+            "name": "printing.summary.candidate_jobs",
+            "type": "count"
+          },
+          {
+            "max": 1000000,
+            "name": "printing.summary.unknown_jobs",
+            "type": "count"
+          },
+          {
+            "max": 1000000,
+            "name": "printing.other_jobs",
+            "type": "count"
+          },
+          {
+            "max": 1000000,
+            "name": "printing.candidate_jobs",
+            "type": "count"
+          },
+          {
+            "max": 1000000,
+            "name": "printing.candidate_jobs_since_start",
+            "type": "count"
+          },
+          {
+            "max": 1000000,
+            "name": "printing.blocked_print_commands",
+            "type": "count"
+          }
+        ],
+        "id": "printing",
+        "permission_prompt": false,
+        "reasons": [
+          "printing.candidate_job"
+        ],
+        "sensitive": false,
+        "stability_ms": 0
+      },
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "max": 64,
+            "name": "camera.summary.physical_devices",
+            "type": "count"
+          },
+          {
+            "max": 64,
+            "name": "camera.summary.virtual_devices",
+            "type": "count"
+          },
+          {
+            "name": "camera.ready",
+            "type": "symbol",
+            "values": [
+              "ready",
+              "not_ready"
+            ]
+          },
+          {
+            "name": "camera.in_use_by_other_app",
+            "type": "symbol",
+            "values": [
+              "yes",
+              "no"
+            ]
+          }
+        ],
+        "id": "camera",
+        "permission_prompt": true,
+        "reasons": [
+          "camera.not_ready",
+          "camera.in_use_by_other_app",
+          "camera.virtual_device"
+        ],
+        "sensitive": false,
+        "stability_ms": 2000
+      },
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "max": 64,
+            "name": "microphone.summary.devices",
+            "type": "count"
+          },
+          {
+            "name": "microphone.ready",
+            "type": "symbol",
+            "values": [
+              "ready",
+              "not_ready"
+            ]
+          },
+          {
+            "name": "microphone.in_use_by_other_app",
+            "type": "symbol",
+            "values": [
+              "yes",
+              "no"
+            ]
+          }
+        ],
+        "id": "microphone",
+        "permission_prompt": true,
+        "reasons": [
+          "microphone.not_ready",
+          "microphone.in_use_by_other_app",
+          "microphone.virtual_device"
+        ],
+        "sensitive": false,
+        "stability_ms": 2000
+      },
+      {
+        "app_conditions": true,
+        "categories": [],
+        "fields": [],
+        "id": "process_application",
+        "permission_prompt": false,
+        "reasons": [
+          "process_application.blocked_application",
+          "process_application.unlisted_application"
+        ],
+        "sensitive": true,
+        "stability_ms": 2000
+      },
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "max": 1073741824,
+            "name": "screen_recording.summary.free_space_mib",
+            "type": "count"
+          }
+        ],
+        "id": "screen_recording",
+        "permission_prompt": true,
+        "reasons": [
+          "screen_recording.not_permitted",
+          "screen_recording.low_disk_space"
+        ],
+        "sensitive": false,
+        "stability_ms": 0
+      }
+    ]
+  }
+}

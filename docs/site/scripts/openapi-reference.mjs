@@ -1,3 +1,8 @@
+import {
+  contractExtensions,
+  readGeneratedApi,
+} from './openapi-reference-generation.mjs';
+
 const HTTP_METHODS = new Set([
   'get',
   'put',
@@ -25,16 +30,7 @@ function operationInventory(specification) {
 }
 
 function parseGeneratedApi(page) {
-  const match = page.source.match(/^api:\s*(\{.*\})\s*$/m);
-  if (!match) {
-    throw new Error(`${page.name}: missing uncompressed api frontmatter`);
-  }
-
-  try {
-    return JSON.parse(match[1]);
-  } catch (error) {
-    throw new Error(`${page.name}: invalid api frontmatter: ${error.message}`);
-  }
+  return readGeneratedApi(page.source, page.name);
 }
 
 function frontmatterValue(source, field) {
@@ -110,12 +106,12 @@ export function verifyOpenapiReference({specification, pages, tagPages, sidebar}
       failures.push(`${operationId}: generated tags differ from the canonical operation`);
     }
 
-    for (const extension of [
-      'x-proctor-auth',
-      'x-proctor-error-codes',
-      'x-proctor-idempotency',
-    ]) {
+    const contract = frontmatterValue(page.source, 'proctor_contract');
+    for (const extension of contractExtensions) {
       const expectedValue = expected.operation[extension];
+      if (!sameJson(contract?.[extension], expectedValue)) {
+        failures.push(`${operationId}: proctor_contract ${extension} differs from the canonical operation`);
+      }
       if (!sameJson(generated[extension], expectedValue)) {
         failures.push(`${operationId}: generated ${extension} differs from the canonical operation`);
       }

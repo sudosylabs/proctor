@@ -629,11 +629,11 @@ unlimited, or overflowing values are invalid.
 The integrity chain remains explicit:
 
 ~~~text
-Native Observation
-    -> Security Signal
-    -> Detector Finding
+Native Fact (a capability's full state, from Desktop)
+    -> Rule Status (evaluated by the server)
+    -> Occurrence (not met, until met again)
     -> Integrity Evidence
-    -> Integrity Flag
+    -> Integrity Flag (enforce rules only)
     -> Review Outcome
 ~~~
 
@@ -895,19 +895,29 @@ integrity; ordinary Browser Activity retirement cannot remove them. Lifetime
 quota counters are never refunded by either retirement.
 
 
-Native condition review preserves immutable, catalog-validated occurrence
-transitions independently of native operational telemetry, including explicit
-unresolved openers and original receipt/interpretation provenance. It requires
-current detailed Submission integrity-view authority and no fabricated Flag.
-Operational health, permissions, gaps and resets remain uncertainty. The manager
-board receives only bounded counts and live source health. A fixed count/digest
-binds native evidence into Review finalization; late interpreted transitions
-invalidate the current Review/release/waiver without changing sealed work or
-prior snapshots. Integrity retirement removes condition copies from both their
-review owner and delivery rows and prevents new condition intake. Operational
-retirement removes delivery state while preserving separately retained integrity
-material. Native evidence rows remain bounded by admitted native record quotas;
-SQL physical copies are not additional client receipt or quota allocations.
+Native capabilities are a core registry the signed Desktop release supplies:
+fields, reasons, stability times, fact schemas and baseline rules. A policy
+compiles into activations and rules; the server decides Start admission from
+the reported facts and re-evaluates the same rules on the facts streamed during
+the Attempt, in the readiness phase until the stream confirms participation.
+Desktop's own statuses are counted as discrepancies, never applied. Every rule
+status change is immutable native condition evidence with its delivery position
+(batch 0 is Start) and receipt/interpretation provenance. An occurrence opens
+when a rule becomes not met and closes when it is met again; an unknown stretch
+does neither. An enforce occurrence that opens raises or reuses the
+`native.<capability>` Flag for the generation (fail mode contain), at most 100
+evidence rows; observe rules, unknown status, gaps, permission problems and
+failed sources never flag. The manager board receives bounded counts, live
+source health and each enforce rule's status, never facts or application
+identities. A fixed count/digest binds native evidence into Review
+finalization; late interpreted changes invalidate the current
+Review/release/waiver without changing sealed work or prior snapshots.
+Integrity retirement removes native evidence, fact and rule-status delivery
+rows, the interpretation and screen clips (purging their chunk keys), and
+prevents new intake. Operational retirement removes delivery state while
+preserving separately retained integrity material. Native evidence rows remain
+bounded by admitted native record quotas; SQL physical copies are not
+additional client receipt or quota allocations.
 
 Current live controls validate all Browser watermark selectors and claimed
 contiguous receipts before processing. Owned closed sources and position limits

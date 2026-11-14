@@ -1119,6 +1119,10 @@ components:
         - exam.attempt.registered_desktop_required
         - exam.attempt.renewal_conflict
         - exam.attempt.revision_conflict
+        - exam.attempt.screen_clip_incomplete
+        - exam.attempt.screen_clip_limit_reached
+        - exam.attempt.screen_clip_too_large
+        - exam.attempt.screen_recording_off
         - exam.attempt.sitting_not_open
         - exam.attempt.state_conflict
         - exam.attempt.suspension_conflict
@@ -1188,14 +1192,15 @@ components:
         - exam.security.catalog_missing
         - exam.security.configuration_unsupported
         - exam.security.control_conflict
+        - exam.security.interaction_blocked
         - exam.security.policy_changed
-        - exam.security.posture_blocked
         - exam.security.preflight_consumed
         - exam.security.preflight_expired
         - exam.security.preflight_rate_limited
         - exam.security.preflight_report_changed
         - exam.security.preflight_required
         - exam.security.preflight_superseded
+        - exam.security.readiness_unmet
         - exam.security.resume_required
         - exam.security.session_changed
         - exam.security.unsupported_capability
@@ -1277,6 +1282,11 @@ components:
         - personal_access_token.invalid
         - personal_access_token.maximum_reached
         - personal_access_token.unavailable
+        - plugin.invalid
+        - plugin.not_found
+        - plugin.required
+        - plugin.revision_conflict
+        - plugin.unavailable
         - profile_picture.invalid
         - profile_picture.unavailable
         - programme.conflict
@@ -1413,6 +1423,7 @@ components:
         - personal_access_token.disable
         - personal_access_token.enable
         - personal_access_token.revoke
+        - plugin.manage
         - programme.manage
         - programme.view
         - programme_level.manage

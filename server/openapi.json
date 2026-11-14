@@ -362,6 +362,16 @@
           "$ref": "#/components/schemas/ID"
         }
       },
+      "PluginID": {
+        "description": "The plugin's ID, for example display-topology.",
+        "in": "path",
+        "name": "plugin_id",
+        "required": true,
+        "schema": {
+          "pattern": "^[a-z][a-z0-9.-]{0,63}$",
+          "type": "string"
+        }
+      },
       "ProgrammeID": {
         "description": "The Programme identifier.",
         "in": "path",
@@ -434,6 +444,15 @@
         "description": "The Role identifier.",
         "in": "path",
         "name": "role_id",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/ID"
+        }
+      },
+      "ScreenClipID": {
+        "description": "The screen clip identifier.",
+        "in": "path",
+        "name": "screen_clip_id",
         "required": true,
         "schema": {
           "$ref": "#/components/schemas/ID"
@@ -586,6 +605,25 @@
           }
         },
         "description": "Supplies the last observed Exam aggregate revision required for the concurrency-safe archive transition.",
+        "required": true
+      },
+      "BeginCandidateScreenClipUpload": {
+        "content": {
+          "application/json": {
+            "example": {
+              "chunk_sha256": [
+                "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+                "fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9"
+              ],
+              "media_type": "video/mp4",
+              "size_bytes": 8388618
+            },
+            "schema": {
+              "$ref": "#/components/schemas/BeginCandidateScreenClipUploadRequest"
+            }
+          }
+        },
+        "description": "The clip's media type, exact size and the SHA-256 of every chunk in order.",
         "required": true
       },
       "BeginInvitationExternalAuthentication": {
@@ -825,6 +863,21 @@
         "description": "Exact immutable preview revision and digest to apply transactionally.",
         "required": true
       },
+      "CompleteCandidateScreenClipUpload": {
+        "content": {
+          "application/json": {
+            "example": {
+              "content_digest": "7d1a54127b222502f5b79b5fb0803061152a44f92b37e23c6527baf665d4da9a",
+              "signature": "IcHJ1bNctXFVhTF0-ay6LIFS44MN3zPJw36YbQsF8C0haUjE4cuDhg0o1daUkq3Rf_VIJ_Me5s6cnjdzIYeWdQ"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/CompleteCandidateScreenClipUploadRequest"
+            }
+          }
+        },
+        "description": "The clip's content digest and the installation key's signature over it.",
+        "required": true
+      },
       "CompleteEmailVerification": {
         "content": {
           "application/json": {
@@ -916,61 +969,70 @@
                   {
                     "allowed_application_ids": [],
                     "id": "process_application",
-                    "mode": "disabled"
+                    "mode": "disabled",
+                    "outcome": "flag"
                   },
                   {
                     "id": "interactive_session",
-                    "mode": "disabled"
+                    "mode": "disabled",
+                    "outcome": "flag"
                   },
                   {
                     "id": "clipboard",
                     "mode": "disabled",
                     "observe_os_clipboard_changes": false,
+                    "outcome": "flag",
                     "strategy": "disabled"
                   },
                   {
                     "candidate_print_commands": "not_applied",
                     "id": "printing",
                     "mode": "disabled",
-                    "monitored_spooler": "not_required"
+                    "monitored_spooler": "not_required",
+                    "outcome": "flag"
                   },
                   {
-                    "allowed_storage_function_class_ids": [],
                     "enabled_sub_capabilities": [],
                     "id": "removable_storage",
-                    "mode": "disabled"
+                    "mode": "disabled",
+                    "outcome": "flag"
                   },
                   {
                     "id": "virtualization",
                     "mode": "disabled",
+                    "outcome": "flag",
                     "rule": "not_applied"
                   },
                   {
-                    "allowed_adapter_class_ids": [],
-                    "allowed_managed_profile_ids": [],
-                    "allowed_tunnel_class_ids": [],
                     "enabled_sub_capabilities": [],
                     "id": "network_configuration",
-                    "mode": "disabled"
+                    "mode": "disabled",
+                    "outcome": "flag"
                   },
                   {
                     "concurrent_use_check": "not_required",
                     "id": "camera",
                     "mode": "disabled",
+                    "outcome": "flag",
                     "require_ready": false
                   },
                   {
                     "concurrent_use_check": "not_required",
                     "id": "microphone",
                     "mode": "disabled",
+                    "outcome": "flag",
                     "require_ready": false
                   },
                   {
                     "id": "external_capture",
-                    "mode": "disabled"
+                    "mode": "disabled",
+                    "outcome": "flag"
                   }
                 ],
-                "registry_digest": "sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0"
+                "registry_digest": "sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d",
+                "screen_recording": {
+                  "enabled": true
+                }
               }
             },
             "schema": {
@@ -1770,8 +1832,7 @@
           "application/json": {
             "example": {
               "configuration_manifest_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "native_registry_digest": "sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0",
-              "source_manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              "native_registry_digest": "sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d"
             },
             "schema": {
               "$ref": "#/components/schemas/PrepareSecurityPreflightRequest"
@@ -1998,6 +2059,22 @@
         "description": "Exact pending revision and complete immutable package for the replacement Invitation.",
         "required": true
       },
+      "ReplacePluginSettings": {
+        "content": {
+          "application/json": {
+            "example": {
+              "enabled": true,
+              "expected_revision": 0,
+              "settings": "{\"mode\":\"observe\"}"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/PluginSettingsRequest"
+            }
+          }
+        },
+        "description": "Whether the plugin runs and its complete settings document. Every member is required.",
+        "required": true
+      },
       "ReplaceRetentionPolicy": {
         "content": {
           "application/json": {
@@ -2033,6 +2110,23 @@
           }
         },
         "description": "Complete settings JSON source, its supported format version, and the exact current revision to replace.",
+        "required": true
+      },
+      "RequestExamAttemptScreenClip": {
+        "content": {
+          "application/json": {
+            "example": {
+              "end": "2026-11-12T10:00:00Z",
+              "from_session_start": false,
+              "reason": "The candidate seemed to read from a second screen.",
+              "start": "2026-11-12T09:58:00Z"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/RequestExamAttemptScreenClipRequest"
+            }
+          }
+        },
+        "description": "The range to cut, either from the start of the session or from an explicit start, and the manager's private reason.",
         "required": true
       },
       "RequestPasswordReset": {
@@ -2176,22 +2270,13 @@
         "content": {
           "application/json": {
             "example": {
-              "baseline": {
-                "constrained_window": "unavailable",
-                "content_protection": "unavailable",
-                "single_physical_display": "unavailable"
-              },
-              "capability_matrix_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "capabilities": [],
               "challenge": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "coverage": [],
               "policy_content_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "posture": "failed",
               "reported_at": "2026-09-08T08:00:00.000Z",
-              "security_session_id": "synthetic-security-session",
-              "selected_source_categories": [],
-              "source_manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "sources": []
+              "rules": [],
+              "security_session_id": "synthetic-security-session"
             },
             "schema": {
               "$ref": "#/components/schemas/SecurityPreflightReport"
@@ -3160,6 +3245,21 @@
           }
         }
       },
+      "CandidateScreenClipOK": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ScreenClipResponse"
+            }
+          }
+        },
+        "description": "The request the candidate's Desktop took",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
       "CandidateWorkspaceJournalOK": {
         "content": {
           "application/json": {
@@ -3656,6 +3756,21 @@
           }
         },
         "description": "Exam Attempt suspension re-allowed without exposing the private manager reason",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "ExamAttemptScreenClipOK": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ScreenClipResponse"
+            }
+          }
+        },
+        "description": "The saved request, without the manager's reason; 201 when created, 200 when replayed",
         "headers": {
           "Cache-Control": {
             "$ref": "#/components/headers/NoStore"
@@ -5325,6 +5440,46 @@
           }
         }
       },
+      "PluginListOK": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PluginListResponse"
+            }
+          }
+        },
+        "description": "One page of the compiled-in plugins.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
+      "PluginOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "enabled": true,
+              "enabled_by_default": true,
+              "id": "oidc",
+              "name": "OpenID Connect",
+              "required": false,
+              "revision": 2,
+              "settings": "{}",
+              "state": "active"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/PluginResponse"
+            }
+          }
+        },
+        "description": "The plugin with its saved settings.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
       "ProfilePictureOK": {
         "content": {
           "image/webp": {
@@ -5761,6 +5916,125 @@
         },
         "description": "Role"
       },
+      "ScreenClipChunkOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "chunk": 1
+            },
+            "schema": {
+              "$ref": "#/components/schemas/ScreenClipChunkResponse"
+            }
+          }
+        },
+        "description": "The chunk is stored",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
+      "ScreenClipContent": {
+        "content": {
+          "video/mp4": {
+            "schema": {
+              "format": "binary",
+              "type": "string"
+            }
+          },
+          "video/webm": {
+            "schema": {
+              "format": "binary",
+              "type": "string"
+            }
+          }
+        },
+        "description": "The whole clip",
+        "headers": {
+          "Accept-Ranges": {
+            "schema": {
+              "const": "bytes",
+              "type": "string"
+            }
+          },
+          "Cache-Control": {
+            "schema": {
+              "const": "private, no-store",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ScreenClipPartialContent": {
+        "content": {
+          "video/mp4": {
+            "schema": {
+              "format": "binary",
+              "type": "string"
+            }
+          },
+          "video/webm": {
+            "schema": {
+              "format": "binary",
+              "type": "string"
+            }
+          }
+        },
+        "description": "One byte range of the clip",
+        "headers": {
+          "Accept-Ranges": {
+            "schema": {
+              "const": "bytes",
+              "type": "string"
+            }
+          },
+          "Cache-Control": {
+            "schema": {
+              "const": "private, no-store",
+              "type": "string"
+            }
+          },
+          "Content-Range": {
+            "description": "The range served, as bytes first-last/size.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ScreenClipRequestListOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "items": []
+            },
+            "schema": {
+              "$ref": "#/components/schemas/ScreenClipListResponse"
+            }
+          }
+        },
+        "description": "The requests waiting for the candidate's Desktop",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
+      "ScreenClipUploadOK": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ScreenClipUploadResponse"
+            }
+          }
+        },
+        "description": "Where the clip's upload stands",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
       "SearchOK": {
         "content": {
           "application/json": {
@@ -6149,6 +6423,37 @@
           }
         },
         "description": "Request-specific availability and Desktop compatibility result",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "SystemPluginsOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "items": [
+                {
+                  "id": "cas",
+                  "name": "CAS"
+                },
+                {
+                  "id": "oidc",
+                  "name": "OpenID Connect"
+                },
+                {
+                  "id": "export.zip",
+                  "name": "Zip export"
+                }
+              ]
+            },
+            "schema": {
+              "$ref": "#/components/schemas/SystemPluginsResponse"
+            }
+          }
+        },
+        "description": "The active plugins",
         "headers": {
           "Cache-Control": {
             "$ref": "#/components/headers/NoStore"
@@ -7787,6 +8092,7 @@
         "additionalProperties": false,
         "properties": {
           "delivery_stream_id": {
+            "description": "The native delivery stream this admission opened. Desktop sends it as the security control's stream_id and as the native delivery watermark's source_id.",
             "maxLength": 128,
             "minLength": 1,
             "type": "string"
@@ -8266,6 +8572,7 @@
           "personal_access_token.disable",
           "personal_access_token.enable",
           "personal_access_token.revoke",
+          "plugin.manage",
           "programme.manage",
           "programme.view",
           "programme_level.manage",
@@ -8539,6 +8846,40 @@
           "refresh_token",
           "access_expires_at",
           "refresh_expires_at"
+        ],
+        "type": "object"
+      },
+      "BeginCandidateScreenClipUploadRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "chunk_sha256": {
+            "description": "The lowercase hexadecimal SHA-256 of every chunk, in order.",
+            "items": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "maxItems": 384,
+            "minItems": 1,
+            "type": "array"
+          },
+          "media_type": {
+            "enum": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "type": "string"
+          },
+          "size_bytes": {
+            "format": "int64",
+            "maximum": 3221225472,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "media_type",
+          "size_bytes",
+          "chunk_sha256"
         ],
         "type": "object"
       },
@@ -10224,6 +10565,7 @@
             "enum": [
               "secure_connectivity_lost",
               "focus_policy_review_required",
+              "native_policy_review_required",
               "manager_suspended",
               null
             ],
@@ -11278,6 +11620,26 @@
           "name",
           "display_name",
           "description"
+        ],
+        "type": "object"
+      },
+      "CompleteCandidateScreenClipUploadRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "content_digest": {
+            "description": "The clip's content digest, as the upload status reports it.",
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "signature": {
+            "description": "The installation key's ES256 signature over the content digest, raw r and s in unpadded base64url.",
+            "pattern": "^[A-Za-z0-9_-]{86}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content_digest",
+          "signature"
         ],
         "type": "object"
       },
@@ -13346,6 +13708,14 @@
         "additionalProperties": false,
         "description": "Frozen native semantics for a Participation. issued_at and active_from use millisecond UTC precision, with issued_at \u003c= active_from \u003c= activation time. There is no policy expiry; the renewable Participation lease is the sole live authority. The digest excludes only digest; scope rebinding preserves the separately computed content digest.",
         "properties": {
+          "activations": {
+            "description": "The capabilities Desktop runs for this policy, with the sub-categories each selects.",
+            "items": {
+              "$ref": "#/components/schemas/NativeActivation"
+            },
+            "maxItems": 32,
+            "type": "array"
+          },
           "active_from": {
             "format": "date-time",
             "type": "string"
@@ -13382,7 +13752,7 @@
                   ],
                   "properties": {
                     "allowed_application_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
+                      "description": "The only catalog applications the candidate may run, sorted and unique: IDs from the Desktop release's application catalog, each one it marks allowable. Empty adds no allowlist. When the family is on, the catalog's never-allowable applications are always blocked.",
                       "items": {
                         "maxLength": 128,
                         "minLength": 1,
@@ -13404,11 +13774,20 @@
                         "enforce"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "allowed_application_ids"
                   ],
                   "type": "object"
@@ -13427,11 +13806,20 @@
                         "enforce"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
-                    "mode"
+                    "mode",
+                    "outcome"
                   ],
                   "type": "object"
                 },
@@ -13509,6 +13897,14 @@
                     "observe_os_clipboard_changes": {
                       "type": "boolean"
                     },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
+                    },
                     "strategy": {
                       "enum": [
                         "disabled",
@@ -13520,6 +13916,7 @@
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "observe_os_clipboard_changes",
                     "strategy"
                   ],
@@ -13609,11 +14006,20 @@
                         "required"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "candidate_print_commands",
                     "monitored_spooler"
                   ],
@@ -13632,9 +14038,6 @@
                       },
                       "then": {
                         "properties": {
-                          "allowed_storage_function_class_ids": {
-                            "const": []
-                          },
                           "enabled_sub_capabilities": {
                             "const": []
                           }
@@ -13675,18 +14078,6 @@
                     }
                   ],
                   "properties": {
-                    "allowed_storage_function_class_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
-                      "items": {
-                        "maxLength": 128,
-                        "minLength": 1,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-                        "type": "string"
-                      },
-                      "maxItems": 256,
-                      "type": "array",
-                      "uniqueItems": true
-                    },
                     "enabled_sub_capabilities": {
                       "items": {
                         "enum": [
@@ -13710,12 +14101,20 @@
                         "enforce"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "mode",
-                    "allowed_storage_function_class_ids",
+                    "outcome",
                     "enabled_sub_capabilities"
                   ],
                   "type": "object"
@@ -13791,6 +14190,14 @@
                       ],
                       "type": "string"
                     },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
+                    },
                     "rule": {
                       "enum": [
                         "not_applied",
@@ -13803,6 +14210,7 @@
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "rule"
                   ],
                   "type": "object"
@@ -13820,15 +14228,6 @@
                       },
                       "then": {
                         "properties": {
-                          "allowed_adapter_class_ids": {
-                            "const": []
-                          },
-                          "allowed_managed_profile_ids": {
-                            "const": []
-                          },
-                          "allowed_tunnel_class_ids": {
-                            "const": []
-                          },
                           "enabled_sub_capabilities": {
                             "const": []
                           }
@@ -13869,54 +14268,16 @@
                     }
                   ],
                   "properties": {
-                    "allowed_adapter_class_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
-                      "items": {
-                        "maxLength": 128,
-                        "minLength": 1,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-                        "type": "string"
-                      },
-                      "maxItems": 256,
-                      "type": "array",
-                      "uniqueItems": true
-                    },
-                    "allowed_managed_profile_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
-                      "items": {
-                        "maxLength": 128,
-                        "minLength": 1,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-                        "type": "string"
-                      },
-                      "maxItems": 256,
-                      "type": "array",
-                      "uniqueItems": true
-                    },
-                    "allowed_tunnel_class_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
-                      "items": {
-                        "maxLength": 128,
-                        "minLength": 1,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-                        "type": "string"
-                      },
-                      "maxItems": 256,
-                      "type": "array",
-                      "uniqueItems": true
-                    },
                     "enabled_sub_capabilities": {
                       "items": {
                         "enum": [
                           "system_proxy_state",
                           "os_managed_vpn_state",
-                          "tunnel_interface_state",
-                          "route_change",
-                          "network_source_health"
+                          "tunnel_interface_state"
                         ],
                         "type": "string"
                       },
-                      "maxItems": 5,
+                      "maxItems": 3,
                       "type": "array",
                       "uniqueItems": true
                     },
@@ -13931,14 +14292,20 @@
                         "enforce"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "mode",
-                    "allowed_adapter_class_ids",
-                    "allowed_managed_profile_ids",
-                    "allowed_tunnel_class_ids",
+                    "outcome",
                     "enabled_sub_capabilities"
                   ],
                   "type": "object"
@@ -14016,6 +14383,14 @@
                       ],
                       "type": "string"
                     },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
+                    },
                     "require_ready": {
                       "type": "boolean"
                     }
@@ -14023,6 +14398,7 @@
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "concurrent_use_check",
                     "require_ready"
                   ],
@@ -14101,6 +14477,14 @@
                       ],
                       "type": "string"
                     },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
+                    },
                     "require_ready": {
                       "type": "boolean"
                     }
@@ -14108,6 +14492,7 @@
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "concurrent_use_check",
                     "require_ready"
                   ],
@@ -14125,11 +14510,20 @@
                         "disabled"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
-                    "mode"
+                    "mode",
+                    "outcome"
                   ],
                   "type": "object"
                 }
@@ -14266,7 +14660,7 @@
             "type": "string"
           },
           "registry_digest": {
-            "const": "sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0",
+            "const": "sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d",
             "type": "string"
           },
           "resolved_exception_refs": {
@@ -14289,6 +14683,14 @@
             "minLength": 1,
             "pattern": "^[ -~]+$",
             "type": "string"
+          },
+          "rules": {
+            "description": "The compiled native rules: the release's baseline, unchanged, then the rules compiled from the Exam's family selections. Desktop evaluates them on the device; the server evaluates them again on the same facts.",
+            "items": {
+              "$ref": "#/components/schemas/NativeRule"
+            },
+            "maxItems": 64,
+            "type": "array"
           },
           "scope": {
             "oneOf": [
@@ -14334,6 +14736,9 @@
               }
             ]
           },
+          "screen_recording": {
+            "$ref": "#/components/schemas/NativeScreenRecordingPolicy"
+          },
           "sitting_id": {
             "maxLength": 26,
             "minLength": 26,
@@ -14372,7 +14777,10 @@
           "evidence_class_id",
           "visibility_class_id",
           "retention_class_id",
-          "capabilities"
+          "capabilities",
+          "screen_recording",
+          "activations",
+          "rules"
         ],
         "type": "object"
       },
@@ -14616,6 +15024,10 @@
           "exam.attempt.registered_desktop_required",
           "exam.attempt.renewal_conflict",
           "exam.attempt.revision_conflict",
+          "exam.attempt.screen_clip_incomplete",
+          "exam.attempt.screen_clip_limit_reached",
+          "exam.attempt.screen_clip_too_large",
+          "exam.attempt.screen_recording_off",
           "exam.attempt.sitting_not_open",
           "exam.attempt.state_conflict",
           "exam.attempt.suspension_conflict",
@@ -14685,14 +15097,15 @@
           "exam.security.catalog_missing",
           "exam.security.configuration_unsupported",
           "exam.security.control_conflict",
+          "exam.security.interaction_blocked",
           "exam.security.policy_changed",
-          "exam.security.posture_blocked",
           "exam.security.preflight_consumed",
           "exam.security.preflight_expired",
           "exam.security.preflight_rate_limited",
           "exam.security.preflight_report_changed",
           "exam.security.preflight_required",
           "exam.security.preflight_superseded",
+          "exam.security.readiness_unmet",
           "exam.security.resume_required",
           "exam.security.session_changed",
           "exam.security.unsupported_capability",
@@ -14774,6 +15187,11 @@
           "personal_access_token.invalid",
           "personal_access_token.maximum_reached",
           "personal_access_token.unavailable",
+          "plugin.invalid",
+          "plugin.not_found",
+          "plugin.required",
+          "plugin.revision_conflict",
+          "plugin.unavailable",
           "profile_picture.invalid",
           "profile_picture.unavailable",
           "programme.conflict",
@@ -15005,6 +15423,7 @@
             "enum": [
               "secure_connectivity_lost",
               "focus_policy_review_required",
+              "native_policy_review_required",
               "manager_suspended"
             ],
             "type": "string"
@@ -15114,6 +15533,7 @@
             "enum": [
               "secure_connectivity_lost",
               "focus_policy_review_required",
+              "native_policy_review_required",
               "manager_suspended"
             ],
             "type": "string"
@@ -15634,11 +16054,9 @@
             "$ref": "#/components/schemas/ID"
           },
           "policy_kind": {
-            "enum": [
-              "connection_loss",
-              "focus_loss",
-              "browser_navigation"
-            ],
+            "description": "The policy that raised the flag: a core policy (connection_loss, focus_loss or browser_navigation) or a capability's \"\u003cplugin-id\u003e.\u003ckind\u003e\". Treat an unknown kind as opaque.",
+            "maxLength": 97,
+            "pattern": "^(connection_loss|focus_loss|browser_navigation|[a-z][a-z0-9.-]{0,63}\\.[a-z][a-z0-9_]{0,31})$",
             "type": "string"
           },
           "recorded_at": {
@@ -15733,11 +16151,9 @@
             "$ref": "#/components/schemas/ID"
           },
           "policy_kind": {
-            "enum": [
-              "connection_loss",
-              "focus_loss",
-              "browser_navigation"
-            ],
+            "description": "The policy that raised the flag: a core policy (connection_loss, focus_loss or browser_navigation) or a capability's \"\u003cplugin-id\u003e.\u003ckind\u003e\". Treat an unknown kind as opaque.",
+            "maxLength": 97,
+            "pattern": "^(connection_loss|focus_loss|browser_navigation|[a-z][a-z0-9.-]{0,63}\\.[a-z][a-z0-9_]{0,31})$",
             "type": "string"
           },
           "state": {
@@ -17933,9 +18349,10 @@
         "description": "Minimal successful health-check projection.",
         "properties": {
           "status": {
-            "description": "The literal successful health state.",
+            "description": "The successful health state. Readiness answers `degraded` when an enabled plugin has failed: the node still serves, without that plugin. The server log and the `proctor_plugin_state` metric name the plugin.",
             "enum": [
-              "ok"
+              "ok",
+              "degraded"
             ],
             "type": "string"
           }
@@ -19087,6 +19504,7 @@
           "academic_administration_preview.resolve",
           "audit.attempt_sweep",
           "command_outcome.cleanup",
+          "domain_event.dispatch",
           "exam_export.build",
           "exam_export.cleanup",
           "exam_sitting.lifecycle",
@@ -20210,35 +20628,26 @@
         ],
         "type": "object"
       },
-      "NativeBaselineReport": {
+      "NativeActivation": {
         "additionalProperties": false,
         "properties": {
-          "constrained_window": {
-            "enum": [
-              "verified",
-              "unavailable"
-            ],
+          "capability": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
             "type": "string"
           },
-          "content_protection": {
-            "enum": [
-              "verified",
-              "unavailable"
-            ],
-            "type": "string"
-          },
-          "single_physical_display": {
-            "enum": [
-              "verified",
-              "unavailable"
-            ],
-            "type": "string"
+          "categories": {
+            "description": "The sub-categories the capability runs; empty means every registered one.",
+            "items": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": "array"
           }
         },
         "required": [
-          "constrained_window",
-          "single_physical_display",
-          "content_protection"
+          "capability",
+          "categories"
         ],
         "type": "object"
       },
@@ -20274,6 +20683,290 @@
         ],
         "type": "object"
       },
+      "NativeCapabilityFact": {
+        "additionalProperties": false,
+        "description": "One activated capability's full minimized state as Desktop observed it, with its envelope. Desktop sends a fact whenever the state or the envelope changes; the server checks it against the capability's published schemas and evaluates the policy's rules on it again. A fact no newer than the latest of its source instance changes nothing.",
+        "properties": {
+          "capability": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "certainty": {
+            "enum": [
+              "complete",
+              "partial",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "health": {
+            "enum": [
+              "unsupported",
+              "healthy",
+              "degraded",
+              "failed",
+              "stopped"
+            ],
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "capability_fact"
+            ],
+            "type": "string"
+          },
+          "observed_at": {
+            "description": "The device time of the observation, in whole milliseconds.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "permission": {
+            "enum": [
+              "not_determined",
+              "granted",
+              "denied",
+              "restricted",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "sequence": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source_instance_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "state": {
+            "description": "The full state, valid against its published state schema. State and summary are at most 16 KiB together.",
+            "type": "object"
+          },
+          "summary": {
+            "description": "The counts derived from the state, valid against its published summary schema.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "kind",
+          "observed_at",
+          "capability",
+          "source_instance_id",
+          "sequence",
+          "permission",
+          "health",
+          "certainty",
+          "state",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "NativeCapabilityReadiness": {
+        "additionalProperties": false,
+        "properties": {
+          "capability": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "certainty": {
+            "enum": [
+              "complete",
+              "partial",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "health": {
+            "enum": [
+              "unsupported",
+              "healthy",
+              "degraded",
+              "failed",
+              "stopped"
+            ],
+            "type": "string"
+          },
+          "permission": {
+            "enum": [
+              "not_determined",
+              "granted",
+              "denied",
+              "restricted",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "sequence": {
+            "description": "The sequence the capability's event stream continues from.",
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source_instance_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "state": {
+            "description": "The capability's minimized full state, valid against its published state schema, at most 16 KiB. It never holds what must not leave the device. A field named \"\u003ccapability\u003e.\u003cname\u003e\" is read from state.\u003cname\u003e.",
+            "type": "object"
+          },
+          "summary": {
+            "description": "The counts Desktop derives from the state, valid against its published summary schema, at most 16 KiB. A field named \"\u003ccapability\u003e.summary.\u003cname\u003e\" is read from summary.\u003cname\u003e.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "capability",
+          "source_instance_id",
+          "sequence",
+          "permission",
+          "health",
+          "certainty",
+          "state",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "NativeCatalogApplications": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog_app_ids": {
+            "description": "Catalog application IDs in ASCII order.",
+            "items": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "catalog_app_ids"
+        ],
+        "type": "object"
+      },
+      "NativeCondition": {
+        "description": "Exactly one of a comparison of a registered field with a typed value, a combination of conditions, or an application condition matched on the device. Nesting is at most three deep.",
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "Compare": {
+                "additionalProperties": false,
+                "properties": {
+                  "field": {
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "op": {
+                    "enum": [
+                      "eq",
+                      "ne",
+                      "lt",
+                      "le",
+                      "gt",
+                      "ge",
+                      "in",
+                      "not_in"
+                    ],
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "A whole number, one of an enumerated field's values, a boolean, or a list of them for in and not_in."
+                  }
+                },
+                "required": [
+                  "field",
+                  "op",
+                  "value"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "Compare"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "All": {
+                "$ref": "#/components/schemas/NativeConditionList"
+              }
+            },
+            "required": [
+              "All"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "Any": {
+                "$ref": "#/components/schemas/NativeConditionList"
+              }
+            },
+            "required": [
+              "Any"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "Not": {
+                "additionalProperties": false,
+                "properties": {
+                  "condition": {
+                    "$ref": "#/components/schemas/NativeCondition"
+                  }
+                },
+                "required": [
+                  "condition"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "Not"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "AppsAbsent": {
+                "$ref": "#/components/schemas/NativeCatalogApplications"
+              }
+            },
+            "required": [
+              "AppsAbsent"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "AppsOnly": {
+                "$ref": "#/components/schemas/NativeCatalogApplications"
+              }
+            },
+            "required": [
+              "AppsOnly"
+            ],
+            "type": "object"
+          }
+        ]
+      },
       "NativeConditionEvidence": {
         "additionalProperties": false,
         "properties": {
@@ -20290,7 +20983,7 @@
           "batch_sequence": {
             "format": "int64",
             "maximum": 20000,
-            "minimum": 1,
+            "minimum": 0,
             "type": "integer"
           },
           "generation": {
@@ -20312,9 +21005,6 @@
             "maxLength": 128,
             "minLength": 1,
             "type": "string"
-          },
-          "occurrence": {
-            "$ref": "#/components/schemas/NativeOccurrence"
           },
           "participation_id": {
             "maxLength": 26,
@@ -20349,8 +21039,8 @@
             "minLength": 1,
             "type": "string"
           },
-          "unresolved_opener": {
-            "type": "boolean"
+          "transition": {
+            "$ref": "#/components/schemas/NativeRuleTransition"
           }
         },
         "required": [
@@ -20366,8 +21056,7 @@
           "matrix_id",
           "batch_sequence",
           "record_index",
-          "occurrence",
-          "unresolved_opener",
+          "transition",
           "received_at",
           "interpreted_at"
         ],
@@ -20393,6 +21082,23 @@
         ],
         "type": "object"
       },
+      "NativeConditionList": {
+        "additionalProperties": false,
+        "properties": {
+          "conditions": {
+            "items": {
+              "$ref": "#/components/schemas/NativeCondition"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "conditions"
+        ],
+        "type": "object"
+      },
       "NativeConditionListResponse": {
         "additionalProperties": false,
         "properties": {
@@ -20412,193 +21118,33 @@
         ],
         "type": "object"
       },
-      "NativeCoverageClaim": {
+      "NativeParticipationConfirmed": {
         "additionalProperties": false,
-        "properties": {
-          "claim": {
-            "enum": [
-              "enforce",
-              "observe",
-              "unavailable"
-            ],
-            "type": "string"
-          },
-          "coverage_key": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-            "type": "string"
-          },
-          "source_schema_digest": {
-            "pattern": "^sha256:[0-9a-f]{64}$",
-            "type": "string"
-          },
-          "state": {
-            "enum": [
-              "ready",
-              "degraded",
-              "unavailable"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "coverage_key",
-          "source_schema_digest",
-          "claim",
-          "state"
-        ],
-        "type": "object"
-      },
-      "NativeCoverageTransition": {
-        "additionalProperties": false,
+        "description": "Where the exam begins on the stream: Desktop sends it once, when the candidate window mounts after admission. Before it the server applies the policy's readiness rules; from it, the participation rules, on the latest facts. Send the mounted candidate window's fact before it, in the same or an earlier batch; otherwise the window rule is evaluated on the window Desktop reported at Start and fails.",
         "properties": {
           "kind": {
             "enum": [
-              "coverage_transition"
+              "participation_confirmed"
             ],
             "type": "string"
           },
-          "occurred_at": {
+          "observed_at": {
             "format": "date-time",
-            "type": "string"
-          },
-          "reason": {
-            "enum": [
-              "initial",
-              "health_changed",
-              "permission_changed",
-              "reconciled",
-              "stopped"
-            ],
-            "type": "string"
-          },
-          "source": {
-            "$ref": "#/components/schemas/NativeSourceCoverage"
-          }
-        },
-        "required": [
-          "kind",
-          "source",
-          "occurred_at",
-          "reason"
-        ],
-        "type": "object"
-      },
-      "NativeOccurrence": {
-        "additionalProperties": false,
-        "properties": {
-          "capability_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-            "type": "string"
-          },
-          "certainty": {
-            "enum": [
-              "complete",
-              "partial",
-              "unknown"
-            ],
-            "type": "string"
-          },
-          "condition_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-            "type": "string"
-          },
-          "detector_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-            "type": "string"
-          },
-          "detector_version": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "minimum": 1,
-            "type": "integer"
-          },
-          "first_observed_at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "gap_count": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "kind": {
-            "enum": [
-              "occurrence"
-            ],
-            "type": "string"
-          },
-          "last_confirmed_at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "mode": {
-            "enum": [
-              "observe",
-              "enforce"
-            ],
-            "type": "string"
-          },
-          "occurrence_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-            "type": "string"
-          },
-          "repeat_count": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "minimum": 1,
-            "type": "integer"
-          },
-          "source_ranges": {
-            "items": {
-              "$ref": "#/components/schemas/NativeSourceRange"
-            },
-            "maxItems": 11,
-            "minItems": 1,
-            "type": "array"
-          },
-          "status": {
-            "enum": [
-              "opened",
-              "repeated",
-              "recovered"
-            ],
             "type": "string"
           }
         },
         "required": [
           "kind",
-          "occurrence_id",
-          "condition_id",
-          "detector_id",
-          "detector_version",
-          "capability_id",
-          "mode",
-          "status",
-          "first_observed_at",
-          "last_confirmed_at",
-          "repeat_count",
-          "certainty",
-          "gap_count",
-          "source_ranges"
+          "observed_at"
         ],
         "type": "object"
       },
       "NativeRecord": {
         "discriminator": {
           "mapping": {
-            "coverage_transition": "#/components/schemas/NativeCoverageTransition",
-            "occurrence": "#/components/schemas/NativeOccurrence",
+            "capability_fact": "#/components/schemas/NativeCapabilityFact",
+            "participation_confirmed": "#/components/schemas/NativeParticipationConfirmed",
+            "rule_status": "#/components/schemas/NativeRuleStatusReport",
             "source_gap": "#/components/schemas/NativeSourceGap",
             "source_reset": "#/components/schemas/NativeSourceReset"
           },
@@ -20606,10 +21152,13 @@
         },
         "oneOf": [
           {
-            "$ref": "#/components/schemas/NativeOccurrence"
+            "$ref": "#/components/schemas/NativeCapabilityFact"
           },
           {
-            "$ref": "#/components/schemas/NativeCoverageTransition"
+            "$ref": "#/components/schemas/NativeParticipationConfirmed"
+          },
+          {
+            "$ref": "#/components/schemas/NativeRuleStatusReport"
           },
           {
             "$ref": "#/components/schemas/NativeSourceReset"
@@ -20618,6 +21167,210 @@
             "$ref": "#/components/schemas/NativeSourceGap"
           }
         ]
+      },
+      "NativeRule": {
+        "additionalProperties": false,
+        "description": "One requirement, in the rule grammar Desktop publishes.",
+        "properties": {
+          "capability": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "enforce",
+              "observe"
+            ],
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "readiness",
+              "participation",
+              "both"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "description": "A reason registered for the capability; Desktop owns its localized text.",
+            "maxLength": 128,
+            "type": "string"
+          },
+          "requirement": {
+            "$ref": "#/components/schemas/NativeCondition"
+          },
+          "rule_id": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule_id",
+          "capability",
+          "mode",
+          "phase",
+          "reason",
+          "requirement"
+        ],
+        "type": "object"
+      },
+      "NativeRuleReport": {
+        "additionalProperties": false,
+        "properties": {
+          "rule_id": {
+            "maxLength": 128,
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "met",
+              "not_met",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "unknown_cause": {
+            "description": "Why the rule is unknown; present only when status is unknown.",
+            "enum": [
+              "unavailable",
+              "gap",
+              "unhealthy",
+              "permission",
+              "partial",
+              "checking"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule_id",
+          "status"
+        ],
+        "type": "object"
+      },
+      "NativeRuleStatusReport": {
+        "additionalProperties": false,
+        "description": "Desktop's own status for one participation rule and whether it is containing the candidate window because of it. The server's status is authoritative; a disagreement is counted, never applied.",
+        "properties": {
+          "contained": {
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "rule_status"
+            ],
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "rule_id": {
+            "maxLength": 128,
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "met",
+              "not_met",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "unknown_cause": {
+            "description": "Why the rule is unknown; present only when status is unknown.",
+            "enum": [
+              "unavailable",
+              "gap",
+              "unhealthy",
+              "permission",
+              "partial",
+              "checking"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "rule_id",
+          "status",
+          "contained",
+          "observed_at"
+        ],
+        "type": "object"
+      },
+      "NativeRuleTransition": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "description": "The device time of the change; it never moves backwards within a Participation.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "capability": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "event": {
+            "enum": [
+              "opened",
+              "closed"
+            ],
+            "type": "string"
+          },
+          "from": {
+            "$ref": "#/components/schemas/NativeRuleReport"
+          },
+          "mode": {
+            "enum": [
+              "enforce",
+              "observe"
+            ],
+            "type": "string"
+          },
+          "occurrence": {
+            "description": "The rule's occurrence this change opened or closed, counted from 1 per Participation.",
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "reason": {
+            "description": "The reason ID Desktop's registry publishes for the rule; Desktop owns its wording.",
+            "maxLength": 128,
+            "type": "string"
+          },
+          "rule_id": {
+            "maxLength": 128,
+            "type": "string"
+          },
+          "to": {
+            "$ref": "#/components/schemas/NativeRuleReport"
+          }
+        },
+        "required": [
+          "rule_id",
+          "capability",
+          "mode",
+          "reason",
+          "to",
+          "at"
+        ],
+        "type": "object"
+      },
+      "NativeScreenRecordingPolicy": {
+        "additionalProperties": false,
+        "description": "Whether Desktop records the candidate's screen on the device for the whole session, uploading only the ranges the server requests. Off by default; the candidate is told before the Attempt starts. When on, the policy activates the screen_recording capability with the readiness rule screen_recording.free_space: Start is refused unless the recorder is permitted and the device has at least 3072 MiB free.",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "type": "object"
       },
       "NativeSecurityAcknowledgement": {
         "additionalProperties": false,
@@ -20778,7 +21531,7 @@
                   ],
                   "properties": {
                     "allowed_application_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
+                      "description": "The only catalog applications the candidate may run, sorted and unique: IDs from the Desktop release's application catalog, each one it marks allowable. Empty adds no allowlist. When the family is on, the catalog's never-allowable applications are always blocked.",
                       "items": {
                         "maxLength": 128,
                         "minLength": 1,
@@ -20800,11 +21553,20 @@
                         "enforce"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "allowed_application_ids"
                   ],
                   "type": "object"
@@ -20823,11 +21585,20 @@
                         "enforce"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
-                    "mode"
+                    "mode",
+                    "outcome"
                   ],
                   "type": "object"
                 },
@@ -20905,6 +21676,14 @@
                     "observe_os_clipboard_changes": {
                       "type": "boolean"
                     },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
+                    },
                     "strategy": {
                       "enum": [
                         "disabled",
@@ -20916,6 +21695,7 @@
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "observe_os_clipboard_changes",
                     "strategy"
                   ],
@@ -21005,11 +21785,20 @@
                         "required"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "candidate_print_commands",
                     "monitored_spooler"
                   ],
@@ -21028,9 +21817,6 @@
                       },
                       "then": {
                         "properties": {
-                          "allowed_storage_function_class_ids": {
-                            "const": []
-                          },
                           "enabled_sub_capabilities": {
                             "const": []
                           }
@@ -21071,18 +21857,6 @@
                     }
                   ],
                   "properties": {
-                    "allowed_storage_function_class_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
-                      "items": {
-                        "maxLength": 128,
-                        "minLength": 1,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-                        "type": "string"
-                      },
-                      "maxItems": 256,
-                      "type": "array",
-                      "uniqueItems": true
-                    },
                     "enabled_sub_capabilities": {
                       "items": {
                         "enum": [
@@ -21106,12 +21880,20 @@
                         "enforce"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "mode",
-                    "allowed_storage_function_class_ids",
+                    "outcome",
                     "enabled_sub_capabilities"
                   ],
                   "type": "object"
@@ -21187,6 +21969,14 @@
                       ],
                       "type": "string"
                     },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
+                    },
                     "rule": {
                       "enum": [
                         "not_applied",
@@ -21199,6 +21989,7 @@
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "rule"
                   ],
                   "type": "object"
@@ -21216,15 +22007,6 @@
                       },
                       "then": {
                         "properties": {
-                          "allowed_adapter_class_ids": {
-                            "const": []
-                          },
-                          "allowed_managed_profile_ids": {
-                            "const": []
-                          },
-                          "allowed_tunnel_class_ids": {
-                            "const": []
-                          },
                           "enabled_sub_capabilities": {
                             "const": []
                           }
@@ -21265,54 +22047,16 @@
                     }
                   ],
                   "properties": {
-                    "allowed_adapter_class_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
-                      "items": {
-                        "maxLength": 128,
-                        "minLength": 1,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-                        "type": "string"
-                      },
-                      "maxItems": 256,
-                      "type": "array",
-                      "uniqueItems": true
-                    },
-                    "allowed_managed_profile_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
-                      "items": {
-                        "maxLength": 128,
-                        "minLength": 1,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-                        "type": "string"
-                      },
-                      "maxItems": 256,
-                      "type": "array",
-                      "uniqueItems": true
-                    },
-                    "allowed_tunnel_class_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
-                      "items": {
-                        "maxLength": 128,
-                        "minLength": 1,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-                        "type": "string"
-                      },
-                      "maxItems": 256,
-                      "type": "array",
-                      "uniqueItems": true
-                    },
                     "enabled_sub_capabilities": {
                       "items": {
                         "enum": [
                           "system_proxy_state",
                           "os_managed_vpn_state",
-                          "tunnel_interface_state",
-                          "route_change",
-                          "network_source_health"
+                          "tunnel_interface_state"
                         ],
                         "type": "string"
                       },
-                      "maxItems": 5,
+                      "maxItems": 3,
                       "type": "array",
                       "uniqueItems": true
                     },
@@ -21327,14 +22071,20 @@
                         "enforce"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "mode",
-                    "allowed_adapter_class_ids",
-                    "allowed_managed_profile_ids",
-                    "allowed_tunnel_class_ids",
+                    "outcome",
                     "enabled_sub_capabilities"
                   ],
                   "type": "object"
@@ -21412,6 +22162,14 @@
                       ],
                       "type": "string"
                     },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
+                    },
                     "require_ready": {
                       "type": "boolean"
                     }
@@ -21419,6 +22177,7 @@
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "concurrent_use_check",
                     "require_ready"
                   ],
@@ -21497,6 +22256,14 @@
                       ],
                       "type": "string"
                     },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
+                    },
                     "require_ready": {
                       "type": "boolean"
                     }
@@ -21504,6 +22271,7 @@
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "concurrent_use_check",
                     "require_ready"
                   ],
@@ -21521,11 +22289,20 @@
                         "disabled"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
-                    "mode"
+                    "mode",
+                    "outcome"
                   ],
                   "type": "object"
                 }
@@ -21608,14 +22385,18 @@
             "type": "array"
           },
           "registry_digest": {
-            "const": "sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0",
+            "const": "sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d",
             "type": "string"
+          },
+          "screen_recording": {
+            "$ref": "#/components/schemas/NativeScreenRecordingPolicy"
           }
         },
         "required": [
           "registry_digest",
           "baseline_id",
-          "families"
+          "families",
+          "screen_recording"
         ],
         "type": "object"
       },
@@ -21772,9 +22553,14 @@
       },
       "NativeSecuritySummary": {
         "additionalProperties": false,
-        "description": "Content-free native condition count and currently live source health. Contains no detector, occurrence or source-instance identities and makes no misconduct finding.",
+        "description": "The candidate's live native standing: how many rule status changes are kept, whether the live Participation's native delivery is open, each enforce rule's status as the server evaluates it, whether Desktop is containing the candidate window, and the Attempt's screen clips by state. It contains no facts, source-instance or application identities, and an application outside the catalog is never named. A rule that is not met is not a misconduct finding; its Flag is reviewed like any other.",
         "properties": {
+          "contained": {
+            "description": "Whether Desktop reports it is containing the candidate window right now.",
+            "type": "boolean"
+          },
           "live_coverage_available": {
+            "description": "Whether the live Participation's native delivery is open, so rule statuses are current.",
             "type": "boolean"
           },
           "retained_condition_records": {
@@ -21783,145 +22569,118 @@
             "minimum": 0,
             "type": "integer"
           },
-          "sources": {
+          "rules": {
+            "description": "The live Participation's enforce rules, by rule ID; empty when nothing is live.",
             "items": {
               "additionalProperties": false,
               "properties": {
-                "complete": {
-                  "type": "boolean"
+                "capability": {
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                  "type": "string"
                 },
-                "health": {
+                "occurrences": {
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "open_occurrence": {
+                  "description": "The occurrence open now, counted from 1 in this Participation; absent when none is open.",
+                  "format": "int64",
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "reason": {
+                  "description": "The registry's reason ID for the rule, such as display.single_display_required.",
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                "rule_id": {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                "status": {
                   "enum": [
-                    "starting",
-                    "healthy",
-                    "degraded",
-                    "failed",
-                    "recovering",
-                    "stopped"
+                    "met",
+                    "not_met",
+                    "unknown"
                   ],
                   "type": "string"
                 },
-                "permission": {
+                "unknown_cause": {
                   "enum": [
-                    "denied",
-                    "granted",
-                    "not_determined",
-                    "restricted",
-                    "unavailable"
+                    "unavailable",
+                    "gap",
+                    "unhealthy",
+                    "permission",
+                    "partial",
+                    "checking"
                   ],
-                  "type": "string"
-                },
-                "source_id": {
                   "type": "string"
                 }
               },
               "required": [
-                "source_id",
-                "health",
-                "permission",
-                "complete"
+                "rule_id",
+                "capability",
+                "reason",
+                "status",
+                "occurrences"
               ],
               "type": "object"
             },
-            "maxItems": 11,
+            "maxItems": 64,
             "type": "array"
+          },
+          "screen_clips": {
+            "additionalProperties": false,
+            "properties": {
+              "failed": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "ready": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "recording": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "requested": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "uploading": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "requested",
+              "recording",
+              "uploading",
+              "ready",
+              "failed"
+            ],
+            "type": "object"
           }
         },
         "required": [
           "retained_condition_records",
           "live_coverage_available",
-          "sources"
-        ],
-        "type": "object"
-      },
-      "NativeSourceCoverage": {
-        "additionalProperties": false,
-        "properties": {
-          "adapter_version": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-            "type": "string"
-          },
-          "complete": {
-            "type": "boolean"
-          },
-          "gap_count": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "health": {
-            "enum": [
-              "starting",
-              "healthy",
-              "degraded",
-              "failed",
-              "recovering",
-              "stopped"
-            ],
-            "type": "string"
-          },
-          "permission": {
-            "enum": [
-              "denied",
-              "granted",
-              "not_determined",
-              "restricted",
-              "unavailable"
-            ],
-            "type": "string"
-          },
-          "sequence": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "source_id": {
-            "enum": [
-              "display-topology",
-              "candidate-window",
-              "capture-session",
-              "process-application",
-              "interactive-session",
-              "clipboard",
-              "print-spooler",
-              "removable-storage",
-              "virtualization",
-              "network-configuration",
-              "media-device"
-            ],
-            "type": "string"
-          },
-          "source_instance_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-            "type": "string"
-          },
-          "source_schema_digest": {
-            "pattern": "^sha256:[0-9a-f]{64}$",
-            "type": "string"
-          }
-        },
-        "required": [
-          "source_id",
-          "source_instance_id",
-          "sequence",
-          "source_schema_digest",
-          "adapter_version",
-          "health",
-          "permission",
-          "complete",
-          "gap_count"
+          "rules",
+          "contained",
+          "screen_clips"
         ],
         "type": "object"
       },
       "NativeSourceGap": {
         "additionalProperties": false,
         "properties": {
+          "capability": {
+            "description": "The activated capability whose source this names.",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
           "first_missing_sequence": {
             "format": "int64",
             "maximum": 9007199254740991,
@@ -21952,22 +22711,6 @@
             ],
             "type": "string"
           },
-          "source_id": {
-            "enum": [
-              "display-topology",
-              "candidate-window",
-              "capture-session",
-              "process-application",
-              "interactive-session",
-              "clipboard",
-              "print-spooler",
-              "removable-storage",
-              "virtualization",
-              "network-configuration",
-              "media-device"
-            ],
-            "type": "string"
-          },
           "source_instance_id": {
             "maxLength": 128,
             "minLength": 1,
@@ -21977,7 +22720,7 @@
         },
         "required": [
           "kind",
-          "source_id",
+          "capability",
           "source_instance_id",
           "first_missing_sequence",
           "last_missing_sequence",
@@ -21986,55 +22729,14 @@
         ],
         "type": "object"
       },
-      "NativeSourceRange": {
-        "additionalProperties": false,
-        "properties": {
-          "first_sequence": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "last_sequence": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "source_id": {
-            "enum": [
-              "display-topology",
-              "candidate-window",
-              "capture-session",
-              "process-application",
-              "interactive-session",
-              "clipboard",
-              "print-spooler",
-              "removable-storage",
-              "virtualization",
-              "network-configuration",
-              "media-device"
-            ],
-            "type": "string"
-          },
-          "source_instance_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-            "type": "string"
-          }
-        },
-        "required": [
-          "source_id",
-          "source_instance_id",
-          "first_sequence",
-          "last_sequence"
-        ],
-        "type": "object"
-      },
       "NativeSourceReset": {
         "additionalProperties": false,
         "properties": {
+          "capability": {
+            "description": "The activated capability whose source this names.",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
           "kind": {
             "enum": [
               "source_reset"
@@ -22076,28 +22778,12 @@
             "minLength": 1,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
             "type": "string"
-          },
-          "source_id": {
-            "enum": [
-              "display-topology",
-              "candidate-window",
-              "capture-session",
-              "process-application",
-              "interactive-session",
-              "clipboard",
-              "print-spooler",
-              "removable-storage",
-              "virtualization",
-              "network-configuration",
-              "media-device"
-            ],
-            "type": "string"
           }
         },
         "required": [
           "kind",
           "reset_id",
-          "source_id",
+          "capability",
           "previous_source_instance_id",
           "previous_final_sequence",
           "new_source_instance_id",
@@ -22857,6 +23543,112 @@
         ],
         "type": "string"
       },
+      "PluginListResponse": {
+        "additionalProperties": false,
+        "description": "One page of the collection in its stable order.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PluginResponse"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PluginResponse": {
+        "additionalProperties": false,
+        "description": "One compiled-in plugin as an administrator sees it.",
+        "properties": {
+          "enabled": {
+            "description": "Whether the plugin should run, from its saved settings or its default.",
+            "type": "boolean"
+          },
+          "enabled_by_default": {
+            "description": "Whether the plugin runs when nobody has configured it.",
+            "type": "boolean"
+          },
+          "id": {
+            "pattern": "^[a-z][a-z0-9.-]{0,63}$",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "required": {
+            "description": "A required plugin always runs.",
+            "type": "boolean"
+          },
+          "revision": {
+            "description": "The saved settings revision, 0 when nothing is saved.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "settings": {
+            "description": "The saved settings document as JSON text, or \"{}\" when nothing is saved.",
+            "type": "string"
+          },
+          "settings_schema": {
+            "description": "The JSON Schema of the plugin's settings as JSON text, absent when the plugin has none.",
+            "type": "string"
+          },
+          "state": {
+            "description": "The plugin's state on the serving node.",
+            "enum": [
+              "disabled",
+              "active",
+              "failed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "state",
+          "required",
+          "enabled_by_default",
+          "enabled",
+          "settings",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "PluginSettingsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "description": "Whether the plugin should run. A required plugin cannot be turned off.",
+            "type": "boolean"
+          },
+          "expected_revision": {
+            "description": "The settings revision the editor read, 0 when nothing is saved. A stale revision cannot overwrite newer settings.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "settings": {
+            "description": "The plugin's settings document as JSON text, a JSON object of at most 64 KiB, as its settings_schema describes.",
+            "maxLength": 65536,
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "enabled",
+          "settings"
+        ],
+        "type": "object"
+      },
       "PrepareSecurityPreflightRequest": {
         "additionalProperties": false,
         "properties": {
@@ -22873,15 +23665,10 @@
           "native_registry_digest": {
             "pattern": "^sha256:[0-9a-f]{64}$",
             "type": "string"
-          },
-          "source_manifest_digest": {
-            "pattern": "^sha256:[0-9a-f]{64}$",
-            "type": "string"
           }
         },
         "required": [
           "native_registry_digest",
-          "source_manifest_digest",
           "configuration_manifest_fingerprint"
         ],
         "type": "object"
@@ -23322,6 +24109,11 @@
         ],
         "type": "object"
       },
+      "ReadinessDigest": {
+        "description": "Identifies what the readiness overview shows and Desktop enforces: the activations and rules, family selections, recorder switch, and the registry, matrix and catalogs they rest on. Unlike the policy content digest it leaves out the policy's own identity, so the overview and the preflight prepared at Start carry the same value exactly when nothing that matters changed. It is the SHA-256 of the canonical JSON object {activations, rules, capabilities, screen_recording, focus_loss_mode, connection_loss_mode, registry_digest, capability_matrix_digest, catalog_bindings}, taken from the policy and its resolution.",
+        "pattern": "^sha256:[0-9a-f]{64}$",
+        "type": "string"
+      },
       "ReallowExamAttemptRequest": {
         "additionalProperties": false,
         "properties": {
@@ -23636,6 +24428,37 @@
           "expected_revision",
           "purpose",
           "email"
+        ],
+        "type": "object"
+      },
+      "RequestExamAttemptScreenClipRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "description": "The range's end, at most ten minutes after the request.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "from_session_start": {
+            "description": "True for a range from the moment the candidate window opened; start is then omitted.",
+            "type": "boolean"
+          },
+          "reason": {
+            "description": "The manager's private reason. It is stored with the request and never returned.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "start": {
+            "description": "The range's start, required unless from_session_start is true, and omitted then.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_session_start",
+          "end",
+          "reason"
         ],
         "type": "object"
       },
@@ -24820,6 +25643,215 @@
         ],
         "type": "object"
       },
+      "ScreenClipChunkResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "chunk": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chunk"
+        ],
+        "type": "object"
+      },
+      "ScreenClipListResponse": {
+        "additionalProperties": false,
+        "description": "One page of the collection in its stable order.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ScreenClipResponse"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ScreenClipRange": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "from_session_start": {
+            "type": "boolean"
+          },
+          "start": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_session_start",
+          "end"
+        ],
+        "type": "object"
+      },
+      "ScreenClipResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "failure": {
+            "description": "Why the clip failed; present only when state is failed.",
+            "enum": [
+              "attempt_ended",
+              "not_recorded",
+              "upload_deadline",
+              "rejected"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "range": {
+            "$ref": "#/components/schemas/ScreenClipRange"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "manager",
+              "incident"
+            ],
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "requested",
+              "recording",
+              "uploading",
+              "ready",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "exam_attempt_id",
+          "source",
+          "state",
+          "range",
+          "requested_at",
+          "updated_at",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "ScreenClipUploadResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "chunk_bytes": {
+            "description": "The size of every chunk but the last.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "chunk_count": {
+            "maximum": 384,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "clip": {
+            "$ref": "#/components/schemas/ScreenClipResponse"
+          },
+          "content_digest": {
+            "description": "The SHA-256 of the clip's manifest: \"proctor-screen-clip-v1\", the media type, size, chunk size and every chunk hash in order, each followed by a line feed.",
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "received_chunks": {
+            "description": "The numbers, from 1, of the chunks that arrived, in order.",
+            "items": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "maxItems": 384,
+            "type": "array"
+          }
+        },
+        "required": [
+          "clip",
+          "chunk_bytes",
+          "chunk_count",
+          "received_chunks",
+          "content_digest"
+        ],
+        "type": "object"
+      },
+      "ScreenRecordingDisclosure": {
+        "additionalProperties": false,
+        "description": "Localized recorder notice, not consent or playback authority. Zero days means no configured automatic expiry; holds still apply.",
+        "properties": {
+          "audience": {
+            "const": "exam_managers_of_the_sitting",
+            "description": "Who may play an uploaded clip.",
+            "type": "string"
+          },
+          "clip_retention_days": {
+            "description": "Uploaded clips are integrity evidence and follow its retention period.",
+            "maximum": 36500,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "local_recording": {
+            "const": "whole_session_deleted_at_submission",
+            "description": "Desktop records the whole session on the device and deletes it at submission.",
+            "type": "string"
+          },
+          "notice_id": {
+            "const": "screen_recording",
+            "type": "string"
+          },
+          "retention_anchor": {
+            "const": "eligible_closed_sitting_records_completion",
+            "type": "string"
+          },
+          "retention_policy_revision": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "uploads": {
+            "const": "requested_and_flagged_ranges_only",
+            "description": "Only ranges the Sitting's Exam Managers ask for, or the minute either side of a Flag, leave the device.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "notice_id",
+          "audience",
+          "local_recording",
+          "uploads",
+          "retention_policy_revision",
+          "clip_retention_days",
+          "retention_anchor"
+        ],
+        "type": "object"
+      },
       "SearchClassItem": {
         "additionalProperties": false,
         "description": "An unarchived Class within the caller's class.view scope.",
@@ -24964,12 +25996,7 @@
           },
           "kind": {
             "enum": [
-              "application",
-              "storage_function",
-              "managed_network_profile",
-              "network_adapter_class",
-              "tunnel_class",
-              "detector"
+              "application"
             ],
             "type": "string"
           },
@@ -24988,18 +26015,10 @@
         ],
         "type": "object"
       },
-      "SecurityCoverageResult": {
+      "SecurityControlResult": {
         "additionalProperties": false,
+        "description": "How the server processed Desktop's latest security control: the lease renewal and its delivery watermarks. A renewal never changes whether the candidate may interact; only closing native delivery does.",
         "properties": {
-          "coverage_result": {
-            "enum": [
-              "accepted",
-              "stale_control",
-              "reset_required",
-              "reset_conflict"
-            ],
-            "type": "string"
-          },
           "delivery_watermark_rejections": {
             "items": {
               "$ref": "#/components/schemas/DeliveryWatermarkRejection"
@@ -25022,71 +26041,89 @@
           },
           "security_interaction_allowed": {
             "type": "boolean"
-          },
-          "source_reset_receipts": {
-            "items": {
-              "$ref": "#/components/schemas/SourceResetReceipt"
-            },
-            "maxItems": 11,
-            "type": "array"
           }
         },
         "required": [
           "processed_control_sequence",
           "processed_control_digest",
-          "coverage_result",
-          "source_reset_receipts",
           "security_interaction_allowed",
           "delivery_watermark_rejections"
+        ],
+        "type": "object"
+      },
+      "SecurityPolicyOverviewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "browser_activity_disclosure": {
+            "$ref": "#/components/schemas/BrowserActivityDisclosure"
+          },
+          "capability_matrix_digest": {
+            "description": "SHA-256 of the exact signed bytes of the release's certification document.",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "catalog_bindings": {
+            "items": {
+              "$ref": "#/components/schemas/SecurityCatalogBinding"
+            },
+            "maxItems": 32,
+            "type": "array"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/EffectiveExamSecurityPolicy"
+          },
+          "readiness_digest": {
+            "$ref": "#/components/schemas/ReadinessDigest"
+          },
+          "screen_recording_disclosure": {
+            "description": "The recorder notice to show before Start; null when the Exam does not record the screen.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ScreenRecordingDisclosure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "server_time": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server_time",
+          "policy",
+          "readiness_digest",
+          "capability_matrix_digest",
+          "catalog_bindings",
+          "browser_activity_disclosure",
+          "screen_recording_disclosure"
         ],
         "type": "object"
       },
       "SecurityPolicyRecovery": {
         "additionalProperties": false,
         "properties": {
-          "current_coverage": {
-            "items": {
-              "$ref": "#/components/schemas/NativeCoverageClaim"
-            },
-            "maxItems": 64,
-            "type": "array"
-          },
-          "current_sources": {
-            "items": {
-              "$ref": "#/components/schemas/NativeSourceCoverage"
-            },
-            "maxItems": 11,
-            "type": "array"
-          },
           "frozen_attempt_configuration": {
             "$ref": "#/components/schemas/FrozenAttemptConfiguration"
           },
           "security": {
             "$ref": "#/components/schemas/AdmittedSecurity"
           },
-          "security_coverage": {
-            "$ref": "#/components/schemas/SecurityCoverageResult"
+          "security_control": {
+            "$ref": "#/components/schemas/SecurityControlResult"
           },
           "server_time": {
             "format": "date-time",
             "type": "string"
-          },
-          "source_reset_receipts": {
-            "items": {
-              "$ref": "#/components/schemas/SourceResetReceipt"
-            },
-            "maxItems": 11,
-            "type": "array"
           }
         },
         "required": [
           "server_time",
           "security",
           "frozen_attempt_configuration",
-          "current_sources",
-          "current_coverage",
-          "source_reset_receipts",
-          "security_coverage"
+          "security_control"
         ],
         "type": "object"
       },
@@ -25098,6 +26135,7 @@
             "$ref": "#/components/schemas/BrowserActivityDisclosure"
           },
           "capability_matrix_digest": {
+            "description": "SHA-256 of the exact signed bytes of the release's certification document.",
             "pattern": "^sha256:[0-9a-f]{64}$",
             "type": "string"
           },
@@ -25129,6 +26167,20 @@
           "preflight_challenge": {
             "$ref": "#/components/schemas/SecurityPreflightChallenge"
           },
+          "readiness_digest": {
+            "$ref": "#/components/schemas/ReadinessDigest"
+          },
+          "screen_recording_disclosure": {
+            "description": "The recorder notice to show before Start; null when the Exam does not record the screen.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ScreenRecordingDisclosure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "server_time": {
             "format": "date-time",
             "type": "string"
@@ -25138,11 +26190,13 @@
           "server_time",
           "policy",
           "policy_content_digest",
+          "readiness_digest",
           "capability_matrix_digest",
           "catalog_bindings",
           "preflight_challenge",
           "frozen_attempt_configuration",
-          "browser_activity_disclosure"
+          "browser_activity_disclosure",
+          "screen_recording_disclosure"
         ],
         "type": "object"
       },
@@ -25180,28 +26234,21 @@
       },
       "SecurityPreflightReport": {
         "additionalProperties": false,
-        "description": "Minimized assertions, at most 64 KiB. Source order and categories must match the resolved policy; coverage keys are sorted and exact. No inventories, media, clipboard bytes, OS errors or arbitrary details are accepted. The server computes the report digest. Client reported_at is provenance; server time controls challenge expiry and admission freshness.",
+        "description": "What Desktop observed at Start, at most 128 KiB: one fresh fact for each activated capability and its own status for each readiness rule. No inventories, media, clipboard bytes, OS errors or arbitrary details are accepted. The server evaluates the readiness rules on these facts and its result decides admission. The server computes the report digest. Client reported_at is provenance; server time controls challenge expiry and admission freshness.",
         "properties": {
-          "baseline": {
-            "$ref": "#/components/schemas/NativeBaselineReport"
-          },
-          "capability_matrix_digest": {
-            "pattern": "^sha256:[0-9a-f]{64}$",
-            "type": "string"
+          "capabilities": {
+            "description": "One fresh fact for every activated capability at Start, in the policy's activation order.",
+            "items": {
+              "$ref": "#/components/schemas/NativeCapabilityReadiness"
+            },
+            "maxItems": 32,
+            "type": "array"
           },
           "challenge": {
             "maxLength": 43,
             "minLength": 43,
             "pattern": "^[A-Za-z0-9_-]{43}$",
             "type": "string"
-          },
-          "coverage": {
-            "items": {
-              "$ref": "#/components/schemas/NativeCoverageClaim"
-            },
-            "maxItems": 64,
-            "minItems": 0,
-            "type": "array"
           },
           "policy_content_digest": {
             "pattern": "^sha256:[0-9a-f]{64}$",
@@ -25211,71 +26258,32 @@
             "pattern": "^sha256:[0-9a-f]{64}$",
             "type": "string"
           },
-          "posture": {
-            "enum": [
-              "compliant",
-              "degraded",
-              "contained",
-              "failed"
-            ],
-            "type": "string"
-          },
           "reported_at": {
             "format": "date-time",
             "type": "string"
+          },
+          "rules": {
+            "description": "Desktop's own status for every readiness rule.",
+            "items": {
+              "$ref": "#/components/schemas/NativeRuleReport"
+            },
+            "maxItems": 64,
+            "type": "array"
           },
           "security_session_id": {
             "maxLength": 128,
             "minLength": 1,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
             "type": "string"
-          },
-          "selected_source_categories": {
-            "items": {
-              "enum": [
-                "os-clipboard-change",
-                "removable-block-storage",
-                "portable-mtp",
-                "system-proxy-state",
-                "os-managed-vpn-state",
-                "tunnel-interface-state",
-                "route-change",
-                "network-source-health",
-                "camera",
-                "microphone"
-              ],
-              "type": "string"
-            },
-            "maxItems": 10,
-            "minItems": 0,
-            "type": "array",
-            "uniqueItems": true
-          },
-          "source_manifest_digest": {
-            "pattern": "^sha256:[0-9a-f]{64}$",
-            "type": "string"
-          },
-          "sources": {
-            "items": {
-              "$ref": "#/components/schemas/NativeSourceCoverage"
-            },
-            "maxItems": 11,
-            "minItems": 0,
-            "type": "array"
           }
         },
         "required": [
           "challenge",
           "policy_digest",
           "policy_content_digest",
-          "capability_matrix_digest",
           "security_session_id",
-          "source_manifest_digest",
-          "selected_source_categories",
-          "sources",
-          "coverage",
-          "baseline",
-          "posture",
+          "capabilities",
+          "rules",
           "reported_at"
         ],
         "type": "object"
@@ -25303,16 +26311,8 @@
           "reason_codes": {
             "items": {
               "enum": [
-                "policy_changed",
-                "unsupported_capability",
-                "source_unavailable",
-                "permission_required",
-                "baseline_unavailable",
                 "preflight_expired",
-                "preflight_superseded",
-                "posture_blocked",
-                "configuration_unsupported",
-                "session_changed"
+                "native_rule_unmet"
               ],
               "type": "string"
             },
@@ -25325,6 +26325,14 @@
             "pattern": "^sha256:[0-9a-f]{64}$",
             "type": "string"
           },
+          "rules": {
+            "description": "The server's own status for every readiness rule, evaluated on the reported state. Where it differs from Desktop's, the server's decides admission.",
+            "items": {
+              "$ref": "#/components/schemas/NativeRuleReport"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
           "server_time": {
             "format": "date-time",
             "type": "string"
@@ -25335,6 +26343,7 @@
           "report_digest",
           "admission",
           "reason_codes",
+          "rules",
           "server_time",
           "expires_at"
         ],
@@ -26112,6 +27121,7 @@
             "enum": [
               "secure_connectivity_lost",
               "focus_policy_review_required",
+              "native_policy_review_required",
               "manager_suspended"
             ],
             "type": "string"
@@ -26127,25 +27137,6 @@
           "id",
           "candidate_reason",
           "reallow_available"
-        ],
-        "type": "object"
-      },
-      "SourceResetReceipt": {
-        "additionalProperties": false,
-        "properties": {
-          "reset_digest": {
-            "pattern": "^sha256:[0-9a-f]{64}$",
-            "type": "string"
-          },
-          "reset_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "reset_id",
-          "reset_digest"
         ],
         "type": "object"
       },
@@ -26565,6 +27556,47 @@
           "reason",
           "compatibility",
           "compatibility_reason"
+        ],
+        "type": "object"
+      },
+      "SystemPlugin": {
+        "additionalProperties": false,
+        "description": "One active plugin.",
+        "properties": {
+          "id": {
+            "description": "Stable plugin identifier, also its key in the Plugins configuration section.",
+            "pattern": "^[a-z][a-z0-9.-]{0,63}$",
+            "type": "string"
+          },
+          "name": {
+            "description": "Short human-readable plugin name.",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "SystemPluginsResponse": {
+        "additionalProperties": false,
+        "description": "One page of the active plugins, ordered by name.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SystemPlugin"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "items"
         ],
         "type": "object"
       },
@@ -34874,6 +35906,535 @@
         }
       ]
     },
+    "/api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests": {
+      "get": {
+        "description": "Lists, newest first, the screen clip requests waiting for the candidate's Desktop, after validating the Session-bound Attempt credential and open Connection. Requests queued while the Attempt was suspended appear once the candidate resumes. Each item carries the range to cut; never who asked or why.",
+        "operationId": "listCandidateScreenClipRequests",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ScreenClipRequestListOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List the screen clip requests the candidate's Desktop has not taken",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ]
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/take": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        },
+        {
+          "$ref": "#/components/parameters/ScreenClipID"
+        }
+      ],
+      "post": {
+        "description": "Records that the candidate's Desktop took a request and is recording what remains of its range. The request then belongs to the Participation that took it. Taking it again through the same Participation returns it unchanged.",
+        "operationId": "takeCandidateScreenClipRequest",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CandidateScreenClipOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Take one screen clip request",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/exam-attempts/dgjcx1ia56br8kpous3h9nfemq/screen-clip-requests/twz47ydgjcx1ia56br8kpous3h/take' \\\n  --header 'Authorization: DPoP \u003cregistered-desktop-session-access-token\u003e' \\\n  --header 'DPoP: \u003cproof\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003cattempt-continuity-credential\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e'"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.state_conflict",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/upload": {
+      "get": {
+        "description": "Returns the clip and the numbers of the chunks that arrived, so Desktop resumes an interrupted upload with the rest.",
+        "operationId": "getCandidateScreenClipUpload",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/NativeDeliveryCredential"
+          },
+          {
+            "$ref": "#/components/parameters/NativeDeliveryConnectionID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ScreenClipUploadOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Read where a screen clip upload stands",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.state_conflict",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        },
+        {
+          "$ref": "#/components/parameters/ScreenClipID"
+        }
+      ],
+      "post": {
+        "description": "Declares a taken clip's media type, exact size and the SHA-256 of every chunk in order. Every chunk is chunk_bytes long except the last, which holds the rest. The clip's content digest is the SHA-256 of that manifest. A clip that would take the Attempt's clips past 6 GiB is refused. Declaring the same clip again returns it unchanged. Once the Participation that took the clip has closed, as at submission, Desktop continues the upload without the Attempt credential and Connection headers until that Participation's upload deadline; a clip not complete by then fails with upload_deadline.",
+        "operationId": "beginCandidateScreenClipUpload",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/NativeDeliveryCredential"
+          },
+          {
+            "$ref": "#/components/parameters/NativeDeliveryConnectionID"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/BeginCandidateScreenClipUpload"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ScreenClipUploadOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Declare the screen clip about to be uploaded",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.state_conflict",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.screen_clip_too_large",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/upload/chunks/{chunk}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        },
+        {
+          "$ref": "#/components/parameters/ScreenClipID"
+        },
+        {
+          "description": "The chunk's number, from 1.",
+          "in": "path",
+          "name": "chunk",
+          "required": true,
+          "schema": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        }
+      ],
+      "put": {
+        "description": "Streams one chunk as the raw request body, with its exact Content-Length. The bytes are checked against the hash the clip declared for that chunk and kept only if they match. Sending a stored chunk again changes nothing, so a chunk whose response was lost can be sent again.",
+        "operationId": "uploadCandidateScreenClipChunk",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/NativeDeliveryCredential"
+          },
+          {
+            "$ref": "#/components/parameters/NativeDeliveryConnectionID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "maxLength": 8388608,
+                "type": "string"
+              }
+            }
+          },
+          "description": "The chunk's raw bytes, exactly the size the declared upload gives that chunk: 8 MiB (8388608 bytes) for every chunk but the last.",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ScreenClipChunkOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Upload one chunk of a screen clip",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "curl --fail-with-body \\\n  --request PUT \\\n  --url 'https://proctor.example.edu/api/v1/exam-attempts/dgjcx1ia56br8kpous3h9nfemq/screen-clip-requests/twz47ydgjcx1ia56br8kpous3h/upload/chunks/1' \\\n  --header 'Authorization: DPoP \u003cregistered-desktop-session-access-token\u003e' \\\n  --header 'DPoP: \u003cproof\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003cattempt-continuity-credential\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e' \\\n  --header 'Content-Type: application/octet-stream' \\\n  --data-binary @chunk-0001.bin"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.state_conflict",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/upload/complete": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        },
+        {
+          "$ref": "#/components/parameters/ScreenClipID"
+        }
+      ],
+      "post": {
+        "description": "Makes a clip whose every chunk arrived ready to play. The body carries the clip's content digest and the installation key's ES256 signature over the exact bytes of that digest (its 64 lowercase hexadecimal characters), raw r and s in unpadded base64url. The signature must verify with the key of the Desktop registration uploading the clip; it is stored with the clip so a reviewer can check the clip later from the clip and its record alone. Completing it again returns it unchanged.",
+        "operationId": "completeCandidateScreenClipUpload",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/NativeDeliveryCredential"
+          },
+          {
+            "$ref": "#/components/parameters/NativeDeliveryConnectionID"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CompleteCandidateScreenClipUpload"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CandidateScreenClipOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Finish a screen clip upload",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.state_conflict",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.screen_clip_incomplete",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
     "/api/v1/exam-attempts/{exam_attempt_id}/security-batches": {
       "parameters": [
         {
@@ -34881,7 +36442,7 @@
         }
       ],
       "post": {
-        "description": "Atomically accepts one closed batch under its original verified release, matrix, policy, source instances, and Participation generation. Live delivery requires exact Connection continuity; closed streams use current owning registered-key authentication until the fixed upload deadline. Exact retries preserve the submitted prior acknowledgement and recover the original receipt. Out-of-order records wait behind recoverable holes; terminal gaps preserve unresolved openers. Native conditions do not automatically create Flags, warnings or suspension. Lifetime quotas include pending bytes, envelopes, receipts and bounded metadata. Repair has reserved headroom. Native append is limited across Sessions and transports to two requests per second with burst eight; replay consumes allowance. A 429 response supplies Retry-After.",
+        "description": "Atomically accepts one closed batch under its original verified release, matrix, policy, source instances, and Participation generation. Live delivery requires exact Connection continuity; closed streams use current owning registered-key authentication until the fixed upload deadline. Exact retries preserve the submitted prior acknowledgement and recover the original receipt. Out-of-order records wait behind recoverable holes; terminal gaps preserve unresolved openers. The server evaluates the policy's rules on the facts in stream order; an enforce rule that stops being met raises its native Flag and, for a flag_and_suspend family, suspends the Attempt. Observe rules, unknown status and gaps never flag. Lifetime quotas include pending bytes, envelopes, receipts and bounded metadata. Repair has reserved headroom. Native append is limited across Sessions and transports to two requests per second with burst eight; replay consumes allowance. A 429 response supplies Retry-After.",
         "operationId": "appendNativeDelivery",
         "parameters": [
           {
@@ -35670,7 +37231,7 @@
         "x-codeSamples": [
           {
             "lang": "Shell",
-            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/exam-attempts/\u003cexam-attempt-id\u003e/submissions' \\\n  --header 'Authorization: DPoP \u003cdesktop-session-access-credential\u003e' \\\n  --header 'DPoP: \u003cfresh-proof-for-this-post-target-and-current-nonce\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003cattempt-credential\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e' \\\n  --header 'Idempotency-Key: docs-submit-001' \\\n  --header 'Content-Type: application/json' \\\n  --data '{\"participation_id\":\"\u003cparticipation-id\u003e\",\"generation\":2,\"expected_current_revision_id\":\"\u003crevision-id\u003e\",\"expected_workspace_cursor\":18,\"final_focus_loss_sequence\":3,\"browser_activity\":{\"state\":\"not_applicable\"}}'"
+            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/exam-attempts/\u003cexam-attempt-id\u003e/submissions' \\\n  --header 'Authorization: DPoP \u003cdesktop-session-access-credential\u003e' \\\n  --header 'DPoP: \u003cfresh-proof-for-this-post-target-and-current-nonce\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003cattempt-credential\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e' \\\n  --header 'Idempotency-Key: docs-submit-001' \\\n  --header 'Content-Type: application/json' \\\n  --data '{\"participation_id\":\"\u003cparticipation-id\u003e\",\"generation\":2,\"expected_current_revision_id\":\"\u003crevision-id\u003e\",\"expected_workspace_cursor\":18,\"final_focus_loss_sequence\":3}'"
           }
         ],
         "x-proctor-auth": "session_required",
@@ -36529,6 +38090,92 @@
         "x-proctor-idempotency": "required"
       }
     },
+    "/api/v1/exam-sittings/{exam_sitting_id}/security-policy": {
+      "get": {
+        "description": "Resolves the Sitting's current native policy, under the same eligibility checks as preparing a preflight, for the overview a candidate's Desktop shows before Start: the capabilities it activates, the rules it checks, the recorder switch and the disclosure. It creates no preflight, records nothing and grants nothing, so the overview may hold it for as long as it is open. At Start, compare readiness_digest with the one the prepared preflight returns; if they differ, refresh the overview.",
+        "operationId": "getSecurityPolicyOverview",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecurityPolicyOverviewResponse"
+                }
+              }
+            },
+            "description": "The policy the readiness overview checks the machine against",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/PrivateNoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Read the policy for the readiness overview",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.registered_desktop_required",
+          "exam.attempt.desktop_incompatible",
+          "exam.attempt.sitting_not_open",
+          "exam.attempt.management_authority_conflict",
+          "exam.attempt.unavailable",
+          "exam.security.unsupported_capability",
+          "exam.security.catalog_missing",
+          "exam.delivery.metadata_capacity",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamSittingID"
+        }
+      ]
+    },
     "/api/v1/exam-sittings/{exam_sitting_id}/security-preflights": {
       "parameters": [
         {
@@ -36536,7 +38183,7 @@
         }
       ],
       "post": {
-        "description": "Requires an eligible registered Desktop Session and an exact admitted build, registry, source manifest and configuration manifest. Stores one pending 120-second challenge per Session and Sitting; a successor supersedes it. Does not create an Attempt, Workspace or Participation. Ready rejoin returns frozen configuration; active and suspended Attempts cannot obtain a replacement preflight. Unavailable Institution catalogs or enforced native coverage fail closed.",
+        "description": "Requires an eligible registered Desktop Session and an exact admitted build, capability registry and configuration manifest. Stores one pending 120-second challenge per Session and Sitting; a successor supersedes it. Does not create an Attempt, Workspace or Participation. Ready rejoin returns frozen configuration; active and suspended Attempts cannot obtain a replacement preflight. Unavailable Institution catalogs, or a family enforced where the release does not certify enforcement on the candidate's platform, fail closed.",
         "operationId": "prepareSecurityPreflight",
         "parameters": [
           {
@@ -40403,6 +42050,290 @@
         ],
         "x-proctor-idempotency": "required"
       }
+    },
+    "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips": {
+      "get": {
+        "description": "Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. Managers' reasons are never returned.",
+        "operationId": "listExamAttemptScreenClips",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "items": []
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenClipListResponse"
+                }
+              }
+            },
+            "description": "The Attempt's screen clips",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List an Attempt's screen clips",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.delivery.metadata_capacity",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamSittingID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ],
+      "post": {
+        "description": "An Exam Manager's request for part of the screen Desktop records on the candidate's device, for an Exam whose native policy turns the screen recorder on. The range is either from the start of the session or an explicit start and end of at most six hours; it may end up to ten minutes after the request, and Desktop waits for that part before cutting the clip. A request made while the Attempt is suspended waits until the candidate resumes. The manager's reason is required, audited as an attempt, and stored with the request; it is never returned. An Attempt takes at most ten manager requests. Requests stop once the Attempt has ended.",
+        "operationId": "requestExamAttemptScreenClip",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/RequestExamAttemptScreenClip"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ExamAttemptScreenClipOK"
+          },
+          "201": {
+            "$ref": "#/components/responses/ExamAttemptScreenClipOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Request a range of a candidate's recorded screen",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.state_conflict",
+          "exam.attempt.screen_recording_off",
+          "exam.attempt.screen_clip_limit_reached",
+          "exam.attempt.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "exam.delivery.metadata_capacity",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
+    "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips/{screen_clip_id}/content": {
+      "get": {
+        "description": "Streams a ready clip to one of the Sitting's Exam Managers, or once the Attempt is submitted to someone allowed to review its Submission, whole or by one byte range so a player can seek. Each playback, a request from the clip's first byte, is audited. Multiple ranges, or a range past the clip's end, are refused.",
+        "operationId": "playExamAttemptScreenClip",
+        "parameters": [
+          {
+            "description": "One byte range, such as bytes=0-1048575, bytes=1048576- or bytes=-4096.",
+            "in": "header",
+            "name": "Range",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ScreenClipContent"
+          },
+          "206": {
+            "$ref": "#/components/responses/ScreenClipPartialContent"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Play a ready screen clip",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.state_conflict",
+          "exam.attempt.unavailable",
+          "exam.delivery.metadata_capacity",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamSittingID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        },
+        {
+          "$ref": "#/components/parameters/ScreenClipID"
+        }
+      ]
     },
     "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/submissions/{submission_id}": {
       "get": {
@@ -45541,6 +47472,165 @@
         }
       ]
     },
+    "/api/v1/plugins": {
+      "get": {
+        "description": "Lists every plugin compiled into the server, ordered by name, with its state on the serving node, whether it should run, its saved settings and the JSON Schema an administration UI draws its settings form from. A Session with plugin.manage is required; Personal Access Tokens cannot read it. Plugin secrets never appear: they stay in the configuration file. A plugin nobody configured shows its default and revision 0.",
+        "operationId": "listPlugins",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PluginListOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List the plugins compiled into the server",
+        "tags": [
+          "Administration"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "plugin.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/plugins/{plugin_id}/settings": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PluginID"
+        }
+      ],
+      "put": {
+        "description": "Turns one plugin on or off and replaces its settings document, under an optimistic revision fence. Requires a strong recent interactive system-administrator Session, an Idempotency-Key, and durable audit; the audit records the plugin and whether it is enabled, never setting values. Use expected_revision 0 for a plugin nobody has configured. The plugin checks the settings before they are saved and may refuse them with plugin.invalid. A required plugin cannot be turned off. A saved change applies on every node within about five seconds, without a restart, and plugin_settings_changed tells administrators' clients to refetch. A no-op keeps the revision.",
+        "operationId": "replacePluginSettings",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ReplacePluginSettings"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PluginOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Save a plugin's settings",
+        "tags": [
+          "Administration"
+        ],
+        "x-proctor-auth": "strong_recent_session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "plugin.invalid",
+          "plugin.not_found",
+          "plugin.required",
+          "plugin.revision_conflict",
+          "plugin.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid",
+          "authentication.strong_required",
+          "authentication.reauthentication_required"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
     "/api/v1/programme-levels/{programme_level_id}": {
       "delete": {
         "description": "Archives one Programme Level only when it has no active Classes. The transition retains history and never cascades into Class archival, enrollment termination, or Role Binding removal.",
@@ -47564,7 +49654,7 @@
         }
       ],
       "post": {
-        "description": "Rechecks the same registered Session, candidate, build, Sitting and policy before storing the bounded report and its canonical digest. Enforced and baseline requirements must be ready; truthful degraded observe-only coverage can remain eligible. A blocked report creates no Attempt or misconduct Flag. Retry preserves the original receipt time; Connect must consume a current eligible report within 30 seconds.",
+        "description": "Rechecks the same registered Session, candidate, build, Sitting and policy before storing the bounded report and its canonical digest. The server evaluates every readiness rule on the reported facts; each enforced and baseline rule must be met, and an unknown status blocks. Observed rules never block. A blocked report creates no Attempt or misconduct Flag. Retry preserves the original receipt time; Connect must consume a current eligible report within 30 seconds.",
         "operationId": "reportSecurityPreflight",
         "parameters": [
           {
@@ -48484,7 +50574,7 @@
     },
     "/api/v1/submissions/{submission_id}/native-conditions": {
       "get": {
-        "description": "Requires the same current Submission integrity-view authorization as detailed evidence. Returns selected catalog-validated occurrence transitions without creating a Flag or declaring a violation. Includes original receipt and interpretation times, immutable stream/policy provenance and unresolved-opener state. Operational health, gaps and resets are excluded. Pages contain at most 100 records. Integrity retirement removes this material independently of native operational retention. No-store; cursors are purpose-specific opaque keysets.",
+        "description": "Requires the same current Submission integrity-view authorization as detailed evidence. Returns every change of a native rule's status as the server evaluated it on the facts Desktop reported, with the delivery position that caused it (batch 0 is the state reported at Start), original receipt and interpretation times, and immutable stream and policy provenance. An occurrence opens when a rule becomes not met and closes when it is met again; an enforce occurrence that opens also raises its capability's native Flag. The facts themselves are not returned. Pages contain at most 100 records. Integrity retirement removes this material independently of native operational retention. No-store; cursors are purpose-specific opaque keysets.",
         "operationId": "listNativeConditions",
         "parameters": [
           {
@@ -48542,7 +50632,7 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Inspect minimized native condition transitions for a Submission",
+        "summary": "Inspect the native rule status changes of a Submission",
         "tags": [
           "Integrity review"
         ],
@@ -49084,6 +51174,64 @@
           "request.invalid",
           "desktop_compatibility_policy.revision_conflict",
           "desktop_compatibility_policy.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/system/plugins": {
+      "get": {
+        "description": "Lists the optional features compiled into the server that are active on the serving node, ordered by name, so a client can show only what this server supports. A plugin that is turned off, failed to activate, or has since failed is not listed. The response carries no plugin settings or diagnostics.",
+        "operationId": "listActiveSystemPlugins",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SystemPluginsOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List the plugins active on this server",
+        "tags": [
+          "System"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
         ],
         "x-proctor-idempotency": "none"
       }

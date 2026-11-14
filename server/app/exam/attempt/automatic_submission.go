@@ -129,6 +129,11 @@ func (s *Service) SealForSittingClose(
 		return AutomaticSubmissionResult{}, s.failSystemAudit(ctx, auditID, apperror.Invalid("exam.attempt.invalid", "receipt_code"))
 	}
 
+	eventID, eventJobID := s.newDomainEventID(), s.newJobID()
+	if !eventID.IsValid() || !eventJobID.IsValid() {
+		return AutomaticSubmissionResult{}, s.failSystemAudit(ctx, auditID, apperror.Invalid("exam.attempt.invalid", "domain_event_id"))
+	}
+
 	var notice *store.PreparedMail
 	var expectedRecipientRevision int64
 	if !preparation.Replayed {
@@ -159,6 +164,8 @@ func (s *Service) SealForSittingClose(
 		AuditAt:                   at,
 		Notice:                    notice,
 		ExpectedRecipientRevision: expectedRecipientRevision,
+		DomainEventID:             eventID,
+		DomainEventJobID:          eventJobID,
 	})
 	if err != nil {
 		return AutomaticSubmissionResult{}, s.failSystemAudit(ctx, auditID, storeError(storeErrors, err))

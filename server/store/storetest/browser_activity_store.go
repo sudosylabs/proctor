@@ -333,7 +333,7 @@ func testBrowserActivitySourceLimit(t *testing.T, ss store.Store) {
 	// Exhausting runtime resets does not spend correction starts. A genuine
 	// later policy revision recovers the Browser and may use all 32 successors.
 	renewal := &store.ExamAttemptParticipationRenewal{DesktopCompatibilityPolicyRevision: 1, AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID, ConnectionID: connected.Connection.ID, CandidateUserID: f.candidate.ID, SessionID: f.session.ID, Generation: connected.Participation.Generation, DesktopRegistrationID: f.session.DesktopRegistrationID, DPoPKeyThumbprint: f.session.DPoPKeyThumbprint, ContinuityCredentialHash: access.ContinuityCredentialHash}
-	prepareParticipationRenewalCoverage(t, ctx, ss, renewal)
+	prepareParticipationSecurityControl(t, ctx, ss, renewal)
 	for index := 1; index <= model.BrowserCorrectionStartLimit; index++ {
 		renewal.Sequence++
 		_, err = ss.ExamAttempt().RenewParticipation(ctx, renewal)

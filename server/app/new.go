@@ -321,6 +321,7 @@ func newAdministration(
 		PasswordMinimumLength:   deps.Password.MinimumLength,
 		RecentAuthenticationTTL: deps.RecentAuthenticationTTL,
 		Sessions:                deps.Sessions,
+		Plugins:                 deps.Plugins,
 		Now:                     time.Now,
 	})
 }

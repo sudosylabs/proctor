@@ -330,7 +330,7 @@ func (s *SQLExamIntegrityReviewStore) ListFlags(
 	}
 
 	query := `SELECT f.id, f.exam_attempt_id AS attempt_id, f.generation, f.policy_kind AS kind,
-			f.state, f.created_at, COUNT(ev.id) AS evidence_count,
+			COALESCE(f.native_rule_id, '') AS native_rule_id, f.state, f.created_at, COUNT(ev.id) AS evidence_count,
 			COALESCE(bg.overflow_count, eval.overflow_count, 0) AS overflow_count,
 			bg.participation_id AS browser_participation_id,
 			bg.policy_revision_id AS browser_policy_revision_id, bg.rule_id AS browser_rule_id,
@@ -352,7 +352,7 @@ func (s *SQLExamIntegrityReviewStore) ListFlags(
 		args = append(args, options.AfterFlagID.String())
 	}
 
-	query += ` GROUP BY f.id, f.exam_attempt_id, f.generation, f.policy_kind, f.state, f.created_at,
+	query += ` GROUP BY f.id, f.exam_attempt_id, f.generation, f.policy_kind, f.native_rule_id, f.state, f.created_at,
 			eval.overflow_count, eval.unresolved_missing_count, bg.integrity_flag_id
 		ORDER BY f.id
 		LIMIT ?`
@@ -366,6 +366,7 @@ func (s *SQLExamIntegrityReviewStore) ListFlags(
 		OverflowLast           sql.NullTime   `db:"overflow_last_received_at"`
 		AttemptID              string         `db:"attempt_id"`
 		Kind                   string         `db:"kind"`
+		NativeRuleID           string         `db:"native_rule_id"`
 		State                  string         `db:"state"`
 		Generation             int64          `db:"generation"`
 		EvidenceCount          int            `db:"evidence_count"`
@@ -395,12 +396,13 @@ func (s *SQLExamIntegrityReviewStore) ListFlags(
 		}
 
 		flag := model.IntegrityFlag{
-			ID:         flagID,
-			AttemptID:  attemptID,
-			Generation: row.Generation,
-			Kind:       model.IntegrityPolicyKind(row.Kind),
-			State:      model.IntegrityFlagState(row.State),
-			CreatedAt:  model.TimeUTC(row.CreatedAt),
+			ID:           flagID,
+			AttemptID:    attemptID,
+			Generation:   row.Generation,
+			Kind:         model.IntegrityPolicyKind(row.Kind),
+			NativeRuleID: row.NativeRuleID,
+			State:        model.IntegrityFlagState(row.State),
+			CreatedAt:    model.TimeUTC(row.CreatedAt),
 		}
 		if err = flag.Validate(); err != nil {
 			return nil, invalidPersistedState("integrity_flag", "value", err)
@@ -451,7 +453,7 @@ func (s *SQLExamIntegrityReviewStore) ListEvidence(
 	query := `SELECT ev.id, ev.exam_attempt_id, ev.participation_id, ev.integrity_flag_id,
 			ev.generation, ev.policy_kind, ev.focus_loss_signal_id, ev.sequence,
 			ev.duration_milliseconds, ev.source, ev.missing_before, ev.observed_at, ev.recorded_at,
-			ev.browser_detail_canonical
+			ev.browser_detail_canonical, ev.detail
 		FROM exam_submissions sub
 		JOIN integrity_evidence ev ON ev.exam_attempt_id = sub.exam_attempt_id
 		WHERE sub.id = ?
@@ -491,6 +493,7 @@ func (s *SQLExamIntegrityReviewStore) ListEvidence(
 
 type examIntegrityEvidenceRow struct {
 	BrowserDetail        []byte         `db:"browser_detail_canonical"`
+	Detail               []byte         `db:"detail"`
 	ID                   string         `db:"id"`
 	AttemptID            string         `db:"exam_attempt_id"`
 	ParticipationID      string         `db:"participation_id"`
@@ -557,6 +560,9 @@ func (row examIntegrityEvidenceRow) value() (*model.IntegrityEvidence, error) {
 		}
 
 		evidence.Browser = &detail
+	}
+	if row.Detail != nil {
+		evidence.Detail = json.RawMessage(row.Detail)
 	}
 
 	if err = evidence.Validate(); err != nil {

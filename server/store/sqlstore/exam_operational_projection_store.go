@@ -10,6 +10,7 @@ package sqlstore
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -571,7 +572,13 @@ type sittingCandidateStatusHeaderRow struct {
 
 type sittingCandidateStatusRow struct {
 	NativeConditionRecords   int64          `db:"native_condition_records"`
-	NativeCoverage           []byte         `db:"native_coverage"`
+	NativeLive               bool           `db:"native_live"`
+	NativeInterpretation     []byte         `db:"native_interpretation"`
+	ClipsRequested           int            `db:"clips_requested"`
+	ClipsRecording           int            `db:"clips_recording"`
+	ClipsUploading           int            `db:"clips_uploading"`
+	ClipsReady               int            `db:"clips_ready"`
+	ClipsFailed              int            `db:"clips_failed"`
 	CandidateUserID          string         `db:"candidate_user_id"`
 	Username                 string         `db:"username"`
 	DisplayName              string         `db:"display_name"`
@@ -818,13 +825,22 @@ func sittingCandidateStatusQuery(
 					THEN COALESCE(delivery_budget.native_condition_records, 0)
 				ELSE 0
 			END AS native_condition_records,
+			COALESCE(participation.state = 'active'
+				AND participation.lease_expires_at > statement_timestamp()
+				AND delivery_budget.security_retired_at IS NULL
+				AND native_owner.participation_id IS NOT NULL, false) AS native_live,
 			CASE
 				WHEN participation.state = 'active'
 					AND participation.lease_expires_at > statement_timestamp()
 					AND delivery_budget.security_retired_at IS NULL
-					THEN native_owner.latest_report_canonical
+					THEN native_owner.native_interpretation_canonical
 				ELSE NULL
-			END AS native_coverage
+			END AS native_interpretation,
+			COALESCE(clips.requested, 0) AS clips_requested,
+			COALESCE(clips.recording, 0) AS clips_recording,
+			COALESCE(clips.uploading, 0) AS clips_uploading,
+			COALESCE(clips.ready, 0) AS clips_ready,
+			COALESCE(clips.failed, 0) AS clips_failed
 		FROM population
 		JOIN users candidate ON candidate.id = population.candidate_user_id
 		LEFT JOIN exam_attempts a ON a.exam_sitting_id = ?
@@ -840,6 +856,15 @@ func sittingCandidateStatusQuery(
 		) participation ON TRUE
 		LEFT JOIN exam_attempt_security_owners native_owner ON native_owner.participation_id = participation.id
 		LEFT JOIN exam_attempt_delivery_budgets delivery_budget ON delivery_budget.exam_attempt_id = a.id
+		LEFT JOIN LATERAL (
+			SELECT count(*) FILTER (WHERE c.state = 'requested') AS requested,
+				count(*) FILTER (WHERE c.state = 'recording') AS recording,
+				count(*) FILTER (WHERE c.state = 'uploading') AS uploading,
+				count(*) FILTER (WHERE c.state = 'ready') AS ready,
+				count(*) FILTER (WHERE c.state = 'failed') AS failed
+			FROM exam_attempt_screen_clips c
+			WHERE c.exam_attempt_id = a.id
+		) clips ON TRUE
 		LEFT JOIN exam_attempt_suspensions suspension ON suspension.exam_attempt_id = a.id
 			AND suspension.state = 'active'
 		WHERE candidate.id > ?
@@ -965,22 +990,21 @@ func (row sittingCandidateStatusRow) item(
 
 	item.NativeSecurity = &model.NativeSecuritySummary{
 		RetainedConditionRecords: row.NativeConditionRecords,
-		Sources:                  []model.NativeSourceHealthSummary{},
+		LiveCoverageAvailable:    row.NativeLive,
+		Rules:                    []model.NativeRuleStanding{},
+		ScreenClips: model.ScreenClipCounts{
+			Requested: row.ClipsRequested, Recording: row.ClipsRecording, Uploading: row.ClipsUploading,
+			Ready: row.ClipsReady, Failed: row.ClipsFailed,
+		},
 	}
-	if row.NativeCoverage != nil {
-		coverage, err := decodeNativeCoverageSnapshot(row.NativeCoverage)
-		if err != nil {
-			return item, err
-		}
-
-		item.NativeSecurity.LiveCoverageAvailable = true
-		for _, source := range coverage.Sources {
-			item.NativeSecurity.Sources = append(item.NativeSecurity.Sources, model.NativeSourceHealthSummary{
-				SourceID:   source.SourceID,
-				Health:     source.Health,
-				Permission: source.Permission,
-				Complete:   source.Complete,
-			})
+	if row.NativeLive {
+		if len(row.NativeInterpretation) > 0 {
+			var interpretation model.NativeInterpretation
+			if json.Unmarshal(row.NativeInterpretation, &interpretation) != nil {
+				return item, invalidPersistedState("sitting_candidate_status", "native_interpretation", model.ErrNativeDeliveryInvalid)
+			}
+			item.NativeSecurity.Rules = model.EnforceStandings(interpretation.Standings())
+			item.NativeSecurity.Contained = interpretation.Contained()
 		}
 	}
 

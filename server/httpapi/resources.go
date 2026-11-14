@@ -21,15 +21,17 @@ func productionResources(
 	application *app.App,
 	health Health,
 	buildInfo BuildInfo,
+	plugins Plugins,
 	cookies route.Cookies,
 	webSocket WebSocketTransport,
 ) []route.Resource {
 	return []route.Resource{
-		systemResourceWithApplication(health, buildInfo, application.Identity, time.Now),
+		systemResourceWithApplication(health, buildInfo, plugins, application.Identity, time.Now),
 		bootstrapResource(application.Identity),
 		accessPolicyResource(application.Administration),
 		desktopCompatibilityPolicyResource(application.Identity),
 		retentionPolicyResource(application.Administration),
+		pluginAdministrationResource(application.Administration),
 		retentionResource(application.Administration),
 		examRecordsResource(application.ExamRecords),
 		examExportsResource(application.ExamExports),

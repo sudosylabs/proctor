@@ -16,6 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -438,11 +439,53 @@ func (s *Service) AppendNativeDelivery(
 	}
 
 	if value == nil ||
-		value.Receipt.Validate() != nil ||
-		value.Receipt.StreamID != deliveryAccess.StreamID ||
-		value.Receipt.BatchSequence != command.Batch.BatchSequence {
+		value.Acknowledgement.Receipt.Validate() != nil ||
+		value.Acknowledgement.Receipt.StreamID != deliveryAccess.StreamID ||
+		value.Acknowledgement.Receipt.BatchSequence != command.Batch.BatchSequence {
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(model.ErrNativeDeliveryInvalid)
 	}
+	s.recordStatusDiscrepancies(value.StatusDiscrepancies)
 
-	return value, nil
+	for _, flagged := range value.Flagged {
+		effects := integrityEffects{
+			SittingID:       target.SittingID,
+			AttemptID:       deliveryAccess.Access.AttemptID,
+			CandidateUserID: deliveryAccess.Access.CandidateUserID,
+			At:              value.Acknowledgement.Receipt.ReceivedAt,
+			Flagged: &integrityFlagNotice{
+				FlagID:           flagged.FlagID,
+				Kind:             flagged.Kind,
+				Outcome:          model.IntegrityOutcomeFlag,
+				RetainedEvidence: flagged.RetainedEvidence,
+			},
+			Invalidate: func() error {
+				return realtime.PublishSittingBoardChanged(ctx, s.publisher, target.ExamID, target.SittingID)
+			},
+		}
+		if suspended := flagged.Suspended; suspended != nil {
+			effects.Flagged.Outcome = model.IntegrityOutcomeFlagAndSuspend
+			effects.ClosedConnection = &suspended.ClosedConnection
+			effects.Suspension = &integritySuspensionNotice{
+				ConnectionID:    suspended.ClosedConnection.ID,
+				FlagID:          flagged.FlagID,
+				Suspension:      suspended.Suspension,
+				AttemptRevision: suspended.AttemptRevision,
+			}
+			effects.Invalidate = func() error {
+				return errors.Join(
+					realtime.PublishSittingBoardChanged(ctx, s.publisher, target.ExamID, target.SittingID),
+					s.publishCandidateActivityChanged(ctx, deliveryAccess.Access.CandidateUserID),
+				)
+			}
+		}
+		if effectErr := s.publishIntegrityOutcome(ctx, effects); effectErr != nil {
+			s.publisher.Report(ctx, "exam_attempt_native_flagged", effectErr)
+		}
+	}
+	if slices.ContainsFunc(value.Flagged, func(f store.NativeIntegrityFlagged) bool { return f.ScreenClipRequested }) {
+		s.publishScreenClipsRequested(ctx, target.SittingID, deliveryAccess.Access.AttemptID,
+			deliveryAccess.Access.CandidateUserID, value.Acknowledgement.Receipt.ReceivedAt)
+	}
+
+	return value.Acknowledgement, nil
 }

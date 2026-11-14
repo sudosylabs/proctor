@@ -9,6 +9,7 @@ package cas
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,7 @@ import (
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform/externalauth"
+	"github.com/sudosylabs/proctor/server/plugin"
 )
 
 func TestProviderLoginAndAuthentication(t *testing.T) {
@@ -58,12 +60,13 @@ func TestProviderLoginAndAuthentication(t *testing.T) {
 	}))
 	defer server.Close()
 
-	created, err := NewFactory().New(testSettings(server.URL + "/cas"))
+	settings := testSettings(server.URL + "/cas")
+	created, err := settings.build()
 	require.NoError(t, err)
 	provider := created.(*Provider)
 	challenge, err := provider.Begin(
 		context.Background(),
-		externalauth.BeginRequest{
+		plugin.BeginRequest{
 			CallbackURL: callbackURL, State: state, Proof: proof,
 		},
 	)
@@ -74,9 +77,9 @@ func TestProviderLoginAndAuthentication(t *testing.T) {
 	require.Equal(t, serviceURL, parsed.Query().Get("service"))
 	assertion, err := provider.Complete(
 		context.Background(),
-		externalauth.CompleteRequest{
+		plugin.CompleteRequest{
 			CallbackURL: callbackURL, State: state, Proof: proof,
-			Callback: model.ExternalAuthenticationCallback{
+			Callback: plugin.Callback{
 				Values: map[string][]string{
 					"state":  {state},
 					"ticket": {ticket},
@@ -85,12 +88,11 @@ func TestProviderLoginAndAuthentication(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	require.Equal(t, "campus-cas", assertion.ProviderID)
 	require.Equal(t, "opaque-subject", assertion.Subject)
 	require.Equal(t, "student.name", assertion.Username)
 	require.Equal(t, "student.name@example.edu", assertion.Email)
 	require.True(t, assertion.EmailVerified)
-	require.Equal(t, model.AuthenticationMultiFactor, assertion.AuthenticationStrength)
+	require.Equal(t, plugin.AuthenticationMultiFactor, assertion.AuthenticationStrength)
 	require.Len(t, assertion.Affiliations, 2)
 }
 
@@ -105,17 +107,17 @@ func TestProviderRejectsFailureAndUnsafeXML(t *testing.T) {
 			response: `<cas:serviceResponse xmlns:cas="urn:cas">
 			  <cas:authenticationFailure code="INVALID_TICKET">rejected</cas:authenticationFailure>
 			</cas:serviceResponse>`,
-			wantError: externalauth.ErrAuthenticationRejected,
+			wantError: plugin.ErrAuthenticationRejected,
 		},
 		{
 			name:      "document type",
 			response:  `<!DOCTYPE serviceResponse><serviceResponse/>`,
-			wantError: externalauth.ErrInvalidResponse,
+			wantError: plugin.ErrInvalidResponse,
 		},
 		{
 			name:      "missing success",
 			response:  `<cas:serviceResponse xmlns:cas="urn:cas"/>`,
-			wantError: externalauth.ErrInvalidResponse,
+			wantError: plugin.ErrInvalidResponse,
 		},
 	}
 	for _, test := range tests {
@@ -127,7 +129,8 @@ func TestProviderRejectsFailureAndUnsafeXML(t *testing.T) {
 				_, _ = writer.Write([]byte(test.response))
 			}))
 			defer server.Close()
-			created, err := NewFactory().New(testSettings(server.URL))
+			settings := testSettings(server.URL)
+			created, err := settings.build()
 			require.NoError(t, err)
 			provider := created.(*Provider)
 			state := model.NewCredentialToken()
@@ -142,7 +145,8 @@ func TestProviderRejectsFailureAndUnsafeXML(t *testing.T) {
 
 func TestProviderRedactsTicketFromTransportErrors(t *testing.T) {
 	const ticket = "ST-must-not-appear"
-	created, err := NewFactory().New(testSettings("http://127.0.0.1:1"))
+	settings := testSettings("http://127.0.0.1:1")
+	created, err := settings.build()
 	require.NoError(t, err)
 	provider := created.(*Provider)
 	cause := errors.New("transport included " + ticket)
@@ -163,12 +167,12 @@ func TestProviderRedactsTicketFromTransportErrors(t *testing.T) {
 func completeRequest(
 	state string,
 	ticket string,
-) externalauth.CompleteRequest {
-	return externalauth.CompleteRequest{
+) plugin.CompleteRequest {
+	return plugin.CompleteRequest{
 		CallbackURL: "https://proctor.example.edu/callback",
 		State:       state,
 		Proof:       model.NewCredentialToken(),
-		Callback: model.ExternalAuthenticationCallback{
+		Callback: plugin.Callback{
 			Values: map[string][]string{
 				"state":  {state},
 				"ticket": {ticket},
@@ -177,27 +181,53 @@ func completeRequest(
 	}
 }
 
+// testProvider is a configured CAS provider: Proctor's envelope and the
+// plugin's own settings.
+type testProvider struct {
+	ID            string
+	AutoProvision bool
+	Settings      Settings
+}
+
 func testSettings(
 	baseURL string,
-) config.ExternalAuthenticationProvider {
-	return config.ExternalAuthenticationProvider{
-		ID: "campus-cas", Type: config.ExternalAuthenticationTypeCAS,
-		DisplayName: "Campus CAS", Enabled: true, AutoProvision: true,
-		CAS: &config.CASProvider{
+) testProvider {
+	return testProvider{
+		ID: "campus-cas", AutoProvision: true,
+		Settings: Settings{
 			BaseURL: baseURL, ValidationPath: "/p3/serviceValidate",
 			Timeout:          config.Duration{Duration: 5 * time.Second},
 			MaxResponseBytes: 64 * 1024,
+			Claims: externalauth.ClaimMapping{
+				Subject: "user", Username: "uid", Email: "mail",
+				FirstName: "givenName", LastName: "sn",
+				HomeOrganization:         "schacHomeOrganization",
+				Affiliation:              "eduPersonAffiliation",
+				AllowedHomeOrganizations: []string{"example.edu"},
+				TrustEmail:               true,
+				MultiFactorAttribute:     "authnContext",
+				MultiFactorValues:        []string{"mfa"},
+			},
 		},
-		Claims: config.ExternalClaimMapping{
-			Subject: "user", Username: "uid", Email: "mail",
-			FirstName: "givenName", LastName: "sn",
-			HomeOrganization:         "schacHomeOrganization",
-			Affiliation:              "eduPersonAffiliation",
-			AllowedHomeOrganizations: []string{"example.edu"},
-			TrustEmail:               true,
-			MultiFactorAttribute:     "authnContext",
-			MultiFactorValues:        []string{"mfa"},
-		},
+	}
+}
+
+func (p testProvider) definition() plugin.IdentityProviderDefinition {
+	encoded, err := json.Marshal(p.Settings)
+	if err != nil {
+		panic(err)
+	}
+	return plugin.IdentityProviderDefinition{ID: p.ID, AutoProvision: p.AutoProvision, Settings: encoded}
+}
+
+func (p testProvider) build() (plugin.IdentityProvider, error) {
+	return New(p.definition())
+}
+
+func (p testProvider) Envelope() config.ExternalAuthenticationProvider {
+	return config.ExternalAuthenticationProvider{
+		ID: p.ID, Type: Type, DisplayName: "Campus CAS", Enabled: true,
+		AutoProvision: p.AutoProvision, Settings: p.definition().Settings,
 	}
 }
 
@@ -226,8 +256,8 @@ func TestProviderFreshProofRenewsAtLoginAndValidation(t *testing.T) {
 			defer server.Close()
 			settings := testSettings(server.URL)
 			settings.AutoProvision = false
-			settings.Claims.AllowedHomeOrganizations = nil
-			created, err := NewFactory().New(settings)
+			settings.Settings.Claims.AllowedHomeOrganizations = nil
+			created, err := settings.build()
 			require.NoError(t, err)
 			provider := created.(*Provider)
 			now := time.Now()
@@ -235,18 +265,18 @@ func TestProviderFreshProofRenewsAtLoginAndValidation(t *testing.T) {
 			state := model.NewCredentialToken()
 			request := completeRequest(state, "ST-fresh")
 			request.AuthenticationStartedAt = now.Add(-time.Second)
-			start, err := provider.Begin(context.Background(), externalauth.BeginRequest{CallbackURL: request.CallbackURL, State: state, Proof: request.Proof, FreshAuthentication: true})
+			start, err := provider.Begin(context.Background(), plugin.BeginRequest{CallbackURL: request.CallbackURL, State: state, Proof: request.Proof, FreshAuthentication: true})
 			require.NoError(t, err)
 			u, _ := url.Parse(start.RedirectURL)
 			require.Equal(t, "true", u.Query().Get("renew"), "CAS login did not request new primary proof")
 			assertion, err := provider.Complete(context.Background(), request)
 			require.True(t, validated, "ticket was not validated")
 			if reject {
-				require.ErrorIs(t, err, externalauth.ErrAuthenticationRejected)
-				require.Nil(t, assertion)
+				require.ErrorIs(t, err, plugin.ErrAuthenticationRejected)
+				require.Zero(t, assertion)
 			} else {
 				require.NoError(t, err, "fresh CAS proof")
-				require.Equal(t, request.AuthenticationStartedAt.UnixMilli(), assertion.AuthenticatedAt, "fresh CAS proof")
+				require.Equal(t, request.AuthenticationStartedAt.UnixMilli(), assertion.AuthenticatedAt.UnixMilli(), "fresh CAS proof")
 			}
 		})
 	}

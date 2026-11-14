@@ -16,8 +16,10 @@ import (
 // NativeConditionEvidenceMaxBytes includes a full bounded batch record and its server provenance.
 const NativeConditionEvidenceMaxBytes = 256*1024 + 2048
 
-// NativeConditionEvidence preserves a selected occurrence transition without
-// asserting a violation or requiring a Flag. Raw platform identity is excluded.
+// NativeConditionEvidence preserves one change of a native rule's status as
+// the server evaluated it, with the delivery position of the record that
+// caused it: batch 0 is the state Desktop reported at Start. Raw platform
+// identity is excluded.
 type NativeConditionEvidence struct {
 	ID                   IntegrityEvidenceID    `json:"id"`
 	AttemptID            ExamAttemptID          `json:"attempt_id"`
@@ -31,8 +33,7 @@ type NativeConditionEvidence struct {
 	MatrixID             string                 `json:"matrix_id"`
 	BatchSequence        int64                  `json:"batch_sequence"`
 	RecordIndex          int                    `json:"record_index"`
-	Occurrence           NativeOccurrence       `json:"occurrence"`
-	UnresolvedOpener     bool                   `json:"unresolved_opener"`
+	Transition           NativeRuleTransition   `json:"transition"`
 	ReceivedAt           time.Time              `json:"received_at"`
 	InterpretedAt        time.Time              `json:"interpreted_at"`
 }
@@ -49,11 +50,11 @@ func (v NativeConditionEvidence) Validate() error {
 		!IsValidSHA256Fingerprint(v.PolicyDigest) ||
 		!IsValidAgreementID(v.ApplicationReleaseID) ||
 		!IsValidAgreementID(v.MatrixID) ||
-		v.BatchSequence < 1 ||
+		v.BatchSequence < 0 ||
 		v.BatchSequence > NativeParticipationPositionLimit ||
 		v.RecordIndex < 0 ||
 		v.RecordIndex > 63 ||
-		v.Occurrence.Validate() != nil ||
+		v.Transition.Validate() != nil ||
 		!securityInstant(v.ReceivedAt) ||
 		!securityInstant(v.InterpretedAt) {
 		return ErrNativeDeliveryInvalid
@@ -67,7 +68,10 @@ func (v NativeConditionEvidence) Validate() error {
 	return nil
 }
 func (v NativeConditionEvidence) Clone() NativeConditionEvidence {
-	v.Occurrence.SourceRanges = append([]NativeSourceRange(nil), v.Occurrence.SourceRanges...)
+	if v.Transition.From != nil {
+		from := *v.Transition.From
+		v.Transition.From = &from
+	}
 	return v
 }
 

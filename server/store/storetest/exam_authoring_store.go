@@ -288,7 +288,7 @@ func testExamAuthoringUpdateDraftNativePolicyAndConflict(t *testing.T, ss store.
 	require.NoError(t, err)
 
 	native := model.DefaultNativeSecurityPolicy()
-	require.NoError(t, json.Unmarshal([]byte(`{"id":"interactive_session","mode":"observe"}`), &native.Families[1]))
+	require.NoError(t, json.Unmarshal([]byte(`{"id":"interactive_session","mode":"observe","outcome":"flag"}`), &native.Families[1]))
 	updatedAt := createdAt.Add(time.Minute)
 	update := newExamDraftNativePolicyUpdate(t, ctx, ss, created.Value.Exam.ID, creator.ID, 1, native, updatedAt)
 	command := examCommand(creator.ID, "exam.draft.native_policy.configure", "native-key", "native-command")

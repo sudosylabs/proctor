@@ -36,14 +36,16 @@ type SecurityPreflightPrepare struct {
 	PreflightID                      string
 	Challenge                        string
 	NativeRegistryDigest             string
-	SourceManifestDigest             string
 	ConfigurationManifestFingerprint string
 	AuditEventID                     model.AuditEventID
 	AuditAt                          time.Time
 }
 type SecurityPreflightPrepared struct {
-	ServerTime                 time.Time
-	BrowserActivityDisclosure  model.BrowserActivityDisclosure
+	ServerTime                time.Time
+	BrowserActivityDisclosure model.BrowserActivityDisclosure
+	// ScreenRecordingDisclosure is set exactly when the policy records the
+	// screen.
+	ScreenRecordingDisclosure  *model.ScreenRecordingDisclosure
 	Challenge                  model.SecurityPreflightChallenge
 	Resolved                   model.ResolvedNativePolicy
 	FrozenAttemptConfiguration *model.AttemptConfiguration
@@ -74,32 +76,22 @@ type SecurityPreflightReport struct {
 // SecurityPolicyRecovery returns privileged admission provenance only to the
 // active owner's registered Session. It does not grant or renew a lease.
 type SecurityPolicyRecovery struct {
-	CurrentSources             []model.NativeSourceCoverage
-	CurrentCoverage            []model.NativeCoverageClaim
-	SourceResetReceipts        []model.SourceResetReceipt
-	SecurityCoverage           model.SecurityCoverageResult
-	ServerTime                 time.Time
 	Security                   model.AdmittedSecurity
+	Control                    model.SecurityControlResult
+	ServerTime                 time.Time
 	FrozenAttemptConfiguration model.AttemptConfiguration
 }
 
-// ConsistentWith reports whether the recovery carries its server time, valid
-// security coverage, bounded and present source, coverage and reset receipt
-// lists, a valid admitted security posture bound to the given Attempt, and a
-// valid frozen Attempt configuration.
+// ConsistentWith reports whether the recovery carries its server time, a
+// valid renewal result, a valid admitted security binding bound to the given
+// Attempt, and a valid frozen Attempt configuration.
 //
 // It is part of the Store contract: the conformance suite asserts it on
 // every real result.
 func (r *SecurityPolicyRecovery) ConsistentWith(attemptID model.ExamAttemptID) bool {
 	return !(r == nil ||
 		r.ServerTime.IsZero() ||
-		r.SecurityCoverage.Validate() != nil ||
-		r.CurrentSources == nil ||
-		r.CurrentCoverage == nil ||
-		r.SourceResetReceipts == nil ||
-		len(r.CurrentSources) > 11 ||
-		len(r.CurrentCoverage) > 64 ||
-		len(r.SourceResetReceipts) > 11 ||
+		r.Control.Validate() != nil ||
 		r.Security.Validate() != nil ||
 		r.Security.Policy.Scope.AttemptID != attemptID ||
 		r.FrozenAttemptConfiguration.Validate() != nil)
@@ -123,4 +115,17 @@ type SecurityPreflightStore interface {
 	// Attempt Configuration and native control state of the Candidate's active
 	// Participation, for a Desktop that lost its Connect response.
 	RecoverSecurityPolicy(context.Context, SecurityPreflightAccess, model.ExamAttemptID) (*SecurityPolicyRecovery, error)
+	// ReadSecurityPolicyOverview resolves the Sitting's current policy for the
+	// readiness overview, under the same eligibility checks as preparation,
+	// without creating a preflight.
+	ReadSecurityPolicyOverview(context.Context, SecurityPreflightAccess) (*SecurityPolicyOverview, error)
+}
+
+// SecurityPolicyOverview is the policy the readiness overview checks the
+// candidate's machine against before Start.
+type SecurityPolicyOverview struct {
+	ServerTime                time.Time
+	Resolved                  model.ResolvedNativePolicy
+	BrowserActivityDisclosure model.BrowserActivityDisclosure
+	ScreenRecordingDisclosure *model.ScreenRecordingDisclosure
 }

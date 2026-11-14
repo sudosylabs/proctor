@@ -8,7 +8,8 @@
 // Package desktoprelease checks that a packaged Proctor Desktop release is one
 // this server build trusts. Verify compares the release's artifacts with the
 // pinned Expectation byte for byte, checks the Ed25519 signature on its
-// capability matrix against the admitted keys, and returns the verified build.
+// certification list against the admitted keys, and returns the verified
+// build.
 //
 // The keys and expectations are supplied when the node is built. No request,
 // Institution setting or client upload can add to them. README.md describes
@@ -23,6 +24,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/internal/canonicaljson"
+	"github.com/sudosylabs/proctor/server/internal/factschema"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -33,40 +35,35 @@ const (
 
 var ErrInvalidArtifact = errors.New("desktop release artifact is invalid")
 
-// SignedMatrix contains the exact canonical UTF-8 bytes signed using an admitted
-// Ed25519 release key. Signature is the raw 64-byte signature, not a DPoP proof.
+// SignedMatrix is the release's certification list: the exact canonical
+// UTF-8 bytes signed using an admitted Ed25519 release key. Signature is the
+// raw 64-byte signature, not a DPoP proof.
 type SignedMatrix struct {
 	Payload   []byte
 	Signature []byte
 	KeyID     string
 }
 
-// Expectation is compiled release admission data, never a received DTO. The
-// registry definitions are the server's reviewed interpretation of the pinned
-// registry; schema bytes and all packaged catalogs are pinned independently.
+// Expectation is compiled release admission data, never a received DTO: the
+// exact digests of the release's capability registry and certification list.
 type Expectation struct {
-	Build                 model.DesktopBuildTuple
-	ApplicationReleaseID  string
-	RegistryDigest        string
-	SourceManifestDigest  string
-	MatrixDigest          string
-	DetectorCatalogDigest string
-	Coverage              []model.NativeCoverageDefinition
-	SourceSchemaDigests   map[model.NativeSourceID]string
+	Build                model.DesktopBuildTuple
+	ApplicationReleaseID string
+	RegistryDigest       string
+	MatrixDigest         string
 }
 
 type Artifacts struct {
+	// Registry is Desktop's capability registry document, fact schemas and
+	// application catalog included.
 	Registry              []byte
-	SourceManifest        []byte
-	Schemas               map[string][]byte
-	DetectorCatalog       []byte
 	ConfigurationManifest []byte
 	Matrix                SignedMatrix
 }
 
-// Verify admits only an exact signed matrix and its pinned registry, source
-// schemas, detector catalog and configuration manifest. Returned model catalogs
-// own defensive copies and cannot be altered through caller-owned buffers.
+// Verify admits only an exact signed certification list and its pinned
+// registry and configuration manifest. Returned model values own defensive
+// copies and cannot be altered through caller-owned buffers.
 func Verify(expected Expectation, artifacts Artifacts, admittedKeys map[string]ed25519.PublicKey) (model.DesktopBuildTuple, error) {
 	if expected.Build.Validate() != nil ||
 		!model.IsValidAgreementID(expected.ApplicationReleaseID) ||
@@ -84,41 +81,9 @@ func Verify(expected Expectation, artifacts Artifacts, admittedKeys map[string]e
 	}
 
 	if !exactArtifact(artifacts.Registry, expected.RegistryDigest) ||
-		!exactArtifact(artifacts.SourceManifest, expected.SourceManifestDigest) ||
 		!exactArtifact(artifacts.Matrix.Payload, expected.MatrixDigest) ||
-		!exactArtifact(artifacts.DetectorCatalog, expected.DetectorCatalogDigest) ||
 		!exactArtifact(artifacts.ConfigurationManifest, expected.Build.AttemptConfigurationManifestFingerprint) ||
 		!bytes.Equal(artifacts.ConfigurationManifest, expected.Build.ConfigurationManifest.Canonical()) {
-		return model.DesktopBuildTuple{}, ErrInvalidArtifact
-	}
-
-	// Every source's exact schema is admitted even when the optional family is
-	// disabled. Effect-only coverage additionally binds its own packaged schema.
-	if len(expected.SourceSchemaDigests) != len(model.NativeSources()) ||
-		len(artifacts.Schemas) > len(model.NativeSources())+model.NativeCoverageClaimLimit {
-		return model.DesktopBuildTuple{}, ErrInvalidArtifact
-	}
-
-	used := make(map[string]bool, len(artifacts.Schemas))
-	for _, source := range model.NativeSources() {
-		digest := expected.SourceSchemaDigests[source]
-		if !exactArtifact(artifacts.Schemas[digest], digest) {
-			return model.DesktopBuildTuple{}, ErrInvalidArtifact
-		}
-
-		used[digest] = true
-	}
-
-	for _, definition := range expected.Coverage {
-		if !exactArtifact(artifacts.Schemas[definition.SourceSchemaDigest], definition.SourceSchemaDigest) ||
-			definition.SourceID != "" && expected.SourceSchemaDigests[definition.SourceID] != definition.SourceSchemaDigest {
-			return model.DesktopBuildTuple{}, ErrInvalidArtifact
-		}
-
-		used[definition.SourceSchemaDigest] = true
-	}
-
-	if len(used) != len(artifacts.Schemas) {
 		return model.DesktopBuildTuple{}, ErrInvalidArtifact
 	}
 
@@ -131,20 +96,19 @@ func Verify(expected Expectation, artifacts Artifacts, admittedKeys map[string]e
 		return model.DesktopBuildTuple{}, ErrInvalidArtifact
 	}
 
-	var detectors []model.NativeDetectorDefinition
-	if decodeCanonicalClosed(artifacts.DetectorCatalog, &detectors, ArtifactMaxBytes) != nil {
+	capabilities, err := model.ParseNativeCapabilityRegistry(artifacts.Registry)
+	if err != nil {
+		return model.DesktopBuildTuple{}, ErrInvalidArtifact
+	}
+	validator, err := factschema.Compile(capabilities.FactSchemas())
+	if err == nil {
+		capabilities, err = capabilities.WithFactValidator(validator)
+	}
+	if err != nil {
 		return model.DesktopBuildTuple{}, ErrInvalidArtifact
 	}
 
-	agreement, err := model.NewDesktopNativeAgreement(
-		expected.RegistryDigest,
-		expected.SourceManifestDigest,
-		expected.MatrixDigest,
-		expected.DetectorCatalogDigest,
-		expected.Coverage,
-		matrix,
-		detectors,
-	)
+	agreement, err := model.NewDesktopNativeAgreement(expected.RegistryDigest, expected.MatrixDigest, matrix, capabilities)
 	if err != nil {
 		return model.DesktopBuildTuple{}, ErrInvalidArtifact
 	}

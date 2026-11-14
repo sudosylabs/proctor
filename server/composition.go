@@ -28,6 +28,8 @@ import (
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform"
+	"github.com/sudosylabs/proctor/server/plugin/zipexport"
+	"github.com/sudosylabs/proctor/server/pluginhost"
 	"github.com/sudosylabs/proctor/server/tracing"
 	"github.com/sudosylabs/proctor/server/websocket"
 	"github.com/sudosylabs/proctor/server/webui"
@@ -93,6 +95,7 @@ func composeNode(ctx context.Context, input compositionInput) (*compositionResul
 		shutdownTimeout: snapshot.Server.ShutdownTimeout.Duration,
 		metrics:         capabilities.metrics,
 		tracing:         capabilities.tracing,
+		plugins:         capabilities.plugins,
 	}
 	result, err := composeConsumers(ctx, applicationPlatform, snapshot, capabilities, input, &release)
 	if err != nil {
@@ -120,10 +123,19 @@ func composeConsumers(
 		return nil, err
 	}
 
+	// A lifecycle-only graph without persistence has no saved settings to
+	// follow.
+	var reconciler *pluginReconciler
+	if saved := capabilities.persistence.PluginSettings(); saved != nil {
+		reconciler = newPluginReconciler(
+			saved, capabilities.plugins, snapshot, capabilities.logger, capabilities.pluginSettingsCount,
+		)
+	}
 	applicationDeps, err := composeApplicationDependencies(ctx, snapshot, capabilities, input, mailRenderer)
 	if err != nil {
 		return nil, err
 	}
+	applicationDeps.Plugins = pluginCatalog{host: capabilities.plugins, reconciler: reconciler}
 
 	application, err := app.New(applicationDeps)
 	if err != nil {
@@ -210,6 +222,8 @@ func composeConsumers(
 		servingLease:          servingLease,
 		transport:             rootTransport,
 		websocket:             webSocketHub,
+		plugins:               capabilities.plugins,
+		pluginReconciler:      reconciler,
 		metrics:               capabilities.metrics,
 		tracing:               capabilities.tracing,
 		readiness:             readiness,
@@ -261,9 +275,15 @@ func composeApplicationDependencies(
 	if capabilities.metrics.Enabled() {
 		contentRecorder = capabilities.metrics.WorkRecorder("file_content")
 	}
+	if _, offered := capabilities.plugins.ExportFormat(zipexport.MediaType); !offered {
+		capabilities.logger.Warn("Exam exports are unavailable: no active plugin offers the zip export format")
+	}
 	content, err := filecontent.New(
 		capabilities.filesystem,
-		filecontent.Policy{MaximumConcurrentOperations: snapshot.FileContent.MaximumConcurrentOperations},
+		filecontent.Policy{
+			MaximumConcurrentOperations: snapshot.FileContent.MaximumConcurrentOperations,
+			ExamExportFormat:            liveExportFormat(capabilities.plugins, zipexport.MediaType),
+		},
 		contentRecorder,
 	)
 	if err != nil {
@@ -386,6 +406,7 @@ func httpAPISettings(
 		Metrics:                 httpMetrics,
 		Tracing:                 httpTracer,
 		BuildInfo:               buildInfo,
+		Plugins:                 pluginDirectory{host: capabilities.plugins},
 		PublicURL:               snapshot.Server.PublicURL,
 		MaxBodyBytes:            snapshot.Server.MaxBodyBytes,
 		ReadTimeout:             snapshot.Server.ReadTimeout.Duration,
@@ -435,6 +456,7 @@ type compositionRelease struct {
 	tracing         *tracing.Module
 	transport       func() error
 	websocket       func(context.Context) error
+	plugins         *pluginhost.Host
 }
 
 // fail joins cause with the release of every owner built so far, closing the
@@ -450,11 +472,12 @@ func (r compositionRelease) fail(cause error) error {
 	if r.websocket != nil {
 		websocketErr = r.websocket(budget)
 	}
+	pluginsErr := r.plugins.Close(budget)
 	if r.metrics != nil {
 		metricsErr = r.metrics.Close(budget)
 	}
 	if r.tracing != nil {
 		tracingErr = r.tracing.Close(budget)
 	}
-	return errors.Join(cause, transportErr, websocketErr, errors.Join(metricsErr, tracingErr, r.platform.Close(budget)))
+	return errors.Join(cause, transportErr, websocketErr, pluginsErr, errors.Join(metricsErr, tracingErr, r.platform.Close(budget)))
 }

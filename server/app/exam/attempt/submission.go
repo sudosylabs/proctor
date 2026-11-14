@@ -343,6 +343,11 @@ func (s *Service) SubmitExamAttempt(
 		return store.ExamSubmissionReceipt{}, apperror.Invalid("exam.attempt.invalid", "receipt_code")
 	}
 
+	eventID, eventJobID := s.newDomainEventID(), s.newJobID()
+	if !eventID.IsValid() || !eventJobID.IsValid() {
+		return store.ExamSubmissionReceipt{}, apperror.Invalid("exam.attempt.invalid", "domain_event_id")
+	}
+
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
 		Invocation: inv,
 		Action:     model.ActionExamSittingParticipate,
@@ -387,6 +392,8 @@ func (s *Service) SubmitExamAttempt(
 		AuditAt:                   at,
 		Notice:                    notice,
 		ExpectedRecipientRevision: expectedRecipientRevision,
+		DomainEventID:             eventID,
+		DomainEventJobID:          eventJobID,
 	}, commandIdempotency)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)

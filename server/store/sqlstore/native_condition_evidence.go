@@ -16,21 +16,21 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Called only for newly interpreted, catalog-validated occurrence records under
-// the Attempt fence. Existing receipt and retained-record quotas bound copies.
-func retainNativeCondition(
+// retainNativeTransitions keeps each rule status change one delivery record
+// caused, under the Attempt fence. Batch 0 is the state Desktop reported at
+// Start. Existing receipt and retained-record quotas bound the copies.
+func retainNativeTransitions(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	owner nativeDeliveryOwner,
-	row nativeStoredRecord,
-	occurrence model.NativeOccurrence,
-	unresolved bool,
+	binding admittedSecurityBinding,
+	sequence int64,
+	index int,
+	transitions []model.NativeRuleTransition,
 ) error {
-	var binding admittedSecurityBinding
-	if json.Unmarshal(owner.Binding, &binding) != nil || binding.Security.Validate() != nil {
-		return invalidPersistedState("native_condition", "value", model.ErrNativeDeliveryInvalid)
+	if len(transitions) == 0 {
+		return nil
 	}
-
 	security := binding.Security
 	attempt := security.Policy.Scope.AttemptID
 	var retired bool
@@ -52,83 +52,84 @@ func retainNativeCondition(
 		return nil
 	}
 
-	var received time.Time
-	if err := tx.Get(
-		ctx,
-		&received,
-		`SELECT received_at
-		FROM exam_native_delivery_batches
-		WHERE participation_id = ?
-			AND batch_sequence = ?`,
-		owner.ParticipationID,
-		row.Sequence,
-	); err != nil {
-		return err
-	}
-
-	value := model.NativeConditionEvidence{
-		ID:                   model.NewIntegrityEvidenceID(),
-		AttemptID:            attempt,
-		ParticipationID:      security.ParticipationID,
-		Generation:           security.Generation,
-		StreamID:             security.DeliveryStreamID,
-		SecuritySessionID:    security.SecuritySessionID,
-		PolicyRevisionID:     security.Policy.ExamRevisionID,
-		PolicyDigest:         security.Policy.Digest,
-		ApplicationReleaseID: security.Policy.ApplicationReleaseID,
-		MatrixID:             security.Policy.MatrixID,
-		BatchSequence:        row.Sequence,
-		RecordIndex:          row.Index,
-		Occurrence:           occurrence,
-		UnresolvedOpener:     unresolved,
-		ReceivedAt:           received.UTC().Truncate(time.Millisecond),
-		InterpretedAt:        owner.Now.UTC().Truncate(time.Millisecond),
-	}
-	if err := validatePersistedModel("native_condition", value); err != nil {
-		return err
-	}
-
-	raw, err := json.Marshal(value)
-	if err == nil {
-		raw, err = canonicaljson.Canonicalize(raw, model.NativeConditionEvidenceMaxBytes)
-	}
-	if err != nil {
-		return err
-	}
-
-	result, err := tx.Exec(
-		ctx,
-		`INSERT INTO native_condition_evidence(id, exam_attempt_id, participation_id,
-			batch_sequence, record_index, canonical)
-		VALUES(?, ?, ?, ?, ?, ?)
-		ON CONFLICT(participation_id, batch_sequence, record_index) DO NOTHING`,
-		value.ID.String(),
-		attempt.String(),
-		owner.ParticipationID,
-		row.Sequence,
-		row.Index,
-		raw,
-	)
-	if err != nil {
-		return err
-	}
-
-	inserted, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if inserted == 0 {
-		return nil
+	received := owner.Now
+	if sequence > 0 {
+		if err := tx.Get(
+			ctx,
+			&received,
+			`SELECT received_at
+			FROM exam_native_delivery_batches
+			WHERE participation_id = ?
+				AND batch_sequence = ?`,
+			owner.ParticipationID,
+			sequence,
+		); err != nil {
+			return err
+		}
 	}
 
 	inventory, err := nativeConditionInventory(ctx, tx, attempt)
 	if err != nil {
 		return err
 	}
+	for position, transition := range transitions {
+		value := model.NativeConditionEvidence{
+			ID:                   model.NewIntegrityEvidenceID(),
+			AttemptID:            attempt,
+			ParticipationID:      security.ParticipationID,
+			Generation:           security.Generation,
+			StreamID:             security.DeliveryStreamID,
+			SecuritySessionID:    security.SecuritySessionID,
+			PolicyRevisionID:     security.Policy.ExamRevisionID,
+			PolicyDigest:         security.Policy.Digest,
+			ApplicationReleaseID: security.Policy.ApplicationReleaseID,
+			MatrixID:             security.Policy.MatrixID,
+			BatchSequence:        sequence,
+			RecordIndex:          index,
+			Transition:           transition,
+			ReceivedAt:           received.UTC().Truncate(time.Millisecond),
+			InterpretedAt:        owner.Now.UTC().Truncate(time.Millisecond),
+		}
+		if err = validatePersistedModel("native_condition", value); err != nil {
+			return err
+		}
 
-	inventory, err = inventory.Append(raw)
-	if err != nil {
-		return err
+		raw, encodeErr := json.Marshal(value)
+		if encodeErr == nil {
+			raw, encodeErr = canonicaljson.Canonicalize(raw, model.NativeConditionEvidenceMaxBytes)
+		}
+		if encodeErr != nil {
+			return encodeErr
+		}
+
+		result, execErr := tx.Exec(
+			ctx,
+			`INSERT INTO native_condition_evidence(id, exam_attempt_id, participation_id,
+				batch_sequence, record_index, transition_index, canonical)
+			VALUES(?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(participation_id, batch_sequence, record_index, transition_index) DO NOTHING`,
+			value.ID.String(),
+			attempt.String(),
+			owner.ParticipationID,
+			sequence,
+			index,
+			position,
+			raw,
+		)
+		if execErr != nil {
+			return execErr
+		}
+
+		inserted, countErr := result.RowsAffected()
+		if countErr != nil {
+			return countErr
+		}
+		if inserted == 0 {
+			continue
+		}
+		if inventory, err = inventory.Append(raw); err != nil {
+			return err
+		}
 	}
 
 	if _, err := tx.Exec(

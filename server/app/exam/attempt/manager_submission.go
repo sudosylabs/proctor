@@ -138,6 +138,11 @@ func (s *Service) EndExamAttemptByManager(
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, apperror.Invalid("exam.attempt.invalid", "receipt_code"))
 	}
 
+	eventID, eventJobID := s.newDomainEventID(), s.newJobID()
+	if !eventID.IsValid() || !eventJobID.IsValid() {
+		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, apperror.Invalid("exam.attempt.invalid", "domain_event_id"))
+	}
+
 	notice, expectedRecipientRevision, err := s.prepareManagerEndReceiptMail(ctx, preparation, proposed, receiptCode)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)
@@ -152,6 +157,8 @@ func (s *Service) EndExamAttemptByManager(
 		AuditAt:                   preparation.SealAt,
 		Notice:                    notice,
 		ExpectedRecipientRevision: expectedRecipientRevision,
+		DomainEventID:             eventID,
+		DomainEventJobID:          eventJobID,
 	}, commandIdempotency)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, storeError(storeErrors, err))

@@ -21,9 +21,10 @@ import (
 const retentionJobMaximumBatch = 100
 
 // RetentionContentPurger removes the stored content of an Attempt Workspace
-// object whose retention has ended.
+// object or a screen clip whose retention has ended.
 type RetentionContentPurger interface {
 	PurgeRetiredAttemptWorkspaceObject(context.Context, model.AttemptWorkspaceObjectID) error
+	PurgeRetiredScreenClip(context.Context, model.ScreenClipID, int) error
 }
 
 // RetentionSystemAuditor opens the durable audit attempt of one Submission's
@@ -241,7 +242,7 @@ func (h retentionHandler) purgePage(
 
 	seen := make(map[store.RetentionPurgeObject]struct{}, len(objects))
 	for _, object := range objects {
-		if !object.RetirementID.IsValid() || !object.ObjectID.IsValid() {
+		if !object.Valid() {
 			return errors.New("invalid retention purge identity")
 		}
 		if _, duplicate := seen[object]; duplicate {
@@ -258,11 +259,16 @@ func (h retentionHandler) purgePage(
 		}
 
 		cp.Examined++
-		if err = h.content.PurgeRetiredAttemptWorkspaceObject(ctx, object.ObjectID); err != nil {
+		if object.ScreenClipID != "" {
+			err = h.content.PurgeRetiredScreenClip(ctx, object.ScreenClipID, object.ChunkCount)
+		} else {
+			err = h.content.PurgeRetiredAttemptWorkspaceObject(ctx, object.ObjectID)
+		}
+		if err != nil {
 			failed = true
 		} else if err = h.records.CompletePurge(
 			ctx,
-			&store.RetentionPurgeCompletion{RetirementID: object.RetirementID, ObjectID: object.ObjectID},
+			&store.RetentionPurgeCompletion{RetirementID: object.RetirementID, ObjectID: object.ObjectID, ScreenClipID: object.ScreenClipID},
 		); err != nil {
 			failed = true
 		} else {

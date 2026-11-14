@@ -397,8 +397,9 @@ paths:
         continuity; closed streams use current owning registered-key authentication until the fixed
         upload deadline. Exact retries preserve the submitted prior acknowledgement and recover the
         original receipt. Out-of-order records wait behind recoverable holes; terminal gaps preserve
-        unresolved openers. Native conditions do not automatically create Flags, warnings or
-        suspension. Lifetime quotas include pending bytes, envelopes, receipts and bounded metadata.
+        unresolved openers. The server evaluates the policy's rules on the facts in stream order; an
+        enforce rule that stops being met raises its native Flag and, for a flag_and_suspend family,
+        suspends the Attempt. Observe rules, unknown status and gaps never flag. Lifetime quotas include pending bytes, envelopes, receipts and bounded metadata.
         Repair has reserved headroom. Native append is limited across Sessions and transports to two
         requests per second with burst eight; replay consumes allowance. A 429 response supplies
         Retry-After.
@@ -806,164 +807,142 @@ components:
             last_unretained_at:
               type: string
               format: date-time
-    NativeSourceRange:
+    NativeCapabilityFact:
       type: object
       additionalProperties: false
+      description: >-
+        One activated capability's full minimized state as Desktop observed it, with its envelope. Desktop sends a fact
+        whenever the state or the envelope changes; the server checks it against the capability's published schemas
+        and evaluates the policy's rules on it again. A fact no newer than the latest of its source instance changes
+        nothing.
       required:
-        - source_id
+        - kind
+        - observed_at
+        - capability
         - source_instance_id
-        - first_sequence
-        - last_sequence
+        - sequence
+        - permission
+        - health
+        - certainty
+        - state
+        - summary
       properties:
-        source_id:
+        kind:
           type: string
           enum:
-            - display-topology
-            - candidate-window
-            - capture-session
-            - process-application
-            - interactive-session
-            - clipboard
-            - print-spooler
-            - removable-storage
-            - virtualization
-            - network-configuration
-            - media-device
+            - capability_fact
+        observed_at:
+          type: string
+          format: date-time
+          description: The device time of the observation, in whole milliseconds.
+        capability:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,63}$
         source_instance_id:
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
-        first_sequence:
+        sequence:
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
-        last_sequence:
-          type: integer
-          format: int64
-          minimum: 0
-          maximum: 9007199254740991
-    NativeOccurrence:
-      type: object
-      additionalProperties: false
-      required:
-        - kind
-        - occurrence_id
-        - condition_id
-        - detector_id
-        - detector_version
-        - capability_id
-        - mode
-        - status
-        - first_observed_at
-        - last_confirmed_at
-        - repeat_count
-        - certainty
-        - gap_count
-        - source_ranges
-      properties:
-        kind:
+        permission:
           type: string
           enum:
-            - occurrence
-        occurrence_id:
-          type: string
-          minLength: 1
-          maxLength: 128
-          pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
-        condition_id:
-          type: string
-          minLength: 1
-          maxLength: 128
-          pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
-        detector_id:
-          type: string
-          minLength: 1
-          maxLength: 128
-          pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
-        detector_version:
-          type: integer
-          format: int64
-          minimum: 1
-          maximum: 9007199254740991
-        capability_id:
-          type: string
-          minLength: 1
-          maxLength: 128
-          pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
-        mode:
+            - not_determined
+            - granted
+            - denied
+            - restricted
+            - unavailable
+        health:
           type: string
           enum:
-            - observe
-            - enforce
-        status:
-          type: string
-          enum:
-            - opened
-            - repeated
-            - recovered
-        first_observed_at:
-          type: string
-          format: date-time
-        last_confirmed_at:
-          type: string
-          format: date-time
-        repeat_count:
-          type: integer
-          format: int64
-          minimum: 1
-          maximum: 9007199254740991
+            - unsupported
+            - healthy
+            - degraded
+            - failed
+            - stopped
         certainty:
           type: string
           enum:
             - complete
             - partial
             - unknown
-        gap_count:
-          type: integer
-          format: int64
-          minimum: 0
-          maximum: 9007199254740991
-        source_ranges:
-          type: array
-          items:
-            $ref: '#/components/schemas/NativeSourceRange'
-          minItems: 1
-          maxItems: 11
-    NativeCoverageTransition:
+        state:
+          type: object
+          description: The full state, valid against its published state schema. State and summary are at most 16 KiB together.
+        summary:
+          type: object
+          description: The counts derived from the state, valid against its published summary schema.
+    NativeParticipationConfirmed:
       type: object
       additionalProperties: false
+      description: >-
+        Where the exam begins on the stream: Desktop sends it once, when the candidate window mounts after admission.
+        Before it the server applies the policy's readiness rules; from it, the participation rules, on the latest
+        facts. Send the mounted candidate window's fact before it, in the same or an earlier batch; otherwise the
+        window rule is evaluated on the window Desktop reported at Start and fails.
       required:
         - kind
-        - source
-        - occurred_at
-        - reason
+        - observed_at
       properties:
         kind:
           type: string
           enum:
-            - coverage_transition
-        source:
-          $ref: '#/components/schemas/NativeSourceCoverage'
-        occurred_at:
+            - participation_confirmed
+        observed_at:
           type: string
           format: date-time
-        reason:
+    NativeRuleStatusReport:
+      type: object
+      additionalProperties: false
+      description: >-
+        Desktop's own status for one participation rule and whether it is containing the candidate window because of
+        it. The server's status is authoritative; a disagreement is counted, never applied.
+      required:
+        - kind
+        - rule_id
+        - status
+        - contained
+        - observed_at
+      properties:
+        kind:
           type: string
           enum:
-            - initial
-            - health_changed
-            - permission_changed
-            - reconciled
-            - stopped
+            - rule_status
+        rule_id:
+          type: string
+          maxLength: 128
+        status:
+          type: string
+          enum:
+            - met
+            - not_met
+            - unknown
+        unknown_cause:
+          type: string
+          description: Why the rule is unknown; present only when status is unknown.
+          enum:
+            - unavailable
+            - gap
+            - unhealthy
+            - permission
+            - partial
+            - checking
+        contained:
+          type: boolean
+        observed_at:
+          type: string
+          format: date-time
     NativeSourceReset:
       type: object
       additionalProperties: false
       required:
         - kind
         - reset_id
-        - source_id
+        - capability
         - previous_source_instance_id
         - previous_final_sequence
         - new_source_instance_id
@@ -979,20 +958,10 @@ components:
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
-        source_id:
+        capability:
           type: string
-          enum:
-            - display-topology
-            - candidate-window
-            - capture-session
-            - process-application
-            - interactive-session
-            - clipboard
-            - print-spooler
-            - removable-storage
-            - virtualization
-            - network-configuration
-            - media-device
+          pattern: ^[a-z][a-z0-9_]{0,63}$
+          description: The activated capability whose source this names.
         previous_source_instance_id:
           type: string
           minLength: 1
@@ -1022,7 +991,7 @@ components:
       additionalProperties: false
       required:
         - kind
-        - source_id
+        - capability
         - source_instance_id
         - first_missing_sequence
         - last_missing_sequence
@@ -1033,20 +1002,10 @@ components:
           type: string
           enum:
             - source_gap
-        source_id:
+        capability:
           type: string
-          enum:
-            - display-topology
-            - candidate-window
-            - capture-session
-            - process-application
-            - interactive-session
-            - clipboard
-            - print-spooler
-            - removable-storage
-            - virtualization
-            - network-configuration
-            - media-device
+          pattern: ^[a-z][a-z0-9_]{0,63}$
+          description: The activated capability whose source this names.
         source_instance_id:
           type: string
           minLength: 1
@@ -1073,15 +1032,17 @@ components:
           format: date-time
     NativeRecord:
       oneOf:
-        - $ref: '#/components/schemas/NativeOccurrence'
-        - $ref: '#/components/schemas/NativeCoverageTransition'
+        - $ref: '#/components/schemas/NativeCapabilityFact'
+        - $ref: '#/components/schemas/NativeParticipationConfirmed'
+        - $ref: '#/components/schemas/NativeRuleStatusReport'
         - $ref: '#/components/schemas/NativeSourceReset'
         - $ref: '#/components/schemas/NativeSourceGap'
       discriminator:
         propertyName: kind
         mapping:
-          occurrence: '#/components/schemas/NativeOccurrence'
-          coverage_transition: '#/components/schemas/NativeCoverageTransition'
+          capability_fact: '#/components/schemas/NativeCapabilityFact'
+          participation_confirmed: '#/components/schemas/NativeParticipationConfirmed'
+          rule_status: '#/components/schemas/NativeRuleStatusReport'
           source_reset: '#/components/schemas/NativeSourceReset'
           source_gap: '#/components/schemas/NativeSourceGap'
     NativeSecurityBatch:

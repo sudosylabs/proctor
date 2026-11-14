@@ -9,6 +9,7 @@ package route
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -199,6 +200,10 @@ func (a *API) protocolOperationHandler(
 			}
 
 			writer.Header().Set("Content-Length", strconv.FormatInt(result.contentLength, 10))
+			if result.status == http.StatusPartialContent {
+				writer.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d",
+					result.rangeStart, result.rangeStart+result.contentLength-1, result.rangeTotal))
+			}
 			writer.WriteHeader(result.status)
 			written, copyErr := io.CopyN(writer, result.body, result.contentLength)
 			if copyErr != nil || written != result.contentLength {

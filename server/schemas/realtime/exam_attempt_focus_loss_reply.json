@@ -1,0 +1,53 @@
+{
+  "title": "Exam Attempt Focus Loss reply",
+  "description": "Acknowledges the signal. It tells the candidate's Desktop only what it must act on: never the threshold, outcome or Flag.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "generation",
+    "accepted_sequence",
+    "received_at",
+    "duplicate",
+    "gap_detected",
+    "policy_disabled",
+    "warning_created",
+    "suspension_created",
+    "discrepancy_recorded"
+  ],
+  "properties": {
+    "generation": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "accepted_sequence": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "received_at": {
+      "$ref": "instant.json"
+    },
+    "duplicate": {
+      "type": "boolean"
+    },
+    "gap_detected": {
+      "type": "boolean"
+    },
+    "policy_disabled": {
+      "type": "boolean",
+      "description": "The Exam does not collect Focus Loss; the signal was only acknowledged."
+    },
+    "warning_created": {
+      "type": "boolean",
+      "description": "Show the candidate the Focus Loss warning."
+    },
+    "suspension_created": {
+      "type": "boolean",
+      "description": "The Attempt was suspended and this Connection closed."
+    },
+    "discrepancy_recorded": {
+      "type": "boolean"
+    }
+  }
+}

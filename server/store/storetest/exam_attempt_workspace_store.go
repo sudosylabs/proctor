@@ -76,7 +76,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 		ParticipationID: connected.Participation.ID, ConnectionID: connected.Connection.ID, CandidateUserID: fixture.candidate.ID,
 		SessionID: fixture.session.ID, Generation: connected.Participation.Generation, DesktopRegistrationID: fixture.session.DesktopRegistrationID,
 		DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint, ContinuityCredentialHash: credentialHash}
-	prepareParticipationRenewalCoverage(t, ctx, ss, renewal)
+	prepareParticipationSecurityControl(t, ctx, ss, renewal)
 	renew := func() {
 		t.Helper()
 		renewal.ConnectionID = access.ConnectionID

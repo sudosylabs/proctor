@@ -95,17 +95,59 @@ jobs:
       - name: Install matching browsers and Linux dependencies
         working-directory: webapp
         run: npx --no-install playwright install --with-deps chromium firefox webkit
-      # The runner was stopped mid race suite with no failing test; record its
-      # headroom so another stop can be told apart from a test failure.
-      - name: Report runner resources
+      # The runner has been stopped mid gate with no failing test and no log.
+      # Each target of `make check` (build/make/test.mk) runs as its own step,
+      # so a stop names the target and earlier steps keep their logs, and a
+      # sampler records memory and the largest processes every 15 seconds.
+      # Keep these steps in step with the `check` and `server-check` targets.
+      - name: Start runner resource sampler
         run: |
           nproc
           free -m
           df -h "$GITHUB_WORKSPACE" /tmp
-      - name: Run product gate
+          mkdir -p .build/ci
+          nohup bash -c 'while :; do
+            printf "%s mem_used=%sM mem_avail=%sM swap_used=%sM load=%s\n" \
+              "$(date -u +%H:%M:%S)" \
+              "$(free -m | awk "/^Mem:/{print \$3}")" \
+              "$(free -m | awk "/^Mem:/{print \$7}")" \
+              "$(free -m | awk "/^Swap:/{print \$3}")" \
+              "$(cut -d" " -f1-3 /proc/loadavg)"
+            ps -eo rss=,args= --sort=-rss | head -5 | awk "{printf \"  %6dM %s\n\", \$1/1024, substr(\$0, index(\$0,\$2), 120)}"
+            sleep 15
+          done' > .build/ci/runner-resources.log 2>&1 &
+      - name: Check brand artwork and build scripts
+        run: make brand-check build-scripts-check
+      - name: Check webapp
+        if: ${{ !cancelled() }}
+        run: make webapp-check
+      - name: Check documentation site
+        if: ${{ !cancelled() }}
+        run: make docs-check
+      - name: Check mail templates
+        if: ${{ !cancelled() }}
+        run: make mail-templates-check
+      - name: Check server contracts and static rules
+        if: ${{ !cancelled() }}
+        run: make -C server architecture errors-check i18n-check openapi-agreement asyncapi-check vet
+      - name: Run server tests
+        if: ${{ !cancelled() }}
+        run: make -C server test
+      - name: Run server race tests
+        if: ${{ !cancelled() }}
         env:
           GO_TEST_RACE_FLAGS: -p 2
-        run: make check
+        run: make -C server test-race
+      - name: Report runner resources and kernel kills
+        if: ${{ always() }}
+        run: |
+          free -m
+          echo "Highest memory use sampled:"
+          sort -t= -k2 -n -r <(grep -o 'mem_used=[0-9]*' .build/ci/runner-resources.log) | head -1 || true
+          echo "Last samples:"
+          tail -n 120 .build/ci/runner-resources.log || true
+          echo "Kernel out-of-memory kills:"
+          sudo dmesg -T | grep -iE 'out of memory|oom-kill|killed process' || echo none
       - name: Verify independent modules
         if: ${{ !cancelled() }}
         env:
@@ -115,7 +157,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: make module-pins-check
       - name: Retain tests, coverage, browser traces, and HTML reports
-        if: ${{ !cancelled() }}
+        if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: hermetic-test-reports

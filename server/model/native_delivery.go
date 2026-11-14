@@ -22,108 +22,87 @@ import (
 
 var ErrNativeDeliveryInvalid = errors.New("native delivery is invalid")
 
-type NativeSourceRange struct {
-	SourceID         NativeSourceID `json:"source_id"`
-	SourceInstanceID string         `json:"source_instance_id"`
-	FirstSequence    int64          `json:"first_sequence"`
-	LastSequence     int64          `json:"last_sequence"`
+// NativeCapabilityFact is one capability's full minimized state, as Desktop
+// observed it at ObservedAt, with the envelope around it. Facts are
+// change-driven: Desktop sends one whenever the state or its envelope
+// changes, and the server evaluates the policy's rules on it again.
+type NativeCapabilityFact struct {
+	observedAtSpelling string
+
+	Kind       string    `json:"kind"`
+	ObservedAt time.Time `json:"observed_at"`
+	NativeCapabilityReadiness
 }
 
-type NativeOccurrence struct {
-	firstObservedAtSpelling string
-	lastConfirmedAtSpelling string
+// NativeCapabilityFactMaxBytes bounds one fact record.
+const NativeCapabilityFactMaxBytes = 16 * 1024
 
-	Kind            string                `json:"kind"`
-	OccurrenceID    string                `json:"occurrence_id"`
-	ConditionID     string                `json:"condition_id"`
-	DetectorID      string                `json:"detector_id"`
-	DetectorVersion int64                 `json:"detector_version"`
-	CapabilityID    string                `json:"capability_id"`
-	Mode            NativeCapabilityClaim `json:"mode"`
-	Status          string                `json:"status"`
-	FirstObservedAt time.Time             `json:"first_observed_at"`
-	LastConfirmedAt time.Time             `json:"last_confirmed_at"`
-	RepeatCount     int64                 `json:"repeat_count"`
-	Certainty       string                `json:"certainty"`
-	GapCount        int64                 `json:"gap_count"`
-	SourceRanges    []NativeSourceRange   `json:"source_ranges"`
-}
-
-func (v NativeOccurrence) Validate() error {
-	if v.Kind != "occurrence" ||
-		!IsValidAgreementID(v.OccurrenceID) ||
-		!IsValidAgreementID(v.ConditionID) ||
-		!IsValidAgreementID(v.DetectorID) ||
-		v.DetectorVersion <= 0 ||
-		!securitySafeInt(v.DetectorVersion) ||
-		!IsValidAgreementID(v.CapabilityID) ||
-		!slices.Contains([]NativeCapabilityClaim{NativeClaimObserve, NativeClaimEnforce}, v.Mode) ||
-		!slices.Contains([]string{"opened", "repeated", "recovered"}, v.Status) ||
-		!securityInstant(v.FirstObservedAt) ||
-		!securityInstant(v.LastConfirmedAt) ||
-		v.RepeatCount <= 0 ||
-		!securitySafeInt(v.RepeatCount) ||
-		!slices.Contains([]string{"complete", "partial", "unknown"}, v.Certainty) ||
-		!securitySafeInt(v.GapCount) ||
-		len(v.SourceRanges) == 0 ||
-		len(v.SourceRanges) > 11 {
+func (v NativeCapabilityFact) Validate() error {
+	if v.Kind != "capability_fact" || !securityInstant(v.ObservedAt) || !v.valid() ||
+		len(v.State)+len(v.Summary) > NativeCapabilityFactMaxBytes {
 		return ErrNativeDeliveryInvalid
 	}
-
-	previous := -1
-	for _, r := range v.SourceRanges {
-		order := slices.Index(NativeSources(), r.SourceID)
-		if order <= previous ||
-			!IsValidAgreementID(r.SourceInstanceID) ||
-			!securitySafeInt(r.FirstSequence) ||
-			!securitySafeInt(r.LastSequence) ||
-			r.LastSequence < r.FirstSequence {
-			return ErrNativeDeliveryInvalid
-		}
-
-		previous = order
-	}
-
-	// Client wall clocks may roll back. Source sequences and stream ordering,
-	// never timestamp equality, determine occurrence continuity.
 	return nil
 }
 
-type NativeCoverageTransition struct {
-	occurredAtSpelling string
+// NativeParticipationConfirmed marks where the exam begins on the stream:
+// Desktop sends it when the candidate window mounts after admission. Before
+// it, readiness rules apply; from it, participation rules do.
+type NativeParticipationConfirmed struct {
+	observedAtSpelling string
 
-	Kind       string               `json:"kind"`
-	Source     NativeSourceCoverage `json:"source"`
-	OccurredAt time.Time            `json:"occurred_at"`
-	Reason     string               `json:"reason"`
+	Kind       string    `json:"kind"`
+	ObservedAt time.Time `json:"observed_at"`
 }
 
-func (v NativeCoverageTransition) Validate() error {
-	if v.Kind != "coverage_transition" ||
-		ValidateNativeCoverageSnapshot([]NativeSourceCoverage{v.Source}, []NativeCoverageClaim{}) != nil ||
-		!securityInstant(v.OccurredAt) ||
-		!slices.Contains([]string{"initial", "health_changed", "permission_changed", "reconciled", "stopped"}, v.Reason) {
+func (v NativeParticipationConfirmed) Validate() error {
+	if v.Kind != "participation_confirmed" || !securityInstant(v.ObservedAt) {
 		return ErrNativeDeliveryInvalid
 	}
-
 	return nil
 }
 
+// NativeRuleStatusReport is Desktop's own status for one rule, and whether
+// it is containing the candidate window because of it. The server's status
+// is authoritative; a disagreement is counted as a discrepancy.
+type NativeRuleStatusReport struct {
+	observedAtSpelling string
+
+	Kind         string             `json:"kind"`
+	RuleID       string             `json:"rule_id"`
+	Status       NativeRuleStatus   `json:"status"`
+	UnknownCause NativeUnknownCause `json:"unknown_cause,omitempty"`
+	Contained    bool               `json:"contained"`
+	ObservedAt   time.Time          `json:"observed_at"`
+}
+
+func (v NativeRuleStatusReport) Validate() error {
+	if v.Kind != "rule_status" || !securityInstant(v.ObservedAt) ||
+		!(NativeRuleReport{RuleID: v.RuleID, Status: v.Status, UnknownCause: v.UnknownCause}).valid() {
+		return ErrNativeDeliveryInvalid
+	}
+	return nil
+}
+
+// NativeSourceGap says a capability's source lost events: the positions
+// from FirstMissingSequence to LastMissingSequence of one source instance
+// will never arrive. Rules on the capability are unknown until its next full
+// state.
 type NativeSourceGap struct {
 	occurredAtSpelling string
 
-	Kind                 string         `json:"kind"`
-	SourceID             NativeSourceID `json:"source_id"`
-	SourceInstanceID     string         `json:"source_instance_id"`
-	FirstMissingSequence int64          `json:"first_missing_sequence"`
-	LastMissingSequence  int64          `json:"last_missing_sequence"`
-	Reason               string         `json:"reason"`
-	OccurredAt           time.Time      `json:"occurred_at"`
+	Kind                 string             `json:"kind"`
+	Capability           NativeCapabilityID `json:"capability"`
+	SourceInstanceID     string             `json:"source_instance_id"`
+	FirstMissingSequence int64              `json:"first_missing_sequence"`
+	LastMissingSequence  int64              `json:"last_missing_sequence"`
+	Reason               string             `json:"reason"`
+	OccurredAt           time.Time          `json:"occurred_at"`
 }
 
 func (v NativeSourceGap) Validate() error {
 	if v.Kind != "source_gap" ||
-		!slices.Contains(NativeSources(), v.SourceID) ||
+		!isNativeIdentifier(string(v.Capability)) ||
 		!IsValidAgreementID(v.SourceInstanceID) ||
 		!securitySafeInt(v.FirstMissingSequence) ||
 		!securitySafeInt(v.LastMissingSequence) ||
@@ -136,10 +115,43 @@ func (v NativeSourceGap) Validate() error {
 	return nil
 }
 
+// NativeSourceReset says a capability's source restarted under a new
+// instance: the previous instance ended at PreviousFinalSequence, and facts
+// continue under NewSourceInstanceID. Rules on the capability are unknown
+// until the new instance's first full state.
+type NativeSourceReset struct {
+	occurredAtSpelling string
+
+	Kind                     string             `json:"kind"`
+	ResetID                  string             `json:"reset_id"`
+	Capability               NativeCapabilityID `json:"capability"`
+	PreviousSourceInstanceID string             `json:"previous_source_instance_id"`
+	PreviousFinalSequence    int64              `json:"previous_final_sequence"`
+	NewSourceInstanceID      string             `json:"new_source_instance_id"`
+	Reason                   string             `json:"reason"`
+	OccurredAt               time.Time          `json:"occurred_at"`
+}
+
+func (r NativeSourceReset) Validate() error {
+	if r.Kind != "source_reset" ||
+		!IsValidAgreementID(r.ResetID) ||
+		!isNativeIdentifier(string(r.Capability)) ||
+		!IsValidAgreementID(r.PreviousSourceInstanceID) ||
+		!IsValidAgreementID(r.NewSourceInstanceID) ||
+		r.PreviousSourceInstanceID == r.NewSourceInstanceID ||
+		!securitySafeInt(r.PreviousFinalSequence) ||
+		!slices.Contains([]string{"restart", "resume", "permission_changed"}, r.Reason) ||
+		!securityInstant(r.OccurredAt) {
+		return ErrNativeDeliveryInvalid
+	}
+	return nil
+}
+
 // NativeRecord is a closed union. It never retains an arbitrary raw detail bag.
 type NativeRecord struct {
-	Occurrence *NativeOccurrence
-	Coverage   *NativeCoverageTransition
+	Fact       *NativeCapabilityFact
+	Confirmed  *NativeParticipationConfirmed
+	RuleStatus *NativeRuleStatusReport
 	Reset      *NativeSourceReset
 	Gap        *NativeSourceGap
 }
@@ -147,14 +159,18 @@ type NativeRecord struct {
 func (r NativeRecord) value() (any, error) {
 	var value any
 	count := 0
-	for _, candidate := range []interface{ Validate() error }{r.Occurrence, r.Coverage, r.Reset, r.Gap} {
+	for _, candidate := range []interface{ Validate() error }{r.Fact, r.Confirmed, r.RuleStatus, r.Reset, r.Gap} {
 		// Typed nil pointers cannot be tested through the interface itself.
 		switch v := candidate.(type) {
-		case *NativeOccurrence:
+		case *NativeCapabilityFact:
 			if v == nil {
 				continue
 			}
-		case *NativeCoverageTransition:
+		case *NativeParticipationConfirmed:
+			if v == nil {
+				continue
+			}
+		case *NativeRuleStatusReport:
 			if v == nil {
 				continue
 			}
@@ -204,12 +220,15 @@ func (r *NativeRecord) UnmarshalJSON(raw []byte) error {
 	var value NativeRecord
 	var target any
 	switch kind.Kind {
-	case "occurrence":
-		value.Occurrence = new(NativeOccurrence)
-		target = value.Occurrence
-	case "coverage_transition":
-		value.Coverage = new(NativeCoverageTransition)
-		target = value.Coverage
+	case "capability_fact":
+		value.Fact = new(NativeCapabilityFact)
+		target = value.Fact
+	case "participation_confirmed":
+		value.Confirmed = new(NativeParticipationConfirmed)
+		target = value.Confirmed
+	case "rule_status":
+		value.RuleStatus = new(NativeRuleStatusReport)
+		target = value.RuleStatus
 	case "source_reset":
 		value.Reset = new(NativeSourceReset)
 		target = value.Reset
@@ -401,194 +420,64 @@ func (s NativeSecurityStreamStatus) Validate() error {
 	return nil
 }
 
-// NativeSourceLifetime is reconstructed from the admitted report and immutable
-// reset edges. A retired instance has a fixed final source sequence; delivery
-// may fill its historical range but can never extend that lifetime.
-type NativeSourceLifetime struct {
-	SourceID      NativeSourceID
-	InstanceID    string
-	FinalSequence *int64
-}
-
-func ValidateNativeRecordBinding(
-	record NativeRecord,
-	resolved ResolvedNativePolicy,
-	agreement *DesktopNativeAgreement,
-	lifetimes []NativeSourceLifetime,
-) error {
-	if record.Validate() != nil || agreement == nil {
+// ValidateNativeRecordBinding checks a record against the admitted policy:
+// facts, gaps and resets name an activated capability, and a rule status
+// names one of its participation rules.
+func ValidateNativeRecordBinding(record NativeRecord, resolved ResolvedNativePolicy) error {
+	if record.Validate() != nil {
 		return ErrNativeDeliveryInvalid
 	}
-
-	checkRange := func(source NativeSourceID, instance string, last int64) error {
-		if !slices.Contains(resolved.Sources, source) {
+	activated := func(capability NativeCapabilityID) error {
+		if !slices.ContainsFunc(resolved.Policy.Activations, func(a NativeActivation) bool { return a.Capability == capability }) {
 			return ErrNativeDeliveryInvalid
 		}
-
-		for _, life := range lifetimes {
-			if life.SourceID == source && life.InstanceID == instance {
-				if life.FinalSequence != nil && last > *life.FinalSequence {
-					return ErrNativeDeliveryInvalid
-				}
-				return nil
-			}
-		}
-
-		return ErrNativeDeliveryInvalid
-	}
-	if occurrence := record.Occurrence; occurrence != nil {
-		sources := make([]NativeSourceID, 0, len(occurrence.SourceRanges))
-		for _, r := range occurrence.SourceRanges {
-			if err := checkRange(r.SourceID, r.SourceInstanceID, r.LastSequence); err != nil {
-				return err
-			}
-
-			sources = append(sources, r.SourceID)
-		}
-
-		if agreement.ValidateDetector(
-			occurrence.DetectorID,
-			occurrence.DetectorVersion,
-			occurrence.CapabilityID,
-			occurrence.ConditionID,
-			occurrence.Mode,
-			sources,
-		) != nil {
-			return ErrNativeDeliveryInvalid
-		}
-
-		selected := false
-		for _, required := range resolved.Requirements {
-			if required.CapabilityID == occurrence.CapabilityID && required.RequiredClaim == occurrence.Mode {
-				selected = true
-			}
-		}
-
-		if !selected {
-			return ErrNativeDeliveryInvalid
-		}
-
 		return nil
 	}
-
-	if transition := record.Coverage; transition != nil {
-		if err := checkRange(transition.Source.SourceID, transition.Source.SourceInstanceID, transition.Source.Sequence); err != nil {
-			return err
+	switch {
+	case record.Fact != nil:
+		return activated(record.Fact.Capability)
+	case record.Gap != nil:
+		return activated(record.Gap.Capability)
+	case record.Reset != nil:
+		return activated(record.Reset.Capability)
+	case record.RuleStatus != nil:
+		status := record.RuleStatus
+		if !slices.ContainsFunc(resolved.Policy.Rules, func(r NativeRule) bool {
+			return r.RuleID == status.RuleID && r.Phase.AppliesTo(NativeRuleParticipation)
+		}) {
+			return ErrNativeDeliveryInvalid
 		}
-
-		for _, required := range resolved.Requirements {
-			if required.SourceID == transition.Source.SourceID &&
-				required.Entry.SourceSchemaDigest == transition.Source.SourceSchemaDigest &&
-				required.Entry.AdapterVersion == transition.Source.AdapterVersion {
-				return nil
-			}
-		}
-
-		return ErrNativeDeliveryInvalid
 	}
-
-	if gap := record.Gap; gap != nil {
-		return checkRange(gap.SourceID, gap.SourceInstanceID, gap.LastMissingSequence)
-	}
-	// Reset edge continuity and semantic reset-ID replay are validated by the
-	// shared reset owner. This check only proves its admitted source selector.
-	if !slices.Contains(resolved.Sources, record.Reset.SourceID) {
-		return ErrNativeDeliveryInvalid
-	}
-
 	return nil
 }
 
-// NativeOccurrenceProgress is an interpretation result, not a misconduct Flag.
-// UnresolvedOpener survives subsequent transitions when a terminal delivery gap
-// prevented the server from receiving the opening observation.
-type NativeOccurrenceProgress struct {
-	Latest           NativeOccurrence
-	UnresolvedOpener bool
-}
-
-func AdvanceNativeOccurrence(
-	prior *NativeOccurrenceProgress,
-	next NativeOccurrence,
-	precedingTerminalGap bool,
-) (NativeOccurrenceProgress, error) {
-	zero := NativeOccurrenceProgress{}
-	if next.Validate() != nil {
-		return zero, ErrNativeDeliveryInvalid
+func (v NativeCapabilityFact) MarshalJSON() ([]byte, error) {
+	type wire struct {
+		Kind       string              `json:"kind"`
+		ObservedAt securityJSONInstant `json:"observed_at"`
+		NativeCapabilityReadiness
 	}
-
-	if prior == nil {
-		if next.Status != "opened" && !precedingTerminalGap {
-			return zero, ErrDeliveryConflict
-		}
-		return NativeOccurrenceProgress{Latest: cloneNativeOccurrence(next), UnresolvedOpener: next.Status != "opened"}, nil
-	}
-
-	old := prior.Latest
-	if old.Validate() != nil ||
-		old.OccurrenceID != next.OccurrenceID ||
-		old.ConditionID != next.ConditionID ||
-		old.DetectorID != next.DetectorID ||
-		old.DetectorVersion != next.DetectorVersion ||
-		old.CapabilityID != next.CapabilityID ||
-		old.Mode != next.Mode ||
-		old.Status == "recovered" ||
-		next.Status == "opened" ||
-		!old.FirstObservedAt.Equal(next.FirstObservedAt) ||
-		next.RepeatCount < old.RepeatCount ||
-		next.GapCount < old.GapCount ||
-		len(old.SourceRanges) != len(next.SourceRanges) {
-		return zero, ErrDeliveryConflict
-	}
-
-	for i, r := range old.SourceRanges {
-		n := next.SourceRanges[i]
-		if r.SourceID != n.SourceID ||
-			r.SourceInstanceID != n.SourceInstanceID ||
-			n.FirstSequence != r.FirstSequence ||
-			n.LastSequence < r.LastSequence {
-			return zero, ErrDeliveryConflict
-		}
-	}
-
-	return NativeOccurrenceProgress{Latest: cloneNativeOccurrence(next), UnresolvedOpener: prior.UnresolvedOpener}, nil
-}
-func cloneNativeOccurrence(o NativeOccurrence) NativeOccurrence {
-	o.SourceRanges = slices.Clone(o.SourceRanges)
-	return o
-}
-
-func (v NativeOccurrence) MarshalJSON() ([]byte, error) {
-	type wire NativeOccurrence
-	return json.Marshal(struct {
-		*wire
-		FirstObservedAt securityJSONInstant `json:"first_observed_at"`
-		LastConfirmedAt securityJSONInstant `json:"last_confirmed_at"`
-	}{
-		wire:            (*wire)(&v),
-		FirstObservedAt: securityJSONInstant{Time: v.FirstObservedAt, spelling: v.firstObservedAtSpelling},
-		LastConfirmedAt: securityJSONInstant{Time: v.LastConfirmedAt, spelling: v.lastConfirmedAtSpelling},
+	return json.Marshal(wire{
+		Kind: v.Kind, ObservedAt: securityJSONInstant{Time: v.ObservedAt, spelling: v.observedAtSpelling},
+		NativeCapabilityReadiness: v.NativeCapabilityReadiness,
 	})
 }
-func (v *NativeOccurrence) UnmarshalJSON(raw []byte) error {
+func (v *NativeCapabilityFact) UnmarshalJSON(raw []byte) error {
 	if v == nil {
 		return ErrNativeDeliveryInvalid
 	}
-	type wire NativeOccurrence
-	var decoded wire
-	value := struct {
-		*wire
-		FirstObservedAt securityJSONInstant `json:"first_observed_at"`
-		LastConfirmedAt securityJSONInstant `json:"last_confirmed_at"`
-	}{wire: &decoded}
+	var value struct {
+		Kind       string              `json:"kind"`
+		ObservedAt securityJSONInstant `json:"observed_at"`
+		NativeCapabilityReadiness
+	}
 	if decodeClosedDeliveryDeclaration(raw, &value, 256*1024) != nil {
 		return ErrNativeDeliveryInvalid
 	}
-	candidate := NativeOccurrence(decoded)
-	candidate.FirstObservedAt = value.FirstObservedAt.Time
-	candidate.firstObservedAtSpelling = value.FirstObservedAt.spelling
-	candidate.LastConfirmedAt = value.LastConfirmedAt.Time
-	candidate.lastConfirmedAtSpelling = value.LastConfirmedAt.spelling
+	candidate := NativeCapabilityFact{
+		observedAtSpelling: value.ObservedAt.spelling, Kind: value.Kind, ObservedAt: value.ObservedAt.Time,
+		NativeCapabilityReadiness: value.NativeCapabilityReadiness,
+	}
 	if candidate.Validate() != nil {
 		return ErrNativeDeliveryInvalid
 	}
@@ -596,29 +485,59 @@ func (v *NativeOccurrence) UnmarshalJSON(raw []byte) error {
 	return nil
 }
 
-func (v NativeCoverageTransition) MarshalJSON() ([]byte, error) {
-	type wire NativeCoverageTransition
+func (v NativeParticipationConfirmed) MarshalJSON() ([]byte, error) {
+	type wire NativeParticipationConfirmed
 	return json.Marshal(struct {
 		*wire
-		OccurredAt securityJSONInstant `json:"occurred_at"`
-	}{wire: (*wire)(&v), OccurredAt: securityJSONInstant{Time: v.OccurredAt, spelling: v.occurredAtSpelling}})
+		ObservedAt securityJSONInstant `json:"observed_at"`
+	}{wire: (*wire)(&v), ObservedAt: securityJSONInstant{Time: v.ObservedAt, spelling: v.observedAtSpelling}})
 }
-func (v *NativeCoverageTransition) UnmarshalJSON(raw []byte) error {
+func (v *NativeParticipationConfirmed) UnmarshalJSON(raw []byte) error {
 	if v == nil {
 		return ErrNativeDeliveryInvalid
 	}
-	type wire NativeCoverageTransition
+	type wire NativeParticipationConfirmed
 	var decoded wire
 	value := struct {
 		*wire
-		OccurredAt securityJSONInstant `json:"occurred_at"`
+		ObservedAt securityJSONInstant `json:"observed_at"`
 	}{wire: &decoded}
 	if decodeClosedDeliveryDeclaration(raw, &value, 256*1024) != nil {
 		return ErrNativeDeliveryInvalid
 	}
-	candidate := NativeCoverageTransition(decoded)
-	candidate.OccurredAt = value.OccurredAt.Time
-	candidate.occurredAtSpelling = value.OccurredAt.spelling
+	candidate := NativeParticipationConfirmed(decoded)
+	candidate.ObservedAt = value.ObservedAt.Time
+	candidate.observedAtSpelling = value.ObservedAt.spelling
+	if candidate.Validate() != nil {
+		return ErrNativeDeliveryInvalid
+	}
+	*v = candidate
+	return nil
+}
+
+func (v NativeRuleStatusReport) MarshalJSON() ([]byte, error) {
+	type wire NativeRuleStatusReport
+	return json.Marshal(struct {
+		*wire
+		ObservedAt securityJSONInstant `json:"observed_at"`
+	}{wire: (*wire)(&v), ObservedAt: securityJSONInstant{Time: v.ObservedAt, spelling: v.observedAtSpelling}})
+}
+func (v *NativeRuleStatusReport) UnmarshalJSON(raw []byte) error {
+	if v == nil {
+		return ErrNativeDeliveryInvalid
+	}
+	type wire NativeRuleStatusReport
+	var decoded wire
+	value := struct {
+		*wire
+		ObservedAt securityJSONInstant `json:"observed_at"`
+	}{wire: &decoded}
+	if decodeClosedDeliveryDeclaration(raw, &value, 256*1024) != nil {
+		return ErrNativeDeliveryInvalid
+	}
+	candidate := NativeRuleStatusReport(decoded)
+	candidate.ObservedAt = value.ObservedAt.Time
+	candidate.observedAtSpelling = value.ObservedAt.spelling
 	if candidate.Validate() != nil {
 		return ErrNativeDeliveryInvalid
 	}
@@ -653,5 +572,35 @@ func (v *NativeSourceGap) UnmarshalJSON(raw []byte) error {
 		return ErrNativeDeliveryInvalid
 	}
 	*v = candidate
+	return nil
+}
+
+func (r NativeSourceReset) MarshalJSON() ([]byte, error) {
+	type wire NativeSourceReset
+	return json.Marshal(struct {
+		*wire
+		OccurredAt securityJSONInstant `json:"occurred_at"`
+	}{wire: (*wire)(&r), OccurredAt: securityJSONInstant{Time: r.OccurredAt, spelling: r.occurredAtSpelling}})
+}
+func (r *NativeSourceReset) UnmarshalJSON(raw []byte) error {
+	if r == nil {
+		return ErrNativeDeliveryInvalid
+	}
+	type wire NativeSourceReset
+	var decoded wire
+	value := struct {
+		*wire
+		OccurredAt securityJSONInstant `json:"occurred_at"`
+	}{wire: &decoded}
+	if decodeClosedDeliveryDeclaration(raw, &value, 256*1024) != nil {
+		return ErrNativeDeliveryInvalid
+	}
+	candidate := NativeSourceReset(decoded)
+	candidate.OccurredAt = value.OccurredAt.Time
+	candidate.occurredAtSpelling = value.OccurredAt.spelling
+	if candidate.Validate() != nil {
+		return ErrNativeDeliveryInvalid
+	}
+	*r = candidate
 	return nil
 }

@@ -19,7 +19,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -50,11 +49,9 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 	mfaConfig := func(cfg *config.Config) {
 		baseConfig(cfg)
 		cfg.Authentication.External.Providers = []config.ExternalAuthenticationProvider{{
-			ID: "campus", Type: config.ExternalAuthenticationTypeCAS, DisplayName: "Campus",
+			ID: "campus", Type: "cas", DisplayName: "Campus",
 			Enabled: true, AutoProvision: true,
-			CAS: &config.CASProvider{BaseURL: "https://cas.example.edu/cas", ValidationPath: "/p3/serviceValidate",
-				Timeout: config.Duration{Duration: 5 * time.Second}, MaxResponseBytes: 64 * 1024},
-			Claims: config.ExternalClaimMapping{Subject: "user", Username: "uid", Email: "mail"},
+			Settings: json.RawMessage(`{"BaseURL":"https://cas.example.edu/cas","ValidationPath":"/p3/serviceValidate","Timeout":"5s","MaxResponseBytes":65536,"Claims":{"Subject":"user","Username":"uid","Email":"mail"}}`),
 		}}
 	}
 	primary := testlib.Setup(t, testlib.WithConfig(mfaConfig), testlib.WithStore(primaryStore), testlib.WithCluster(primaryCluster))

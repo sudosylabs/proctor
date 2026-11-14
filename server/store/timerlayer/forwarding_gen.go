@@ -73,6 +73,8 @@ type timedStores struct {
 	fileOnce                       sync.Once
 	job                            store.JobStore
 	jobOnce                        sync.Once
+	domainEvent                    store.DomainEventStore
+	domainEventOnce                sync.Once
 	mail                           store.MailStore
 	mailOnce                       sync.Once
 	externalIdentity               store.ExternalIdentityStore
@@ -117,6 +119,8 @@ type timedStores struct {
 	accessPolicyOnce               sync.Once
 	desktopCompatibilityPolicy     store.DesktopCompatibilityPolicyStore
 	desktopCompatibilityPolicyOnce sync.Once
+	pluginSettings                 store.PluginSettingsStore
+	pluginSettingsOnce             sync.Once
 	retentionPolicy                store.RetentionPolicyStore
 	retentionPolicyOnce            sync.Once
 	retention                      store.RetentionStore
@@ -264,6 +268,11 @@ type timedJobStore struct {
 	next  store.JobStore
 }
 
+type timedDomainEventStore struct {
+	layer *Layer
+	next  store.DomainEventStore
+}
+
 type timedMailStore struct {
 	layer *Layer
 	next  store.MailStore
@@ -372,6 +381,11 @@ type timedAccessPolicyStore struct {
 type timedDesktopCompatibilityPolicyStore struct {
 	layer *Layer
 	next  store.DesktopCompatibilityPolicyStore
+}
+
+type timedPluginSettingsStore struct {
+	layer *Layer
+	next  store.PluginSettingsStore
 }
 
 type timedRetentionPolicyStore struct {
@@ -669,6 +683,16 @@ func (l *Layer) Job() store.JobStore {
 	return l.stores.job
 }
 
+func (l *Layer) DomainEvent() store.DomainEventStore {
+	l.stores.domainEventOnce.Do(func() {
+		next := l.next.DomainEvent()
+		if next != nil {
+			l.stores.domainEvent = &timedDomainEventStore{layer: l, next: next}
+		}
+	})
+	return l.stores.domainEvent
+}
+
 func (l *Layer) Mail() store.MailStore {
 	l.stores.mailOnce.Do(func() {
 		next := l.next.Mail()
@@ -887,6 +911,16 @@ func (l *Layer) DesktopCompatibilityPolicy() store.DesktopCompatibilityPolicySto
 		}
 	})
 	return l.stores.desktopCompatibilityPolicy
+}
+
+func (l *Layer) PluginSettings() store.PluginSettingsStore {
+	l.stores.pluginSettingsOnce.Do(func() {
+		next := l.next.PluginSettings()
+		if next != nil {
+			l.stores.pluginSettings = &timedPluginSettingsStore{layer: l, next: next}
+		}
+	})
+	return l.stores.pluginSettings
 }
 
 func (l *Layer) RetentionPolicy() store.RetentionPolicyStore {
@@ -1473,9 +1507,9 @@ func (s *timedExamAttemptStore) RenewParticipation(arg0 context.Context, arg1 *s
 	})
 }
 
-func (s *timedExamAttemptStore) UpdateSecurityCoverage(arg0 context.Context, arg1 *store.ExamAttemptSecurityCoverageUpdate) (model.SecurityCoverageResult, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodUpdateSecurityCoverage), func(callCtx context.Context) (model.SecurityCoverageResult, error) {
-		return s.next.UpdateSecurityCoverage(callCtx, arg1)
+func (s *timedExamAttemptStore) UpdateSecurity(arg0 context.Context, arg1 *store.ExamAttemptSecurityUpdate) (model.SecurityControlResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodUpdateSecurity), func(callCtx context.Context) (model.SecurityControlResult, error) {
+		return s.next.UpdateSecurity(callCtx, arg1)
 	})
 }
 
@@ -1506,6 +1540,60 @@ func (s *timedExamAttemptStore) SuspendAttempt(arg0 context.Context, arg1 *store
 func (s *timedExamAttemptStore) ReallowAttempt(arg0 context.Context, arg1 *store.ExamAttemptReallow, arg2 *store.CommandIdempotency) (*store.ExamAttemptReallowResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodReallowAttempt), func(callCtx context.Context) (*store.ExamAttemptReallowResult, error) {
 		return s.next.ReallowAttempt(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedExamAttemptStore) RequestScreenClip(arg0 context.Context, arg1 *store.ExamAttemptScreenClipRequest, arg2 *store.CommandIdempotency) (*store.ExamAttemptScreenClipResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodRequestScreenClip), func(callCtx context.Context) (*store.ExamAttemptScreenClipResult, error) {
+		return s.next.RequestScreenClip(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedExamAttemptStore) ListPendingScreenClips(arg0 context.Context, arg1 store.CandidateAttemptAccess) ([]store.ExamAttemptScreenClipView, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodListPendingScreenClips), func(callCtx context.Context) ([]store.ExamAttemptScreenClipView, error) {
+		return s.next.ListPendingScreenClips(callCtx, arg1)
+	})
+}
+
+func (s *timedExamAttemptStore) DeliverScreenClip(arg0 context.Context, arg1 *store.ExamAttemptScreenClipDelivery) (*store.ExamAttemptScreenClipView, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodDeliverScreenClip), func(callCtx context.Context) (*store.ExamAttemptScreenClipView, error) {
+		return s.next.DeliverScreenClip(callCtx, arg1)
+	})
+}
+
+func (s *timedExamAttemptStore) BeginScreenClipUpload(arg0 context.Context, arg1 *store.ExamAttemptScreenClipUploadBegin) (*store.ExamAttemptScreenClipView, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodBeginScreenClipUpload), func(callCtx context.Context) (*store.ExamAttemptScreenClipView, error) {
+		return s.next.BeginScreenClipUpload(callCtx, arg1)
+	})
+}
+
+func (s *timedExamAttemptStore) GetScreenClipUpload(arg0 context.Context, arg1 store.CandidateAttemptAccess, arg2 model.ScreenClipID) (*store.ExamAttemptScreenClipUploadStatus, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodGetScreenClipUpload), func(callCtx context.Context) (*store.ExamAttemptScreenClipUploadStatus, error) {
+		return s.next.GetScreenClipUpload(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedExamAttemptStore) RecordScreenClipChunk(arg0 context.Context, arg1 *store.ExamAttemptScreenClipChunk) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateExamAttempt, methodRecordScreenClipChunk), func(callCtx context.Context) error {
+		return s.next.RecordScreenClipChunk(callCtx, arg1)
+	})
+}
+
+func (s *timedExamAttemptStore) CompleteScreenClipUpload(arg0 context.Context, arg1 *store.ExamAttemptScreenClipCompletion) (*store.ExamAttemptScreenClipView, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodCompleteScreenClipUpload), func(callCtx context.Context) (*store.ExamAttemptScreenClipView, error) {
+		return s.next.CompleteScreenClipUpload(callCtx, arg1)
+	})
+}
+
+func (s *timedExamAttemptStore) ListAttemptScreenClips(arg0 context.Context, arg1 store.ExamAttemptClips) ([]store.ExamAttemptScreenClipView, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodListAttemptScreenClips), func(callCtx context.Context) ([]store.ExamAttemptScreenClipView, error) {
+		return s.next.ListAttemptScreenClips(callCtx, arg1)
+	})
+}
+
+func (s *timedExamAttemptStore) GetAttemptScreenClip(arg0 context.Context, arg1 store.ExamAttemptClips, arg2 model.ScreenClipID) (*store.ExamAttemptScreenClipView, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodGetAttemptScreenClip), func(callCtx context.Context) (*store.ExamAttemptScreenClipView, error) {
+		return s.next.GetAttemptScreenClip(callCtx, arg1, arg2)
 	})
 }
 
@@ -1611,6 +1699,12 @@ func (s *timedSecurityPreflightStore) RecoverSecurityPolicy(arg0 context.Context
 	})
 }
 
+func (s *timedSecurityPreflightStore) ReadSecurityPolicyOverview(arg0 context.Context, arg1 store.SecurityPreflightAccess) (*store.SecurityPolicyOverview, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateSecurityPreflight, methodReadSecurityPolicyOverview), func(callCtx context.Context) (*store.SecurityPolicyOverview, error) {
+		return s.next.ReadSecurityPolicyOverview(callCtx, arg1)
+	})
+}
+
 func (s *timedNativeDeliveryStore) ResolveNativeDeliveryTarget(arg0 context.Context, arg1 store.NativeDeliveryAccess) (*store.NativeDeliveryTarget, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateNativeDelivery, methodResolveNativeDeliveryTarget), func(callCtx context.Context) (*store.NativeDeliveryTarget, error) {
 		return s.next.ResolveNativeDeliveryTarget(callCtx, arg1)
@@ -1629,8 +1723,8 @@ func (s *timedNativeDeliveryStore) NativeDeliveryReceipt(arg0 context.Context, a
 	})
 }
 
-func (s *timedNativeDeliveryStore) AppendNativeDelivery(arg0 context.Context, arg1 *store.NativeDeliveryAppend, arg2 *store.CommandIdempotency) (*model.NativeSecurityAcknowledgement, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateNativeDelivery, methodAppendNativeDelivery), func(callCtx context.Context) (*model.NativeSecurityAcknowledgement, error) {
+func (s *timedNativeDeliveryStore) AppendNativeDelivery(arg0 context.Context, arg1 *store.NativeDeliveryAppend, arg2 *store.CommandIdempotency) (*store.NativeDeliveryAppended, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateNativeDelivery, methodAppendNativeDelivery), func(callCtx context.Context) (*store.NativeDeliveryAppended, error) {
 		return s.next.AppendNativeDelivery(callCtx, arg1, arg2)
 	})
 }
@@ -1860,6 +1954,12 @@ func (s *timedExamSubmissionStore) SealForSittingClose(arg0 context.Context, arg
 func (s *timedExamSubmissionStore) Resolve(arg0 context.Context, arg1 model.SubmissionID) (*store.ExamSubmissionAuthorization, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamSubmission, methodResolve), func(callCtx context.Context) (*store.ExamSubmissionAuthorization, error) {
 		return s.next.Resolve(callCtx, arg1)
+	})
+}
+
+func (s *timedExamSubmissionStore) ResolveAttempt(arg0 context.Context, arg1 model.ExamAttemptID) (*store.ExamSubmissionAuthorization, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamSubmission, methodResolveAttempt), func(callCtx context.Context) (*store.ExamSubmissionAuthorization, error) {
+		return s.next.ResolveAttempt(callCtx, arg1)
 	})
 }
 
@@ -2538,6 +2638,18 @@ func (s *timedJobStore) Retry(arg0 context.Context, arg1 *store.JobMutation) (*m
 func (s *timedJobStore) DeleteTerminalHistory(arg0 context.Context, arg1 *store.JobHistoryCleanup) (*store.JobHistoryCleanupResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateJob, methodDeleteTerminalHistory), func(callCtx context.Context) (*store.JobHistoryCleanupResult, error) {
 		return s.next.DeleteTerminalHistory(callCtx, arg1)
+	})
+}
+
+func (s *timedDomainEventStore) Get(arg0 context.Context, arg1 model.DomainEventID) (*model.DomainEvent, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateDomainEvent, methodGet), func(callCtx context.Context) (*model.DomainEvent, error) {
+		return s.next.Get(callCtx, arg1)
+	})
+}
+
+func (s *timedDomainEventStore) Delete(arg0 context.Context, arg1 model.DomainEventID) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateDomainEvent, methodDelete), func(callCtx context.Context) error {
+		return s.next.Delete(callCtx, arg1)
 	})
 }
 
@@ -3879,6 +3991,24 @@ func (s *timedDesktopCompatibilityPolicyStore) Replace(arg0 context.Context, arg
 	})
 }
 
+func (s *timedPluginSettingsStore) List(arg0 context.Context) ([]*model.PluginSettings, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregatePluginSettings, methodList), func(callCtx context.Context) ([]*model.PluginSettings, error) {
+		return s.next.List(callCtx)
+	})
+}
+
+func (s *timedPluginSettingsStore) ChangeCount(arg0 context.Context) (int64, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregatePluginSettings, methodChangeCount), func(callCtx context.Context) (int64, error) {
+		return s.next.ChangeCount(callCtx)
+	})
+}
+
+func (s *timedPluginSettingsStore) Replace(arg0 context.Context, arg1 *store.PluginSettingsReplacement, arg2 *store.CommandIdempotency) (*store.PluginSettingsReplacementResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregatePluginSettings, methodReplace), func(callCtx context.Context) (*store.PluginSettingsReplacementResult, error) {
+		return s.next.Replace(callCtx, arg1, arg2)
+	})
+}
+
 func (s *timedRetentionPolicyStore) Get(arg0 context.Context) (*model.RetentionPolicy, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRetentionPolicy, methodGet), func(callCtx context.Context) (*model.RetentionPolicy, error) {
 		return s.next.Get(callCtx)
@@ -4052,6 +4182,7 @@ var (
 	_ store.UserSettingsStore               = (*timedUserSettingsStore)(nil)
 	_ store.FileStore                       = (*timedFileStore)(nil)
 	_ store.JobStore                        = (*timedJobStore)(nil)
+	_ store.DomainEventStore                = (*timedDomainEventStore)(nil)
 	_ store.MailStore                       = (*timedMailStore)(nil)
 	_ store.ExternalIdentityStore           = (*timedExternalIdentityStore)(nil)
 	_ store.ExternalLoginStateStore         = (*timedExternalLoginStateStore)(nil)
@@ -4074,6 +4205,7 @@ var (
 	_ store.InstallationStore               = (*timedInstallationStore)(nil)
 	_ store.AccessPolicyStore               = (*timedAccessPolicyStore)(nil)
 	_ store.DesktopCompatibilityPolicyStore = (*timedDesktopCompatibilityPolicyStore)(nil)
+	_ store.PluginSettingsStore             = (*timedPluginSettingsStore)(nil)
 	_ store.RetentionPolicyStore            = (*timedRetentionPolicyStore)(nil)
 	_ store.RetentionStore                  = (*timedRetentionStore)(nil)
 	_ store.ClusterDiscoveryStore           = (*timedClusterDiscoveryStore)(nil)

@@ -11,15 +11,16 @@ paths:
       - $ref: '#/components/parameters/SubmissionID'
     get:
       operationId: listNativeConditions
-      summary: Inspect minimized native condition transitions for a Submission
+      summary: Inspect the native rule status changes of a Submission
       tags:
         - Integrity review
       description: >-
-        Requires the same current Submission integrity-view authorization as detailed evidence. Returns
-        selected catalog-validated occurrence transitions without creating a Flag or declaring a violation.
-        Includes original receipt and interpretation times, immutable stream/policy provenance and
-        unresolved-opener state. Operational health, gaps and resets are excluded. Pages contain at most 100
-        records. Integrity retirement removes this material independently of native operational retention.
+        Requires the same current Submission integrity-view authorization as detailed evidence. Returns every change
+        of a native rule's status as the server evaluated it on the facts Desktop reported, with the delivery position
+        that caused it (batch 0 is the state reported at Start), original receipt and interpretation times, and
+        immutable stream and policy provenance. An occurrence opens when a rule becomes not met and closes when it is
+        met again; an enforce occurrence that opens also raises its capability's native Flag. The facts themselves
+        are not returned. Pages contain at most 100 records. Integrity retirement removes this material independently of native operational retention.
         No-store; cursors are purpose-specific opaque keysets.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
@@ -91,8 +92,7 @@ components:
         - matrix_id
         - batch_sequence
         - record_index
-        - occurrence
-        - unresolved_opener
+        - transition
         - received_at
         - interpreted_at
       properties:
@@ -139,22 +139,65 @@ components:
         batch_sequence:
           type: integer
           format: int64
-          minimum: 1
+          minimum: 0
           maximum: 20000
         record_index:
           type: integer
           minimum: 0
           maximum: 63
-        occurrence:
-          $ref: '#/components/schemas/NativeOccurrence'
-        unresolved_opener:
-          type: boolean
+        transition:
+          $ref: '#/components/schemas/NativeRuleTransition'
         received_at:
           type: string
           format: date-time
         interpreted_at:
           type: string
           format: date-time
+    NativeRuleTransition:
+      type: object
+      additionalProperties: false
+      required:
+        - rule_id
+        - capability
+        - mode
+        - reason
+        - to
+        - at
+      properties:
+        rule_id:
+          type: string
+          maxLength: 128
+        capability:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,63}$
+        mode:
+          type: string
+          enum:
+            - enforce
+            - observe
+        reason:
+          type: string
+          maxLength: 128
+          description: The reason ID Desktop's registry publishes for the rule; Desktop owns its wording.
+        from:
+          $ref: '#/components/schemas/NativeRuleReport'
+        to:
+          $ref: '#/components/schemas/NativeRuleReport'
+        at:
+          type: string
+          format: date-time
+          description: The device time of the change; it never moves backwards within a Participation.
+        occurrence:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9007199254740991
+          description: The rule's occurrence this change opened or closed, counted from 1 per Participation.
+        event:
+          type: string
+          enum:
+            - opened
+            - closed
     NativeConditionListResponse:
       type: object
       additionalProperties: false

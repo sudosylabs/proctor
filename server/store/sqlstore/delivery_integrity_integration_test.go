@@ -11,7 +11,6 @@ package sqlstore
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -42,42 +41,8 @@ func TestDeliveryCorruptReads(t *testing.T) {
 			read = `SELECT record_canonical FROM exam_native_delivery_records WHERE participation_id=? AND batch_sequence=4 AND record_index=0`
 			write = `UPDATE exam_native_delivery_records SET record_canonical=? WHERE participation_id=? AND batch_sequence=4 AND record_index=0`
 			id = part.String()
-			var raw []byte
-			require.NoError(t, s.GetMaster().Get(ctx, &raw, read, id))
-			var record model.NativeRecord
-			require.NoError(t, json.Unmarshal(raw, &record))
-			record.Occurrence.Status = "opened"
-			var err error
-			invalid, err = json.Marshal(record)
-			require.NoError(t, err)
-		case "native_source_sequence", "native_source_id", "native_coverage_state":
-			read = `SELECT latest_report_canonical FROM exam_attempt_security_owners WHERE participation_id=?`
-			write = `UPDATE exam_attempt_security_owners SET latest_report_canonical=? WHERE participation_id=?`
-			id = part.String()
-			var raw []byte
-			require.NoError(t, s.GetMaster().Get(ctx, &raw, read, id))
-			var snapshot map[string]json.RawMessage
-			require.NoError(t, json.Unmarshal(raw, &snapshot))
-			if field == "native_coverage_state" {
-				var values []model.NativeCoverageClaim
-				require.NoError(t, json.Unmarshal(snapshot["coverage"], &values), "missing coverage fixture")
-				require.NotEmpty(t, values, "missing coverage fixture")
-				values[0].State = "unknown"
-				snapshot["coverage"], _ = json.Marshal(values)
-			} else {
-				var values []model.NativeSourceCoverage
-				require.NoError(t, json.Unmarshal(snapshot["sources"], &values), "missing source fixture")
-				require.NotEmpty(t, values, "missing source fixture")
-				if field == "native_source_sequence" {
-					values[0].Sequence = -1
-				} else {
-					values[0].SourceID = "unknown"
-				}
-				snapshot["sources"], _ = json.Marshal(values)
-			}
-			var err error
-			invalid, err = json.Marshal(snapshot)
-			require.NoError(t, err)
+			// A fact that lost its state is no longer a contract record.
+			invalid = []byte(`{"kind":"capability_fact"}`)
 		case "native_binding":
 			read = `SELECT binding_canonical FROM exam_attempt_security_owners WHERE participation_id=?`
 			write = `UPDATE exam_attempt_security_owners SET binding_canonical=? WHERE participation_id=?`

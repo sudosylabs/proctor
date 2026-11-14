@@ -224,6 +224,7 @@ func composeConsumers(
 		websocket:             webSocketHub,
 		plugins:               capabilities.plugins,
 		pluginReconciler:      reconciler,
+		pluginWorkers:         capabilities.plugins,
 		metrics:               capabilities.metrics,
 		tracing:               capabilities.tracing,
 		readiness:             readiness,

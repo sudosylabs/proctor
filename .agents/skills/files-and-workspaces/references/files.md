@@ -427,8 +427,8 @@ eligible for idempotent purge.
 Each accepted mutation has one idempotency key and explicit expected entry,
 path, content version, and destination conditions. An Attempt-scoped ordered
 journal records identities, old/new paths, resulting content versions,
-mutation keys, and Workspace Cursors without retaining the complete body of
-every prior save. Reconnect applies ordered changes after the last acknowledged
+mutation keys, Workspace Cursors and each change's origin, `editor` or
+`environment`, without retaining the complete body of every prior save. Reconnect applies ordered changes after the last acknowledged
 cursor or refreshes a complete manifest after a gap. Conflicted, rejected, or
 outcome-unknown client work remains protected until acknowledged replacement
 or explicit discard.
@@ -447,7 +447,7 @@ The public protocol is deliberately asymmetric. The one authoritative write is
 an HTTP-only batch of 1 to 128 create, replace, move/rename, and delete
 mutations, applied in order and all or nothing. Every writer, the editor and the
 execution environment alike, uses it; never add a per-file write path beside
-it. A batch requires the active Session-bound Attempt credential and
+it. An editor batch requires the active Session-bound Attempt credential and
 Connection headers, explicitly repeats the current Participation identity and
 generation, and requires an idempotency key. Its multipart body is a
 duplicate-free strict JSON manifest of at most 512 KiB, then one content part
@@ -455,6 +455,33 @@ for each file creation or replacement in manifest order, and no other part. The
 manifest and bodies together have a hard 100 MiB plus 512 KiB envelope. The
 admission Revision's frozen Exam Capacity Policy may impose a lower per-file
 limit, and capacity is checked once against the state the batch leaves.
+
+The execution environment writes through the same use case and Store
+operation on the candidate's behalf; it is a second access kind, not a second
+path. Its proof is an environment binding the core keeps in
+`exam_attempt_environment_bindings`: an opaque grant ID (at most 64 bytes of
+`[A-Za-z0-9._:-]`), epoch (at most 128 bytes of the same) and incarnation,
+bound to one Attempt and one Participation generation. At most one binding
+per Attempt is live. Binding is allowed only while the Attempt is Active and
+the generation is its active Participation with an unexpired lease; the same
+identity again repeats the binding, and a newer incarnation for the same
+generation replaces it atomically. A grant and epoch pair is bound at most
+once, and a grant belongs to one Attempt. The binding ends when its
+generation ends, on every path, in the same transaction (a trigger on the
+Participation row), or when the owner ends it. An environment batch repeats
+the binding, its identity and generation, and passes every editor gate except
+Session, key, Connection and credential: current Class membership, Open
+Sitting before its deadline, Active Attempt, active unexpired generation, and
+no pending Workspace correction acknowledgement. A binding that ended,
+was replaced, or does not match conflicts with
+`attempt_environment_binding_current`. Its changes carry origin
+`environment`; its outcome is keyed under the candidate with the same
+operation, and its fingerprint includes the origin so it never replays as an
+editor command. Audit names the candidate as actor without a Principal, and
+the aggregate data adds the origin and the binding ID. The environment reads
+the manifest, files and journal through the same binding, under the
+candidate read guard's Attempt, Participation, Sitting and account gates. The
+candidate receives the usual refetch hint.
 
 Each Attempt may change its Workspace only so fast, whoever writes: a
 token bucket on each node bounds mutations and bytes per second, with a burst
@@ -466,7 +493,7 @@ rather than enforcing an exact cluster-wide quota.
 A batch checks access once, reserves all its objects in one transaction,
 stages every body, records them ready in one transaction, and applies every
 mutation in one transaction. That transaction holds one idempotency outcome and
-one audit pair, with counts and the cursor range but never paths. It writes one
+one audit pair, with counts, the cursor range and the origin but never paths. It writes one
 journal record per mutation at consecutive cursors. A mutation that refuses the
 batch is named by its position in the problem's `item` field. After commit,
 WebSocket publishes one targeted `exam_attempt_workspace_changed` refetch hint

@@ -100,7 +100,9 @@ func TestWorkspaceBatchRevalidatesMutationAccessAuditsAndPublishesSafeChange(t *
 	require.Len(t, f.workspace.reservations, 1)
 	require.Empty(t, f.workspace.reservations[0].ObjectIDs, "a batch without files only resolves its target")
 	principal := f.inv.Principal()
-	for _, workspaceAccess := range []store.ExamAttemptWorkspaceMutationAccess{f.workspace.reservations[0].Access, f.workspace.batch().Access} {
+	for _, writer := range []store.ExamAttemptWorkspaceWriteAccess{f.workspace.reservations[0].Access, f.workspace.batch().Access} {
+		workspaceAccess, editor := writer.(store.ExamAttemptWorkspaceEditorAccess)
+		require.True(t, editor, "the editor writes through editor access")
 		require.Equal(t, f.attemptID, workspaceAccess.AttemptID)
 		require.Equal(t, participationID, workspaceAccess.ParticipationID)
 		require.Equal(t, int64(4), workspaceAccess.Generation, "the write is fenced by Participation generation")
@@ -131,7 +133,7 @@ func TestWorkspaceBatchRevalidatesMutationAccessAuditsAndPublishesSafeChange(t *
 	require.Equal(t, model.Resource{Type: model.ResourceExamSitting, ID: f.sitting.ID.String()}, f.audit.resource)
 	require.Equal(t, model.RoleScopeClass, f.audit.scopeType)
 	require.Equal(t, f.sitting.ClassID.String(), f.audit.scopeID)
-	require.Equal(t, map[string]any{"exam_attempt_id": f.attemptID.String(), "mutation_count": 1}, f.audit.values)
+	require.Equal(t, map[string]any{"exam_attempt_id": f.attemptID.String(), "mutation_count": 1, "origin": "editor"}, f.audit.values)
 	auditCapture := fmt.Sprintf("%#v", f.audit.values)
 	require.NotContains(t, auditCapture, credential)
 	require.NotContains(t, auditCapture, model.HashToken(credential))
@@ -139,7 +141,7 @@ func TestWorkspaceBatchRevalidatesMutationAccessAuditsAndPublishesSafeChange(t *
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
 	// and the write commits before its effect.
 	require.Equal(t, []string{"workspace.reserve", "audit", "workspace.apply", "effects"}, f.order)
-	wantIdempotency, prepareErr := prepareWorkspaceBatchIdempotency(f.inv, "test-key", f.attemptID, mutations, nil)
+	wantIdempotency, prepareErr := prepareWorkspaceBatchIdempotency(f.userID, model.AttemptWorkspaceOriginEditor, "test-key", f.attemptID, mutations, nil)
 	require.NoError(t, prepareErr)
 	require.Equal(t, wantIdempotency, f.workspace.idempotency)
 	require.Equal(t, store.ExamAttemptWorkspaceBatchOperation, f.workspace.idempotency.Operation)
@@ -165,7 +167,7 @@ func TestWorkspaceBatchCreateFileStagesBeforeAtomicApplyAndSuppressesPrivateEffe
 	require.True(t, objectID.IsValid())
 	require.Equal(t, []model.AttemptWorkspaceObjectID{objectID}, f.workspace.reservedObjectIDs())
 	require.Len(t, f.workspace.readied, 1)
-	require.Equal(t, int64(2), f.workspace.readied[0].Access.Generation)
+	require.Equal(t, int64(2), f.workspace.readied[0].Access.(store.ExamAttemptWorkspaceEditorAccess).Generation)
 	require.Equal(t, []store.ExamAttemptWorkspaceReadyObject{{ObjectID: objectID, ContentVersion: f.workspace.proposedVersion,
 		Content: *f.content.attemptContent}}, f.workspace.readied[0].Objects)
 	mutation := f.workspace.batch().Mutations[0]
@@ -184,7 +186,7 @@ func TestWorkspaceBatchCreateFileStagesBeforeAtomicApplyAndSuppressesPrivateEffe
 	// before the durable apply (guardrail 8), and the apply commits before its
 	// effect (guardrail 14).
 	require.Equal(t, []string{"workspace.reserve", "content.next", "content.stage", "workspace.ready", "audit", "workspace.apply", "effects"}, f.order)
-	want, prepareErr := prepareWorkspaceBatchIdempotency(f.inv, "test-key", f.attemptID, mutations, nil)
+	want, prepareErr := prepareWorkspaceBatchIdempotency(f.userID, model.AttemptWorkspaceOriginEditor, "test-key", f.attemptID, mutations, nil)
 	require.NoError(t, prepareErr)
 	require.Equal(t, want, f.workspace.idempotency)
 }
@@ -205,7 +207,7 @@ func TestWorkspaceBatchReplaceFilePassesOwnedIdempotencyToStore(t *testing.T) {
 	require.Equal(t, "main.go", mutation.ExpectedPath)
 	require.Equal(t, currentVersion, mutation.ExpectedContentVersion)
 	require.Equal(t, f.content.attemptObjectID, mutation.ObjectID)
-	want, err := prepareWorkspaceBatchIdempotency(f.inv, "test-key", f.attemptID, mutations, nil)
+	want, err := prepareWorkspaceBatchIdempotency(f.userID, model.AttemptWorkspaceOriginEditor, "test-key", f.attemptID, mutations, nil)
 	require.NoError(t, err)
 	require.Equal(t, want, f.workspace.idempotency)
 }
@@ -320,7 +322,7 @@ func TestWorkspaceBatchMetadataMutationsCarrySelectiveEntryFences(t *testing.T) 
 			require.Equal(t, entryID, stored.EntryID)
 			require.True(t, stored.ObjectID.IsZero())
 			test.check(t, stored)
-			want, prepareErr := prepareWorkspaceBatchIdempotency(f.inv, "test-key", f.attemptID, []WorkspaceBatchMutation{mutation}, nil)
+			want, prepareErr := prepareWorkspaceBatchIdempotency(f.userID, model.AttemptWorkspaceOriginEditor, "test-key", f.attemptID, []WorkspaceBatchMutation{mutation}, nil)
 			require.NoError(t, prepareErr)
 			require.Equal(t, want, f.workspace.idempotency)
 		})

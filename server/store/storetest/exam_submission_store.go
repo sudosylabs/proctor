@@ -115,7 +115,7 @@ func TestExamSubmissionStore(t *testing.T, ss store.Store, submissions store.Exa
 		examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "submission-connect", "submission-connect"))
 	require.NoError(t, err)
 
-	workspaceAccess := store.ExamAttemptWorkspaceMutationAccess{AttemptID: connected.Attempt.ID,
+	workspaceAccess := store.ExamAttemptWorkspaceEditorAccess{AttemptID: connected.Attempt.ID,
 		ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation,
 		CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID,
 		DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint,
@@ -124,6 +124,8 @@ func TestExamSubmissionStore(t *testing.T, ss store.Store, submissions store.Exa
 		model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: 7, SHA256: strings.Repeat("b", 64)}, "submission-file")
 	attemptEntryID := written.Changes[0].EntryID
 	writtenCursor := written.Changes[0].Cursor
+	_, environment := bindTestEnvironment(t, ctx, ss, connected.Attempt.ID, connected.Participation.Generation,
+		environmentIdentity("grant-submission", "epoch-1", 0))
 
 	access := store.ExamSubmissionSealAccess{
 		AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID,
@@ -149,6 +151,7 @@ func TestExamSubmissionStore(t *testing.T, ss store.Store, submissions store.Exa
 	sealed, err := submissions.Seal(ctx, input, command)
 	require.NoError(t, err)
 	require.True(t, sealed.ConsistentWith(target, access, input.SubmissionID, input.ReceiptCode), "Seal returned a result inconsistent with its request")
+	requireEnvironmentBindingEnded(t, ctx, ss, environment, "voluntary Submission")
 	require.NotNil(t, sealed)
 	require.False(t, sealed.Replayed)
 	require.Equal(t, input.SubmissionID, sealed.Receipt.SubmissionID)
@@ -602,6 +605,8 @@ func testManagerEndedExamSubmission(t *testing.T, ctx context.Context, ss store.
 	t.Run("Manager end seals without an integrity judgment", func(t *testing.T) {
 		fixture := newExamAttemptFixture(t, ctx, ss)
 		connected, _ := connectFocusLossFixture(t, ctx, ss, fixture, "manager-end-connect")
+		_, environment := bindTestEnvironment(t, ctx, ss, connected.Attempt.ID, connected.Participation.Generation,
+			environmentIdentity("grant-manager-end", "epoch-1", 0))
 		request := store.ExamSubmissionManagerEndRequest{ExamID: fixture.examID, SittingID: fixture.sitting.ID,
 			AttemptID: connected.Attempt.ID, ActorUserID: fixture.manager.ID,
 			ExpectedAttemptRevision: connected.Attempt.Revision, PrivateReason: "candidate requested an assisted early end"}
@@ -625,6 +630,7 @@ func testManagerEndedExamSubmission(t *testing.T, ctx context.Context, ss store.
 		command := examCommand(fixture.manager.ID, store.ExamSubmissionManagerEndOperation, "manager-end-once", "manager-end-once")
 		ended, err := submissions.EndByManager(ctx, input, command)
 		require.NoError(t, err)
+		requireEnvironmentBindingEnded(t, ctx, ss, environment, "manager end")
 		require.True(t, ended.ConsistentWith(connected.Attempt.ID, fixture.examID, fixture.sitting.ID, preparation.Target, input.SubmissionID, input.ReceiptCode),
 			"EndByManager returned a result inconsistent with its request")
 		require.NotNil(t, ended)
@@ -694,11 +700,21 @@ func testAutomaticExamSubmissionSealing(t *testing.T, ctx context.Context, ss st
 			Window: 10 * time.Second, Outcome: model.IntegrityOutcomeFlagAndSuspend}
 		fixture := newExamAttemptFixtureWithFocusLoss(t, ctx, ss, &policy)
 		active, activeAccess := connectFocusLossFixture(t, ctx, ss, fixture, "automatic-active-connect")
+		_, activeEnvironment := bindTestEnvironment(t, ctx, ss, active.Attempt.ID, active.Participation.Generation,
+			environmentIdentity("grant-automatic-active", "epoch-1", 0))
 
 		suspendedFixture := addExamAttemptCandidate(t, ctx, ss, fixture, fixture.sitting.OpenedAt.Time.Add(-time.Minute))
 		suspended, suspendedAccess := connectFocusLossFixture(t, ctx, ss, suspendedFixture, "automatic-suspended-connect")
+		// A grant belongs to one Attempt for good.
+		_, err := ss.ExamAttemptWorkspace().BindEnvironment(ctx, &store.ExamAttemptEnvironmentBind{
+			BindingID: model.NewAttemptEnvironmentBindingID(), AttemptID: suspended.Attempt.ID,
+			Generation: suspended.Participation.Generation, Identity: environmentIdentity("grant-automatic-active", "epoch-2", 1)})
+		requireConflictConstraint(t, err, "attempt_environment_binding_identity")
+		_, suspendedEnvironment := bindTestEnvironment(t, ctx, ss, suspended.Attempt.ID, suspended.Participation.Generation,
+			environmentIdentity("grant-automatic-suspended", "epoch-1", 0))
 		suspension := recordFocusLoss(t, ctx, ss, suspendedFixture, suspendedAccess, 1, 500,
 			model.FocusLossSourceApplicationBackgrounded)
+		requireEnvironmentBindingEnded(t, ctx, ss, suspendedEnvironment, "Focus Loss policy suspension")
 		require.NotNil(t, suspension.Attempt)
 		require.Equal(t, model.ExamAttemptSuspended, suspension.Attempt.State)
 		require.NotNil(t, suspension.Participation)
@@ -771,6 +787,7 @@ func testAutomaticExamSubmissionSealing(t *testing.T, ctx context.Context, ss st
 		}
 		activeResult := raceAutomaticExamSubmissionSeal(t, ctx, ss, submissions, activeTarget, probes...)
 		require.True(t, activeResult.ConnectionClosed)
+		requireEnvironmentBindingEnded(t, ctx, ss, activeEnvironment, "automatic seal")
 		automaticPreparation, replayErr := submissions.PrepareAutomaticSeal(ctx, activeTarget)
 		require.NoError(t, replayErr)
 		require.NotNil(t, automaticPreparation)

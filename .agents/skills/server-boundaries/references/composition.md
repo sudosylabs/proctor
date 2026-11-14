@@ -86,8 +86,10 @@ standard library. `pluginhost` runs them and imports only `server/plugin`. The
 root names every built-in in `builtinPlugins()`, the one place a plugin is
 listed.
 
-- Activate plugins once persistence and telemetry exist, before anything
-  that consumes what they register, with the settings an administrator saved.
+- Activate plugins once persistence is fully decorated, telemetry exists and
+  the cluster transport is constructed, before anything that consumes what
+  they register, with the settings an administrator saved. The cluster node
+  ID names this node in the leases plugin workers hold.
   A plugin that fails to activate is left out and never fails construction.
   Only a configuration mistake does, such as secrets for a plugin that is not
   compiled in, or saved settings that cannot be read.
@@ -103,9 +105,17 @@ listed.
   `plugin.ErrUnavailable`. Consumers never see the host.
 - Add a capability as one typed `Host` method with a contained wrapper, and
   only when a plugin needs it. Plugins get no broad API, store contract or
-  `platform.Service`.
+  `platform.Service`. A capability backed by a Store, such as the record
+  store and the worker leases, is a port in `pluginhost` that the root
+  adapts from the Store contract (`plugin_records.go`, `plugin_leases.go`);
+  the host adds the plugin's ID, and the node ID for leases, to every call.
+- Start plugin workers in their own `Server.Run` stage after durable Jobs and
+  the plugin reconciler, never during construction. A plugin activated later
+  starts its workers at once. Workers never affect readiness except through a
+  failed plugin.
 - Deactivate plugins once nothing can call them: after Jobs and transports
-  stop, or when a failed construction is released.
+  stop, or when a failed construction is released. Each plugin's workers are
+  stopped, and waited for under the host's timeout, before its `Deactivate`.
 
 ## Module placement
 

@@ -29,7 +29,7 @@ func (s *SQLExamAttemptWorkspaceStore) ReserveObjects(
 	input *store.ExamAttemptWorkspaceObjectReservation,
 ) (*store.ExamAttemptWorkspaceMutationTarget, error) {
 	if input == nil ||
-		!validAttemptWorkspaceMutationAccess(input.Access) ||
+		!validAttemptWorkspaceWriteAccess(input.Access) ||
 		len(input.ObjectIDs) > model.AttemptWorkspaceBatchMaximumMutations ||
 		!distinctAttemptWorkspaceObjectIDs(input.ObjectIDs) {
 		return nil, store.NewErrInvalidInput("attempt_workspace_object", "reservation", nil)
@@ -137,7 +137,7 @@ func (s *SQLExamAttemptWorkspaceStore) MarkObjectsReady(
 	input *store.ExamAttemptWorkspaceObjectsReady,
 ) error {
 	if input == nil ||
-		!validAttemptWorkspaceMutationAccess(input.Access) ||
+		!validAttemptWorkspaceWriteAccess(input.Access) ||
 		len(input.Objects) == 0 ||
 		len(input.Objects) > model.AttemptWorkspaceBatchMaximumMutations {
 		return store.NewErrInvalidInput("attempt_workspace_object", "ready", nil)
@@ -254,6 +254,7 @@ func markAttemptWorkspaceObjectReady(
 // which an exact replay repeats, so they are not stored again. Short keys
 // keep a full batch well inside the outcome bound.
 type attemptWorkspaceBatchOutcome struct {
+	Origin             string                             `json:"r"`
 	SittingID          string                             `json:"s"`
 	ClassID            string                             `json:"c"`
 	CandidateID        string                             `json:"u"`
@@ -318,11 +319,12 @@ func (s *SQLExamAttemptWorkspaceStore) ApplyBatch(
 					return lockErr
 				}
 
-				if target.SittingID.String() != outcome.SittingID ||
+				if outcome.Origin != string(prepared.Access.WorkspaceOrigin()) ||
+					target.SittingID.String() != outcome.SittingID ||
 					target.ClassID.String() != outcome.ClassID ||
 					target.CandidateUserID.String() != outcome.CandidateID ||
 					target.WorkspaceID.String() != outcome.WorkspaceID {
-					return store.NewErrNotFound("attempt_workspace_access", prepared.Access.AttemptID.String())
+					return store.NewErrNotFound("attempt_workspace_access", prepared.Access.WorkspaceAttemptID().String())
 				}
 
 				return completeAttemptWorkspaceBatchAudit(ctx, tx, outcome, prepared, true, originalAuditID)
@@ -349,12 +351,17 @@ func prepareAttemptWorkspaceBatch(
 	if input == nil ||
 		command == nil ||
 		command.Operation != store.ExamAttemptWorkspaceBatchOperation ||
-		command.UserID != input.Access.CandidateUserID ||
-		!validAttemptWorkspaceMutationAccess(input.Access) ||
+		!command.UserID.IsValid() ||
+		!validAttemptWorkspaceWriteAccess(input.Access) ||
 		len(input.Mutations) == 0 ||
 		len(input.Mutations) > model.AttemptWorkspaceBatchMaximumMutations ||
 		!input.AuditEventID.IsValid() ||
 		input.AuditAt.IsZero() {
+		return nil, store.NewErrInvalidInput("attempt_workspace", "batch", nil)
+	}
+	// An editor names its candidate; an environment's candidate is resolved
+	// under the batch's locks and checked there.
+	if editor, ok := input.Access.(store.ExamAttemptWorkspaceEditorAccess); ok && command.UserID != editor.CandidateUserID {
 		return nil, store.NewErrInvalidInput("attempt_workspace", "batch", nil)
 	}
 
@@ -462,6 +469,10 @@ func applyAttemptWorkspaceBatch(
 	if err != nil {
 		return zero, err
 	}
+	// The outcome is the candidate's, whoever wrote on their behalf.
+	if command.UserID != target.CandidateUserID {
+		return zero, store.NewErrInvalidInput("attempt_workspace", "batch", nil)
+	}
 
 	var workspace struct {
 		AdmissionRevisionID string `db:"admission_revision_id"`
@@ -489,7 +500,9 @@ func applyAttemptWorkspaceBatch(
 		databaseNow:  databaseNow,
 		auditEventID: input.AuditEventID,
 	}
+	origin := input.Access.WorkspaceOrigin()
 	outcome := attemptWorkspaceBatchOutcome{
+		Origin:      string(origin),
 		SittingID:   target.SittingID.String(),
 		ClassID:     target.ClassID.String(),
 		CandidateID: target.CandidateUserID.String(),
@@ -527,6 +540,7 @@ func applyAttemptWorkspaceBatch(
 			effect.newPath,
 			effect.version,
 			mutation.Recursive,
+			origin,
 			command.KeyDigest[:],
 			databaseNow,
 		)
@@ -554,7 +568,8 @@ func applyAttemptWorkspaceBatch(
 }
 
 // completeAttemptWorkspaceBatchAudit records what the batch did in aggregate:
-// counts by operation and the cursor range, never paths or content.
+// counts by operation, the cursor range and the writer's origin, never paths
+// or content. An environment batch also names its binding.
 func completeAttemptWorkspaceBatchAudit(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -576,6 +591,10 @@ func completeAttemptWorkspaceBatchAudit(
 		"operation_counts":       counts,
 		"first_workspace_cursor": outcome.Items[0].Cursor,
 		"last_workspace_cursor":  outcome.Items[len(outcome.Items)-1].Cursor,
+		"origin":                 outcome.Origin,
+	}
+	if environment, ok := batch.Access.(store.ExamAttemptWorkspaceEnvironmentAccess); ok {
+		data["environment_binding_id"] = environment.BindingID.String()
 	}
 	if replayed {
 		data["idempotency_replayed"] = true
@@ -619,7 +638,8 @@ func attemptWorkspaceBatchResult(
 		return nil, err
 	}
 
-	if len(outcome.Items) != len(mutations) || outcome.ChangedAt.IsZero() {
+	origin := model.AttemptWorkspaceOrigin(outcome.Origin)
+	if len(outcome.Items) != len(mutations) || outcome.ChangedAt.IsZero() || !origin.IsValid() {
 		return nil, errors.New("invalid Attempt Workspace batch result")
 	}
 
@@ -647,6 +667,7 @@ func attemptWorkspaceBatchResult(
 			ContentVersion: version,
 			ChangedAt:      model.TimeUTC(outcome.ChangedAt),
 			Recursive:      mutation.Recursive,
+			Origin:         origin,
 		}
 		switch mutation.Operation {
 		case model.AttemptWorkspaceMutationCreateFile, model.AttemptWorkspaceMutationCreateDirectory:

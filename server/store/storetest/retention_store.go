@@ -330,7 +330,7 @@ func newRetentionFixture(t *testing.T, ctx context.Context, ss store.Store) (exa
 	t.Helper()
 	f := newExamAttemptFixture(t, ctx, ss)
 	connected, focus := connectFocusLossFixture(t, ctx, ss, f, "retention-connect")
-	access := store.ExamAttemptWorkspaceMutationAccess{AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, CandidateUserID: f.candidate.ID, SessionID: f.session.ID, DesktopRegistrationID: f.session.DesktopRegistrationID, DPoPKeyThumbprint: f.session.DPoPKeyThumbprint, ConnectionID: connected.Connection.ID, ContinuityCredentialHash: focus.ContinuityCredentialHash}
+	access := store.ExamAttemptWorkspaceEditorAccess{AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, CandidateUserID: f.candidate.ID, SessionID: f.session.ID, DesktopRegistrationID: f.session.DesktopRegistrationID, DPoPKeyThumbprint: f.session.DPoPKeyThumbprint, ConnectionID: connected.Connection.ID, ContinuityCredentialHash: focus.ContinuityCredentialHash}
 	// This reservation models a remote write whose process disappeared before
 	// confirming readiness. Retirement must keep its exact reconciliation key.
 	stageAttemptWorkspaceReservations(t, ctx, ss.ExamAttemptWorkspace(), access, 1)

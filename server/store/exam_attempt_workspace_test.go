@@ -19,7 +19,7 @@ import (
 
 func TestExamAttemptWorkspaceBatchContractUsesSelectiveFencesAndSafeResults(t *testing.T) {
 	t.Parallel()
-	access := ExamAttemptWorkspaceMutationAccess{AttemptID: model.NewExamAttemptID(),
+	access := ExamAttemptWorkspaceEditorAccess{AttemptID: model.NewExamAttemptID(),
 		ParticipationID: model.NewAttemptParticipationID(), Generation: 2, CandidateUserID: model.NewUserID(),
 		SessionID: model.NewSessionID(), DesktopRegistrationID: model.NewDesktopRegistrationID(),
 		DPoPKeyThumbprint: strings.Repeat("A", 43), ConnectionID: model.NewAttemptConnectionID(),
@@ -35,7 +35,7 @@ func TestExamAttemptWorkspaceBatchContractUsesSelectiveFencesAndSafeResults(t *t
 			EntryID: entryID, EntryKind: model.StarterWorkspaceEntryFile, Operation: mutation.Operation,
 			OldPath: mutation.ExpectedPath, NewPath: mutation.ExpectedPath,
 			ContentVersion: model.NewWorkspaceContentVersion(), ChangedAt: model.NowUTC()}}, Replayed: true}
-	require.Equal(t, int64(2), batch.Access.Generation, "Workspace batch contract = %#v / %#v", batch, result)
+	require.Equal(t, int64(2), batch.Access.(ExamAttemptWorkspaceEditorAccess).Generation, "Workspace batch contract = %#v / %#v", batch, result)
 	require.Nil(t, batch.ExpectedWorkspaceCursor, "a batch without recursive deletion carries no cursor fence")
 	require.Empty(t, batch.Mutations[0].DestinationPath, "Workspace batch contract = %#v / %#v", batch, result)
 	require.True(t, result.Replayed, "Workspace batch contract = %#v / %#v", batch, result)
@@ -88,7 +88,7 @@ func TestCandidateWorkspaceRecoveryCursorsNeverCarryPaths(t *testing.T) {
 
 func TestExamAttemptWorkspaceBatchResolvesSafeAuditAndEffectScope(t *testing.T) {
 	t.Parallel()
-	access := ExamAttemptWorkspaceMutationAccess{AttemptID: model.NewExamAttemptID(), ParticipationID: model.NewAttemptParticipationID(),
+	access := ExamAttemptWorkspaceEditorAccess{AttemptID: model.NewExamAttemptID(), ParticipationID: model.NewAttemptParticipationID(),
 		Generation: 2, CandidateUserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		DesktopRegistrationID: model.NewDesktopRegistrationID(), DPoPKeyThumbprint: strings.Repeat("A", 43),
 		ConnectionID: model.NewAttemptConnectionID(), ContinuityCredentialHash: model.HashToken(model.NewCredentialToken())}
@@ -111,7 +111,7 @@ func TestExamAttemptWorkspaceBatchResolvesSafeAuditAndEffectScope(t *testing.T) 
 
 func TestExamAttemptWorkspaceObjectContractSeparatesStagingFromCleanup(t *testing.T) {
 	t.Parallel()
-	access := ExamAttemptWorkspaceMutationAccess{AttemptID: model.NewExamAttemptID(), ParticipationID: model.NewAttemptParticipationID(),
+	access := ExamAttemptWorkspaceEditorAccess{AttemptID: model.NewExamAttemptID(), ParticipationID: model.NewAttemptParticipationID(),
 		Generation: 3, CandidateUserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		DesktopRegistrationID: model.NewDesktopRegistrationID(), DPoPKeyThumbprint: strings.Repeat("A", 43),
 		ConnectionID: model.NewAttemptConnectionID(), ContinuityCredentialHash: model.HashToken(model.NewCredentialToken())}

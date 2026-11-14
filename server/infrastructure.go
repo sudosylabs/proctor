@@ -182,15 +182,6 @@ func openRuntimeInfrastructure(
 	if err != nil {
 		return result, err
 	}
-	// Plugins activate once metrics exist, so their first calls are
-	// recorded, and before anything that consumes what they register.
-	result.plugins, result.pluginSettingsCount, err = activatePlugins(
-		ctx, cfg, result.resources.Persistence.PluginSettings(), result.resources.Logger,
-		pluginRecorder(metricsModule), overrides.Plugins,
-	)
-	if err != nil {
-		return result, err
-	}
 	if err = result.decoratePersistenceWithRetryAndTiming(ctx, cfg, overrides, metricsModule, tracingModule); err != nil {
 		return result, err
 	}
@@ -201,6 +192,17 @@ func openRuntimeInfrastructure(
 		return result, err
 	}
 	if err = result.decoratePersistenceWithLocalCache(ctx, overrides, metricsModule); err != nil {
+		return result, err
+	}
+	// Plugins activate once metrics exist, so their first calls are
+	// recorded, over the fully decorated store and with this node's cluster
+	// ID for their leases, and before anything that consumes what they
+	// register.
+	result.plugins, result.pluginSettingsCount, err = activatePlugins(
+		ctx, cfg, result.resources.Persistence.PluginSettings(), result.pluginRuntime(), result.resources.Logger,
+		pluginRecorder(metricsModule), overrides.Plugins,
+	)
+	if err != nil {
 		return result, err
 	}
 	externalAuthentication, err := newExternalAuthenticationRegistry(result.plugins)

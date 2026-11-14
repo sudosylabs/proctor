@@ -698,7 +698,7 @@ func (s *SQLExamAttemptStore) listCandidateWorkspace(
 		ctx context.Context,
 		tx *sqlxTxWrapper,
 	) (*store.CandidateAttemptWorkspacePage, error) {
-		if _, err := lockCandidateGuard(ctx, tx, options.Access); err != nil {
+		if err := lockAttemptWorkspaceReadGuard(ctx, tx, options.Access); err != nil {
 			return nil, err
 		}
 		return listCandidateWorkspaceSnapshot(ctx, tx, options, continuation)
@@ -722,9 +722,9 @@ func listCandidateWorkspaceSnapshot(
 		FROM exam_attempt_workspaces
 		WHERE exam_attempt_id = ?
 		FOR SHARE`,
-		options.Access.AttemptID.String(),
+		options.Access.WorkspaceAttemptID().String(),
 	); err != nil {
-		return nil, translateError("attempt_workspace", options.Access.AttemptID.String(), err)
+		return nil, translateError("attempt_workspace", options.Access.WorkspaceAttemptID().String(), err)
 	}
 
 	workspaceID, err := model.ParseExamAttemptWorkspaceID(workspace.ID)
@@ -770,7 +770,7 @@ func listCandidateWorkspaceSnapshot(
 		LEFT JOIN exam_attempt_workspace_objects o ON o.id = e.current_object_id
 			AND o.workspace_id = e.workspace_id
 		WHERE w.exam_attempt_id = ?`
-	args := []any{options.Access.AttemptID.String()}
+	args := []any{options.Access.WorkspaceAttemptID().String()}
 	if continuation {
 		query += ` AND (e.path, e.id) > (?, ?)`
 		args = append(args, afterPath, options.AfterEntryID.String())
@@ -881,7 +881,7 @@ func (s *SQLExamAttemptStore) ResolveCandidateResource(
 func resolveCandidateWorkspaceFile(
 	ctx context.Context,
 	executor sqlxExecutor,
-	access store.CandidateAttemptAccess,
+	attemptID model.ExamAttemptID,
 	entryID model.AttemptWorkspaceEntryID,
 ) (*store.CandidateWorkspaceContent, error) {
 	var row struct {
@@ -905,7 +905,7 @@ func resolveCandidateWorkspaceFile(
 			AND o.workspace_id = e.workspace_id
 		WHERE w.exam_attempt_id = ?
 			AND e.id = ?
-			AND e.kind = 'file'`, access.AttemptID.String(), entryID.String())
+			AND e.kind = 'file'`, attemptID.String(), entryID.String())
 	if err != nil {
 		return nil, translateError("attempt_workspace_entry", entryID.String(), err)
 	}

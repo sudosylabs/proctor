@@ -93,6 +93,10 @@ var storeErrors = apperror.StoreTable{
 		"attempt_workspace_size_limit":             "exam.attempt.workspace.size_limit",
 		"attempt_workspace_object_state":           "exam.attempt.workspace.object_conflict",
 		"attempt_workspace_cursor":                 "exam.attempt.workspace.cursor_conflict",
+		// An environment whose binding ended or was replaced is in the
+		// position of a closed Connection: it must be bound again.
+		"attempt_environment_binding_current":  "exam.attempt.connection_closed",
+		"attempt_environment_binding_identity": "exam.attempt.conflict",
 	},
 	NotFound:     "exam.attempt.not_found",
 	Conflict:     "exam.attempt.conflict",

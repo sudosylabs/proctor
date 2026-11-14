@@ -40,6 +40,10 @@ func (*recordingHost) AddEventHandler(plugin.EventTopic, plugin.EventHandler) er
 	return errors.New("not offered")
 }
 
+func (*recordingHost) Records() plugin.Records { return nil }
+
+func (*recordingHost) AddWorker(string, plugin.Worker) error { return errors.New("not offered") }
+
 func TestPluginOffersTheProviderTypeThatBuildsConfiguredProviders(t *testing.T) {
 	t.Parallel()
 

@@ -13,9 +13,12 @@
 //
 // A plugin implements Plugin. While the server starts, it activates each
 // enabled plugin, and the plugin registers what it offers on the Host it is
-// given: an IdentityProviderType, an ExportFormat or an EventHandler. The
-// Host grows one typed method per capability, added when a plugin needs it.
-// There is no broad API that every plugin can reach.
+// given: an IdentityProviderType, an ExportFormat, an EventHandler or a
+// Worker. It keeps its own state in Records and claims work under Leases.
+// The Host grows one typed method per capability, added when a plugin needs
+// it. There is no broad API that every plugin can reach, and no plugin
+// touches the database: records and leases are core tables the server
+// scopes to the calling plugin.
 //
 // Because plugins are trusted, reviewed code, they run in process and are
 // called through plain Go interfaces. There is no separate process, RPC,

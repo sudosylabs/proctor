@@ -241,6 +241,7 @@ func newAttempts(
 		NewWorkspaceEntry:   model.NewAttemptWorkspaceEntryID,
 		NewWorkspaceObject:  model.NewAttemptWorkspaceObjectID,
 		NewWorkspaceVersion: model.NewWorkspaceContentVersion,
+		NewEnvironment:      model.NewAttemptEnvironmentBindingID,
 		NewSubmission:       model.NewSubmissionID,
 		NewReceiptCode:      model.NewSubmissionReceiptCode,
 		NewDomainEvent:      model.NewDomainEventID,

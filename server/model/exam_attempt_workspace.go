@@ -445,6 +445,20 @@ func (k AttemptWorkspaceMutationKind) IsValid() bool {
 	}
 }
 
+// AttemptWorkspaceOrigin names which writer made a journaled change. Both
+// write as the candidate: the editor through their Desktop Connection, the
+// execution environment on their behalf through its environment binding.
+type AttemptWorkspaceOrigin string
+
+const (
+	AttemptWorkspaceOriginEditor      AttemptWorkspaceOrigin = "editor"
+	AttemptWorkspaceOriginEnvironment AttemptWorkspaceOrigin = "environment"
+)
+
+func (o AttemptWorkspaceOrigin) IsValid() bool {
+	return o == AttemptWorkspaceOriginEditor || o == AttemptWorkspaceOriginEnvironment
+}
+
 // AttemptWorkspaceJournalEntry is one safe acknowledged change in the
 // Attempt-scoped ordered recovery stream. It contains logical metadata only:
 // no object selector, backend revision, credential, Session, or content body.
@@ -460,6 +474,7 @@ type AttemptWorkspaceJournalEntry struct {
 	ChangedAt      time.Time
 	// Recursive deletes OldPath and every descendant separated by a slash.
 	Recursive bool
+	Origin    AttemptWorkspaceOrigin
 }
 
 func (e AttemptWorkspaceJournalEntry) Validate() error {
@@ -467,6 +482,7 @@ func (e AttemptWorkspaceJournalEntry) Validate() error {
 		e.Cursor < 1 ||
 		!e.EntryID.IsValid() ||
 		!e.Operation.IsValid() ||
+		!e.Origin.IsValid() ||
 		e.ChangedAt.IsZero() {
 		return invalidModelError(
 			"AttemptWorkspaceJournalEntry.Validate",

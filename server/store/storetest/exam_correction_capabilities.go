@@ -9,6 +9,7 @@ package storetest
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"testing"
 
@@ -75,7 +76,7 @@ func testCorrectionCapabilityGates(t *testing.T, ss store.Store) {
 			require.Len(t, presentation.LiveCorrections, 1)
 			require.True(t, slices.Equal(presentation.LiveCorrections[0].AffectedCapabilities, test.selected))
 			require.Equal(t, blocked(model.CandidateCapabilityBrowser), presentation.BrowserPolicy == nil, "usable browser policy escaped its gate")
-			workspaceAccess := store.ExamAttemptWorkspaceMutationAccess{AttemptID: connected.Attempt.ID,
+			workspaceAccess := store.ExamAttemptWorkspaceEditorAccess{AttemptID: connected.Attempt.ID,
 				ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation,
 				CandidateUserID: access.CandidateUserID, SessionID: access.SessionID, DesktopRegistrationID: access.DesktopRegistrationID,
 				DPoPKeyThumbprint: access.DPoPKeyThumbprint, ConnectionID: access.ConnectionID, ContinuityCredentialHash: access.ContinuityCredentialHash}
@@ -90,6 +91,19 @@ func testCorrectionCapabilityGates(t *testing.T, ss store.Store) {
 			} else {
 				require.NoError(t, err)
 				cursor = changed.Changes[0].Cursor
+			}
+			// The environment writes under the same correction gate.
+			_, environment := bindTestEnvironment(t, ctx, ss, connected.Attempt.ID, connected.Participation.Generation,
+				environmentIdentity(fmt.Sprintf("grant-correction-%d", caseIndex), "epoch-1", 0))
+			harvested, err := ss.ExamAttemptWorkspace().ApplyBatch(ctx, newAttemptWorkspaceBatch(t, ctx, ss, fixture, environment,
+				store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
+					EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "harvested-after-correction"}),
+				attemptWorkspaceBatchCommand(fixture.candidate.ID, "correction-environment"))
+			if blocked(model.CandidateCapabilityWorkspace) {
+				requireConflictConstraint(t, err, "exam_correction_acknowledgement_required")
+			} else {
+				require.NoError(t, err)
+				cursor = harvested.Changes[0].Cursor
 			}
 			source := browserSourceID(501 + caseIndex)
 			_, err = startBrowserSourceFixture(t, ctx, ss, &store.BrowserActivitySourceStart{Access: access,
@@ -131,7 +145,7 @@ func testCorrectionPublicationWorkspaceRace(t *testing.T, ss store.Store) {
 		AffectedCapabilities: []model.CandidateCapability{model.CandidateCapabilitySubmission, model.CandidateCapabilityWorkspace},
 		PrivateReason:        "Verify correction and Workspace serialization", AppliedAt: model.NowUTC(),
 		AuditEventID: saveExamSittingAudit(t, ctx, ss, fixture.manager.ID, fixture.examID, fixture.unitID).ID, AuditAt: model.NowUTC()}
-	write := newAttemptWorkspaceBatch(t, ctx, ss, fixture, store.ExamAttemptWorkspaceMutationAccess{
+	write := newAttemptWorkspaceBatch(t, ctx, ss, fixture, store.ExamAttemptWorkspaceEditorAccess{
 		AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation,
 		CandidateUserID: access.CandidateUserID, SessionID: access.SessionID, DesktopRegistrationID: access.DesktopRegistrationID,
 		DPoPKeyThumbprint: access.DPoPKeyThumbprint, ConnectionID: access.ConnectionID, ContinuityCredentialHash: access.ContinuityCredentialHash},

@@ -28,6 +28,8 @@ const (
 	aggregateBrowserAuthentication      aggregateName = "browser_authentication"
 	aggregateDesktopCompatibilityPolicy aggregateName = "desktop_compatibility_policy"
 	aggregatePluginSettings             aggregateName = "plugin_settings"
+	aggregatePluginRecord               aggregateName = "plugin_record"
+	aggregatePluginLease                aggregateName = "plugin_lease"
 	aggregateRetentionPolicy            aggregateName = "retention_policy"
 	aggregateRetention                  aggregateName = "retention"
 	aggregateExamExport                 aggregateName = "exam_export"
@@ -429,9 +431,18 @@ const (
 	methodMarkObjectsReclaimable                    methodName = "mark_objects_reclaimable"
 	methodMarkObjectsReady                          methodName = "mark_objects_ready"
 	methodApplyBatch                                methodName = "apply_batch"
+	methodBindEnvironment                           methodName = "bind_environment"
+	methodEndEnvironmentBinding                     methodName = "end_environment_binding"
 	methodMoveEntry                                 methodName = "move_entry"
 	methodReplaceFile                               methodName = "replace_file"
 	methodValidateSchema                            methodName = "validate_schema"
+)
+
+const (
+	methodPut            methodName = "put"
+	methodClaim          methodName = "claim"
+	methodClaimAvailable methodName = "claim_available"
+	methodRenew          methodName = "renew"
 )
 
 const (

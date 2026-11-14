@@ -84,8 +84,14 @@ func TestAttemptWorkspaceJournalDescribesSafeOrderedAcknowledgements(t *testing.
 	version := NewWorkspaceContentVersion()
 	entry := AttemptWorkspaceJournalEntry{WorkspaceID: workspaceID, Cursor: 3, EntryID: entryID,
 		EntryKind: StarterWorkspaceEntryFile, Operation: AttemptWorkspaceMutationReplaceFile,
-		OldPath: "cmd/main.go", NewPath: "cmd/main.go", ContentVersion: version, ChangedAt: at}
+		OldPath: "cmd/main.go", NewPath: "cmd/main.go", ContentVersion: version, ChangedAt: at,
+		Origin: AttemptWorkspaceOriginEditor}
 	require.NoError(t, entry.Validate())
+	environment := entry
+	environment.Origin = AttemptWorkspaceOriginEnvironment
+	require.NoError(t, environment.Validate())
+	environment.Origin = ""
+	require.Error(t, environment.Validate(), "journal accepted a change without an origin")
 	move := entry
 	move.Cursor, move.Operation, move.NewPath = 4, AttemptWorkspaceMutationMoveEntry, "internal/main.go"
 	require.NoError(t, move.Validate())

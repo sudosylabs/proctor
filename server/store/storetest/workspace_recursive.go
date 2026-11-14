@@ -138,7 +138,7 @@ func testAttemptWorkspaceRecursiveDeletion(t *testing.T, ss store.Store, workspa
 	prepareExamAttemptConnect(t, ctx, ss, connect)
 	connected, err := ss.ExamAttempt().Connect(ctx, connect, examCommand(f.candidate.ID, store.ExamAttemptConnectOperation, "recursive-connect", "recursive-connect"))
 	require.NoError(t, err)
-	access := store.ExamAttemptWorkspaceMutationAccess{AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID,
+	access := store.ExamAttemptWorkspaceEditorAccess{AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID,
 		Generation: connected.Participation.Generation, CandidateUserID: f.candidate.ID, SessionID: f.session.ID,
 		DesktopRegistrationID: f.session.DesktopRegistrationID, DPoPKeyThumbprint: f.session.DPoPKeyThumbprint,
 		ConnectionID: connected.Connection.ID, ContinuityCredentialHash: credential}

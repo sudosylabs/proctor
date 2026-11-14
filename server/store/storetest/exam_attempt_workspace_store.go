@@ -31,6 +31,7 @@ type ExamAttemptWorkspaceSQLProbe struct {
 	FillWorkspaceEntryQuota      func(*testing.T, context.Context, model.ExamAttemptWorkspaceID)
 	MakeJournalGap               func(*testing.T, context.Context, model.ExamAttemptWorkspaceID)
 	SetParticipationLeaseExpired func(*testing.T, context.Context, model.AttemptParticipationID)
+	PassSittingScheduledEnd      func(*testing.T, context.Context, model.ExamSittingID)
 	ConcurrentPeer               store.ExamAttemptWorkspaceStore
 }
 
@@ -67,7 +68,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 		examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "workspace-connect", "workspace-connect"))
 	require.NoError(t, err)
 
-	access := store.ExamAttemptWorkspaceMutationAccess{AttemptID: connected.Attempt.ID,
+	access := store.ExamAttemptWorkspaceEditorAccess{AttemptID: connected.Attempt.ID,
 		ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation,
 		CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID,
 		DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint,
@@ -571,6 +572,7 @@ writesComplete:
 	if len(probes) > 0 && probes[0].SetParticipationLeaseExpired != nil {
 		testExamAttemptWorkspaceSuspensionAndMultiNodeReplay(t, ctx, ss, workspace, probes[0])
 	}
+	testAttemptEnvironmentBinding(t, ss, workspace, probes...)
 	testAttemptWorkspaceBatches(t, ss, workspace)
 	testAttemptWorkspaceRecursiveDeletion(t, ss, workspace, probes...)
 }
@@ -591,7 +593,7 @@ func testExamAttemptWorkspaceSuspensionAndMultiNodeReplay(t *testing.T, ctx cont
 	connected, err := ss.ExamAttempt().Connect(ctx, connect,
 		examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "workspace-fence-connect", "workspace-fence-connect"))
 	require.NoError(t, err)
-	access := store.ExamAttemptWorkspaceMutationAccess{AttemptID: connected.Attempt.ID,
+	access := store.ExamAttemptWorkspaceEditorAccess{AttemptID: connected.Attempt.ID,
 		ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation,
 		CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID,
 		DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint,
@@ -667,7 +669,7 @@ func testExamAttemptWorkspaceSuspensionAndMultiNodeReplay(t *testing.T, ctx cont
 	require.True(t, store.IsConflict(err), "ApplyBatch(suspended Attempt) error")
 }
 
-func journalAccess(access store.ExamAttemptWorkspaceMutationAccess) store.CandidateAttemptAccess {
+func journalAccess(access store.ExamAttemptWorkspaceEditorAccess) store.CandidateAttemptAccess {
 	return store.CandidateAttemptAccess{AttemptID: access.AttemptID, CandidateUserID: access.CandidateUserID,
 		SessionID: access.SessionID, DesktopRegistrationID: access.DesktopRegistrationID,
 		DPoPKeyThumbprint: access.DPoPKeyThumbprint, ConnectionID: access.ConnectionID,
@@ -691,7 +693,7 @@ func testAttemptWorkspaceBatches(t *testing.T, ss store.Store, workspace store.E
 	connected, err := ss.ExamAttempt().Connect(ctx, connect,
 		examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "batch-connect", "batch-connect"))
 	require.NoError(t, err)
-	access := store.ExamAttemptWorkspaceMutationAccess{AttemptID: connected.Attempt.ID,
+	access := store.ExamAttemptWorkspaceEditorAccess{AttemptID: connected.Attempt.ID,
 		ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation,
 		CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID,
 		DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint,
@@ -779,7 +781,7 @@ func testAttemptWorkspaceBatches(t *testing.T, ss store.Store, workspace store.E
 	replayed, err := workspace.ApplyBatch(ctx, replayBatch, command)
 	require.NoError(t, err)
 	require.True(t, replayed.Replayed)
-	require.True(t, replayed.ConsistentWith(target, replayMutations))
+	require.True(t, replayed.ConsistentWith(target, model.AttemptWorkspaceOriginEditor, replayMutations))
 	require.Equal(t, applied.Changes, replayed.Changes)
 	require.Equal(t, afterMixed.cursor, state().cursor, "replay advanced the Workspace Cursor")
 	replayAudit, err := ss.Audit().Get(ctx, replayBatch.AuditEventID)
@@ -964,7 +966,7 @@ func requireWorkspaceBatchEcho(
 ) {
 	t.Helper()
 	require.NotNil(t, result)
-	require.True(t, result.ConsistentWith(target, mutations), "ApplyBatch returned a result inconsistent with its request")
+	require.True(t, result.ConsistentWith(target, model.AttemptWorkspaceOriginEditor, mutations), "ApplyBatch returned a result inconsistent with its request")
 	require.Len(t, result.Changes, len(mutations))
 	for index, change := range result.Changes {
 		mutation := mutations[index]
@@ -1019,10 +1021,13 @@ type attemptWorkspaceBatchAudit struct {
 	OperationCounts      map[string]int
 	Replayed             bool
 	OriginalAuditEventID string
+	Origin               model.AttemptWorkspaceOrigin
+	BindingID            string
 }
 
 // requireAttemptWorkspaceBatchAudit asserts that a batch audit carries only
-// safe scope, counts by operation and the cursor range of result.
+// safe scope, counts by operation, the cursor range of result and the
+// writer's origin, plus the binding of an environment writer.
 func requireAttemptWorkspaceBatchAudit(t *testing.T, audit *model.AuditEvent, mutationCount int,
 	result *store.ExamAttemptWorkspaceBatchResult,
 ) attemptWorkspaceBatchAudit {
@@ -1030,8 +1035,14 @@ func requireAttemptWorkspaceBatchAudit(t *testing.T, audit *model.AuditEvent, mu
 	var data map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(audit.Result, &data))
 	keys := []string{"exam_sitting_id", "candidate_user_id", "workspace_id", "mutation_count", "operation_counts",
-		"first_workspace_cursor", "last_workspace_cursor"}
+		"first_workspace_cursor", "last_workspace_cursor", "origin"}
 	var decoded attemptWorkspaceBatchAudit
+	require.NoError(t, json.Unmarshal(data["origin"], &decoded.Origin))
+	require.Equal(t, result.Changes[0].Origin, decoded.Origin, "batch audit origin = %s", audit.Result)
+	if decoded.Origin == model.AttemptWorkspaceOriginEnvironment {
+		keys = append(keys, "environment_binding_id")
+		require.NoError(t, json.Unmarshal(data["environment_binding_id"], &decoded.BindingID))
+	}
 	if _, replayed := data["idempotency_replayed"]; replayed {
 		keys = append(keys, "idempotency_replayed", "original_audit_event_id")
 		require.NoError(t, json.Unmarshal(data["idempotency_replayed"], &decoded.Replayed))
@@ -1143,7 +1154,7 @@ func attemptWorkspaceDirectoryMutations(prefix string, count int) []store.ExamAt
 // stageAttemptWorkspaceReservations reserves count objects in one call and
 // leaves them without content.
 func stageAttemptWorkspaceReservations(t *testing.T, ctx context.Context, workspace store.ExamAttemptWorkspaceStore,
-	access store.ExamAttemptWorkspaceMutationAccess, count int,
+	access store.ExamAttemptWorkspaceWriteAccess, count int,
 ) []model.AttemptWorkspaceObjectID {
 	t.Helper()
 	ids := newAttemptWorkspaceObjectIDs(count)
@@ -1156,7 +1167,7 @@ func stageAttemptWorkspaceReservations(t *testing.T, ctx context.Context, worksp
 // with one ReserveObjects and one MarkObjectsReady call, as one batch's
 // staging does.
 func stageAttemptWorkspaceObjects(t *testing.T, ctx context.Context, workspace store.ExamAttemptWorkspaceStore,
-	access store.ExamAttemptWorkspaceMutationAccess, contents ...model.AttemptWorkspaceContent,
+	access store.ExamAttemptWorkspaceWriteAccess, contents ...model.AttemptWorkspaceContent,
 ) []store.ExamAttemptWorkspaceReadyObject {
 	t.Helper()
 	ids := stageAttemptWorkspaceReservations(t, ctx, workspace, access, len(contents))
@@ -1172,7 +1183,7 @@ func stageAttemptWorkspaceObjects(t *testing.T, ctx context.Context, workspace s
 // newAttemptWorkspaceBatch wraps mutations in a batch with a fresh audit
 // attempt for the fixture's Sitting.
 func newAttemptWorkspaceBatch(t *testing.T, ctx context.Context, ss store.Store, fixture examAttemptFixture,
-	access store.ExamAttemptWorkspaceMutationAccess, mutations ...store.ExamAttemptWorkspaceMutation,
+	access store.ExamAttemptWorkspaceWriteAccess, mutations ...store.ExamAttemptWorkspaceMutation,
 ) *store.ExamAttemptWorkspaceBatch {
 	t.Helper()
 	return &store.ExamAttemptWorkspaceBatch{Access: access, Mutations: mutations,
@@ -1186,7 +1197,7 @@ func attemptWorkspaceBatchCommand(userID model.UserID, label string) *store.Comm
 // createAttemptWorkspaceTestFile stages one object and creates a file from
 // it in a one-mutation batch, for suites that need Workspace content.
 func createAttemptWorkspaceTestFile(t *testing.T, ctx context.Context, ss store.Store, fixture examAttemptFixture,
-	access store.ExamAttemptWorkspaceMutationAccess, path string, content model.AttemptWorkspaceContent, label string,
+	access store.ExamAttemptWorkspaceWriteAccess, path string, content model.AttemptWorkspaceContent, label string,
 ) (store.ExamAttemptWorkspaceReadyObject, *store.ExamAttemptWorkspaceBatchResult) {
 	t.Helper()
 	object := stageAttemptWorkspaceObjects(t, ctx, ss.ExamAttemptWorkspace(), access, content)[0]

@@ -81,6 +81,22 @@ type Dependencies struct {
 	// Recorder receives call outcomes and state changes for metrics. Nil
 	// records nothing.
 	Recorder Recorder
+	// Records keeps the plugins' records; each plugin's Host.Records is it,
+	// scoped to that plugin. Nil leaves plugins without records: every call
+	// answers plugin.ErrUnavailable.
+	Records RecordStore
+	// Leases keeps the leases the plugins' workers claim, as NodeID. Nil, or
+	// an empty NodeID, leaves workers without leases: every call answers
+	// plugin.ErrUnavailable.
+	Leases LeaseStore
+	// NodeID names this node in the leases it holds.
+	NodeID string
+	// LeaseLifetime is how long each lease lasts; zero means
+	// DefaultLeaseLifetime.
+	LeaseLifetime time.Duration
+	// WorkerRestartDelay is the first wait before a failed worker starts
+	// again; zero means DefaultWorkerRestartDelay.
+	WorkerRestartDelay time.Duration
 }
 
 // Status is what the server reports about one plugin.
@@ -103,10 +119,19 @@ type Host struct {
 	mu            sync.Mutex
 	contributions contributions
 
-	// lifecycle serializes Reconcile and Close; closed stops Reconcile.
-	lifecycle sync.Mutex
-	closed    bool
-	closeErr  error
+	records       RecordStore
+	leases        LeaseStore
+	nodeID        string
+	leaseLifetime time.Duration
+	restartDelay  time.Duration
+
+	// lifecycle serializes Reconcile, StartWorkers and Close; closed stops
+	// Reconcile, and workersStarted makes every later activation start its
+	// workers.
+	lifecycle      sync.Mutex
+	closed         bool
+	closeErr       error
+	workersStarted bool
 }
 
 // entry is one plugin and everything the host knows about it.
@@ -126,6 +151,9 @@ type entry struct {
 	// applied is the Settings last applied or attempted; a failed plugin is
 	// retried only when they change.
 	applied *wanted
+	// current is the activation that succeeded, until the plugin is
+	// deactivated.
+	current *activation
 }
 
 // wanted is a resolved Settings: whether the plugin should run, and with
@@ -158,7 +186,23 @@ func Activate(ctx context.Context, deps Dependencies) (*Host, error) {
 	if recorder == nil {
 		recorder = discardRecorder{}
 	}
-	host := &Host{logger: deps.Logger, timeout: timeout}
+	leaseLifetime := deps.LeaseLifetime
+	if leaseLifetime <= 0 {
+		leaseLifetime = DefaultLeaseLifetime
+	}
+	restartDelay := deps.WorkerRestartDelay
+	if restartDelay <= 0 {
+		restartDelay = DefaultWorkerRestartDelay
+	}
+	host := &Host{
+		logger:        deps.Logger,
+		timeout:       timeout,
+		records:       deps.Records,
+		leases:        deps.Leases,
+		nodeID:        deps.NodeID,
+		leaseLifetime: leaseLifetime,
+		restartDelay:  restartDelay,
+	}
 	seen := make(map[string]struct{}, len(deps.Plugins))
 	for _, p := range deps.Plugins {
 		if p == nil {
@@ -286,7 +330,10 @@ func (h *Host) reconfigure(ctx context.Context, e *entry, want wanted) bool {
 	if !ok {
 		return false
 	}
-	view := &registrar{host: h, entry: e, settings: want.settings, secrets: want.secrets}
+	e.mu.Lock()
+	current := e.current
+	e.mu.Unlock()
+	view := &registrar{host: h, entry: e, activation: current, settings: want.settings, secrets: want.secrets}
 	err := e.callWithin(ctx, h.timeout, "reconfigure", func(bounded context.Context) error {
 		return reconfigurer.Reconfigure(bounded, view)
 	})
@@ -307,7 +354,8 @@ func (h *Host) activate(ctx context.Context, e *entry, want wanted) {
 	e.mu.Lock()
 	e.panics = 0
 	e.mu.Unlock()
-	registration := &registrar{host: h, entry: e, settings: want.settings, secrets: want.secrets, open: true}
+	current := h.newActivation(e)
+	registration := &registrar{host: h, entry: e, activation: current, settings: want.settings, secrets: want.secrets, open: true}
 	err := e.callWithin(ctx, h.timeout, "activate", func(bounded context.Context) error {
 		return e.plugin.Activate(bounded, registration)
 	})
@@ -315,12 +363,17 @@ func (h *Host) activate(ctx context.Context, e *entry, want wanted) {
 	if err == nil {
 		e.mu.Lock()
 		e.activated = true
+		e.current = current
 		e.setState(StateActive)
 		e.mu.Unlock()
 		e.logger.Info("plugin activated")
+		if h.workersStarted {
+			current.startWorkers()
+		}
 		return
 	}
 
+	current.halt()
 	h.discardRegistrations(e)
 	e.mu.Lock()
 	e.setState(StateFailed)
@@ -383,6 +436,29 @@ func (h *Host) ValidateSettings(ctx context.Context, id string, settings json.Ra
 	return ErrUnknownPlugin
 }
 
+// StartWorkers starts the workers of every active plugin, and of every
+// plugin activated from now on. The server calls it once, while the node
+// starts; before it, workers are registered but not run, so building a node
+// starts no plugin work. It does nothing once the host is closed.
+func (h *Host) StartWorkers(context.Context) error {
+	if h == nil {
+		return nil
+	}
+	h.lifecycle.Lock()
+	defer h.lifecycle.Unlock()
+	if h.closed || h.workersStarted {
+		return nil
+	}
+	h.workersStarted = true
+	for _, e := range h.entries {
+		e.mu.Lock()
+		current := e.current
+		e.mu.Unlock()
+		current.startWorkers()
+	}
+	return nil
+}
+
 // Close deactivates every plugin that activated, in reverse order, each
 // under the host's timeout and within ctx. It runs once; later calls return
 // the first result, and Reconcile does nothing afterwards. A nil Host has
@@ -415,20 +491,23 @@ func (h *Host) deactivate(ctx context.Context, e *entry) error {
 		return nil
 	}
 
-	// Turn the plugin's capabilities off first, so no new call reaches it
-	// while it releases what it holds.
+	// Turn the plugin's capabilities off and stop its workers first, so no
+	// new call reaches it while it releases what it holds.
 	e.mu.Lock()
 	e.activated = false
+	current := e.current
+	e.current = nil
 	if e.state == StateActive {
 		e.setState(StateDisabled)
 	}
 	e.mu.Unlock()
 	h.discardRegistrations(e)
+	workersErr := current.stop(ctx)
 	if err := e.callWithin(ctx, h.timeout, "deactivate", e.plugin.Deactivate); err != nil {
 		e.logger.Error("plugin failed to deactivate", slog.Any("error", err))
-		return fmt.Errorf("deactivate plugin %q: %w", e.manifest.ID, err)
+		return errors.Join(workersErr, fmt.Errorf("deactivate plugin %q: %w", e.manifest.ID, err))
 	}
-	return nil
+	return workersErr
 }
 
 func (e *entry) currentState() State {
@@ -440,10 +519,11 @@ func (e *entry) currentState() State {
 // registrar is the plugin.Host one plugin's Activate receives. It accepts
 // registrations only while Activate runs.
 type registrar struct {
-	host     *Host
-	entry    *entry
-	settings json.RawMessage
-	secrets  json.RawMessage
+	host       *Host
+	entry      *entry
+	activation *activation
+	settings   json.RawMessage
+	secrets    json.RawMessage
 
 	mu   sync.Mutex
 	open bool
@@ -454,6 +534,12 @@ var _ plugin.Host = (*registrar)(nil)
 func (r *registrar) Logger() *slog.Logger      { return r.entry.logger }
 func (r *registrar) Settings() json.RawMessage { return slices.Clone(r.settings) }
 func (r *registrar) Secrets() json.RawMessage  { return slices.Clone(r.secrets) }
+
+// Records returns the plugin's record store, scoped to it and usable while
+// this activation lasts.
+func (r *registrar) Records() plugin.Records {
+	return pluginRecords{store: r.host.records, activation: r.activation}
+}
 
 func (r *registrar) close() {
 	r.mu.Lock()

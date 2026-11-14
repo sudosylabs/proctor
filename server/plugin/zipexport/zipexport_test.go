@@ -56,3 +56,7 @@ func (h *formatRecordingHost) AddExportFormat(format plugin.ExportFormat) error 
 func (*formatRecordingHost) AddEventHandler(plugin.EventTopic, plugin.EventHandler) error {
 	return errors.New("not offered")
 }
+func (*formatRecordingHost) Records() plugin.Records { return nil }
+func (*formatRecordingHost) AddWorker(string, plugin.Worker) error {
+	return errors.New("not offered")
+}

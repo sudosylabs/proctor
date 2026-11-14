@@ -90,6 +90,7 @@ components:
         - kind
         - operation
         - changed_at
+        - origin
       properties:
         cursor:
           type: integer
@@ -122,6 +123,12 @@ components:
         recursive:
           type: boolean
           description: When true, this directory deletion removes old_path and all descendants whose paths start with old_path followed by a slash. Clients apply the entire subtree removal at this one cursor.
+        origin:
+          type: string
+          enum:
+            - editor
+            - environment
+          description: Which writer made the change. Both write as the candidate; `editor` is the candidate's Desktop editor and `environment` is the Exam's execution environment, writing the candidate's work back on their behalf.
     CandidateWorkspaceJournalResponse:
       type: object
       additionalProperties: false

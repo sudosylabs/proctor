@@ -184,6 +184,8 @@ func runLayerConformance(
 		}},
 		{"DesktopCompatibilityPolicy", storetest.TestDesktopCompatibilityPolicyStore},
 		{"PluginSettings", storetest.TestPluginSettingsStore},
+		{"PluginRecord", storetest.TestPluginRecordStore},
+		{"PluginLease", storetest.TestPluginLeaseStore},
 		{"RetentionPolicy", storetest.TestRetentionPolicyStore},
 		{"CommandOutcome", storetest.TestCommandOutcomeStore},
 	}
@@ -622,6 +624,16 @@ func examAttemptWorkspaceSQLProbe(t *testing.T, persistence *SQLStore) storetest
 	t.Helper()
 	return storetest.ExamAttemptWorkspaceSQLProbe{
 		SetParticipationLeaseExpired: examAttemptSQLProbe(t, persistence).SetParticipationLeaseExpired,
+		PassSittingScheduledEnd: func(t *testing.T, ctx context.Context, id model.ExamSittingID) {
+			t.Helper()
+			result, err := persistence.GetMaster().Exec(ctx, `UPDATE exam_sittings
+				SET scheduled_end_at=GREATEST(scheduled_start_at+INTERVAL '1 microsecond',statement_timestamp()-INTERVAL '1 second')
+				WHERE id=?`, id.String())
+			require.NoError(t, err)
+			affected, err := result.RowsAffected()
+			require.NoError(t, err)
+			require.Equal(t, int64(1), affected, "pass Sitting scheduled end affected")
+		},
 		MakeObjectCleanupDue: func(t *testing.T, ctx context.Context, id model.AttemptWorkspaceObjectID) {
 			t.Helper()
 			_, err := persistence.GetMaster().Exec(ctx, `UPDATE exam_attempt_workspace_objects
@@ -691,8 +703,8 @@ func examAttemptWorkspaceSQLProbe(t *testing.T, persistence *SQLStore) storetest
 					return struct{}{}, getErr
 				}
 				if _, execErr := tx.Exec(ctx, `INSERT INTO exam_attempt_workspace_journal
-				(workspace_id,cursor,entry_id,entry_kind,operation,old_path,new_path,mutation_key_digest,changed_at)
-				VALUES (?,?,?,?,'move_entry','gap-old','gap-new',?,statement_timestamp())`, workspaceID.String(), cursor,
+				(workspace_id,cursor,entry_id,entry_kind,operation,old_path,new_path,mutation_key_digest,changed_at,origin)
+				VALUES (?,?,?,?,'move_entry','gap-old','gap-new',?,statement_timestamp(),'editor')`, workspaceID.String(), cursor,
 					entry.ID, entry.Kind, bytes.Repeat([]byte{1}, 32)); execErr != nil {
 					return struct{}{}, execErr
 				}
@@ -1419,6 +1431,14 @@ func TestDesktopCompatibilityPolicyStore(t *testing.T) {
 
 func TestPluginSettingsStore(t *testing.T) {
 	PristineStoreTest(t, storetest.TestPluginSettingsStore)
+}
+
+func TestPluginRecordStore(t *testing.T) {
+	StoreTest(t, storetest.TestPluginRecordStore)
+}
+
+func TestPluginLeaseStore(t *testing.T) {
+	StoreTest(t, storetest.TestPluginLeaseStore)
 }
 
 func TestRetentionPolicyStore(t *testing.T) {

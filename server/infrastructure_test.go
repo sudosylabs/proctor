@@ -149,6 +149,8 @@ type layerOrderStore struct {
 func (s layerOrderStore) AcademicPeriod() store.AcademicPeriodStore   { return s.periods }
 func (layerOrderStore) ClusterDiscovery() store.ClusterDiscoveryStore { return nil }
 func (layerOrderStore) PluginSettings() store.PluginSettingsStore     { return nil }
+func (layerOrderStore) PluginRecord() store.PluginRecordStore         { return nil }
+func (layerOrderStore) PluginLease() store.PluginLeaseStore           { return nil }
 func (layerOrderStore) Close() error                                  { return nil }
 
 type layerOrderPeriods struct {
@@ -233,7 +235,7 @@ func TestRootSelectsLocalDevelopmentInfrastructure(t *testing.T) {
 	t.Cleanup(func() { _ = cluster.Stop(context.Background()) })
 	require.Equal(t, settings.Cluster.NodeID, cluster.NodeID(), "cluster node ID")
 
-	plugins, _, err := activatePlugins(context.Background(), settings, nil, logger, nil, nil)
+	plugins, _, err := activatePlugins(context.Background(), settings, nil, pluginRuntime{}, logger, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
 	providers, err := newExternalAuthenticationRegistry(plugins)
@@ -261,7 +263,7 @@ func TestRootSelectsConfiguredSMTPVFSAndIdentityAdapters(t *testing.T) {
 	logger, err := logging.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = logger.Shutdown() })
-	plugins, _, err := activatePlugins(context.Background(), settings, nil, logger, nil, nil)
+	plugins, _, err := activatePlugins(context.Background(), settings, nil, pluginRuntime{}, logger, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
 	providers, err := newExternalAuthenticationRegistry(plugins)
@@ -291,7 +293,7 @@ func TestActivePluginSummariesListOnlyActivePlugins(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = logger.Shutdown() })
 	saved := savedPluginSettings{rows: []*model.PluginSettings{pluginSettingsRow(t, "cas", false)}}
-	plugins, _, err := activatePlugins(context.Background(), config.Default(), saved, logger, nil, nil)
+	plugins, _, err := activatePlugins(context.Background(), config.Default(), saved, pluginRuntime{}, logger, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
 
@@ -333,7 +335,7 @@ func TestPluginEventSubscriptionsAndDegradedReadiness(t *testing.T) {
 	logger, err := logging.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = logger.Shutdown() })
-	plugins, _, err := activatePlugins(context.Background(), config.Default(), nil, logger, nil, []plugin.Plugin{
+	plugins, _, err := activatePlugins(context.Background(), config.Default(), nil, pluginRuntime{}, logger, nil, []plugin.Plugin{
 		eventPlugin{id: "mirror"},
 		eventPlugin{id: "broken", activateErr: errors.New("unreachable")},
 	})

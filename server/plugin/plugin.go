@@ -149,6 +149,15 @@ type Host interface {
 	// AddEventHandler subscribes handler to topic. A plugin subscribes at
 	// most one handler to each topic, during Activate.
 	AddEventHandler(topic EventTopic, handler EventHandler) error
+	// Records is the plugin's own record store. The plugin may keep it and
+	// use it from Activate until it is deactivated; after that, or once the
+	// plugin has failed, every call returns ErrUnavailable.
+	Records() Records
+	// AddWorker registers a Worker the server runs on every node while the
+	// plugin is active. name is 1 to 64 lowercase letters, digits,
+	// underscores, dots or hyphens, starting with a letter, and unique
+	// within the plugin. It fails after Activate has returned.
+	AddWorker(name string, run Worker) error
 }
 
 // PresentDocument returns document, or nil when it is absent, empty or JSON

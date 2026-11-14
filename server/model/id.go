@@ -84,6 +84,10 @@ type AttemptParticipationID string
 // AttemptConnectionID identifies one transport connection admitted to an Attempt Participation.
 type AttemptConnectionID string
 
+// AttemptEnvironmentBindingID identifies one binding of an execution
+// environment to an Attempt Participation generation.
+type AttemptEnvironmentBindingID string
+
 // FocusLossSignalID identifies one durably accepted Focus Loss claim and its outcome.
 type FocusLossSignalID string
 

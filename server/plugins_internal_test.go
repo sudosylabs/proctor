@@ -76,7 +76,7 @@ func TestPluginReconcilerAppliesSavedChangesOnlyWhenTheyChange(t *testing.T) {
 
 	logger := newTestLogger(t)
 	saved := &changingPluginSettings{}
-	plugins, count, err := activatePlugins(context.Background(), config.Default(), saved, logger, nil, nil)
+	plugins, count, err := activatePlugins(context.Background(), config.Default(), saved, pluginRuntime{}, logger, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
 	require.Equal(t, []string{"cas", "oidc", "export.zip"}, activePluginIDs(plugins))
@@ -99,7 +99,7 @@ func TestPluginReconcilerRunsUntilClosedAndChecksWhenTriggered(t *testing.T) {
 
 	logger := newTestLogger(t)
 	saved := &changingPluginSettings{}
-	plugins, count, err := activatePlugins(context.Background(), config.Default(), saved, logger, nil, nil)
+	plugins, count, err := activatePlugins(context.Background(), config.Default(), saved, pluginRuntime{}, logger, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
 	reconciler := newPluginReconciler(saved, plugins, config.Default(), logger, count)
@@ -123,7 +123,7 @@ func TestSignInProvidersFollowTheirPluginBeingTurnedOffAndOn(t *testing.T) {
 
 	logger := newTestLogger(t)
 	saved := &changingPluginSettings{}
-	plugins, _, err := activatePlugins(context.Background(), config.Default(), saved, logger, nil, nil)
+	plugins, _, err := activatePlugins(context.Background(), config.Default(), saved, pluginRuntime{}, logger, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
 

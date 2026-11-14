@@ -602,6 +602,28 @@ func (s *examAttemptStore) ResolveCandidateResource(
 	})
 }
 
+// BindEnvironment is retried as a whole: an identical live binding repeats,
+// so a retry after an unknown commit returns the same binding.
+func (s *examAttemptWorkspaceStore) BindEnvironment(
+	ctx context.Context,
+	input *store.ExamAttemptEnvironmentBind,
+) (*store.ExamAttemptEnvironmentBindResult, error) {
+	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptEnvironmentBindResult, error) {
+		return s.ExamAttemptWorkspaceStore.BindEnvironment(ctx, input)
+	})
+}
+
+// EndEnvironmentBinding is retried as a whole: ending an ended binding
+// returns it unchanged.
+func (s *examAttemptWorkspaceStore) EndEnvironmentBinding(
+	ctx context.Context,
+	input *store.ExamAttemptEnvironmentBindingEnd,
+) (*store.ExamAttemptEnvironmentBindingEndResult, error) {
+	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptEnvironmentBindingEndResult, error) {
+		return s.ExamAttemptWorkspaceStore.EndEnvironmentBinding(ctx, input)
+	})
+}
+
 func (s *examAttemptWorkspaceStore) List(
 	ctx context.Context,
 	options store.CandidateWorkspaceListOptions,
@@ -613,7 +635,7 @@ func (s *examAttemptWorkspaceStore) List(
 
 func (s *examAttemptWorkspaceStore) ResolveFile(
 	ctx context.Context,
-	access store.CandidateAttemptAccess,
+	access store.ExamAttemptWorkspaceReadAccess,
 	entryID model.AttemptWorkspaceEntryID,
 ) (*store.CandidateWorkspaceContent, error) {
 	return retryCall1(ctx, s.layer, func() (*store.CandidateWorkspaceContent, error) {
@@ -1241,4 +1263,27 @@ func (s *servingNodeLeaseStore) Delete(ctx context.Context, input *store.Serving
 	return retryCall0(ctx, s.layer, func() error {
 		return s.ServingNodeLeaseStore.Delete(ctx, &store.ServingNodeLeaseDeletion{NodeID: nodeID, LeaseID: leaseID})
 	})
+}
+
+func (s *pluginRecordStore) Get(ctx context.Context, pluginID model.PluginID, kind, key string) (*store.PluginRecord, error) {
+	return retryCall1(ctx, s.layer, func() (*store.PluginRecord, error) {
+		return s.PluginRecordStore.Get(ctx, pluginID, kind, key)
+	})
+}
+
+func (s *pluginRecordStore) List(ctx context.Context, options store.PluginRecordListOptions) ([]*store.PluginRecord, error) {
+	return retryCall1(ctx, s.layer, func() ([]*store.PluginRecord, error) {
+		return s.PluginRecordStore.List(ctx, options)
+	})
+}
+
+// Renew only extends the caller's exact fence, so replay after a lost commit
+// extends the same lease again or reports it lost.
+func (s *pluginLeaseStore) Renew(ctx context.Context, renewal *store.PluginLeaseRenewal) (*store.PluginLease, error) {
+	return retryCall1(ctx, s.layer, func() (*store.PluginLease, error) { return s.PluginLeaseStore.Renew(ctx, renewal) })
+}
+
+// Release deletes only the caller's exact fence, so replay is idempotent.
+func (s *pluginLeaseStore) Release(ctx context.Context, release *store.PluginLeaseRelease) error {
+	return retryCall0(ctx, s.layer, func() error { return s.PluginLeaseStore.Release(ctx, release) })
 }

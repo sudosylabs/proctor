@@ -63,6 +63,8 @@ documents only its plugin decodes and validates, handed over in
 | Admission gates | built for native rules | Decide admit or deny before an Attempt starts, from the facts Desktop reports |
 | Signal verdicts | built for native capabilities | Evaluate rules on the facts Desktop reports during an Attempt and flag what an enforce rule finds |
 | Evidence kinds | storage built | Declare evidence the core stores, seals, exports and shows in review |
+| Records | built | Keep JSON documents of at most 64 KiB by kind and key, with compare-and-swap on a revision |
+| Workers | built | Run long-lived work on every node and own keys under fenced leases that another node takes over when one dies |
 
 The first plugin to need most of the seams that are still missing is the
 terminal. [Design the Execution Environment](execution-environment.mdx)
@@ -122,6 +124,39 @@ lets the Attempt go on.
   bounded, and a failed plugin is reported in readiness and metrics while the
   node keeps serving. The capability's declared fail mode decides what that
   means for an Attempt in progress.
+
+## State and background work
+
+A plugin keeps its state in its record store, `Host.Records()`. Every plugin
+has its own namespace in one core table; the core adds the plugin's ID to
+each call, so a plugin cannot read or write another's records. A record is a
+JSON object of at most 64 KiB, named by a kind such as `grant` and a key such
+as `attempt/01hx7k2`. `Put` and `Delete` take the revision the plugin last
+read, and expected revision 0 means the record must not exist yet, so two
+nodes never overwrite each other unnoticed. Writes are not audited: records
+are the plugin's operational state, and anything an auditor must see goes
+through a core capability that audits it. Records are kept while the plugin
+is turned off and are there again when it is turned on; nothing deletes them
+on the plugin's behalf. There is no plugin SQL and there are no plugin
+migrations.
+
+Long-lived work is a worker, registered with `Host.AddWorker` during
+`Activate`. The core runs one of each worker on every node once the node has
+started. It ends the worker's context when the plugin is turned off,
+restarted with new settings, or the node stops, and waits for the worker
+before it calls `Deactivate`. A worker that returns an error or panics starts
+again after a growing delay; its panics count toward the plugin's panic
+limit, and a failed plugin's workers stop. A worker never changes readiness
+except through its plugin failing.
+
+Work only one node may do, such as owning one external resource, is claimed
+under a lease. The `Leases` a worker receives claims keys for this node in a
+core table where PostgreSQL's clock decides expiry, so a dead node's leases
+lapse and another node claims them. Every claim takes a new, larger fence,
+which the holder carries on each action it takes as the owner. `Hold` claims
+a key, renews it, and ends a derived context as soon as the lease is lost or
+can no longer be proven. A plugin that owns many keys keeps the set it wants
+owned in its records and offers it to `ClaimAvailable` from every node.
 
 ## Settings
 

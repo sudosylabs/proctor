@@ -361,6 +361,13 @@ generation, so an absent candidate receives no unused credential and stale
 credentials, renewals, and mutations cannot revive prior access. Individual
 Attempt Connections remain durable children of their Participation and every
 committed open/close emits a bounded manager notification after commit.
+An execution environment binding is likewise bound to one generation: every
+transition that ends a Participation (lease expiry, Kick, policy suspension,
+Session revocation, voluntary Submission, manager end, automatic seal) ends
+that generation's live binding in the same transaction, through a trigger on
+the Participation row, so a path added later cannot forget it. Re-allow
+creates no generation, so nothing can be bound until the candidate reconnects,
+and then only to the new generation.
 
 The first secure admission freezes the complete proposed Attempt Configuration
 under the current User Settings revision and exact admitted Desktop build,
@@ -504,7 +511,10 @@ outcome protection; published or submitted content pins survive.
 
 Every Workspace write rechecks the Open Sitting, active Attempt, current Class
 membership, exact active Participation generation and credential, and the
-owning Session-bound open Connection. Command idempotency is Attempt-scoped so
+owning Session-bound open Connection. An execution environment write is the
+candidate's own work made on their behalf: it rechecks the same gates with its
+live environment binding in place of the credential, Session and Connection,
+records journal origin `environment`, and is audited as the candidate. Command idempotency is Attempt-scoped so
 an exact retry can recover its retained outcome after reconnect or re-allow;
 the current access selector is reauthorized separately and is not part of the
 semantic fingerprint. Stable losing stages become reclaimable, while an

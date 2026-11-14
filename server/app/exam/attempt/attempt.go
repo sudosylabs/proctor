@@ -53,12 +53,17 @@ type Auditor interface {
 	Complete(context.Context, model.AuditEventID, map[string]any) error
 }
 
-// SystemAuditor creates actor-less audit attempts for trusted periodic
-// continuity enforcement. A runtime scanner must never manufacture a User
-// Principal merely to persist this system decision.
+// SystemAuditor creates audit attempts for trusted core work that has no
+// Principal. Begin is actor-less, for periodic continuity enforcement: a
+// runtime scanner must never manufacture a User Principal merely to persist
+// this system decision. BeginOnBehalf names the User whose work it is, for an
+// execution environment writing the candidate's Workspace on their behalf.
 // access.SystemAuditAdapter satisfies it and tests substitute a fake.
 type SystemAuditor interface {
 	Begin(context.Context, model.Action, model.Resource, model.RoleScopeType, string, string, map[string]any) (model.AuditEventID, error)
+	BeginOnBehalf(
+		context.Context, model.UserID, model.Action, model.Resource, model.RoleScopeType, string, string, map[string]any,
+	) (model.AuditEventID, error)
 	Fail(context.Context, model.AuditEventID, string) error
 }
 
@@ -165,6 +170,7 @@ type Dependencies struct {
 	NewWorkspaceEntry   func() model.AttemptWorkspaceEntryID
 	NewWorkspaceObject  func() model.AttemptWorkspaceObjectID
 	NewWorkspaceVersion func() model.WorkspaceContentVersion
+	NewEnvironment      func() model.AttemptEnvironmentBindingID
 	NewSubmission       func() model.SubmissionID
 	NewReceiptCode      func() model.SubmissionReceiptCode
 	// NewDomainEvent and NewJob propose the exam.attempt.submitted outbox row
@@ -205,22 +211,23 @@ type Service struct {
 	now           func() time.Time
 	operational   OperationalRecorder
 
-	newAttemptID         func() model.ExamAttemptID
-	newWorkspaceID       func() model.ExamAttemptWorkspaceID
-	newParticipationID   func() model.AttemptParticipationID
-	newConnectionID      func() model.AttemptConnectionID
-	newEvidenceID        func() model.IntegrityEvidenceID
-	newFlagID            func() model.IntegrityFlagID
-	newSuspensionID      func() model.AttemptSuspensionID
-	newFocusLossSignalID func() model.FocusLossSignalID
-	newDiscrepancyID     func() model.IntegrityDiscrepancyID
-	newWorkspaceEntryID  func() model.AttemptWorkspaceEntryID
-	newWorkspaceObjectID func() model.AttemptWorkspaceObjectID
-	newWorkspaceVersion  func() model.WorkspaceContentVersion
-	newSubmissionID      func() model.SubmissionID
-	newReceiptCode       func() model.SubmissionReceiptCode
-	newDomainEventID     func() model.DomainEventID
-	newJobID             func() model.JobID
+	newAttemptID            func() model.ExamAttemptID
+	newWorkspaceID          func() model.ExamAttemptWorkspaceID
+	newParticipationID      func() model.AttemptParticipationID
+	newConnectionID         func() model.AttemptConnectionID
+	newEvidenceID           func() model.IntegrityEvidenceID
+	newFlagID               func() model.IntegrityFlagID
+	newSuspensionID         func() model.AttemptSuspensionID
+	newFocusLossSignalID    func() model.FocusLossSignalID
+	newDiscrepancyID        func() model.IntegrityDiscrepancyID
+	newWorkspaceEntryID     func() model.AttemptWorkspaceEntryID
+	newWorkspaceObjectID    func() model.AttemptWorkspaceObjectID
+	newWorkspaceVersion     func() model.WorkspaceContentVersion
+	newEnvironmentBindingID func() model.AttemptEnvironmentBindingID
+	newSubmissionID         func() model.SubmissionID
+	newReceiptCode          func() model.SubmissionReceiptCode
+	newDomainEventID        func() model.DomainEventID
+	newJobID                func() model.JobID
 
 	liveControls     controlAdmission
 	deliveryControls controlAdmission
@@ -259,6 +266,7 @@ func New(deps Dependencies) (*Service, error) {
 		deps.NewWorkspaceEntry == nil ||
 		deps.NewWorkspaceObject == nil ||
 		deps.NewWorkspaceVersion == nil ||
+		deps.NewEnvironment == nil ||
 		deps.NewSubmission == nil ||
 		deps.NewReceiptCode == nil ||
 		deps.NewDomainEvent == nil ||
@@ -267,42 +275,43 @@ func New(deps Dependencies) (*Service, error) {
 	}
 
 	return &Service{
-		attempts:             deps.Persistence,
-		focusLoss:            deps.FocusLoss,
-		securityPreflight:    deps.SecurityPreflight,
-		nativeDelivery:       deps.NativeDelivery,
-		browserDelivery:      deps.BrowserDelivery,
-		deliveryBudget:       deps.DeliveryBudget,
-		workspaces:           deps.Workspace,
-		submissions:          deps.Submissions,
-		sittings:             deps.Sittings,
-		managers:             deps.Managers,
-		auditor:              deps.Auditor,
-		systemAuditor:        deps.SystemAuditor,
-		publisher:            deps.Publisher,
-		content:              deps.Content,
-		mail:                 deps.Mail,
-		desktopBuilds:        deps.DesktopBuilds,
-		now:                  deps.Now,
-		operational:          deps.Operational,
-		newAttemptID:         deps.NewAttemptID,
-		newWorkspaceID:       deps.NewWorkspaceID,
-		newParticipationID:   deps.NewParticipation,
-		newConnectionID:      deps.NewConnection,
-		newEvidenceID:        deps.NewEvidence,
-		newFlagID:            deps.NewFlag,
-		newSuspensionID:      deps.NewSuspension,
-		newFocusLossSignalID: deps.NewFocusLossSignal,
-		newDiscrepancyID:     deps.NewDiscrepancy,
-		newWorkspaceEntryID:  deps.NewWorkspaceEntry,
-		newWorkspaceObjectID: deps.NewWorkspaceObject,
-		newWorkspaceVersion:  deps.NewWorkspaceVersion,
-		newSubmissionID:      deps.NewSubmission,
-		newReceiptCode:       deps.NewReceiptCode,
-		newDomainEventID:     deps.NewDomainEvent,
-		newJobID:             deps.NewJob,
-		liveControls:         controlAdmission{lane: liveControlLane},
-		deliveryControls:     controlAdmission{lane: deliveryControlLane},
-		workspaceBudget:      newWorkspaceWriteBudget(workspaceWriteRates),
+		attempts:                deps.Persistence,
+		focusLoss:               deps.FocusLoss,
+		securityPreflight:       deps.SecurityPreflight,
+		nativeDelivery:          deps.NativeDelivery,
+		browserDelivery:         deps.BrowserDelivery,
+		deliveryBudget:          deps.DeliveryBudget,
+		workspaces:              deps.Workspace,
+		submissions:             deps.Submissions,
+		sittings:                deps.Sittings,
+		managers:                deps.Managers,
+		auditor:                 deps.Auditor,
+		systemAuditor:           deps.SystemAuditor,
+		publisher:               deps.Publisher,
+		content:                 deps.Content,
+		mail:                    deps.Mail,
+		desktopBuilds:           deps.DesktopBuilds,
+		now:                     deps.Now,
+		operational:             deps.Operational,
+		newAttemptID:            deps.NewAttemptID,
+		newWorkspaceID:          deps.NewWorkspaceID,
+		newParticipationID:      deps.NewParticipation,
+		newConnectionID:         deps.NewConnection,
+		newEvidenceID:           deps.NewEvidence,
+		newFlagID:               deps.NewFlag,
+		newSuspensionID:         deps.NewSuspension,
+		newFocusLossSignalID:    deps.NewFocusLossSignal,
+		newDiscrepancyID:        deps.NewDiscrepancy,
+		newWorkspaceEntryID:     deps.NewWorkspaceEntry,
+		newWorkspaceObjectID:    deps.NewWorkspaceObject,
+		newWorkspaceVersion:     deps.NewWorkspaceVersion,
+		newEnvironmentBindingID: deps.NewEnvironment,
+		newSubmissionID:         deps.NewSubmission,
+		newReceiptCode:          deps.NewReceiptCode,
+		newDomainEventID:        deps.NewDomainEvent,
+		newJobID:                deps.NewJob,
+		liveControls:            controlAdmission{lane: liveControlLane},
+		deliveryControls:        controlAdmission{lane: deliveryControlLane},
+		workspaceBudget:         newWorkspaceWriteBudget(workspaceWriteRates),
 	}, nil
 }

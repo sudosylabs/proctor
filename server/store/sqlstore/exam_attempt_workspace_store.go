@@ -42,7 +42,7 @@ func (s *SQLExamAttemptWorkspaceStore) List(
 
 func (s *SQLExamAttemptWorkspaceStore) ResolveFile(
 	ctx context.Context,
-	access store.CandidateAttemptAccess,
+	access store.ExamAttemptWorkspaceReadAccess,
 	entryID model.AttemptWorkspaceEntryID,
 ) (*store.CandidateWorkspaceContent, error) {
 	if !entryID.IsValid() {
@@ -52,10 +52,10 @@ func (s *SQLExamAttemptWorkspaceStore) ResolveFile(
 		ctx context.Context,
 		tx *sqlxTxWrapper,
 	) (*store.CandidateWorkspaceContent, error) {
-		if _, err := lockCandidateGuard(ctx, tx, access); err != nil {
+		if err := lockAttemptWorkspaceReadGuard(ctx, tx, access); err != nil {
 			return nil, err
 		}
-		return resolveCandidateWorkspaceFile(ctx, tx, access, entryID)
+		return resolveCandidateWorkspaceFile(ctx, tx, access.WorkspaceAttemptID(), entryID)
 	})
 }
 
@@ -72,13 +72,7 @@ type attemptWorkspaceMutationTargetRow struct {
 	ScheduledEndAt      time.Time    `db:"scheduled_end_at"`
 	ParticipationState  string       `db:"participation_state"`
 	Generation          int64        `db:"generation"`
-	CredentialHash      string       `db:"continuity_credential_hash"`
 	LeaseExpiresAt      time.Time    `db:"lease_expires_at"`
-	ConnectionState     string       `db:"connection_state"`
-	SessionArchivedAt   sql.NullTime `db:"session_archived_at"`
-	SessionRevokedAt    sql.NullTime `db:"session_revoked_at"`
-	SessionIdleExpiry   time.Time    `db:"session_idle_expires_at"`
-	SessionExpiry       time.Time    `db:"session_expires_at"`
 	UserArchivedAt      sql.NullTime `db:"user_archived_at"`
 	UserDisabledAt      sql.NullTime `db:"user_disabled_at"`
 	ClassArchived       sql.NullTime `db:"class_archived_at"`
@@ -86,45 +80,87 @@ type attemptWorkspaceMutationTargetRow struct {
 	ProgrammeArchived   sql.NullTime `db:"programme_archived_at"`
 	UnitArchived        sql.NullTime `db:"unit_archived_at"`
 	PeriodArchived      sql.NullTime `db:"period_archived_at"`
+
+	// The editor's Desktop proof.
+	CredentialHash    string       `db:"continuity_credential_hash"`
+	ConnectionState   string       `db:"connection_state"`
+	SessionArchivedAt sql.NullTime `db:"session_archived_at"`
+	SessionRevokedAt  sql.NullTime `db:"session_revoked_at"`
+	SessionIdleExpiry time.Time    `db:"session_idle_expires_at"`
+	SessionExpiry     time.Time    `db:"session_expires_at"`
+
+	// The execution environment's binding.
+	BindingGrantID     string       `db:"binding_grant_id"`
+	BindingEpoch       string       `db:"binding_epoch"`
+	BindingIncarnation int64        `db:"binding_incarnation"`
+	BindingEndedAt     sql.NullTime `db:"binding_ended_at"`
 }
 
-func validAttemptWorkspaceMutationAccess(access store.ExamAttemptWorkspaceMutationAccess) bool {
-	return access.AttemptID.IsValid() &&
-		access.ParticipationID.IsValid() &&
-		access.Generation > 0 &&
-		access.CandidateUserID.IsValid() &&
-		access.SessionID.IsValid() &&
-		access.DesktopRegistrationID.IsValid() &&
-		model.IsValidDPoPKeyThumbprint(access.DPoPKeyThumbprint) &&
-		access.ConnectionID.IsValid() &&
-		model.IsValidTokenHash(access.ContinuityCredentialHash)
+func validAttemptWorkspaceWriteAccess(access store.ExamAttemptWorkspaceWriteAccess) bool {
+	switch access := access.(type) {
+	case store.ExamAttemptWorkspaceEditorAccess:
+		return access.AttemptID.IsValid() &&
+			access.ParticipationID.IsValid() &&
+			access.Generation > 0 &&
+			access.CandidateUserID.IsValid() &&
+			access.SessionID.IsValid() &&
+			access.DesktopRegistrationID.IsValid() &&
+			model.IsValidDPoPKeyThumbprint(access.DPoPKeyThumbprint) &&
+			access.ConnectionID.IsValid() &&
+			model.IsValidTokenHash(access.ContinuityCredentialHash)
+	case store.ExamAttemptWorkspaceEnvironmentAccess:
+		return access.Valid()
+	default:
+		return false
+	}
 }
 
+// lockAttemptWorkspaceMutationTarget is the one write-access check of every
+// batch step. The access kind changes only how the writer is proved: the
+// editor by Session, key, Connection and credential, the environment by its
+// live binding. Membership, Sitting, Attempt, Participation and correction
+// gates are the same for both.
 func lockAttemptWorkspaceMutationTarget(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
-	access store.ExamAttemptWorkspaceMutationAccess,
+	access store.ExamAttemptWorkspaceWriteAccess,
 ) (*store.ExamAttemptWorkspaceMutationTarget, time.Time, error) {
-	if !validAttemptWorkspaceMutationAccess(access) {
+	if !validAttemptWorkspaceWriteAccess(access) {
 		return nil, time.Time{}, store.NewErrInvalidInput("attempt_workspace", "access", nil)
 	}
-	if err := lockAttemptWorkspaceEnrollmentFence(ctx, tx, access); err != nil {
-		return nil, time.Time{}, err
-	}
 
-	row, err := lockAttemptWorkspaceMutationRow(ctx, tx, access)
+	attemptID := access.WorkspaceAttemptID()
+	var candidateID model.UserID
+	var row attemptWorkspaceMutationTargetRow
+	var err error
+	switch access := access.(type) {
+	case store.ExamAttemptWorkspaceEditorAccess:
+		candidateID = access.CandidateUserID
+		if err = lockAttemptWorkspaceEnrollmentFence(ctx, tx, attemptID, candidateID); err != nil {
+			return nil, time.Time{}, err
+		}
+		row, err = lockAttemptWorkspaceEditorRow(ctx, tx, access)
+	case store.ExamAttemptWorkspaceEnvironmentAccess:
+		if candidateID, err = attemptCandidate(ctx, tx, attemptID); err != nil {
+			return nil, time.Time{}, err
+		}
+		if err = lockAttemptWorkspaceEnrollmentFence(ctx, tx, attemptID, candidateID); err != nil {
+			return nil, time.Time{}, err
+		}
+		row, err = lockAttemptWorkspaceEnvironmentRow(ctx, tx, access, candidateID)
+	}
 	if err != nil {
 		return nil, time.Time{}, err
 	}
 
-	databaseNow, err := lockAttemptWorkspaceMembership(ctx, tx, access, row.ClassID)
+	databaseNow, err := lockAttemptWorkspaceMembership(ctx, tx, attemptID, candidateID, row.ClassID)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
 	if err = checkAttemptWorkspaceMutationAccess(ctx, tx, access, row, databaseNow); err != nil {
 		return nil, time.Time{}, err
 	}
-	if err = lockSecurityInteraction(ctx, tx, access.AttemptID); err != nil {
+	if err = lockSecurityInteraction(ctx, tx, attemptID); err != nil {
 		return nil, time.Time{}, err
 	}
 
@@ -132,9 +168,33 @@ func lockAttemptWorkspaceMutationTarget(
 	return target, databaseNow, err
 }
 
+// attemptCandidate reads the candidate an Attempt belongs to, which never
+// changes, so an environment writer is resolved to the candidate before the
+// candidate-first lock order is taken.
+func attemptCandidate(ctx context.Context, tx *sqlxTxWrapper, attemptID model.ExamAttemptID) (model.UserID, error) {
+	var value string
+	if err := tx.Get(ctx, &value, `SELECT candidate_user_id FROM exam_attempts WHERE id = ?`, attemptID.String()); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", store.NewErrNotFound("attempt_workspace_access", attemptID.String())
+		}
+		return "", fmt.Errorf("resolve Attempt candidate: %w", err)
+	}
+
+	candidateID, err := model.ParseUserID(value)
+	if err != nil {
+		return "", invalidPersistedState("exam_attempt", "candidate_user_id", err)
+	}
+	return candidateID, nil
+}
+
 // lockAttemptWorkspaceEnrollmentFence resolves the Attempt's Academic Period
 // and locks the Candidate and their Class enrollment in that period.
-func lockAttemptWorkspaceEnrollmentFence(ctx context.Context, tx *sqlxTxWrapper, access store.ExamAttemptWorkspaceMutationAccess) error {
+func lockAttemptWorkspaceEnrollmentFence(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+) error {
 	var periodID string
 	if err := tx.Get(
 		ctx,
@@ -146,29 +206,29 @@ func lockAttemptWorkspaceEnrollmentFence(ctx context.Context, tx *sqlxTxWrapper,
 		JOIN classes cl ON cl.id = s.class_id
 		WHERE a.id = ?
 			AND a.candidate_user_id = ?`,
-		access.AttemptID.String(),
-		access.CandidateUserID.String(),
+		attemptID.String(),
+		candidateID.String(),
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return store.NewErrNotFound("attempt_workspace_access", access.AttemptID.String())
+			return store.NewErrNotFound("attempt_workspace_access", attemptID.String())
 		}
 		return fmt.Errorf("resolve Attempt Workspace enrollment fence: %w", err)
 	}
 
-	if err := lockCandidateUser(ctx, tx, access.CandidateUserID.String()); err != nil {
+	if err := lockCandidateUser(ctx, tx, candidateID.String()); err != nil {
 		return err
 	}
 
-	return lockClassEnrollment(ctx, tx, access.CandidateUserID.String(), periodID)
+	return lockClassEnrollment(ctx, tx, candidateID.String(), periodID)
 }
 
-// lockAttemptWorkspaceMutationRow locks the Attempt, its Participation,
+// lockAttemptWorkspaceEditorRow locks the Attempt, its Participation,
 // Connection and Workspace, and share-locks the Sitting, Session, Desktop
 // registration, User and academic structure behind them.
-func lockAttemptWorkspaceMutationRow(
+func lockAttemptWorkspaceEditorRow(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
-	access store.ExamAttemptWorkspaceMutationAccess,
+	access store.ExamAttemptWorkspaceEditorAccess,
 ) (attemptWorkspaceMutationTargetRow, error) {
 	var row attemptWorkspaceMutationTargetRow
 	err := tx.Get(
@@ -232,13 +292,72 @@ func lockAttemptWorkspaceMutationRow(
 	return row, nil
 }
 
+// lockAttemptWorkspaceEnvironmentRow locks the Attempt, the Participation
+// generation its binding names and the Workspace, and share-locks the binding,
+// Sitting, User and academic structure behind them. A concurrent rebind or
+// generation end therefore waits for the batch, or the batch sees it.
+func lockAttemptWorkspaceEnvironmentRow(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	access store.ExamAttemptWorkspaceEnvironmentAccess,
+	candidateID model.UserID,
+) (attemptWorkspaceMutationTargetRow, error) {
+	var row attemptWorkspaceMutationTargetRow
+	err := tx.Get(
+		ctx,
+		&row,
+		`SELECT a.exam_id, a.exam_sitting_id, s.class_id, a.candidate_user_id, w.id AS workspace_id,
+			a.admission_revision_id, s.exam_revision_id AS current_revision_id,
+			a.state AS attempt_state, s.state AS sitting_state, s.scheduled_end_at,
+			p.state AS participation_state, p.generation, p.lease_expires_at,
+			b.grant_id AS binding_grant_id, b.epoch AS binding_epoch,
+			b.incarnation AS binding_incarnation, b.ended_at AS binding_ended_at,
+			u.archived_at AS user_archived_at,
+			u.disabled_at AS user_disabled_at, cl.archived_at AS class_archived_at,
+			pl.archived_at AS level_archived_at, pr.archived_at AS programme_archived_at,
+			au.archived_at AS unit_archived_at, ap.archived_at AS period_archived_at
+		FROM exam_attempts a
+		JOIN exam_attempt_workspaces w ON w.exam_attempt_id = a.id
+		JOIN exam_sittings s ON s.id = a.exam_sitting_id
+			AND s.exam_id = a.exam_id
+		JOIN exam_attempt_environment_bindings b ON b.id = ?
+			AND b.exam_attempt_id = a.id
+		JOIN exam_attempt_participations p ON p.id = b.participation_id
+			AND p.exam_attempt_id = a.id
+			AND p.generation = b.generation
+		JOIN users u ON u.id = a.candidate_user_id
+		JOIN classes cl ON cl.id = s.class_id
+		JOIN programme_levels pl ON pl.id = cl.programme_level_id
+		JOIN programmes pr ON pr.id = pl.programme_id
+		JOIN academic_units au ON au.id = pr.academic_unit_id
+		JOIN academic_periods ap ON ap.id = cl.academic_period_id
+			AND ap.institution_id = au.institution_id
+		WHERE a.id = ?
+			AND a.candidate_user_id = ?
+		FOR UPDATE OF a, p, w
+		FOR SHARE OF b, s, u, cl, pl, pr, au, ap`,
+		access.BindingID.String(),
+		access.AttemptID.String(),
+		candidateID.String(),
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return row, store.NewErrNotFound("attempt_workspace_access", access.AttemptID.String())
+		}
+		return row, fmt.Errorf("lock Attempt Workspace environment access: %w", err)
+	}
+
+	return row, nil
+}
+
 // lockAttemptWorkspaceMembership share-locks the Candidate's Class membership
 // history, reads the decision instant, and requires exactly one current
 // membership at that instant.
 func lockAttemptWorkspaceMembership(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
-	access store.ExamAttemptWorkspaceMutationAccess,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
 	classID string,
 ) (time.Time, error) {
 	var memberships []struct {
@@ -251,7 +370,7 @@ func lockAttemptWorkspaceMembership(
 		WHERE class_id = ?
 			AND user_id = ?
 		ORDER BY start_at, id
-		FOR SHARE`, classID, access.CandidateUserID.String()); err != nil {
+		FOR SHARE`, classID, candidateID.String()); err != nil {
 		return time.Time{}, fmt.Errorf("lock Attempt Workspace membership history: %w", err)
 	}
 
@@ -271,30 +390,44 @@ func lockAttemptWorkspaceMembership(
 	}
 
 	if currentMemberships != 1 {
-		return time.Time{}, store.NewErrNotFound("attempt_workspace_access", access.AttemptID.String())
+		return time.Time{}, store.NewErrNotFound("attempt_workspace_access", attemptID.String())
 	}
 
 	return databaseNow, nil
 }
 
 // checkAttemptWorkspaceMutationAccess requires the current Participation
-// generation and credential, live Attempt and Sitting states, no pending
-// Workspace correction acknowledgement, and an active Session, User and
-// academic structure.
+// generation, the writer's proof (the editor's credential and open Connection
+// and active Session, or the environment's live matching binding), live
+// Attempt and Sitting states, no pending Workspace correction
+// acknowledgement, and an active User and academic structure.
 func checkAttemptWorkspaceMutationAccess(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
-	access store.ExamAttemptWorkspaceMutationAccess,
+	access store.ExamAttemptWorkspaceWriteAccess,
 	row attemptWorkspaceMutationTargetRow,
 	databaseNow time.Time,
 ) error {
-	if row.Generation != access.Generation {
-		return store.NewErrConflict("attempt_participation", "attempt_participation_generation", nil)
-	}
-
-	if subtle.ConstantTimeCompare([]byte(row.CredentialHash), []byte(access.ContinuityCredentialHash)) != 1 ||
-		row.ConnectionState != string(model.AttemptConnectionOpen) {
-		return store.NewErrConflict("attempt_participation", "attempt_participation_credential", nil)
+	attemptID := access.WorkspaceAttemptID()
+	switch access := access.(type) {
+	case store.ExamAttemptWorkspaceEditorAccess:
+		if row.Generation != access.Generation {
+			return store.NewErrConflict("attempt_participation", "attempt_participation_generation", nil)
+		}
+		if subtle.ConstantTimeCompare([]byte(row.CredentialHash), []byte(access.ContinuityCredentialHash)) != 1 ||
+			row.ConnectionState != string(model.AttemptConnectionOpen) {
+			return store.NewErrConflict("attempt_participation", "attempt_participation_credential", nil)
+		}
+	case store.ExamAttemptWorkspaceEnvironmentAccess:
+		if row.Generation != access.Generation {
+			return store.NewErrConflict("attempt_participation", "attempt_participation_generation", nil)
+		}
+		if row.BindingEndedAt.Valid ||
+			row.BindingGrantID != access.Identity.GrantID ||
+			row.BindingEpoch != access.Identity.Epoch ||
+			row.BindingIncarnation != access.Identity.Incarnation {
+			return store.NewErrConflict("attempt_environment_binding", "attempt_environment_binding_current", nil)
+		}
 	}
 
 	if row.ParticipationState != string(model.AttemptParticipationActive) || !databaseNow.Before(row.LeaseExpiresAt) {
@@ -310,7 +443,7 @@ func checkAttemptWorkspaceMutationAccess(
 	pendingAcknowledgement, err := hasPendingCandidateCorrectionCapability(
 		ctx,
 		tx,
-		access.AttemptID.String(),
+		attemptID.String(),
 		row.SittingID,
 		row.AdmissionRevisionID,
 		row.CurrentRevisionID,
@@ -323,21 +456,42 @@ func checkAttemptWorkspaceMutationAccess(
 		return store.NewErrConflict("attempt_workspace", "exam_correction_acknowledgement_required", nil)
 	}
 
-	if row.SessionArchivedAt.Valid ||
-		row.SessionRevokedAt.Valid ||
-		!databaseNow.Before(row.SessionIdleExpiry) ||
-		!databaseNow.Before(row.SessionExpiry) ||
-		row.UserArchivedAt.Valid ||
+	if _, editor := access.(store.ExamAttemptWorkspaceEditorAccess); editor &&
+		(row.SessionArchivedAt.Valid ||
+			row.SessionRevokedAt.Valid ||
+			!databaseNow.Before(row.SessionIdleExpiry) ||
+			!databaseNow.Before(row.SessionExpiry)) {
+		return store.NewErrNotFound("attempt_workspace_access", attemptID.String())
+	}
+	if row.UserArchivedAt.Valid ||
 		row.UserDisabledAt.Valid ||
 		row.ClassArchived.Valid ||
 		row.LevelArchived.Valid ||
 		row.ProgrammeArchived.Valid ||
 		row.UnitArchived.Valid ||
 		row.PeriodArchived.Valid {
-		return store.NewErrNotFound("attempt_workspace_access", access.AttemptID.String())
+		return store.NewErrNotFound("attempt_workspace_access", attemptID.String())
 	}
 
 	return nil
+}
+
+// lockAttemptWorkspaceReadGuard checks live read access for the candidate's
+// Desktop or for the environment bound to the current generation.
+func lockAttemptWorkspaceReadGuard(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	access store.ExamAttemptWorkspaceReadAccess,
+) error {
+	switch access := access.(type) {
+	case store.CandidateAttemptAccess:
+		_, err := lockCandidateGuard(ctx, tx, access)
+		return err
+	case store.ExamAttemptWorkspaceEnvironmentAccess:
+		return lockAttemptEnvironmentReadGuard(ctx, tx, access)
+	default:
+		return store.NewErrInvalidInput("attempt_workspace", "access", nil)
+	}
 }
 
 func attemptWorkspaceTarget(row attemptWorkspaceMutationTargetRow) (*store.ExamAttemptWorkspaceMutationTarget, error) {
@@ -467,7 +621,7 @@ func (s *SQLExamAttemptWorkspaceStore) ListJournal(
 		ctx context.Context,
 		tx *sqlxTxWrapper,
 	) (*store.CandidateWorkspaceJournalPage, error) {
-		if _, err := lockCandidateGuard(ctx, tx, options.Access); err != nil {
+		if err := lockAttemptWorkspaceReadGuard(ctx, tx, options.Access); err != nil {
 			return nil, err
 		}
 		return listAttemptWorkspaceJournalSnapshot(ctx, tx, options)
@@ -490,9 +644,9 @@ func listAttemptWorkspaceJournalSnapshot(
 		FROM exam_attempt_workspaces
 		WHERE exam_attempt_id = ?
 		FOR SHARE`,
-		options.Access.AttemptID.String(),
+		options.Access.WorkspaceAttemptID().String(),
 	); err != nil {
-		return nil, translateError("attempt_workspace", options.Access.AttemptID.String(), err)
+		return nil, translateError("attempt_workspace", options.Access.WorkspaceAttemptID().String(), err)
 	}
 
 	workspaceID, err := model.ParseExamAttemptWorkspaceID(workspace.ID)
@@ -532,12 +686,13 @@ func listAttemptWorkspaceJournalSnapshot(
 		ContentVersion sql.NullString `db:"content_version"`
 		ChangedAt      time.Time      `db:"changed_at"`
 		Recursive      bool           `db:"recursive"`
+		Origin         string         `db:"origin"`
 	}
 	if err = tx.Select(
 		ctx,
 		&rows,
 		`SELECT cursor, entry_id, entry_kind, operation, old_path, new_path, content_version,
-			changed_at, recursive
+			changed_at, recursive, origin
 		FROM exam_attempt_workspace_journal
 		WHERE workspace_id = ?
 			AND cursor > ?
@@ -582,6 +737,7 @@ func listAttemptWorkspaceJournalSnapshot(
 			ContentVersion: version,
 			ChangedAt:      model.TimeUTC(row.ChangedAt),
 			Recursive:      row.Recursive,
+			Origin:         model.AttemptWorkspaceOrigin(row.Origin),
 		}
 		if parseErr = entry.Validate(); parseErr != nil {
 			return nil, invalidPersistedState("attempt_workspace_journal", "value", parseErr)
@@ -1223,6 +1379,7 @@ func appendAttemptWorkspaceJournal(
 	oldPath, newPath string,
 	version model.WorkspaceContentVersion,
 	recursive bool,
+	origin model.AttemptWorkspaceOrigin,
 	keyDigest []byte,
 	databaseNow time.Time,
 ) (*model.AttemptWorkspaceJournalEntry, error) {
@@ -1251,6 +1408,7 @@ func appendAttemptWorkspaceJournal(
 		ContentVersion: version,
 		ChangedAt:      databaseNow,
 		Recursive:      recursive,
+		Origin:         origin,
 	}
 	if err := change.Validate(); err != nil {
 		return nil, store.NewErrInvalidInput("attempt_workspace_journal", "change", nil).Wrap(err)
@@ -1260,9 +1418,9 @@ func appendAttemptWorkspaceJournal(
 		ctx,
 		`INSERT INTO exam_attempt_workspace_journal (
 			workspace_id, cursor, entry_id, entry_kind, operation, old_path, new_path,
-				content_version, mutation_key_digest, changed_at, recursive
+				content_version, mutation_key_digest, changed_at, recursive, origin
 		)
-		VALUES (?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?, ?)`,
 		workspaceID.String(),
 		cursor,
 		entryID.String(),
@@ -1274,6 +1432,7 @@ func appendAttemptWorkspaceJournal(
 		keyDigest,
 		databaseNow,
 		recursive,
+		string(origin),
 	); err != nil {
 		return nil, fmt.Errorf("append Attempt Workspace journal: %w", err)
 	}

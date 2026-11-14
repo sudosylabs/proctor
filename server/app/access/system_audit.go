@@ -62,6 +62,38 @@ func (a SystemAuditAdapter) BeginJob(
 	return a.begin(ctx, action, resource, scopeType, scopeID, operation, auditValue)
 }
 
+// BeginOnBehalf persists the attempt of a mutation trusted core work makes on
+// a User's behalf outside any request of theirs, and names that User as the
+// actor. The event has no Session, client or request identity, because none
+// exists. An execution environment writing a candidate's Workspace is the one
+// such writer: the change is the candidate's own work, and there is no plugin
+// principal to attribute it to instead.
+func (a SystemAuditAdapter) BeginOnBehalf(
+	ctx context.Context,
+	actor model.UserID,
+	action model.Action,
+	resource model.Resource,
+	scopeType model.RoleScopeType,
+	scopeID,
+	operation string,
+	value map[string]any,
+) (model.AuditEventID, error) {
+	event, err := a.audit.BeginOnBehalfAtScope(
+		ctx,
+		actor,
+		action,
+		resource,
+		scopeType,
+		scopeID,
+		map[string]any{"operation": operation, "value": value},
+	)
+	if err != nil {
+		return "", err
+	}
+
+	return event.ID, nil
+}
+
 func (a SystemAuditAdapter) begin(
 	ctx context.Context,
 	action model.Action,

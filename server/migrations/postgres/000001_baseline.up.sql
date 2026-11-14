@@ -1948,6 +1948,7 @@ CREATE TABLE exam_attempt_workspace_journal (
     mutation_key_digest bytea NOT NULL CHECK (octet_length(mutation_key_digest) = 32),
     changed_at timestamptz NOT NULL,
     recursive boolean NOT NULL DEFAULT false,
+    origin varchar(16) NOT NULL CHECK (origin IN ('editor', 'environment')),
     CONSTRAINT exam_attempt_workspace_journal_recursive_check CHECK (
         NOT recursive OR (operation = 'delete_entry' AND entry_kind = 'directory')
     ),
@@ -1998,6 +1999,32 @@ CREATE INDEX exam_attempt_participations_expiry_idx
 CREATE INDEX exam_attempt_participations_session_active_idx
     ON exam_attempt_participations (session_id, exam_attempt_id)
     WHERE state = 'active';
+
+-- An execution environment writes the Attempt Workspace on the candidate's
+-- behalf only through its live binding to the Attempt's current Participation
+-- generation. The grant, epoch and incarnation are opaque execenv identities;
+-- a grant and epoch pair is never bound twice. Ending the generation ends the
+-- binding in the same transaction, and a newer incarnation replaces it.
+CREATE TABLE exam_attempt_environment_bindings (
+    id varchar(26) PRIMARY KEY,
+    exam_attempt_id varchar(26) NOT NULL,
+    participation_id varchar(26) NOT NULL,
+    generation bigint NOT NULL CHECK (generation > 0),
+    grant_id varchar(64) NOT NULL CHECK (grant_id ~ '^[A-Za-z0-9._:-]{1,64}$'),
+    epoch varchar(128) NOT NULL CHECK (epoch ~ '^[A-Za-z0-9._:-]{1,128}$'),
+    incarnation bigint NOT NULL CHECK (incarnation >= 0),
+    created_at timestamptz NOT NULL,
+    ended_at timestamptz CHECK (ended_at >= created_at),
+    UNIQUE (grant_id, epoch),
+    CONSTRAINT exam_attempt_environment_bindings_participation_fkey
+        FOREIGN KEY (participation_id, exam_attempt_id, generation)
+        REFERENCES exam_attempt_participations(id, exam_attempt_id, generation)
+);
+
+CREATE UNIQUE INDEX exam_attempt_environment_bindings_one_live_key
+    ON exam_attempt_environment_bindings (exam_attempt_id) WHERE ended_at IS NULL;
+CREATE INDEX exam_attempt_environment_bindings_participation_idx
+    ON exam_attempt_environment_bindings (participation_id, exam_attempt_id, generation);
 
 CREATE TABLE exam_attempt_connections (
     id varchar(26) PRIMARY KEY,
@@ -2260,6 +2287,42 @@ $$;
 CREATE TRIGGER exam_attempt_participations_guard
     BEFORE UPDATE ON exam_attempt_participations FOR EACH ROW
     EXECUTE FUNCTION guard_attempt_participation_mutation();
+
+-- Every path that ends a Participation generation (lease expiry, Kick, policy
+-- suspension, Session revocation, Submission, manager end, automatic seal)
+-- ends that generation's live environment binding in the same transaction.
+-- A trigger makes this hold for paths added later too.
+CREATE FUNCTION end_environment_binding_with_participation() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF OLD.state = 'active' AND NEW.state = 'ended' THEN
+        UPDATE exam_attempt_environment_bindings b
+           SET ended_at = GREATEST(NEW.ended_at, b.created_at)
+         WHERE b.participation_id = NEW.id AND b.ended_at IS NULL;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER exam_attempt_participations_end_environment_binding
+    AFTER UPDATE OF state ON exam_attempt_participations FOR EACH ROW
+    EXECUTE FUNCTION end_environment_binding_with_participation();
+
+CREATE FUNCTION guard_attempt_environment_binding_mutation() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.id IS DISTINCT FROM OLD.id OR NEW.exam_attempt_id IS DISTINCT FROM OLD.exam_attempt_id OR
+       NEW.participation_id IS DISTINCT FROM OLD.participation_id OR NEW.generation IS DISTINCT FROM OLD.generation OR
+       NEW.grant_id IS DISTINCT FROM OLD.grant_id OR NEW.epoch IS DISTINCT FROM OLD.epoch OR
+       NEW.incarnation IS DISTINCT FROM OLD.incarnation OR NEW.created_at IS DISTINCT FROM OLD.created_at OR
+       OLD.ended_at IS NOT NULL THEN
+        RAISE EXCEPTION 'Attempt environment binding identity or terminal state changed' USING ERRCODE = '55000';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER exam_attempt_environment_bindings_guard
+    BEFORE UPDATE ON exam_attempt_environment_bindings FOR EACH ROW
+    EXECUTE FUNCTION guard_attempt_environment_binding_mutation();
 
 CREATE FUNCTION guard_attempt_connection_mutation() RETURNS trigger
 LANGUAGE plpgsql AS $$
@@ -3944,6 +4007,47 @@ CREATE TABLE plugin_settings (
     ),
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL CHECK (updated_at >= created_at)
+);
+
+-- Each plugin's own documents, named by kind and key within the plugin and
+-- fenced by their revision. They are operational state, not audited, and
+-- outlive the plugin being turned off. Keys compare bytewise, so a key
+-- prefix bounds an index range. The store bounds a document at 64 KiB in
+-- compact form; PostgreSQL's text form adds spacing, so the check here is a
+-- looser backstop.
+CREATE TABLE plugin_records (
+    plugin_id varchar(64) NOT NULL CHECK (plugin_id ~ '^[a-z][a-z0-9.-]{0,63}$'),
+    kind varchar(64) NOT NULL CHECK (kind ~ '^[a-z][a-z0-9_.-]{0,63}$'),
+    key varchar(256) COLLATE "C" NOT NULL
+        CHECK (key ~ '^[A-Za-z0-9._~:@=+-]+(/[A-Za-z0-9._~:@=+-]+)*$'),
+    revision bigint NOT NULL CHECK (revision > 0),
+    document jsonb NOT NULL CHECK (
+        jsonb_typeof(document) = 'object' AND
+        octet_length(document::text) <= 196608
+    ),
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL CHECK (updated_at >= created_at),
+    PRIMARY KEY (plugin_id, kind, key)
+);
+
+-- Fences for plugin_leases. One sequence for every key keeps a key's fences
+-- growing after its row is released and deleted.
+CREATE SEQUENCE plugin_lease_fences AS bigint;
+
+-- One node's fenced, PostgreSQL-clocked claim on one of a plugin's keys.
+-- Disposable runtime state: an expired row is free to claim.
+CREATE TABLE plugin_leases (
+    plugin_id varchar(64) NOT NULL CHECK (plugin_id ~ '^[a-z][a-z0-9.-]{0,63}$'),
+    key varchar(256) COLLATE "C" NOT NULL
+        CHECK (key ~ '^[A-Za-z0-9._~:@=+-]+(/[A-Za-z0-9._~:@=+-]+)*$'),
+    node_id varchar(128) NOT NULL CHECK (char_length(node_id) > 0),
+    fence bigint NOT NULL CHECK (fence > 0),
+    acquired_at timestamptz NOT NULL,
+    renewed_at timestamptz NOT NULL,
+    expires_at timestamptz NOT NULL,
+    PRIMARY KEY (plugin_id, key),
+    CONSTRAINT plugin_leases_lifetime_check
+        CHECK (renewed_at >= acquired_at AND expires_at > renewed_at)
 );
 
 CREATE TABLE access_policy_transitions (

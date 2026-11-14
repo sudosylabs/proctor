@@ -979,7 +979,7 @@ type CandidateAttemptWorkspaceItem struct {
 // require a nonnegative exact ExpectedCursor and a valid AfterEntryID. An
 // advanced aggregate returns RefreshRequired with no Items. Limit is 1..200.
 type CandidateWorkspaceListOptions struct {
-	Access         CandidateAttemptAccess
+	Access         ExamAttemptWorkspaceReadAccess
 	ExpectedCursor int64
 	AfterEntryID   model.AttemptWorkspaceEntryID
 	Limit          int

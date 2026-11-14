@@ -7328,6 +7328,11 @@ export interface components {
             old_path?: components["schemas"]["StarterWorkspacePath"];
             /** @enum {string} */
             operation: "create_file" | "create_directory" | "replace_file" | "move_entry" | "delete_entry";
+            /**
+             * @description Which writer made the change. Both write as the candidate; `editor` is the candidate's Desktop editor and `environment` is the Exam's execution environment, writing the candidate's work back on their behalf.
+             * @enum {string}
+             */
+            origin: "editor" | "environment";
             /** @description When true, this directory deletion removes old_path and all descendants whose paths start with old_path followed by a slash. Clients apply the entire subtree removal at this one cursor. */
             recursive?: boolean;
         };

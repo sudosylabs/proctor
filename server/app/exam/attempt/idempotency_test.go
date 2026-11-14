@@ -43,7 +43,6 @@ func TestWorkspaceBatchFingerprintCompatibility(t *testing.T) {
 	entryID := model.NewAttemptWorkspaceEntryID()
 	version := model.WorkspaceContentVersion("aaaaaaaaaaaaaaaaaaaaaaaaaa")
 	digest := strings.Repeat("a", 64)
-	inv := invocation.New(model.Principal{UserID: userID}, model.RequestMetadata{})
 	cursor := int64(7)
 	tests := []struct {
 		name     string
@@ -89,7 +88,8 @@ func TestWorkspaceBatchFingerprintCompatibility(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			prepared, err := prepareWorkspaceBatchIdempotency(inv, "execution-key", attemptID, []WorkspaceBatchMutation{test.mutation}, test.cursor)
+			prepared, err := prepareWorkspaceBatchIdempotency(userID, model.AttemptWorkspaceOriginEditor, "execution-key", attemptID,
+				[]WorkspaceBatchMutation{test.mutation}, test.cursor)
 			require.NoError(t, err)
 			outer := fmt.Sprintf(`{"exam_attempt_id":%q,"mutations":[%s]}`, attemptID, test.document)
 			if test.cursor != nil {
@@ -103,16 +103,21 @@ func TestWorkspaceBatchFingerprintCompatibility(t *testing.T) {
 
 func TestWorkspaceBatchFingerprintFollowsOrderAndPaths(t *testing.T) {
 	t.Parallel()
-	inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+	userID := model.NewUserID()
 	attemptID := model.NewExamAttemptID()
 	directory := WorkspaceBatchMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory, DestinationPath: "src"}
 	file := WorkspaceBatchMutation{Operation: model.AttemptWorkspaceMutationCreateFile, DestinationPath: "src/main.go",
 		MediaType: "text/plain", SHA256: strings.Repeat("a", 64), Size: 4}
+	fingerprintFrom := func(origin model.AttemptWorkspaceOrigin, mutations ...WorkspaceBatchMutation) [32]byte {
+		t.Helper()
+		prepared, err := prepareWorkspaceBatchIdempotency(userID, origin, "batch-key", attemptID, mutations, nil)
+		require.NoError(t, err)
+		require.Equal(t, userID, prepared.UserID, "the outcome is keyed under the candidate for every writer")
+		return prepared.Fingerprint
+	}
 	fingerprint := func(mutations ...WorkspaceBatchMutation) [32]byte {
 		t.Helper()
-		prepared, err := prepareWorkspaceBatchIdempotency(inv, "batch-key", attemptID, mutations, nil)
-		require.NoError(t, err)
-		return prepared.Fingerprint
+		return fingerprintFrom(model.AttemptWorkspaceOriginEditor, mutations...)
 	}
 
 	original := fingerprint(directory, file)
@@ -122,6 +127,8 @@ func TestWorkspaceBatchFingerprintFollowsOrderAndPaths(t *testing.T) {
 	renamed.DestinationPath = "src/other.go"
 	require.NotEqual(t, original, fingerprint(directory, renamed), "paths are part of the batch")
 	require.NotEqual(t, original, fingerprint(directory), "every mutation is part of the batch")
+	require.NotEqual(t, original, fingerprintFrom(model.AttemptWorkspaceOriginEnvironment, directory, file),
+		"an environment batch never replays as the editor's")
 }
 
 func TestCommandIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) {

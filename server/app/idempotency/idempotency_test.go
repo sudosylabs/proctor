@@ -69,3 +69,21 @@ func TestRequireRejectsEmptyKeyBeforeEncoding(t *testing.T) {
 	require.Nil(t, got, "Require empty key = %#v, %v; want idempotency.key_required", got, err)
 	require.True(t, apperror.Is(err, "idempotency.key_required"), "Require empty key = %#v, %v; want idempotency.key_required", got, err)
 }
+
+func TestRequireForKeysTheOutcomeUnderTheNamedUser(t *testing.T) {
+	t.Parallel()
+	candidateID := model.NewUserID()
+	semantic := struct {
+		AttemptID string `json:"exam_attempt_id"`
+	}{"attempt-1"}
+	got, err := RequireFor(candidateID, "exam.attempt.workspace.batch", "harvest-key", semantic)
+	require.NoError(t, err)
+	viaCaller, err := Require(caller(candidateID), "exam.attempt.workspace.batch", "harvest-key", semantic)
+	require.NoError(t, err)
+	require.Equal(t, viaCaller, got, "a command on the User's behalf is keyed exactly as the User's own")
+
+	_, err = RequireFor(candidateID, "operation", "", semantic)
+	require.True(t, apperror.Is(err, "idempotency.key_required"), "RequireFor empty key error = %v", err)
+	_, err = RequireFor("", "operation", "key", semantic)
+	require.True(t, apperror.Is(err, "idempotency.key_invalid"), "RequireFor invalid user error = %v", err)
+}

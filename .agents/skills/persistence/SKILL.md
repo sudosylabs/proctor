@@ -240,6 +240,22 @@ across a daylight-saving transition.
   order stays with the operation that takes the locks. Command idempotency
   fences use `lockCommandIdempotency`.
 
+## Plugin persistence
+
+Plugins never receive a Store contract, SQL or migrations. Their state lives
+in two core tables behind `PluginRecordStore` and `PluginLeaseStore`, which
+the root adapts into `pluginhost` ports; every row carries the plugin ID the
+host supplies, and no operation crosses plugins. Records are revisioned JSON
+objects of at most 64 KiB in compact form, written by single-statement
+compare-and-swap and deliberately unaudited, because they are operational
+state rather than security-sensitive changes; a disabled plugin's records are
+kept. Leases follow the serving-lease clock rule: `clock_timestamp()` decides
+claim, renewal and expiry in one statement, an expired lease is lost even if
+nobody took it, and fences come from one sequence so a released, deleted row
+can never hand out an old fence again. Only reads, renewal and release are on
+the retry allowlist; a retried claim or Put could take a second fence or
+report a conflict for its own commit.
+
 ## Examination persistence
 
 The examination boundary is divided into cohesive Store contracts for Exam

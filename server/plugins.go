@@ -33,9 +33,31 @@ func builtinPlugins() []plugin.Plugin {
 	}
 }
 
+// pluginRuntime is what the plugins' record store and workers' leases run
+// on. Its zero value gives plugins neither.
+type pluginRuntime struct {
+	records pluginhost.RecordStore
+	leases  pluginhost.LeaseStore
+	nodeID  string
+}
+
+// pluginRuntime is the plugin runtime over the acquired store and cluster
+// transport.
+func (i *ownedInfrastructure) pluginRuntime() pluginRuntime {
+	var runtime pluginRuntime
+	if i.resources.Persistence != nil {
+		runtime.records = newStorePluginRecords(i.resources.Persistence.PluginRecord())
+		runtime.leases = newStorePluginLeases(i.resources.Persistence.PluginLease())
+	}
+	if i.resources.Cluster != nil {
+		runtime.nodeID = i.resources.Cluster.NodeID()
+	}
+	return runtime
+}
+
 // activatePlugins activates the built-in plugins, then any a test adds,
 // with the settings an administrator saved and the secrets in the Plugins
-// configuration section. It returns the host and the settings change count
+// configuration section, over runtime. It returns the host and the settings change count
 // it read, from which the reconciler continues. A plugin that fails to
 // activate is logged and left out; a configuration mistake, such as secrets
 // for a plugin that is not compiled in, or unreadable saved settings, fails
@@ -44,6 +66,7 @@ func activatePlugins(
 	ctx context.Context,
 	cfg config.Config,
 	saved store.PluginSettingsStore,
+	runtime pluginRuntime,
 	logger *logging.Logger,
 	recorder pluginhost.Recorder,
 	extra []plugin.Plugin,
@@ -64,6 +87,9 @@ func activatePlugins(
 		Settings: desiredPlugins(known, rows, cfg, logger),
 		Logger:   logger.Slog(),
 		Recorder: recorder,
+		Records:  runtime.records,
+		Leases:   runtime.leases,
+		NodeID:   runtime.nodeID,
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("activate plugins: %w", err)

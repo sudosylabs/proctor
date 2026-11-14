@@ -198,6 +198,7 @@ func newFixture(t *testing.T) *fixture {
 		NewWorkspaceEntry:   func() model.AttemptWorkspaceEntryID { return entryIDOrNew(f.workspace) },
 		NewWorkspaceObject:  model.NewAttemptWorkspaceObjectID,
 		NewWorkspaceVersion: func() model.WorkspaceContentVersion { return workspaceVersionOrNew(f.workspace) },
+		NewEnvironment:      model.NewAttemptEnvironmentBindingID,
 		NewSubmission: func() model.SubmissionID {
 			if f.submissionID.IsValid() {
 				return f.submissionID
@@ -339,6 +340,21 @@ type systemAuditFake struct {
 	f          *fixture
 	values     map[string]any
 	failedCode string
+	actor      model.UserID
+	action     model.Action
+	resource   model.Resource
+	scopeType  model.RoleScopeType
+	scopeID    string
+	operation  string
+}
+
+func (f *systemAuditFake) BeginOnBehalf(_ context.Context, actor model.UserID, action model.Action, resource model.Resource,
+	scopeType model.RoleScopeType, scopeID, operation string, values map[string]any,
+) (model.AuditEventID, error) {
+	f.f.order = append(f.f.order, "system.audit.on_behalf")
+	f.actor, f.action, f.resource, f.scopeType, f.scopeID, f.operation, f.values =
+		actor, action, resource, scopeType, scopeID, operation, values
+	return model.NewAuditEventID(), nil
 }
 
 func (f *systemAuditFake) Begin(_ context.Context, _ model.Action, _ model.Resource, _ model.RoleScopeType, _, _ string, values map[string]any) (model.AuditEventID, error) {

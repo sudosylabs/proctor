@@ -32,12 +32,41 @@ func IsValidWorkspaceSHA256(value string) bool {
 	return err == nil
 }
 
-// ExamAttemptWorkspaceMutationAccess is the complete hash-only selector for a
-// candidate write. Persistence rechecks the current Class membership, Open
-// Sitting, Active Attempt, exact active unexpired Participation generation,
-// and owning Session-bound open Connection once per reservation, readiness
-// and batch, and on every exact replay.
-type ExamAttemptWorkspaceMutationAccess struct {
+// ExamAttemptWorkspaceWriteAccess names who writes one batch. It is one of
+// two kinds, and both write as the candidate through their current
+// Participation generation:
+//
+//   - ExamAttemptWorkspaceEditorAccess: the candidate's own Desktop, proved by
+//     Session, registered key, open Connection and continuity credential.
+//   - ExamAttemptWorkspaceEnvironmentAccess: an execution environment on the
+//     candidate's behalf, proved by its live environment binding.
+//
+// Persistence rechecks the chosen kind once per reservation, readiness and
+// batch, and on every exact replay. Everything else a write requires is the
+// same for both kinds: current Class membership, Open Sitting before its
+// deadline, Active Attempt, the exact active unexpired Participation
+// generation and no pending Workspace correction acknowledgement.
+type ExamAttemptWorkspaceWriteAccess interface {
+	// WorkspaceAttemptID is the Attempt whose Workspace is written.
+	WorkspaceAttemptID() model.ExamAttemptID
+	// WorkspaceOrigin is the journal origin of the writer's changes.
+	WorkspaceOrigin() model.AttemptWorkspaceOrigin
+	examAttemptWorkspaceWriteAccess()
+}
+
+// ExamAttemptWorkspaceReadAccess names who reads the live Attempt Workspace:
+// the candidate's Desktop (CandidateAttemptAccess) or the execution
+// environment bound to the current Participation generation
+// (ExamAttemptWorkspaceEnvironmentAccess).
+type ExamAttemptWorkspaceReadAccess interface {
+	WorkspaceAttemptID() model.ExamAttemptID
+	examAttemptWorkspaceReadAccess()
+}
+
+// ExamAttemptWorkspaceEditorAccess is the complete hash-only selector for a
+// candidate's own write from Desktop. It additionally requires the owning
+// Session-bound open Connection, registered key and continuity credential.
+type ExamAttemptWorkspaceEditorAccess struct {
 	AttemptID                model.ExamAttemptID
 	ParticipationID          model.AttemptParticipationID
 	Generation               int64
@@ -47,6 +76,85 @@ type ExamAttemptWorkspaceMutationAccess struct {
 	DPoPKeyThumbprint        string
 	ConnectionID             model.AttemptConnectionID
 	ContinuityCredentialHash string
+}
+
+func (a ExamAttemptWorkspaceEditorAccess) WorkspaceAttemptID() model.ExamAttemptID {
+	return a.AttemptID
+}
+
+func (ExamAttemptWorkspaceEditorAccess) WorkspaceOrigin() model.AttemptWorkspaceOrigin {
+	return model.AttemptWorkspaceOriginEditor
+}
+
+func (ExamAttemptWorkspaceEditorAccess) examAttemptWorkspaceWriteAccess() {}
+
+// ExamAttemptWorkspaceEnvironmentAccess is the selector an execution
+// environment writes and reads through, on the candidate's behalf. It names
+// the binding and repeats the identity and generation it was made for;
+// persistence requires that binding to be live and to match all of them, and
+// the generation to be the Attempt's current active Participation with an
+// unexpired lease. No Session, key, Connection or continuity credential is
+// involved: the binding is the core's own proof that the environment belongs
+// to this generation. The candidate is resolved from the Attempt.
+type ExamAttemptWorkspaceEnvironmentAccess struct {
+	AttemptID  model.ExamAttemptID
+	BindingID  model.AttemptEnvironmentBindingID
+	Identity   model.AttemptEnvironmentIdentity
+	Generation int64
+}
+
+func (a ExamAttemptWorkspaceEnvironmentAccess) WorkspaceAttemptID() model.ExamAttemptID {
+	return a.AttemptID
+}
+
+func (ExamAttemptWorkspaceEnvironmentAccess) WorkspaceOrigin() model.AttemptWorkspaceOrigin {
+	return model.AttemptWorkspaceOriginEnvironment
+}
+
+// Valid reports whether every selector field is well formed.
+func (a ExamAttemptWorkspaceEnvironmentAccess) Valid() bool {
+	return a.AttemptID.IsValid() && a.BindingID.IsValid() && a.Identity.Validate() == nil && a.Generation > 0
+}
+
+func (ExamAttemptWorkspaceEnvironmentAccess) examAttemptWorkspaceWriteAccess() {}
+
+func (ExamAttemptWorkspaceEnvironmentAccess) examAttemptWorkspaceReadAccess() {}
+
+func (a CandidateAttemptAccess) WorkspaceAttemptID() model.ExamAttemptID { return a.AttemptID }
+
+func (CandidateAttemptAccess) examAttemptWorkspaceReadAccess() {}
+
+// ExamAttemptEnvironmentBind binds an execution environment identity to the
+// Attempt's current Participation generation. BindingID is the proposed
+// identity of a new binding.
+type ExamAttemptEnvironmentBind struct {
+	BindingID  model.AttemptEnvironmentBindingID
+	AttemptID  model.ExamAttemptID
+	Generation int64
+	Identity   model.AttemptEnvironmentIdentity
+}
+
+// ExamAttemptEnvironmentBindResult is the live binding. Replaced is the
+// binding of an earlier incarnation for the same generation that this one
+// ended. Repeated reports that the identical binding was already live and
+// nothing changed.
+type ExamAttemptEnvironmentBindResult struct {
+	Binding  model.AttemptEnvironmentBinding
+	Replaced *model.AttemptEnvironmentBinding
+	Repeated bool
+}
+
+// ExamAttemptEnvironmentBindingEnd ends one binding of the Attempt.
+type ExamAttemptEnvironmentBindingEnd struct {
+	AttemptID model.ExamAttemptID
+	BindingID model.AttemptEnvironmentBindingID
+}
+
+// ExamAttemptEnvironmentBindingEndResult is the ended binding. Changed is
+// false when it had already ended.
+type ExamAttemptEnvironmentBindingEndResult struct {
+	Binding model.AttemptEnvironmentBinding
+	Changed bool
 }
 
 // ExamAttemptWorkspaceMutationTarget is the bounded preflight projection used
@@ -67,7 +175,7 @@ type ExamAttemptWorkspaceMutationTarget struct {
 // supplies CreatedAt and ExpiresAt using its clock. Exact repeats of the same
 // unused ObjectID keep the same reservation.
 type ExamAttemptWorkspaceObjectReservation struct {
-	Access    ExamAttemptWorkspaceMutationAccess
+	Access    ExamAttemptWorkspaceWriteAccess
 	ObjectIDs []model.AttemptWorkspaceObjectID
 }
 
@@ -76,7 +184,7 @@ type ExamAttemptWorkspaceObjectReservation struct {
 // object key or backend revision. Exact repeats with identical content are
 // idempotent; different content conflicts.
 type ExamAttemptWorkspaceObjectsReady struct {
-	Access  ExamAttemptWorkspaceMutationAccess
+	Access  ExamAttemptWorkspaceWriteAccess
 	Objects []ExamAttemptWorkspaceReadyObject
 }
 
@@ -115,7 +223,7 @@ type ExamAttemptWorkspaceMutation struct {
 // deletes recursively, and fences the cursor the batch starts from; other
 // batches omit it so unrelated entries may commute.
 type ExamAttemptWorkspaceBatch struct {
-	Access                  ExamAttemptWorkspaceMutationAccess
+	Access                  ExamAttemptWorkspaceWriteAccess
 	Mutations               []ExamAttemptWorkspaceMutation
 	ExpectedWorkspaceCursor *int64
 	AuditEventID            model.AuditEventID
@@ -123,9 +231,9 @@ type ExamAttemptWorkspaceBatch struct {
 }
 
 // ExamAttemptWorkspaceBatchResult is the safe acknowledged state. Changes has
-// one journal entry per mutation, in order, at consecutive cursors. It carries
-// no mutation-key digest, object selector, credential, Session, or content
-// body.
+// one journal entry per mutation, in order, at consecutive cursors, each with
+// the batch's origin. It carries no mutation-key digest, object selector,
+// credential, Session, binding, or content body.
 type ExamAttemptWorkspaceBatchResult struct {
 	SittingID       model.ExamSittingID
 	ClassID         model.ClassID
@@ -137,7 +245,8 @@ type ExamAttemptWorkspaceBatchResult struct {
 
 // ConsistentWith reports whether the result names the resolved target's
 // Sitting, Class, candidate and Attempt Workspace, and carries one valid
-// change per mutation, of the requested operation, in that workspace, at
+// change per mutation, of the requested operation and the writer's origin,
+// in that workspace, at
 // consecutive positive cursors, for the proposed entry unless it replays an
 // earlier batch. It reads target, which the caller has already checked.
 //
@@ -145,6 +254,7 @@ type ExamAttemptWorkspaceBatchResult struct {
 // every real result.
 func (r *ExamAttemptWorkspaceBatchResult) ConsistentWith(
 	target *ExamAttemptWorkspaceMutationTarget,
+	origin model.AttemptWorkspaceOrigin,
 	mutations []ExamAttemptWorkspaceMutation,
 ) bool {
 	if r == nil ||
@@ -159,6 +269,7 @@ func (r *ExamAttemptWorkspaceBatchResult) ConsistentWith(
 		if change.Validate() != nil ||
 			change.WorkspaceID != r.WorkspaceID ||
 			change.Operation != mutations[index].Operation ||
+			change.Origin != origin ||
 			change.Cursor < 1 ||
 			(index > 0 && change.Cursor != r.Changes[index-1].Cursor+1) ||
 			(!r.Replayed && change.EntryID != mutations[index].EntryID) {
@@ -185,7 +296,7 @@ func (e *ErrAttemptWorkspaceBatchItem) Unwrap() error { return e.Err }
 // numeric cursor. Limit is 1..200. Paths remain in the protected response body
 // and never enter a URL, pagination token, audit field, log, or realtime event.
 type CandidateWorkspaceJournalOptions struct {
-	Access      CandidateAttemptAccess
+	Access      ExamAttemptWorkspaceReadAccess
 	AfterCursor int64
 	Limit       int
 }
@@ -227,7 +338,24 @@ func (p *CandidateWorkspaceJournalPage) NotBehind(afterCursor int64) bool {
 //
 // Every write is one batch: ReserveObjects, then VFS staging, then
 // MarkObjectsReady, then ApplyBatch. Each checks access once for the whole
-// batch.
+// batch. The editor and the execution environment both write this way; the
+// access kind decides only how the writer is proved and the journal origin.
+// The command outcome is keyed under the candidate either way, and audit adds
+// the origin, and for the environment its binding, to the aggregate data.
+//
+// The reads take either the candidate's Desktop access or an environment
+// access and return the same manifest, file and journal projections.
+//
+// BindEnvironment binds an execution environment identity to the Attempt's
+// current Participation generation, only while the Attempt is Active and that
+// generation is active with an unexpired lease. At most one binding per
+// Attempt is live. Binding the identical live identity again repeats it;
+// binding a newer incarnation for the same generation ends the old binding
+// and creates the new one atomically. An older or equal incarnation, a grant
+// and epoch pair already bound, or a grant bound to another Attempt conflict
+// with attempt_environment_binding_identity. Ending the generation, on any
+// path, ends its binding in the same transaction. EndEnvironmentBinding ends
+// one binding and repeats its terminal result.
 //
 // ApplyBatch atomically applies every mutation in order: it changes the
 // logical hierarchy and current content pointers, advances the Workspace
@@ -258,8 +386,10 @@ func (p *CandidateWorkspaceJournalPage) NotBehind(afterCursor int64) bool {
 // stale-claim retry repeats removal before CompleteObjectCleanup deletes the
 // metadata. ReleaseObjectCleanup handles known physical-removal failure.
 type ExamAttemptWorkspaceStore interface {
+	BindEnvironment(context.Context, *ExamAttemptEnvironmentBind) (*ExamAttemptEnvironmentBindResult, error)
+	EndEnvironmentBinding(context.Context, *ExamAttemptEnvironmentBindingEnd) (*ExamAttemptEnvironmentBindingEndResult, error)
 	List(context.Context, CandidateWorkspaceListOptions) (*CandidateAttemptWorkspacePage, error)
-	ResolveFile(context.Context, CandidateAttemptAccess, model.AttemptWorkspaceEntryID) (*CandidateWorkspaceContent, error)
+	ResolveFile(context.Context, ExamAttemptWorkspaceReadAccess, model.AttemptWorkspaceEntryID) (*CandidateWorkspaceContent, error)
 	ListJournal(context.Context, CandidateWorkspaceJournalOptions) (*CandidateWorkspaceJournalPage, error)
 	ReserveObjects(context.Context, *ExamAttemptWorkspaceObjectReservation) (*ExamAttemptWorkspaceMutationTarget, error)
 	MarkObjectsReady(context.Context, *ExamAttemptWorkspaceObjectsReady) error

@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -88,10 +89,10 @@ type WorkspaceBatchResult struct {
 	Replayed        bool
 }
 
-// ApplyCandidateExamWorkspaceBatch is the one way the candidate's Attempt
-// Workspace changes. It checks write access once, stages every file body,
-// verifies each against its declared SHA-256, then applies every mutation in
-// one transaction, fenced by Participation generation. A failure names the
+// ApplyCandidateExamWorkspaceBatch is the candidate's own write from the
+// editor. It checks write access once, stages every file body, verifies each
+// against its declared SHA-256, then applies every mutation in one
+// transaction, fenced by Participation generation. A failure names the
 // mutation that refused the batch in the "item" field, and nothing changes.
 func (s *Service) ApplyCandidateExamWorkspaceBatch(
 	ctx context.Context,
@@ -104,13 +105,57 @@ func (s *Service) ApplyCandidateExamWorkspaceBatch(
 		return WorkspaceBatchResult{}, err
 	}
 
-	if len(command.Mutations) == 0 || len(command.Mutations) > model.AttemptWorkspaceBatchMaximumMutations {
+	return s.applyWorkspaceWrite(ctx, workspaceWriter{
+		access:    workspaceAccess,
+		candidate: workspaceAccess.CandidateUserID,
+		beginAudit: func(ctx context.Context, target *store.ExamAttemptWorkspaceMutationTarget, value map[string]any) (model.AuditEventID, error) {
+			return s.auditor.Begin(ctx, access.Mutation{
+				Invocation: inv,
+				Action:     model.ActionExamSittingParticipate,
+				Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
+				ScopeType:  model.RoleScopeClass,
+				ScopeID:    target.ClassID.String(),
+				Operation:  store.ExamAttemptWorkspaceBatchOperation,
+				Value:      value,
+			})
+		},
+	}, workspaceWrite{
+		Mutations:               command.Mutations,
+		ExpectedWorkspaceCursor: command.ExpectedWorkspaceCursor,
+		Content:                 command.Content,
+		IdempotencyKey:          command.IdempotencyKey,
+	})
+}
+
+// workspaceWriter is who writes a batch. Both kinds write as the candidate;
+// they differ only in how the Store proves them, which candidate they name
+// before the Store resolves one (zero for the environment), and how the audit
+// attempt records the candidate as actor.
+type workspaceWriter struct {
+	access     store.ExamAttemptWorkspaceWriteAccess
+	candidate  model.UserID
+	beginAudit func(context.Context, *store.ExamAttemptWorkspaceMutationTarget, map[string]any) (model.AuditEventID, error)
+}
+
+// workspaceWrite is the batch a writer asks for.
+type workspaceWrite struct {
+	Mutations               []WorkspaceBatchMutation
+	ExpectedWorkspaceCursor *int64
+	Content                 WorkspaceBatchContent
+	IdempotencyKey          string
+}
+
+// applyWorkspaceWrite is the one batch write path, for every writer: it
+// validates, spends the Attempt's budget, reserves, stages and applies.
+func (s *Service) applyWorkspaceWrite(ctx context.Context, writer workspaceWriter, write workspaceWrite) (WorkspaceBatchResult, error) {
+	attemptID := writer.access.WorkspaceAttemptID()
+	if len(write.Mutations) == 0 || len(write.Mutations) > model.AttemptWorkspaceBatchMaximumMutations {
 		return WorkspaceBatchResult{}, apperror.Invalid("exam.attempt.invalid", "workspace_batch")
 	}
 
 	recursive, files, bytes := false, 0, int64(0)
-	for index, mutation := range command.Mutations {
-		if err = validateWorkspaceBatchMutation(mutation); err != nil {
+	for index, mutation := range write.Mutations {
+		if err := validateWorkspaceBatchMutation(mutation); err != nil {
 			return WorkspaceBatchResult{}, workspaceBatchItemError(err, index)
 		}
 		recursive = recursive || mutation.Recursive
@@ -120,32 +165,24 @@ func (s *Service) ApplyCandidateExamWorkspaceBatch(
 		}
 	}
 
-	if recursive != (command.ExpectedWorkspaceCursor != nil) ||
-		(command.ExpectedWorkspaceCursor != nil && *command.ExpectedWorkspaceCursor < 0) {
+	if recursive != (write.ExpectedWorkspaceCursor != nil) ||
+		(write.ExpectedWorkspaceCursor != nil && *write.ExpectedWorkspaceCursor < 0) {
 		return WorkspaceBatchResult{}, apperror.Invalid("exam.attempt.invalid", "workspace_recursive_delete")
 	}
-	if files > 0 && command.Content == nil {
+	if files > 0 && write.Content == nil {
 		return WorkspaceBatchResult{}, apperror.Invalid("exam.attempt.invalid", "workspace_content")
+	}
+	if write.IdempotencyKey == "" {
+		return WorkspaceBatchResult{}, apperror.New("idempotency.key_required")
 	}
 
 	// The budget is spent before anything is reserved or staged, so a writer
 	// that outruns it costs storage nothing. An exact retry spends again.
-	if !s.workspaceBudget.spend(workspaceAccess.AttemptID, len(command.Mutations), bytes, s.now()) {
+	if !s.workspaceBudget.spend(attemptID, len(write.Mutations), bytes, s.now()) {
 		return WorkspaceBatchResult{}, apperror.New("exam.attempt.workspace.rate_limited")
 	}
 
-	commandIdempotency, err := prepareWorkspaceBatchIdempotency(
-		inv,
-		command.IdempotencyKey,
-		workspaceAccess.AttemptID,
-		command.Mutations,
-		command.ExpectedWorkspaceCursor,
-	)
-	if err != nil {
-		return WorkspaceBatchResult{}, err
-	}
-
-	mutations, objects, err := s.identifyWorkspaceBatch(command.Mutations)
+	mutations, objects, err := s.identifyWorkspaceBatch(write.Mutations)
 	if err != nil {
 		return WorkspaceBatchResult{}, err
 	}
@@ -156,25 +193,39 @@ func (s *Service) ApplyCandidateExamWorkspaceBatch(
 	}
 
 	target, err := s.workspaces.ReserveObjects(ctx, &store.ExamAttemptWorkspaceObjectReservation{
-		Access:    workspaceAccess,
+		Access:    writer.access,
 		ObjectIDs: objectIDs,
 	})
 	if err != nil {
 		return WorkspaceBatchResult{}, storeError(storeErrors, err)
 	}
-	if !validWorkspaceTarget(target, workspaceAccess) {
+	if !validWorkspaceTarget(target, writer.candidate) {
 		return WorkspaceBatchResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt Workspace mutation target"))
 	}
 
-	if err = s.stageWorkspaceBatch(ctx, workspaceAccess, command, objects); err != nil {
+	// The outcome is the candidate's, whoever writes on their behalf.
+	commandIdempotency, err := prepareWorkspaceBatchIdempotency(
+		target.CandidateUserID,
+		writer.access.WorkspaceOrigin(),
+		write.IdempotencyKey,
+		attemptID,
+		write.Mutations,
+		write.ExpectedWorkspaceCursor,
+	)
+	if err != nil {
 		s.reclaimWorkspaceObjects(ctx, objectIDs, err)
 		return WorkspaceBatchResult{}, err
 	}
 
-	result, err := s.applyWorkspaceBatch(ctx, inv, target, &store.ExamAttemptWorkspaceBatch{
-		Access:                  workspaceAccess,
+	if err = s.stageWorkspaceBatch(ctx, writer.access, write, objects); err != nil {
+		s.reclaimWorkspaceObjects(ctx, objectIDs, err)
+		return WorkspaceBatchResult{}, err
+	}
+
+	result, err := s.applyWorkspaceBatch(ctx, writer, target, &store.ExamAttemptWorkspaceBatch{
+		Access:                  writer.access,
 		Mutations:               mutations,
-		ExpectedWorkspaceCursor: command.ExpectedWorkspaceCursor,
+		ExpectedWorkspaceCursor: write.ExpectedWorkspaceCursor,
 	}, commandIdempotency)
 	if err != nil {
 		s.reclaimWorkspaceObjects(ctx, objectIDs, err)
@@ -238,8 +289,8 @@ func (s *Service) identifyWorkspaceBatch(
 // each against its declared size and SHA-256, and records them all ready.
 func (s *Service) stageWorkspaceBatch(
 	ctx context.Context,
-	workspaceAccess store.ExamAttemptWorkspaceMutationAccess,
-	command ApplyWorkspaceBatchCommand,
+	workspaceAccess store.ExamAttemptWorkspaceWriteAccess,
+	command workspaceWrite,
 	objects []workspaceBatchObject,
 ) error {
 	if len(objects) == 0 {

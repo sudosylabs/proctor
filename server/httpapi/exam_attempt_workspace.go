@@ -128,6 +128,7 @@ type candidateWorkspaceJournalEntryResponse struct {
 	ContentVersion string `json:"content_version,omitempty"`
 	ChangedAt      string `json:"changed_at"`
 	Recursive      bool   `json:"recursive,omitempty"`
+	Origin         string `json:"origin"`
 }
 
 type candidateWorkspaceJournalResponse struct {
@@ -298,6 +299,7 @@ func candidateWorkspaceJournalEntry(entry model.AttemptWorkspaceJournalEntry) ca
 		ContentVersion: entry.ContentVersion.String(),
 		ChangedAt:      model.FormatRFC3339(entry.ChangedAt),
 		Recursive:      entry.Recursive,
+		Origin:         string(entry.Origin),
 	}
 }
 

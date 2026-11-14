@@ -67,6 +67,24 @@ func TestConfigureDraftNativePolicyOrderAndFailures(t *testing.T) {
 		})
 	}
 }
+
+// No native catalog is admitted, so a policy that names allowlist entries
+// could never start an Attempt. Authoring refuses it before anything is saved.
+func TestConfigureDraftNativePolicyRefusesCatalogEntries(t *testing.T) {
+	fixture := newAuthoringFixture(t)
+	fixture.persistence.actorIsManager = true
+	fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
+	policy := model.DefaultNativeSecurityPolicy()
+	require.NoError(t, json.Unmarshal([]byte(`{"id":"process_application","mode":"observe","allowed_application_ids":["approved.application"]}`), &policy.Families[0]))
+	require.NoError(t, policy.Validate(), "the policy is well formed")
+	require.True(t, policy.NamesCatalogEntries())
+
+	_, err := fixture.service.ConfigureExamDraftNativePolicy(context.Background(), fixture.inv, ConfigureDraftNativePolicyCommand{ExamID: fixture.examID, ExpectedDraftRevision: 1, NativePolicy: policy, IdempotencyKey: "native-key"})
+	require.True(t, apperror.Is(err, "exam.invalid"), "error = %v", err)
+	require.Nil(t, fixture.persistence.nativePolicyUpdate, "a refused policy reached persistence")
+	require.Empty(t, fixture.publisher.Calls(), "a refused policy was published")
+}
+
 func TestConfigureDraftNativePolicyNoOpAndMalformed(t *testing.T) {
 	for _, invalid := range []bool{false, true} {
 		fixture := newAuthoringFixture(t)

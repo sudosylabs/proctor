@@ -260,11 +260,7 @@ func resolveNativeRequirements(policy NativeSecurityPolicy, agreement *DesktopNa
 	add := func(id string, claim NativeCapabilityClaim) { selected["native."+id+".v1"] = claim }
 	for _, family := range policy.Families {
 		f := family.fields
-		if len(f.AllowedApplicationIDs)+
-			len(f.AllowedStorageFunctionClassIDs)+
-			len(f.AllowedManagedProfileIDs)+
-			len(f.AllowedAdapterClassIDs)+
-			len(f.AllowedTunnelClassIDs) > 0 {
+		if family.namesCatalogEntries() {
 			return nil, ErrNativeCatalogUnavailable
 		}
 

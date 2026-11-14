@@ -46,6 +46,11 @@ func (a *Authoring) ConfigureExamDraftNativePolicy(
 	if err := policy.Validate(); err != nil {
 		return View{}, apperror.Invalid("exam.invalid", "native_policy").Wrap(err)
 	}
+	// No native catalog is admitted yet, so allowlist entries could never be
+	// applied to an Attempt. Refuse them now rather than at Attempt start.
+	if command.NativePolicy.NamesCatalogEntries() {
+		return View{}, apperror.Invalid("exam.invalid", "native_policy").Wrap(model.ErrNativeCatalogUnavailable)
+	}
 
 	commandIdempotency, err := idempotency.Require(inv, idempotencyOperationConfigureDraftNativePolicy, command.IdempotencyKey, struct {
 		ExamID                string                     `json:"exam_id"`

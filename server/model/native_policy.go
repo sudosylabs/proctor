@@ -307,6 +307,25 @@ func (p NativeSecurityPolicy) Validate() error {
 	return nil
 }
 
+// namesCatalogEntries reports whether the family allows specific catalog
+// entries by ID.
+func (p NativeFamilyPolicy) namesCatalogEntries() bool {
+	f := p.fields
+	return len(f.AllowedApplicationIDs)+
+		len(f.AllowedStorageFunctionClassIDs)+
+		len(f.AllowedManagedProfileIDs)+
+		len(f.AllowedAdapterClassIDs)+
+		len(f.AllowedTunnelClassIDs) > 0
+}
+
+// NamesCatalogEntries reports whether any family allows specific catalog
+// entries by ID. No native catalog is admitted yet, so such a policy can never
+// be applied to an Attempt: authoring refuses it instead of saving a policy
+// that would only fail when a candidate starts.
+func (p NativeSecurityPolicy) NamesCatalogEntries() bool {
+	return slices.ContainsFunc(p.Families, NativeFamilyPolicy.namesCatalogEntries)
+}
+
 func (p NativeSecurityPolicy) Clone() NativeSecurityPolicy {
 	p.Families = slices.Clone(p.Families)
 	// Family fields are private immutable values. Only decoders construct lists;

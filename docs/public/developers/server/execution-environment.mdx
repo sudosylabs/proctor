@@ -391,10 +391,9 @@ design with these differences and gaps:
 
 - **Defaults.** The default ignore patterns are execenv's fallback and the
   plugin's own check, never a file in the Workspace.
-- **One binding per generation.** The core binds a grant ID and epoch once,
-  so the plugin names the generation in the binding's epoch. The same grant,
-  and its shell, then serve the candidate's next generation after a
-  reconnect.
+- **The same shell across generations.** The core binds a grant and epoch at
+  most once per generation. The same grant, and its shell, therefore serve the
+  candidate's next generation after a reconnect, under execenv's own epoch.
 - **Harvest cadence.** The quiet window applies to the Attempt's guest
   changes as a whole rather than to each path, so changes are stored in the
   order the guest made them.

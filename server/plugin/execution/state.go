@@ -129,14 +129,6 @@ func (g *grantRecord) derive() {
 	}
 }
 
-// bindingEpoch is the epoch the core binding names: the grant's execenv
-// epoch and the generation it serves. The core binds a grant ID and epoch
-// once, so naming the generation lets the same grant, and its shell, serve
-// the candidate's next generation after a reconnect.
-func (g grantRecord) bindingEpoch(generation int64) string {
-	return fmt.Sprintf("%s.g%d", g.Epoch, generation)
-}
-
 // bound is the environment the owner acts through, or false without a
 // live binding.
 func (g grantRecord) bound() (plugin.BoundEnvironment, bool) {
@@ -148,7 +140,7 @@ func (g grantRecord) bound() (plugin.BoundEnvironment, bool) {
 		BindingID:  g.BindingID,
 		Generation: g.BoundGeneration,
 		Identity: plugin.EnvironmentIdentity{
-			GrantID: g.GrantID, Epoch: g.bindingEpoch(g.BoundGeneration), Incarnation: g.Incarnation,
+			GrantID: g.GrantID, Epoch: g.Epoch, Incarnation: g.Incarnation,
 		},
 	}, true
 }

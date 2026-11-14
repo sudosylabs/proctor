@@ -113,16 +113,19 @@ func (s *SQLExamAttemptWorkspaceStore) BindEnvironment(
 			result.Replaced = live
 		}
 
-		var foreign bool
-		if err = tx.Get(ctx, &foreign, `SELECT EXISTS (
+		// A grant belongs to one Attempt for good, and a grant and epoch keep
+		// the incarnation they were first bound with. The same grant and
+		// epoch, and so the same shell, may serve each later generation.
+		var mismatched bool
+		if err = tx.Get(ctx, &mismatched, `SELECT EXISTS (
 				SELECT 1
 				FROM exam_attempt_environment_bindings
 				WHERE grant_id = ?
-					AND exam_attempt_id <> ?
-			)`, input.Identity.GrantID, input.AttemptID.String()); err != nil {
+					AND (exam_attempt_id <> ? OR (epoch = ? AND incarnation <> ?))
+			)`, input.Identity.GrantID, input.AttemptID.String(), input.Identity.Epoch, input.Identity.Incarnation); err != nil {
 			return nil, fmt.Errorf("check execution environment grant ownership: %w", err)
 		}
-		if foreign {
+		if mismatched {
 			return nil, store.NewErrConflict("attempt_environment_binding", "attempt_environment_binding_identity", nil)
 		}
 

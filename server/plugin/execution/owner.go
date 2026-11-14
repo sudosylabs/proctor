@@ -420,7 +420,7 @@ func (o *owner) bind(ctx context.Context) error {
 		return errWait
 	}
 	identity := plugin.EnvironmentIdentity{
-		GrantID: o.grant.GrantID, Epoch: o.grant.bindingEpoch(o.grant.Generation), Incarnation: o.grant.Incarnation,
+		GrantID: o.grant.GrantID, Epoch: o.grant.Epoch, Incarnation: o.grant.Incarnation,
 	}
 	result, err := o.plugin.host.AttemptWorkspaces().BindEnvironment(ctx, plugin.BindEnvironmentRequest{
 		AttemptID: o.attemptID, Generation: o.grant.Generation, Identity: identity,

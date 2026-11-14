@@ -349,8 +349,17 @@ func (w *fakeWorkspaces) BindEnvironment(_ context.Context, request plugin.BindE
 			return plugin.EnvironmentBindResult{Binding: binding}, nil
 		}
 	}
+	// As the core: a grant belongs to one Attempt, a grant and epoch keep
+	// their first incarnation, and they are bound at most once per
+	// generation.
 	for _, binding := range w.bindings {
-		if binding.Identity.GrantID == request.Identity.GrantID && binding.Identity.Epoch == request.Identity.Epoch {
+		if binding.Identity.GrantID != request.Identity.GrantID {
+			continue
+		}
+		sameEpoch := binding.Identity.Epoch == request.Identity.Epoch
+		if binding.AttemptID != request.AttemptID ||
+			(sameEpoch && binding.Identity.Incarnation != request.Identity.Incarnation) ||
+			(sameEpoch && binding.Generation == request.Generation) {
 			return plugin.EnvironmentBindResult{}, w.refused("exam.attempt.environment.identity_conflict")
 		}
 	}

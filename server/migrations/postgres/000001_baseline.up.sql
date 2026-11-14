@@ -2095,7 +2095,9 @@ CREATE TABLE exam_attempt_environment_bindings (
     incarnation bigint NOT NULL CHECK (incarnation >= 0),
     created_at timestamptz NOT NULL,
     ended_at timestamptz CHECK (ended_at >= created_at),
-    UNIQUE (grant_id, epoch),
+    -- The same grant and epoch, and so the same shell, may serve each of an
+    -- Attempt's generations in turn, but only once per generation.
+    UNIQUE (grant_id, epoch, generation),
     CONSTRAINT exam_attempt_environment_bindings_participation_fkey
         FOREIGN KEY (participation_id, exam_attempt_id, generation)
         REFERENCES exam_attempt_participations(id, exam_attempt_id, generation)

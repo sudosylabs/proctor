@@ -324,8 +324,18 @@ func testAttemptEnvironmentBindingLifecycle(t *testing.T, ctx context.Context, s
 	_, err = workspace.BindEnvironment(ctx, &store.ExamAttemptEnvironmentBind{BindingID: model.NewAttemptEnvironmentBindingID(),
 		AttemptID: attemptID, Generation: generation, Identity: environmentIdentity("grant-1", "epoch-4", 4)})
 	requireConflictConstraint(t, err, "attempt_participation_generation")
+	// The grant and epoch the Kicked generation used, and so the same shell,
+	// may serve the candidate's next generation; only one binding per
+	// generation can name them.
 	_, current := bindTestEnvironment(t, ctx, ss, attemptID, reconnected.Participation.Generation,
-		environmentIdentity("grant-1", "epoch-5", 5))
+		environmentIdentity("grant-1", "epoch-3", 3))
+	// A grant and epoch keep the incarnation they were first bound with: an
+	// old epoch can never come back under a newer incarnation.
+	_, err = workspace.BindEnvironment(ctx, &store.ExamAttemptEnvironmentBind{BindingID: model.NewAttemptEnvironmentBindingID(),
+		AttemptID: attemptID, Generation: reconnected.Participation.Generation, Identity: environmentIdentity("grant-1", "epoch-1", 6)})
+	requireConflictConstraint(t, err, "attempt_environment_binding_identity")
+	_, current = bindTestEnvironment(t, ctx, ss, attemptID, reconnected.Participation.Generation,
+		environmentIdentity("grant-1", "epoch-5", 7))
 	_, err = workspace.ApplyBatch(ctx, newAttemptWorkspaceBatch(t, ctx, ss, fixture, current, store.ExamAttemptWorkspaceMutation{
 		Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "second-generation"}),
 		attemptWorkspaceBatchCommand(fixture.candidate.ID, "environment-second-generation"))

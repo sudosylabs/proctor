@@ -465,8 +465,10 @@ bound to one Attempt and one Participation generation. At most one binding
 per Attempt is live. Binding is allowed only while the Attempt is Active and
 the generation is its active Participation with an unexpired lease; the same
 identity again repeats the binding, and a newer incarnation for the same
-generation replaces it atomically. A grant and epoch pair is bound at most
-once, and a grant belongs to one Attempt. The binding ends when its
+generation replaces it atomically. A grant belongs to one Attempt for good. A
+grant and epoch pair keeps the incarnation it was first bound with, and is
+bound at most once per generation, so the same grant and its shell can serve
+each later generation after a reconnect. The binding ends when its
 generation ends, on every path, in the same transaction (a trigger on the
 Participation row), or when the owner ends it. An environment batch repeats
 the binding, its identity and generation, and passes every editor gate except

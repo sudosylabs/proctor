@@ -12,7 +12,7 @@ message. Rate limiting and service failure use bounded localized
 copy. Successful submission presents the generic check-your-email state.
 
 The accepted replacement uses the shared `TaskState` hierarchy with a teal
-status line and the persistent polite announcement. Its lede echoes the address
+“Request received” status line and the persistent polite announcement. Its lede echoes the address
 the person typed, held only in component memory, inside one fixed conditional
 sentence (“If an account uses …”) so a typo is obvious while the response stays
 identical for known and unknown addresses. The address never enters the URL,

@@ -42,12 +42,14 @@ retry.
 
 The page requests the stable title `Confirm email · Proctor`. It uses the
 shared hosted shell column and the shared `TaskState` hierarchy: a
-`Confirm email` status line only for a real outcome, one state-specific `h1`,
+status line only for a real outcome, one state-specific `h1`,
 a lede, and the state's actions, plus one persistent polite live region
 (`TaskStateAnnouncement`). There is no separate centred layout or evidence
-note. The status line is teal when verified, coral when the link is unusable,
-and amber when the result is unavailable; the ready and pending states show
-none. The heading and lede always state the outcome in words. The ready lede states the single-use, 24-hour
+note. The status line reads teal “Email confirmed” when verified, coral
+“Email not confirmed” when the link is unusable, and amber “Not checked” when
+the result is unavailable; the ready and pending states show none. The ready
+state's verification rail adds “Not your address? Don’t confirm it. Close this
+page and contact your institution.” The heading and lede always state the outcome in words. The ready lede states the single-use, 24-hour
 lifetime (the server default).
 
 On entry with a captured token the route makes one read-only `POST

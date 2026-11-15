@@ -416,7 +416,10 @@ rails, or decorative icons. A task opens with the condensed display
 **heading** and a **lede** in the subtle foreground. A **status line** above
 the heading appears only when the page reports a real outcome — success,
 warning, or danger — and pairs its colour with an icon and a word; there is no
-neutral kind line repeating the heading. Facts the person must check use the
+neutral kind line repeating the heading. The word names that outcome in two
+or three words (“Email confirmed”, “Link can’t be used”, “Exam in progress”),
+never the task's category, so the line says what happened before the heading
+explains it. Facts the person must check use the
 hairline `FactList`. Stable evidence uses the unboxed `Notice`. Related
 decisions further down a page are separated by a hairline rule and a small
 heading rather than a panel. A long form is divided into numbered groups — a

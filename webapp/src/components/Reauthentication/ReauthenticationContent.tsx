@@ -4,6 +4,7 @@ import type { SecurityContextResult } from "../../features/account-security/Acco
 import { formatMinutes, minutesUntil } from "../../features/account-security/presentation";
 import { reauthenticationDestination, type ReauthenticationActions, type ReauthenticationFailure, type ReauthenticationTask } from "../../features/reauthenticate/ReauthenticationApi";
 import { message } from "../../i18n/messages";
+import { RailItem, TaskRail } from "../AccessPageShell/AccessPageShell";
 import { AccessTaskIntro } from "../AccessTaskIntro/AccessTaskIntro";
 import { SecurityCodeForm } from "../AccountSecurity/SecurityCodeForm";
 import { securityFailureMessage } from "../AccountSecurity/SecurityFeedback";
@@ -120,12 +121,19 @@ export function ReauthenticationContent({ actions, externalProofFailed, loading,
       <TaskStateAnnouncement message={pending ? message("webapp.security.working") : ""} />
       <AccessTaskIntro key={step} headingID="reauthentication-heading" focusHeading={focusHeading}
         status={requiresRecovery
-          ? { label: message("webapp.security.eyebrow"), tone: "warning" }
-          : complete ? { label: message("webapp.reauthenticate.kind"), tone: "success" } : undefined}
+          ? { label: message("webapp.reauthenticate.status.action_needed"), tone: "warning" }
+          : complete ? { label: message("webapp.reauthenticate.status.complete"), tone: "success" } : undefined}
         heading={message(requiresRecovery
           ? context.recoveryRequired ? "webapp.security.restore_access" : "webapp.security.enrollment_required.heading"
           : complete ? "webapp.reauthenticate.complete.heading" : "webapp.reauthenticate.heading")}
         body={stepBody(step, task, duration, context.recoveryRequired)} />
+      {needsPrimary ? (
+        <TaskRail>
+          <RailItem heading={message("webapp.reauthenticate.rail.why.heading")}>
+            <p>{message("webapp.reauthenticate.rail.why.body")}</p>
+          </RailItem>
+        </TaskRail>
+      ) : null}
       {showExternalFailure ? <Notice tone="warning">{providerName === undefined
         ? message("webapp.reauthenticate.external.failed_unnamed")
         : message("webapp.reauthenticate.external.failed", { Provider: providerName })}</Notice> : null}

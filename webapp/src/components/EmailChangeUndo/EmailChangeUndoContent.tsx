@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { EmailChangeUndoResult } from "../../features/undo-email-change/UndoEmailChangeApi";
 import { formatDateTime } from "../../i18n/dateTime";
 import { message, type MessageID } from "../../i18n/messages";
+import { RailItem, TaskRail } from "../AccessPageShell/AccessPageShell";
 import { Button, ButtonLink } from "../Button/Button";
 import { Fact, FactList } from "../FactList/FactList";
 import { Notice } from "../Notice/Notice";
@@ -90,7 +91,7 @@ export function EmailChangeUndoContent({
         focusHeading={transitioned}
         heading={message(copy.heading)}
         headingID="undo-email-change-heading"
-        status={copy.tone === undefined ? undefined : { label: message("webapp.undo_email_change.kind"), tone: copy.tone }}
+        status={{ label: message(copy.status), tone: copy.tone }}
       >
         {change !== undefined && (state === "ready" || state === "rate_limited" || state === "unavailable") ? (
           <FactList className={styles.afterBody} aria-label={message("webapp.undo_email_change.facts.label")}>
@@ -146,6 +147,14 @@ function UndoActions({
           <ButtonLink href="/login" variant="secondary">
             {message("webapp.undo_email_change.ready.keep")}
           </ButtonLink>
+          <TaskRail>
+            <RailItem heading={message("webapp.undo_email_change.restored.note_lead")}>
+              <p>{message("webapp.undo_email_change.rail.unrecognized.body")}</p>
+            </RailItem>
+            <RailItem heading={message("webapp.undo_email_change.rail.once.heading")}>
+              <p>{message("webapp.undo_email_change.rail.once.body")}</p>
+            </RailItem>
+          </TaskRail>
         </>
       );
     case "rate_limited":
@@ -187,6 +196,7 @@ interface UndoCopy {
   body: MessageID;
   heading: MessageID;
   tone: "success" | "warning" | "danger";
+  status: MessageID;
 }
 
 function copyFor(state: UndoState): UndoCopy {
@@ -197,36 +207,42 @@ function copyFor(state: UndoState): UndoCopy {
         heading: "webapp.undo_email_change.ready.heading",
         body: "webapp.undo_email_change.ready.body",
         tone: "danger",
+        status: "webapp.undo_email_change.status.ready",
       };
     case "restored":
       return {
         heading: "webapp.undo_email_change.restored.heading",
         body: "webapp.undo_email_change.restored.body",
         tone: "success",
+        status: "webapp.undo_email_change.status.restored",
       };
     case "invalid":
       return {
         heading: "webapp.undo_email_change.invalid.heading",
         body: "webapp.undo_email_change.invalid.body",
         tone: "danger",
+        status: "webapp.undo_email_change.status.invalid",
       };
     case "conflict":
       return {
         heading: "webapp.undo_email_change.conflict.heading",
         body: "webapp.undo_email_change.conflict.body",
         tone: "danger",
+        status: "webapp.undo_email_change.status.conflict",
       };
     case "rate_limited":
       return {
         heading: "webapp.undo_email_change.unavailable.heading",
         body: "webapp.undo_email_change.rate_limited.body",
         tone: "warning",
+        status: "webapp.undo_email_change.status.rate_limited",
       };
     case "unavailable":
       return {
         heading: "webapp.undo_email_change.unavailable.heading",
         body: "webapp.undo_email_change.unavailable.body",
         tone: "warning",
+        status: "webapp.undo_email_change.status.unavailable",
       };
   }
 }

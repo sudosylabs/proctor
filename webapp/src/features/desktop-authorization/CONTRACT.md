@@ -24,7 +24,8 @@ email, untranslated, after a muted separator; “Device” — the bounded Deskt
 device label; and “Requested” — when Desktop started the request, formatted
 with `Intl` in the viewer's locale and time zone inside a `time` element. A
 verification-rail item headed “Didn’t start this?” says that closing the page
-is safe. The context names the
+is safe, and a second rail item states “Request expires” as a fact, the
+request's `expiresAt` formatted with `Intl` inside a `time` element. The context names the
 account only after this browser authenticated as it for the transaction. While
 confirming and after approval the journey snapshot exposes that account, and
 the page passes its display name (or username when none is set) to the shell's
@@ -50,8 +51,10 @@ The journey uses one centered task column. Checking and terminal states use
 the shared `TaskState` hierarchy and persistent polite announcements. The
 approved state confirms success and shows a returning indicator before the
 loopback hand-off, so the page is not blank if Proctor Desktop does not open.
-Status lines mark only real outcomes: success after approval, warning for
-an active-Exam lock or unavailable check, danger for an unusable request.
+Status lines mark only real outcomes, each with its own word: success
+“Proctor Desktop signed in” after approval, warning “Exam in progress” for an
+active-Exam lock and “Request not checked” for an unavailable check, and
+danger “Link can’t be used” for an unusable request.
 Authentication and confirmation use `AccessTaskIntro`, document-order controls,
 and persistent `FormFeedback`. Action-caused terminal transitions focus their
 replacement heading; initial invalid state and background checks do not.

@@ -17,7 +17,10 @@ restrictions send the User to reenrollment instead of ordinary account tasks.
 Read failures and proof failures retain localized, action-adjacent feedback.
 
 The page opens with “Confirm it’s you”; a status line appears only for a real
-outcome (success once confirmed, warning for a recovery restriction). Its
+outcome (success “Confirmed” once confirmed, warning “Action needed” for a
+recovery or enrollment restriction). While proof is still needed, a
+verification-rail item “Why you’re asked” says security changes need a recent
+sign-in so someone at an unlocked computer cannot make them. Its
 lede names the task and how long the confirmation lasts, from the status
 response's `recent_authentication_minutes` (the configured
 `Authentication.RecentAuthenticationTTL`). Once confirmed, the completed step

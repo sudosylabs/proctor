@@ -3,11 +3,13 @@ import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { AccessPageShell, RailItem, TaskRail } from "../../components/AccessPageShell/AccessPageShell";
 import { AccessTaskIntro } from "../../components/AccessTaskIntro/AccessTaskIntro";
 import { Button } from "../../components/Button/Button";
+import { Fact, FactList } from "../../components/FactList/FactList";
 import { FormFeedback } from "../../components/FormFeedback/FormFeedback";
 import { PasswordField } from "../../components/InputField/PasswordField";
 import { Notice } from "../../components/Notice/Notice";
 import { TaskState, TaskStateActions, TaskStateAnnouncement } from "../../components/TaskState/TaskState";
-import { message } from "../../i18n/messages";
+import { formatDateTime } from "../../i18n/dateTime";
+import { message, type MessageID } from "../../i18n/messages";
 import type { DesktopReauthenticationContext, DesktopReauthenticationProof } from "./DesktopReauthenticationApi";
 import {
   useDesktopReauthenticationJourney,
@@ -52,7 +54,7 @@ export function DesktopReauthenticationContent({ actions, snapshot }: {
       </>;
     }
     case "approved":
-      return <Terminal focusHeading={focusHeading} tone="success"
+      return <Terminal focusHeading={focusHeading} tone="success" statusLabel="webapp.desktop_reauthentication.status.approved"
         heading={message("webapp.desktop_reauthentication.approved.heading")}
         body={message("webapp.desktop_reauthentication.approved.body")} />;
     case "canceled":
@@ -60,11 +62,11 @@ export function DesktopReauthenticationContent({ actions, snapshot }: {
         heading={message("webapp.desktop_reauthentication.canceled.heading")}
         body={message("webapp.desktop_reauthentication.canceled.body")} />;
     case "invalid":
-      return <Terminal focusHeading={focusHeading} tone="danger"
+      return <Terminal focusHeading={focusHeading} tone="danger" statusLabel="webapp.desktop_reauthentication.status.invalid"
         heading={message("webapp.desktop_reauthentication.invalid.heading")}
         body={message("webapp.desktop_reauthentication.invalid.body")} />;
     case "unavailable":
-      return <Terminal focusHeading={focusHeading} tone="warning"
+      return <Terminal focusHeading={focusHeading} tone="warning" statusLabel="webapp.desktop_reauthentication.status.unavailable"
         heading={message("webapp.desktop_reauthentication.unavailable.heading")}
         body={message("webapp.desktop_reauthentication.unavailable.body")}>
         <TaskStateActions>
@@ -76,17 +78,18 @@ export function DesktopReauthenticationContent({ actions, snapshot }: {
   }
 }
 
-function Terminal({ body, children, focusHeading, heading, tone }: {
+function Terminal({ body, children, focusHeading, heading, statusLabel, tone }: {
   body: string;
   children?: ReactNode;
   focusHeading: boolean;
   heading: string;
   tone?: "success" | "warning" | "danger";
+  statusLabel?: MessageID;
 }) {
   return <>
     <TaskStateAnnouncement message={focusHeading ? heading : ""} />
     <TaskState heading={heading} headingID={headingID} focusHeading={focusHeading} body={body}
-      status={tone === undefined ? undefined : { label: message("webapp.desktop_reauthentication.kind"), tone: tone }}>
+      status={tone === undefined || statusLabel === undefined ? undefined : { label: message(statusLabel), tone }}>
       {children}
     </TaskState>
   </>;
@@ -131,6 +134,13 @@ function Proof({ actions, context, snapshot }: {
       <TaskRail>
         <RailItem>
           <p>{message("webapp.desktop_reauthentication.note")}</p>
+        </RailItem>
+        <RailItem>
+          <FactList>
+            <Fact label={message("webapp.desktop_reauthentication.rail.expires")}>
+              <time dateTime={context.expiresAt}>{formatDateTime(context.expiresAt)}</time>
+            </Fact>
+          </FactList>
         </RailItem>
       </TaskRail>
     </section>

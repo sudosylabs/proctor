@@ -176,6 +176,14 @@ export function AccountSecurityContent({ actions, loading, onRefresh, state }: {
         onSetup={setup} onRefresh={() => refresh()} signOut={actions.signOut}
         onRegenerate={() => changeTask({ kind: "confirm_regenerate" })}
         onDisable={() => changeTask({ kind: "confirm_disable" })} /> : null}
+      {/* Connecting another sign-in method needs two-step verification first. */}
+      {task.kind === "status" && context?.enabled === true ? (
+        <TaskRail>
+          <RailItem heading={message("webapp.security.rail.methods.heading")}>
+            <p><a href="/account/connect-provider">{message("webapp.authorization_complete.connect")}</a></p>
+          </RailItem>
+        </TaskRail>
+      ) : null}
       {task.kind === "setup" ? <>
         <div className={styles.steps}>
           <FormGroup as="section" number={1} headingID="authenticator-step-scan"
@@ -193,6 +201,9 @@ export function AccountSecurityContent({ actions, loading, onRefresh, state }: {
           <RailItem beforeTask>
             <p>{message("webapp.security.setup.private")}</p>
           </RailItem>
+          <RailItem heading={message("webapp.security.rail.next.heading")}>
+            <p>{message("webapp.security.rail.next.body")}</p>
+          </RailItem>
         </TaskRail>
       </> : null}
       {task.kind === "codes" ? <RecoveryCodes codes={task.codes} onDone={() => refresh(message("webapp.security.codes.saved"))} /> : null}
@@ -201,12 +212,29 @@ export function AccountSecurityContent({ actions, loading, onRefresh, state }: {
         {feedback}
       </> : null}
       {task.kind === "confirm_disable" ? <>
-        <Notice>{message("webapp.security.disable.warning")}</Notice>
+        {/* What turning it off changes, checked before the irreversible action. */}
+        <FactList>
+          <Fact label={message("webapp.security.status.two_step")}>
+            {message("webapp.security.disable.facts.two_step")}
+          </Fact>
+          {context !== undefined && context.recoveryCodesRemaining > 0 ? (
+            <Fact label={message("webapp.security.status.codes")}>
+              {message("webapp.security.disable.facts.codes", {
+                Count: new Intl.NumberFormat().format(context.recoveryCodesRemaining),
+              })}
+            </Fact>
+          ) : null}
+        </FactList>
         <TaskStateActions>
           <Button variant="danger" isLoading={pending} loadingLabel={message("webapp.security.working")} onClick={disable}>{message("webapp.security.disable.confirm")}</Button>
-          <Button variant="secondary" disabled={pending} onClick={() => refresh()}>{message("webapp.security.disable.keep")}</Button>
+          <Button variant="text" disabled={pending} onClick={() => refresh()}>{message("webapp.security.disable.keep")}</Button>
         </TaskStateActions>
         {feedback}
+        <TaskRail>
+          <RailItem>
+            <p>{message("webapp.security.disable.warning")}</p>
+          </RailItem>
+        </TaskRail>
       </> : null}
       {task.kind === "confirm_regenerate" ? <>
         <TaskStateActions>
@@ -387,10 +415,10 @@ function taskCopy(task: Task): { status?: TaskStatus; heading: string; body: str
   switch (task.kind) {
     case "status": return { heading: message("webapp.security.heading"), body: message("webapp.security.body") };
     case "setup": return { heading: message("webapp.security.setup.section.heading"), body: message("webapp.security.setup.body"), beforeTaskNote: message("webapp.security.setup.private") };
-    case "codes": return { status: { label: message("webapp.security.kind.two_step"), tone: "success" }, heading: message("webapp.security.codes.heading"), body: message("webapp.security.codes.body") };
+    case "codes": return { status: { label: message("webapp.security.status.codes_saved"), tone: "success" }, heading: message("webapp.security.codes.heading"), body: message("webapp.security.codes.body") };
     case "challenge": return { heading: message("webapp.security.challenge.heading"), body: message("webapp.security.challenge.body") };
     case "confirm_disable": return { heading: message("webapp.security.disable.heading"), body: message("webapp.security.disable.body") };
     case "confirm_regenerate": return { heading: message("webapp.security.regenerate.heading"), body: message("webapp.security.regenerate.body") };
-    case "uncertain": return { status: { label: message("webapp.security.eyebrow"), tone: "warning" }, heading: message("webapp.security.uncertain.heading"), body: message("webapp.security.uncertain.body") };
+    case "uncertain": return { status: { label: message("webapp.security.status.unconfirmed"), tone: "warning" }, heading: message("webapp.security.uncertain.heading"), body: message("webapp.security.uncertain.body") };
   }
 }

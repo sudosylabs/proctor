@@ -122,7 +122,7 @@ function SetupState({
         focusHeading={focusHeading}
         heading={heading}
         headingID="setup-heading"
-        status={succeeded ? { label: message("webapp.setup.kind"), tone: "success" } : undefined}
+        status={succeeded ? { label: message("webapp.setup.status.created"), tone: "success" } : undefined}
       />
       {children}
     </section>

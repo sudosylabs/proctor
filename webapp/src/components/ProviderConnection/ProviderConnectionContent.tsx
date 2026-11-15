@@ -219,7 +219,7 @@ function ProviderChooser({
         </fieldset>
       ) : null}
       <TaskRail>
-        <RailItem>
+        <RailItem heading={message("webapp.connect_provider.rail.heading")}>
           <p>{message("webapp.connect_provider.note")}</p>
         </RailItem>
       </TaskRail>

@@ -99,7 +99,10 @@ There is no autofocus on page load. Loading, failure, and method availability
 do not move focus. Each changed state has one announcement path: progress, the MFA transition,
 and field-placed server failures use the page-owned live region, while a
 general submission failure, including rejected credentials, uses the
-always-mounted `FormFeedback` region after the submit action.
+always-mounted `FormFeedback` region after the submit action. After rejected
+credentials (outside the MFA step), the verification rail adds “Can’t
+remember your password?” with a “Reset it by email” link to
+`/account/forgot-password`; it does not appear before a rejection.
 Focus moves only for invalid form input or the MFA transition described below.
 
 All authored page copy uses `webapp.login.*` messages in `server/i18n`; the

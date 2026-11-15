@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { message } from "../../i18n/messages";
+import { RailItem, TaskRail } from "../AccessPageShell/AccessPageShell";
 import { Button } from "../Button/Button";
 import { TaskStateActions } from "../TaskState/TaskState";
 import styles from "./AccountSecurity.module.css";
@@ -54,6 +55,14 @@ export function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone(): vo
       <TaskStateActions>
         <Button disabled={!acknowledged} onClick={onDone}>{message("webapp.security.codes.done")}</Button>
       </TaskStateActions>
+      <TaskRail>
+        <RailItem heading={message("webapp.security.rail.codes.heading")}>
+          <p>{message("webapp.security.rail.codes.body")}</p>
+        </RailItem>
+        <RailItem heading={message("webapp.security.rail.apart.heading")}>
+          <p>{message("webapp.security.rail.apart.body")}</p>
+        </RailItem>
+      </TaskRail>
     </div>
   );
 }

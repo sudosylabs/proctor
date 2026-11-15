@@ -3,6 +3,7 @@ import { formatPasswordLength, usePasswordMinimumLength } from "../../auth/passw
 
 import type { PasswordResetCompletionResult } from "../../features/reset-password/ResetPasswordApi";
 import { message } from "../../i18n/messages";
+import { RailItem, TaskRail } from "../AccessPageShell/AccessPageShell";
 import { AccessTaskIntro } from "../AccessTaskIntro/AccessTaskIntro";
 import { Button, ButtonLink } from "../Button/Button";
 import { FormFeedback } from "../FormFeedback/FormFeedback";
@@ -122,7 +123,9 @@ export function ResetPasswordContent({
           focusHeading={transitioned}
           heading={heading}
           headingID="reset-heading"
-          status={{ label: message("webapp.reset_password.kind"), tone: complete ? "success" : "danger" }}
+          status={complete
+            ? { label: message("webapp.reset_password.status.complete"), tone: "success" }
+            : { label: message("webapp.reset_password.status.invalid"), tone: "danger" }}
         >
           <TaskStateActions className={styles.afterBody}>
             {complete ? (
@@ -210,6 +213,11 @@ export function ResetPasswordContent({
           </div>
           <FormFeedback message={formError} />
         </form>
+        <TaskRail>
+          <RailItem heading={message("webapp.reset_password.rail.heading")}>
+            <p>{message("webapp.reset_password.rail.body")}</p>
+          </RailItem>
+        </TaskRail>
       </section>
     </>
   );

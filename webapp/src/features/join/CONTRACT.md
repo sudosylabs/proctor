@@ -39,12 +39,16 @@ expires, formatted with `Intl` in the viewer's locale and time zone inside a
 Class is one more fact between the two. Academic Unit and Role names are
 deliberately absent from the projection, as from their mail, so none is shown
 or invented. The account form or the single Session action follows. The page presents no workflow steps or
-transaction internals.
+transaction internals. In the account variant, a verification-rail item
+“Already have a Proctor account?” links to Sign in and says to open the link
+again to accept with that account; both variants carry “Details look wrong?
+Ask the person who invited you for a new link.”
 
 Loading, unavailable, invalid, and accepted route states use the shared
 `TaskState` hierarchy and persistent polite announcement, with a status line
-only for a real outcome (danger for an unusable link, warning for an
-unavailable check, success after acceptance). The unusable-link state names
+only for a real outcome, each with its own word (danger “Link can’t be
+used” for an unusable link, warning “Invitation not checked” for an
+unavailable check, success “Invitation accepted” after acceptance). The unusable-link state names
 the possible causes together without revealing which applies, and offers sign
 in plus a support contact when the Institution publishes a support address.
 Acceptance states what the person can now do, chosen from the same purpose

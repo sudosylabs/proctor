@@ -28,8 +28,8 @@ never replays a provider-connection mutation after proof.
 The ready view uses the shell task column: the heading, a one-sentence lede
 about the result, the radio group when there is a choice, and one action row
 (Continue and a quiet Cancel link to `/account/security`). One
-verification-rail item keeps the password/profile and email non-merge
-guarantees together. Start failures stay beside the action row; the
+verification-rail item headed “What stays the same” keeps the password/profile
+and email non-merge guarantees together. Start failures stay beside the action row; the
 reauthentication follow-up is a plain link there, never a second primary
 button. The current User's display name appears only in the shell masthead. No
 progress rail or provider artwork is introduced.

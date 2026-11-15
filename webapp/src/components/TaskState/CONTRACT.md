@@ -6,7 +6,9 @@ Invitation acceptance, provider connection, and Desktop authorization. It owns a
 status line, the display-scale `h1`, supporting body, and responsive action
 rhythm. Feature modules retain state, copy, evidence, and available actions.
 
-`status` (`{ label, tone }`) appears only when the state is a real outcome.
+`status` (`{ label, tone }`) appears only when the state is a real outcome,
+and its label is that outcome in a few words (“Password changed”, “Link
+expired”), never the feature's name.
 `TaskStatusLine` renders it as the tone's icon (`stateSuccess`,
 `stateWarning`, or `stateDanger`) beside the label in the matching state
 colour at semibold weight; colour, shape, and words always travel together.

@@ -60,7 +60,8 @@ generated API client.
 ## Completion and failure
 
 A successful response clears live secrets and presents a completion state
-distinct from the already-set-up state: a success status line, a heading
+distinct from the already-set-up state: a success “Institution created”
+status line, a heading
 naming the new Institution, a lede giving the next step, a `FactList` of what
 was created (the Institution display name; the administrator name, or username
 when no name was given, and email), and a normal link to `/login`. Those

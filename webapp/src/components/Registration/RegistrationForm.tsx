@@ -367,6 +367,9 @@ export function RegistrationForm({
             })}
           </p>
         </RailItem>
+        <RailItem heading={message("webapp.register.rail.classes.heading")}>
+          <p>{message("webapp.register.rail.classes.body")}</p>
+        </RailItem>
       </TaskRail>
     </section>
   );

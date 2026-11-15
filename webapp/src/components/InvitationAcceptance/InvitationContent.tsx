@@ -12,6 +12,8 @@ import type {
 } from "../../features/join/InvitationApi";
 import { formatDateTime } from "../../i18n/dateTime";
 import { message, type MessageID } from "../../i18n/messages";
+import { richMessage } from "../../i18n/richMessage";
+import { RailItem, TaskRail } from "../AccessPageShell/AccessPageShell";
 import { AccessTaskIntro } from "../AccessTaskIntro/AccessTaskIntro";
 import { Button, ButtonLink } from "../Button/Button";
 import { Fact, FactList } from "../FactList/FactList";
@@ -22,6 +24,7 @@ import {
   TaskState,
   TaskStateActions,
   TaskStateAnnouncement,
+  type TaskStatus,
 } from "../TaskState/TaskState";
 import styles from "./InvitationAcceptance.module.css";
 
@@ -111,7 +114,7 @@ export function InvitationContent({
         <TaskStateAnnouncement message={heading} />
         <InvitationRouteState
           focusHeading
-          labelTone="success"
+          status={{ label: message("webapp.join.status.accepted"), tone: "success" }}
           heading={heading}
           body={message(
             acceptedBodies[accepted.requirement][accepted.purpose],
@@ -144,7 +147,7 @@ export function InvitationContent({
         <TaskStateAnnouncement message={message("webapp.join.invalid.heading")} />
         <InvitationRouteState
           focusHeading={retryRequested}
-          labelTone="danger"
+          status={{ label: message("webapp.join.status.invalid"), tone: "danger" }}
           heading={message("webapp.join.invalid.heading")}
           body={message("webapp.join.invalid.body")}
         >
@@ -170,7 +173,7 @@ export function InvitationContent({
         />
         <InvitationRouteState
           focusHeading={retryRequested}
-          labelTone="warning"
+          status={{ label: message("webapp.join.status.unavailable"), tone: "warning" }}
           heading={message("webapp.join.unavailable.heading")}
           body={message("webapp.join.unavailable.body")}
         >
@@ -211,6 +214,20 @@ export function InvitationContent({
             onAccepted={onAccepted}
           />
         )}
+        <TaskRail>
+          {transaction.requirement === "session" ? null : (
+            <RailItem heading={message("webapp.join.rail.existing.heading")}>
+              <p>
+                {richMessage("webapp.join.rail.existing.body", {
+                  Link: <a href="/login">{message("webapp.join.sign_in")}</a>,
+                })}
+              </p>
+            </RailItem>
+          )}
+          <RailItem heading={message("webapp.join.rail.details.heading")}>
+            <p>{message("webapp.join.rail.details.body")}</p>
+          </RailItem>
+        </TaskRail>
       </section>
     </>
   );
@@ -473,14 +490,14 @@ function InvitationRouteState({
   children,
   focusHeading = false,
   heading,
-  labelTone,
+  status,
 }: {
   body: string;
   busy?: boolean;
   children?: React.ReactNode;
   focusHeading?: boolean;
   heading: string;
-  labelTone?: "success" | "warning" | "danger";
+  status?: TaskStatus;
 }) {
   return (
     <TaskState
@@ -489,7 +506,7 @@ function InvitationRouteState({
       focusHeading={focusHeading}
       heading={heading}
       headingID="join-heading"
-      status={labelTone === undefined ? undefined : { label: message("webapp.join.kind"), tone: labelTone }}
+      status={status}
     >
       {children}
     </TaskState>

@@ -10,7 +10,7 @@ import { useAsyncResource } from "../../app/AsyncResource";
 import { useHostedInstitution } from "../../auth/HostedInstitution";
 import { navigateToProvider } from "../../auth/navigation";
 import type { PublicAccessDiscovery } from "../../auth/PublicAccessDiscovery";
-import { AccessPageShell, RailItem } from "../../components/AccessPageShell/AccessPageShell";
+import { AccessPageShell, RailItem, TaskRail } from "../../components/AccessPageShell/AccessPageShell";
 import { AccessTaskIntro } from "../../components/AccessTaskIntro/AccessTaskIntro";
 import { AuthenticationCodeField, isCompleteAuthenticationCode, type AuthenticationCodeValue } from "../../components/AuthenticationCodeField/AuthenticationCodeField";
 import { Button, ButtonLink } from "../../components/Button/Button";
@@ -314,6 +314,8 @@ function LocalLoginForm({
   const [pending, setPending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string>();
+  // After rejected credentials, the rail offers the password reset route.
+  const [credentialsRejected, setCredentialsRejected] = useState(false);
   const [liveMessage, setLiveMessage] = useState("");
   const loginIDRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -414,6 +416,7 @@ function LocalLoginForm({
           safeError = message("webapp.login.form.error.generic");
       }
       setFormError(safeError);
+      setCredentialsRejected(result.kind === "invalid_credentials");
       setLiveMessage("");
     } catch {
       const safeError = message("webapp.login.form.error.generic");
@@ -519,6 +522,21 @@ function LocalLoginForm({
           ) : null}
         </div>
         <FormFeedback message={formError} />
+        {credentialsRejected && !mfaRequired ? (
+          <TaskRail>
+            <RailItem heading={message("webapp.login.rail.reset.heading")}>
+              <p>
+                {richMessage("webapp.login.rail.reset.body", {
+                  Link: (
+                    <a href="/account/forgot-password">
+                      {message("webapp.login.rail.reset.action")}
+                    </a>
+                  ),
+                })}
+              </p>
+            </RailItem>
+          </TaskRail>
+        ) : null}
       </div>
     </form>
   );

@@ -38,7 +38,8 @@ feature-specific state.
 `OneTimeCodeField` is the six-digit variant used by authenticator enrollment
 and Session proof. It wraps the pinned `input-otp` primitive with one labelled
 native text input (`inputmode="numeric"`, `autocomplete="one-time-code"`) and
-six decorative slots. There is one tab stop; normal selection, arrow keys,
+six decorative slots, laid out as two groups of three with a wider gutter
+after the third so the code is read in two chunks. There is one tab stop; normal selection, arrow keys,
 Backspace, leading zeroes, typing, paste, and autofill retain native input
 semantics. Spaces and hyphens may separate pasted digits; letters are rejected.
 Completion never submits automatically.

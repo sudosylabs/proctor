@@ -82,7 +82,7 @@ export function ForgotPasswordContent({
           focusHeading
           heading={message("webapp.forgot_password.accepted.heading")}
           headingID="forgot-heading"
-          status={{ label: message("webapp.forgot_password.kind"), tone: "success" }}
+          status={{ label: message("webapp.forgot_password.status.accepted"), tone: "success" }}
         >
           <div className={styles.outcome}>
             <Notice

@@ -669,6 +669,13 @@ test("rejected credentials stay beside the action and keep both values", { tag: 
   const password = page.locator("#password");
   await expect(password).not.toHaveAttribute("aria-invalid", "true");
   await expect(page.locator("#login-id")).not.toHaveAttribute("aria-invalid", "true");
+  // The rail offers the reset route only once credentials were rejected.
+  const rail = page.getByRole("complementary", { name: "About this page" });
+  await expect(rail.getByRole("heading", { name: "Can’t remember your password?" })).toBeVisible();
+  await expect(rail.getByRole("link", { name: "Reset it by email" })).toHaveAttribute(
+    "href",
+    "/account/forgot-password",
+  );
   await expect(password).toHaveValue("private-password");
   await expect(page.getByLabel("Email or username")).toHaveValue(
     "student@example.edu",
@@ -954,10 +961,8 @@ test("password recovery keeps its accepted response generic", async ({ page }) =
   ).toBeFocused();
   await expect(page.getByRole("status")).toContainText("Check your email");
   await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-  await expect(page.getByText("Reset password", { exact: true })).toHaveCSS(
-    "color",
-    "rgb(11, 118, 110)",
-  );
+  await expect(page.locator('[data-proctor-status-tone]')).toHaveText("Request received");
+  await expect(page.locator('[data-proctor-status-tone]')).toHaveCSS("color", "rgb(11, 118, 110)");
   // The typed address is echoed from page memory inside the same generic
   // sentence for every address; it never claims that an account exists.
   await expect(page.locator("main")).toContainText(
@@ -998,7 +1003,10 @@ test("password reset consumes only the sanitized fragment credential", async ({
   await expect(
     page.getByRole("heading", { level: 1, name: "Choose a new password" }),
   ).toBeVisible();
-  await expect(page.getByRole("heading")).toHaveCount(1);
+  await expect(page.getByRole("main").getByRole("heading")).toHaveCount(1);
+  await expect(
+    page.getByRole("complementary", { name: "About this page" }).getByRole("heading", { name: "This link works once" }),
+  ).toBeVisible();
   await expect(page.locator("#new-password")).toHaveAccessibleDescription(
     "At least 14 characters. You can’t reuse a recent password.",
   );
@@ -1059,7 +1067,7 @@ test("password reset announces an unusable link returned after submission", { ta
     "This reset link has expired",
   );
   const status = page.locator('[data-proctor-status-tone="danger"]');
-  await expect(status).toHaveText("Reset password");
+  await expect(status).toHaveText("Link expired");
   await expect(status).toHaveCSS("color", "rgb(165, 31, 55)");
   await expect(status.locator('[data-proctor-icon="stateDanger"]')).toBeVisible();
   await expect(page.getByRole("link", { name: "Send a new link" })).toHaveAttribute(

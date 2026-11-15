@@ -97,8 +97,10 @@ Initial confirmation uses the shared Loading indicator and supporting message
 within the shared `TaskState` in the shell task column. The page heading
 remains visible without taking focus. There is no centred card or coloured
 panel; a status line (icon and label in the state colour) appears only for a
-real outcome: teal for a confirmed sign-in and amber for a recovery
-restriction. The
+real outcome: teal “Sign-in confirmed” for a confirmed sign-in, amber “Not
+signed in” when the browser has no Session, amber “Sign-in not checked” when
+the check is unavailable, and amber “Action needed” for a recovery or
+enrollment restriction. The checking state shows none. The
 existing page-owned live region announces progress. An explicit retry keeps
 its current result in place and shows the spinner inside the retry button.
 

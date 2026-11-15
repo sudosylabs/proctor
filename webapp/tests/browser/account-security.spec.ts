@@ -172,6 +172,27 @@ test("status names the signed-in User and signs out from the footer", async ({ p
   expect(mutations(state, "/logout")).toHaveLength(1);
 });
 
+test("setup copies the ungrouped key and splits the code into two groups", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await mockSecurity(page);
+  await page.goto("/account/security");
+  await page.getByRole("button", { name: "Set up two-step verification", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Turn on two-step verification", level: 1 })).toBeFocused();
+
+  await page.getByRole("button", { name: "Copy setup key" }).click();
+  await expect(page.getByText("Setup key copied.")).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(setupKey);
+
+  // A wider gutter after the third slot reads the six digits as three and three.
+  const gaps = await page.locator("[data-proctor-otp-slot]").evaluateAll((slots) => {
+    const boxes = slots.map((slot) => slot.getBoundingClientRect());
+    return boxes.slice(1).map((box, index) => box.left - boxes[index].right);
+  });
+  expect(gaps).toHaveLength(5);
+  expect(gaps[2]).toBeGreaterThan(gaps[0] + 4);
+  expect(gaps[0]).toBeCloseTo(gaps[1], 0);
+});
+
 test("OTP supports leading zeroes, editing, paste, validation and explicit submission", { tag: "@cross-browser" }, async ({ page }) => {
   const state = await mockSecurity(page);
   await page.goto("/account/security");
@@ -282,7 +303,7 @@ test("enrollment shows codes once and requires acknowledgement before hiding the
   expect(state.requests.filter(({ method }) => method === "POST")).toHaveLength(0);
   await activate(page);
   await expect(page.getByRole("heading", { name: "Save your recovery codes", level: 1 })).toBeFocused();
-  await expect(page.getByText("Two-step verification", { exact: true }).first()).toBeVisible();
+  await expect(page.locator('[data-proctor-status-tone="success"]')).toHaveText("Two-step verification is on");
   await expect(page.getByRole("list", { name: "Recovery codes" }).getByRole("listitem")).toHaveText(recoveryCodes);
   const finish = page.getByRole("button", { name: "Done", exact: true });
   await expect(finish).toBeDisabled();

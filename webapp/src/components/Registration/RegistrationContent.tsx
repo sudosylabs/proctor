@@ -76,7 +76,7 @@ export function RegistrationContent({
   if (state.kind === "invitation_required") {
     return (
       <RegistrationState
-        status={{ label: message("webapp.register.kind"), tone: "warning" }}
+        status={{ label: message("webapp.register.status.invitation_required"), tone: "warning" }}
         heading={message("webapp.register.invitation_required.heading")}
         body={
           institution.displayName === undefined

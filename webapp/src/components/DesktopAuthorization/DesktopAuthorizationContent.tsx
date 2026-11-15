@@ -17,6 +17,7 @@ import {
   TaskState,
   TaskStateActions,
   TaskStateAnnouncement,
+  type TaskStatus,
 } from "../TaskState/TaskState";
 import styles from "./DesktopAuthorization.module.css";
 
@@ -71,7 +72,7 @@ export function DesktopAuthorizationContent({ journey }: DesktopAuthorizationCon
           focusHeading={focusHeading}
           heading={message("webapp.desktop_authorization.unavailable.heading")}
           headingID="desktop-heading"
-          status={{ label: message("webapp.desktop_authorization.kind"), tone: "warning" }}
+          status={{ label: message("webapp.desktop_authorization.status.unavailable"), tone: "warning" }}
         >
           <TaskStateActions>
             <Button disabled={pending !== undefined} onClick={journey.retry}>
@@ -152,6 +153,13 @@ export function DesktopAuthorizationContent({ journey }: DesktopAuthorizationCon
           <TaskRail>
             <RailItem heading={message("webapp.desktop_authorization.note.lead")}>
               <p>{message("webapp.desktop_authorization.note.body")}</p>
+            </RailItem>
+            <RailItem>
+              <FactList>
+                <Fact label={message("webapp.desktop_authorization.rail.expires")}>
+                  <time dateTime={view.context.expiresAt}>{formatDateTime(view.context.expiresAt)}</time>
+                </Fact>
+              </FactList>
             </RailItem>
           </TaskRail>
         </div>
@@ -406,7 +414,7 @@ function TerminalContent({
       focusHeading={focusHeading}
       heading={content.heading}
       headingID="desktop-heading"
-      status={content.tone === undefined ? undefined : { label: message("webapp.desktop_authorization.kind"), tone: content.tone }}
+      status={content.status}
     >
       {state === "approved" ? (
         <Loading
@@ -430,12 +438,12 @@ function TerminalContent({
 function terminalCopy(state: DesktopTerminalState): {
   body: string;
   heading: string;
-  tone?: "success" | "warning" | "danger";
+  status?: TaskStatus;
 } {
   switch (state) {
     case "approved":
       return {
-        tone: "success",
+        status: { label: message("webapp.desktop_authorization.status.approved"), tone: "success" },
         heading: message("webapp.desktop_authorization.approved.heading"),
         body: message("webapp.desktop_authorization.approved.body"),
       };
@@ -446,13 +454,13 @@ function terminalCopy(state: DesktopTerminalState): {
       };
     case "locked":
       return {
-        tone: "warning",
+        status: { label: message("webapp.desktop_authorization.status.locked"), tone: "warning" },
         heading: message("webapp.desktop_authorization.locked.heading"),
         body: message("webapp.desktop_authorization.locked.body"),
       };
     case "invalid":
       return {
-        tone: "danger",
+        status: { label: message("webapp.desktop_authorization.status.invalid"), tone: "danger" },
         heading: message("webapp.desktop_authorization.invalid.heading"),
         body: message("webapp.desktop_authorization.invalid.body"),
       };

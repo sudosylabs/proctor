@@ -9,8 +9,8 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 // Only repository tooling reads the artwork masters. Packages consume copies.
 export const brandCopies = [
-  ['lockups/horizontal/svg/proctor-lockup-horizontal-flat-light.svg', 'webapp/src/assets/brand/proctor-lockup.svg'],
-  ['lockups/horizontal/svg/proctor-lockup-horizontal-flat-purple-white.svg', 'webapp/src/assets/brand/proctor-lockup-purple-white.svg'],
+  ['lockups/horizontal/svg/proctor-lockup-horizontal-25d-light.svg', 'webapp/src/assets/brand/proctor-lockup-light.svg'],
+  ['lockups/horizontal/svg/proctor-lockup-horizontal-25d-dark.svg', 'webapp/src/assets/brand/proctor-lockup-dark.svg'],
   ['favicons/light/proctor-favicon-light.svg', 'webapp/src/assets/brand/proctor-favicon-light.svg'],
   ['favicons/dark/proctor-favicon-dark.svg', 'webapp/src/assets/brand/proctor-favicon-dark.svg'],
   ['favicons/light/proctor-favicon-light-32.png', 'webapp/src/assets/brand/proctor-favicon-light-32.png'],

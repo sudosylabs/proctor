@@ -1,0 +1,50 @@
+@layer components {
+  .group {
+    min-inline-size: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  /* Groups after the first sit under a hairline; proximity and the heading do the rest. */
+  .group + .group {
+    padding-block-start: var(--proctor-space-6);
+    border-block-start: var(--proctor-border-width-hairline) solid
+      var(--proctor-color-border-default);
+  }
+
+  /* A floated legend never cuts the rule and takes ordinary block spacing. */
+  .legend {
+    float: inline-start;
+    inline-size: 100%;
+    padding: 0;
+  }
+
+  .legend + .body {
+    clear: both;
+  }
+
+  .heading {
+    display: flex;
+    align-items: baseline;
+    gap: var(--proctor-space-3);
+    font-size: var(--proctor-font-size-heading-small);
+    font-weight: var(--proctor-font-weight-semibold);
+    line-height: var(--proctor-line-height-heading-small);
+  }
+
+  .number {
+    color: var(--proctor-color-foreground-muted);
+    font-family: var(--proctor-font-family-mono);
+    font-size: var(--proctor-font-size-body-small);
+    font-weight: var(--proctor-font-weight-semibold);
+  }
+
+  .body {
+    display: flex;
+    min-inline-size: 0;
+    flex-direction: column;
+    gap: var(--proctor-space-5);
+    padding-block-start: var(--proctor-space-5);
+  }
+}

@@ -5,11 +5,18 @@
     direction: ltr;
   }
 
+  /* Six digits read as two groups of three: a wider gutter after the third slot. */
   .slots {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr)) var(--proctor-space-3)
+      repeat(3, minmax(0, 1fr));
     gap: var(--proctor-space-2);
     inline-size: 100%;
+  }
+
+  .slot:nth-child(4) {
+    grid-column: 5;
   }
 
   .slot {

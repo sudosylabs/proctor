@@ -158,4 +158,12 @@
       background: CanvasText;
     }
   }
+
+  /* Two numbered setup steps, spaced as groups. */
+  .steps {
+    display: flex;
+    min-inline-size: 0;
+    flex-direction: column;
+    gap: var(--proctor-space-6);
+  }
 }

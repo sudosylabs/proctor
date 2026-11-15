@@ -1,11 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 896 176" fill="none">
-  <title>Proctor horizontal lockup — flat-light</title>
+  <title>Proctor horizontal lockup — 25d-dark</title>
   <g transform="translate(0 4) scale(0.283305)">
-    <path fill="#5C00AA" d="M0 0H486L578 92H92V578L0 486Z" />
-    <path fill="#5C00AA" fill-rule="evenodd" d="M127 107H573A20 20 0 0 1 593 127V573A20 20 0 0 1 573 593H127A20 20 0 0 1 107 573V127A20 20 0 0 1 127 107ZM167 157H533A10 10 0 0 1 543 167V533A10 10 0 0 1 533 543H167A10 10 0 0 1 157 533V167A10 10 0 0 1 167 157Z" />
+    <defs>
+      <path id="front" fill-rule="evenodd" clip-rule="evenodd" d="M127 107H573A20 20 0 0 1 593 127V573A20 20 0 0 1 573 593H127A20 20 0 0 1 107 573V127A20 20 0 0 1 127 107ZM167 157H533A10 10 0 0 1 543 167V533A10 10 0 0 1 533 543H167A10 10 0 0 1 157 533V167A10 10 0 0 1 167 157Z" />
+      <mask id="container-shape" maskUnits="userSpaceOnUse" x="0" y="0" width="593" height="593" style="mask-type:alpha">
+        <path fill="#FFFFFF" d="M0 0H486L578 92H92V578L0 486Z" />
+        <use href="#front" fill="#FFFFFF" />
+      </mask>
+      <clipPath id="opening-bevel">
+        <path clip-rule="evenodd" d="M167 148H533A19 19 0 0 1 552 167V533A19 19 0 0 1 533 552H167A19 19 0 0 1 148 533V167A19 19 0 0 1 167 148ZM167 157H533A10 10 0 0 1 543 167V533A10 10 0 0 1 533 543H167A10 10 0 0 1 157 533V167A10 10 0 0 1 167 157Z" />
+      </clipPath>
+      <clipPath id="outer-bevel">
+        <path clip-rule="evenodd" d="M127 107H573A20 20 0 0 1 593 127V573A20 20 0 0 1 573 593H127A20 20 0 0 1 107 573V127A20 20 0 0 1 127 107ZM127 114H573A13 13 0 0 1 586 127V573A13 13 0 0 1 573 586H127A13 13 0 0 1 114 573V127A13 13 0 0 1 127 114Z" />
+      </clipPath>
+    </defs>
+    <g mask="url(#container-shape)">
+      <rect x="-1" y="-1" width="595" height="595" fill="#9471B8" />
+      <path id="top-wall" fill="#D3BCEB" d="M0 0H593V92H92Z" />
+      <rect x="100" y="100" width="500" height="500" fill="#FCFAFF" />
+      <g clip-path="url(#outer-bevel)">
+        <path fill="#E7DDEF" d="M700 0V700L350 350Z" />
+        <path fill="#DCCDE8" d="M0 700H700L350 350Z" />
+      </g>
+      <g clip-path="url(#opening-bevel)">
+        <rect x="148" y="148" width="404" height="404" fill="#FFFFFF" />
+        <path fill="#C2AFD3" d="M0 0H700L350 350Z" />
+        <path fill="#DDD0E8" d="M0 0L350 350L0 700Z" />
+      </g>
+    </g>
   </g>
   <!-- Wordmark outlines from IBM Plex Sans Medium, licensed under the SIL Open Font License 1.1. -->
-  <g fill="#161616" transform="translate(200 164) scale(0.8545)">
+  <g fill="#FFFFFF" transform="translate(200 164) scale(0.8545)">
     <path d="M18.92 0V-153.56H84.92Q106.26-153.56 117.92-141.02Q129.58-128.48 129.58-107.36Q129.58-86.24 117.92-73.7Q106.26-61.16 84.92-61.16H43.78V0ZM43.78-82.94H83.38Q92.84-82.94 98.12-87.89Q103.4-92.84 103.4-102.08V-112.64Q103.4-121.88 98.12-126.83Q92.84-131.78 83.38-131.78H43.78Z" />
     <path d="M162.8 0V-114.4H186.78V-92.4H187.88Q190.3-101.2 198-107.8Q205.7-114.4 219.34-114.4H225.72V-91.3H216.26Q201.96-91.3 194.37-86.68Q186.78-82.06 186.78-73.04V0Z" />
     <path d="M299.64 2.64Q287.76 2.64 277.97-1.54Q268.18-5.72 261.36-13.53Q254.54-21.34 250.8-32.45Q247.06-43.56 247.06-57.2Q247.06-70.84 250.8-81.95Q254.54-93.06 261.36-100.87Q268.18-108.68 277.97-112.86Q287.76-117.04 299.64-117.04Q311.52-117.04 321.31-112.86Q331.1-108.68 337.92-100.87Q344.74-93.06 348.48-81.95Q352.22-70.84 352.22-57.2Q352.22-43.56 348.48-32.45Q344.74-21.34 337.92-13.53Q331.1-5.72 321.31-1.54Q311.52 2.64 299.64 2.64ZM299.64-17.16Q311.96-17.16 319.44-24.75Q326.92-32.34 326.92-47.52V-66.88Q326.92-82.06 319.44-89.65Q311.96-97.24 299.64-97.24Q287.32-97.24 279.84-89.65Q272.36-82.06 272.36-66.88V-47.52Q272.36-32.34 279.84-24.75Q287.32-17.16 299.64-17.16Z" />

@@ -1,7 +1,12 @@
 import {
+  CircleAlert,
+  CircleCheck,
+  CircleX,
   Eye,
   EyeOff,
   Loader,
+  Lock,
+  TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
 
@@ -11,6 +16,11 @@ const iconComponents = {
   loading: Loader,
   hidePassword: EyeOff,
   showPassword: Eye,
+  stateSuccess: CircleCheck,
+  stateWarning: TriangleAlert,
+  stateDanger: CircleX,
+  error: CircleAlert,
+  readOnly: Lock,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof iconComponents;

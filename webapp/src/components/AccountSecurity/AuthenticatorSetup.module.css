@@ -40,6 +40,30 @@
     user-select: all;
   }
 
+  .copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--proctor-space-2);
+    padding-block-start: var(--proctor-space-2);
+  }
+
+  .copyButton {
+    min-block-size: var(--proctor-control-size-default);
+    padding-block: var(--proctor-space-2);
+    font-size: var(--proctor-font-size-body-small);
+  }
+
+  .copyStatus {
+    color: var(--proctor-color-foreground-muted);
+    font-size: var(--proctor-font-size-body-small);
+    line-height: var(--proctor-line-height-body-small);
+  }
+
+  .copyStatus:empty {
+    display: none;
+  }
+
   .visuallyHidden {
     position: absolute;
     inline-size: 1px;

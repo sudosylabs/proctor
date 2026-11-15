@@ -5,7 +5,7 @@ import { InputField } from "./InputField";
 import { PasswordField } from "./PasswordField";
 
 describe("InputField", () => {
-  it("associates its visible constraint, description, and error", () => {
+  it("associates its native constraint, description, and error", () => {
     const markup = renderToStaticMarkup(
       <InputField
         id="email"
@@ -17,14 +17,22 @@ describe("InputField", () => {
       />,
     );
 
-    expect(markup).toContain('<label for="email">Email address');
-    expect(markup).toContain("data-required-indicator");
-    expect(markup).toContain('aria-hidden="true"');
-    expect(markup).toContain("required");
+    expect(markup).toContain('<label for="email">Email address</label>');
+    expect(markup).not.toContain("data-required-indicator");
+    expect(markup).toContain('required=""');
     expect(markup).toContain('aria-invalid="true"');
     expect(markup).toContain(
       'aria-describedby="email-description email-error"',
     );
+  });
+
+  it("marks a read-only value with a lock", () => {
+    const markup = renderToStaticMarkup(
+      <InputField id="invited-email" label="Email" name="email" readOnly defaultValue="a@example.edu" />,
+    );
+
+    expect(markup).toContain("readOnly");
+    expect(markup).toContain('data-proctor-icon="readOnly"');
   });
 
   it("renders a named icon-only password disclosure", () => {

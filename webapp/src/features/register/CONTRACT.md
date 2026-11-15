@@ -25,8 +25,9 @@ whether setup, public registration, or Invitation admission applies.
   required and does not accept an email address or imply that an Invitation
   exists. That state replaces the whole task, including the registration
   heading, so nothing on the page also suggests that public registration is
-  open. Its kind line uses the warning tone; it offers sign-in and, when the
-  Institution publishes a support address, a secondary contact action.
+  open. Its warning status line reads “Invitation needed”; it offers sign-in
+  and, when the Institution publishes a support address, a secondary contact
+  action.
 - Origin mismatch fails closed with a reload action.
 - A network failure, malformed success body, or unavailable policy produces a
   recoverable state with an explicit retry action.
@@ -108,12 +109,14 @@ submit action remain stationary while ordinary failure copy appears.
 
 The page uses the single task column of `AccessPageShell`; the shell
 masthead names the Institution. Every state opens with one `AccessTaskIntro`
-(kind line “Create an account”, the single page heading, and a lede), so the
-page never shows two competing headings. The form's lede names the
-Institution and says email confirmation comes before sign-in, which replaces a
-separate mail notice. “Already have an account?” follows the form as a small
-heading under a hairline rule. The accepted state's success-toned kind line
-appears only after the server accepts the request, and its heading takes focus
+(the single page heading and a lede), so the page never shows two competing
+headings. The form's lede names the Institution and says email confirmation
+comes before sign-in, which replaces a separate mail notice. “Already have an
+account?” is a verification-rail item beside the form, followed by
+“Joining a class or exam?”, which says the Institution adds people to classes
+by invitation and an account alone gives no access. The accepted state's
+success status line (“Request received”) appears only after the server
+accepts the request, and its heading takes focus
 because the submit action that invoked it is gone.
 
 The column stays in one-dimensional document flow at every width. Both

@@ -80,27 +80,6 @@
     line-height: var(--proctor-line-height-body-small);
   }
 
-  .signIn {
-    display: flex;
-    flex-direction: column;
-    gap: var(--proctor-space-2);
-    margin-block-start: var(--proctor-space-2);
-    padding-block-start: var(--proctor-space-5);
-    border-block-start: var(--proctor-border-width-hairline) solid
-      var(--proctor-color-border-default);
-  }
-
-  .signIn h2 {
-    font-size: var(--proctor-font-size-body);
-    font-weight: var(--proctor-font-weight-semibold);
-    line-height: var(--proctor-line-height-heading-small);
-  }
-
-  .signIn p {
-    color: var(--proctor-color-foreground-subtle);
-    font-size: var(--proctor-font-size-body-small);
-    line-height: var(--proctor-line-height-body-small);
-  }
 
   .visuallyHidden {
     position: absolute;
@@ -128,12 +107,6 @@
 
     .actions > * {
       inline-size: 100%;
-    }
-  }
-
-  @media (forced-colors: active) {
-    .signIn {
-      border-block-start-color: CanvasText;
     }
   }
 }

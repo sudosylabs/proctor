@@ -56,9 +56,15 @@ page drops its reference after a restored, invalid, or conflict outcome.
 The link-unavailable state does not distinguish malformed, expired, already
 used, or superseded tokens; it states the single-use, 72-hour window (the
 server default). The page uses the shared hosted shell column and `TaskState`
-hierarchy with the `Security` kind line: coral while the unrecognised change
-is pending and for unusable or conflicting links, teal once restored, and
-amber when the undo is unavailable. Focus moves to the new heading after a
+hierarchy with a status line (icon and its own word in the state colour):
+coral “Email address changed” while the unrecognised change is pending, coral
+“Link can’t be used” and “Address not restored” for unusable or conflicting
+links, teal “Previous address restored” once restored, and amber “Too many
+attempts” or “Change not undone” when the undo is rate limited or unavailable.
+The ready state's verification rail adds “Didn’t make this change?” (undo it
+here, then reset the password from the sign-in page and tell the Institution)
+and “This link works once” (undo links work once, for 72 hours after the
+change). Focus moves to the new heading after a
 user-triggered outcome, and one persistent polite live region announces it. All copy uses
 `webapp.undo_email_change.*` messages in `server/i18n`.
 

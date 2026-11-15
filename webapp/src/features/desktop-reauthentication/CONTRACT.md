@@ -22,9 +22,12 @@ removes and the page shows as a warning beside the same choice. A signed-in
 browser Web Session is never offered or used as proof.
 
 The heading is “Confirm it’s you”; the lede names the Desktop Session's
-account and says the proof is “to continue in Proctor Desktop”. A muted
-closing line says the proof applies to Proctor Desktop only. The shell shows
-no signed-in footer because this browser is not signed in.
+account and says the proof is “to continue in Proctor Desktop”. A
+verification-rail item says the proof applies to Proctor Desktop only, and a
+second states “Request expires” as a fact, the request's `expiresAt` formatted
+with `Intl` inside a `time` element. The
+shell masthead shows no signed-in identity because this browser is not signed
+in.
 
 As soon as the request is proved (after the password, or on return from the
 provider) the journey approves it without another click and navigates only to
@@ -38,6 +41,8 @@ share one unusable-link state. A failed check shows recoverable unavailability
 with a retry that never repeats binding. A wrong password or rate limit keeps
 the form, clears the field, and explains the failure in persistent
 `FormFeedback`. Terminal transitions caused by an action focus their heading.
+Terminal status lines carry their own word: success “Confirmed”, danger “Link
+can’t be used”, and warning “Request not checked”; cancellation shows none.
 
 The feature-owned journey is the sole owner of transitions and pending work;
 password proof, provider navigation, approval, and cancellation cannot overlap,

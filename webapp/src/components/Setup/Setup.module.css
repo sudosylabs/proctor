@@ -20,7 +20,7 @@
   }
 
   .form {
-    gap: var(--proctor-space-5);
+    gap: var(--proctor-space-7);
   }
 
   /* Codes and identifiers read in the data face; masked dots stay as-is. */

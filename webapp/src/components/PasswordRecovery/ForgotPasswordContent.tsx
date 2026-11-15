@@ -82,8 +82,7 @@ export function ForgotPasswordContent({
           focusHeading
           heading={message("webapp.forgot_password.accepted.heading")}
           headingID="forgot-heading"
-          label={message("webapp.forgot_password.kind")}
-          labelTone="success"
+          status={{ label: message("webapp.forgot_password.status.accepted"), tone: "success" }}
         >
           <div className={styles.outcome}>
             <Notice
@@ -121,7 +120,6 @@ export function ForgotPasswordContent({
       <TaskStateAnnouncement message="" />
       <section className={styles.page} aria-labelledby="forgot-heading">
         <AccessTaskIntro
-          kind={message("webapp.forgot_password.kind")}
           heading={message("webapp.forgot_password.context.heading")}
           body={message("webapp.forgot_password.context.body")}
           headingID="forgot-heading"

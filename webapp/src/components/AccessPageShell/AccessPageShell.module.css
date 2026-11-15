@@ -1,8 +1,17 @@
 @layer components {
-  .shell {
+  /*
+   * One twelve-column grid owns the page. The masthead, the task column, and
+   * the rail share its inline-start edge.
+   */
+  .frame {
     display: grid;
+    box-sizing: content-box;
     min-block-size: 100vh;
-    grid-template-rows: auto 1fr auto;
+    max-inline-size: var(--proctor-measure-content);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    align-content: start;
+    margin-inline: auto;
     padding-inline: max(var(--proctor-space-5), env(safe-area-inset-left))
       max(var(--proctor-space-5), env(safe-area-inset-right));
   }
@@ -10,107 +19,179 @@
   .masthead {
     display: flex;
     min-inline-size: 0;
+    min-block-size: var(--proctor-space-8);
     align-items: center;
     justify-content: space-between;
-    gap: var(--proctor-space-5);
-    padding-block: max(var(--proctor-space-5), env(safe-area-inset-top))
-      var(--proctor-space-5);
+    gap: var(--proctor-space-4);
+    padding-block-start: env(safe-area-inset-top);
+    border-block-end: var(--proctor-border-width-hairline) solid
+      var(--proctor-color-border-default);
+  }
+
+  .identity {
+    display: flex;
+    min-inline-size: 0;
+    align-items: center;
+    gap: var(--proctor-space-3);
   }
 
   .brand {
     display: block;
     flex: none;
-    block-size: var(--proctor-space-5);
+    block-size: 1.625rem;
     inline-size: auto;
   }
 
   .institution {
-    display: none;
     min-inline-size: 0;
-    max-inline-size: 50%;
+    padding-inline-start: var(--proctor-space-3);
+    border-inline-start: var(--proctor-border-width-hairline) solid
+      var(--proctor-color-border-default);
     color: var(--proctor-color-foreground-muted);
     font-size: var(--proctor-font-size-body-small);
     line-height: var(--proctor-line-height-body-small);
     overflow-wrap: anywhere;
-    text-align: end;
-  }
-
-  .main {
-    inline-size: 100%;
-    min-inline-size: 0;
-    max-inline-size: var(--proctor-measure-form);
-    margin-inline: auto;
-    padding-block: var(--proctor-space-6) var(--proctor-space-7);
-  }
-
-  .footer {
-    padding-block-end: max(var(--proctor-space-6), env(safe-area-inset-bottom));
-  }
-
-  .footerRule {
-    display: flex;
-    flex-wrap: wrap;
-    inline-size: 100%;
-    max-inline-size: var(--proctor-measure-form);
-    justify-content: space-between;
-    gap: var(--proctor-space-2) var(--proctor-space-5);
-    padding-block-start: var(--proctor-space-4);
-    margin-inline: auto;
-    border-block-start: var(--proctor-border-width-hairline) solid
-      var(--proctor-color-border-default);
-    color: var(--proctor-color-foreground-muted);
-    font-size: var(--proctor-font-size-label);
-    line-height: var(--proctor-line-height-label);
   }
 
   .signedIn {
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--proctor-space-2);
+    min-inline-size: 0;
+    flex: none;
+    align-items: center;
+    gap: var(--proctor-space-4);
+    color: var(--proctor-color-foreground-muted);
+    font-size: var(--proctor-font-size-body-small);
+    line-height: var(--proctor-line-height-body-small);
+  }
+
+  .signedInText {
     min-inline-size: 0;
     overflow-wrap: anywhere;
   }
 
-  .help {
+  .signedInShort {
+    color: var(--proctor-color-foreground-default);
+    font-weight: var(--proctor-font-weight-semibold);
+  }
+
+  /* Narrow mastheads show the name only; the full sentence stays for assistive technology. */
+  .signedInFull {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* A signed-in masthead gives the narrow row to the identity, not the Institution. */
+  .masthead[data-proctor-shell-signed-in] .institution {
+    display: none;
+  }
+
+  .task {
     min-inline-size: 0;
+    padding-block: var(--proctor-space-6) var(--proctor-space-6);
+  }
+
+  .rail {
+    display: flex;
+    min-inline-size: 0;
+    flex-direction: column;
+    gap: var(--proctor-space-5);
+    margin-block-end: var(--proctor-space-7);
+    padding-block-start: var(--proctor-space-6);
+    border-block-start: var(--proctor-border-width-hairline) solid
+      var(--proctor-color-border-default);
+    color: var(--proctor-color-foreground-muted);
+    font-size: var(--proctor-font-size-body-small);
+    line-height: var(--proctor-line-height-body-small);
+  }
+
+  /* Nested task content portals its rail items here; the slot adds no box. */
+  .railSlot {
+    display: contents;
+  }
+
+  .railItem {
+    display: flex;
+    min-inline-size: 0;
+    flex-direction: column;
+    gap: var(--proctor-space-1);
     overflow-wrap: anywhere;
   }
 
-  .footerRule a {
-    color: inherit;
+  .railItem h2 {
+    color: var(--proctor-color-foreground-default);
+    font-family: var(--proctor-font-family-text);
+    font-size: var(--proctor-font-size-body-small);
+    font-weight: var(--proctor-font-weight-semibold);
+    line-height: var(--proctor-line-height-body-small);
+  }
+
+  /* Needed before acting: the page repeats it under its lede at this width. */
+  .beforeTask {
+    display: none;
   }
 
   @supports (min-block-size: 100dvb) {
-    .shell {
+    .frame {
       min-block-size: 100dvb;
     }
   }
 
-  @media (min-width: 30rem) {
-    .institution {
-      display: block;
-    }
-  }
-
   @media (min-width: 48rem) {
-    .shell {
+    .frame {
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      grid-template-rows: auto 1fr;
+      column-gap: var(--proctor-space-5);
       padding-inline: max(var(--proctor-space-7), env(safe-area-inset-left))
         max(var(--proctor-space-7), env(safe-area-inset-right));
     }
 
     .masthead {
-      padding-block: max(var(--proctor-space-6), env(safe-area-inset-top))
-        var(--proctor-space-6);
+      grid-column: 1 / -1;
+      min-block-size: 5.5rem;
     }
 
-    .main {
-      padding-block: calc(var(--proctor-space-7) + var(--proctor-space-2))
-        var(--proctor-space-8);
+    .signedInFull {
+      position: static;
+      inline-size: auto;
+      block-size: auto;
+      overflow: visible;
+      clip-path: none;
+      white-space: normal;
     }
 
-    .footer {
-      padding-block-end: max(var(--proctor-space-7), env(safe-area-inset-bottom));
+    .signedInShort {
+      display: none;
+    }
+
+    .masthead[data-proctor-shell-signed-in] .institution {
+      display: block;
+    }
+
+    .task {
+      grid-column: 1 / span 6;
+      padding-block: var(--proctor-space-8) var(--proctor-space-9);
+    }
+
+    /* The rule is only as tall as the rail's content; its first heading meets the h1 cap line. */
+    .rail {
+      grid-column: 8 / -1;
+      align-self: start;
+      margin-block: calc(var(--proctor-space-8) + 0.125rem)
+        var(--proctor-space-9);
+      padding-block-start: 0;
+      padding-inline-start: var(--proctor-space-6);
+      border-block-start: 0;
+      border-inline-start: var(--proctor-border-width-hairline) solid
+        var(--proctor-color-border-default);
+      gap: var(--proctor-space-6);
+    }
+
+    .beforeTask {
+      display: flex;
     }
   }
 }

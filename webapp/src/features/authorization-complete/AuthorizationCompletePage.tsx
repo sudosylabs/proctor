@@ -5,7 +5,7 @@ import { readProblemValue } from "../../api/problem";
 import { useAsyncResource } from "../../app/AsyncResource";
 import { AccessPageShell } from "../../components/AccessPageShell/AccessPageShell";
 import { Button, ButtonLink } from "../../components/Button/Button";
-import { TaskState, TaskStateActions } from "../../components/TaskState/TaskState";
+import { TaskState, TaskStateActions, type TaskStatus } from "../../components/TaskState/TaskState";
 import { message } from "../../i18n/messages";
 import { requestSecurityContext } from "../account-security/AccountSecurityApi";
 import styles from "./AuthorizationCompletePage.module.css";
@@ -86,8 +86,7 @@ export function AuthorizationCompletePage() {
       <TaskState
         key={state}
         busy={state === "checking"}
-        label={content.label}
-        labelTone={content.tone}
+        status={content.status}
         heading={content.heading}
         headingID="authorization-complete-heading"
         focusHeading={focusUnavailable}
@@ -169,48 +168,43 @@ function StatusActions({
 }
 
 function statusContent(state: ConfirmationState): {
-  label: string;
-  tone?: "success" | "warning";
+  status?: TaskStatus;
   heading: string;
   body: string;
 } {
   switch (state) {
     case "recovery_required":
       return {
-        label: message("webapp.security.eyebrow"),
-        tone: "warning",
+        status: { label: message("webapp.reauthenticate.status.action_needed"), tone: "warning" },
         heading: message("webapp.security.restore_access"),
         body: message("webapp.security.recovery_required"),
       };
     case "enrollment_required":
       return {
-        label: message("webapp.security.eyebrow"),
-        tone: "warning",
+        status: { label: message("webapp.reauthenticate.status.action_needed"), tone: "warning" },
         heading: message("webapp.security.enrollment_required.heading"),
         body: message("webapp.security.enrollment_required"),
       };
     case "checking":
       return {
-        label: message("webapp.authorization_complete.checking.label"),
         heading: message("webapp.authorization_complete.checking.heading"),
         body: message("webapp.authorization_complete.checking.body"),
       };
     case "signed_in":
       return {
-        label: message("webapp.authorization_complete.signed_in.label"),
-        tone: "success",
+        status: { label: message("webapp.authorization_complete.signed_in.label"), tone: "success" },
         heading: message("webapp.authorization_complete.signed_in.heading"),
         body: message("webapp.authorization_complete.signed_in.body"),
       };
     case "no_session":
       return {
-        label: message("webapp.authorization_complete.no_session.label"),
+        status: { label: message("webapp.authorization_complete.status.no_session"), tone: "warning" },
         heading: message("webapp.authorization_complete.no_session.heading"),
         body: message("webapp.authorization_complete.no_session.body"),
       };
     case "unavailable":
       return {
-        label: message("webapp.authorization_complete.unavailable.label"),
+        status: { label: message("webapp.authorization_complete.status.unavailable"), tone: "warning" },
         heading: message("webapp.authorization_complete.unavailable.heading"),
         body: message("webapp.authorization_complete.unavailable.body"),
       };

@@ -4,6 +4,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { Icon } from "../Icon/Icon";
 import styles from "./InputField.module.css";
 
 export interface InputFieldProps
@@ -49,10 +50,7 @@ export const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
     return (
       <div className={classes(styles.field, className)}>
         <div className={styles.labelRow}>
-          <label htmlFor={id}>
-            {label}
-            {required ? <RequiredMark /> : null}
-          </label>
+          <label htmlFor={id}>{label}</label>
           {labelAccessory === undefined ? null : (
             <div className={styles.labelAccessory}>{labelAccessory}</div>
           )}
@@ -67,7 +65,9 @@ export const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
             aria-invalid={errorMessage === undefined ? undefined : true}
             className={classes(
               styles.input,
-              trailingControl === undefined ? undefined : styles.withTrailingControl,
+              trailingControl === undefined && inputProps.readOnly !== true
+                ? undefined
+                : styles.withTrailingControl,
               inputClassName,
             )}
             id={id}
@@ -75,6 +75,11 @@ export const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
             type={type}
           />
           {trailingControl}
+          {inputProps.readOnly === true && trailingControl === undefined ? (
+            <span className={styles.readOnlyMark} data-proctor-read-only="">
+              <Icon name="readOnly" size="default" />
+            </span>
+          ) : null}
         </div>
         {description === undefined ? null : (
           <p className={styles.description} id={descriptionID}>
@@ -90,14 +95,6 @@ export const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
     );
   },
 );
-
-export function RequiredMark() {
-  return (
-    <span className={styles.requiredMark} data-required-indicator aria-hidden="true">
-      *
-    </span>
-  );
-}
 
 function classes(...values: Array<string | undefined>) {
   return values.filter((value): value is string => value !== undefined).join(" ");

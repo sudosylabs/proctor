@@ -7,7 +7,7 @@ import type {
   SharedPublicAccessDiscovery,
 } from "../../auth/PublicAccessDiscovery";
 import { ProductThemeProvider, resolveProductTheme } from "../../theme/ProductTheme";
-import { AccessPageShell, type AccessPageShellProps } from "./AccessPageShell";
+import { AccessPageShell, RailItem, type AccessPageShellProps } from "./AccessPageShell";
 
 function fixedDiscovery(result?: PublicAccessDiscoveryResult): SharedPublicAccessDiscovery {
   return {
@@ -56,15 +56,33 @@ function render(
 }
 
 describe("AccessPageShell", () => {
-  it("keeps the skip link, one focusable main landmark, masthead, and footer", () => {
+  it("keeps the skip link, one focusable main landmark, masthead, and rail", () => {
     const markup = render();
 
-    expect(markup).toMatch(/^<a class="proctor-skip-link" href="#main-content">Skip to main content<\/a>/);
+    expect(markup).toMatch(/^(?:<link rel="preload"[^>]*\/>)?<a class="proctor-skip-link" href="#main-content">Skip to main content<\/a>/);
     expect(markup.match(/<main /g)).toHaveLength(1);
     expect(markup).toContain('<main id="main-content"');
     expect(markup).toContain('tabindex="-1"');
-    expect(markup).toMatch(/<header[^>]*><img[^>]*alt="Proctor"/);
-    expect(markup).toContain("<footer");
+    expect(markup).toMatch(/<header[^>]*><div[^>]*><img[^>]*alt="Proctor"/);
+    expect(markup).toContain('<aside class="');
+    expect(markup).toContain('aria-label="About this page"');
+    expect(markup).not.toContain("<footer");
+  });
+
+  it("places page rail items before the shell help item", () => {
+    const markup = render({
+      rail: <RailItem heading="New to Proctor?"><p>Ask for an invitation.</p></RailItem>,
+    });
+
+    expect(markup).toMatch(/<h2>New to Proctor\?<\/h2><p>Ask for an invitation\.<\/p>.*Need help\?/);
+  });
+
+  it("marks rail items a person needs before acting", () => {
+    const markup = render({
+      rail: <RailItem beforeTask heading="Before you start"><p>Have the key ready.</p></RailItem>,
+    });
+
+    expect(markup).toContain("data-proctor-rail-before-task");
   });
 
   it("omits the Institution until discovery names it", () => {
@@ -88,6 +106,8 @@ describe("AccessPageShell", () => {
     });
 
     expect(markup).toContain("Signed in as Adaeze &lt;Okonkwo&gt;");
+    expect(markup).toContain('aria-hidden="true">Adaeze &lt;Okonkwo&gt;</span>');
     expect(markup).toContain('<button type="button">Sign out</button>');
+    expect(markup).toContain("data-proctor-shell-signed-in");
   });
 });

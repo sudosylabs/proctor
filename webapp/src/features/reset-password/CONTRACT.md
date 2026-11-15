@@ -19,10 +19,13 @@ field carries no rules. General failure appears in the action-adjacent
 `FormFeedback` region, which takes space only while it holds a message, and
 permits retry while the token may still be usable. The task introduction
 states only that other devices will be signed out, without a progress
-indicator or additional server state.
+indicator or additional server state. While the form is shown, a
+verification-rail item states “This link works once / Reset links work once,
+for 1 hour.”
 
 Completion and server-reported unusable-link replacements use the shared
-`TaskState` hierarchy, a teal or coral kind line, and the persistent polite
+`TaskState` hierarchy, a teal “Password changed” or coral “Link expired”
+status line, and the persistent polite
 announcement. Completion offers `Sign in`; the unusable-link state states the
 1-hour single-use lifetime (the server default) and offers `Send a new link`
 to `/account/forgot-password` plus a quiet return to sign in. A replacement caused

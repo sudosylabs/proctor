@@ -31,14 +31,14 @@
       "height": 593
     },
     {
-      "file": "proctor-lockup-purple-white.svg",
-      "sha256": "78440824573f68970786fdc110859588d9f52dac2fd21a9df728f0a73fde6f82",
+      "file": "proctor-lockup-dark.svg",
+      "sha256": "704a9ba587e806b20d048b2b3a094fe6c0473b6ae86037017b6b9d7fa0b28ad0",
       "width": 896,
       "height": 176
     },
     {
-      "file": "proctor-lockup.svg",
-      "sha256": "136a2a4e3e53f0cb95d045a3d1f34d3cdb2fd453df0a95ea5059b97cd1483c8d",
+      "file": "proctor-lockup-light.svg",
+      "sha256": "34c46d096c2223567385da80e5cbd11b2c8cfb593e0b2e1c401e65a4fc2520fc",
       "width": 896,
       "height": 176
     }

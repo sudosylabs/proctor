@@ -27,3 +27,9 @@ layout only. They own target size, typography, border, theme, hover, active,
 disabled, focus, reduced-motion token behavior, and forced-colors boundaries.
 Navigation is never implemented with an `onClick` button, and an action is
 never implemented with an anchor.
+
+`primary` and `danger` span their container's inline size, so a view's one
+dominant action carries the most weight and shares the form's right edge.
+`secondary` keeps its content width with a neutral outline and an ink label;
+purple belongs only to the primary action and links. `text` is an underlined
+ink action for Cancel and Back links and sits at the column's start.

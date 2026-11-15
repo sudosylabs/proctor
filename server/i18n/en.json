@@ -4122,10 +4122,6 @@
     "translation": "Checking your sign-in"
   },
   {
-    "id": "webapp.authorization_complete.checking.label",
-    "translation": "Sign-in status"
-  },
-  {
     "id": "webapp.authorization_complete.connect",
     "translation": "Add a sign-in method"
   },
@@ -4140,10 +4136,6 @@
   {
     "id": "webapp.authorization_complete.no_session.heading",
     "translation": "You’re not signed in"
-  },
-  {
-    "id": "webapp.authorization_complete.no_session.label",
-    "translation": "Sign-in status"
   },
   {
     "id": "webapp.authorization_complete.security",
@@ -4170,16 +4162,20 @@
     "translation": "Skip to sign-in status"
   },
   {
+    "id": "webapp.authorization_complete.status.no_session",
+    "translation": "Not signed in"
+  },
+  {
+    "id": "webapp.authorization_complete.status.unavailable",
+    "translation": "Sign-in not checked"
+  },
+  {
     "id": "webapp.authorization_complete.unavailable.body",
     "translation": "We couldn’t confirm whether this browser has an active Session. Try again, or sign in again."
   },
   {
     "id": "webapp.authorization_complete.unavailable.heading",
     "translation": "We couldn’t check your sign-in"
-  },
-  {
-    "id": "webapp.authorization_complete.unavailable.label",
-    "translation": "Sign-in status"
   },
   {
     "id": "webapp.authorization_complete.unavailable.retry",
@@ -4226,10 +4222,6 @@
     "translation": "Sign-in methods you can add"
   },
   {
-    "id": "webapp.connect_provider.kind",
-    "translation": "Sign-in methods"
-  },
-  {
     "id": "webapp.connect_provider.loading.body",
     "translation": "Checking which sign-in methods you can add…"
   },
@@ -4260,6 +4252,10 @@
   {
     "id": "webapp.connect_provider.note",
     "translation": "Your password and Proctor profile stay the same, and email addresses are never used to merge accounts."
+  },
+  {
+    "id": "webapp.connect_provider.rail.heading",
+    "translation": "What stays the same"
   },
   {
     "id": "webapp.connect_provider.single.body",
@@ -4386,10 +4382,6 @@
     "translation": "This sign-in link doesn’t work"
   },
   {
-    "id": "webapp.desktop_authorization.kind",
-    "translation": "Desktop sign-in"
-  },
-  {
     "id": "webapp.desktop_authorization.lede",
     "translation": "Proctor Desktop on this computer is asking to use your {{.Institution}} account."
   },
@@ -4418,6 +4410,10 @@
     "translation": "Other ways to sign in"
   },
   {
+    "id": "webapp.desktop_authorization.rail.expires",
+    "translation": "Request expires"
+  },
+  {
     "id": "webapp.desktop_authorization.requested",
     "translation": "Requested"
   },
@@ -4432,6 +4428,22 @@
   {
     "id": "webapp.desktop_authorization.skip_to_main",
     "translation": "Skip to Desktop sign-in"
+  },
+  {
+    "id": "webapp.desktop_authorization.status.approved",
+    "translation": "Proctor Desktop signed in"
+  },
+  {
+    "id": "webapp.desktop_authorization.status.invalid",
+    "translation": "Link can’t be used"
+  },
+  {
+    "id": "webapp.desktop_authorization.status.locked",
+    "translation": "Exam in progress"
+  },
+  {
+    "id": "webapp.desktop_authorization.status.unavailable",
+    "translation": "Request not checked"
   },
   {
     "id": "webapp.desktop_authorization.unavailable.body",
@@ -4502,10 +4514,6 @@
     "translation": "This link doesn’t work"
   },
   {
-    "id": "webapp.desktop_reauthentication.kind",
-    "translation": "Proctor Desktop"
-  },
-  {
     "id": "webapp.desktop_reauthentication.lede.password",
     "translation": "Enter the password for {{.Name}} to continue in Proctor Desktop."
   },
@@ -4542,6 +4550,10 @@
     "translation": "{{.Provider}} couldn’t confirm it’s you. Use the account that’s signed in to Proctor Desktop and try again."
   },
   {
+    "id": "webapp.desktop_reauthentication.rail.expires",
+    "translation": "Request expires"
+  },
+  {
     "id": "webapp.desktop_reauthentication.rate_limited",
     "translation": "Too many attempts. Wait a moment, then try again."
   },
@@ -4552,6 +4564,18 @@
   {
     "id": "webapp.desktop_reauthentication.skip_to_main",
     "translation": "Skip to confirmation"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.status.approved",
+    "translation": "Confirmed"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.status.invalid",
+    "translation": "Link can’t be used"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.status.unavailable",
+    "translation": "Request not checked"
   },
   {
     "id": "webapp.desktop_reauthentication.unavailable.body",
@@ -4630,16 +4654,16 @@
     "translation": "Sending reset link…"
   },
   {
-    "id": "webapp.forgot_password.kind",
-    "translation": "Reset password"
-  },
-  {
     "id": "webapp.forgot_password.sign_in",
     "translation": "Back to sign in"
   },
   {
     "id": "webapp.forgot_password.skip_to_main",
     "translation": "Skip to password recovery"
+  },
+  {
+    "id": "webapp.forgot_password.status.accepted",
+    "translation": "Request received"
   },
   {
     "id": "webapp.form.otp.help",
@@ -4838,10 +4862,6 @@
     "translation": "This invitation link doesn’t work"
   },
   {
-    "id": "webapp.join.kind",
-    "translation": "Invitation"
-  },
-  {
     "id": "webapp.join.lede.account.academic_unit_role",
     "translation": "You’ve been invited to a role in an academic unit. Create your account to accept it."
   },
@@ -4882,6 +4902,22 @@
     "translation": "Checking your invitation"
   },
   {
+    "id": "webapp.join.rail.details.body",
+    "translation": "Ask the person who invited you for a new link."
+  },
+  {
+    "id": "webapp.join.rail.details.heading",
+    "translation": "Details look wrong?"
+  },
+  {
+    "id": "webapp.join.rail.existing.body",
+    "translation": "{{.Link}}, then open this link again to accept with that account."
+  },
+  {
+    "id": "webapp.join.rail.existing.heading",
+    "translation": "Already have a Proctor account?"
+  },
+  {
     "id": "webapp.join.session.error.sign_in",
     "translation": "You need to be signed in first. Sign in opens in a new tab; when you’re done, come back here and choose Accept invitation."
   },
@@ -4904,6 +4940,18 @@
   {
     "id": "webapp.join.skip_to_main",
     "translation": "Skip to invitation"
+  },
+  {
+    "id": "webapp.join.status.accepted",
+    "translation": "Invitation accepted"
+  },
+  {
+    "id": "webapp.join.status.invalid",
+    "translation": "Link can’t be used"
+  },
+  {
+    "id": "webapp.join.status.unavailable",
+    "translation": "Invitation not checked"
   },
   {
     "id": "webapp.join.unavailable.body",
@@ -5026,16 +5074,8 @@
     "translation": "Checking how you can sign in…"
   },
   {
-    "id": "webapp.login.method_separator",
-    "translation": "or"
-  },
-  {
     "id": "webapp.login.mfa.heading",
     "translation": "Enter your code"
-  },
-  {
-    "id": "webapp.login.mfa.kind",
-    "translation": "Sign in"
   },
   {
     "id": "webapp.login.mfa.lede",
@@ -5056,6 +5096,18 @@
   {
     "id": "webapp.login.provider.group",
     "translation": "Sign in with your institution"
+  },
+  {
+    "id": "webapp.login.rail.reset.action",
+    "translation": "Reset it by email"
+  },
+  {
+    "id": "webapp.login.rail.reset.body",
+    "translation": "{{.Link}}. We’ll send a link to the address on your account."
+  },
+  {
+    "id": "webapp.login.rail.reset.heading",
+    "translation": "Can’t remember your password?"
   },
   {
     "id": "webapp.login.registration.action",
@@ -5178,10 +5230,6 @@
     "translation": "Confirm it’s you"
   },
   {
-    "id": "webapp.reauthenticate.kind",
-    "translation": "Security check"
-  },
-  {
     "id": "webapp.reauthenticate.lede.connect",
     "translation": "Confirm it’s you before you connect a sign-in method. You won’t be asked again for {{.Duration}}."
   },
@@ -5214,12 +5262,28 @@
     "translation": "Enter your password."
   },
   {
+    "id": "webapp.reauthenticate.rail.why.body",
+    "translation": "Security changes need a recent sign-in, so someone using an unlocked computer can’t make them."
+  },
+  {
+    "id": "webapp.reauthenticate.rail.why.heading",
+    "translation": "Why you’re asked"
+  },
+  {
     "id": "webapp.reauthenticate.setup_required",
     "translation": "Connecting a sign-in method needs two-step verification. Turn it on in account security, then come back."
   },
   {
     "id": "webapp.reauthenticate.setup_required.action",
     "translation": "Go to account security"
+  },
+  {
+    "id": "webapp.reauthenticate.status.action_needed",
+    "translation": "Action needed"
+  },
+  {
+    "id": "webapp.reauthenticate.status.complete",
+    "translation": "Confirmed"
   },
   {
     "id": "webapp.register.accepted.body",
@@ -5354,10 +5418,6 @@
     "translation": "You need an invitation"
   },
   {
-    "id": "webapp.register.kind",
-    "translation": "Create an account"
-  },
-  {
     "id": "webapp.register.lede",
     "translation": "For {{.Institution}}. You’ll confirm your email before you can sign in."
   },
@@ -5376,6 +5436,14 @@
   {
     "id": "webapp.register.origin_mismatch.heading",
     "translation": "This registration page can’t be used"
+  },
+  {
+    "id": "webapp.register.rail.classes.body",
+    "translation": "Your institution adds you to classes by invitation. An account on its own doesn’t give you access."
+  },
+  {
+    "id": "webapp.register.rail.classes.heading",
+    "translation": "Joining a class or exam?"
   },
   {
     "id": "webapp.register.reload",
@@ -5412,6 +5480,10 @@
   {
     "id": "webapp.register.skip_to_main",
     "translation": "Skip to create an account"
+  },
+  {
+    "id": "webapp.register.status.invitation_required",
+    "translation": "Invitation needed"
   },
   {
     "id": "webapp.register.unavailable.body",
@@ -5506,8 +5578,12 @@
     "translation": "This reset link has expired"
   },
   {
-    "id": "webapp.reset_password.kind",
-    "translation": "Reset password"
+    "id": "webapp.reset_password.rail.body",
+    "translation": "Reset links work once, for 1 hour."
+  },
+  {
+    "id": "webapp.reset_password.rail.heading",
+    "translation": "This link works once"
   },
   {
     "id": "webapp.reset_password.sign_in",
@@ -5516,6 +5592,14 @@
   {
     "id": "webapp.reset_password.skip_to_main",
     "translation": "Skip to new password"
+  },
+  {
+    "id": "webapp.reset_password.status.complete",
+    "translation": "Password changed"
+  },
+  {
+    "id": "webapp.reset_password.status.invalid",
+    "translation": "Link expired"
   },
   {
     "id": "webapp.security.body",
@@ -5606,6 +5690,14 @@
     "translation": "Turn off"
   },
   {
+    "id": "webapp.security.disable.facts.codes",
+    "translation": "{{.Count}} stop working"
+  },
+  {
+    "id": "webapp.security.disable.facts.two_step",
+    "translation": "Turns off"
+  },
+  {
     "id": "webapp.security.disable.heading",
     "translation": "Turn off two-step verification?"
   },
@@ -5694,16 +5786,8 @@
     "translation": "We couldn’t complete this request. Check your connection and try again."
   },
   {
-    "id": "webapp.security.eyebrow",
-    "translation": "Your account"
-  },
-  {
     "id": "webapp.security.heading",
     "translation": "Account security"
-  },
-  {
-    "id": "webapp.security.kind.two_step",
-    "translation": "Two-step verification"
   },
   {
     "id": "webapp.security.loading.body",
@@ -5720,6 +5804,34 @@
   {
     "id": "webapp.security.no_session.heading",
     "translation": "Sign in to manage your security"
+  },
+  {
+    "id": "webapp.security.rail.apart.body",
+    "translation": "A recovery code is for the day your phone is lost."
+  },
+  {
+    "id": "webapp.security.rail.apart.heading",
+    "translation": "Keep them apart from your phone"
+  },
+  {
+    "id": "webapp.security.rail.codes.body",
+    "translation": "If you lose them, make a new set from account security. Your old codes then stop working."
+  },
+  {
+    "id": "webapp.security.rail.codes.heading",
+    "translation": "You won’t see these again"
+  },
+  {
+    "id": "webapp.security.rail.methods.heading",
+    "translation": "Other ways to sign in"
+  },
+  {
+    "id": "webapp.security.rail.next.body",
+    "translation": "Each code signs you in once if you lose your phone."
+  },
+  {
+    "id": "webapp.security.rail.next.heading",
+    "translation": "Next, save your recovery codes"
   },
   {
     "id": "webapp.security.recovery_required",
@@ -5782,6 +5894,14 @@
     "translation": "Use an authenticator app such as Google Authenticator, Microsoft Authenticator or 1Password."
   },
   {
+    "id": "webapp.security.setup.copy_failed",
+    "translation": "Couldn’t copy the key. Enter it in your app by hand instead."
+  },
+  {
+    "id": "webapp.security.setup.copy_key",
+    "translation": "Copy setup key"
+  },
+  {
     "id": "webapp.security.setup.expired",
     "translation": "This setup has expired. Cancel and start again."
   },
@@ -5790,12 +5910,12 @@
     "translation": "Finish within {{.Duration}}."
   },
   {
-    "id": "webapp.security.setup.heading",
-    "translation": "Scan this code"
-  },
-  {
     "id": "webapp.security.setup.key",
     "translation": "Setup key"
+  },
+  {
+    "id": "webapp.security.setup.key_copied",
+    "translation": "Setup key copied."
   },
   {
     "id": "webapp.security.setup.manual",
@@ -5826,6 +5946,14 @@
     "translation": "Turn on two-step verification"
   },
   {
+    "id": "webapp.security.setup.step.code",
+    "translation": "Enter the code it shows"
+  },
+  {
+    "id": "webapp.security.setup.step.scan",
+    "translation": "Scan the code"
+  },
+  {
     "id": "webapp.security.sign_in",
     "translation": "Sign in"
   },
@@ -5852,6 +5980,10 @@
   {
     "id": "webapp.security.status.codes_none",
     "translation": "None left"
+  },
+  {
+    "id": "webapp.security.status.codes_saved",
+    "translation": "Two-step verification is on"
   },
   {
     "id": "webapp.security.status.no_codes",
@@ -5902,6 +6034,10 @@
     "translation": "Two-step verification"
   },
   {
+    "id": "webapp.security.status.unconfirmed",
+    "translation": "Change not confirmed"
+  },
+  {
     "id": "webapp.security.unavailable.body",
     "translation": "Your security settings couldn’t be loaded. Try again to see where things stand."
   },
@@ -5932,6 +6068,14 @@
   {
     "id": "webapp.setup.already_initialized.heading",
     "translation": "Proctor is already set up"
+  },
+  {
+    "id": "webapp.setup.before.body",
+    "translation": "You need the setup key from whoever runs this server."
+  },
+  {
+    "id": "webapp.setup.before.heading",
+    "translation": "Before you start"
   },
   {
     "id": "webapp.setup.created.administrator",
@@ -6074,12 +6218,20 @@
     "translation": "Creating institution…"
   },
   {
-    "id": "webapp.setup.heading",
-    "translation": "Set up your institution"
+    "id": "webapp.setup.group.administrator",
+    "translation": "Your administrator account"
   },
   {
-    "id": "webapp.setup.kind",
-    "translation": "Set up Proctor"
+    "id": "webapp.setup.group.authorization",
+    "translation": "Authorize this setup"
+  },
+  {
+    "id": "webapp.setup.group.institution",
+    "translation": "Institution"
+  },
+  {
+    "id": "webapp.setup.heading",
+    "translation": "Set up your institution"
   },
   {
     "id": "webapp.setup.lede",
@@ -6096,6 +6248,10 @@
   {
     "id": "webapp.setup.skip_to_main",
     "translation": "Skip to installation setup"
+  },
+  {
+    "id": "webapp.setup.status.created",
+    "translation": "Institution created"
   },
   {
     "id": "webapp.setup.status_failure.body",
@@ -6116,6 +6272,10 @@
   {
     "id": "webapp.shell.help.unnamed",
     "translation": "Need help? Contact your institution."
+  },
+  {
+    "id": "webapp.shell.rail.label",
+    "translation": "About this page"
   },
   {
     "id": "webapp.shell.signed_in",
@@ -6158,8 +6318,16 @@
     "translation": "This undo link can’t be used"
   },
   {
-    "id": "webapp.undo_email_change.kind",
-    "translation": "Security"
+    "id": "webapp.undo_email_change.rail.once.body",
+    "translation": "Undo links work once, for 72 hours after the change."
+  },
+  {
+    "id": "webapp.undo_email_change.rail.once.heading",
+    "translation": "This link works once"
+  },
+  {
+    "id": "webapp.undo_email_change.rail.unrecognized.body",
+    "translation": "Undo it here, then reset your password from the sign-in page and tell your institution."
   },
   {
     "id": "webapp.undo_email_change.rate_limited.body",
@@ -6218,6 +6386,30 @@
     "translation": "Skip to undo email change"
   },
   {
+    "id": "webapp.undo_email_change.status.conflict",
+    "translation": "Address not restored"
+  },
+  {
+    "id": "webapp.undo_email_change.status.invalid",
+    "translation": "Link can’t be used"
+  },
+  {
+    "id": "webapp.undo_email_change.status.rate_limited",
+    "translation": "Too many attempts"
+  },
+  {
+    "id": "webapp.undo_email_change.status.ready",
+    "translation": "Email address changed"
+  },
+  {
+    "id": "webapp.undo_email_change.status.restored",
+    "translation": "Previous address restored"
+  },
+  {
+    "id": "webapp.undo_email_change.status.unavailable",
+    "translation": "Change not undone"
+  },
+  {
     "id": "webapp.undo_email_change.unavailable.body",
     "translation": "Proctor couldn’t restore the address right now. Your link hasn’t been used, so you can try again."
   },
@@ -6246,8 +6438,12 @@
     "translation": "This confirmation link can’t be used"
   },
   {
-    "id": "webapp.verify_email.kind",
-    "translation": "Confirm email"
+    "id": "webapp.verify_email.rail.body",
+    "translation": "Don’t confirm it. Close this page and contact your institution."
+  },
+  {
+    "id": "webapp.verify_email.rail.heading",
+    "translation": "Not your address?"
   },
   {
     "id": "webapp.verify_email.ready.action",
@@ -6280,6 +6476,18 @@
   {
     "id": "webapp.verify_email.skip_to_main",
     "translation": "Skip to email confirmation"
+  },
+  {
+    "id": "webapp.verify_email.status.invalid",
+    "translation": "Email not confirmed"
+  },
+  {
+    "id": "webapp.verify_email.status.unavailable",
+    "translation": "Not checked"
+  },
+  {
+    "id": "webapp.verify_email.status.verified",
+    "translation": "Email confirmed"
   },
   {
     "id": "webapp.verify_email.unavailable.body",

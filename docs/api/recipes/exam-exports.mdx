@@ -1,6 +1,6 @@
 ---
-title: Export Examination Records
-description: Request a bounded private archive, verify its original files and structured records, and respect its fixed expiry.
+title: Export examination records
+description: Request a private archive within the size limits, check its original files and structured records, and download it before its fixed expiry.
 audience: api-consumer
 maturity: preview
 sidebar_position: 8
@@ -8,135 +8,152 @@ sidebar_position: 8
 
 import Link from '@docusaurus/Link';
 
-# Export Examination Records
+# Export examination records
 
 An examination export is a temporary ZIP archive for an authorized reviewer.
-It contains an explicitly selected set of sealed Submission records and their
-original files. Its versioned manifest and SHA-256 hashes support independent
-verification after download. Exporting does not complete a Sitting's records,
-release a candidate result, or enable cleanup.
+It holds a set of sealed Submission records that you choose, with their
+original files. A versioned manifest and SHA-256 hashes let anyone check the
+archive after download. Exporting doesn't complete a Sitting's records,
+release a result to the candidate or allow cleanup.
 
-## 1. Choose the Scope and Categories
+## 1. Choose the scope and categories
 
-Use <Link to="/api/reference/create-submission-export">Create Submission export</Link>
+Call <Link to="/api/reference/create-submission-export">Create Submission export</Link>
 for one Submission, or
 <Link to="/api/reference/create-sitting-export">Create Sitting export</Link>
-for every sealed Submission currently belonging to that Sitting. A Sitting
-archive captures that exact set; a later Submission requires a new export.
-An empty scope is rejected. Candidates cannot export their own Submissions
-through these reviewer operations.
+for every sealed Submission that belongs to the Sitting at that moment. A
+Sitting archive captures exactly that set. To include a later Submission, you
+need a new export. Proctor rejects an empty scope. Candidates can't export
+their own Submissions through these reviewer calls.
 
-Send an explicit category selection:
+Choose the categories explicitly:
 
 ```json
 {"categories": ["work", "integrity"]}
 ```
 
-`work` includes the preserved Workspace manifest, directory paths, and original
-file bytes. `integrity` includes the integrity summary, observations and
-discrepancies, private Review text and decisions, frozen Review inventories,
-waivers, minimized Browser evidence copies and native condition records.
-`browser_activity` selects ordinary Browser history separately. Select only the
-categories needed. Private Review records remain private even when a smaller result
-has been released to the candidate. A retired category cannot be exported.
+| Category | What it includes |
+| --- | --- |
+| `work` | The preserved Workspace manifest, directory paths and original file bytes. |
+| `integrity` | The integrity summary, observations and discrepancies, private Review text and decisions, frozen Review inventories, waivers, reduced copies of Browser evidence and native condition records. |
+| `browser_activity` | Ordinary Browser history, which you select separately. |
 
-The requester needs the dedicated `exam.records.export` permission, current
-Exam Manager access, and the ordinary read permissions for every selected
-record. Scoped override access uses the corresponding override permissions.
-Sitting exports also require Sitting read authority. Integrity exports require
-Review authority and do not implicitly include ordinary Browser history. Selecting
-`browser_activity` additionally requires the exact Exam Manager relationship and
-the dedicated Browser Activity permission; scoped overrides cannot grant it. These routes accept Sessions, not Personal
-Access Tokens. Current credentials, permissions, and scope are rechecked when
-requesting metadata or downloading; an archive is downloadable only by its
-requester.
+Choose only the categories you need. Private Review records stay private even
+when a smaller result has been released to the candidate. You can't export a
+retired category.
 
-## 2. Request Once and Observe the Fixed Deadline
+The requester needs:
 
-The institution must configure an export lifetime from one to seven days in
-its <Link to="/api/recipes/retention-policy">retention policy</Link>. One day is
-the recommended starting point. Zero is unconfigured and rejects new exports;
-it never means immediate deletion. A later policy change does not alter an
-existing export's advertised expiry.
+- the dedicated `exam.records.export` permission;
+- current Exam Manager access;
+- the ordinary read permissions for every selected record.
 
-Send a fresh `Idempotency-Key` with the create request. Cookie transport also
-requires CSRF proof. A successful request returns `202` with `queued` metadata,
-the captured counts, `construction_deadline`, and `expires_at`. Retrying the
-same command with the same key returns the same export and the same deadline.
-A changed scope or category selection needs a new key.
+Scoped override access uses the matching override permissions instead. Sitting
+exports also need permission to read the Sitting. Integrity exports need Review
+permission, and don't include ordinary Browser history unless you ask for it.
+Choosing `browser_activity` also needs the exact Exam Manager relationship and
+the dedicated Browser Activity permission. Scoped overrides can't grant it.
 
-Save the returned export ID. The
-<Link to="/api/guides/idempotency">bounded retry-record window</Link> applies;
-an idempotency key is not a permanent lookup handle. After that record has
-expired, use the saved ID to inspect the original export rather than resending
-its create request.
+These routes accept Sessions, not Personal Access Tokens. Proctor checks the
+current credentials, permissions and scope again each time you read the
+metadata or download. Only the person who requested an archive can download
+it.
 
-The lifetime begins when the request is created. Downloads, build retries,
-preservation holds, and examination deletion grace do not extend it. Temporary
-source protections last at most 24 hours and are released when the independent
-archive is verified. Construction that misses this deadline fails; it does not
-reserve another protection period silently.
+## 2. Request once and note the fixed deadline
 
-Requests are bounded to 200 Submissions, 50,000 Workspace entries, 50,000
-structured records, 8 GiB of original file bytes, and 64 MiB of structured
-JSON. A request exceeding a bound is rejected as a whole. The service does not
-silently produce an incomplete Sitting archive. Use a smaller scope when a
-limit is reached. Construction uses finite background work with at most three
-attempts; unavailable or changed source bytes can cause a build to fail.
+The institution must set an export lifetime of one to seven days in its
+<Link to="/api/recipes/retention-policy">retention policy</Link>. One day is a
+good starting point. Zero means not configured, and Proctor rejects new exports
+while it is zero. It never means delete immediately. Changing the policy later
+doesn't change the expiry an existing export already shows.
 
-## 3. Download and Verify
+Send a new `Idempotency-Key` with the create request. With cookies, also send
+CSRF proof. A successful request returns `202` with `queued` metadata, the
+captured counts, `construction_deadline` and `expires_at`. Resending the same
+command with the same key returns the same export and the same deadline. If
+you change the scope or categories, use a new key.
+
+Save the export ID from the response. Proctor keeps retry records only for a
+<Link to="/api/guides/idempotency">limited time</Link>, so an idempotency key
+is not a permanent way to look an export up. Once that record has expired, use
+the saved ID to check the original export instead of sending its create request
+again.
+
+The lifetime starts when the request is created. Downloads, build retries,
+preservation holds and the grace period before examination records are deleted
+don't extend it. While the archive is built, Proctor protects the source
+records for at most 24 hours, and releases them as soon as the separate archive
+is verified. If the build misses this deadline, it fails. Proctor doesn't
+quietly reserve another protection period.
+
+Each request is limited to:
+
+- 200 Submissions;
+- 50,000 Workspace entries;
+- 50,000 structured records;
+- 8 GiB of original file bytes;
+- 64 MiB of structured JSON.
+
+Proctor rejects a request that goes over any limit as a whole. It never quietly
+produces a partial Sitting archive. If you hit a limit, use a smaller scope.
+The build runs as a finite background job with at most three attempts. Source
+bytes that are unavailable or have changed can make a build fail.
+
+## 3. Download and check the archive
 
 Poll <Link to="/api/reference/get-submission-export">Submission export metadata</Link>
 or <Link to="/api/reference/get-sitting-export">Sitting export metadata</Link>
-with the requesting User's current Session. States are `queued`, `ready`,
-`failed`, and `expired`. Only `ready` metadata advertises the ZIP byte length,
-SHA-256 digest, and ready time.
+with the requesting User's current Session. The states are `queued`, `ready`,
+`failed` and `expired`. Only `ready` metadata shows the ZIP's byte length,
+SHA-256 digest and ready time.
 
 Download through the matching
 <Link to="/api/reference/download-submission-export">Submission archive route</Link>
 or <Link to="/api/reference/download-sitting-export">Sitting archive route</Link>.
 There is no public storage URL. Responses are private and must not be cached.
-Keep archives outside ordinary logs and shared analytics stores.
+Keep archives out of ordinary logs and shared analytics stores.
 
-Verify the downloaded ZIP's byte length and SHA-256 against the ready metadata
-before processing it. Then read the archive's `README.txt` and `manifest.json`.
-Manifest version 1 identifies each exported member by archive path, byte length,
-and SHA-256. Hash the uncompressed bytes of every listed member and check the
-complete inventory. File entries also record the original logical path and
-stable Submission and Entry identifiers. The original bytes are stored without
-conversion; file names inside the ZIP use opaque identities rather than
-untrusted candidate paths.
+Before you process the ZIP, check its byte length and SHA-256 against the
+`ready` metadata. Then read `README.txt` and `manifest.json` in the archive.
+Manifest version 1 lists each exported member by archive path, byte length and
+SHA-256. Hash the uncompressed bytes of every listed member, and check that the
+inventory is complete. File entries also record the original logical path and
+stable Submission and Entry identifiers. Proctor stores the original bytes
+without converting them. File names inside the ZIP use opaque identities, not
+the candidate's untrusted paths.
 
-`records.json` has its own schema version and the exact requested categories.
-It preserves directory paths and links structured file records to the archive
-members. Neither document requires access to a Proctor storage key. The
-archive contains its selected records and files; it does not bundle shared
-published Exam materials or provide archive re-import and backup restoration.
-Hashes detect changed bytes; they are not a digital signature or a claim about
-the truth of an integrity observation.
+`records.json` has its own schema version and lists exactly the categories you
+asked for. It keeps directory paths and links structured file records to the
+archive members. Neither file needs access to a Proctor storage key.
 
-## 4. Handle Expiry and Retirement
+The archive holds the records and files you chose. It doesn't include shared
+published Exam materials, and you can't re-import it or use it to restore a
+backup. The hashes detect changed bytes. They aren't a digital signature, and
+they don't vouch for whether an integrity observation is true.
 
-New download access ends at `expires_at`, even if physical storage cleanup is
-still pending. An already-open download cannot be recalled. While its retry
-record is retained, an old create command returns current expired metadata and
-cannot resurrect the archive. Requesting a new export requires current
-authority and source records that still exist.
+## 4. Expiry and retirement
 
-Construction protects only its selected source records. If that protection
-interrupts a scheduled retirement, resumed eligibility receives fresh deletion
-grace. A verified independent archive no longer holds the original Submission
-open: source retirement and archive expiry follow their own deadlines.
+New downloads stop at `expires_at`, even if the storage cleanup hasn't run
+yet. A download that already started can't be recalled. While its retry record
+is kept, resending an old create command returns the current expired metadata
+and can't bring the archive back. A new export needs current permissions and
+source records that still exist.
 
-Failed, abandoned, and expired artifacts enter bounded cleanup and
-reconciliation. A successful deletion acknowledgement alone does not establish
-absence; the server also checks the exact managed key. An interrupted writer
-may have an uncertain outcome, so its cleanup identity remains available for
-later reconciliation even after one absence observation.
+The build protects only the source records it selected. If that protection
+interrupts a scheduled retirement, the records get a fresh deletion grace
+period when they become eligible again. Once the separate archive is verified,
+it no longer keeps the original Submission from retiring. The source records
+and the archive each follow their own deadlines.
 
-Verified current-key absence is not secure media erasure. It does not certify
-deletion of operator-controlled backups, snapshots, historical object versions,
-or replicas. Institutions remain responsible for those storage policies and
-for downloaded copies. See
+Failed, abandoned and expired archives go through cleanup and reconciliation
+with limits. A successful delete response on its own doesn't prove the file is
+gone. Proctor also checks the exact managed key. If a writer was interrupted,
+its outcome may be unknown, so Proctor keeps its cleanup identity for later
+reconciliation even after seeing it absent once.
+
+Confirming the current key is absent is not secure erasure of the storage
+media. It doesn't cover operator-controlled backups, snapshots, older object
+versions or replicas. Institutions remain responsible for those storage
+policies and for any downloaded copies. See
 <Link to="/operator/maintenance-and-recovery">maintenance and recovery</Link>
-for operator responsibilities.
+for what operators are responsible for.

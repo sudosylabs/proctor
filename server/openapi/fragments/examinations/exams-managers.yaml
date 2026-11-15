@@ -13,7 +13,7 @@ paths:
       operationId: listExamManagers
       summary: List bounded Exam Manager relationship provenance
       description: >-
-        Lists the Users who currently share management responsibility for the Exam, including who granted each relationship and whether a Manager is the creator or current owner. Results contain no general User profile or credential data.
+        Lists the Users who currently manage the Exam, newest first. Each entry shows who made that User a Manager and whether they are the creator or the current owner. The response contains no User profile or credential data.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -40,7 +40,7 @@ paths:
         - name: limit
           in: query
           required: false
-          description: Maximum number of current Exam Manager relationship records to return in this page.
+          description: The most Managers to return in one page, from 1 to 200. Defaults to 50.
           schema:
             type: integer
             minimum: 1
@@ -49,7 +49,7 @@ paths:
         - name: cursor
           in: query
           required: false
-          description: Continue from the opaque cursor returned by the preceding manager relationship page.
+          description: The next_cursor value from the previous page, sent back unchanged. Omit it for the first page.
           schema:
             type: string
       responses:
@@ -71,7 +71,7 @@ paths:
       operationId: addExamManager
       summary: Grant an eligible User equal Exam management responsibility
       description: >-
-        Adds one eligible User as an equal Exam Manager when the expected Exam revision still matches. The durable relationship records its grantor and timestamp; it does not silently transfer ownership or infer authority from affiliation alone.
+        Makes an eligible User a Manager of the Exam, with the same management rights as the other Managers. The change is made only if expected_revision still matches the Exam's current revision. Proctor records who added the Manager and when. Adding a Manager never changes the owner, and belonging to the Academic Unit alone never makes someone a Manager.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -135,7 +135,7 @@ paths:
       operationId: removeExamManager
       summary: Revoke an Exam Manager relationship while preserving provenance
       description: >-
-        Revokes one current Manager relationship at the expected Exam revision while preserving its provenance and audit history. The current owner cannot be removed until ownership is explicitly transferred.
+        Removes one User as a Manager of the Exam. The change is made only if expected_revision still matches the Exam's current revision. The record of who added them, and the audit history, are kept. You can't remove the current owner. Transfer ownership to someone else first.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -194,17 +194,17 @@ components:
   requestBodies:
     AddExamManager:
       required: true
-      description: Identifies the eligible User to add and the last observed Exam aggregate revision for concurrency control.
+      description: The User to add as a Manager, and the Exam revision you last saw.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/AddExamManagerRequest'
           example:
-            user_id: ybndrfg8ejkmcpqxot1uwisza3
+            user_id: hw5jrd1ypzt8nkq3xe7mcboa4g
             expected_revision: 3
     RemoveExamManager:
       required: true
-      description: Supplies the last observed Exam aggregate revision required to revoke the path User's manager relationship.
+      description: The Exam revision you last saw.
       content:
         application/json:
           schema:
@@ -213,7 +213,7 @@ components:
             expected_revision: 4
   responses:
     ExamManagerListOK:
-      description: Bounded Exam Manager relationship collection
+      description: One page of the Exam's current Managers.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -221,6 +221,18 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamManagerListResponse'
+          example:
+            items:
+              - user_id: hw5jrd1ypzt8nkq3xe7mcboa4g
+                granted_by_user_id: c9me3tsk7oyhx1bwuadgz5nqrf
+                granted_at: '2026-08-02T09:15:00Z'
+                is_creator: false
+                is_owner: false
+              - user_id: c9me3tsk7oyhx1bwuadgz5nqrf
+                granted_by_user_id: c9me3tsk7oyhx1bwuadgz5nqrf
+                granted_at: '2026-07-20T10:00:00Z'
+                is_creator: true
+                is_owner: true
   schemas:
     AddExamManagerRequest:
       type: object
@@ -231,10 +243,12 @@ components:
       properties:
         user_id:
           $ref: '#/components/schemas/ID'
+          description: The User to make a Manager.
         expected_revision:
           type: integer
           format: int64
           minimum: 1
+          description: The Exam revision you last saw. If the Exam has changed since, the request fails with a conflict.
     RemoveExamManagerRequest:
       type: object
       additionalProperties: false
@@ -245,6 +259,7 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The Exam revision you last saw. If the Exam has changed since, the request fails with a conflict.
     ExamManagerListResponse:
       type: object
       additionalProperties: false
@@ -253,7 +268,9 @@ components:
       properties:
         items:
           type: array
+          description: The Managers on this page, most recently added first.
           items:
             $ref: '#/components/schemas/ExamManagerResponse'
         next_cursor:
           type: string
+          description: Send this back as cursor to get the next page. Omitted on the last page.

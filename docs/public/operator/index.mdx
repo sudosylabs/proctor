@@ -1,61 +1,67 @@
 ---
-title: Operate Proctor
-description: Install and run the current Proctor runtime without mistaking pre-production examples for certified production procedures.
+title: Run a Proctor server
+description: Install and run the current Proctor build, and know where its pre-production examples stop short of a certified production procedure.
 audience: operator
 maturity: preview
 slug: /operator/
 ---
 
-# Operate Proctor
+# Run a Proctor server
 
-One Proctor installation represents one Institution. A single application node
-and an active-active group use the same product semantics. Horizontal scaling
-changes infrastructure redundancy, not authorization or feature availability.
+This guide is for the people who install and run a Proctor server. One Proctor
+installation serves one Institution. Whether you run a single application node
+or several active nodes, the product behaves the same way. Adding nodes gives
+you more redundant infrastructure. It doesn't change who can do what or which
+features are available.
 
 <Maturity state="preview">
-  Packaging, configuration validation, hardened systemd and container examples,
-  TLS modes, node lifecycle, serving leases, health, metrics, logs, Memberlist,
-  and pre-release recovery boundaries are implemented. This is pre-production
-  guidance, not a certified production support matrix.
+  Packaging, configuration checks, hardened systemd and container examples,
+  TLS modes, node lifecycle, serving leases, health, metrics, logs, Memberlist
+  and the pre-release recovery limits all work today. Treat this guide as
+  pre-production guidance, not a certified list of supported production
+  setups.
 </Maturity>
 
-## Follow the Operating Path
+## How to use this guide
 
-1. [Verify a package or image](./package-and-install.mdx) and its embedded
-   binary/hosted-application identity.
-2. [Create protected configuration and secret inputs](./configuration-and-secrets.mdx)
-   and validate them before any listener starts.
-3. Choose the tracked [systemd or container runtime](./systemd-and-container.mdx)
-   without weakening non-root and read-only boundaries.
-4. Select [single-node or active-active topology](./topology-and-dependencies.mdx)
-   and assign PostgreSQL, Redis, VFS, SMTP, and load-balancer
-   responsibility.
-5. Configure [TLS and reverse-proxy behavior](./tls-and-proxy.mdx), including
-   the separate metrics and cluster boundaries.
-6. Route traffic by [readiness and observable evidence](./health-and-observability.mdx),
-   not process existence.
+The pages follow the order you set a server up in. Work through them in turn
+the first time, then come back to individual pages as you need them.
+
+1. [Verify a package or image](./package-and-install.mdx), and check that the
+   server binary and the hosted web application come from the same build.
+2. [Create your configuration and secrets](./configuration-and-secrets.mdx),
+   and check them before any listener starts.
+3. Run Proctor with the [systemd unit or container](./systemd-and-container.mdx)
+   from the repository, without weakening its non-root and read-only limits.
+4. Choose [one node or several active nodes](./topology-and-dependencies.mdx),
+   and decide who runs PostgreSQL, Redis, VFS, SMTP and the load balancer.
+5. Set up [TLS and your reverse proxy](./tls-and-proxy.mdx), including the
+   separate metrics and cluster connections.
+6. Send traffic to a node based on [readiness and what you can observe](./health-and-observability.mdx),
+   not on whether its process is running.
 7. Connect a production relay and
-   [verify transactional mail delivery](./mail-delivery.mdx).
-8. Use the bounded [maintenance and recovery procedures](./maintenance-and-recovery.mdx)
-   that are implemented today.
-9. [Back up, restore, upgrade, and roll back](./backup-restore-and-upgrade.mdx)
-   PostgreSQL, file bytes, configuration, and key rings as one set.
-10. Stop at the explicit [pre-production limits](./pre-production-readiness.mdx)
-   instead of inventing sizing, recovery-objective, or support promises.
+   [check that transactional mail is delivered](./mail-delivery.mdx).
+8. Use the [maintenance and recovery procedures](./maintenance-and-recovery.mdx)
+   that exist today, within their stated limits.
+9. [Back up, restore, upgrade and roll back](./backup-restore-and-upgrade.mdx)
+   PostgreSQL, file bytes, configuration and key rings as one set.
+10. Respect the [pre-production limits](./pre-production-readiness.mdx).
+    Don't make up sizing, recovery objectives or support promises that
+    Proctor doesn't make.
 
 <GovernedFigure asset="installation-authority-topology" />
 
-## Authority at a Glance
+## What each dependency is responsible for
 
-| Dependency | Durable responsibility |
+| Dependency | What it keeps |
 | --- | --- |
-| PostgreSQL | application state, authorization facts, audit, leases, Jobs, mail state, Workspace metadata |
-| VFS/S3 | opaque managed bytes selected through PostgreSQL metadata |
-| Redis | disposable shared cache and installation-wide counters in cluster mode |
-| Memberlist | best-effort peer discovery and effect propagation, never durable state |
-| SMTP | transport acceptance for durable mail delivery, not application truth |
+| PostgreSQL | Application state, authorization facts, audit, leases, Jobs, mail state and Workspace metadata |
+| VFS/S3 | Opaque managed bytes, chosen through metadata in PostgreSQL |
+| Redis | A disposable shared cache, and installation-wide counters in cluster mode |
+| Memberlist | Best-effort peer discovery and passing changes between nodes. It never holds durable state |
+| SMTP | Accepting mail for delivery. It is not the record of what the application did |
 
-PostgreSQL commits before cache invalidation, peer fan-out, WebSocket
-publication, or SMTP delivery. A failure of a transient
-effect is recovered by durable state and refetch, not by treating that effect
-as the source of truth.
+Proctor commits to PostgreSQL before it clears caches, notifies other nodes,
+publishes WebSocket events or sends mail over SMTP. If one of those later steps
+fails, Proctor recovers from durable state and by fetching again. It never
+treats the later step as the source of truth.

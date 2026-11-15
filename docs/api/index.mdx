@@ -1,6 +1,6 @@
 ---
 title: Proctor API
-description: Use Proctor's reviewed OpenAPI contract, explicit authentication metadata, and stable Problem Details errors.
+description: Build against Proctor's reviewed OpenAPI contract, with authentication declared on every operation and stable Problem Details errors.
 audience: api-consumer
 maturity: preview
 slug: /
@@ -12,84 +12,96 @@ import Link from '@docusaurus/Link';
 <ApiOverviewHero />
 
 <Maturity state="preview">
-  The contract and generated endpoint reference describe the current
-  pre-release server operation set. The `/api/v1` contract may still change in
-  place before the first supported release; pin the reviewed OpenAPI artifact
-  used by an integration.
+  The contract and the generated endpoint reference describe the operations
+  the server has today, before its first release. The `/api/v1` contract may
+  still change in place before the first supported release, so pin the
+  reviewed OpenAPI file your integration uses.
 </Maturity>
 
-## Use the Contract as the Authority
+## The contract is the source of truth
 
-The docs build publishes `openapi.json` directly from the tracked server
-contract. It does not infer endpoints from handlers or rewrite canonical
-descriptions. The generated reference is a reader for that contract, never a
-second source of route behavior.
+The docs build publishes `openapi.json` straight from the server contract
+tracked in the repository. It doesn't work out endpoints from the handlers,
+and it doesn't rewrite the contract's descriptions. The generated reference
+only displays that contract. It never describes route behavior on its own.
 
-Browse the endpoint groups in the sidebar. Every endpoint page is generated
-from the same contract and displays its authentication, idempotency, and stable
-error-code declarations before the request and response schemas. The
+Browse the endpoint groups in the sidebar. Each endpoint page is generated
+from the same contract. It shows the operation's authentication, idempotency
+and stable error codes before the request and response schemas. The
 <Link to="/api/reference/realtime-protocol/">Realtime Protocol</Link>
-reference is generated the same way from the reviewed AsyncAPI contract for the
-WebSocket frames.
+reference is generated the same way, from the reviewed AsyncAPI contract for
+the WebSocket frames.
 
-If this is your first integration, begin with [Getting Started](./guides/getting-started.mdx),
-then read [Authentication and Assurance](./guides/authentication.mdx) and
-[Errors and Problem Details](./guides/errors.mdx). The remaining guides cover
-pagination, safe retries, uploads, protected content, realtime recovery, and
+If this is your first integration, start with [Getting started](./guides/getting-started.mdx).
+Then read [Authentication and assurance](./guides/authentication.mdx) and
+[Errors and Problem Details](./guides/errors.mdx). The other guides cover
+pagination, safe retries, uploads, protected content, realtime recovery and
 compatibility.
 
-The [end-to-end recipes](./recipes/bootstrap-installation.mdx) connect those
-rules into real workflows: installation bootstrap, account entry and recovery,
-Access Policy changes, academic structure, Invitations and onboarding, Exam
-publication, Sitting control, candidate Attempts, integrity review, and audit
-consumption.
+The [end-to-end recipes](./recipes/bootstrap-installation.mdx) put those
+rules together into real workflows:
 
-## Choose a Product Area
+- bootstrapping an installation
+- signing in and recovering an account
+- changing the Access Policy
+- building the academic structure
+- Invitations and onboarding
+- publishing an Exam
+- running a Sitting
+- candidate Attempts
+- integrity review
+- reading audit history
 
-Every generated product-area group has an authored starting point that explains
-the surrounding workflow before you use its exact endpoint pages.
+## Start from a product area
 
-| Product area | Authored entry path |
+Each product area in the generated reference has a hand-written starting
+point. It explains the surrounding workflow before you turn to the exact
+endpoint pages.
+
+| Product area | Start here |
 | --- | --- |
-| System | [Bootstrap an Installation](./recipes/bootstrap-installation.mdx) |
-| Authentication | [Authentication and Assurance](./guides/authentication.mdx) |
-| Users | [Invite and Link Users](./recipes/invite-and-link-users.mdx) |
-| Academic structure | [Model an Academic Structure](./recipes/academic-structure.mdx) |
-| Membership and progression | [Run Onboarding Imports and Progression](./recipes/onboarding-imports-and-progression.mdx) |
-| Invitations and onboarding | [Invite and Link Users](./recipes/invite-and-link-users.mdx) |
-| Roles and access | [Define Roles and Scoped Bindings](./recipes/roles-and-scopes.mdx) |
-| Access policy | [Change the Access Policy Safely](./recipes/access-policy.mdx) |
-| Examinations | [Author and Publish an Exam](./recipes/author-and-publish-exam.mdx) |
-| Sittings | [Manage a Sitting](./recipes/manage-sitting.mdx) |
-| Attempts and workspaces | [Run a Candidate Attempt](./recipes/candidate-attempt.mdx) |
-| Submissions | [Run a Candidate Attempt](./recipes/candidate-attempt.mdx) |
-| Integrity review | [Review and Release a Result](./recipes/review-and-release.mdx) |
-| Jobs | [Durable Jobs and Mail](./guides/durable-operations.mdx) |
-| Mail | [Durable Jobs and Mail](./guides/durable-operations.mdx) |
-| Realtime | [Realtime and Replay](./guides/realtime.mdx) |
+| System | [Bootstrap an installation](./recipes/bootstrap-installation.mdx) |
+| Authentication | [Authentication and assurance](./guides/authentication.mdx) |
+| Users | [Invite and link users](./recipes/invite-and-link-users.mdx) |
+| Academic structure | [Build the academic structure](./recipes/academic-structure.mdx) |
+| Membership and progression | [Run onboarding imports and progression](./recipes/onboarding-imports-and-progression.mdx) |
+| Invitations and onboarding | [Invite and link users](./recipes/invite-and-link-users.mdx) |
+| Roles and access | [Define Roles and scoped bindings](./recipes/roles-and-scopes.mdx) |
+| Access policy | [Change the Access Policy safely](./recipes/access-policy.mdx) |
+| Examinations | [Author and publish an Exam](./recipes/author-and-publish-exam.mdx) |
+| Sittings | [Schedule and manage a Sitting](./recipes/manage-sitting.mdx) |
+| Attempts and workspaces | [Start, continue and submit an Attempt](./recipes/candidate-attempt.mdx) |
+| Submissions | [Start, continue and submit an Attempt](./recipes/candidate-attempt.mdx) |
+| Integrity review | [Review integrity and release a result](./recipes/review-and-release.mdx) |
+| Jobs | [Durable Jobs and mail](./guides/durable-operations.mdx) |
+| Mail | [Durable Jobs and mail](./guides/durable-operations.mdx) |
+| Realtime | [Realtime and replay](./guides/realtime.mdx) |
 
-## Read Every Operation Completely
+## Read each operation in full
 
-Each route declares its credential requirement through `x-proctor-auth`.
-Security-sensitive operations may additionally require a strong, recently
-authenticated interactive <Term id="session">Session</Term> and CSRF proof; a
-<Term id="personal-access-token">Personal Access Token</Term> is not
-interchangeable with that assurance.
+Every route declares the credential it needs in `x-proctor-auth`. Some
+security-sensitive operations also need a strong, recently authenticated
+interactive <Term id="session">Session</Term> and CSRF proof. A
+<Term id="personal-access-token">Personal Access Token</Term> can't stand in
+for that level of assurance.
 
-Public failures use RFC 9457 Problem Details and stable application codes.
-Operations declare their bounded codes in `x-proctor-error-codes`, and agreement
-tests require them to map to documented HTTP responses.
+When a request fails, Proctor answers with RFC 9457 Problem Details and a
+stable application code. Each operation lists the codes it can return in
+`x-proctor-error-codes`, and agreement tests check that every one maps to a
+documented HTTP response.
 
-## Contract Conventions
+## Conventions across the contract
 
-- Request and response objects are closed unless a named extension point is
-  deliberately open.
-- Collection traversal uses bounded opaque keyset cursors.
-- Resource mutations authorize the current <Term id="principal">principal</Term>
-  against current durable state at the terminal use case.
-- Idempotent commands distinguish exact replay from reuse with different input.
-- Successful durable state commits before transient cache, cluster, or realtime
-  effects.
+- Request and response objects are closed, unless a named extension point is
+  deliberately left open.
+- Collections are paged with opaque keyset cursors, within fixed limits.
+- When you change a resource, Proctor checks the current
+  <Term id="principal">principal</Term> against the current stored state, at
+  the final step that carries out the change.
+- Idempotent commands tell an exact replay apart from a reused key with
+  different input.
+- Proctor commits a successful change to durable state first. Transient
+  cache, cluster and realtime effects come after it.
 
 Read the [HTTP contract conventions](https://github.com/sudosylabs/Proctor/blob/main/server/httpapi/CONTRACT.md)
-before generating a client or designing an integration.
+before you generate a client or design an integration.

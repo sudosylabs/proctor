@@ -15,12 +15,12 @@ paths:
       tags:
         - Users
       description: >-
-        Enables a previously disabled User after terminal authorization. The transition preserves history but does not restore revoked Sessions, verify email, add authentication methods, reactivate ended relationships, or recreate Role Bindings.
+        Enables a disabled User, after checking your permission. History is kept. It does not bring back ended Sessions, verify the email address, add sign-in methods, restart ended memberships or recreate Role Bindings.
       x-codeSamples:
         - lang: Shell
           source: |-
             curl --request POST \
-              --url 'https://proctor.example.edu/api/v1/users/<user-id>/enable' \
+              --url 'https://proctor.example.edu/api/v1/users/wj3drgzdpnf54rxf5d8qd3dqne/enable' \
               --header 'Authorization: Bearer <token>' \
               --header 'X-Proctor-CSRF-Token: <session-csrf-token>'
       x-proctor-auth: principal_required

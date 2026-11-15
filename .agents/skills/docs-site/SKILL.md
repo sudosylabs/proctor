@@ -14,7 +14,7 @@ description: Author, restructure, validate, or build Proctor's Docusaurus public
 2. Invoke [`$glossary`](../glossary/SKILL.md) before changing public domain
    terminology. For visual-system work, also read
    [the visual-system reference](references/design-system.md). For a governed
-   diagram, illustration, or screenshot, invoke
+   diagram or screenshot, invoke
    [`$docs-site-visual-assets`](../docs-site-visual-assets/SKILL.md). Completion:
    the change uses canonical terms, current semantic tokens, and the governed
    asset registry when it contains a visual.
@@ -37,7 +37,7 @@ Public pages contain task-oriented information for their declared audience and
 maturity. They use synthetic examples, never credentials, student data, Exam
 answers, operational hostnames, or local-machine values. Curated `<Term>`
 markup is limited to a useful first occurrence and stays out of headings, code,
-API paths, and illustrations.
+API paths, and diagrams.
 
 Search remains a deterministic local adapter over authored MDX and
 `server/openapi.json`; it sends no reader query to an external service. The API

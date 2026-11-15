@@ -1,52 +1,55 @@
 ---
-title: Inspect Audit History
-description: Review structural, identity, authority, and security-sensitive decisions through the caller's authorized scope.
+title: Inspect audit history
+description: Review changes to structure, identity and permissions, and other security-sensitive decisions, within the scope you are allowed to see.
 audience: institution-administrator
 maturity: preview
 ---
 
 import Link from '@docusaurus/Link';
 
-# Inspect Audit History
+# Inspect audit history
 
-Audit history is durable PostgreSQL authority for security-sensitive attempts,
-mutations, and authorization decisions. Operational logs explain process
-behavior; they are not a substitute for audit.
+Audit history is the permanent record, kept in PostgreSQL, of security-sensitive
+attempts, changes and permission decisions. Operational logs describe what the
+server process did. They are not a replacement for audit.
 
-## Choose the Correct Visibility Boundary
+## Know what you can see
 
-Institution-wide `audit.view` can reach the full authorized Institution event
-set. `academic_audit.view` is narrower: it includes only academic mutations,
-Invitations, batches, and decisions whose scope resolves to an authorized
-Academic Unit or Class subtree. It excludes unrelated identity, provider, and
-security events.
+`audit.view` granted Institution-wide can reach the Institution's full set of
+audit events. `academic_audit.view` is narrower. It
+covers only academic changes, Invitations, batches and decisions whose scope
+falls inside an Academic Unit or Class you are allowed to see, and everything
+below it. It leaves out identity, provider and security events that aren't
+related.
 
-An Affiliation alone does not expose a User through a Unit. The caller needs a
-current relationship-based visibility anchor and the applicable audit action.
-Changing the caller's bindings changes subsequent audit visibility; a previous
-page is not an authorization receipt.
+An Affiliation on its own doesn't make a User visible to you through a Unit.
+You need a current relationship that makes them visible, as well as the
+matching audit permission.
 
-## Read Events as Decisions, Not Payload Archives
+If your bindings change, what you can see in audit changes from then on. A
+page you loaded earlier is not proof that you are allowed to see it now.
 
-Use the stable action, typed resource, resolved academic scope, outcome, actor
-or principal, request context, and server time. Safe prior/result projections
-are bounded. Credentials, provider claims, Invitation claims, Exam answers,
-file contents, private Review rationale, and unbounded user input must not be
-present.
+## Read events as decisions, not as copies of data
 
-When investigating a change:
+Each event gives you the action, the type of resource, the academic scope it
+resolved to, the outcome, the actor or principal, request details and the
+server time. Any before-and-after snapshots are safe and limited in size.
+Events must never contain credentials, provider claims, Invitation claims, Exam
+answers, file contents, private Review reasoning or unlimited user input.
 
-1. start with a narrow time and resource filter;
-2. page with the returned keyset cursor without changing filters;
-3. correlate a safe `request_id` with operational logs when necessary;
-4. distinguish `attempt`, `success`, `fail`, `allow`, and `deny`; and
-5. record the audit event ID in the investigation, not a copied private
-   payload.
+When you investigate a change:
 
-Authorization decisions that require audit fail closed when their durable
-record cannot be written. A critical mutation may retain an unresolved attempt
-if terminal audit completion fails after commit; operators reconcile that
-condition rather than inventing a successful outcome from logs.
+1. start with a narrow time range and resource filter;
+2. page through results with the returned cursor, and keep the same filters;
+3. when you need to, match the safe `request_id` against operational logs;
+4. tell apart the outcomes `attempt`, `success`, `fail`, `allow` and `deny`;
+5. note the audit event ID in your investigation, not a copy of private data.
 
-The API traversal and cursor rules are in
+When a permission decision must be audited and Proctor can't write the audit
+record, the action is refused (it fails closed). For a critical change, the
+data may commit and then the final audit step fail. That leaves an unresolved
+attempt record. Operators resolve this case. They don't invent a
+successful outcome from what the logs say.
+
+Paging and cursor rules for the API are in
 <Link to="/api/recipes/consume-audit">Consume Audit History</Link>.

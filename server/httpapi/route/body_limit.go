@@ -38,7 +38,7 @@ func writeRequestTooLarge(writer http.ResponseWriter, request *http.Request) {
 	// rather than draining an oversized remainder.
 	writer.Header().Set("Connection", "close")
 	writeProblem(writer, Problem{
-		Type:      ProblemType(requestTooLargeCode),
+		Type:      ProblemType(request, requestTooLargeCode),
 		Title:     title,
 		Status:    http.StatusRequestEntityTooLarge,
 		Detail:    detail,

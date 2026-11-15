@@ -1,6 +1,6 @@
 ---
-title: Start, Continue, and Submit an Attempt
-description: Coordinate candidate admission, protected Attempt requests, Workspace acknowledgements, reconnects, and submission.
+title: Start, continue and submit an Attempt
+description: Admit a candidate, make protected Attempt requests, get Workspace changes acknowledged, reconnect and submit.
 audience: api-consumer
 maturity: preview
 sidebar_position: 6
@@ -8,43 +8,54 @@ sidebar_position: 6
 
 import Link from '@docusaurus/Link';
 
-# Start, Continue, and Submit an Attempt
+# Start, continue and submit an Attempt
 
-Candidate delivery is a coordinated registered-key Desktop Session, WebSocket,
-and HTTP workflow. A generic backend integration or browser Session cannot
-invent an Attempt or continuity credential: the privileged candidate
-coordinator receives them through authenticated `exam_attempt.connect`
-admission on the versioned WebSocket protocol.
+A candidate takes an Exam through a Desktop Session tied to a registered key,
+a WebSocket and HTTP calls, all working together. A general backend
+integration or a browser Session can't make up an Attempt or a continuity
+credential. The privileged candidate coordinator gets both when it is admitted
+through an authenticated `exam_attempt.connect` on the versioned WebSocket
+protocol.
 
-## 1. Discover the Current Candidate Action
+## 1. Find out what the candidate can do now
 
 Start with <Link to="/api/reference/list-candidate-exam-activity">Candidate Exam Activity</Link>.
-This bounded collection is the navigation registry for upcoming, available,
-active, submitted, released, and past activity. Follow only an action returned
-for the current item; do not infer availability from cached schedule data.
+This list drives navigation. It shows upcoming, available, active, submitted,
+released and past activity. Follow only an action the list returns for the
+current item. Don't work out availability from a cached schedule.
 
-The first eligible entry lazily creates the candidate's one Ready Attempt and
-copy-on-write Workspace. It does **not** create a Participation or Connection.
-That separation keeps navigation and durable work preparation independent from
-secure Desktop admission, and avoids fabricating Attempts for no-shows.
+The first eligible entry creates, on demand, the candidate's one Ready Attempt
+and a copy-on-write Workspace. It does **not** create a Participation or a
+Connection. Keeping these apart means navigation and preparing durable work
+don't depend on secure Desktop admission, and Proctor doesn't create Attempts
+for candidates who never show up.
 
-## 2. Establish the Desktop Session and Socket
+## 2. Open the Desktop Session and the socket
 
-Complete Desktop browser authorization so the installation has registered the
-client's P-256 key and issued a DPoP-bound Desktop Session. Then
+Finish Desktop browser authorization, so that the installation has registered
+the client's P-256 key and issued a DPoP-bound Desktop Session. Then
 <Link to="/api/reference/connect-web-socket">connect the WebSocket</Link> with
-that Session's DPoP access credential and a fresh nonce-bound proof.
+that Session's DPoP access credential and a fresh proof bound to the nonce.
 
-Before admission, use <Link to="/api/reference/ping-system">System ping</Link>
-to evaluate the exact Desktop release, build, target, and realtime protocol.
-Stop for maintenance, required update, incompatible server, unsupported target,
-or revoked build. A client must not rewrite its selectors to appear compatible.
+Before admission, call <Link to="/api/reference/ping-system">System ping</Link>
+with the exact Desktop release, build, target and realtime protocol. Stop if
+the server reports maintenance, a required update, an incompatible server, an
+unsupported target or a revoked build. A client must not change what it
+reports about itself to look compatible.
 
-An accepted `exam_attempt.connect` rechecks current Class membership, Sitting
-state, the registered key and Session, build compatibility, runtime posture,
-the one-unresolved-Attempt-per-User-Session lock, and the Ready Attempt. It then
-creates one Participation generation and one current Connection bound to the
-exact Desktop Session. Retain the returned values only in protected runtime:
+When Proctor accepts `exam_attempt.connect`, it checks again:
+
+- the candidate's current Class membership;
+- the Sitting's state;
+- the registered key and the Session;
+- build compatibility;
+- the runtime posture;
+- the lock that allows one unresolved Attempt per User Session;
+- the Ready Attempt.
+
+It then creates one Participation generation and one current Connection, tied
+to that exact Desktop Session. Keep these returned values only in protected
+runtime memory:
 
 - `exam_attempt_id`
 - `participation_id` and `generation`
@@ -52,21 +63,22 @@ exact Desktop Session. Retain the returned values only in protected runtime:
 - the 32-byte continuity credential
 - renewal interval and lease expiry
 
-Admission can also carry the immutable Attempt Configuration derived from the
-candidate's settings and verified Desktop capability registry. Treat it as the
-governed runtime input for that Attempt, not as an editable local preference.
-Reconnect and manager re-allow never recompute it.
+Admission can also carry the Attempt Configuration. Proctor builds it from the
+candidate's settings and the verified Desktop capability registry, and it
+never changes. Treat it as the fixed runtime input for that Attempt, not as a
+local preference anyone can edit. Reconnecting, or a manager re-allowing the
+Attempt, never rebuilds it.
 
-The exact connect, renewal, focus-loss, acknowledgement, and error envelopes
-are part of the versioned WebSocket protocol, not HTTP request bodies. Never
-send the continuity credential in a URL, form field, or log.
+The exact messages for connect, renewal, focus loss, acknowledgements and
+errors belong to the versioned WebSocket protocol. They are not HTTP request
+bodies. Never put the continuity credential in a URL, form field or log.
 
 <GovernedFigure asset="candidate-trust-chain" />
 
-## 3. Read the Presentation
+## 3. Read the presentation
 
-For protected HTTP requests, combine a fresh Desktop DPoP proof with the two
-Attempt headers:
+For protected HTTP requests, send a fresh Desktop DPoP proof along with the
+two Attempt headers:
 
 ```bash
 curl --request GET \
@@ -78,16 +90,17 @@ curl --request GET \
 ```
 
 <Link to="/api/reference/get-candidate-exam-presentation">Get candidate presentation</Link>
-returns both the admission Revision and the Sitting's current immutable
-Revision, including whether a live correction acknowledgement is required.
-Retrieve protected resources through their Attempt-scoped content routes.
+returns the Revision the candidate was admitted on and the Sitting's current
+Revision, which never changes once created. It also says whether the candidate
+must acknowledge a live correction. Fetch protected Resources through their
+content routes for this Attempt.
 
-## 4. Persist Workspace Changes
+## 4. Save Workspace changes
 
-Every Workspace mutation includes `participation_id` and `generation`; uploads
-put those values in the `metadata` part. Preserve each acknowledged Workspace
-cursor and content version. Use an idempotency key where the endpoint requires
-it.
+Every Workspace change includes `participation_id` and `generation`. For
+uploads, put those values in the `metadata` part. Keep the Workspace cursor and
+content version from each acknowledged change. Send an idempotency key where
+the endpoint requires one.
 
 ```json
 {
@@ -97,65 +110,68 @@ it.
 }
 ```
 
-Use <Link to="/api/reference/list-candidate-exam-workspace-changes">Workspace changes</Link> to
-reconcile acknowledged mutations after a recoverable client interruption. The
-ordered journal retains a bounded history; when the server cannot bridge the
-requested cursor, replace the local projection from a complete manifest rather
-than pushing an unacknowledged local tree over authority.
+After the client recovers from an interruption, call
+<Link to="/api/reference/list-candidate-exam-workspace-changes">Workspace changes</Link>
+to catch up on the changes Proctor acknowledged. This ordered log keeps only
+a limited history. If Proctor can't bridge from the cursor you send, rebuild
+your local copy from a complete manifest. Don't push a local tree that Proctor
+never acknowledged over the server's copy.
 
-## 5. Deliver Integrity Signals
+## 5. Send integrity signals
 
-Send focus-loss and Browser Activity through their versioned WebSocket streams
-while the current Participation permits collection. Browser Activity is a
-privacy-minimized top-level navigation record, not page content or a general
-browsing history. Keep the highest server-acknowledged focus-loss sequence and
-Browser Activity sequence because terminal submission fences both streams.
+While the current Participation allows collection, send focus loss and Browser
+Activity on their versioned WebSocket streams. Browser Activity records
+top-level navigation with as little detail as possible. It is not page content
+or a general browsing history. Keep the highest sequence number Proctor has
+acknowledged for each stream, because submission closes both streams.
 
-Browser Activity accepts bounded batches of 1–64 events with an encoded limit
-of 256 KiB and no more than 16 source sessions. The retained location is
-minimized: query, fragment, URL credentials, page content, title, referrer,
-headers, cookies, DOM, downloaded bodies, and local paths are excluded. Gaps
-remain explicit uncertainty rather than invented observations.
+Each Browser Activity batch holds 1 to 64 events, is at most 256 KiB once
+encoded, and covers no more than 16 source sessions. Proctor keeps only a
+reduced location. It leaves out the query, fragment, credentials in the URL,
+page content, title, referrer, headers, cookies, DOM, downloaded bodies and
+local paths. Gaps stay recorded as unknown rather than filled with invented
+observations.
 
 <GovernedFigure asset="browser-activity-privacy-boundary" />
 
-If Browser Activity is not applicable to the frozen Attempt Configuration,
-the submission terminal reports `not_applicable`. Otherwise it reports either
-the complete acknowledged terminal sequence or an explicit gapped state. Do
-not manufacture `not_applicable` to bypass an enabled collection policy.
+If Browser Activity doesn't apply to the Attempt Configuration, the submission
+reports `not_applicable`. Otherwise it reports either the complete final
+acknowledged sequence or an explicit gap. Don't send `not_applicable` to get
+around a collection policy that is turned on.
 
-## 6. Acknowledge Live Corrections
+## 6. Acknowledge live corrections
 
-When the presentation reports a required correction, stop governed navigation,
-Workspace mutation, and voluntary submission. Continue lease
-renewal and permitted integrity delivery, present the correction, then
-acknowledge the oldest pending Revision with the current Participation fence,
-`expected_current_revision_id`, and a stable idempotency key. Refetch the
-presentation after acknowledgement before resuming candidate work.
+When the presentation says a correction needs acknowledging, stop governed
+navigation, Workspace changes and voluntary submission. Keep renewing the lease
+and sending the integrity signals that are still allowed. Show the correction,
+then acknowledge the oldest pending Revision with the current Participation
+details, `expected_current_revision_id` and a stable idempotency key. Fetch the
+presentation again after acknowledging, before the candidate carries on.
 
-## 7. Renew or Reconnect
+## 7. Renew or reconnect
 
-The privileged coordinator explicitly renews the Participation with monotonic
-sequences at the server-provided interval. WebSocket ping does not renew it. A
-brief reconnect may retain the generation; an expired or interrupted
-generation is fenced permanently and requires fresh admission. If the Attempt
-is suspended, a manager must re-allow it before a new generation can begin.
+The privileged coordinator renews the Participation explicitly, at the
+interval the server gives it, with sequence numbers that only go up. A
+WebSocket ping doesn't renew it. A short reconnect may keep the same
+generation. A generation that expired or was interrupted is closed for good,
+and the candidate needs a fresh admission. If the Attempt is suspended, a
+manager must re-allow it before a new generation can start.
 
-The current server contract starts with a 5-second renewal interval, a
-20-second lease, and a 2-second expiry scan. These are runtime values returned
-or enforced by the server, not timing constants a client should guess. Lease
-expiry is exclusive and uses PostgreSQL time.
+The server currently starts with a 5-second renewal interval, a 20-second
+lease and a 2-second expiry scan. The server returns or enforces these values.
+A client shouldn't hard-code them. Proctor uses PostgreSQL's clock for lease
+expiry, and a lease is already invalid at the exact expiry time.
 
 <GovernedFigure asset="participation-lease-timeline" />
 
-After reconnect, refetch the presentation and reconcile Workspace changes.
-Never assume that a retained local socket sequence proves the durable resource
-state is current.
+After a reconnect, fetch the presentation again and catch up on Workspace
+changes. Don't assume a socket sequence number you kept locally proves the
+server's state is current.
 
-## 8. Submit Against Acknowledged State
+## 8. Submit against acknowledged state
 
-Submit only after the client has received acknowledgements for its final
-Workspace mutation and focus-loss signal.
+Submit only once the client has acknowledgements for its last Workspace change
+and its last focus-loss signal.
 
 ```json
 {
@@ -171,14 +187,15 @@ Workspace mutation and focus-loss signal.
 }
 ```
 
-<Link to="/api/reference/submit-exam-attempt">Submit Exam Attempt</Link> atomically seals the
-Workspace and returns a candidate-safe receipt. Retry an uncertain result only
-with the exact body and idempotency key, while creating a fresh DPoP proof for
-the retry. Submission unbinds the Attempt runtime but leaves the ordinary
-authenticated socket available.
+<Link to="/api/reference/submit-exam-attempt">Submit Exam Attempt</Link> seals
+the Workspace in one transaction and returns a receipt that is safe to show the
+candidate. If you're not sure whether it worked, retry only with the exact same
+body and idempotency key, and a fresh DPoP proof for the retry. Submission
+detaches the Attempt from the runtime but leaves the normal authenticated socket
+open.
 
-Submission conflicts are synchronization signals. A Workspace cursor,
-focus-loss sequence, current Revision, pending correction, or Browser Activity
-conflict means the client must reconcile that authority before it offers
-submission again; it must not decrement a fence or silently omit terminal
+A submission conflict tells you the client is out of step. If the Workspace
+cursor, focus-loss sequence, current Revision, a pending correction or Browser
+Activity conflicts, catch up with the server's state before you offer
+submission again. Never lower a guard value, and never leave out the final
 integrity state.

@@ -1,0 +1,18 @@
+blocks:
+  - row:
+      - card: Proctor Desktop
+        text: Keeps the private key, its credentials and the server’s current nonce.
+      - card: Each request
+        text: Carries the credential and a new proof signed for this request only.
+      - card: Server checks
+        accent: true
+        numbered: true
+        items:
+          - The credential is active
+          - The key matches the registration
+          - The proof fits this request
+          - The nonce is current
+          - The proof is new
+      - card: Caller
+        text: The person, Institution and Desktop Registration. Not yet permission.
+  - note: "**Any failed check stops the request.** When the server sends a new nonce, Desktop signs a completely new proof."

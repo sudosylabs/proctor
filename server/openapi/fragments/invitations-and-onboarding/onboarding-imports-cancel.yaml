@@ -13,12 +13,14 @@ paths:
       operationId: cancelOnboardingImport
       summary: Cooperatively cancel an onboarding parse or execution
       description: >-
-        Requests cooperative cancellation while the authorized onboarding validation or commit Job remains cancelable. It cannot roll back rows that already committed and preserves the immutable source, preview, and Job history.
+        Asks to cancel the import's validation or commit Job while it can still be canceled. The work stops at its
+        next safe point. Rows that already committed are not undone, and the uploaded file, preview and Job history
+        are kept.
       x-codeSamples:
         - lang: Shell
           source: |-
             curl --request POST \
-              --url 'https://proctor.example.edu/api/v1/onboarding-imports/<import-id>/cancel' \
+              --url 'https://proctor.example.edu/api/v1/onboarding-imports/grofpg49hmqe47x811ttzoochx/cancel' \
               --header 'Authorization: Bearer <token>' \
               --header 'X-Proctor-CSRF-Token: <session-csrf-token>'
       tags:

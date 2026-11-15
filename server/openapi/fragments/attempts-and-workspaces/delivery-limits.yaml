@@ -11,11 +11,7 @@ paths:
     get:
       operationId: deliveryBudget
       summary: Read current delivery limits
-      description: >-
-        Return one owned Participation and the current lifetime Attempt counters across every generation,
-        bounded at 8 KiB. Requires a current Session of the registered key that owns the Participation.
-        Retirement and client spool deletion never refund quota; a snapshot grants no interaction or larger
-        allowance.
+      description: Returns the delivery usage of one Participation you own, together with the lifetime counters of the Attempt across every Participation Generation. The response is at most 8 KiB. You need a current Session for the registered key that owns the Participation. Retiring records or deleting the client's local spool never gives quota back. The snapshot doesn't allow interaction or raise any limit.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -55,7 +51,7 @@ paths:
         - name: participation_id
           in: query
           required: true
-          description: Owned Participation whose bounded source inventory is requested.
+          description: ID of the Participation you own whose delivery limits you want.
           schema:
             $ref: '#/components/schemas/ID'
       responses:
@@ -85,13 +81,7 @@ paths:
     post:
       operationId: stopDeliveryDetails
       summary: Stop detailed delivery for a Participation
-      description: >-
-        Requires the current live registered Desktop Connection and Idempotency-Key. Local loss-inventory
-        exhaustion irreversibly latches only the selected family for the current Participation, freezes
-        allocated boundaries and records terminal omissions without fabricating receipts. Return the current
-        budget and at most one native stream or 49 Browser sources, bounded at 1 MiB. Exact replay rechecks
-        live authority and cannot affect a successor generation. No quota is replenished and no misconduct
-        Flag, suspension or interaction denial follows solely from this request.
+      description: 'Stops detailed delivery for one family, native or browser, for the current Participation, because the client has run out of room to track lost records. You need the live registered Desktop Connection and an Idempotency-Key. The stop can''t be undone. It fixes the reserved positions where they are and marks the rest as permanently missing, without making up receipts. The response holds the current budget and the affected statuses: at most one native stream or 49 browser sources, within 1 MiB. A retry with the same key checks live authority again and never affects a later Participation Generation. No quota is given back. This request alone never creates an Integrity Flag, a Suspension or a block on interaction.'
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -160,6 +150,7 @@ paths:
 components:
   schemas:
     DeliveryQuotaUsage:
+      description: Usage and limits for one delivery family, for either the current Participation or the whole Attempt.
       type: object
       additionalProperties: false
       required:
@@ -173,38 +164,46 @@ components:
         - stop_reason
       properties:
         retained_records:
+          description: Number of records the server has kept so far.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         retained_bytes:
+          description: Total size in bytes of the records the server has kept so far.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         allocated_positions:
+          description: Number of sequence positions reserved so far.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         record_limit:
+          description: Most records the server will keep.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
         byte_limit:
+          description: Most bytes of records the server will keep.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
         position_limit:
+          description: Most sequence positions that can be reserved.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
         summary_only:
+          description: True once detailed delivery has stopped. After that the server keeps only summary counts, and the counters no longer change.
           type: boolean
         stop_reason:
+          description: Why detailed delivery stopped. records, bytes, positions and metadata name the limit that was reached. local_loss_inventory_exhausted means the client stopped it. Null while detailed delivery continues.
           type:
             - string
             - 'null'
@@ -216,6 +215,7 @@ components:
             - local_loss_inventory_exhausted
             - null
     DeliveryFamilyBudget:
+      description: Delivery usage for one family, native or browser.
       type: object
       additionalProperties: false
       required:
@@ -225,15 +225,19 @@ components:
         - pending_byte_limit
       properties:
         participation:
+          description: Usage of the current Participation Generation.
           $ref: '#/components/schemas/DeliveryQuotaUsage'
         attempt:
+          description: Lifetime usage of the Attempt across every Participation Generation.
           $ref: '#/components/schemas/DeliveryQuotaUsage'
         pending_bytes:
+          description: Bytes of records the server has received but not yet processed, for example because earlier positions are still missing.
           type: integer
           format: int64
           minimum: 0
           maximum: 2097152
         pending_byte_limit:
+          description: Most bytes that may wait to be processed. Always 2 MiB.
           type: integer
           format: int64
           minimum: 1
@@ -241,6 +245,7 @@ components:
           enum:
             - 2097152
     DeliveryBudgetSnapshot:
+      description: Delivery usage of one Participation and of its Attempt.
       type: object
       additionalProperties: false
       required:
@@ -256,46 +261,57 @@ components:
         - server_time
       properties:
         participation_id:
+          description: ID of the Attempt Participation.
           $ref: '#/components/schemas/ID'
         generation:
+          description: Participation Generation of that Participation.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
         native:
+          description: Usage for native security delivery.
           $ref: '#/components/schemas/DeliveryFamilyBudget'
         browser:
+          description: Usage for browser activity delivery.
           $ref: '#/components/schemas/DeliveryFamilyBudget'
         browser_flag_groups:
+          description: Number of browser Integrity Flag groups recorded for the Attempt. At most 256.
           type: integer
           format: int64
           minimum: 0
           maximum: 256
         browser_evidence_records:
+          description: Number of browser Integrity Evidence records kept for the Attempt. At most 10,000.
           type: integer
           format: int64
           minimum: 0
           maximum: 10000
         browser_evidence_bytes:
+          description: Total size in bytes of the browser Integrity Evidence kept for the Attempt. At most 8 MiB.
           type: integer
           format: int64
           minimum: 0
           maximum: 8388608
         explicit_missing_intervals:
+          description: Number of declared missing ranges recorded for the Attempt. At most 4,096.
           type: integer
           format: int64
           minimum: 0
           maximum: 4096
         control_metadata_bytes:
+          description: Bytes of delivery control metadata recorded for the Attempt, such as declarations and receipts. At most 2 MiB.
           type: integer
           format: int64
           minimum: 0
           maximum: 2097152
         server_time:
+          description: Server time when the snapshot was taken.
           type: string
           format: date-time
           pattern: Z$
     StopDeliveryDetails:
+      description: Which delivery family to stop detailed delivery for, and why.
       type: object
       additionalProperties: false
       required:
@@ -303,15 +319,18 @@ components:
         - reason
       properties:
         family:
+          description: 'The delivery family to stop: native security streams or browser activity sources.'
           type: string
           enum:
             - native
             - browser
         reason:
+          description: 'Why delivery is stopping. Only local_loss_inventory_exhausted is accepted: the client has no room left to track lost records.'
           type: string
           enum:
             - local_loss_inventory_exhausted
     StopDeliveryDetailsResult:
+      description: The budget after the stop, with the statuses it affected. Only the requested family is filled in.
       type: object
       additionalProperties: false
       required:
@@ -320,12 +339,15 @@ components:
         - browser
       properties:
         budget:
+          description: Delivery usage after the stop.
           $ref: '#/components/schemas/DeliveryBudgetSnapshot'
         native:
+          description: Status of the native security stream after the stop. Null when family is browser.
           oneOf:
             - $ref: '#/components/schemas/NativeSecurityStreamStatus'
             - type: 'null'
         browser:
+          description: Statuses of the Participation's browser activity sources after the stop. Empty when family is native.
           type: array
           maxItems: 49
           items:
@@ -333,7 +355,7 @@ components:
   requestBodies:
     StopDeliveryDetails:
       required: true
-      description: Closed family-scoped local loss-inventory exhaustion declaration. Maximum 2 KiB.
+      description: The delivery family the client has run out of room to track lost records for. At most 2 KiB.
       content:
         application/json:
           schema:
@@ -343,14 +365,177 @@ components:
             reason: local_loss_inventory_exhausted
   responses:
     DeliveryBudgetOK:
-      description: Current lifetime quota projection, bounded at 8 KiB.
+      description: Current delivery usage and lifetime limits, at most 8 KiB.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/DeliveryBudgetSnapshot'
+          example:
+            participation_id: 6xoche483hwrx5rpu8jzjoe7qg
+            generation: 2
+            native:
+              participation:
+                retained_records: 1840
+                retained_bytes: 412300
+                allocated_positions: 45
+                record_limit: 50000
+                byte_limit: 33554432
+                position_limit: 20000
+                summary_only: false
+                stop_reason: null
+              attempt:
+                retained_records: 2915
+                retained_bytes: 655120
+                allocated_positions: 71
+                record_limit: 200000
+                byte_limit: 134217728
+                position_limit: 80000
+                summary_only: false
+                stop_reason: null
+              pending_bytes: 0
+              pending_byte_limit: 2097152
+            browser:
+              participation:
+                retained_records: 212
+                retained_bytes: 98304
+                allocated_positions: 249
+                record_limit: 50000
+                byte_limit: 33554432
+                position_limit: 50000
+                summary_only: false
+                stop_reason: null
+              attempt:
+                retained_records: 388
+                retained_bytes: 176128
+                allocated_positions: 425
+                record_limit: 200000
+                byte_limit: 134217728
+                position_limit: 200000
+                summary_only: false
+                stop_reason: null
+              pending_bytes: 4096
+              pending_byte_limit: 2097152
+            browser_flag_groups: 1
+            browser_evidence_records: 3
+            browser_evidence_bytes: 2048
+            explicit_missing_intervals: 2
+            control_metadata_bytes: 18432
+            server_time: '2026-08-01T09:45:00Z'
     StopDeliveryDetailsOK:
-      description: Committed family cutoff and current affected source inventory, bounded at 1 MiB.
+      description: The stop was recorded. Returns the budget and the affected source statuses, at most 1 MiB.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/StopDeliveryDetailsResult'
+          example:
+            budget:
+              participation_id: 6xoche483hwrx5rpu8jzjoe7qg
+              generation: 2
+              native:
+                participation:
+                  retained_records: 1840
+                  retained_bytes: 412300
+                  allocated_positions: 45
+                  record_limit: 50000
+                  byte_limit: 33554432
+                  position_limit: 20000
+                  summary_only: false
+                  stop_reason: null
+                attempt:
+                  retained_records: 2915
+                  retained_bytes: 655120
+                  allocated_positions: 71
+                  record_limit: 200000
+                  byte_limit: 134217728
+                  position_limit: 80000
+                  summary_only: false
+                  stop_reason: null
+                pending_bytes: 0
+                pending_byte_limit: 2097152
+              browser:
+                participation:
+                  retained_records: 212
+                  retained_bytes: 98304
+                  allocated_positions: 249
+                  record_limit: 50000
+                  byte_limit: 33554432
+                  position_limit: 50000
+                  summary_only: true
+                  stop_reason: local_loss_inventory_exhausted
+                attempt:
+                  retained_records: 388
+                  retained_bytes: 176128
+                  allocated_positions: 425
+                  record_limit: 200000
+                  byte_limit: 134217728
+                  position_limit: 200000
+                  summary_only: false
+                  stop_reason: null
+                pending_bytes: 4096
+                pending_byte_limit: 2097152
+              browser_flag_groups: 1
+              browser_evidence_records: 3
+              browser_evidence_bytes: 2048
+              explicit_missing_intervals: 2
+              control_metadata_bytes: 18432
+              server_time: '2026-08-01T09:45:00Z'
+            native: null
+            browser:
+              - missing_ranges_truncated: false
+                server_time: '2026-08-01T10:05:00Z'
+                allocated_through_sequence: 212
+                terminal_missing_through_sequence: 212
+                closure:
+                  closed_at: '2026-08-01T09:41:29Z'
+                  close_reason: runtime_reset
+                  known_at_close: 212
+                  unknown_tail: true
+                  upload_expires_at: '2026-08-02T09:41:29Z'
+                declaration_revision: 1
+                detail_mode: summary_only
+                budget_scope: participation
+                summary_only_reason: local_loss_inventory_exhausted
+                summary: null
+                highest_contiguous_sequence: 198
+                settled_through_sequence: 212
+                highest_seen_sequence: 212
+                missing_ranges: []
+                source_session_id: 3f6c2a9e-8d41-4b7a-9c35-0e2f7d18a6b4
+                attempt_id: 1asb7sk89dp1ex339fkh3te5t4
+                participation_id: 6xoche483hwrx5rpu8jzjoe7qg
+                generation: 2
+                policy_revision_id: iqcx3qc9sbbt6ocshszfqgq6ci
+                policy_digest: "sha256:4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"
+                predecessor_source_session_id: null
+                start_transition: initial
+                runtime_reset_reason: null
+                started_at: '2026-08-01T09:02:11Z'
+                remaining_correction_starts: 32
+                remaining_runtime_reset_starts: 15
+              - missing_ranges_truncated: false
+                server_time: '2026-08-01T10:05:00Z'
+                allocated_through_sequence: 37
+                terminal_missing_through_sequence: 37
+                closure:
+                  unknown_tail: false
+                declaration_revision: 0
+                detail_mode: summary_only
+                budget_scope: participation
+                summary_only_reason: local_loss_inventory_exhausted
+                summary: null
+                highest_contiguous_sequence: 37
+                settled_through_sequence: 37
+                highest_seen_sequence: 37
+                missing_ranges: []
+                source_session_id: 9b1e4d27-5c83-4f60-a2d9-71c8e3b05f1a
+                attempt_id: 1asb7sk89dp1ex339fkh3te5t4
+                participation_id: 6xoche483hwrx5rpu8jzjoe7qg
+                generation: 2
+                policy_revision_id: iqcx3qc9sbbt6ocshszfqgq6ci
+                policy_digest: "sha256:4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"
+                predecessor_source_session_id: 3f6c2a9e-8d41-4b7a-9c35-0e2f7d18a6b4
+                start_transition: runtime_reset
+                runtime_reset_reason: coordinator_restarted
+                started_at: '2026-08-01T09:41:30Z'
+                remaining_correction_starts: 32
+                remaining_runtime_reset_starts: 15

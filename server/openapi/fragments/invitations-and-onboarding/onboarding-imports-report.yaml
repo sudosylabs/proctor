@@ -13,7 +13,9 @@ paths:
       operationId: downloadOnboardingImportReport
       summary: Download the authorized formula-safe onboarding report
       description: >-
-        Downloads the bounded authorized preview or final row report with spreadsheet formulas neutralized as data. The report excludes credentials, one-time claims, mail payloads, and internal worker diagnostics.
+        Downloads the preview or final row report of one import as CSV. Values a spreadsheet would run as formulas
+        are neutralized, so they show as plain text. The report never contains credentials, one-time claims, email
+        contents or internal worker diagnostics.
       tags:
         - Invitations and onboarding
       x-proctor-auth: principal_required
@@ -58,7 +60,7 @@ paths:
 components:
   responses:
     OnboardingImportReport:
-      description: Formula-safe CSV report without recipient or Invitation secret disclosure
+      description: The report as CSV, with formulas neutralized. It shows no recipient addresses or Invitation secrets.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'

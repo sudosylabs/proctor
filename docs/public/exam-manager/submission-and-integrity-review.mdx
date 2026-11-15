@@ -1,101 +1,119 @@
 ---
-title: Inspect a Submission and Review Integrity
-description: Read the immutable submitted work, distinguish provenance from suspicion, assess bounded evidence, and record non-academic dispositions.
+title: Look at a Submission and review integrity
+description: Read the sealed work, tell how an Attempt ended apart from any suspicion, weigh the evidence, and record decisions that are not academic judgments.
 audience: exam-manager
 maturity: preview
 ---
 
-# Inspect a Submission and Review Integrity
+# Look at a Submission and review integrity
 
-A Submission answers “what acknowledged work was sealed, when, and by which
-terminal path?” Integrity review answers “how should a manager interpret the
-bounded record?” Neither object is a grade, a misconduct verdict, or permission
-to reconstruct a candidate's broader device activity.
+A Submission tells you which confirmed work was sealed, when, and how the
+Attempt ended. An integrity review is about how you, as a manager, should read
+the limited record Proctor kept. Neither one is a grade or a finding of
+misconduct. Neither gives you permission to piece together what else the
+candidate was doing on their device.
 
-## Begin With Submission Provenance
+## Start with how the Attempt ended
 
-Every created Attempt reaches at most one immutable Submission:
+Every Attempt that was created ends with at most one Submission, which never
+changes. Its provenance tells you how it ended:
 
-- `candidate_submitted` means the candidate completed the synchronized
-  voluntary-submission handshake;
-- `manager_ended_attempt` means an authorized Manager deliberately sealed the
-  latest acknowledged state before the Sitting deadline; and
-- `sitting_closed` means scheduled or early Sitting closure sealed unfinished
-  created Attempts.
+- `candidate_submitted` means the candidate finished the in-sync submit
+  process themselves;
+- `manager_ended_attempt` means an authorized Manager chose to seal the latest
+  confirmed work before the Sitting deadline;
+- `sitting_closed` means the Sitting closed, on schedule or early, and sealed
+  the unfinished Attempts that had been created.
 
 <GovernedFigure asset="submission-provenance-boundary" />
 
-Provenance describes the terminal path, not quality or intent. A no-show has no
-fabricated Attempt or Submission. A manager-ending private reason remains
-private even though the candidate-safe receipt names the terminal provenance.
+Provenance only says how the Attempt ended. It says nothing about the quality
+of the work or what the candidate intended. If a candidate never entered,
+Proctor doesn't create an Attempt or Submission for them. If a manager ended
+the Attempt, their private reason stays private, even though the candidate's
+receipt names how the Attempt ended.
 
-## Inspect Only the Sealed Record
+## Look only at the sealed record
 
-The Submission header pins the governing Exam Revision, acknowledged Workspace
-Cursor, integrity terminal state, unresolved discrepancy count, provenance,
-and submission time. Its manifest preserves stable entry identities, logical
-paths, content origins, versions, checksums, media types, and sizes.
+The Submission header records:
 
-Managers can page the manifest and open retained file bytes only after sealing.
-They cannot read a live candidate Workspace. Do not treat object-storage keys,
-local Desktop paths, as the Submission hierarchy;
-the immutable manifest is authority.
+- the Exam Revision that applied;
+- the confirmed Workspace Cursor;
+- the final integrity state;
+- the number of unresolved discrepancies;
+- the provenance;
+- the submission time.
 
-## Read the Integrity Chain in Order
+Its manifest, the list of submitted files, keeps each entry's fixed identity,
+its path, where its content came from, its version, checksum, media type and
+size.
+
+You can page through the manifest and open the stored file contents, but only
+after the Attempt is sealed. You can't read a candidate's Workspace while they
+are working. Don't treat storage keys or local Desktop paths as the shape of
+the Submission. The manifest, which never changes, is what counts.
+
+## Read the integrity record in order
 
 <GovernedFigure asset="integrity-review-release-boundary" />
 
-Native condition records keep every change of a native rule's status, as the
+Native condition records keep every change in a native rule's status, as the
 server worked it out from what the candidate's Desktop reported: which rule,
-why, when, and whether it began or ended a stretch of time the rule was not met.
-When a rule the Exam enforces stops being met, Proctor raises a Flag for that
-capability, such as a second display, with one piece of evidence each time it
-happens. Rules that only observe, and stretches where Proctor could not tell,
+why, when, and whether the change began or ended a stretch when the rule wasn't
+met. When a rule the Exam enforces stops being met, Proctor raises a Flag for
+that capability, such as a second display, with one piece of evidence each time
+it happens. Rules that only observe, and stretches where Proctor couldn't tell,
 never raise one.
 
 When the Exam records the screen, a Flag also asks the candidate's Desktop for
 the minute either side of it. You can ask for other ranges yourself, with a
-short private reason, up to ten per Attempt. Asking and each playback are
+short private reason, up to ten per Attempt. Each request and each playback is
 audited.
 
-Review these sources together:
+Look at these together:
 
-- **Flags** group qualifying policy evidence. Browser Flags also distinguish
-  Participation, frozen policy Revision and rule.
-- **Evidence** retains bounded qualifying episodes and summarized overflow.
-- **Native conditions** keep each rule status change; Review finalization
-  acknowledges their current inventory. Native Flags need a decision like any
-  other Flag.
+- **Flags** group the evidence that met a policy rule. Browser Flags also
+  record the Participation, the fixed policy Revision and the rule.
+- **Evidence** keeps a limited number of qualifying episodes, with a summary
+  of any beyond that.
+- **Native conditions** keep each rule status change. When you finalize the
+  Review, you acknowledge the current list of them. Native Flags need a
+  decision like any other Flag.
 - **Screen clips** are the recorded ranges asked for around Flags or by a
   manager. A clip still uploading after the deadline shows as failed.
-- **Discrepancies** retain gaps, missing correction acknowledgement, incomplete
-  Browser Activity, late Focus Loss, and other explicit uncertainty.
-- **Submission integrity state** is `settled` only when collection completed
-  without unresolved gaps; `gapped` means the uncertainty remains visible.
+- **Discrepancies** keep gaps, missing acknowledgements of corrections,
+  incomplete Browser Activity, late Focus Loss and other uncertainty, in the
+  open.
+- **Submission integrity state** is `settled` only when collection finished
+  with no unresolved gaps. `gapped` means some uncertainty remains, and it
+  stays visible.
 
-Client clocks, severity claims, and manager intuition are not server authority.
-Connection Loss is based on confirmed lease expiry, while one failed request or
-ping is not enough. Browser Activity is the minimized top-level record described
-in [Browser and Privacy](../candidate/browser-and-privacy.mdx), never page
-content or general browsing history.
+The server doesn't rely on the candidate's clock, on claims about how serious
+something was, or on a manager's hunch. Connection Loss is based on a
+confirmed lease expiry. One failed request or ping isn't enough. Browser
+Activity is the cut-down record of top-level pages described in
+[The Exam browser and your privacy](../candidate/browser-and-privacy.mdx). It never
+includes page content or general browsing history.
 
-## Record a Disposition, Not a Verdict
+## Record a decision, not a verdict
 
-Every Flag requires one current `confirmed`, `dismissed`, or `inconclusive`
-decision before finalization. Use `inconclusive` when the retained record cannot
-support a reliable conclusion; do not force uncertainty into either of the
-other outcomes.
+Before you can finalize, every Flag needs one current decision: `confirmed`,
+`dismissed` or `inconclusive`. Use `inconclusive` when the record can't
+support a reliable conclusion. Don't force uncertainty into one of the other
+two.
 
-The rationale is manager-only and must explain the evidence-based reason for
-the disposition. It is not shown to the candidate. Private Review notes are
-also separate from optional approved student-facing Markdown remarks.
+Your rationale is seen only by managers. It must explain the reason for your
+decision, based on the evidence. The candidate never sees it. Private Review
+notes are also kept apart from the optional Markdown remarks you approve for
+the student.
 
-Concurrent manager changes advance the Review revision. If the revision is
-stale, reread the Review and reconcile the other manager's work rather than
-guessing the next number or overwriting it.
+When another manager makes a change at the same time, the Review revision
+moves on. If your revision is out of date, read the Review again and work
+their changes in. Don't guess the next number or write over their work.
 
-New qualifying Browser evidence or native conditions can arrive during a closed
-source's bounded upload window. They withdraw approval of the current Review and
-make Records Completion stale. Previously finalized snapshots remain available;
-inspect the new inventory, refresh affected Browser Flag decisions, finalize, and
-explicitly release again. An exact delivery replay does not reopen a Review.
+After a source has closed, new qualifying Browser evidence or native
+conditions can still arrive during its limited upload window. When they do,
+the current Review is no longer approved, and Records Completion is out of
+date. Earlier finalized snapshots stay available. Look at the new records,
+update the affected Browser Flag decisions, then finalize and release again.
+A delivery that is an exact repeat doesn't reopen a Review.

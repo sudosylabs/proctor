@@ -45,6 +45,7 @@ type API struct {
 	routes                  []Entry
 	routeMatchers           []routeMatcher
 	maxBodyBytes            int64
+	problemDocumentation    string
 	transferDeadlines       transferDeadlines
 	middleware              middlewarePolicy
 }
@@ -59,6 +60,10 @@ type Settings struct {
 	// PublicURL is the installation's public origin. It decides whether
 	// cookies are Secure and which Origin an unsafe browser request may carry.
 	PublicURL string
+	// DocumentationURL is the installation's documentation site. Problem
+	// Details link each error to <DocumentationURL>/problems/<code>; empty
+	// sends type "about:blank".
+	DocumentationURL string
 	// MaxBodyBytes is the request body limit of an endpoint that declares
 	// none.
 	MaxBodyBytes int64
@@ -96,6 +101,10 @@ func New(settings Settings, authenticator Authenticator, resources ...Resource) 
 	if settings.RecentAuthenticationTTL <= 0 {
 		return nil, errors.New("recent authentication TTL must be greater than zero")
 	}
+	problemDocumentation, err := problemDocumentationBase(settings.DocumentationURL)
+	if err != nil {
+		return nil, err
+	}
 	cookies, err := NewCookies(settings.PublicURL)
 	if err != nil {
 		return nil, fmt.Errorf("configure browser cookies: %w", err)
@@ -114,6 +123,7 @@ func New(settings Settings, authenticator Authenticator, resources ...Resource) 
 		browserRequests:         browserRequests,
 		recentAuthenticationTTL: settings.RecentAuthenticationTTL,
 		maxBodyBytes:            settings.MaxBodyBytes,
+		problemDocumentation:    problemDocumentation,
 		transferDeadlines:       newTransferDeadlines(settings.ReadTimeout, settings.WriteTimeout),
 		middleware: middlewarePolicy{
 			trustedProxies: trustedProxies(slices.Clone(settings.TrustedProxies)),
@@ -129,7 +139,7 @@ func New(settings Settings, authenticator Authenticator, resources ...Resource) 
 // ServeHTTP negotiates the request's locale from Accept-Language and dispatches
 // it through the request-wide middleware to its route.
 func (a *API) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	a.handler.ServeHTTP(writer, a.localize(request))
+	a.handler.ServeHTTP(writer, a.prepare(request))
 }
 
 // NotFoundHandler answers a path that a sibling browser module owns but
@@ -138,7 +148,7 @@ func (a *API) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 func (a *API) NotFoundHandler() http.Handler {
 	handler := withMiddleware(http.HandlerFunc(a.handleNotFound), a.logger, a.middleware)
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		handler.ServeHTTP(writer, a.localize(request))
+		handler.ServeHTTP(writer, a.prepare(request))
 	})
 }
 
@@ -152,7 +162,7 @@ func (a *API) MethodNotAllowedHandler(allowed ...string) http.Handler {
 		a.writeMethodNotAllowed(writer, request)
 	}), a.logger, a.middleware)
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		handler.ServeHTTP(writer, a.localize(request))
+		handler.ServeHTTP(writer, a.prepare(request))
 	})
 }
 
@@ -215,7 +225,7 @@ func (a *API) Close() error {
 func (a *API) handleNotFound(writer http.ResponseWriter, request *http.Request) {
 	title, detail := localizedProblemPresentation(request, http.StatusNotFound)
 	writeProblem(writer, Problem{
-		Type:      ProblemType(routeNotFoundCode),
+		Type:      ProblemType(request, routeNotFoundCode),
 		Title:     title,
 		Status:    http.StatusNotFound,
 		Detail:    detail,
@@ -235,7 +245,7 @@ func (a *API) handleMethodNotAllowed(writer http.ResponseWriter, request *http.R
 func (a *API) writeMethodNotAllowed(writer http.ResponseWriter, request *http.Request) {
 	title, detail := ProblemPresentation(request, "method_not_allowed")
 	writeProblem(writer, Problem{
-		Type:      ProblemType(routeMethodNotAllowedCode),
+		Type:      ProblemType(request, routeMethodNotAllowedCode),
 		Title:     title,
 		Status:    http.StatusMethodNotAllowed,
 		Detail:    detail,

@@ -1,97 +1,103 @@
 ---
-title: Sign In and Recover Access
-description: Use local, provider, Invitation, verification, and recovery journeys without confusing authentication with membership.
+title: Sign in and recover access
+description: Sign in, register, accept an Invitation, verify your email address and reset a password, and understand why signing in is not the same as membership.
 audience: account-holder
 maturity: preview
 ---
 
-# Sign In and Recover Access
+# Sign in and recover access
 
-Always begin at the canonical Proctor origin supplied by your Institution. Do
-not enter credentials into a copied page, an address received from an
-untrusted source, or a Proctor Desktop window: Desktop opens the Institution's
-hosted browser page for authentication.
+Always start from the Proctor address your Institution gave you. Don't type
+your sign-in details into a copied page, into an address someone sent you that
+you don't trust, or into a Proctor Desktop window. When Desktop needs you to
+sign in, it opens your Institution's sign-in page in your browser.
 
-## Choose the Right Entry Point
+## Choose where to start
 
 ### You already have an account
 
-Open `/login`. The page shows only methods currently enabled by the
-Institution's revisioned <Term id="access-policy">Access Policy</Term> and by the
-server's configured providers.
+Open `/login`. The page shows only the sign-in methods that are switched on
+right now, both by your Institution's
+<Term id="access-policy">Access Policy</Term> (which keeps a history of its
+versions) and by the sign-in providers set up on the server.
 
-- **Local login** uses the username or email accepted by the form and the
-  account's password. If MFA is active, complete the second factor in the same
-  transaction.
-- **External login** redirects through the provider selected on the page. The
-  immutable provider subject identifies an existing link; an email returned by
-  a provider never silently merges two accounts.
-- If several providers are available, choose the provider originally connected
-  to the account. An unlinked external identity does not become an account
-  merely because its email resembles one.
+- **Local login** uses your username or email address, whichever the form
+  accepts, and your account password. If you have MFA turned on, you enter the
+  second factor as part of the same sign-in.
+- **External login** sends you to the provider you pick on the page. Proctor
+  recognizes your account by the provider's fixed identifier for you. It never
+  quietly merges two accounts because a provider returned a matching email
+  address.
+- If you see several providers, choose the one you first connected to your
+  account. An external identity that isn't linked to an account doesn't become
+  one just because its email address looks like yours.
 
-A successful login creates a Web <Term id="session">Session</Term>. It does not
-accept an Invitation, enroll a person in a Class, or grant a role.
+Signing in creates a Web <Term id="session">Session</Term>. It doesn't accept
+an Invitation, add you to a Class or give you a role.
 
-### Your Institution sent an Invitation
+### Your Institution sent you an Invitation
 
-Use the complete `/join` link from the most recent delivery. An
-<Term id="invitation">Invitation</Term> is a purpose-specific, pre-account
-package: it may create or resolve the User and atomically establish the exact
-relationship or role package it names.
+Use the complete `/join` link from the most recent email. An
+<Term id="invitation">Invitation</Term> is made for one purpose, before you
+have an account. It may create your User or find your existing one, and in the
+same step it sets up exactly the relationship or set of roles it names.
 
-The hosted journey may offer a local credential, an enabled external provider,
-or acceptance with a current Session. Those branches converge on the same
-frozen package. A replacement Invitation invalidates the previous claim;
-resending rotates delivery without broadening its meaning.
+The page may let you set a local password, use an enabled sign-in provider, or
+accept while you are already signed in. Whichever you choose, you get exactly
+the same fixed set of access. A replacement Invitation cancels the old one.
+Resending an Invitation sends a fresh link, but it never widens what the
+Invitation grants.
 
-If the link is expired, revoked, replaced, already consumed, or malformed, the
-page gives a harmless unusable-link result. Ask the issuer for a new Invitation
-instead of repeatedly submitting the old claim.
+If the link has expired, been revoked or replaced, has already been used, or is
+damaged, the page tells you it can't be used and nothing else happens. Ask the
+person who invited you for a new Invitation rather than trying the old link
+again and again.
 
-### Public registration is offered
+### Public registration is available
 
-Open `/register` only when the hosted page says public local registration is
-enabled. Registration creates a User and begins mailbox verification. It does
-not create an Affiliation, membership, or Role Binding. When registration is
-disabled, an Invitation is required; the page does not collect an email merely
-to reveal Invitation state.
+Open `/register` only when the page says public local registration is switched
+on. Registering creates your User and starts email verification. It doesn't
+create an Affiliation, a membership or a Role Binding. When registration is
+off, you need an Invitation. In that case the page doesn't ask for your email
+address just to tell you whether an Invitation exists.
 
-## Verify the Mailbox
+## Verify your email address
 
-The bootstrap administrator and a newly registered local account begin with an
-unverified email address. Use the newest verification delivery. Verification
-proves mailbox control only; it does not prove legal identity, institutional
-relationship, or permission.
+The first administrator account, and any newly registered local account,
+starts with an email address that isn't verified yet. Use the newest
+verification email. Verifying shows only that you can read that mailbox. It
+doesn't prove who you legally are, your relationship with the Institution, or
+what you are allowed to do.
 
-If no delivery arrives:
+If the email doesn't arrive:
 
-1. confirm the address through a safe account or administrator view rather
-   than posting it in a support channel;
-2. request a new verification delivery once;
-3. check the Institution's mail-delivery status with an operator; and
-4. discard older links after the new request.
+1. Check the address in a safe place, such as your account page or an
+   administrator's view, rather than posting it in a support channel.
+2. Ask for a new verification email once.
+3. Ask an operator whether the Institution's mail delivery is working.
+4. Throw away older links once you have asked for a new one.
 
-## Recover a Local Password
+## Reset a local password
 
-Open `/account/forgot-password` when local login is available. Submit the
-account identifier once. The response is intentionally generic whether or not
-an eligible account exists. If a delivery arrives, open the newest
-`/account/reset-password` link and choose a new password before the transaction
+When local login is available, open `/account/forgot-password` and submit
+your account identifier once. You get the same general reply whether or not a
+matching account exists. If an email arrives, open the newest
+`/account/reset-password` link and choose a new password before the link
 expires.
 
-Password recovery changes a credential; it does not silently clear MFA or
-create academic authority. If local login is disabled, the hosted login page
-hides recovery even though the API preserves a non-enumerating response.
+Resetting your password changes only your password. It doesn't quietly turn
+off MFA or give you any academic permissions. If local login is switched off,
+the sign-in page hides the reset option, although the API still answers in a
+way that doesn't reveal whether an account exists.
 
-## Understand Safe Failure Messages
+## What sign-in error messages mean
 
-| Result | What to do |
+| Message | What to do |
 | --- | --- |
-| Invalid credentials | Re-enter the chosen method; do not try to infer whether the account exists. |
-| MFA required or invalid | Complete the factor or use one unused recovery code. Never send a recovery code to support. |
-| Method disabled | Use another method already connected to the same account or ask an administrator about policy. |
-| Account disabled | Contact the Institution; creating another account does not restore the original authority. |
-| Session limit reached | Revoke an old Session through account security, or ask an administrator for help. |
-| Active Attempt Session lock | Return to the Desktop Session already taking the Exam; Proctor will not create a competing User Session. |
-| Provider unavailable | Retry after the provider or server capability is restored; do not link by matching email. |
+| Invalid credentials | Enter your details again with the method you chose. Don't try to work out whether the account exists. |
+| MFA required or invalid | Enter your second factor, or use one recovery code you haven't used before. Never send a recovery code to support. |
+| Method disabled | Use another method already connected to the same account, or ask an administrator about the policy. |
+| Account disabled | Contact your Institution. Creating another account won't give you back the access the original one had. |
+| Session limit reached | Sign out an old Session from your account security page, or ask an administrator for help. |
+| Active Attempt Session lock | Go back to the Desktop Session where you are already taking the Exam. Proctor won't create a second User Session alongside it. |
+| Provider unavailable | Try again once the provider or the server feature is working again. Don't try to link accounts by matching email addresses. |

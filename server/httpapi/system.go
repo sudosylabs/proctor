@@ -89,7 +89,7 @@ func systemResourceWithApplication(
 			Method: http.MethodGet,
 			Path:   "/system/ping",
 			Auth:   route.AuthPublic,
-			Errors: []string{"request.invalid", "desktop_compatibility_policy.revision_conflict", "desktop_compatibility_policy.unavailable"},
+			Errors: []string{"request.invalid"},
 			Handle: h.ping,
 		},
 		route.Endpoint{
@@ -127,7 +127,7 @@ func (h systemHandlers) liveness(request route.Request) (route.Result, error) {
 	if !h.health.Live() {
 		title, detail := route.ProblemPresentation(request.HTTP, "not_live")
 		return route.ProblemResult(route.Problem{
-			Type:      route.ProblemType(healthNotLiveCode),
+			Type:      route.ProblemType(request.HTTP, healthNotLiveCode),
 			Title:     title,
 			Status:    http.StatusServiceUnavailable,
 			Detail:    detail,
@@ -143,7 +143,7 @@ func (h systemHandlers) readiness(request route.Request) (route.Result, error) {
 	if !h.health.Ready() {
 		title, detail := route.ProblemPresentation(request.HTTP, "not_ready")
 		return route.ProblemResult(route.Problem{
-			Type:      route.ProblemType(healthNotReadyCode),
+			Type:      route.ProblemType(request.HTTP, healthNotReadyCode),
 			Title:     title,
 			Status:    http.StatusServiceUnavailable,
 			Detail:    detail,
@@ -194,8 +194,10 @@ func (h systemHandlers) ping(request route.Request) (route.Result, error) {
 		request.Invocation(),
 		query,
 	)
+	// Only a malformed query fails the request. Every other evaluation error
+	// becomes a 200 that reports compatibility as unavailable.
 	if apperror.Is(evaluationErr, "request.invalid") {
-		return route.Result{}, evaluationErr
+		return route.Result{}, route.InvalidRequest(nil)
 	}
 
 	responseTime := model.TimeUTC(h.now())

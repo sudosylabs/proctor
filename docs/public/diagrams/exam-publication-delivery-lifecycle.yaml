@@ -1,0 +1,21 @@
+blocks:
+  - row:
+      - card: Exam
+        text: Stays the same Exam across every Revision.
+      - card: Draft
+        text: Where you edit. The only part that changes.
+        via: has one
+      - card: Revision
+        text: Numbered and can’t change. Holds policies, Resources and Starter Workspace.
+        via: {label: Publish, accent: true}
+  - row:
+      - card: Sitting
+        text: One Revision, one Class, one time window.
+      - card: Attempt
+        text: One per student in a Sitting.
+      - card: Submission
+        text: The one final result, submitted or sealed at close.
+    from:
+      - {from: 3, to: 1, label: Scheduled as}
+  - note: A live correction makes a new Revision for one Sitting. It can change only instructions, Resources and Browser Policy.
+    rule: dashed

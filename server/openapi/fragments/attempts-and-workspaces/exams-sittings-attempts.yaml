@@ -13,10 +13,7 @@ paths:
     get:
       operationId: listExamAttempts
       summary: List bounded candidate Attempts for one Exam Sitting
-      description: >-
-        Lists manager-safe Attempt projections for the exact Exam Sitting after rechecking current scope
-        authority. Results may be filtered by lifecycle state and omit candidate credentials, answer content,
-        private integrity evidence, and internal lease material.
+      description: Lists the Attempts of one Exam Sitting, after checking again that the caller may manage it. You can filter by Attempt state. Rows contain no candidate credentials, answers, private Integrity Evidence or internal lease data.
       tags:
         - Attempts and workspaces
       x-proctor-auth: principal_required
@@ -46,7 +43,7 @@ paths:
         - name: state
           in: query
           required: false
-          description: Repeated distinct Attempt states.
+          description: Return only Attempts in these states. Repeat the parameter for each state, at most three, without duplicates.
           style: form
           explode: true
           schema:
@@ -58,7 +55,7 @@ paths:
         - name: limit
           in: query
           required: false
-          description: Maximum number of manager-safe Exam Attempt projections to return in this page.
+          description: Largest number of Attempts to return on this page.
           schema:
             type: integer
             minimum: 1
@@ -68,8 +65,8 @@ paths:
           in: query
           required: false
           description: >-
-            Opaque cursor over descending creation time and Attempt identity; clients return it
-            unchanged.
+            Cursor from next_cursor of the previous page. Send it back unchanged. Attempts are listed newest
+            first.
           schema:
             type: string
       responses:
@@ -97,10 +94,7 @@ paths:
     get:
       operationId: getExamAttempt
       summary: Get one manager-safe Exam Attempt projection
-      description: >-
-        Returns one Attempt only after verifying its Exam and Sitting path ownership and the caller's current
-        management authority. The projection exposes operational state but omits candidate credentials, answer
-        content, and private evidence.
+      description: Returns one Attempt, after checking that it belongs to the Exam and Sitting in the path and that the caller may manage it. The response shows the Attempt's operational state. It contains no candidate credentials, answers or private evidence.
       tags:
         - Attempts and workspaces
       x-proctor-auth: principal_required
@@ -152,12 +146,7 @@ paths:
     get:
       operationId: listExamAttemptBrowserActivity
       summary: List privacy-minimized Browser Activity for one managed Attempt
-      description: >-
-        Returns a no-store keyset page of minimized top-level browser navigation records after resolving the
-        exact nested Attempt and checking current exact Exam Manager membership and the dedicated Browser
-        Activity view permission. Every page repeats these checks; administrator, teacher, integrity-review
-        and general export grants provide no override. Session, Connection, Desktop Registration, credentials,
-        page content, and private Review state are excluded.
+      description: Returns one page of top-level browser navigation records for an Attempt, with only the details the review needs. The server checks that the caller is currently an Exam Manager of this Exam and holds the separate Browser Activity view permission, and it checks again on every page. Administrator, teacher, integrity review and general export permissions don't replace it. Responses are not cached. They contain no Session, Connection, Desktop Registration, credentials, page content or private Submission Review state.
       tags:
         - Attempts and workspaces
       x-proctor-auth: principal_required
@@ -189,7 +178,7 @@ paths:
         - name: limit
           in: query
           required: false
-          description: Maximum number of minimized Browser Activity records to return in this keyset page.
+          description: Largest number of browser activity records to return on this page.
           schema:
             type: integer
             minimum: 1
@@ -199,8 +188,8 @@ paths:
           in: query
           required: false
           description: >-
-            Opaque keyset cursor; return it unchanged and do not infer Browser location data from
-            it.
+            Cursor from next_cursor of the previous page. Send it back unchanged. Don't try to read browser
+            locations from it.
           schema:
             type: string
       responses:
@@ -230,10 +219,7 @@ paths:
       summary: Re-allow one exact suspended Exam Attempt
       tags:
         - Attempts and workspaces
-      description: >-
-        Closes only the identified active suspension episode and moves the Attempt to ready. It preserves
-        integrity evidence and creates no continuity credential, Participation, Session binding, or
-        Connection; the candidate must rejoin through full admission validation.
+      description: Ends the given active Suspension and returns the Attempt to Ready. Integrity Evidence is kept. No continuity credential, Participation, Session binding or Connection is created, so the candidate must enter again and pass every admission check.
       x-proctor-auth: principal_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -300,16 +286,7 @@ paths:
       summary: Suspend (kick) one exact active Exam Attempt
       tags:
         - Attempts and workspaces
-      description: >-
-        An Exam Manager's immediate manual control. Ends the active Participation generation as kicked,
-        closes its open Connection, and opens one manual suspension episode without an Integrity Flag.
-        The suspended Attempt denies connections, workspace and exam-material access, and candidate
-        submission until an authorized re-allow. The candidate sees only the safe manager_suspended
-        reason; the private manager reason is retained only in suspension provenance. PostgreSQL time
-        bounds the kick: once the Sitting's scheduled end is reached it fails with
-        exam.attempt.sitting_not_open, and when the generation's lease has already lapsed the server
-        records that Connection Loss (Flag, evidence, and policy suspension) and fails with
-        exam.attempt.connection_lost instead of ending the generation as kicked.
+      description: Lets an Exam Manager suspend an Attempt at once. It ends the active Participation Generation as kicked, closes its open Connection and opens one manual Suspension, with no Integrity Flag. While suspended, the Attempt refuses connections, Workspace and Exam material access, and Submission until someone allowed to re-allows it. The candidate sees only the reason manager_suspended. The manager's private reason is kept only in the Suspension record. Database time decides the outcome. Once the Sitting's scheduled end has passed, the request fails with exam.attempt.sitting_not_open. If the Participation Lease had already run out, the server records that Connection Loss (Integrity Flag, evidence and policy Suspension) and fails with exam.attempt.connection_lost instead.
       x-proctor-auth: principal_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -370,9 +347,7 @@ components:
   requestBodies:
     SuspendExamAttempt:
       required: true
-      description: >-
-        Identifies the expected Attempt revision and the private manager reason required for the audited
-        manual suspension.
+      description: The Attempt revision you expect and the private reason for the suspension, which is audited.
       content:
         application/json:
           schema:
@@ -382,9 +357,7 @@ components:
             reason: Candidate left the examination room without permission.
     ReallowExamAttempt:
       required: true
-      description: >-
-        Identifies the active suspension, expected Attempt revision, and private manager reason required for
-        the audited re-allow transition.
+      description: The active Suspension, the Attempt revision you expect and the private reason for the re-allow, which is audited.
       content:
         application/json:
           schema:
@@ -395,7 +368,7 @@ components:
             reason: Candidate identity was reverified by the invigilator.
   responses:
     ExamAttemptSuspended:
-      description: Exam Attempt suspended by a manager without exposing the private manager reason
+      description: The Attempt is suspended. The private reason is not returned.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -403,8 +376,19 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamAttemptSuspendResponse'
+          example:
+            exam_attempt_id: fotnmte5o3j9wftdm5rtbfofqr
+            exam_sitting_id: 889766ufjgio6kbpzjbufozksq
+            state: suspended
+            attempt_revision: 4
+            suspension_id: 5ebqfbnezgahdbx9oy7rfr6oro
+            suspension_state: active
+            source: manual
+            candidate_reason: manager_suspended
+            suspended_by_user_id: f6tcxyfofj3n3buuqfjaw9j1jn
+            connection_closed: true
     BrowserActivityListOK:
-      description: Bounded privacy-minimized Browser Activity page
+      description: One page of browser navigation records, with only the details the review needs.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -412,8 +396,39 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/BrowserActivityListResponse'
+          example:
+            items:
+              - source_session_id: 3f6c2a9e-8d41-4b7a-9c35-0e2f7d18a6b4
+                generation: 1
+                sequence: 14
+                kind: blocked_top_level_navigation
+                policy_revision_id: iqcx3qc9sbbt6ocshszfqgq6ci
+                client_occurred_at: '2026-08-01T09:20:31Z'
+                location:
+                  scheme: https
+                  host: search.example.com
+                  path: /
+                matched_rule_id: null
+                block_reason: origin_not_allowed
+                received_at: '2026-08-01T09:20:32Z'
+                redirect_from_sequence: null
+              - source_session_id: 3f6c2a9e-8d41-4b7a-9c35-0e2f7d18a6b4
+                generation: 1
+                sequence: 13
+                kind: top_level_navigation
+                policy_revision_id: iqcx3qc9sbbt6ocshszfqgq6ci
+                client_occurred_at: '2026-08-01T09:18:02Z'
+                location:
+                  scheme: https
+                  host: docs.example.org
+                  path: /reference/sort
+                matched_rule_id: language-docs
+                block_reason: null
+                received_at: '2026-08-01T09:18:03Z'
+                redirect_from_sequence: null
+            next_cursor: eyJyZWNlaXZlZF9hdCI6IjIwMjYtMDgtMDFUMDk6MTg6MDMuMDAwWiIsInNvdXJjZV9zZXNzaW9uX2lkIjoiM2Y2YzJhOWUtOGQ0MS00YjdhLTljMzUtMGUyZjdkMThhNmI0Iiwic2VxdWVuY2UiOjEzfQ
     ExamAttemptManagerOK:
-      description: Bounded manager-safe Exam Attempt state
+      description: The Attempt's state, as a manager may see it.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -421,8 +436,42 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamAttemptManagerResponse'
+          example:
+            id: fotnmte5o3j9wftdm5rtbfofqr
+            exam_id: 39kqk53i4cswfzbi7hbai1r8qg
+            exam_sitting_id: 889766ufjgio6kbpzjbufozksq
+            candidate_user_id: o87yi4tenx8kodmcuup1hmtsbo
+            admission_revision_id: p6y6sf8ac6m5if373fkkebj7j6
+            state: suspended
+            created_at: '2026-08-01T09:00:11Z'
+            updated_at: '2026-08-01T09:31:40Z'
+            revision: 4
+            workspace:
+              id: wj3drgzdpnf54rxf5d8qd3dqne
+              cursor: 12
+              created_at: '2026-08-01T09:00:11Z'
+              updated_at: '2026-08-01T09:29:58Z'
+            latest_participation:
+              id: 6xoche483hwrx5rpu8jzjoe7qg
+              state: ended
+              generation: 1
+              renewal_sequence: 58
+              started_at: '2026-08-01T09:01:02Z'
+              updated_at: '2026-08-01T09:31:40Z'
+              lease_expires_at: '2026-08-01T09:31:40Z'
+              ended_at: '2026-08-01T09:31:40Z'
+              end_reason: kicked
+            active_suspension:
+              id: 5ebqfbnezgahdbx9oy7rfr6oro
+              participation_id: 6xoche483hwrx5rpu8jzjoe7qg
+              generation: 1
+              state: active
+              source: manual
+              candidate_reason: manager_suspended
+              started_at: '2026-08-01T09:31:40Z'
+              suspended_by_user_id: f6tcxyfofj3n3buuqfjaw9j1jn
     ExamAttemptManagerListOK:
-      description: Bounded manager-safe Exam Attempt collection
+      description: One page of the Sitting's Attempts, as a manager may see them.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -431,9 +480,69 @@ components:
           schema:
             $ref: '#/components/schemas/ExamAttemptManagerListResponse'
           example:
-            items: []
+            items:
+              - id: 1asb7sk89dp1ex339fkh3te5t4
+                exam_id: 39kqk53i4cswfzbi7hbai1r8qg
+                exam_sitting_id: 889766ufjgio6kbpzjbufozksq
+                candidate_user_id: nybc6xhg593upqice3sdeyro5k
+                admission_revision_id: p6y6sf8ac6m5if373fkkebj7j6
+                state: active
+                created_at: '2026-08-01T09:00:11Z'
+                updated_at: '2026-08-01T09:02:10Z'
+                revision: 3
+                workspace:
+                  id: wj3drgzdpnf54rxf5d8qd3dqne
+                  cursor: 12
+                  created_at: '2026-08-01T09:00:11Z'
+                  updated_at: '2026-08-01T09:29:58Z'
+                latest_participation:
+                  id: 6xoche483hwrx5rpu8jzjoe7qg
+                  state: active
+                  generation: 1
+                  renewal_sequence: 132
+                  started_at: '2026-08-01T09:02:10Z'
+                  updated_at: '2026-08-01T09:44:50Z'
+                  lease_expires_at: '2026-08-01T09:45:20Z'
+                current_connection:
+                  id: yu7twx6xxb4udbc94foq5zq9ni
+                  state: open
+                  opened_at: '2026-08-01T09:02:10Z'
+              - id: fotnmte5o3j9wftdm5rtbfofqr
+                exam_id: 39kqk53i4cswfzbi7hbai1r8qg
+                exam_sitting_id: 889766ufjgio6kbpzjbufozksq
+                candidate_user_id: o87yi4tenx8kodmcuup1hmtsbo
+                admission_revision_id: p6y6sf8ac6m5if373fkkebj7j6
+                state: suspended
+                created_at: '2026-08-01T09:00:11Z'
+                updated_at: '2026-08-01T09:31:40Z'
+                revision: 4
+                workspace:
+                  id: wj3drgzdpnf54rxf5d8qd3dqne
+                  cursor: 12
+                  created_at: '2026-08-01T09:00:11Z'
+                  updated_at: '2026-08-01T09:29:58Z'
+                latest_participation:
+                  id: 6xoche483hwrx5rpu8jzjoe7qg
+                  state: ended
+                  generation: 1
+                  renewal_sequence: 58
+                  started_at: '2026-08-01T09:01:02Z'
+                  updated_at: '2026-08-01T09:31:40Z'
+                  lease_expires_at: '2026-08-01T09:31:40Z'
+                  ended_at: '2026-08-01T09:31:40Z'
+                  end_reason: kicked
+                active_suspension:
+                  id: 5ebqfbnezgahdbx9oy7rfr6oro
+                  participation_id: 6xoche483hwrx5rpu8jzjoe7qg
+                  generation: 1
+                  state: active
+                  source: manual
+                  candidate_reason: manager_suspended
+                  started_at: '2026-08-01T09:31:40Z'
+                  suspended_by_user_id: f6tcxyfofj3n3buuqfjaw9j1jn
+            next_cursor: eyJjcmVhdGVkX2F0IjoiMjAyNi0wOC0wMVQwOTowMDowNC4wMDBaIiwiaWQiOiIxYXNiN3NrODlkcDFleDMzOWZraDN0ZTV0NCJ9
     ExamAttemptReallowed:
-      description: Exam Attempt suspension re-allowed without exposing the private manager reason
+      description: The Suspension is closed. The private reason is not returned.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -441,21 +550,34 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamAttemptReallowResponse'
+          example:
+            exam_attempt_id: fotnmte5o3j9wftdm5rtbfofqr
+            exam_sitting_id: 889766ufjgio6kbpzjbufozksq
+            state: ready
+            attempt_revision: 5
+            suspension_id: 5ebqfbnezgahdbx9oy7rfr6oro
+            suspension_state: closed
+            candidate_reason: manager_suspended
+            reallowed_by_user_id: f6tcxyfofj3n3buuqfjaw9j1jn
   schemas:
     BrowserActivityListResponse:
+      description: One page of browser activity records.
       type: object
       additionalProperties: false
       required:
         - items
       properties:
         items:
+          description: Records on this page.
           type: array
           maxItems: 200
           items:
             $ref: '#/components/schemas/BrowserActivityItemResponse'
         next_cursor:
+          description: Cursor for the next page. Omitted on the last page. Send it back unchanged as cursor.
           type: string
     BrowserActivityItemResponse:
+      description: One browser activity record.
       type: object
       additionalProperties: false
       required:
@@ -472,17 +594,21 @@ components:
         - redirect_from_sequence
       properties:
         source_session_id:
+          description: ID of the browser activity source that recorded the event.
           type: string
           format: uuid
         generation:
+          description: Participation Generation the source belonged to.
           type: integer
           format: int64
           minimum: 1
         sequence:
+          description: Sequence number of the event in its source.
           type: integer
           format: int64
           minimum: 1
         kind:
+          description: 'What happened: the browser opened or closed, a top-level page loaded or redirected, or a top-level navigation was blocked.'
           type: string
           enum:
             - browser_opened
@@ -491,17 +617,14 @@ components:
             - top_level_redirect
             - blocked_top_level_navigation
         policy_revision_id:
+          description: ID of the Exam Revision whose Browser Policy applied.
           $ref: '#/components/schemas/ID'
         client_occurred_at:
+          description: When the event happened, by the client clock.
           type: string
           format: date-time
         location:
-          description: >-
-            Reason-minimized navigation location. Successful navigation and HTTPS policy failures use a
-            canonical HTTPS host, optional non-default port, and path. A blocked HTTP navigation uses the same
-            canonical network fields with scheme `http`. Other disallowed schemes retain only their lowercase
-            scheme while host and path are empty. An `invalid_url` block uses empty scheme, host, and path
-            values. Query, fragment, user information, local paths, and scheme payloads are never retained.
+          description: Where the navigation went, with only the details needed for review. A successful navigation, or an HTTPS one the policy blocked, has an HTTPS host, a port only when it isn't the default, and a path. A blocked HTTP navigation has the same parts with the scheme http. Any other scheme that isn't allowed keeps only its lowercase scheme, with empty host and path. A block for invalid_url has empty scheme, host and path. Query strings, fragments, user information, local paths and scheme content are never kept. Null for browser_opened and browser_closed.
           type:
             - object
             - 'null'
@@ -512,21 +635,27 @@ components:
             - path
           properties:
             scheme:
+              description: Lowercase URL scheme, or empty for an invalid URL.
               type: string
               maxLength: 32
               pattern: ^$|^[a-z][a-z0-9+.-]{0,31}$
             host:
+              description: Host name. Empty when only the scheme is kept.
               type: string
             port:
+              description: Port number, present only when it isn't the default for the scheme.
               type: string
               pattern: ^[0-9]{1,5}$
             path:
+              description: URL path. Empty when only the scheme is kept.
               type: string
         matched_rule_id:
+          description: ID of the Browser Policy rule that allowed the navigation. Null when no rule matched or the event is not a navigation.
           type:
             - string
             - 'null'
         block_reason:
+          description: Why the navigation was blocked. Null unless kind is blocked_top_level_navigation.
           type:
             - string
             - 'null'
@@ -538,6 +667,7 @@ components:
             - invalid_url
             - null
         received_at:
+          description: When the server received the event.
           type: string
           format: date-time
         redirect_from_sequence:
@@ -546,9 +676,10 @@ components:
             - 'null'
           minimum: 1
           maximum: 50000
-          description: Prior event sequence in the same source when the event records a redirect; null otherwise.
+          description: Sequence number of the earlier event in the same source that this redirect came from. Null when the event is not a redirect.
           format: int64
     ExamAttemptState:
+      description: Lifecycle state of an Exam Attempt. ready means the candidate may enter. active means a Participation is in progress. suspended means a Suspension blocks the Attempt. submitted means the Attempt has a Submission and is finished.
       type: string
       enum:
         - ready
@@ -556,11 +687,13 @@ components:
         - suspended
         - submitted
     AttemptParticipationState:
+      description: Whether a Participation is still active or has ended.
       type: string
       enum:
         - active
         - ended
     AttemptParticipationEndReason:
+      description: Why a Participation ended.
       type: string
       enum:
         - interrupted
@@ -569,11 +702,13 @@ components:
         - submitted
         - sitting_closed
     AttemptConnectionState:
+      description: Whether a Connection is open or closed.
       type: string
       enum:
         - open
         - closed
     AttemptConnectionCloseReason:
+      description: Why a Connection closed.
       type: string
       enum:
         - transport_closed
@@ -583,6 +718,7 @@ components:
         - submitted
         - sitting_closed
     ExamAttemptWorkspaceResponse:
+      description: The Attempt Workspace.
       type: object
       additionalProperties: false
       required:
@@ -592,18 +728,23 @@ components:
         - updated_at
       properties:
         id:
+          description: ID of the Attempt Workspace.
           $ref: '#/components/schemas/ID'
         cursor:
+          description: Current Workspace Cursor. It goes up by one with every accepted change.
           type: integer
           format: int64
           minimum: 0
         created_at:
+          description: When the Workspace was created.
           type: string
           format: date-time
         updated_at:
+          description: When the Workspace last changed.
           type: string
           format: date-time
     ExamAttemptParticipationResponse:
+      description: The latest Attempt Participation.
       type: object
       additionalProperties: false
       required:
@@ -616,32 +757,42 @@ components:
         - lease_expires_at
       properties:
         id:
+          description: ID of the Participation.
           $ref: '#/components/schemas/ID'
         state:
+          description: Whether the Participation is active or has ended.
           $ref: '#/components/schemas/AttemptParticipationState'
         generation:
+          description: Participation Generation. Each new entry into the Attempt gets the next number.
           type: integer
           format: int64
           minimum: 1
         renewal_sequence:
+          description: Sequence number of the latest lease renewal. It only goes up.
           type: integer
           format: int64
           minimum: 0
         started_at:
+          description: When the Participation started.
           type: string
           format: date-time
         updated_at:
+          description: When the Participation last changed, such as at its latest renewal.
           type: string
           format: date-time
         lease_expires_at:
+          description: When the Participation Lease runs out, or ran out.
           type: string
           format: date-time
         ended_at:
+          description: When the Participation ended. Present only when state is ended.
           type: string
           format: date-time
         end_reason:
+          description: Why the Participation ended. Present only when state is ended.
           $ref: '#/components/schemas/AttemptParticipationEndReason'
     ExamAttemptConnectionResponse:
+      description: An Attempt Connection.
       type: object
       additionalProperties: false
       required:
@@ -650,23 +801,26 @@ components:
         - opened_at
       properties:
         id:
+          description: ID of the Connection.
           $ref: '#/components/schemas/ID'
         state:
+          description: Whether the Connection is open or closed.
           $ref: '#/components/schemas/AttemptConnectionState'
         opened_at:
+          description: When the Connection opened.
           type: string
           format: date-time
         closed_at:
+          description: When the Connection closed. Present only when state is closed.
           type: string
           format: date-time
         close_reason:
+          description: Why the Connection closed. Present only when state is closed.
           $ref: '#/components/schemas/AttemptConnectionCloseReason'
     ExamAttemptSuspensionResponse:
       type: object
       additionalProperties: false
-      description: >-
-        One suspension episode. A policy episode links its Integrity Flag in integrity_flag_id; a manual episode (an
-        Exam Manager's kick) links no Flag and names its manager in suspended_by_user_id.
+      description: One Suspension. A policy Suspension links its Integrity Flag in integrity_flag_id. A manual Suspension, when an Exam Manager kicks the candidate, links no Flag and names the manager in suspended_by_user_id.
       required:
         - id
         - participation_id
@@ -677,26 +831,33 @@ components:
         - started_at
       properties:
         id:
+          description: ID of the Suspension. Send it as suspension_id to re-allow the Attempt.
           $ref: '#/components/schemas/ID'
         participation_id:
+          description: ID of the Participation that was active when the Suspension started.
           $ref: '#/components/schemas/ID'
         integrity_flag_id:
+          description: ID of the Integrity Flag that caused a policy Suspension. Omitted for a manual Suspension.
           $ref: '#/components/schemas/ID'
         generation:
+          description: Participation Generation that was active when the Suspension started.
           type: integer
           format: int64
           minimum: 1
         state:
+          description: Whether the Suspension is still active or has been closed by a re-allow.
           type: string
           enum:
             - active
             - closed
         source:
+          description: policy when a rule suspended the Attempt automatically. manual when an Exam Manager did.
           type: string
           enum:
             - policy
             - manual
         candidate_reason:
+          description: The reason the candidate is shown.
           type: string
           enum:
             - secure_connectivity_lost
@@ -704,16 +865,21 @@ components:
             - native_policy_review_required
             - manager_suspended
         started_at:
+          description: When the Suspension started.
           type: string
           format: date-time
         ended_at:
+          description: When the Suspension was closed. Omitted while it is active.
           type: string
           format: date-time
         reallowed_by_user_id:
+          description: ID of the User who re-allowed the Attempt. Omitted while the Suspension is active.
           $ref: '#/components/schemas/ID'
         suspended_by_user_id:
+          description: ID of the Exam Manager who suspended the Attempt. Present only for a manual Suspension.
           $ref: '#/components/schemas/ID'
     ExamAttemptManagerResponse:
+      description: An Exam Attempt, as a manager may see it.
       type: object
       additionalProperties: false
       required:
@@ -729,39 +895,54 @@ components:
         - workspace
       properties:
         id:
+          description: ID of the Exam Attempt.
           $ref: '#/components/schemas/ID'
         exam_id:
+          description: ID of the Exam.
           $ref: '#/components/schemas/ID'
         exam_sitting_id:
+          description: ID of the Exam Sitting.
           $ref: '#/components/schemas/ID'
         candidate_user_id:
+          description: ID of the candidate User.
           $ref: '#/components/schemas/ID'
         admission_revision_id:
+          description: ID of the Exam Revision the Attempt was admitted with.
           $ref: '#/components/schemas/ID'
         state:
+          description: Current state of the Attempt.
           $ref: '#/components/schemas/ExamAttemptState'
         created_at:
+          description: When the Attempt was created.
           type: string
           format: date-time
         updated_at:
+          description: When the Attempt last changed.
           type: string
           format: date-time
         submitted_at:
+          description: When the Attempt was submitted. Present only when state is submitted.
           type: string
           format: date-time
         revision:
+          description: Revision of the Attempt. It goes up with every change. Send it as expected_revision when you suspend or re-allow the Attempt.
           type: integer
           format: int64
           minimum: 1
         workspace:
+          description: The Attempt Workspace.
           $ref: '#/components/schemas/ExamAttemptWorkspaceResponse'
         latest_participation:
+          description: The most recent Participation. Omitted when the candidate has never entered.
           $ref: '#/components/schemas/ExamAttemptParticipationResponse'
         current_connection:
+          description: The open Connection. Omitted when no Connection is open.
           $ref: '#/components/schemas/ExamAttemptConnectionResponse'
         active_suspension:
+          description: The active Suspension. Omitted unless the Attempt is suspended.
           $ref: '#/components/schemas/ExamAttemptSuspensionResponse'
     ReallowExamAttemptRequest:
+      description: Which Suspension to close, and why.
       type: object
       additionalProperties: false
       required:
@@ -770,8 +951,10 @@ components:
         - reason
       properties:
         suspension_id:
+          description: ID of the active Suspension to close.
           $ref: '#/components/schemas/ID'
         expected_revision:
+          description: The Attempt revision you last saw. The request fails if the Attempt changed since.
           type: integer
           format: int64
           minimum: 1
@@ -779,8 +962,9 @@ components:
           type: string
           minLength: 1
           maxLength: 1000
-          description: Trimmed private manager reason retained only in suspension provenance.
+          description: Private reason for the re-allow. Leading and trailing spaces are removed. It is kept only in the Suspension record and never returned or logged.
     ExamAttemptReallowResponse:
+      description: The result of a re-allow.
       type: object
       additionalProperties: false
       required:
@@ -794,22 +978,29 @@ components:
         - reallowed_by_user_id
       properties:
         exam_attempt_id:
+          description: ID of the Exam Attempt.
           $ref: '#/components/schemas/ID'
         exam_sitting_id:
+          description: ID of the Exam Sitting.
           $ref: '#/components/schemas/ID'
         state:
+          description: State of the Attempt after the re-allow.
           type: string
-          const: active
+          const: ready
         attempt_revision:
+          description: New revision of the Attempt.
           type: integer
           format: int64
           minimum: 1
         suspension_id:
+          description: ID of the Suspension that was closed.
           $ref: '#/components/schemas/ID'
         suspension_state:
+          description: State of the Suspension. Always closed.
           type: string
           const: closed
         candidate_reason:
+          description: The reason the candidate was shown for the Suspension.
           type: string
           enum:
             - secure_connectivity_lost
@@ -817,8 +1008,10 @@ components:
             - native_policy_review_required
             - manager_suspended
         reallowed_by_user_id:
+          description: ID of the User who re-allowed the Attempt.
           $ref: '#/components/schemas/ID'
     SuspendExamAttemptRequest:
+      description: The revision you expect and why you are suspending the Attempt.
       type: object
       additionalProperties: false
       required:
@@ -826,6 +1019,7 @@ components:
         - reason
       properties:
         expected_revision:
+          description: The Attempt revision you last saw. The Attempt must be active and unchanged since.
           type: integer
           format: int64
           minimum: 1
@@ -833,8 +1027,9 @@ components:
           type: string
           minLength: 1
           maxLength: 1000
-          description: Trimmed private manager reason retained only in suspension provenance.
+          description: Private reason for the suspension. Leading and trailing spaces are removed. It is kept only in the Suspension record and never returned or logged.
     ExamAttemptSuspendResponse:
+      description: The result of a manual suspension.
       type: object
       additionalProperties: false
       required:
@@ -850,45 +1045,54 @@ components:
         - connection_closed
       properties:
         exam_attempt_id:
+          description: ID of the Exam Attempt.
           $ref: '#/components/schemas/ID'
         exam_sitting_id:
+          description: ID of the Exam Sitting.
           $ref: '#/components/schemas/ID'
         state:
+          description: State of the Attempt. Always suspended.
           type: string
           const: suspended
         attempt_revision:
+          description: New revision of the Attempt.
           type: integer
           format: int64
           minimum: 2
         suspension_id:
+          description: ID of the new Suspension. Send it as suspension_id to re-allow the Attempt.
           $ref: '#/components/schemas/ID'
         suspension_state:
+          description: State of the Suspension. Always active.
           type: string
           const: active
         source:
+          description: Always manual.
           type: string
           const: manual
         candidate_reason:
+          description: The reason the candidate is shown. Always manager_suspended.
           type: string
           const: manager_suspended
         suspended_by_user_id:
+          description: ID of the Exam Manager who suspended the Attempt.
           $ref: '#/components/schemas/ID'
         connection_closed:
           type: boolean
-          description: True when the kick closed the candidate's open Connection.
+          description: True when the suspension closed the candidate's open Connection.
     ExamAttemptManagerListResponse:
+      description: One page of Exam Attempts.
       type: object
       additionalProperties: false
       required:
         - items
       properties:
         items:
+          description: Attempts on this page, newest first.
           type: array
           maxItems: 200
           items:
             $ref: '#/components/schemas/ExamAttemptManagerResponse'
         next_cursor:
           type: string
-          description: >-
-            Opaque cursor over descending creation time and Attempt identity; clients return it
-            unchanged.
+          description: Cursor for the next page. Omitted on the last page. Send it back unchanged as cursor.

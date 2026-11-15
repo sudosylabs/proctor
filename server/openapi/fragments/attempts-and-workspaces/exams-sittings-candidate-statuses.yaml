@@ -15,11 +15,7 @@ paths:
       summary: List the minimized candidate-status board for one Exam Sitting
       tags:
         - Attempts and workspaces
-      description: >-
-        Returns one bounded row per authoritative Sitting candidate after current exam.sitting.view
-        authorization. Presence is derived from the authoritative Participation lease at server_time. The
-        projection excludes Sessions, credentials, connections, evidence, private reasons, and Review
-        decisions.
+      description: Returns one row for each candidate of the Sitting, after checking that the caller currently holds exam.sitting.view. Presence comes from the Participation Lease as it stands at server_time. Rows contain no Sessions, credentials, Connections, evidence, private reasons or Submission Review decisions.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -47,7 +43,7 @@ paths:
         - name: limit
           in: query
           required: false
-          description: Maximum number of candidate-status rows to return from the live Sitting projection.
+          description: Largest number of candidate rows to return on this page.
           schema:
             type: integer
             minimum: 1
@@ -56,7 +52,7 @@ paths:
         - name: cursor
           in: query
           required: false
-          description: Opaque live-view keyset cursor over ascending candidate User identity.
+          description: Cursor from next_cursor of the previous page. Send it back unchanged.
           schema:
             type: string
       responses:
@@ -79,7 +75,7 @@ paths:
 components:
   responses:
     ExamSittingCandidateStatusesOK:
-      description: Minimized live candidate-status board
+      description: One page of the live candidate-status board.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -87,8 +83,61 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamSittingCandidateStatusesResponse'
+          example:
+            server_time: '2026-08-01T09:45:00Z'
+            exam_id: 39kqk53i4cswfzbi7hbai1r8qg
+            exam_sitting_id: 889766ufjgio6kbpzjbufozksq
+            sitting_state: open
+            sitting_revision: 4
+            items:
+              - candidate:
+                  user_id: nybc6xhg593upqice3sdeyro5k
+                  username: student.ada
+                  display_name: Ada Student
+                current_class_membership: true
+                attempt:
+                  id: 1asb7sk89dp1ex339fkh3te5t4
+                  state: active
+                  revision: 3
+                  created_at: '2026-08-01T09:00:04Z'
+                  updated_at: '2026-08-01T09:02:10Z'
+                  submission: null
+                presence:
+                  state: connected
+                  last_lease_renewed_at: '2026-08-01T09:44:50Z'
+                  lease_expires_at: '2026-08-01T09:45:20Z'
+                suspension: null
+                integrity_attention_count: 0
+                native_security:
+                  retained_condition_records: 2
+                  live_coverage_available: true
+                  rules:
+                    - rule_id: baseline.single_display
+                      capability: display
+                      reason: display.single_display_required
+                      status: met
+                      occurrences: 1
+                  contained: true
+                  screen_clips:
+                    requested: 0
+                    recording: 0
+                    uploading: 0
+                    ready: 1
+                    failed: 0
+              - candidate:
+                  user_id: dfa1x1n7mkthyoziwxnupsmyia
+                  username: student.bo
+                  display_name: Bo Student
+                current_class_membership: true
+                attempt: null
+                presence:
+                  state: not_started
+                suspension: null
+                integrity_attention_count: 0
+            next_cursor: eyJjYW5kaWRhdGVfdXNlcl9pZCI6ImRmYTF4MW43bWt0aHlveml3eG51cHNteWlhIn0
   schemas:
     SittingCandidatePresenceState:
+      description: Where a candidate stands in the Sitting. not_started has no Attempt yet. ready has an Attempt in the Ready state. connected is in progress with an open Connection. reconnecting is in progress with a valid lease but no open Connection. lease_expired is in progress but the Participation Lease has run out. suspended and submitted follow the Attempt state.
       type: string
       enum:
         - not_started
@@ -99,6 +148,7 @@ components:
         - suspended
         - submitted
     SittingCandidateIdentityResponse:
+      description: The candidate User.
       type: object
       additionalProperties: false
       required:
@@ -107,13 +157,17 @@ components:
         - display_name
       properties:
         user_id:
+          description: ID of the candidate User.
           $ref: '#/components/schemas/ID'
         username:
+          description: Username of the candidate.
           type: string
           minLength: 1
         display_name:
+          description: Display name of the candidate.
           type: string
     SittingCandidateSubmissionResponse:
+      description: The candidate's Submission.
       type: object
       additionalProperties: false
       required:
@@ -122,13 +176,17 @@ components:
         - provenance
       properties:
         id:
+          description: ID of the Submission.
           $ref: '#/components/schemas/ID'
         submitted_at:
+          description: When the Submission was made.
           type: string
           format: date-time
         provenance:
+          description: How the Submission was made.
           $ref: '#/components/schemas/ExamSubmissionProvenance'
     SittingCandidateAttemptResponse:
+      description: The candidate's Exam Attempt.
       type: object
       additionalProperties: false
       required:
@@ -140,8 +198,10 @@ components:
         - submission
       properties:
         id:
+          description: ID of the Exam Attempt.
           $ref: '#/components/schemas/ID'
         state:
+          description: Current state of the Attempt.
           type: string
           enum:
             - ready
@@ -149,34 +209,43 @@ components:
             - suspended
             - submitted
         revision:
+          description: Revision of the Attempt. It goes up with every change. Send it as expected_revision when you suspend or re-allow the Attempt.
           type: integer
           format: int64
           minimum: 1
         created_at:
+          description: When the Attempt was created.
           type: string
           format: date-time
         updated_at:
+          description: When the Attempt last changed.
           type: string
           format: date-time
         submission:
+          description: The Submission. Null until the Attempt is submitted.
           oneOf:
             - $ref: '#/components/schemas/SittingCandidateSubmissionResponse'
             - type: 'null'
     SittingCandidatePresenceResponse:
+      description: The candidate's presence, worked out at server_time.
       type: object
       additionalProperties: false
       required:
         - state
       properties:
         state:
+          description: Presence of the candidate.
           $ref: '#/components/schemas/SittingCandidatePresenceState'
         last_lease_renewed_at:
+          description: When the latest Participation Lease was last renewed. Omitted when the candidate has never had a Participation.
           type: string
           format: date-time
         lease_expires_at:
+          description: When the latest Participation Lease runs out, or ran out. Omitted when the candidate has never had a Participation.
           type: string
           format: date-time
     SittingCandidateSuspensionResponse:
+      description: The active Attempt Suspension.
       type: object
       additionalProperties: false
       required:
@@ -185,8 +254,10 @@ components:
         - reallow_available
       properties:
         id:
+          description: ID of the Suspension. Send it as suspension_id to re-allow the Attempt.
           $ref: '#/components/schemas/ID'
         candidate_reason:
+          description: The reason the candidate is shown.
           type: string
           enum:
             - secure_connectivity_lost
@@ -194,8 +265,10 @@ components:
             - native_policy_review_required
             - manager_suspended
         reallow_available:
+          description: Whether the caller can re-allow the Attempt now. True only when the caller is allowed to, the Exam isn't archived, the Sitting is Open or Paused and its scheduled end hasn't passed.
           type: boolean
     SittingCandidateStatusItemResponse:
+      description: One candidate's row on the status board.
       type: object
       additionalProperties: false
       required:
@@ -207,26 +280,34 @@ components:
         - integrity_attention_count
       properties:
         candidate:
+          description: The candidate User.
           $ref: '#/components/schemas/SittingCandidateIdentityResponse'
         current_class_membership:
+          description: Whether the candidate is still a member of the Sitting's Class.
           type: boolean
         attempt:
+          description: The candidate's Attempt. Null when the candidate has not started.
           oneOf:
             - $ref: '#/components/schemas/SittingCandidateAttemptResponse'
             - type: 'null'
         presence:
+          description: The candidate's presence.
           $ref: '#/components/schemas/SittingCandidatePresenceResponse'
         suspension:
+          description: The active Suspension. Null unless the Attempt is suspended.
           oneOf:
             - $ref: '#/components/schemas/SittingCandidateSuspensionResponse'
             - type: 'null'
         integrity_attention_count:
+          description: Number of integrity issues on the Attempt that still need attention, such as discrepancies not covered by a finalized Submission Review or gaps in the delivered integrity data. Zero when there is no Attempt.
           type: integer
           format: int64
           minimum: 0
         native_security:
+          description: Native security summary for the Attempt. Omitted when the candidate has no Attempt.
           $ref: '#/components/schemas/NativeSecuritySummary'
     ExamSittingCandidateStatusesResponse:
+      description: One page of the candidate-status board for a Sitting.
       type: object
       additionalProperties: false
       required:
@@ -238,23 +319,30 @@ components:
         - items
       properties:
         server_time:
+          description: Server time the board was worked out at.
           type: string
           format: date-time
         exam_id:
+          description: ID of the Exam.
           $ref: '#/components/schemas/ID'
         exam_sitting_id:
+          description: ID of the Exam Sitting.
           $ref: '#/components/schemas/ID'
         sitting_state:
+          description: Current state of the Sitting.
           $ref: '#/components/schemas/ExamSittingState'
         sitting_revision:
+          description: Current revision of the Sitting.
           type: integer
           format: int64
           minimum: 1
         items:
+          description: Candidate rows, in ascending order of candidate User ID.
           type: array
           items:
             $ref: '#/components/schemas/SittingCandidateStatusItemResponse'
         next_cursor:
+          description: Cursor for the next page. Omitted on the last page. Send it back unchanged as cursor.
           type: string
     NativeSecuritySummary:
       type: object
@@ -349,6 +437,7 @@ components:
               type: integer
               minimum: 0
         retained_condition_records:
+          description: Number of native condition records kept for the Attempt. Zero once its integrity data has been retired.
           type: integer
           format: int64
           minimum: 0

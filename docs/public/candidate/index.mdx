@@ -1,44 +1,50 @@
 ---
-title: Take an Exam With Proctor Desktop
-description: Prepare a registered Desktop Session, enter one protected Attempt, keep work acknowledged, recover continuity, and submit safely.
+title: Take an Exam with Proctor Desktop
+description: Get Proctor Desktop ready, start your Attempt, keep your work saved, get back on track after an interruption, and submit safely.
 audience: candidate
 maturity: preview
 slug: /candidate/
 ---
 
-# Take an Exam With Proctor Desktop
+# Take an Exam with Proctor Desktop
 
-Candidate delivery is available only through a compatible, registered-key
-Proctor Desktop Session. An ordinary browser Session or copied bearer token
-cannot enter an Attempt.
+You can only take an Exam in Proctor Desktop. Your copy of Desktop must be a
+compatible version, and it must have a Session tied to its registered key. You
+can't start an Attempt from an ordinary browser Session or with a copied
+bearer token.
 
 <Maturity state="preview">
-  The server, hosted authorization page, and API contract are implemented. The
-  Desktop client repository is not present here, so this guide names durable
-  states and safe actions rather than guessing exact client screen labels or
-  showing fictional screenshots.
+  The server, the sign-in page for authorizing Desktop, and the API are ready.
+  The Desktop app's code isn't in this repository, so this guide describes the
+  states your Attempt can be in and what you can safely do in each. It doesn't
+  guess at the exact labels on Desktop's screens or show made-up screenshots.
 </Maturity>
 
-## Follow the Protected Journey
+## Your Exam, step by step
 
-1. [Prepare and enter](./prepare-and-enter.mdx) from Candidate Exam Activity
-   after Desktop compatibility and authorization succeed.
-2. [Keep the Workspace and Participation current](./workspace-and-continuity.mdx)
-   while Desktop acknowledges every durable change.
-3. [Understand the governed Browser and minimized activity](./browser-and-privacy.mdx)
-   before following external reference links.
-4. [Submit or recover](./submit-and-recover.mdx) from correction, pause,
-   disconnect, Suspension, or synchronization conflicts.
-5. [Read an explicitly released result](./released-result.mdx) without gaining
-   access to private evidence, decisions, or manager notes.
+1. [Prepare and enter](./prepare-and-enter.mdx) from Candidate Exam Activity,
+   once Desktop has passed its compatibility check and you have authorized it.
+2. [Keep your Workspace and Participation up to date](./workspace-and-continuity.mdx)
+   while Desktop confirms that the server has saved every change.
+3. [Learn how the Exam browser works and what it records](./browser-and-privacy.mdx)
+   before you follow links to outside reference material.
+4. [Submit, or get going again](./submit-and-recover.mdx) after a correction,
+   a pause, a disconnection, a Suspension or a sync conflict.
+5. [Read your result once it has been released](./released-result.mdx). The
+   result doesn't show private evidence, decisions or manager notes.
 
-## Know What the Status Means
+## What the status on your Exam card means
 
-An Exam Activity card is a navigation projection, not a permanent admission
-grant. It may classify a Sitting as upcoming, available, in progress,
-submitted, result available, or past and expose only current safe actions such
-as enter, resume, or view result. Admission still rechecks Class membership,
-Sitting state, build compatibility, Desktop Registration, and current Session.
+An Exam Activity card helps you find your way to the right Exam. It is not a
+lasting promise that you will be let in. A card can show a Sitting as
+upcoming, available, in progress, submitted, result available or past. It
+offers only the actions that are safe right now, such as enter, resume or view
+result.
 
-Proctor records protected programming-exam delivery and integrity signals. It
-does not decide a grade, score, rubric, pass/fail, or guilt.
+When you enter, Proctor checks everything again: your Class membership, the
+state of the Sitting, whether your Desktop build is compatible, your Desktop
+Registration, and your current Session.
+
+Proctor delivers programming Exams securely and records signals about exam
+integrity. It doesn't decide your grade, score, rubric, pass or fail, or
+whether you did anything wrong.

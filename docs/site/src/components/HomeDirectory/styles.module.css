@@ -1,0 +1,142 @@
+.home {
+  max-width: 76rem;
+  min-width: 0;
+}
+
+.intro {
+  max-width: 47.5rem;
+  padding: 88px 0 64px;
+}
+
+.home .intro h1 {
+  color: var(--proctor-ink);
+  font-size: 2.75rem;
+  font-weight: 600;
+  letter-spacing: -0.032em;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.lead {
+  color: var(--proctor-ink-soft);
+  font-size: 1.125rem;
+  line-height: 1.6;
+  margin: 14px 0 0;
+  max-width: 38.75rem;
+}
+
+.search {
+  align-items: center;
+  background: var(--proctor-surface-raised);
+  border: 1px solid var(--proctor-border);
+  border-radius: 10px;
+  color: var(--proctor-ink-muted);
+  cursor: text;
+  display: flex;
+  font: inherit;
+  font-size: 0.9375rem;
+  gap: 10px;
+  height: 46px;
+  margin-top: 32px;
+  max-width: 35rem;
+  padding: 0 12px 0 14px;
+  text-align: left;
+  transition: border-color 120ms ease;
+  width: 100%;
+}
+
+.search:hover {
+  border-color: var(--proctor-border-strong);
+}
+
+.search span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search kbd {
+  background: var(--proctor-canvas);
+  border: 1px solid var(--proctor-border);
+  border-radius: 4px;
+  box-shadow: none;
+  font: 500 0.6875rem/1 var(--ifm-font-family-monospace);
+  padding: 3px 5px;
+}
+
+.guides {
+  display: grid;
+  gap: 48px 64px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+  padding-bottom: 72px;
+}
+
+.home .label {
+  color: var(--proctor-ink-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.4;
+  margin: 0 0 14px;
+}
+
+.reference {
+  border-top: 1px solid var(--proctor-border);
+  padding: 40px 0 96px;
+}
+
+.home .reference .label {
+  margin-bottom: 20px;
+}
+
+.home .reference ul {
+  display: grid;
+  gap: 28px 48px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.reference a {
+  display: block;
+}
+
+.reference a:hover {
+  text-decoration: none;
+}
+
+.refTitle {
+  color: var(--proctor-ink);
+  display: block;
+  font-weight: 500;
+  transition: color 120ms ease;
+}
+
+.reference a:hover .refTitle {
+  color: var(--proctor-primary);
+}
+
+.refDescription {
+  color: var(--proctor-ink-muted);
+  display: block;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+@media (max-width: 720px) {
+  .intro {
+    padding: 48px 0 40px;
+  }
+
+  .home .intro h1 {
+    font-size: 2.125rem;
+  }
+
+  .lead {
+    font-size: 1.0625rem;
+  }
+}

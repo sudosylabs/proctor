@@ -1,79 +1,82 @@
 ---
-title: Data and Cluster Configuration
-description: Reference Proctor's PostgreSQL pool, disposable cache, and local or Memberlist cluster configuration.
+title: Data and cluster settings
+description: Settings for Proctor's PostgreSQL connection pool, its disposable cache, and running as one node or as a Memberlist cluster.
 audience: operator
 maturity: preview
 slug: /reference/configuration/data-and-cluster/
 ---
 
-# Data and Cluster Configuration
+# Data and cluster settings
 
-PostgreSQL is the durable authority. Cache entries and cluster messages are
-disposable: Proctor must be able to reconstruct correct behavior from durable
-state after either is lost. Changes on this page require a process restart.
+PostgreSQL holds the lasting record. Cache entries and cluster messages are
+disposable. If either is lost, Proctor must be able to rebuild correct
+behavior from what PostgreSQL holds. You need to restart the process after
+you change anything on this page.
 
 ## PostgreSQL
 
-| Path and default | Meaning and accepted value |
+| Path and default | What it does and accepted values |
 | --- | --- |
-| `Database.DataSource`<br />Default: `postgres://proctor:proctor@127.0.0.1:15432/proctor?sslmode=disable` | PostgreSQL connection URL. It must use the `postgres` scheme and include both a host and database name. Treat embedded credentials as secrets. The default is development-only. |
-| `Database.MaxOpenConnections`<br />Default: `50` | Maximum open connections in this node's pool. Must be at least `2` because locked migrations require a dedicated connection alongside ordinary work. Multiply by node count before comparing with PostgreSQL capacity. |
-| `Database.MaxIdleConnections`<br />Default: `10` | Maximum idle connections retained by this node. Must be between `0` and `MaxOpenConnections`. |
-| `Database.ConnectionMaxLifetime`<br />Default: `1h` | Maximum lifetime of a pooled connection. Must be greater than zero. |
-| `Database.ConnectionMaxIdleTime`<br />Default: `5m` | Maximum time a pooled connection may remain idle. Must be greater than zero. |
-| `Database.QueryTimeout`<br />Default: `10s` | Default deadline for ordinary database operations when their caller supplies no shorter deadline. Must be greater than zero. |
-| `Database.MigrationTimeout`<br />Default: `1m` | Deadline for startup migration work and its lock acquisition. Must be greater than zero. |
-| `Database.SlowOperationThreshold`<br />Default: `0s` | Logs a `slow store operation` warning for every store operation that takes at least this long, recording only the operation name and duration. `0s` disables the log; negative values are rejected. |
+| `Database.DataSource`<br />Default: `postgres://proctor:proctor@127.0.0.1:15432/proctor?sslmode=disable` | The PostgreSQL connection URL. It must use the `postgres` scheme and include both a host and a database name. Treat any credentials in it as secrets. The default is for development only. |
+| `Database.MaxOpenConnections`<br />Default: `50` | The most connections this node's pool keeps open. Must be at least `2`, because migrations hold a lock on their own connection while ordinary work continues. Multiply by the number of nodes before you compare it with what PostgreSQL can handle. |
+| `Database.MaxIdleConnections`<br />Default: `10` | The most idle connections this node keeps. Must be between `0` and `MaxOpenConnections`. |
+| `Database.ConnectionMaxLifetime`<br />Default: `1h` | The longest a pooled connection lives. Must be greater than zero. |
+| `Database.ConnectionMaxIdleTime`<br />Default: `5m` | The longest a pooled connection can stay idle. Must be greater than zero. |
+| `Database.QueryTimeout`<br />Default: `10s` | The default deadline for ordinary database operations, when the caller doesn't set a shorter one. Must be greater than zero. |
+| `Database.MigrationTimeout`<br />Default: `1m` | The deadline for migrations at startup, including waiting for their lock. Must be greater than zero. |
+| `Database.SlowOperationThreshold`<br />Default: `0s` | Logs a `slow store operation` warning for every store operation that takes at least this long. The warning records only the operation name and how long it took. `0s` turns the warning off. Negative values are rejected. |
 
-The validator checks URL shape and bounds; it does not connect to PostgreSQL.
-Use TLS and credential settings in the data-source query appropriate to the
-deployment. Size `MaxOpenConnections` across every application node, migration
-activity, and reserved administrative capacity.
+Proctor checks the shape of the URL and the limits. It doesn't connect to
+PostgreSQL to check them. Put the TLS and credential options your deployment
+needs in the query part of the data source. When you size
+`MaxOpenConnections`, count every application node, migrations, and the
+connections you keep back for administration.
 
 {/* TODO(production): publish measured database pool profiles after supported
 deployment sizes and PostgreSQL capacity assumptions are established. */}
 
 ## Disposable cache
 
-| Path and default | Meaning and accepted value |
+| Path and default | What it does and accepted values |
 | --- | --- |
-| `Cache.Backend`<br />Default: `memory` | Cache implementation: `memory` for one process or `redis` for installation-shared disposable state. Memberlist clustering requires `redis`. |
-| `Cache.Namespace`<br />Default: `proctor` | Prefix separating this installation's cache keys. Must contain `1`–`128` ASCII letters, numbers, dots, underscores, or hyphens. Use a distinct value when Redis is shared. |
-| `Cache.Memory.MaxEntries`<br />Default: `100000` | Maximum retained entries for the `memory` backend. Must be between `1` and `1000000`. |
-| `Cache.Memory.MaxBytes`<br />Default: `67108864` (64 MiB) | Bound on retained key and encoded-value bytes for the `memory` backend. Must be between `1048576` and `1073741824`; implementation overhead is additional. |
-| `Cache.Memory.MaxCounters`<br />Default: `100000` | Maximum live authentication rate-limit counters for the `memory` backend, kept apart from the entry and byte bounds. Counters are never evicted to make room, so a flood of new usernames cannot erase another account's limit; while every slot holds an open window, new sign-in and recovery attempts are refused as temporarily unavailable until windows close. Must be between `1` and `1000000`. |
-| `Cache.Redis.Addresses[]`<br />Default: `127.0.0.1:6379` | One or more Redis endpoints for the `redis` backend. Each entry must be `host:port`; at least one is required. |
-| `Cache.Redis.Username`<br />Default: empty | Redis ACL username. Treat it as credential material when used. |
-| `Cache.Redis.Password`<br />Default: empty | Redis password. Secret; prefer a protected environment override. |
-| `Cache.Redis.Database`<br />Default: `0` | Redis logical database number. Must be zero or greater. Use the namespace as the primary installation boundary. |
-| `Cache.Redis.TLS`<br />Default: `false` | Enables TLS for Redis connections. |
-| `Cache.Redis.ConnectTimeout`<br />Default: `5s` | Maximum Redis connection-establishment time. Must be greater than zero. |
+| `Cache.Backend`<br />Default: `memory` | Which cache to use: `memory` for one process, or `redis` for disposable state shared across the installation. Memberlist clustering needs `redis`. |
+| `Cache.Namespace`<br />Default: `proctor` | A prefix that keeps this installation's cache keys apart. Must be `1` to `128` ASCII letters, numbers, dots, underscores or hyphens. Use a different value for each installation that shares a Redis server. |
+| `Cache.Memory.MaxEntries`<br />Default: `100000` | The most entries the `memory` cache keeps. Must be between `1` and `1000000`. |
+| `Cache.Memory.MaxBytes`<br />Default: `67108864` (64 MiB) | The most key and encoded value bytes the `memory` cache keeps. Must be between `1048576` and `1073741824`. The cache's own overhead comes on top. |
+| `Cache.Memory.MaxCounters`<br />Default: `100000` | The most sign-in rate limit counters the `memory` cache keeps live, counted separately from the entry and byte limits. Proctor never evicts a counter to make room, so a flood of new usernames can't wipe out another account's limit. While every slot holds an open window, Proctor refuses new sign-in and recovery attempts as temporarily unavailable until windows close. Must be between `1` and `1000000`. |
+| `Cache.Redis.Addresses[]`<br />Default: `127.0.0.1:6379` | One or more Redis addresses for the `redis` cache. Each entry must be `host:port`. You need at least one. |
+| `Cache.Redis.Username`<br />Default: empty | The Redis ACL username. If you use one, treat it as a credential. |
+| `Cache.Redis.Password`<br />Default: empty | The Redis password. It is a secret, so set it through a protected environment override if you can. |
+| `Cache.Redis.Database`<br />Default: `0` | The Redis database number. Must be zero or greater. Rely on the namespace, not this number, to keep installations apart. |
+| `Cache.Redis.TLS`<br />Default: `false` | Turns on TLS for Redis connections. |
+| `Cache.Redis.ConnectTimeout`<br />Default: `5s` | The longest Proctor waits to connect to Redis. Must be greater than zero. |
 
-Only the selected backend's backend-specific fields are enforced. Retain the
-unused block in a complete file so a backend change remains reviewable. Redis
-is still disposable infrastructure; never treat it as the only copy of durable
-application state.
+Proctor checks only the fields for the cache you choose. Keep the other block
+in a complete file anyway, so a reviewer can see the change if you switch
+caches later. Redis is still disposable. Never treat it as the only copy of
+data the application needs to keep.
 
 ## Cluster identity and transport
 
-| Path and default | Meaning and accepted value |
+| Path and default | What it does and accepted values |
 | --- | --- |
-| `Cluster.Backend`<br />Default: `local` | Inter-node transport: `local` for the single-node form or `memberlist` for a multi-node installation. |
-| `Cluster.NodeID`<br />Default: `local` | Stable runtime identity for this process. Must contain `1`–`128` ASCII letters, numbers, dots, underscores, or hyphens. Every simultaneously running node needs a distinct stable ID. |
-| `Cluster.Memberlist.BindAddress`<br />Default: `127.0.0.1:7946` | Local address receiving Memberlist traffic. Must be `host:port` with port `1`–`65535`. Public or unspecified binds require the explicit `AllowPublicBind` acknowledgement. |
-| `Cluster.Memberlist.AdvertiseAddress`<br />Default: `127.0.0.1:7946` | Address other nodes use to reach this node. Must be `host:port` with port `1`–`65535`. It should resolve consistently from every peer. |
-| `Cluster.Memberlist.EncryptionKey`<br />Default: empty | Primary Memberlist traffic-encryption key. Required with the `memberlist` backend; standard base64 decoding must produce `16`, `24`, or `32` bytes. Secret. |
-| `Cluster.Memberlist.DecryptionKeys[]`<br />Default: empty list | Up to eight unique fallback Memberlist keys accepted during rotation. Each follows the same base64 and decoded-length rules and must differ from the primary. |
-| `Cluster.Memberlist.SeedAddresses[]`<br />Default: empty list | Up to `32` `host:port` peers used to join the cluster. Entries must be valid and unique enough for the intended topology. |
-| `Cluster.Memberlist.DiscoveryTTL`<br />Default: `30s` | Lifetime of discovery records. Must be at least `3s`. |
-| `Cluster.Memberlist.DiscoveryHeartbeat`<br />Default: `10s` | Interval for refreshing discovery presence. Must be greater than zero and less than half of `DiscoveryTTL`. |
-| `Cluster.Memberlist.AllowPublicBind`<br />Default: `false` | Explicit acknowledgement that the bind address is public or unspecified. Setting this does not make a public gossip listener safe; restrict it at the network boundary. |
+| `Cluster.Backend`<br />Default: `local` | How nodes talk to each other: `local` for a single node, or `memberlist` for an installation with several nodes. |
+| `Cluster.NodeID`<br />Default: `local` | A stable name for this process. Must be `1` to `128` ASCII letters, numbers, dots, underscores or hyphens. Every node that runs at the same time needs its own stable ID. |
+| `Cluster.Memberlist.BindAddress`<br />Default: `127.0.0.1:7946` | The local address that receives Memberlist traffic. Must be `host:port` with a port from `1` to `65535`. A public or unspecified address needs you to set `AllowPublicBind` as well. |
+| `Cluster.Memberlist.AdvertiseAddress`<br />Default: `127.0.0.1:7946` | The address other nodes use to reach this one. Must be `host:port` with a port from `1` to `65535`. It should resolve to the same place from every peer. |
+| `Cluster.Memberlist.EncryptionKey`<br />Default: empty | The primary key that encrypts Memberlist traffic. Required with the `memberlist` backend. It must be standard base64 that decodes to `16`, `24` or `32` bytes. Secret. |
+| `Cluster.Memberlist.DecryptionKeys[]`<br />Default: empty list | Up to eight unique older Memberlist keys that Proctor still accepts during a rotation. Each follows the same base64 and length rules, and must differ from the primary. |
+| `Cluster.Memberlist.SeedAddresses[]`<br />Default: empty list | Up to `32` `host:port` peers that a node contacts to join the cluster. Entries must be valid, and distinct enough for the layout you plan. |
+| `Cluster.Memberlist.DiscoveryTTL`<br />Default: `30s` | How long a discovery record lasts. Must be at least `3s`. |
+| `Cluster.Memberlist.DiscoveryHeartbeat`<br />Default: `10s` | How often a node refreshes its discovery record. Must be greater than zero and less than half of `DiscoveryTTL`. |
+| `Cluster.Memberlist.AllowPublicBind`<br />Default: `false` | Confirms that you mean to use a public or unspecified bind address. It doesn't make a public gossip listener safe. Restrict access to it at the network edge. |
 
-The `memberlist` backend additionally requires the Redis cache backend and a
-non-local VFS backend. Every node shares PostgreSQL, Redis, opaque file storage,
-key material, and the effective cluster configuration. Built-in Let's Encrypt
-cannot be used with Memberlist.
+The `memberlist` backend also needs the Redis cache and a VFS backend other
+than local. Every node shares PostgreSQL, Redis, file storage, keys, and the
+same cluster configuration. You can't use built-in Let's Encrypt with
+Memberlist.
 
-During key rotation, place the old primary in every node's fallback ring before
-introducing the new primary. Converge all nodes before removing the old key.
-Never reuse Memberlist material for mail or MFA secret sealing.
+To rotate the Memberlist key, first add the old primary to every node's list
+of older keys, then bring in the new primary. Wait until every node has the
+change before you remove the old key. Never reuse a Memberlist key for mail or
+MFA encryption.

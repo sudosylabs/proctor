@@ -13,7 +13,14 @@ paths:
       tags:
         - Data retention
       description: >-
-        Returns the Institution's revisioned retention configuration. A Session with retention_policy.view is required; Personal Access Tokens cannot read it. Examination and audit periods start at zero, meaning no configured expiry, never immediate deletion. Automatic deletion is a derived projection of separate, current-revision cleanup approval. Saving settings never enables cleanup. Examination periods begin at current Sitting Records Completion; holds, supporting integrity and export construction can protect individual records. Temporary exports require a configured finite lifetime from one through seven days. Operator-controlled backups and historical object versions remain outside current-key cleanup.
+        Returns the Institution's retention settings. The caller needs `retention_policy.view` through a
+        Session. Personal Access Tokens can't read it. Examination and audit periods start at zero, which
+        means no expiry is configured, never immediate deletion. `automatic_deletion_enabled` reflects a
+        separate cleanup approval for the current revision. Saving settings never turns cleanup on.
+        Examination periods start at the current Sitting Records Completion. Retention Holds, supporting
+        integrity evidence and exports being built can protect individual records. Temporary exports need a
+        lifetime of one to seven days. Backups and earlier object versions that operators keep are outside
+        cleanup.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -57,7 +64,20 @@ paths:
       tags:
         - Data retention
       description: >-
-        Completely replaces the configuration under an optimistic revision fence. Requires a strong recent interactive system-administrator Session, an Idempotency-Key, and durable audit. The policy, successful audit, and idempotent outcome commit together. Every write, including a no-op and exact retry, rechecks the current access credential, protected administrator binding and strong recent Session assurance at the post-lock database time. A stale revision returns retention_policy.revision_conflict with current_revision; an exact retry returns the recorded result after fresh authorization. A no-op preserves revision and timestamps. All periods are required integers. Export retention accepts 0 when unconfigured or a finite lifetime from 1 through 7 days; other periods accept 0 through 36500 as a technical bound, not a recommended period. Days mean 24-hour durations. Zero leaves that period unconfigured, and export creation rejects an unconfigured lifetime. A real settings change pauses approved cleanup and cancels pending grace; a fresh preview and explicit approval are required before new scheduling. Candidate notices default to false when omitted; null is invalid.
+        Replaces the whole policy. Send the revision you read as `expected_revision`. The caller needs a
+        strong, recent interactive system-administrator Session and an `Idempotency-Key`, and every change is
+        audited. The policy, its audit record and the idempotent result are saved together. Every write,
+        including one that changes nothing and an exact retry, checks again at write time that the caller's
+        credential, protected administrator Role and strong recent sign-in are still valid. A stale revision
+        fails with `retention_policy.revision_conflict` and reports `current_revision`. An exact retry returns
+        the recorded result after authorization is checked again. A write that changes nothing keeps the
+        revision and timestamps. All periods are required integers. Export retention accepts 0 when it isn't
+        configured, or a lifetime of 1 to 7 days. Other periods accept 0 to 36500. That upper limit is a
+        technical limit, not a recommended period. A day means 24 hours. Zero leaves a period unconfigured,
+        and no export can be created while the export lifetime is unconfigured. A real change to the settings
+        pauses approved cleanup and cancels pending grace. A new Retention Preview and a new approval are
+        needed before cleanup schedules anything again. `candidate_notices` defaults to false when omitted,
+        and null is rejected.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -124,7 +144,7 @@ components:
   requestBodies:
     ReplaceRetentionPolicy:
       required: true
-      description: Complete configuration replacement. Every period is required, including zero values. Automatic deletion cannot be enabled.
+      description: The complete policy. Every period is required, including zero values. This request can't turn on automatic deletion.
       content:
         application/json:
           schema:
@@ -140,7 +160,7 @@ components:
             deletion_grace_days: 0
   responses:
     RetentionPolicyOK:
-      description: Revisioned Institution retention configuration and current cleanup-approval projection.
+      description: The Institution's retention settings and whether cleanup is currently approved.
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
@@ -179,46 +199,66 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: The revision read by the editor. A stale revision cannot overwrite newer settings.
+          description: >-
+            The policy revision you read before editing. If the policy changed since, the request fails
+            instead of overwriting newer settings.
         submission_retention_days:
           type: integer
           minimum: 0
           maximum: 36500
-          description: Work lifetime from current Sitting Records Completion. Zero is indefinite. Supporting integrity, holds and source protections can extend preservation.
+          description: >-
+            Days to keep Submission work after the current Sitting Records Completion. Zero keeps it with no
+            expiry. Supporting integrity evidence, Retention Holds and source protections can keep it longer.
         integrity_retention_days:
           type: integer
           minimum: 0
           maximum: 36500
-          description: Integrity evidence, Review and released-remark lifetime from current Sitting Records Completion. Zero is indefinite. Unresolved Reviews block completion.
+          description: >-
+            Days to keep integrity evidence, Reviews and released remarks after the current Sitting Records
+            Completion. Zero keeps them with no expiry. Unresolved Reviews block completion.
         browser_activity_retention_days:
           type: integer
           minimum: 0
           maximum: 36500
-          description: Zero means no configured automatic expiry; deletion still requires approval, grace, completion and hold checks.
+          description: >-
+            Days to keep Browser Activity after the current Sitting Records Completion. Zero means no expiry
+            is configured. Deletion still needs approval, a grace period, completion and no Retention Hold.
         security_operational_retention_days:
           type: integer
           minimum: 0
           maximum: 36500
-          description: Zero means no configured automatic expiry; deletion still requires approval, grace, completion and hold checks.
+          description: >-
+            Days to keep security operational data after the current Sitting Records Completion. Zero means no
+            expiry is configured. Deletion still needs approval, a grace period, completion and no Retention
+            Hold.
         audit_retention_days:
           type: integer
           minimum: 0
           maximum: 36500
-          description: Lifetime from each completed audit or receipt event. Zero is indefinite. Unfinished work and current references protect dependent records.
+          description: >-
+            Days to keep each completed audit or receipt event, counted from that event. Zero keeps them with
+            no expiry. Unfinished work and records that still refer to them keep them longer.
         export_retention_days:
           type: integer
           minimum: 0
           maximum: 7
-          description: Temporary archive lifetime. Creation requires an explicit valid value from one through seven days; zero or larger existing values cannot create an export. Existing archive expiry is fixed at request time.
+          description: >-
+            Days a temporary export archive is kept. Creating an export needs a value from 1 to 7, so with 0
+            no export can be created. An existing archive keeps the expiry set when it was requested.
         deletion_grace_days:
           type: integer
           minimum: 0
           maximum: 36500
-          description: Positive per-record grace required for cleanup approval. Zero is unconfigured and cannot authorize immediate deletion. Seven days is the initial recommendation.
+          description: >-
+            Days each record waits in grace before cleanup may retire it. Cleanup can only be approved when
+            this is above zero. Zero means not configured and never allows immediate deletion. Seven days is
+            the suggested starting value.
         candidate_notices:
           type: boolean
           default: false
-          description: Also create candidate notices when their records enter grace. Manager and operator notices are always reserved durably.
+          description: >-
+            Also notify candidates when their records enter grace. Exam Managers and operators are always
+            notified.
     RetentionPolicyResponse:
       type: object
       additionalProperties: false
@@ -240,52 +280,71 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Current policy revision.
+          description: Current policy revision. Send it as `expected_revision` when you replace the policy.
         submission_retention_days:
           type: integer
           minimum: 0
           maximum: 36500
-          description: Work lifetime from current Sitting Records Completion. Zero is indefinite; integrity dependencies and preservation holds remain effective.
+          description: >-
+            Days to keep Submission work after the current Sitting Records Completion. Zero keeps it with no
+            expiry. Integrity evidence it supports and Retention Holds still protect it.
         integrity_retention_days:
           type: integer
           minimum: 0
           maximum: 36500
-          description: Integrity evidence, Review and released-remark lifetime from current Sitting Records Completion. Zero is indefinite.
+          description: >-
+            Days to keep integrity evidence, Reviews and released remarks after the current Sitting Records
+            Completion. Zero keeps them with no expiry.
         browser_activity_retention_days:
           type: integer
           minimum: 0
           maximum: 36500
-          description: Zero means no configured automatic expiry; deletion still requires approval, grace, completion and hold checks.
+          description: >-
+            Days to keep Browser Activity after the current Sitting Records Completion. Zero means no expiry
+            is configured. Deletion still needs approval, a grace period, completion and no Retention Hold.
         security_operational_retention_days:
           type: integer
           minimum: 0
           maximum: 36500
-          description: Zero means no configured automatic expiry; deletion still requires approval, grace, completion and hold checks.
+          description: >-
+            Days to keep security operational data after the current Sitting Records Completion. Zero means no
+            expiry is configured. Deletion still needs approval, a grace period, completion and no Retention
+            Hold.
         audit_retention_days:
           type: integer
           minimum: 0
           maximum: 36500
-          description: Completed audit and receipt lifetime from their own event, subject to unfinished work and durable references. Zero is indefinite.
+          description: >-
+            Days to keep completed audit and receipt events, counted from each event. Unfinished work and
+            records that still refer to them keep them longer. Zero keeps them with no expiry.
         export_retention_days:
           type: integer
           minimum: 0
           maximum: 7
-          description: Temporary archive lifetime. Creation requires one through seven days; existing archive expiry is fixed at request time.
+          description: >-
+            Days a temporary export archive is kept. Creating an export needs 1 to 7 days. An existing archive
+            keeps the expiry set when it was requested.
         deletion_grace_days:
           type: integer
           minimum: 0
           maximum: 36500
-          description: Per-record grace required before logical retirement. Zero is unconfigured and prevents cleanup approval.
+          description: >-
+            Days each record waits in grace before it is retired. Zero means not configured, and then cleanup
+            can't be approved.
         candidate_notices:
           type: boolean
-          description: Whether candidate notices accompany mandatory manager and operator notices.
+          description: Whether candidates are notified too. Exam Managers and operators are always notified.
         automatic_deletion_enabled:
           type: boolean
           readOnly: true
-          description: True only when a separate active cleanup approval matches this exact policy revision and a positive grace period is configured.
+          description: >-
+            True only when a separate cleanup approval is active for this exact policy revision and the grace
+            period is above zero. It can't be set directly.
         created_at:
           type: string
           format: date-time
+          description: Time the policy was first created.
         updated_at:
           type: string
           format: date-time
+          description: Time the policy last changed.

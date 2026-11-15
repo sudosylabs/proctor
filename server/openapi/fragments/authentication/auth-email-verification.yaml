@@ -11,7 +11,7 @@ paths:
       operationId: requestEmailVerification
       summary: Request an email-verification message
       description: >-
-        Requests a new short-lived verification message for the authenticated User's current unverified email address. The response is deliberately non-enumerating, and any prior usable verification credential may be superseded.
+        Emails a new short-lived verification link to the signed-in User's current email address when it is not yet verified. The response is the same in every case, so it reveals nothing about the account. A new link may replace any earlier link that still works.
       x-codeSamples:
         - lang: Shell
           label: Request verification mail
@@ -58,7 +58,7 @@ paths:
       operationId: completeEmailVerification
       summary: Consume an email-verification credential
       description: >-
-        Consumes one valid short-lived verification token and marks its bound email address verified. The token is single use, cannot verify another address, and an invalid or expired token reveals no account details.
+        Uses up one valid verification token and marks the email address it was issued for as verified. A token works once and can't verify any other address. An invalid or expired token reveals no account details.
       tags:
         - Authentication
       x-proctor-auth: public
@@ -86,7 +86,7 @@ paths:
       operationId: inspectEmailVerification
       summary: Read the address an email-verification credential would confirm
       description: >-
-        Returns the address bound to one active verification token so the hosted page can name it before the person confirms. It never consumes, extends, or reissues the token and records no audit event. It is rate-limited by token and source with the completion policy, and an unknown, malformed, expired, superseded, or already used token receives the same generic invalid-credential outcome as completion. The token travels in the body so it stays out of URLs and logs; the result is presentation only and completion rechecks the token.
+        Returns the address an active verification token was issued for, so the hosted page can show it before the person confirms. It never uses up, extends or reissues the token, and it records no audit event. It shares the rate limits of completion, counted per token and per source address. A token that is unknown, malformed, expired, replaced or already used gets the same generic invalid-token error as completion. The token is sent in the body so it stays out of URLs and logs. The result is for display only: completion checks the token again.
       tags:
         - Authentication
       x-proctor-auth: public
@@ -114,7 +114,7 @@ paths:
       operationId: undoEmailChange
       summary: Undo an email change from the previous address
       description: >-
-        Consumes the single-use undo token Proctor mails to an account's previous address when its email changes. Within the configured undo window it restores that address as the verified account email, cancels pending verification and password-reset links, signs out every Session of the account, and records an audit event. An invalid, expired, or already used token reveals no account details; a previous address that another account now holds is refused.
+        Uses up the one-time undo token that Proctor emails to an account's previous address when its email changes. Within the configured undo window, it restores that address as the account's verified email, cancels pending verification and password-reset links, signs out every Session of the account and records an audit event. An invalid, expired or already used token reveals no account details. If another account now uses the previous address, the undo is refused.
       tags:
         - Authentication
       x-proctor-auth: public
@@ -145,7 +145,7 @@ paths:
       operationId: inspectEmailChangeUndo
       summary: Read the email change an undo credential would reverse
       description: >-
-        Returns, for one active undo token, the previous address it would restore, the account's current address masked as in the warning mail, and when the change was applied. It never consumes, extends, or reissues the token and records no audit event. It is rate-limited by token and source with the undo policy, and an unknown, malformed, expired, or already used token receives the same generic invalid-credential outcome as the undo itself. The token travels in the body so it stays out of URLs and logs; whether the previous address is still free is decided only by the undo.
+        For one active undo token, returns the previous address it would restore, the account's current address masked as in the warning email, and when the change happened. It never uses up, extends or reissues the token, and it records no audit event. It shares the rate limits of the undo, counted per token and per source address. A token that is unknown, malformed, expired or already used gets the same generic invalid-token error as the undo itself. The token is sent in the body so it stays out of URLs and logs. Only the undo itself checks whether the previous address is still free.
       tags:
         - Authentication
       x-proctor-auth: public
@@ -197,7 +197,7 @@ components:
   requestBodies:
     InspectEmailVerification:
       required: true
-      description: Supplies the email-verification token from the link fragment; it is read, not consumed.
+      description: The email-verification token from the link's fragment. This call reads the token and does not use it up.
       content:
         application/json:
           schema:
@@ -206,7 +206,7 @@ components:
             token: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
     InspectEmailChangeUndo:
       required: true
-      description: Supplies the undo token from the link fragment; it is read, not consumed.
+      description: The undo token from the link's fragment. This call reads the token and does not use it up.
       content:
         application/json:
           schema:
@@ -215,7 +215,7 @@ components:
             token: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
     UndoEmailChange:
       required: true
-      description: Supplies the one-time undo token delivered to the previous email address.
+      description: The one-time undo token emailed to the previous address.
       content:
         application/json:
           schema:
@@ -224,7 +224,7 @@ components:
             token: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
     CompleteEmailVerification:
       required: true
-      description: Supplies the one-time email-verification token delivered through the configured mail channel.
+      description: The one-time email-verification token from the verification email.
       content:
         application/json:
           schema:
@@ -240,6 +240,7 @@ components:
       properties:
         token:
           type: string
+          description: The verification token from the link in the verification email, as 43 URL-safe base64 characters.
     EmailChangeUndoRequest:
       type: object
       additionalProperties: false
@@ -248,6 +249,7 @@ components:
       properties:
         token:
           type: string
+          description: The undo token from the link emailed to the previous address, as 43 URL-safe base64 characters.
     AccountTokenInspectionRequest:
       type: object
       additionalProperties: false
@@ -256,6 +258,7 @@ components:
       properties:
         token:
           type: string
+          description: The token from the emailed link's fragment, as 43 URL-safe base64 characters. It is read and not used up.
     EmailVerificationInspectionResponse:
       type: object
       additionalProperties: false
@@ -277,11 +280,11 @@ components:
         restored_email:
           type: string
           format: email
-          description: The previous address the undo would restore; the token was mailed to it.
+          description: The previous address the undo would restore. The token was emailed to this address.
         masked_current_email:
           type: string
           description: The account's current address, masked as in the email-change warning (first character, up to three asterisks, and the domain).
         changed_at:
           type: string
           format: date-time
-          description: When the email change was applied.
+          description: When the email change happened.

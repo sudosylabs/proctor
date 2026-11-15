@@ -1,55 +1,67 @@
 ---
-title: Submit Safely and Recover From Blocks
-description: Reconcile every submission fence, acknowledge corrections, recover from pause or Suspension, and understand terminal outcomes.
+title: Submit safely and get past blocks
+description: Make sure everything lines up before you submit, acknowledge corrections, get going again after a pause or Suspension, and understand how an Attempt ends.
 audience: candidate
 maturity: preview
 ---
 
-# Submit Safely and Recover From Blocks
+# Submit safely and get past blocks
 
-Voluntary submission seals only acknowledged, synchronized authority. Before
-Desktop can offer submission, the current runtime capability must permit it and
-all terminal fences must agree.
+When you choose to submit, Proctor seals only the work the server has
+confirmed and that is fully in sync. Desktop can offer you the submit option
+only when the current runtime allows it and every final check agrees.
 
-## Resolve Submission Fences
+## Checks that must agree before you submit
 
-The request names the current Participation and generation, expected current
-Revision, final acknowledged Workspace Cursor, final Focus Loss sequence, and
-Browser Activity terminal accounting. It also requires the DPoP-bound Session,
-continuity credential, and current open Connection.
+The submit request names:
 
-Browser Activity is explicitly:
+- your current Participation and its generation;
+- the current Revision Desktop expects;
+- the last Workspace Cursor the server confirmed;
+- the last Focus Loss sequence number;
+- the final accounting for Browser Activity.
 
-- `not_applicable` only when collection is not part of this Attempt;
-- `complete` with the current finalized source and sequence; or
-- `gapped` with a bounded truthful reason.
+It also needs your DPoP-bound Session, your continuity credential and an open
+current Connection.
 
-A truthful gap records discrepancy provenance and need not prevent sealing.
-Never claim `not_applicable` to avoid enabled collection.
+Browser Activity is reported as exactly one of these:
 
-## Handle Common Blocks
+- `not_applicable`, only when this Attempt doesn't collect Browser Activity;
+- `complete`, with the current final source and sequence number;
+- `gapped`, with a short, honest reason.
 
-| Block | Safe next action |
+An honest gap is recorded as a discrepancy, with where it came from, and it
+doesn't have to stop your work being sealed. Never report `not_applicable` to
+avoid collection that is switched on.
+
+## Common blocks and what to do
+
+| Block | What to do |
 | --- | --- |
-| Sitting paused | keep secure renewal and permitted reporting active; wait for resume |
-| correction acknowledgement required | read the oldest notice, acknowledge its exact Revision, then refetch presentation |
-| Workspace cursor conflict | reconcile ordered journal or reload the full manifest |
-| Focus Loss or Browser Activity sequence conflict | send/reconcile the missing terminal accounting; do not decrement the fence |
-| reconnecting | renew and reconnect before exclusive lease expiry |
-| suspended | ask an Exam Manager to review and re-allow; fresh admission will create another generation |
-| scheduled deadline reached | stop mutation; Sitting closure owns terminal sealing |
+| Sitting paused | Keep secure renewal and any permitted reporting running, and wait for the Sitting to resume. |
+| Correction acknowledgement required | Read the oldest notice, acknowledge its exact Revision, then fetch the Exam view again. |
+| Workspace cursor conflict | Catch up with the ordered list of Workspace changes, or reload the full list of files. |
+| Focus Loss or Browser Activity sequence conflict | Send or catch up the missing final accounting. Don't lower the sequence number to get past the check. |
+| Reconnecting | Renew and reconnect before your exclusive lease expires. |
+| Suspended | Ask an Exam Manager to review and let you back in. Entering again will start a new generation. |
+| Scheduled deadline reached | Stop making changes. Closing the Sitting takes care of sealing your work. |
 
-## Treat Submission as Terminal
+## Submitting ends your Attempt
 
-Successful voluntary submission atomically creates one immutable Submission,
-marks the Attempt Submitted, ends Participation, and returns a candidate-safe
-receipt. Exact retry uses the same body and idempotency key but a fresh DPoP
-proof. There is no reopen or resubmit.
+When you submit successfully, Proctor does all of this in one step: it creates
+one Submission that can never change, marks the Attempt Submitted, ends your
+Participation, and gives you a receipt that is safe for you to see.
 
-An authorized Manager may end an unfinished Attempt and seal the last
-acknowledged Workspace with `manager_ended_attempt` provenance. Scheduled or
-early Sitting closure seals unfinished created Attempts with `sitting_closed`
-provenance. A no-show has no fabricated Attempt or Submission.
+If you need to retry, send exactly the same body with the same idempotency
+key, but with a fresh DPoP proof. You can't reopen an Attempt or submit it
+again.
 
-Candidates receive the receipt and later only an explicitly released narrow
-result. They cannot browse the sealed Workspace or private integrity Review.
+An authorized Manager can end an unfinished Attempt. That seals the last
+Workspace the server confirmed, recorded as `manager_ended_attempt`. When a
+Sitting closes, on schedule or early, Proctor seals every unfinished Attempt
+that was created, recorded as `sitting_closed`. If you never entered, no
+Attempt or Submission is created for you.
+
+You get your receipt and, later, a short result, but only once it has been
+released. You can't browse the sealed Workspace or the private integrity
+Review.

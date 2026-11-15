@@ -12,8 +12,9 @@ paths:
       tags:
         - Data retention
       description: >-
-        Requires retention_policy.view. Reports deliberate approval separately from settings; disabled or
-        paused controls cannot schedule retirement.
+        Returns whether recurring cleanup is approved. The caller needs `retention_policy.view`. Approval is
+        kept apart from the policy settings. While the control is `disabled` or `paused`, nothing is scheduled
+        for retirement.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -59,11 +60,12 @@ paths:
       tags:
         - Data retention
       description: >-
-        Requires retention_cleanup.manage and strong recent system-administrator authentication. Enablement
-        binds a fresh preview to the exact policy revision and requires positive grace. Every changed control
-        cancels existing grace; eligible records receive fresh grace when scheduling resumes. Pausing cannot
-        reverse committed retirement or stop reconciliation of already-retired bytes. Exact retries return
-        their recorded result after current authorization.
+        Turns recurring cleanup on or pauses it. The caller needs `retention_cleanup.manage` and a strong,
+        recent system-administrator sign-in. Enabling ties the approval to a fresh Retention Preview of the
+        exact policy revision, and the policy's grace period must be above zero. Every change to the control
+        cancels existing grace. Eligible records get a new grace period when scheduling resumes. Pausing can't
+        undo retirement that already happened, and doesn't stop the removal of stored files for records
+        already retired. An exact retry returns the recorded result after authorization is checked again.
       x-proctor-auth: strong_recent_session_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -125,10 +127,11 @@ paths:
       tags:
         - Data retention
       description: >-
-        Requires retention_policy.view and critical audit. Creates a one-hour content-free assessment for the
-        specified current policy revision. Counts explain incomplete records, configured deadlines, holds,
-        supporting integrity, export source protection and already-retired categories. Creating a preview
-        alone never schedules disposal.
+        Creates a Retention Preview for the given current policy revision. The caller needs
+        `retention_policy.view`, and the request is written to the critical audit log. The preview lasts one
+        hour and holds counts only, never content. The counts show records that are incomplete, waiting for
+        their deadline, held, needed as supporting integrity evidence, protected by an export or already
+        retired. Creating a preview never schedules anything for deletion.
       x-proctor-auth: session_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -188,8 +191,9 @@ paths:
       tags:
         - Data retention
       description: >-
-        Requires retention_policy.view. Returns the original assessment and expiry. Subsequent record changes
-        can alter eligibility; every scheduled and final transition rechecks authoritative state.
+        Returns a Retention Preview as it was created, with its expiry. The caller needs
+        `retention_policy.view`. Records may have changed since, which can change what is eligible. Every
+        scheduling and final retirement step checks the live records again.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -216,7 +220,7 @@ paths:
       parameters:
         - name: retention_preview_id
           in: path
-          description: Identifier returned by Create Retention Preview; fetching does not refresh its expiry.
+          description: ID returned when the preview was created. Reading the preview doesn't extend its expiry.
           required: true
           schema:
             $ref: '#/components/schemas/ID'
@@ -244,11 +248,13 @@ paths:
       tags:
         - Data retention
       description: >-
-        Requires retention_policy.view. Does not expose filenames, answers, evidence or remarks. Limit counts
-        Submissions; each contributes work, integrity, Browser Activity and security operational items. The
-        opaque cursor is bound to this listing. A retired category stays closed after detailed receipt expiry.
-        Purge-verified counts represent an independent observation of exact current-key absence; they do not
-        certify secure media erasure or deletion of backups, historical versions, or already-open streams.
+        Lists the retention status of each Submission's records. The caller needs `retention_policy.view`.
+        File names, answers, evidence and remarks are never included. `limit` counts Submissions, and each
+        Submission adds four items: work, integrity, Browser Activity and security operational. The cursor
+        only works with this listing. A retired category stays retired even after its detailed receipt
+        expires. `purge_verified` counts come from a separate check that the stored objects are gone from
+        current storage. They don't certify secure erasure of the storage media, or removal from backups,
+        earlier object versions or downloads already in progress.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -275,7 +281,9 @@ paths:
       parameters:
         - name: limit
           in: query
-          description: Maximum number of Submissions to assess; each contributes work, integrity, Browser Activity and security operational records.
+          description: >-
+            Maximum number of Submissions to include. Each one adds a work, an integrity, a Browser Activity and a
+            security operational item.
           schema:
             type: integer
             minimum: 1
@@ -283,7 +291,7 @@ paths:
             default: 100
         - name: cursor
           in: query
-          description: Opaque next_cursor from the preceding retention-record page; pass it unchanged.
+          description: The `next_cursor` value from the previous page. Treat it as an unreadable token and pass it unchanged.
           schema:
             type: string
             maxLength: 256
@@ -308,8 +316,8 @@ components:
   requestBodies:
     ChangeRetentionControl:
       description: >-
-        Exact current control and policy revisions plus the intended state. Enabling also requires an
-        unexpired preview for that policy revision.
+        The current control and policy revisions and the state you want. Enabling also needs an unexpired
+        Retention Preview of that policy revision.
       required: true
       content:
         application/json:
@@ -321,7 +329,7 @@ components:
             preview_id: 4cbxoynrnbnzpkfcghhsy3qxuy
             state: enabled
     CreateRetentionPreview:
-      description: Current policy revision to assess. The resulting preview lasts one hour and does not enable cleanup.
+      description: The current policy revision to assess. The preview lasts one hour and doesn't turn on cleanup.
       required: true
       content:
         application/json:
@@ -331,7 +339,7 @@ components:
             expected_revision: 1
   responses:
     RetentionControlOK:
-      description: Current revision-bound cleanup control.
+      description: The cleanup control and the policy revision it approves.
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
@@ -344,7 +352,7 @@ components:
             state: disabled
             updated_at: '2026-09-01T12:00:00Z'
     RetentionPreviewOK:
-      description: Content-free eligibility assessment, valid for one hour.
+      description: Record counts by retention status, with no content. Valid for one hour.
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
@@ -418,7 +426,7 @@ components:
               export_protected: 0
               retired: 0
     RetentionRecordsOK:
-      description: Bounded eligibility page; each Submission contributes two category records.
+      description: One page of retention records. Each Submission adds four items, one per category.
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
@@ -427,11 +435,70 @@ components:
           schema:
             $ref: '#/components/schemas/RetentionRecordsResponse'
           example:
-            policy_revision: 1
+            policy_revision: 3
             as_of: '2026-09-01T12:00:00Z'
-            items: []
+            items:
+              - exam_id: xpq79ar61ncrjiouey6d9tgp91
+                exam_sitting_id: 17778cuf6b17rhtapprfjozet8
+                submission_id: zq993bky9h3uj4saw8iywi38cy
+                category: work
+                completion_revision: 2
+                completed_at: '2026-06-01T12:00:00Z'
+                completion_current: true
+                has_integrity: true
+                held: false
+                shared_published_objects: 1
+                blocker: retention_period
+                eligible_at: '2027-06-01T12:00:00Z'
+              - exam_id: xpq79ar61ncrjiouey6d9tgp91
+                exam_sitting_id: 17778cuf6b17rhtapprfjozet8
+                submission_id: zq993bky9h3uj4saw8iywi38cy
+                category: integrity
+                completion_revision: 2
+                completed_at: '2026-06-01T12:00:00Z'
+                completion_current: true
+                has_integrity: true
+                held: false
+                shared_published_objects: 0
+                blocker: retention_period
+                eligible_at: '2027-06-01T12:00:00Z'
+              - exam_id: xpq79ar61ncrjiouey6d9tgp91
+                exam_sitting_id: 17778cuf6b17rhtapprfjozet8
+                submission_id: zq993bky9h3uj4saw8iywi38cy
+                category: browser_activity
+                completion_revision: 2
+                completed_at: '2026-06-01T12:00:00Z'
+                completion_current: true
+                has_integrity: true
+                held: false
+                shared_published_objects: 0
+                blocker: ''
+                eligible_at: '2026-08-30T12:00:00Z'
+                retirement:
+                  id: 5ebqfbnezgahdbx9oy7rfr6oro
+                  state: grace
+                  policy_revision: 3
+                  control_revision: 2
+                  completion_revision: 2
+                  scheduled_at: '2026-08-31T02:00:00Z'
+                  retire_after: '2026-09-07T02:00:00Z'
+                  purge_pending: 0
+                  purge_verified: 0
+              - exam_id: xpq79ar61ncrjiouey6d9tgp91
+                exam_sitting_id: 17778cuf6b17rhtapprfjozet8
+                submission_id: zq993bky9h3uj4saw8iywi38cy
+                category: security_operational
+                completion_revision: 2
+                completed_at: '2026-06-01T12:00:00Z'
+                completion_current: true
+                has_integrity: true
+                held: false
+                shared_published_objects: 0
+                blocker: retention_unconfigured
+            next_cursor: eyJhZnRlcl9zdWJtaXNzaW9uX2lkIjoienE5OTMifQ
   schemas:
     RetentionControlRequest:
+      description: A change to the cleanup control.
       type: object
       additionalProperties: false
       required:
@@ -443,19 +510,24 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The control revision you read. The request fails if the control changed since.
         expected_policy_revision:
           type: integer
           format: int64
           minimum: 1
+          description: The policy revision you reviewed. The request fails if the policy changed since.
         preview_id:
           $ref: '#/components/schemas/ID'
-          description: Required to enable; omit when pausing.
+          description: Retention Preview to approve cleanup with. Required to enable, omitted when pausing.
         state:
           type: string
           enum:
             - enabled
             - paused
+          description: >-
+            `enabled` turns recurring cleanup on. `paused` stops new scheduling.
     RetentionPreviewRequest:
+      description: Which policy revision a new Retention Preview assesses.
       type: object
       additionalProperties: false
       required:
@@ -465,7 +537,9 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The current policy revision to assess. The request fails if the policy changed since.
     RetentionControlResponse:
+      description: Whether recurring cleanup is approved, and for which policy revision.
       type: object
       additionalProperties: false
       required:
@@ -477,22 +551,32 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: Current control revision. Send it as `expected_revision` when you change the control.
         state:
           type: string
           enum:
             - disabled
             - enabled
             - paused
+          description: >-
+            `disabled` means no cleanup approval exists. `enabled` means cleanup runs for the approved policy
+            revision. `paused` means an approval exists but scheduling is stopped.
         approved_policy_revision:
           type: integer
           format: int64
           minimum: 1
+          description: Policy revision the approval applies to. Omitted while `disabled`.
         approved_preview_id:
           $ref: '#/components/schemas/ID'
+          description: Retention Preview the approval was based on. Omitted while `disabled`.
         updated_at:
           type: string
           format: date-time
+          description: Time the control last changed.
     RetentionPreviewCounts:
+      description: >-
+        Counts for one record category. Each record is counted once, under the first reason that applies, so
+        the other counts add up to `total`.
       type: object
       additionalProperties: false
       required:
@@ -510,39 +594,49 @@ components:
           type: integer
           format: int64
           minimum: 0
+          description: Number of records in the category.
         eligible:
           type: integer
           format: int64
           minimum: 0
+          description: Records that cleanup could retire now.
         awaiting_deadline:
           type: integer
           format: int64
           minimum: 0
+          description: Records whose retention period hasn't ended yet.
         incomplete:
           type: integer
           format: int64
           minimum: 0
+          description: Records whose Sitting has no current Sitting Records Completion.
         held:
           type: integer
           format: int64
           minimum: 0
+          description: Records protected by a Retention Hold.
         unconfigured:
           type: integer
           format: int64
           minimum: 0
+          description: Records whose category has no retention period configured.
         supporting_work:
           type: integer
           format: int64
           minimum: 0
+          description: Work kept because it supports integrity evidence that has no expiry.
         export_protected:
           type: integer
           format: int64
           minimum: 0
+          description: Records protected because an export that includes them is being built.
         retired:
           type: integer
           format: int64
           minimum: 0
+          description: Records already retired.
     RetentionPreviewResponse:
+      description: A one-hour Retention Preview of one policy revision. It holds counts only, never content.
       type: object
       additionalProperties: false
       required:
@@ -559,29 +653,42 @@ components:
       properties:
         audit:
           $ref: '#/components/schemas/RetentionExpiryCounts'
+          description: Counts for completed audit records.
         receipts:
           $ref: '#/components/schemas/RetentionExpiryCounts'
+          description: Counts for Record Retirement receipts.
         id:
           $ref: '#/components/schemas/ID'
+          description: ID of the preview. Send it as `preview_id` to approve cleanup.
         policy_revision:
           type: integer
           format: int64
           minimum: 1
+          description: Policy revision the preview assessed.
         created_at:
           type: string
           format: date-time
+          description: Time the preview was created.
         expires_at:
           type: string
           format: date-time
+          description: Time after which the preview can no longer be used to approve cleanup.
         work:
           $ref: '#/components/schemas/RetentionPreviewCounts'
+          description: Counts for Submission work.
         integrity:
           $ref: '#/components/schemas/RetentionPreviewCounts'
+          description: Counts for integrity evidence and Reviews.
         browser_activity:
           $ref: '#/components/schemas/RetentionPreviewCounts'
+          description: Counts for Browser Activity.
         security_operational:
           $ref: '#/components/schemas/RetentionPreviewCounts'
+          description: Counts for security operational data.
     RetentionExpiryCounts:
+      description: >-
+        Counts for audit records or retirement receipts. Each record is counted once, under the first reason
+        that applies, so the other counts add up to `total`.
       type: object
       additionalProperties: false
       required:
@@ -599,39 +706,51 @@ components:
           type: integer
           format: int64
           minimum: 0
+          description: Number of records.
         eligible:
           type: integer
           format: int64
           minimum: 0
+          description: Records that could expire now.
         awaiting_deadline:
           type: integer
           format: int64
           minimum: 0
+          description: Records whose retention period hasn't ended yet.
         unconfigured:
           type: integer
           format: int64
           minimum: 0
+          description: Records with no audit retention period configured.
         unfinished:
           type: integer
           format: int64
           minimum: 0
+          description: Records whose audited work hasn't finished.
         referenced:
           type: integer
           format: int64
           minimum: 0
+          description: Records that other records still refer to.
         held:
           type: integer
           format: int64
           minimum: 0
+          description: Records protected by a Retention Hold.
         purge_pending:
           type: integer
           format: int64
           minimum: 0
+          description: Receipts whose retired files are still waiting to be removed from storage.
         source_protected:
           type: integer
           format: int64
           minimum: 0
+          description: Records protected because an export that relies on them is being built.
     RetentionRetirement:
+      description: >-
+        The scheduled or completed retirement of one category of a Submission's records. After retirement it
+        remains as a short receipt with no content.
       type: object
       additionalProperties: false
       required:
@@ -647,42 +766,58 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: ID of the Record Retirement.
         state:
           type: string
           enum:
             - grace
             - canceled
             - retired
+          description: >-
+            `grace` means retirement is scheduled and waits for `retire_after`. `canceled` means it was called
+            off. `retired` means the records were removed.
         policy_revision:
           type: integer
           format: int64
           minimum: 1
+          description: Policy revision in force when the retirement was scheduled.
         control_revision:
           type: integer
           format: int64
           minimum: 1
+          description: Cleanup control revision that approved the retirement.
         completion_revision:
           type: integer
           format: int64
           minimum: 1
+          description: Sitting Records Completion revision the retirement was based on.
         scheduled_at:
           type: string
           format: date-time
+          description: Time the retirement was scheduled.
         retire_after:
           type: string
           format: date-time
+          description: Earliest time the records may be retired.
         retired_at:
           type: string
           format: date-time
+          description: Time the records were retired. Omitted unless `state` is `retired`.
         purge_pending:
           type: integer
           format: int64
           minimum: 0
+          description: >-
+            Number of stored objects of the retired records still waiting to be removed from storage.
         purge_verified:
           type: integer
           format: int64
           minimum: 0
+          description: >-
+            Number of stored objects confirmed gone from current storage. This doesn't cover backups or
+            earlier object versions.
     RetentionRecord:
+      description: Retention status of one category of one Submission's records. It contains no content.
       type: object
       additionalProperties: false
       required:
@@ -699,10 +834,13 @@ components:
       properties:
         exam_id:
           $ref: '#/components/schemas/ID'
+          description: Exam the records belong to.
         exam_sitting_id:
           $ref: '#/components/schemas/ID'
+          description: Sitting the records belong to.
         submission_id:
           $ref: '#/components/schemas/ID'
+          description: Submission the records belong to.
         category:
           type: string
           enum:
@@ -710,29 +848,44 @@ components:
             - integrity
             - browser_activity
             - security_operational
+          description: Which of the Submission's records this item covers.
         completion_revision:
           type: integer
           format: int64
           minimum: 0
+          description: Revision of the Sitting's records completion.
         completed_at:
           type: string
           format: date-time
+          description: Time the Sitting's records were last completed. Omitted if they were never completed.
         completion_current:
           type: boolean
+          description: >-
+            True when the Sitting's records completion is current. A stale or missing completion blocks
+            retention.
         has_integrity:
           type: boolean
+          description: True when the Submission has integrity evidence.
         held:
           type: boolean
+          description: True when a Retention Hold covers these records.
         export_protected_until:
           type: string
           format: date-time
+          description: >-
+            Time until which an export being built protects these records. Omitted when no export protects
+            them.
         retired_at:
           type: string
           format: date-time
+          description: Time these records were retired. Omitted until then.
         shared_published_objects:
           type: integer
           format: int64
           minimum: 0
+          description: >-
+            Number of shared published files the work refers to. They survive work retirement, which only
+            releases the Submission's reference to them.
         blocker:
           type: string
           enum:
@@ -744,12 +897,20 @@ components:
             - supporting_integrity
             - export_in_progress
             - retention_period
+          description: >-
+            First reason the records can't be retired yet. Empty when they are eligible now.
+            `retention_period` means the period hasn't ended. `export_in_progress` means an export is being
+            built from them. `supporting_integrity` means the work supports integrity evidence with no expiry.
         eligible_at:
           type: string
           format: date-time
+          description: >-
+            Time the retention period ends and the records become eligible. Omitted when no period applies.
         retirement:
           $ref: '#/components/schemas/RetentionRetirement'
+          description: The scheduled or completed retirement of these records. Omitted when there is none.
     RetentionRecordsResponse:
+      description: One page of retention records.
       type: object
       additionalProperties: false
       required:
@@ -761,14 +922,21 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: Policy revision the statuses were worked out with.
         as_of:
           type: string
           format: date-time
+          description: Time the statuses were worked out.
         items:
           type: array
           maxItems: 400
           items:
             $ref: '#/components/schemas/RetentionRecord'
+          description: >-
+            Records on this page, four per Submission, in the order work, integrity, Browser Activity,
+            security operational.
         next_cursor:
           type: string
           maxLength: 256
+          description: >-
+            Token to pass as `cursor` to read the next page. Treat it as unreadable. Omitted on the last page.

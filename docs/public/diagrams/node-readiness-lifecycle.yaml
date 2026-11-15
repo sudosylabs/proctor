@@ -1,0 +1,27 @@
+blocks:
+  - row:
+      - card: Platform
+        text: Dependencies and metrics are up.
+      - card: Serving lease
+        text: The lease is saved and startup checks are done.
+      - card: Jobs and WebSocket
+        text: Background work and live updates start.
+      - card: HTTP
+        text: The listener is handed to HTTP.
+  - row:
+      - card: Ready
+        text: Only now does the node receive traffic.
+        accent: true
+      - branch: Stop
+        span: 2
+        items:
+          - title: Normal stop
+            text: Not ready, then HTTP drains within the shutdown timeout.
+          - title: Failure
+            text: The lease or metrics listener fails. Not ready, then HTTP stops at once.
+      - card: Close
+        text: Each part shuts down in the reverse order it started.
+        via: Then
+    from:
+      - {from: 4, to: 1}
+  - note: A failed startup takes the same close path and never reports ready.

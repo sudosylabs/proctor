@@ -13,7 +13,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Lists the Academic Units visible to the current principal, optionally filtered by a literal case-insensitive name substring. Visibility is evaluated from current scoped authority and does not grant mutation permission. This bounded collection returns at most the requested limit.
+        Without `q`, lists the top-level Academic Units of the Institution. With `q`, searches every active Academic Unit in the Institution whose name or display name contains the text, ignoring case. Both need academic_unit.view on the Institution. Seeing an Academic Unit does not let the caller change it. Results come in pages ordered by name and then by identifier, at most `limit` per page.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -47,7 +47,9 @@ paths:
         - name: q
           in: query
           required: false
-          description: Literal case-insensitive substring matched against name and display name.
+          description: >-
+            Text to find in the name or display name, matched literally and ignoring case. Without it, only
+            top-level Academic Units are listed.
           schema:
             type: string
         - $ref: '#/components/parameters/PageLimit'
@@ -73,7 +75,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Creates a top-level Academic Unit in the installation Institution after authoritative authorization. Supplying an optional Idempotency-Key makes an exact retry return the committed outcome; reusing the key with different input is a conflict. Server-owned identity and scope fields in the compatibility body are ignored.
+        Creates a top-level Academic Unit in the Institution. The caller needs academic_unit.manage on the Institution. Send an Idempotency-Key to make retries safe: a retry with the same key and body returns the first result, and the same key with a different body is a conflict. The server sets the new Unit's identifier, timestamps and Institution.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -142,7 +144,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Returns one active Academic Unit only when it is visible through the principal's current scoped authority. The bounded projection identifies its Institution and parent but does not recursively include descendants or permission grants.
+        Returns one Academic Unit when the caller holds academic_unit.view on it. The response names its Institution and parent. It does not include the Units beneath it or any permission grants.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -184,7 +186,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Applies a partial presentation update and can move the Unit beneath another valid parent after authorizing both sides. The transition rejects cycles, cross-Institution ownership, stale dependencies, and invalid hierarchy changes atomically.
+        Changes some of an Academic Unit's fields and can move it under another parent. A move needs management permission on both the Unit and its new parent, or on the Institution when it becomes top-level. Proctor rejects the whole change if it would create a cycle, cross Institutions, rely on out-of-date data or break the hierarchy in any other way. Nothing is applied in that case.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -237,7 +239,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Archives one empty eligible Academic Unit while retaining hierarchy and audit history. Active descendants, Programmes, memberships, or authorization dependencies block the transition rather than being cascaded.
+        Archives one empty Academic Unit and keeps its place in the hierarchy and its audit history. Proctor does not archive anything beneath it: if the Unit still has active child Units, Programmes, memberships or permission grants, the request fails instead.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -289,7 +291,9 @@ paths:
 components:
   requestBodies:
     UpdateAcademicUnit:
-      description: Partial Academic Unit presentation or parent change; omitted or null fields remain unchanged.
+      description: >-
+        The Academic Unit fields to change, and optionally a new parent. Fields you leave out or send as null stay
+        as they are.
       required: true
       content:
         application/json:
@@ -305,6 +309,16 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/AcademicUnitResponse'
+          example:
+            revision: 3
+            id: 14j8umgczgrdp95w77zuxmxfu9
+            created_at: '2026-08-01T09:00:00Z'
+            updated_at: '2026-08-12T11:45:00Z'
+            institution_id: wj3drgzdpnf54rxf5d8qd3dqne
+            parent_id: ih1r84kij94nrwis97rft6rduh
+            name: computer-science
+            display_name: School of Computer Science
+            description: Computing teaching and research.
     AcademicUnitArchived:
       description: Academic Unit archived
       headers:
@@ -312,7 +326,7 @@ components:
           $ref: '#/components/headers/NoStore'
   schemas:
     UpdateAcademicUnitRequest:
-      description: Mutable Academic Unit fields, including an optional hierarchy move.
+      description: The Academic Unit fields you can change, including a move to another parent.
       type: object
       additionalProperties: false
       properties:
@@ -320,24 +334,36 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Optional positive revision from the last resource response. A stale value returns the resource conflict error without applying the edit. Omission preserves v1 compatibility; null is invalid.
+          description: >-
+            Optional. The `revision` from your last read. If the Academic Unit has changed since, the request fails
+            with `academic_unit.conflict` and nothing changes. Without it, the change applies whatever the current
+            revision. Null is rejected.
         parent_id:
           type:
             - string
             - "null"
           pattern: ^$|^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$
+          description: >-
+            The Academic Unit to move this one under. An empty string makes it top-level. Omitted or null leaves the
+            parent unchanged.
         name:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged. An empty string is present and subject to validation.
+          description: >-
+            New machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. Omitted or
+            null leaves it unchanged. An empty string is checked like any other value, so it is rejected.
         display_name:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged. An empty string is present and subject to validation.
+          description: >-
+            New name shown to people, 1 to 128 characters. Omitted or null leaves it unchanged. An empty string is
+            rejected.
         description:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged. An empty string is present and subject to validation.
+          description: >-
+            New longer text, up to 1,024 characters. Omitted or null leaves it unchanged. An empty string clears
+            it.

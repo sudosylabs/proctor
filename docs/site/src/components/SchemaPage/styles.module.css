@@ -1,0 +1,11 @@
+.meta {
+  color: var(--proctor-ink-muted);
+  font-size: 0.875rem;
+  margin: 12px 0 0;
+}
+
+.kind {
+  color: var(--proctor-ink-muted);
+  font: 500 0.72rem var(--ifm-font-family-monospace);
+  min-width: 3.5rem;
+}

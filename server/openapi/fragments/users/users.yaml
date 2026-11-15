@@ -13,9 +13,9 @@ paths:
       tags:
         - Users
       description: >-
-        Searches only User profiles visible through the caller's current Institution or scoped relationships, ordered by canonical username and identity unless `sort` and `dir` choose another order. Disabled Users remain concealed unless an Institution-wide user viewer explicitly requests them.
-        Each item carries a `summary`: the User's current Affiliations with the current Academic Units the caller can see, and, for a caller holding role_binding.view, the current Role Bindings inside that authority's scopes, each list bounded and followed by a count of the rest.
-        The first page, read without a cursor, also reports `total`: the Users the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
+        Searches the Users you can see through your Institution-wide or scoped permissions. Results are sorted by username, then ID, unless `sort` and `dir` say otherwise. Disabled Users are hidden unless you hold Institution-wide user.view and ask for them.
+        Each item has a `summary`: the User's current Affiliations with the current Academic Units you can see and, if you hold role_binding.view, their current Role Bindings inside your scopes. Each list is short and ends with a count of the rest.
+        The first page (read without a cursor) also has `total`, the number of matching Users across all pages. It is exact up to 10,000. Above that it shows 10,000 and `total_is_lower_bound` is true. Later pages have no total, so keep the one from the first page.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -41,13 +41,15 @@ paths:
         - name: q
           in: query
           required: false
-          description: Literal case-insensitive substring matched against visible User directory fields.
+          description: Text to find, case-insensitively, anywhere in the User fields you can see. It is matched literally.
           schema:
             type: string
         - name: include_disabled
           in: query
           required: false
-          description: Honored only for institution-wide user.view; scoped visibility always excludes disabled Users.
+          description: >-
+            With `true`, also returns disabled Users. It works only with Institution-wide user.view. With scoped
+            permissions, disabled Users are always left out.
           schema:
             type: boolean
             default: false
@@ -55,7 +57,7 @@ paths:
           in: query
           required: false
           description: >-
-            Keeps Users holding a current Affiliation of any listed kind. Repeat the parameter to accept several kinds; a kind may appear once. The filter narrows the caller's visibility and never widens it.
+            Keeps Users who have a current Affiliation of any listed kind. Repeat the parameter for several kinds, each kind at most once. Filters only narrow what you can already see.
           style: form
           explode: true
           schema:
@@ -73,18 +75,18 @@ paths:
           in: query
           required: false
           description: >-
-            Keeps Users with a current membership in this Academic Unit or one of its descendants. A unit outside the caller's user.view scope answers an empty page rather than an error.
+            Keeps Users who are current members of this Academic Unit or any unit below it. A unit outside your user.view scope returns an empty page, not an error.
           schema:
             $ref: '#/components/schemas/ID'
         - name: role_id
           in: query
           required: false
           description: >-
-            Keeps Users holding a current Role Binding of any listed Role inside the caller's role_binding.view
-            scopes, so the filter matches only bindings the `summary` could show; a caller without role_binding.view
-            receives an empty page. Repeat the parameter for up to 16 Roles. Roles are seen through
-            Institution-wide role.view: without it, and for a Role that does not exist or is archived, the request
-            is `request.invalid` on `role_id` alike. The filter narrows the caller's visibility and never widens it.
+            Keeps Users who hold a current Role Binding of any listed Role inside your role_binding.view scopes,
+            so it matches only Bindings the `summary` could show. Without role_binding.view you get an empty page.
+            Repeat the parameter for up to 16 Roles. You need Institution-wide role.view to name Roles. Without it,
+            or for a Role that does not exist or is archived, the request fails with `request.invalid` on
+            `role_id`. Filters only narrow what you can already see.
           style: form
           explode: true
           schema:
@@ -96,9 +98,9 @@ paths:
           in: query
           required: false
           description: >-
-            Keeps only `active` or only `disabled` accounts. Like `include_disabled` it reaches disabled Users only
-            for Institution-wide user.view: scoped visibility never sees a disabled User, so `disabled` answers an
-            empty page. It cannot be combined with `include_disabled=true`.
+            Keeps only `active` or only `disabled` accounts. As with `include_disabled`, only Institution-wide
+            user.view can see disabled Users, so with scoped permissions `disabled` returns an empty page. You
+            can't combine it with `include_disabled=true`.
           schema:
             type: string
             enum:
@@ -108,10 +110,9 @@ paths:
           in: query
           required: false
           description: >-
-            With `true`, keeps Users who have no recorded account activity, which is first recorded when a Session
-            is issued to them, so they have never signed in. Account activity is visible only to Institution-wide
-            user.view; any other caller receives `request.invalid`. It cannot be combined with `last_active_after`
-            or `last_active_before`.
+            With `true`, keeps Users who have never signed in. Activity is first recorded when a User gets a
+            Session. Only Institution-wide user.view can filter on activity; anyone else gets `request.invalid`.
+            You can't combine it with `last_active_after` or `last_active_before`.
           schema:
             type: boolean
             default: false
@@ -119,9 +120,8 @@ paths:
           in: query
           required: false
           description: >-
-            Keeps Users whose last account activity is at or after this RFC 3339 instant; a User never active never
-            matches. Only Institution-wide user.view may filter on account activity; any other caller receives
-            `request.invalid`.
+            Keeps Users last active at or after this RFC 3339 time. A User who was never active does not match.
+            Only Institution-wide user.view can filter on activity; anyone else gets `request.invalid`.
           schema:
             type: string
             format: date-time
@@ -129,9 +129,9 @@ paths:
           in: query
           required: false
           description: >-
-            Keeps Users whose last account activity is before this RFC 3339 instant; it must be later than
-            `last_active_after`, and a User never active never matches. Only Institution-wide user.view may filter
-            on account activity; any other caller receives `request.invalid`.
+            Keeps Users last active before this RFC 3339 time. It must be later than `last_active_after`. A User
+            who was never active does not match. Only Institution-wide user.view can filter on activity; anyone
+            else gets `request.invalid`.
           schema:
             type: string
             format: date-time
@@ -139,11 +139,11 @@ paths:
           in: query
           required: false
           description: >-
-            The page order, each key then by User identity: `username` (the default), `name` (the presented name,
-            the display name or else the username, compared case-insensitively on its first 64 characters),
-            `created`, or `last_active` (the last account activity; a User never active sorts as the least recent).
-            `last_active` reads account activity, which only an Institution-wide user.view caller can see, so any
-            other caller receives `request.invalid`. A cursor continues only the sort and direction that produced it.
+            Sort order, with User ID breaking ties: `username` (the default), `name`, `created` or `last_active`.
+            `name` is the display name, or the username when there is none, compared case-insensitively on its
+            first 64 characters. `last_active` puts Users who were never active as least recent, and only
+            Institution-wide user.view can use it; anyone else gets `request.invalid`. A cursor works only with
+            the sort and direction that produced it.
           schema:
             type: string
             enum:
@@ -186,7 +186,7 @@ paths:
       tags:
         - Users
       description: >-
-        Returns the current principal's own safe User profile from durable state. The projection contains no password data, authentication-provider claims, Session credentials, Personal Access Token material, or private authorization bindings.
+        Returns your own User profile. It never includes password data, identity-provider claims, Session or Personal Access Token secrets, or your Role Bindings.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -229,7 +229,7 @@ paths:
       tags:
         - Users
       description: >-
-        Returns a credential-free navigation projection for the current interactive Session. It identifies available product areas, a bounded list of management scopes, and the current unresolved Attempt selector without exposing Roles, permissions, provider claims, Session credentials, or examination content. This response is not an authorization receipt and must never be cached.
+        Returns what a client needs to build navigation for the current Session: the product areas you can open, up to 20 scopes you manage, and any Attempt you have not finished. It contains no Roles, permissions, identity-provider claims, credentials or Exam content. It does not prove you may do anything, and it must never be cached.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -265,7 +265,7 @@ paths:
       tags:
         - Users
       description: >-
-        Returns one safe User profile only when the caller has current contextual visibility through the Institution or a supported scoped relationship. Disabled or unrelated Users are concealed according to the documented authorization behavior.
+        Returns one User's profile if you can currently see that User through Institution-wide or scoped permissions. Unrelated Users, and disabled Users when you have only scoped permissions, stay hidden.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -307,7 +307,7 @@ paths:
       tags:
         - Users
       description: >-
-        Applies a partial administrative profile update after terminal authorization against the target User. It changes presentation fields only; email, credential methods, account state, memberships, and Role Bindings use explicit separate transitions.
+        Changes some profile fields of a User, after checking your permission on that User. It changes only names, locale and time zone. Email, sign-in methods, account state, memberships and Role Bindings each have their own operations.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -355,7 +355,7 @@ paths:
 components:
   requestBodies:
     UpdateUserProfile:
-      description: Mutable presentation fields for one User; omitted or null fields remain unchanged.
+      description: The profile fields to change. Omitted or null fields stay as they are.
       required: true
       content:
         application/json:
@@ -369,7 +369,7 @@ components:
             timezone: Europe/Paris
   responses:
     CurrentUserContextOK:
-      description: Bounded current User product context
+      description: Navigation context for the current User
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -377,6 +377,27 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/CurrentUserContextResponse'
+          example:
+            user:
+              id: wj3drgzdpnf54rxf5d8qd3dqne
+              username: amina.diallo
+              display_name: Amina Diallo
+              profile_picture_reference: /api/v1/users/wj3drgzdpnf54rxf5d8qd3dqne/profile-picture
+              profile_picture_kind: custom
+            no_current_affiliation: false
+            no_assigned_access: false
+            available_product_areas:
+              - account
+              - exam_management
+              - settings
+            management_scopes:
+              - scope_type: academic_unit
+                scope_id: 14j8umgczgrdp95w77zuxmxfu9
+                display_name: School of Engineering
+            management_scopes_has_more: false
+            unresolved_attempt: null
+            session_management_available: true
+            current_desktop_registration_id: null
     UserProfileListOK:
       description: User profile collection
       content:
@@ -384,13 +405,39 @@ components:
           schema:
             $ref: '#/components/schemas/UserProfileListResponse'
           example:
-            items: []
-            total: 0
+            items:
+              - id: ih1r84kij94nrwis97rft6rduh
+                created_at: '2026-01-19T10:00:00Z'
+                updated_at: '2026-07-22T16:40:00Z'
+                username: jonas.berg
+                display_name: Jonas Berg
+                first_name: Jonas
+                last_name: Berg
+                profile_picture_url: /api/v1/users/ih1r84kij94nrwis97rft6rduh/profile-picture
+                profile_picture_kind: default
+                summary:
+                  affiliations:
+                    - kind: teacher
+                      academic_units:
+                        - id: 14j8umgczgrdp95w77zuxmxfu9
+                          name: School of Engineering
+                      academic_units_more: 0
+                  affiliations_more: 0
+                  roles:
+                    - role_id: 1asb7sk89dp1ex339fkh3te5t4
+                      display_name: Exam Author
+                      scope_type: academic_unit
+                      scope_id: 14j8umgczgrdp95w77zuxmxfu9
+                      scope_name: School of Engineering
+                  roles_more: 0
+            next_cursor: eyJrIjoianVvbmFzLmJlcmcifQ
+            total: 128
             total_is_lower_bound: false
   schemas:
     CurrentUserContextResponse:
       type: object
       additionalProperties: false
+      description: What the signed-in User can open, for building navigation.
       required:
         - user
         - no_current_affiliation
@@ -406,12 +453,18 @@ components:
           $ref: '#/components/schemas/CurrentUserContextIdentity'
         no_current_affiliation:
           type: boolean
+          description: True when the User has no current Affiliation with the Institution.
         no_assigned_access:
           type: boolean
+          description: True when the User holds no Role Binding that is in effect now.
         available_product_areas:
           type: array
           minItems: 2
           uniqueItems: true
+          description: >-
+            Product areas the User can open. `account` and `settings` are always present. `administration` and
+            `exam_management` follow from current Role Bindings, and `student_activity` from a current Class
+            membership or an unfinished Attempt.
           items:
             type: string
             enum:
@@ -423,15 +476,18 @@ components:
         management_scopes:
           type: array
           maxItems: 20
+          description: Up to 20 Institution or Academic Unit scopes the User can manage.
           items:
             $ref: '#/components/schemas/CurrentUserManagementScope'
         management_scopes_has_more:
           type: boolean
+          description: True when the User can manage more scopes than the 20 listed.
         unresolved_attempt:
           type:
             - object
             - "null"
           additionalProperties: false
+          description: The User's Attempt that is ready, active or suspended, or null when there is none.
           required:
             - id
             - exam_sitting_id
@@ -439,24 +495,30 @@ components:
           properties:
             id:
               $ref: '#/components/schemas/ID'
+              description: The Attempt.
             exam_sitting_id:
               $ref: '#/components/schemas/ID'
+              description: The Sitting the Attempt belongs to.
             state:
               type: string
+              description: Current state of the Attempt.
               enum:
                 - ready
                 - active
                 - suspended
         session_management_available:
           type: boolean
+          description: True when Session management is available to the User. Always true in this version.
         current_desktop_registration_id:
           type:
             - string
             - "null"
-          pattern: '^[a-z0-9]{26}$'
+          pattern: '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'
+          description: The Desktop registration of the current Session, or null when the Session is not from Proctor Desktop.
     CurrentUserContextIdentity:
       type: object
       additionalProperties: false
+      description: Who is signed in.
       required:
         - id
         - username
@@ -468,15 +530,19 @@ components:
           $ref: '#/components/schemas/ID'
         username:
           type: string
+          description: The User's sign-in name.
         display_name:
           type: string
+          description: Name shown to other people. It can be empty.
         profile_picture_reference:
           type: string
+          description: Relative URL of the User's profile picture.
         profile_picture_kind:
           $ref: '#/components/schemas/ProfilePictureKind'
     CurrentUserManagementScope:
       type: object
       additionalProperties: false
+      description: An Institution or Academic Unit the User can manage.
       required:
         - scope_type
         - scope_id
@@ -484,15 +550,18 @@ components:
       properties:
         scope_type:
           type: string
+          description: Kind of scope.
           enum:
             - institution
             - academic_unit
         scope_id:
           $ref: '#/components/schemas/ID'
+          description: The Institution or Academic Unit.
         display_name:
           type: string
+          description: Name of the Institution or Academic Unit.
     UserProfileListResponse:
-      description: Visible User profiles in the requested order, by canonical username and identity by default.
+      description: A page of Users you can see, sorted by username and then ID unless you choose another order.
       type: object
       additionalProperties: false
       required:
@@ -500,6 +569,7 @@ components:
       properties:
         items:
           type: array
+          description: The Users on this page.
           items:
             $ref: '#/components/schemas/UserDirectoryEntryResponse'
         next_cursor:
@@ -509,17 +579,17 @@ components:
           minimum: 0
           maximum: 10000
           description: >-
-            Users matching the filters and the caller's visibility across every page, present only on the
-            first page. At 10,000 counting stops and `total_is_lower_bound` is true.
+            Number of Users that match the filters and that you can see, across all pages. Sent on the first page
+            only. Counting stops at 10,000, and then `total_is_lower_bound` is true.
         total_is_lower_bound:
           type: boolean
-          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.
+          description: True when `total` reached 10,000 and there may be more. Sent with `total`.
     UserDirectoryEntryResponse:
       type: object
       additionalProperties: false
       description: >-
-        One User directory item: the User profile projection the caller may read, with the same field rules as
-        UserProfileResponse, and a bounded summary of who the User is in the Institution.
+        One User in the directory: the same profile fields as UserProfileResponse, under the same visibility
+        rules, plus a short `summary` of the User's place in the Institution.
       required:
         - id
         - created_at
@@ -536,46 +606,63 @@ components:
         created_at:
           type: string
           format: date-time
+          description: Time the User account was created.
         updated_at:
           type: string
           format: date-time
+          description: Time of the latest change to the account.
         archived_at:
           type: string
           format: date-time
+          description: Time the account was archived. Omitted while it is not archived.
         username:
           type: string
+          description: Unique sign-in name, in lowercase.
         email:
           type: string
           format: email
+          description: The User's email address.
         email_verified:
           type: boolean
+          description: True when the User has confirmed they own the email address.
         display_name:
           type: string
+          description: Name shown to other people. It can be empty.
         first_name:
           type: string
+          description: Given name. It can be empty.
         last_name:
           type: string
+          description: Family name. It can be empty.
         locale:
           type: string
+          description: Preferred language tag, such as `en`.
         timezone:
           type: string
+          description: Preferred time zone name, such as `Europe/Paris`.
         last_login_at:
           type: string
           format: date-time
+          description: Time the User last signed in. Omitted if they never have.
         last_activity_at:
           type: string
           format: date-time
+          description: >-
+            Time the User was last active in any Session. It can lag the latest request by up to five minutes by
+            default.
         disabled_at:
           type: string
           format: date-time
+          description: Time the account was disabled. Omitted while it is enabled.
         profile_picture_url:
           type: string
+          description: Relative URL of the User's profile picture.
         profile_picture_changed_at:
           type: string
           format: date-time
           description: >-
-            Time of the latest upload or removal. It is not a sign that a custom picture exists; use
-            profile_picture_kind.
+            Time of the latest upload or removal. It does not tell you whether a custom picture exists. Use
+            `profile_picture_kind` for that.
         profile_picture_kind:
           $ref: '#/components/schemas/ProfilePictureKind'
         summary:
@@ -584,10 +671,10 @@ components:
       type: object
       additionalProperties: false
       description: >-
-        Who the User is, read at the same instant as the page. `affiliations` lists at most three current
-        Affiliations, oldest first. `roles` and `roles_more` are present only when the caller holds
-        role_binding.view somewhere; they list at most three current Role Bindings inside the caller's
-        role_binding.view scopes, oldest first, and a binding outside those scopes is neither listed nor counted.
+        Who the User is, read at the same moment as the page. `affiliations` lists up to three current
+        Affiliations, oldest first. `roles` and `roles_more` appear only if you hold role_binding.view
+        somewhere. They list up to three current Role Bindings inside your role_binding.view scopes, oldest
+        first. Bindings outside those scopes are neither listed nor counted.
       required:
         - affiliations
         - affiliations_more
@@ -595,28 +682,30 @@ components:
         affiliations:
           type: array
           maxItems: 3
+          description: Up to three current Affiliations, oldest first.
           items:
             $ref: '#/components/schemas/UserDirectoryAffiliation'
         affiliations_more:
           type: integer
           minimum: 0
-          description: Current Affiliations past the three listed.
+          description: Number of current Affiliations beyond the three listed.
         roles:
           type: array
           maxItems: 3
+          description: Up to three current Role Bindings you can see, oldest first.
           items:
             $ref: '#/components/schemas/UserDirectoryRole'
         roles_more:
           type: integer
           minimum: 0
-          description: Visible current Role Bindings past the three listed. Present with `roles`.
+          description: Number of visible current Role Bindings beyond the three listed. Sent with `roles`.
     UserDirectoryAffiliation:
       type: object
       additionalProperties: false
       description: >-
-        One current Affiliation with the User's current Academic Units. A membership is not tied to an
-        Affiliation kind, so every Affiliation carries the same units: at most two, ordered by name, from units the
-        caller's user.view reaches (every unit for Institution-wide user.view).
+        One current Affiliation, with the User's current Academic Units. Memberships are not tied to an
+        Affiliation kind, so every Affiliation lists the same units: up to two, sorted by name, from the units
+        your user.view reaches (all units with Institution-wide user.view).
       required:
         - kind
         - academic_units
@@ -624,6 +713,7 @@ components:
       properties:
         kind:
           type: string
+          description: Kind of Affiliation.
           enum:
             - student
             - teacher
@@ -632,15 +722,17 @@ components:
         academic_units:
           type: array
           maxItems: 2
+          description: Up to two of the User's current Academic Units, sorted by name.
           items:
             $ref: '#/components/schemas/UserDirectoryAcademicUnit'
         academic_units_more:
           type: integer
           minimum: 0
-          description: Visible current Academic Units past the two listed.
+          description: Number of visible current Academic Units beyond the two listed.
     UserDirectoryAcademicUnit:
       type: object
       additionalProperties: false
+      description: An Academic Unit the User belongs to.
       required:
         - id
         - name
@@ -663,22 +755,25 @@ components:
       properties:
         role_id:
           $ref: '#/components/schemas/ID'
+          description: The Role granted.
         display_name:
           type: string
           description: The Role's display name.
         scope_type:
           type: string
+          description: Kind of scope the Binding is at.
           enum:
             - institution
             - academic_unit
             - class
         scope_id:
           $ref: '#/components/schemas/ID'
+          description: The Institution, Academic Unit or Class the Binding is at.
         scope_name:
           type: string
           description: The display name of the binding's Institution, Academic Unit or Class.
     UpdateUserProfileRequest:
-      description: Partial User presentation update; omitted and explicit null values leave a field unchanged.
+      description: Profile fields to change. Omitted fields and fields set to null stay as they are.
       type: object
       additionalProperties: false
       properties:
@@ -686,29 +781,31 @@ components:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the canonical username unchanged.
+          description: >-
+            New sign-in name. It is stored in lowercase and may use only letters, digits, `.`, `_` and `-`. Omit
+            or send null to keep it.
         display_name:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the human-facing display name unchanged.
+          description: New name shown to other people. Omit or send null to keep it.
         first_name:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the first name unchanged.
+          description: New given name. Omit or send null to keep it.
         last_name:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the last name unchanged.
+          description: New family name. Omit or send null to keep it.
         locale:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the locale unchanged.
+          description: New language tag, such as `en` or `fr-CA`. Omit or send null to keep it.
         timezone:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the IANA time-zone name unchanged.
+          description: New time zone name, such as `Europe/Paris`. Omit or send null to keep it.

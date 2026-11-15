@@ -3,6 +3,7 @@ import {dirname, extname, relative, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {audienceLabels} from '../navigation.mjs';
 import {messageSlug, referenceRoute} from '../scripts/asyncapi-reference.mjs';
+import {loadProblems, problemsRoute} from '../problems/index.mjs';
 
 const moduleRoot = dirname(fileURLToPath(import.meta.url));
 const defaultRepoRoot = resolve(moduleRoot, '../../..');
@@ -12,11 +13,11 @@ function compact(value) {
   return value.replace(/\s+/g, ' ').trim();
 }
 
-function kebab(value) {
-  return value
-    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-    .replace(/[^a-zA-Z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
+// Matches lodash's kebabCase, which the OpenAPI plugin uses for page slugs:
+// acronyms stay one word (getMFAStatus -> get-mfa-status) and digit runs split.
+export function kebab(value) {
+  return (value.match(/[A-Z]{2,}(?=[A-Z][a-z]|[^A-Za-z]|$)|[A-Z]?[a-z]+|[A-Z]+|[0-9]+/g) ?? [])
+    .join('-')
     .toLowerCase();
 }
 
@@ -189,11 +190,26 @@ async function asyncAPIEntries(repoRoot) {
   return entries;
 }
 
+async function problemEntries(repoRoot) {
+  return (await loadProblems({repoRoot})).map((problem) => ({
+    id: `problem:${problem.code}`,
+    kind: 'problem',
+    group: `Error codes / ${problem.areaLabel}`,
+    title: problem.code,
+    description: compact(problem.description.replaceAll('`', '')),
+    href: `${problemsRoute}/${problem.code}`,
+    searchText: compact(
+      `${problem.code} ${problem.code.replaceAll(/[._]/g, ' ')} ${problem.status} ${problem.description}`,
+    ).toLowerCase(),
+  }));
+}
+
 export async function buildSearchIndex({repoRoot = defaultRepoRoot} = {}) {
   const entries = [
     ...(await authoredEntries(repoRoot)),
     ...(await openAPIEntries(repoRoot)),
     ...(await asyncAPIEntries(repoRoot)),
+    ...(await problemEntries(repoRoot)),
   ];
   const ids = new Set();
   const hrefs = new Set();
@@ -211,7 +227,7 @@ export async function buildSearchIndex({repoRoot = defaultRepoRoot} = {}) {
 }
 
 export function renderSearchData(entries) {
-  return `// Generated from public MDX, server/openapi.json and server/asyncapi.json. Do not edit by hand.\n\nexport type SearchEntry = {\n  id: string;\n  kind: 'guide' | 'glossary' | 'product-area' | 'endpoint' | 'realtime-message';\n  group: string;\n  title: string;\n  description: string;\n  href: string;\n  searchText: string;\n  method?: string;\n  path?: string;\n};\n\nexport const searchEntries = ${JSON.stringify(entries, null, 2)} satisfies readonly SearchEntry[];\n`;
+  return `// Generated from public MDX, server/openapi.json, server/asyncapi.json and the error catalog. Do not edit by hand.\n\nexport type SearchEntry = {\n  id: string;\n  kind: 'guide' | 'glossary' | 'product-area' | 'endpoint' | 'realtime-message' | 'problem';\n  group: string;\n  title: string;\n  description: string;\n  href: string;\n  searchText: string;\n  method?: string;\n  path?: string;\n};\n\nexport const searchEntries = ${JSON.stringify(entries, null, 2)} satisfies readonly SearchEntry[];\n`;
 }
 
 export async function auditSearchIndex({repoRoot = defaultRepoRoot} = {}) {

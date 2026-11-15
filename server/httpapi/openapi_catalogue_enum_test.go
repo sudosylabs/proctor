@@ -89,6 +89,11 @@ func TestInvitationBatchErrorCodeEnumMatchesTheCatalogue(t *testing.T) {
 	require.Equal(t, onboarding.InvitationBatchErrorCodes(), openAPIComponentEnum(t, "InvitationBatchErrorCode"))
 }
 
+func TestSessionRevocationReasonCodeEnumMatchesTheCatalogue(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, stringValues(model.AllSessionRevocationReasons()), openAPIComponentEnum(t, "SessionRevocationReasonCode"))
+}
+
 func TestAuditActionEnumMatchesTheCatalogue(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, model.AuditActions(), openAPIComponentEnum(t, "AuditAction"))
@@ -117,6 +122,7 @@ var responseCatalogues = map[string]bool{
 	"MailFailureCode": true, "MailTemplateKey": true, "OnboardingImportFailureCode": true,
 	"OnboardingImportPreviewCode": true, "OnboardingImportRowCode": true,
 	"PersonalAccessTokenScope": true, "ResourceType": true, "SelfAuditEvent": true,
+	"SessionRevocationReasonCode": true,
 }
 
 func TestResponseCataloguesStayOpenForOlderClients(t *testing.T) {

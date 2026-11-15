@@ -1,27 +1,28 @@
 ---
-title: Develop the Proctor Server
-description: Navigate the server architecture, place policy at the correct boundary, and deliver one verified behavior from domain model to public contract.
+title: Develop the Proctor server
+description: Find your way around the server, put each rule in the right place, and ship one tested behavior from the domain model to the public contract.
 audience: developer
 maturity: preview
 slug: /developers/server-workflow/
 ---
 
-# Develop the Proctor Server
+# Develop the Proctor server
 
-The Proctor server is organized around ownership, not around framework layers.
-A change starts with a user-visible or operational behavior, crosses only the
-boundaries that behavior needs, and finishes with evidence at every changed
-boundary. The aim is not to create a model, service, Store, and route for
-symmetry. The aim is to make one coherent behavior true.
+The Proctor server is organized by who owns what, not by framework layers. A
+change starts from a behavior that a user or operator can see. It crosses only
+the boundaries that behavior needs, and it ends with tests at every boundary it
+changed. The goal is not to add a model, a service, a Store and a route because
+the pattern suggests it. The goal is to make one behavior work correctly from
+end to end.
 
-This manual is for contributors who already write Go but do not yet know where
-Proctor keeps policy, durable guarantees, transport rules, or runtime
-ownership. Read it in order for a first server change; return to the focused
-chapters during review.
+This manual is for contributors who already write Go but don't yet know where
+Proctor keeps its rules, its durable guarantees, its transport rules, or its
+runtime ownership. For your first server change, read it in order. During
+review, come back to the chapter you need.
 
 <GovernedFigure asset="developer-repository-boundaries" />
 
-## Follow the Manual
+## Chapters in this manual
 
 | If you need to understand… | Read… |
 | --- | --- |
@@ -41,10 +42,10 @@ chapters during review.
 | How one implemented operation crosses the complete stack | [User Settings vertical slice](./server/user-settings-slice.mdx) |
 | What to check before requesting review | [Server review checklists](./server/review-checklists.mdx) |
 
-## The Placement Rule
+## Where each decision goes
 
-Ask who must remain correct if the transport, database, cache, or application
-node changes.
+Ask which code must stay correct if the transport, the database, the cache or
+the node running the application changes.
 
 | Decision | Owner |
 | --- | --- |
@@ -58,14 +59,15 @@ node changes.
 | How portable cache, mail, or VFS mechanics work | The corresponding independent module under `packages` |
 | Which concrete adapters run and who closes them | Module-root `server.New` and `platform.Service` |
 
-If two rows appear to own the same decision, the design is not finished. For
-example, transport owns strict JSON decoding, while the domain owns the local
-validity of the decoded value. PostgreSQL may enforce the invariant again for
-concurrency, but it does not become the author of business policy.
+If two rows seem to own the same decision, the design isn't finished yet. For
+example, the transport owns strict JSON decoding, and the domain decides
+whether the decoded value is valid. PostgreSQL may enforce the same rule again
+to handle concurrency, but that doesn't make it the author of the business
+rule.
 
-## Work One Vertical Slice at a Time
+## Work on one vertical slice at a time
 
-Before editing, write a short boundary map in your notes:
+Before you edit anything, write a short boundary map in your notes:
 
 ```text
 Behavior:        what changes for a User or operator?
@@ -78,51 +80,51 @@ Effects:         what happens only after commit?
 Evidence:        which focused, conformance, integration, and broad tests prove it?
 ```
 
-Then inspect the current code and tests. Do not create an interface until its
-consumer and complete need are known. Do not create a child package until the
-responsibility has enough stable structure to survive deletion of its current
-callers. Do not add a route until the application behavior exists without
-HTTP.
+Then read the current code and tests. Don't create an interface until you know
+who will use it and everything they need from it. Don't create a child package
+until the responsibility is stable enough to outlive its current callers. Don't
+add a route until the application behavior works without HTTP.
 
-## Preserve the Non-Negotiable Order
+## Keep this order
 
-For an actor-sensitive mutation, the usual chronology is:
+For a change that depends on who is acting, the usual order is:
 
-1. Establish a bounded immutable invocation from the transport proof.
-2. Resolve the canonical resource and current authority.
-3. Authorize immediately before expensive work or mutation.
-4. Prepare safe audit intent and, when required, command idempotency.
-5. Commit the durable state, required audit, retained outcome, Job, or mail
+1. Build a bounded, immutable invocation from what the transport proved about
+   the caller.
+2. Resolve the canonical resource and the caller's current authority.
+3. Authorize just before any expensive work or change.
+4. Prepare safe audit details and, when required, the command's idempotency.
+5. Commit the durable state, required audit, retained outcome, Job or mail
    intent through one named Store operation.
-6. Publish cache, cluster, WebSocket, or other reconstructible
-   effects only after commit.
-7. Translate the result into an allowlisted public response.
+6. Only after the commit, publish cache, cluster, WebSocket or other effects
+   that can be rebuilt.
+7. Turn the result into a public response that contains only allowed fields.
 
-Not every read or mutation uses every step. The omission must follow the
-owning contract, not convenience in a handler.
+Not every read or change uses every step. When you skip one, it must be because
+the owning contract says so, not because it is easier in a handler.
 
-## Know the Sources of Truth
+## Where the details live
 
-This manual explains how to work. It deliberately does not duplicate live
-inventories. Use these authorities while implementing:
+This manual explains how to work. It deliberately doesn't repeat lists that
+change often. While you work, use:
 
-- the [server module guide](https://github.com/sudosylabs/Proctor/blob/main/server/README.md)
+- the [server module guide](https://github.com/sudosylabs/Proctor/blob/main/server/README.md),
   for the package map, one traced request, and the commands a change needs;
-- the [HTTP transport contract](https://github.com/sudosylabs/Proctor/blob/main/server/httpapi/CONTRACT.md)
+- the [HTTP transport contract](https://github.com/sudosylabs/Proctor/blob/main/server/httpapi/CONTRACT.md),
   for exact routing and mapping guarantees;
-- the [OpenAPI authoring guide](https://github.com/sudosylabs/Proctor/blob/main/server/openapi/README.md)
-  for the human-first public contract workflow;
-- the [cluster guarantees](https://github.com/sudosylabs/Proctor/blob/main/server/cluster/GUARANTEES.md)
-  for exact delivery and recovery behavior; and
-- code, tests, configuration examples, and command help for discoverable
-  implementation detail.
+- the [OpenAPI authoring guide](https://github.com/sudosylabs/Proctor/blob/main/server/openapi/README.md),
+  for the workflow that writes the public contract by hand first;
+- the [cluster guarantees](https://github.com/sudosylabs/Proctor/blob/main/server/cluster/GUARANTEES.md),
+  for exact delivery and recovery behavior;
+- code, tests, configuration examples and command help, for implementation
+  details you can find by reading them.
 
-## First Change Route
+## Your first change
 
-For a first contribution, use the [User Settings vertical slice](./server/user-settings-slice.mdx)
-as a reading exercise before changing another feature. It shows what each file
-contributes without presenting a copy-and-paste package template. Your feature
-may need fewer boundaries or different ones.
+For a first contribution, read the [User Settings vertical slice](./server/user-settings-slice.mdx)
+before you change another feature. It shows what each file adds, without
+handing you a package template to copy. Your feature may need fewer
+boundaries, or different ones.
 
 Finish with the [server review checklists](./server/review-checklists.mdx) and
-the repository [verification ladder](./testing.mdx).
+the repository [testing ladder](./testing.mdx).

@@ -16,7 +16,7 @@ paths:
       tags:
         - Roles and access
       description: >-
-        Lists built-in and custom Roles visible to the authorized caller, ascending by `name` then `id`. Role definitions name permissions only; effective access also requires a current scoped Role Binding and terminal authorization against current durable state. Each item carries `holders`, the current Role Bindings of that Role the caller can see through role_binding.view, counted for the whole page in one read; `holders` is omitted for a caller who holds role_binding.view nowhere.
+        Lists the built-in and custom Roles you can see, sorted by `name` and then `id`. A Role only names permissions. A User gets them only through a current Role Binding at a scope, and each request still checks access at that moment. Each item has `holders`, counting the current Role Bindings of that Role you can see through role_binding.view, all read at the same moment for the whole page. `holders` is left out if you hold role_binding.view nowhere.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -58,7 +58,7 @@ paths:
       tags:
         - Roles and access
       description: >-
-        Creates a reusable custom Role from a canonical name and an allowlisted set of known permissions. Creation grants the Role to nobody; a separate scoped Role Binding is required before it affects authorization.
+        Creates a custom Role with a machine name and a set of known permissions. A new Role is granted to nobody. It has no effect until you create a Role Binding for it.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -113,7 +113,7 @@ paths:
       tags:
         - Roles and access
       description: >-
-        Returns one built-in or custom Role visible to the caller, including its current permission set and built-in protection flag. `holders` counts the current Role Bindings of the Role the caller can see through role_binding.view, and is omitted for a caller who holds role_binding.view nowhere; the Role definition alone does not imply that any User holds it.
+        Returns one built-in or custom Role you can see, with its permissions and whether it is built in. `holders` counts the current Role Bindings of the Role you can see through role_binding.view. It is left out if you hold role_binding.view nowhere. A Role existing does not mean anyone holds it.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -155,7 +155,7 @@ paths:
       tags:
         - Roles and access
       description: >-
-        Changes the presentation or complete permission set of one custom Role after rechecking current authority. Built-in Roles are protected, and a permission change can fail when active historical guarantees make the proposed replacement unsafe.
+        Changes the display name, description or full permission list of a custom Role, after checking your permission again. Built-in Roles can't be changed. A permission change can be refused when existing grants would make it unsafe.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -208,12 +208,12 @@ paths:
       tags:
         - Roles and access
       description: >-
-        Deletes an unprotected custom Role only when no retained Binding dependency prevents removal. Built-in Roles and Roles whose deletion would invalidate active authorization history remain protected.
+        Deletes a custom Role, unless Role Bindings that are kept still depend on it. Built-in Roles can't be deleted, and neither can a Role whose removal would break the record of current grants.
       x-codeSamples:
         - lang: Shell
           source: |-
             curl --request DELETE \
-              --url 'https://proctor.example.edu/api/v1/roles/<role-id>' \
+              --url 'https://proctor.example.edu/api/v1/roles/1asb7sk89dp1ex339fkh3te5t4' \
               --header 'Authorization: Bearer <token>' \
               --header 'X-Proctor-CSRF-Token: <session-csrf-token>'
       x-proctor-auth: principal_required
@@ -269,7 +269,7 @@ components:
       description: The Role identifier.
   requestBodies:
     CreateRole:
-      description: Canonical custom Role presentation and complete initial permission set.
+      description: The new Role's machine name, display text and full list of permissions.
       required: true
       content:
         application/json:
@@ -282,7 +282,7 @@ components:
             permissions:
               - class.view
     UpdateRole:
-      description: Partial custom Role replacement; omitted or null fields remain unchanged.
+      description: The Role fields to change. Omitted or null fields stay as they are.
       required: true
       content:
         application/json:
@@ -300,23 +300,70 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/RoleListResponse'
+          example:
+            items:
+              - id: 1asb7sk89dp1ex339fkh3te5t4
+                created_at: '2026-03-02T10:00:00Z'
+                updated_at: '2026-05-18T12:30:00Z'
+                name: assessment-reviewer
+                display_name: Assessment Reviewer
+                description: Reviews examination integrity records.
+                permissions:
+                  - class.view
+                  - submission.review
+                built_in: false
+                holders:
+                  bindings: 12
+                  users: 9
+                  scopes: 3
+                  bindings_is_lower_bound: false
+                  users_is_lower_bound: false
+                  scopes_is_lower_bound: false
+            next_cursor: eyJuYW1lIjoiYXNzZXNzbWVudC1yZXZpZXdlciJ9
     RoleOK:
       description: Role
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/RoleResponse'
+          example:
+            id: 1asb7sk89dp1ex339fkh3te5t4
+            created_at: '2026-03-02T10:00:00Z'
+            updated_at: '2026-08-01T09:30:00Z'
+            name: assessment-reviewer
+            display_name: Senior Assessment Reviewer
+            description: Reviews examination and integrity records.
+            permissions:
+              - class.view
+            built_in: false
+            holders:
+              bindings: 12
+              users: 9
+              scopes: 3
+              bindings_is_lower_bound: false
+              users_is_lower_bound: false
+              scopes_is_lower_bound: false
     RoleCreated:
       description: Role created
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/RoleResponse'
+          example:
+            id: 1asb7sk89dp1ex339fkh3te5t4
+            created_at: '2026-08-01T09:30:00Z'
+            updated_at: '2026-08-01T09:30:00Z'
+            name: assessment-reviewer
+            display_name: Assessment Reviewer
+            description: Reviews examination integrity records.
+            permissions:
+              - class.view
+            built_in: false
     RoleDeleted:
       description: Role deleted
   schemas:
     RoleListResponse:
-      description: Roles visible to the authorized caller.
+      description: A page of Roles you can see.
       type: object
       additionalProperties: false
       required:
@@ -324,12 +371,13 @@ components:
       properties:
         items:
           type: array
+          description: The Roles on this page, sorted by `name` and then `id`.
           items:
             $ref: '#/components/schemas/RoleResponse'
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
     CreateRoleRequest:
-      description: Canonical identity, presentation, and complete permission set for a new custom Role.
+      description: The machine name, display text and full permission list of a new custom Role.
       type: object
       additionalProperties: false
       required:
@@ -339,20 +387,22 @@ components:
       properties:
         name:
           type: string
-          description: Immutable canonical machine name for the Role.
+          description: Machine name of the Role. It must be unique and can't change later.
         display_name:
           type: string
-          description: Human-facing Role name.
+          description: Name shown to people.
         description:
           type: string
-          description: Human-facing explanation of the Role's intended responsibility.
+          description: What the Role is for, in plain text.
         permissions:
           type: array
-          description: Duplicate-free complete set of known permission actions granted by the Role.
+          description: >-
+            Every permission the Role grants, such as `class.view`, each listed once. Each must be a permission
+            Proctor knows.
           items:
             type: string
     UpdateRoleRequest:
-      description: Mutable custom Role fields; the canonical name never changes.
+      description: Custom Role fields to change. The machine name can't change.
       type: object
       additionalProperties: false
       properties:
@@ -360,16 +410,18 @@ components:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged. An empty string is present and subject to validation.
+          description: New name shown to people. Omit or send null to keep it. An empty string is checked like any other value.
         description:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged. An empty string is present and subject to validation.
+          description: New description. Omit or send null to keep it. An empty string is checked like any other value.
         permissions:
           type:
             - array
             - "null"
-          description: Omitted or null leaves the value unchanged. An empty array is present and subject to validation.
+          description: >-
+            The new full permission list, which replaces the old one. Omit or send null to keep it. An empty list
+            is checked like any other value.
           items:
             type: string

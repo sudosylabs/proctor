@@ -1,6 +1,6 @@
 ---
-title: Realtime and Replay
-description: Connect to Proctor WebSocket events, authorize subscriptions, and recover from bounded replay gaps.
+title: Realtime and replay
+description: Connect to Proctor's WebSocket events, get each subscription authorized, and recover when replay can't fill a gap.
 audience: api-consumer
 maturity: preview
 sidebar_position: 7
@@ -8,76 +8,92 @@ sidebar_position: 7
 
 import Link from '@docusaurus/Link';
 
-# Realtime and Replay
+# Realtime and replay
 
-Proctor exposes one authenticated WebSocket endpoint at `/api/v1/websocket`.
-Realtime delivery accelerates an interface; durable HTTP resources remain the
-authority.
+Proctor has one authenticated WebSocket endpoint, at `/api/v1/websocket`.
+Realtime events make an interface faster. The durable HTTP resources are
+still the source of truth.
 
-Browser connections use the Web Session cookie and must present the
-installation's exact allowed Origin. A Web client using an allowed Web Session
-access credential may use bearer transport. Proctor Desktop instead presents
-its Desktop Session as `Authorization: DPoP …` with a fresh proof for the
-WebSocket handshake and current server nonce; a Desktop credential is never a
-bearer credential. Non-browser clients may omit Origin.
+How each client connects:
 
-The connection handshake authenticates one Session but does not grant every
-subscription. Each subscription action and exact resource is authorized
-separately; the resource is the one the action protects or, for an action that
-also governs a collection, an owning scope it accepts. Candidate admission
-additionally requires the registered-key Desktop Session and the exact Desktop
-compatibility inputs enforced by the Attempt protocol.
+- **Browsers** use the Web Session cookie and must send the installation's
+  exact allowed `Origin`.
+- **Web clients** with an allowed Web Session access credential may use
+  bearer transport.
+- **Proctor Desktop** presents its Desktop Session as
+  `Authorization: DPoP …`, with a fresh proof for the WebSocket handshake and
+  the server's current nonce. A Desktop credential is never a bearer
+  credential.
+- **Clients that don't run in a browser** may leave out `Origin`.
 
-See <Link to="/api/reference/connect-web-socket">Connect WebSocket</Link> for the
-handshake parameters. The <Link to="/api/reference/realtime-protocol/">Realtime Protocol</Link>
+The handshake authenticates one Session, but it doesn't grant every
+subscription. Proctor authorizes each subscription's action and exact
+resource separately. The resource is the one the action protects. For an
+action that also covers a collection, it can be an owning scope the action
+accepts. Candidate admission also requires the registered-key Desktop
+Session and the exact Desktop compatibility inputs that the Attempt protocol
+checks.
+
+See <Link to="/api/reference/connect-web-socket">Connect WebSocket</Link> for
+the handshake parameters. The
+<Link to="/api/reference/realtime-protocol/">Realtime Protocol</Link>
 reference describes every frame after the upgrade: the event frame, the
 commands and their replies, the close codes, and each event with its data.
 
-## Refetch Signals
+## Events tell you to fetch again
 
-Most events name what changed and carry no more than identifiers, a state
-and a revision; refetch the resource over HTTP to read it. Operator and
-administrator views can follow Jobs (`job.changed`, subscribed with `job.view`
-on the institution) and onboarding imports (`onboarding_import.changed`,
-subscribed with `onboarding_batch.view` on the institution, an academic unit
-or a class; an import is announced at its own scope and at every scope that
-encloses it). A User's own connections hear `current_user.sessions.changed`
-when one of their Sessions is revoked or renamed, and `invitation.changed`
-when an Invitation they issued is accepted. Job progress arrives at most once
-every two seconds per Job; a status change arrives at once.
+Most events say what changed and carry no more than identifiers, a state
+and a revision. Fetch the resource over HTTP to read it.
 
-## Unknown Events
+| Event | Who hears it | Subscription |
+| --- | --- | --- |
+| `job.changed` | Operator and administrator views | `job.view` on the institution |
+| `onboarding_import.changed` | Operator and administrator views | `onboarding_batch.view` on the institution, an academic unit or a class |
+| `current_user.sessions.changed` | The User's own connections, when one of their Sessions is revoked or renamed | |
+| `invitation.changed` | The User's own connections, when an Invitation they issued is accepted | |
 
-The server sends only the events its reference lists, but the list grows.
-Ignore an event whose name you do not recognize instead of treating it as an
-error, and keep processing the events that follow. Before the first supported
-release an event's data may change in place, together with the reference, as
-the HTTP contract may.
+Proctor announces an onboarding import at its own scope and at every scope
+that contains it. Job progress arrives at most once every two seconds for
+each Job. A change of status arrives straight away.
 
-## Resume After Disconnect
+## Unknown events
 
-Replay is bounded and node-local. Retain the most recent sequence or replay
-cursor exactly as the protocol specifies, then offer it when reconnecting to
-the appropriate node. A successful replay fills only the available bounded
-gap.
+The server only sends the events its reference lists, but the list grows.
+If you don't recognize an event's name, ignore it rather than treating it as
+an error, and keep processing the events that follow. Before the first
+supported release, an event's data may change in place, together with the
+reference, just as the HTTP contract may.
+
+## Resume after a disconnect
+
+Replay is limited, and each node keeps its own. Keep the most recent
+sequence or replay cursor exactly as the protocol describes, and offer it
+when you reconnect to the right node. A successful replay only fills the
+part of the gap the node still has.
 
 If the server reports that replay is unavailable or incomplete:
 
 1. Stop applying incremental events for the affected scope.
-2. Refetch the authoritative resource or collection over HTTP.
-3. Replace local derived state with that snapshot.
-4. Establish a fresh realtime position and resume incremental processing.
+2. Fetch the resource or collection again over HTTP.
+3. Replace the local state you built from events with that snapshot.
+4. Start from a fresh realtime position and carry on with incremental
+   events.
 
-Never treat a missing event as evidence that durable state did not change.
-Cluster fan-out and WebSocket publication occur after the durable commit and
-are best-effort effects.
+A missing event never proves that stored state didn't change. Proctor
+publishes to the cluster and to WebSockets after the change is committed, on
+a best-effort basis.
 
-## Protocol Errors
+## Protocol errors
 
-After upgrade, protocol errors use stable typed WebSocket envelopes rather
-than RFC 9457 Problem Details. Handle an unknown event or error type
-defensively, preserve ordering within its documented scope, and reconnect with
-bounded backoff. Avoid tight reconnect loops after authentication or
-authorization rejection. A failed DPoP handshake can return a replacement
-`DPoP-Nonce`; reconnect with a newly signed proof rather than replaying the
-upgrade request byte-for-byte.
+After the upgrade, protocol errors arrive as stable, typed WebSocket
+messages, not as RFC 9457 Problem Details.
+
+- Handle an unknown event or error type defensively.
+- Keep events in order within the scope the protocol documents.
+- Reconnect with backoff that has a limit.
+- Don't reconnect in a tight loop after Proctor rejects authentication or
+  authorization.
+
+A failed DPoP handshake can return a new `DPoP-Nonce`. Reconnect with a newly
+signed proof, rather than sending the same upgrade request again byte for
+byte.

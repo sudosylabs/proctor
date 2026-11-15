@@ -1,22 +1,23 @@
 ---
-title: Uploads and Protected Content
-description: Build strict multipart uploads and handle protected Proctor content safely.
+title: Uploads and protected content
+description: Send strict multipart uploads and handle protected Proctor content safely.
 audience: api-consumer
 maturity: preview
 sidebar_position: 6
 ---
 
-# Uploads and Protected Content
+# Uploads and protected content
 
-Upload endpoints use a deliberately narrow multipart contract. Send exactly
-two parts in this order:
+Upload endpoints accept a deliberately narrow form of multipart request.
+Send exactly two parts, in this order:
 
-1. `metadata`: a non-file part containing strict JSON, no larger than 32 KiB.
+1. `metadata`: a part that isn't a file, holding strict JSON of no more than
+   32 KiB.
 2. `content`: the file bytes.
 
-The metadata declares the byte size and SHA-256 digest expected for the content
-part. A mismatch fails the request; the server does not silently accept or
-rewrite it.
+The metadata declares the size in bytes and the SHA-256 digest that the
+content part should have. If they don't match, the request fails. Proctor
+never quietly accepts or rewrites the content.
 
 ```bash
 curl --request PUT \
@@ -26,30 +27,33 @@ curl --request PUT \
   --form 'content=@./profile.png;type=image/png'
 ```
 
-Do not add extra form fields, reverse the parts, or send metadata as a file.
-The public hard request boundary is 100 MiB plus 64 KiB of multipart overhead;
-individual routes and installation policy may impose a lower content limit.
-Inspect the endpoint schema before allocating or streaming a file.
+Don't add extra form fields, swap the order of the parts, or send the
+metadata as a file. The hard limit for a public request is 100 MiB plus
+64 KiB of multipart overhead. Individual routes and installation policy may
+set a lower limit for the content. Check the endpoint schema before you
+allocate memory for a file or start streaming it.
 
-## Digest and Size
+## Digest and size
 
-Compute SHA-256 over the exact bytes sent in `content`, before multipart
-encoding. Declare the exact byte length, not a character count or encoded form
-length. If your client transparently transforms a file, compute metadata after
-that transformation.
+Compute the SHA-256 digest over the exact bytes you send in `content`,
+before multipart encoding. Declare the exact length in bytes, not a count of
+characters or the length after encoding. If your client changes the file
+behind the scenes, compute the metadata after that change.
 
-## Protected Downloads
+## Protected downloads
 
-Protected content is returned inline with a strong `ETag` and
-`X-Content-Type-Options: nosniff`. Authorization is reevaluated for the current
-principal and resource; knowing a content URL is not permission to retrieve it.
+Proctor returns protected content inline, with a strong `ETag` and
+`X-Content-Type-Options: nosniff`. It checks authorization again for the
+current principal and resource. Knowing a content URL doesn't give you
+permission to fetch it.
 
-- Honor the response `Content-Type`; do not infer a type from a filename.
+- Follow the response `Content-Type`. Don't guess the type from a filename.
 - Keep protected bytes out of shared HTTP caches and analytics payloads.
-- Use `If-None-Match` with the strong ETag when the endpoint's cache policy
-  permits revalidation.
-- Do not rely on `Content-Disposition` to force a download; protected content
-  is served inline by contract.
+- Send `If-None-Match` with the strong ETag when the endpoint's cache policy
+  allows revalidation.
+- Don't rely on `Content-Disposition` to force a download. The contract
+  serves protected content inline.
 
-Candidate workspace and exam resource downloads also require the attempt
-credential headers described in [Authentication and Assurance](./authentication.mdx).
+Downloads of a candidate's workspace and of exam resources also need the
+attempt credential headers described in
+[Authentication and assurance](./authentication.mdx).

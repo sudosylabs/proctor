@@ -16,6 +16,7 @@ export const brandCopies = [
   ['favicons/light/proctor-favicon-light-32.png', 'webapp/src/assets/brand/proctor-favicon-light-32.png'],
   ['favicons/dark/proctor-favicon-dark-32.png', 'webapp/src/assets/brand/proctor-favicon-dark-32.png'],
   ['app-icons/apple/png/proctor-apple-touch-icon-180.png', 'webapp/src/assets/brand/proctor-apple-touch-icon-180.png'],
+  ['lockups/horizontal/svg/proctor-docs-lockup-horizontal-flat-light.svg', 'docs/site/static/img/brand/proctor-docs-lockup-light.svg'],
   ['lockups/horizontal/svg/proctor-docs-lockup-horizontal-flat-white.svg', 'docs/site/static/img/brand/proctor-docs-lockup-white.svg'],
   ['favicons/light/proctor-favicon-light.svg', 'docs/site/static/img/brand/proctor-favicon-light.svg'],
   ['favicons/dark/proctor-favicon-dark.svg', 'docs/site/static/img/brand/proctor-favicon-dark.svg'],

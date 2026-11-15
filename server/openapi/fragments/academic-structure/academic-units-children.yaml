@@ -18,7 +18,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Lists only the immediate active child Units beneath one authorized Academic Unit. The operation does not recursively flatten the hierarchy or broaden the caller's visibility to concealed descendants.
+        Lists the active Academic Units directly under one Academic Unit, ordered by name and then by identifier. The caller needs academic_unit.view on the parent. Units further down are not included. List each child's children to walk the tree.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -60,7 +60,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Creates one active Unit directly beneath the Academic Unit named by the route. Route scope is authoritative, and current permission is checked against the parent before the hierarchical relationship commits.
+        Creates an Academic Unit directly under the Academic Unit in the path. The parent always comes from the path. The caller needs academic_unit.manage on the parent, checked before the Unit is created.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:

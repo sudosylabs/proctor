@@ -1,67 +1,87 @@
 ---
-title: Evaluate Pre-production Readiness
-description: Verify the implemented runtime in a representative environment while keeping unsupported production claims explicitly blocked.
+title: Check pre-production readiness
+description: Try the current runtime in an environment like your production one, and keep the production claims Proctor doesn't support out of your plans.
 audience: operator
 maturity: preview
 ---
 
-# Evaluate Pre-production Readiness
+# Check pre-production readiness
 
 Use this checklist to evaluate the current preview runtime. Passing it proves
-only the environment and scenarios you exercised; it is not Proctor production
-certification.
+only the environment and scenarios you actually tried. It doesn't certify
+Proctor for production.
 
-## Artifact and Identity
+## Package and build identity
 
-- archive checksum or image digest recorded;
-- binary `version --json`, `BUILD_METADATA`, and hosted build identity match;
-- configuration example copied rather than used as a secret-bearing source;
-- service runs non-root with an immutable application payload.
+- You recorded the archive checksum or the image digest.
+- The binary's `version --json`, `BUILD_METADATA` and the hosted build identity
+  match.
+- You copied the configuration example, rather than using it as a source that
+  holds secrets.
+- The service runs as a non-root user, from application files it can't change.
 
-## Configuration and Secrets
+## Configuration and secrets
 
-- `config validate` passes for every node's effective inputs;
-- config/environment/secret files have least-readable ownership and modes;
-- bootstrap, MFA, mail, Memberlist, TLS, metrics, and dependency
-  secrets are independent and rotation ownership is recorded;
-- every restart-required change is documented in the deployment procedure.
+- `config validate` passes for the effective inputs of every node.
+- Configuration, environment and secret files have ownership and modes that
+  let as few accounts as possible read them.
+- The bootstrap, MFA, mail, Memberlist, TLS, metrics and dependency secrets are
+  all independent, and you have recorded who rotates each one.
+- Your deployment procedure lists every change that needs a restart.
 
-## Traffic and Topology
+## Traffic and topology
 
-- canonical HTTPS `PublicURL`, proxy, WebSocket, upload, redirect, and DPoP
-  target behavior are tested end to end;
-- application, metrics, and cluster listeners are exposed only to intended
-  networks;
-- load balancer uses readiness and respects drain;
-- shared PostgreSQL/Redis/VFS and unique stable Node IDs are verified when
-  using Memberlist;
-- the tracked single-container Compose example is not presented as HA.
+- You have tested the HTTPS `PublicURL`, proxy, WebSocket, uploads, redirects
+  and the DPoP target from end to end.
+- The application, metrics and cluster listeners are reachable only from the
+  networks that should reach them.
+- The load balancer uses readiness and respects the drain.
+- When you use Memberlist, you have checked the shared PostgreSQL, Redis and
+  VFS, and that every node has a unique stable Node ID.
+- Nobody presents the single-container Compose example from the repository as
+  highly available.
 
-## Lifecycle and Failure Exercises
+## Lifecycle and failure drills
 
-- cold startup, repeated startup failure, SIGTERM drain, and restart succeed;
-- serving-lease or metrics failure removes readiness and stops serving;
-- one application node can be removed and restored in the tested topology;
-- delayed/lost peer notification recovers through refetch and durable state;
-- queued Job and mail retry/cancellation behavior is understood;
-- administrator recovery is rehearsed only in an isolated non-production copy.
+- Cold startup, repeated startup failure, the SIGTERM drain and restart all
+  work.
+- A serving-lease or metrics failure removes readiness and stops serving.
+- You can remove one application node and bring it back in the topology you
+  tested.
+- A delayed or lost peer notification recovers by fetching again and from
+  durable state.
+- You understand how queued Jobs and mail are retried and canceled.
+- You rehearse administrator recovery only on an isolated copy that isn't
+  production.
 
-## Data and Diagnostics
+## Data and diagnostics
 
-- PostgreSQL and VFS are recognized as the recovery set; Redis is disposable;
-- logs, metrics, traces, screenshots, and tickets are reviewed for credential,
-  student, Exam, Workspace, mail, and private Review leakage;
-- metrics access is loopback or protected by both TLS and bearer token;
-- synthetic data is used in operational screenshots and reports.
+- You treat PostgreSQL and VFS as the set to recover, and Redis as disposable.
+- You have reviewed logs, metrics, traces, screenshots and tickets for leaks of
+  credentials, student, Exam, Workspace and mail data, and private Review
+  details.
+- Metrics are reachable only on loopback, or protected by both TLS and a bearer
+  token.
+- Operational screenshots and reports use synthetic data.
 
-## Claims That Remain Blocked
+## Claims Proctor doesn't make yet
 
-Do not publish or rely on a Proctor-supported production matrix, sizing table,
-backup/restore guarantee, RPO/RTO, stable upgrade/mixed-version/rollback policy,
-alert thresholds, support bundle, release support window, or security-update SLA.
-Each requires explicit decisions and
-evidence in a declared environment.
+Don't publish or rely on any of these as if Proctor supports them:
 
-The tracked systemd and container definitions are hardened implementation
-examples. They are not certifications for a particular operating system,
-orchestrator, cloud, database service, object store, mail relay, or identity provider.
+- a supported production matrix;
+- a sizing table;
+- a backup and restore guarantee;
+- an RPO or RTO;
+- a stable policy for upgrades, mixed versions or rollback;
+- alert thresholds;
+- a support bundle;
+- a release support window;
+- a security-update SLA.
+
+Each of these needs explicit decisions, and evidence from a declared
+environment.
+
+The systemd and container definitions in the repository are hardened examples
+of how to run the implementation. They don't certify any particular operating
+system, orchestrator, cloud, database service, object store, mail relay or
+identity provider.

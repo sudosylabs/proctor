@@ -38,12 +38,14 @@ test("a clean report passes and malformed input is rejected", () => {
     /without a GitHub advisory URL/);
 });
 
-test("both npm audits fail on high, and the docs audit accepts only the documented advisories", async () => {
+test("both npm audits fail on high, and the docs audit accepts only documented advisories", async () => {
   const workflow = await readFile(new URL("../../.github/workflows/security.yml", import.meta.url), "utf8");
   const readme = await readFile(new URL("../../docs/site/README.md", import.meta.url), "utf8");
   assert.match(workflow, /npm audit --omit=dev --audit-level=high/);
   assert.doesNotMatch(workflow, /--audit-level=(?:info|low|moderate|critical|none)/);
-  const accepted = workflow.match(/node \.\.\/\.\.\/build\/ci\/npm-audit\.mjs [^\n]+/)?.[0].match(/GHSA(?:-[a-z0-9]{4}){3}/g);
-  assert.deepEqual(accepted?.sort(), ["GHSA-qxc2-j82w-r537", "GHSA-vfj7-8cjw-p6xm"]);
+  const command = workflow.match(/node \.\.\/\.\.\/build\/ci\/npm-audit\.mjs [^\n]+/)?.[0];
+  assert.ok(command, "the docs audit step runs build/ci/npm-audit.mjs");
+  const accepted = command.match(/GHSA(?:-[a-z0-9]{4}){3}/g) ?? [];
+  assert.deepEqual(accepted, []);
   for (const id of accepted) assert.match(readme, new RegExp(id));
 });

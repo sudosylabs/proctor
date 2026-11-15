@@ -10,7 +10,7 @@ components:
     MailFailureCode:
       type: string
       description: >-
-        Stable safe failure category of a Mail Delivery: why it failed, was suppressed or canceled, or was retried by an operator. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+        Public reason a mail delivery failed, was suppressed or canceled, or was retried by an operator. The server only uses the values listed here, but later releases may add more. Clients choose their own labels and should show an unknown value in a generic way.
       enum:
         - mail.delivery.canceled
         - mail.delivery.expired
@@ -27,8 +27,7 @@ components:
     MailTemplateKey:
       type: string
       description: >-
-        Stable key of one server-owned transactional mail template. The catalogue is closed and may grow; clients
-        own the labels and should present an unknown key generically.
+        Key of one of the server's built-in transactional mail templates. The server only uses the values listed here, but later releases may add more. Clients choose their own labels and should show an unknown value in a generic way.
       enum:
         - academic.academic_unit_assigned
         - academic.academic_unit_assignment_ended
@@ -77,7 +76,8 @@ components:
         - identity.verify_email
         - system.mail_test
     MailDeliveryState:
-      description: Durable lifecycle state of one mail delivery occurrence.
+      description: >-
+        Where one mail delivery is in its lifecycle. `accepted` means the SMTP server took the message. It doesn't prove the message reached the inbox.
       type: string
       enum:
         - queued
@@ -87,7 +87,8 @@ components:
         - suppressed
         - canceled
     MailDeliveryResponse:
-      description: Safe durable mail delivery metadata with the recipient masked and content omitted.
+      description: >-
+        Status and routing details of one mail delivery. The recipient address is masked and the message content is never included.
       type: object
       additionalProperties: false
       required:
@@ -106,31 +107,37 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: ID of the delivery.
         occurrence_id:
           $ref: '#/components/schemas/ID'
+          description: >-
+            ID of the notification this delivery belongs to. When one notification goes to several recipients, each of their deliveries carries the same value.
         target_user_id:
           $ref: '#/components/schemas/ID'
           description: >-
-            User the mail is addressed to. Exactly one of target_user_id and target_invitation_id is present; an
-            Invitation mail goes to an invitee who has no account yet.
+            User the mail is addressed to. Each delivery has exactly one of `target_user_id` and
+            `target_invitation_id`. Invitation mail uses the second, because the invitee has no account yet.
         target_invitation_id:
           $ref: '#/components/schemas/ID'
-          description: Invitation the mail is addressed to, present instead of target_user_id for Invitation mail.
+          description: Invitation the mail is addressed to. Present instead of `target_user_id` for Invitation mail.
         template_key:
           type: string
           anyOf:
             - $ref: '#/components/schemas/MailTemplateKey'
             - type: string
+          description: Template the message was written from.
         template_digest:
           type: string
           pattern: ^[0-9a-f]{64}$
-          description: SHA-256 digest of the exact rendered template revision, encoded as lowercase hexadecimal.
+          description: SHA-256 hash, in lowercase hexadecimal, of the exact template version used to write the message.
         masked_recipient:
           type: string
           maxLength: 254
-          description: Redacted recipient address suitable for bounded administrative display.
+          description: >-
+            Recipient address with the local part hidden, such as `a***@example.edu`. Safe to show to administrators.
         state:
           $ref: '#/components/schemas/MailDeliveryState'
+          description: Where the delivery is in its lifecycle.
         created_at:
           type: string
           format: date-time
@@ -138,43 +145,46 @@ components:
         updated_at:
           type: string
           format: date-time
-          description: Time of the latest durable state change.
+          description: Time of the delivery's most recent change.
         message_date:
           type: string
           format: date-time
-          description: Time represented by the message Date header.
+          description: Time written in the message's `Date` header.
         deadline:
           type: string
           format: date-time
-          description: Time after which the message is no longer relevant for delivery.
+          description: Time after which the message is no longer worth sending. A delivery still unsent by then expires.
         message_id:
           type: string
           maxLength: 900
-          description: Safe retained Message-ID for delivery correlation, not a credential.
+          description: >-
+            The message's `Message-ID` header, for matching the delivery with mail server logs. It isn't a secret.
         attempt_count:
           type: integer
           minimum: 0
           maximum: 8
+          description: Number of send attempts made so far.
         accepted_at:
           type: string
           format: date-time
-          description: Time when SMTP accepted the message.
+          description: Time the SMTP server accepted the message. Omitted until then.
         failed_at:
           type: string
           format: date-time
-          description: Time when the delivery became terminally failed.
+          description: Time the delivery failed for good. Omitted unless it failed.
         public_failure_code:
           type: string
           anyOf:
             - $ref: '#/components/schemas/MailFailureCode'
             - type: string
-          description: Stable safe failure category; raw SMTP or infrastructure errors are never exposed.
+          description: >-
+            Public reason the delivery failed, was suppressed or canceled, or was retried by an operator. Raw SMTP and infrastructure errors are never returned. Omitted when there is no such reason.
         recipient_display_name:
           type: string
           maxLength: 256
           description: >-
-            Current name of the User target_user_id identifies, present when the mail delivery is read (listed or
-            fetched by ID) and only while the caller can see that User now through the User directory's
-            visibility (`user.view` or `class.members.view`); `mail.view` alone does not reveal it. Absent for
-            Invitation mail, for a User the caller cannot see, and on the responses of sending a test, canceling,
-            or retrying. It is the account's display name, not the address the mail went to, which stays masked.
+            Current display name of the User in `target_user_id`. Present only when the delivery is listed or
+            fetched by ID, and only while the caller can see that User in the User directory (`user.view` or
+            `class.members.view`). `mail.view` alone doesn't reveal it. Omitted for Invitation mail, for a User the
+            caller can't see, and in the responses to sending a test, canceling or retrying. It is the account's
+            name, not the address the mail went to, which stays masked.

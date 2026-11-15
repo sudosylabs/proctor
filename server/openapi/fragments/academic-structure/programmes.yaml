@@ -15,7 +15,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Returns one active Programme when its owning Academic Unit is visible to the current principal. The bounded projection does not expand Levels or Classes.
+        Returns one active Programme when the caller can see the Academic Unit that owns it. The response does not include its Programme Levels or Classes.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -57,7 +57,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Applies a partial canonical or presentation update while preserving the Programme's Academic Unit owner. Dependent Levels retain stable ownership and are not mutated by this command.
+        Changes some of a Programme's name and display fields. The Academic Unit that owns it stays the same. Its Programme Levels keep belonging to it and are not changed.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -110,7 +110,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Archives one Programme only after proving it has no active Programme Levels. The operation retains history and never cascades into Level, Class, enrollment, or authorization changes.
+        Archives one Programme, but only when it has no active Programme Levels. Its history is kept. Archiving never changes Programme Levels, Classes, enrollments or permissions.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -162,7 +162,7 @@ paths:
 components:
   requestBodies:
     UpdateProgramme:
-      description: Partial Programme presentation update; its Academic Unit owner cannot change.
+      description: The Programme fields to change. The Academic Unit that owns it can't change.
       required: true
       content:
         application/json:
@@ -178,6 +178,15 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ProgrammeResponse'
+          example:
+            revision: 2
+            id: g63dcrphk8idgyjgzbrpajosz6
+            created_at: '2026-08-02T09:30:00Z'
+            updated_at: '2026-08-09T15:00:00Z'
+            academic_unit_id: 14j8umgczgrdp95w77zuxmxfu9
+            name: bsc-computer-science
+            display_name: Bachelor of Science in Computer Science
+            description: Undergraduate computer science programme.
     ProgrammeArchived:
       description: Programme archived
       headers:
@@ -185,7 +194,9 @@ components:
           $ref: '#/components/headers/NoStore'
   schemas:
     UpdateProgrammeRequest:
-      description: Mutable Programme fields; omitted or null metadata values remain unchanged; expected_revision, when present, must be a positive integer.
+      description: >-
+        The Programme fields you can change. Fields you leave out or send as null stay as they are. When you send
+        `expected_revision`, it must be a positive integer.
       type: object
       additionalProperties: false
       properties:
@@ -193,19 +204,28 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Optional positive revision from the last resource response. A stale value returns the resource conflict error without applying the edit. Omission preserves v1 compatibility; null is invalid.
+          description: >-
+            Optional. The `revision` from your last read. If the Programme has changed since, the request fails
+            with `programme.conflict` and nothing changes. Without it, the change applies whatever the current
+            revision. Null is rejected.
         name:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged. An empty string is present and subject to validation.
+          description: >-
+            New machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. It must be
+            unique among the Academic Unit's active Programmes. Omitted or null leaves it unchanged. An empty string is rejected.
         display_name:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged. An empty string is present and subject to validation.
+          description: >-
+            New name shown to people, 1 to 128 characters. Omitted or null leaves it unchanged. An empty string is
+            rejected.
         description:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged. An empty string is present and subject to validation.
+          description: >-
+            New longer text, up to 1,024 characters. Omitted or null leaves it unchanged. An empty string clears
+            it.

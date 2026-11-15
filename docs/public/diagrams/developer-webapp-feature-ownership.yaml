@@ -1,0 +1,35 @@
+blocks:
+  - row:
+      - group: Written by people
+        columns: 2
+        items:
+          - card: Hosted routes
+            text: Server route catalog
+          - card: HTTP contract
+            text: OpenAPI YAML
+          - card: Messages
+            text: Server i18n catalog
+          - card: Visual system
+            text: Tokens and design rules
+      - group: Generated for the browser
+        columns: 2
+        via: generates
+        items:
+          - card: "`routes.ts`"
+            text: Every hosted path
+          - card: "`schema.ts`"
+            text: Request and response types
+          - card: "`messages.ts`"
+            text: Message IDs
+          - card: Tokens and icons
+            text: Named visual roles
+  - row:
+      - card: Route root
+        text: Cleans the URL input, then picks the page
+      - card: Feature
+        text: Calls the API, maps each outcome to a state and picks the copy
+        accent: true
+      - card: Shared components
+        text: Shell, fields, feedback and tasks with reviewed contracts
+    from:
+      - {from: 2, to: 2, label: used by}

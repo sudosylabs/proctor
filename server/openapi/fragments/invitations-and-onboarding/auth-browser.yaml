@@ -11,7 +11,11 @@ paths:
       operationId: startBrowserInvitation
       summary: Exchange an Invitation claim for a purpose-bound browser acceptance transaction
       description: >-
-        Consumes no Invitation yet; it exchanges the one-time claim for a short-lived, same-origin browser handle bound to that exact Invitation purpose. The response omits the original claim and prevents it from entering subsequent browser URLs or logs. It names the address the Invitation was sent to, which acceptance uses and the browser cannot change, and, for a student Class Invitation only, the Class display name; Academic Unit and Role names are never returned.
+        Exchanges a one-time Invitation claim for a short-lived browser handle tied to that Invitation and its
+        purpose, without using up the Invitation yet. The response does not repeat the claim, so the claim never has
+        to appear in later browser URLs or logs. It names the address the Invitation was sent to, which acceptance
+        uses and the browser cannot change. For a student Class Invitation only, it also gives the Class display
+        name; Academic Unit and Role names are never returned.
       tags:
         - Invitations and onboarding
       x-proctor-auth: public
@@ -39,7 +43,9 @@ paths:
       operationId: acceptBrowserInvitation
       summary: Accept an account-creating Invitation through its browser transaction
       description: >-
-        Creates the invited account and applies the immutable Invitation package through one purpose-bound browser handle. Password and profile inputs are validated, the handle is consumed atomically, and claim or credential material is never returned.
+        Creates the invited account and applies what the Invitation grants, using one browser handle. The password
+        and profile are validated, the handle is used up in the same step, and no claim or credential is ever
+        returned.
       tags:
         - Invitations and onboarding
       x-proctor-auth: public
@@ -74,7 +80,8 @@ paths:
       operationId: acceptBrowserInvitationWithSession
       summary: Accept a scoped-role Invitation with the current browser Session
       description: >-
-        Applies an eligible scoped Role Invitation to the exact already-authenticated User bound to the browser handle. It never relinks the package to another User and consumes the transaction atomically.
+        Applies a Role Invitation to the signed-in User the browser handle is tied to. It never moves the Invitation
+        to another User, and the handle is used up in the same step.
       tags:
         - Invitations and onboarding
       x-proctor-auth: session_required
@@ -117,40 +124,42 @@ paths:
 components:
   requestBodies:
     BrowserInvitationStart:
-      description: One-time Invitation claim to exchange for a short-lived purpose-bound browser handle.
+      description: The one-time claim from the Invitation email.
       required: true
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/BrowserInvitationStartRequest'
           example:
-            claim: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+            claim: zWT3q-SolqxwrFkEGxq_MAfGRuTbm0sJ07Vn-A5PnaQ
     BrowserInvitationAcceptance:
-      description: Browser handle plus account credentials and optional profile fields for account-creating acceptance.
+      description: The browser handle, the password and username for the new account, and optional profile fields.
       required: true
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/BrowserInvitationAcceptanceRequest'
           example:
-            handle: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+            handle: 5IVl2oSEMui7aeP8X36BUp0eryeDfmJGYT17o96b474
             password: Correct-Horse-Battery-Staple-2048!
             username: student-one
             display_name: Student One
             locale: en
             timezone: Europe/Paris
     BrowserInvitationSessionAcceptance:
-      description: Purpose-bound browser handle to accept for the exact current Session User.
+      description: The browser handle to accept as the signed-in User.
       required: true
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/BrowserInvitationSessionAcceptanceRequest'
           example:
-            handle: CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+            handle: x2Z6JZoJCDoS8BISd9ydKhVMOLsvze00_XSCdWqIN84
   responses:
     BrowserInvitationStarted:
-      description: Short-lived browser Invitation transaction created; its second proof is set only as an HttpOnly cookie
+      description: >-
+        A short-lived browser acceptance has started. Its second proof is set only as an HttpOnly cookie, and
+        accepting needs both the handle and that cookie.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -158,8 +167,15 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/BrowserInvitationStartResponse'
+          example:
+            handle: 5IVl2oSEMui7aeP8X36BUp0eryeDfmJGYT17o96b474
+            purpose: student_class
+            requirement: account
+            expires_at: '2026-08-20T10:45:00Z'
+            email: student.one@example.edu
+            class_display_name: Year 10 Chemistry A
     BrowserInvitationAccepted:
-      description: Invitation accepted or its exact durable outcome replayed
+      description: The Invitation was accepted, or the outcome of an earlier identical acceptance was returned.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -167,6 +183,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/InvitationAcceptanceResponse'
+          example:
+            user_id: jxcnnw8a7u4ux5azhhmby97xh7
+            invitation_id: ccrzmhoygspnzijnponpyw4zmu
+            affiliation_id: rga9cuen6wdafkq3c6mpn3kas8
+            class_member_id: o59e9myujxww7zfc3kx4rn6wk5
+            replayed: false
   schemas:
     BrowserInvitationStartRequest:
       type: object
@@ -177,6 +199,7 @@ components:
         claim:
           type: string
           pattern: ^[A-Za-z0-9_-]{43}$
+          description: The one-time claim from the Invitation email.
     BrowserInvitationAcceptanceRequest:
       type: object
       additionalProperties: false
@@ -188,20 +211,35 @@ components:
         handle:
           type: string
           pattern: ^[A-Za-z0-9_-]{43}$
+          description: The `handle` returned when the browser acceptance started.
         password:
           type: string
+          description: The password for the new account. It must meet the password policy.
         username:
           type: string
+          maxLength: 64
+          description: The username for the new account.
         display_name:
           type: string
+          maxLength: 128
+          description: The new account's display name.
         first_name:
           type: string
+          maxLength: 64
+          description: The account holder's first name.
         last_name:
           type: string
+          maxLength: 64
+          description: The account holder's last name.
         locale:
           type: string
+          maxLength: 35
+          description: The account's language, as a language tag such as `en`.
         timezone:
           type: string
+          maxLength: 64
+          description: >-
+            The account's time zone, such as `Europe/Paris`. Omit it to use the time zone the inviter suggested.
     BrowserInvitationSessionAcceptanceRequest:
       type: object
       additionalProperties: false
@@ -211,6 +249,7 @@ components:
         handle:
           type: string
           pattern: ^[A-Za-z0-9_-]{43}$
+          description: The `handle` returned when the browser acceptance started.
     BrowserInvitationStartResponse:
       type: object
       additionalProperties: false
@@ -224,6 +263,9 @@ components:
         handle:
           type: string
           pattern: ^[A-Za-z0-9_-]{43}$
+          description: >-
+            The browser handle to send when accepting. It works only together with the proof cookie set on this
+            response, and only until `expires_at`.
         purpose:
           type: string
           enum:
@@ -231,18 +273,27 @@ components:
             - teacher_academic_unit
             - academic_unit_role
             - institution_role
+          description: The purpose of the Invitation being accepted.
         requirement:
           type: string
           enum:
             - account
             - session
+          description: >-
+            What accepting needs. `account` means the browser creates a new account, for student Class and teacher
+            Academic Unit Invitations. `session` means the invitee must be signed in, for Role Invitations.
         expires_at:
           type: string
           format: date-time
+          description: When the browser handle stops working.
         email:
           type: string
           format: email
-          description: Normalized address the Invitation was sent to. Account-creating acceptance gives the new account this address; no acceptance operation takes an address from the browser.
+          description: >-
+            The normalized address the Invitation was sent to. Account-creating acceptance gives the new account this
+            address; no acceptance operation takes an address from the browser.
         class_display_name:
           type: string
-          description: Display name of the Class a student Class Invitation enrolls the invitee in. Omitted for every other purpose.
+          description: >-
+            Display name of the Class a student Class Invitation enrolls the invitee in. Omitted for every other
+            purpose.

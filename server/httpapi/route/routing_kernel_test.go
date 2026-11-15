@@ -390,7 +390,7 @@ func TestRoutingKernelAppliesTypedHeadersProblemsAndNamedProtocolOperations(t *t
 				Errors: []string{"health.not_ready"},
 				Handle: func(request Request) (Result, error) {
 					return ProblemResult(Problem{
-						Type: "https://proctor.sudosylabs.com/problems/health.not_ready", Title: "Service unavailable",
+						Type: "about:blank", Title: "Service unavailable",
 						Status: http.StatusServiceUnavailable, Detail: "The service is not ready to accept requests.",
 						Instance: request.HTTP.URL.Path, Code: "health.not_ready", RequestID: RequestID(request.Context),
 					}), nil

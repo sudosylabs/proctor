@@ -13,7 +13,7 @@ paths:
       operationId: resetUserMFA
       summary: Reset another User's local MFA after institution verification
       description: >-
-        Requires the protected system-administrator action user.mfa.reset and strong recent interactive authentication. Administrative self-reset is prohibited. The institution verifies identity outside Proctor and records a bounded attestation reference. Old local MFA material, all target Sessions and PATs, and unfinished access grants are invalidated atomically with mandatory audit and security-notice reservation. Fresh primary proof then creates a restricted Web Session; activation of a new local authenticator restores ordinary access. Existing provider identity and primary credentials remain unchanged. The request fails when local enrollment is unavailable or when it would remove the last usable administrator authentication path. A repeated explicit reset creates a new recovery generation.
+        Resets another User's two-step verification after the Institution has checked who they are. The caller needs the protected system-administrator action user.mfa.reset and an interactive Session that has passed two-step verification and has signed in or reauthenticated recently. An administrator can't reset their own two-step verification. The Institution checks the person's identity outside Proctor and records a short reference to that check here. In one step, Proctor cancels the User's old authenticator and recovery codes, revokes all their Sessions and Personal Access Tokens, and cancels unfinished access grants. The audit record and the security notice email are saved in the same step, and the reset fails if either can't be. When the User next signs in with their password or provider, they get a limited Web Session. Normal access returns once they set up a new authenticator app. Their linked provider identities and password stay as they were. The request fails when authenticator setup is not available, or when it would leave no administrator able to sign in. Each new reset starts a new recovery round.
       tags: [Authentication]
       x-proctor-auth: strong_recent_session_required
       x-proctor-idempotency: none
@@ -70,7 +70,7 @@ paths:
 components:
   requestBodies:
     ResetUserMFA:
-      description: The administrator's identity-verification attestation, bounded reset reason, and reference to the Institution's verification record for the target User.
+      description: The administrator's confirmation that the User's identity was checked, a short reason for the reset and a reference to the Institution's record of that check.
       required: true
       content:
         application/json:
@@ -88,14 +88,14 @@ components:
         identity_verified:
           type: boolean
           const: true
-          description: Attests that institution identity verification has been completed.
+          description: Confirms that the Institution has finished checking the User's identity. Must be true.
         reason:
           type: string
           minLength: 1
           maxLength: 512
-          description: A bounded administrative reason. Do not include passwords, secrets, recovery codes or identity documents.
+          description: Why the reset is needed, in up to 512 characters. Don't include passwords, secrets, recovery codes or identity documents.
         verification_reference:
           type: string
           minLength: 1
           maxLength: 128
-          description: Reference to the institution's verification record; do not include the verification evidence itself.
+          description: A reference to the Institution's record of the identity check, such as a case number. Don't include the evidence itself.

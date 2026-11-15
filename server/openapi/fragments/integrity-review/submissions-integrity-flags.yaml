@@ -15,9 +15,8 @@ paths:
       tags:
         - Integrity review
       description: >-
-        Lists bounded manager-authorized Flag summaries created by retained integrity policy processing for
-        one sealed Submission. Summaries report lifecycle and counts without returning evidence payloads,
-        private decisions, candidate-facing accusations, or grades.
+        Lists the integrity Flags raised for one sealed Submission. Each summary gives the Flag's state and
+        evidence counts. It does not include the evidence itself, private decisions, accusations or grades.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -53,8 +52,10 @@ paths:
           in: query
           schema:
             type: string
-            description: Opaque Flag identity cursor.
-          description: Opaque continuation emitted by the preceding Flag page.
+            description: A page cursor.
+          description: >-
+            The `next_cursor` from the previous page. Pass it back unchanged and do not parse or build it
+            yourself.
       responses:
         '200':
           $ref: '#/components/responses/ExamIntegrityFlagListOK'
@@ -80,9 +81,8 @@ paths:
       tags:
         - Integrity review
       description: >-
-        Lists only the bounded evidence retained for the exact authorized Flag and Submission. Evidence
-        records are non-academic integrity signals, not guilt findings, and remain private to authorized
-        review workflows.
+        Lists the evidence kept for one Flag of the Submission. Evidence records are integrity signals,
+        not findings of guilt and not academic judgments. Only authorized reviewers can see them.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -118,8 +118,10 @@ paths:
           in: query
           schema:
             type: string
-            description: Opaque Evidence identity cursor.
-          description: Opaque continuation emitted by the preceding Evidence page.
+            description: A page cursor.
+          description: >-
+            The `next_cursor` from the previous page. Pass it back unchanged and do not parse or build it
+            yourself.
       responses:
         '200':
           $ref: '#/components/responses/ExamIntegrityEvidenceListOK'
@@ -138,7 +140,7 @@ paths:
 components:
   responses:
     ExamIntegrityFlagListOK:
-      description: Bounded manager-authorized integrity Flag summaries
+      description: One page of Flag summaries.
       headers:
         Cache-Control:
           schema:
@@ -148,8 +150,32 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamIntegrityFlagListResponse'
+          example:
+            items:
+              - id: xpq79ar61ncrjiouey6d9tgp91
+                exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
+                generation: 2
+                policy_kind: focus_loss
+                state: open
+                created_at: '2026-12-14T09:22:47Z'
+                evidence_count: 2
+                evidence_overflow_count: 0
+                unresolved_missing_count: 0
+              - id: 17778cuf6b17rhtapprfjozet8
+                exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
+                generation: 2
+                policy_kind: browser_navigation
+                state: open
+                created_at: '2026-12-14T09:40:12Z'
+                evidence_count: 1
+                evidence_overflow_count: 0
+                unresolved_missing_count: 0
+                browser:
+                  participation_id: o87yi4tenx8kodmcuup1hmtsbo
+                  policy_revision_id: ih1r84kij94nrwis97rft6rduh
+                  rule_id: block-search
     ExamIntegrityEvidenceListOK:
-      description: Bounded manager-authorized purpose-specific evidence
+      description: One page of evidence for the Flag.
       headers:
         Cache-Control:
           schema:
@@ -159,9 +185,39 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamIntegrityEvidenceListResponse'
+          example:
+            items:
+              - id: zq993bky9h3uj4saw8iywi38cy
+                exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
+                participation_id: o87yi4tenx8kodmcuup1hmtsbo
+                integrity_flag_id: xpq79ar61ncrjiouey6d9tgp91
+                generation: 2
+                policy_kind: focus_loss
+                signal_id: yu7twx6xxb4udbc94foq5zq9ni
+                sequence: 1
+                duration_milliseconds: 8400
+                source: window_blur
+                missing_before: 0
+                observed_at: '2026-12-14T09:22:46Z'
+                recorded_at: '2026-12-14T09:22:47Z'
+              - id: 1ozr3arz5tdtgd1jxt5wcz5b3p
+                exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
+                participation_id: o87yi4tenx8kodmcuup1hmtsbo
+                integrity_flag_id: xpq79ar61ncrjiouey6d9tgp91
+                generation: 2
+                policy_kind: focus_loss
+                signal_id: 4z3cy1rp9cucq7qo1g9mq94dj3
+                sequence: 2
+                duration_milliseconds: 2150
+                source: document_hidden
+                missing_before: 0
+                observed_at: '2026-12-14T10:05:19Z'
+                recorded_at: '2026-12-14T10:05:19Z'
   schemas:
     ExamIntegrityFlagResponse:
-      description: Manager-safe lifecycle and bounded evidence counts for one integrity Flag.
+      description: >-
+        One integrity Flag with its state and evidence counts. A Flag marks something for review; it is
+        not a finding of guilt.
       type: object
       additionalProperties: false
       required:
@@ -177,12 +233,15 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The Flag's ID.
         exam_attempt_id:
           $ref: '#/components/schemas/ID'
+          description: The Attempt the Flag was raised on.
         generation:
           type: integer
           format: int64
           minimum: 1
+          description: The Participation generation the Flag was raised in.
         policy_kind:
           type: string
           description: >-
@@ -196,27 +255,31 @@ components:
           enum:
             - open
             - closed
+          description: Whether the Flag is open or closed.
         created_at:
           type: string
           format: date-time
+          description: When the Flag was raised.
         evidence_count:
           type: integer
           minimum: 0
           maximum: 100
+          description: The number of evidence records kept for the Flag, at most 100.
         evidence_overflow_count:
           type: integer
           format: int64
           minimum: 0
-          description: Evidence records observed beyond the bounded retained inventory.
+          description: The number of further evidence records observed but not kept because the limit was reached.
         unresolved_missing_count:
           type: integer
           format: int64
           minimum: 0
-          description: Missing monotonic signals not reconciled before collection ended.
+          description: The number of missing signals in the sequence that were still missing when collection ended.
         browser:
           $ref: '#/components/schemas/BrowserIntegrityGroup'
+          description: The browser rule the Flag groups. Present only for `browser_navigation` Flags.
     ExamIntegrityFlagListResponse:
-      description: One bounded page of manager-authorized integrity Flag summaries.
+      description: One page of integrity Flag summaries for a Submission.
       type: object
       additionalProperties: false
       required:
@@ -225,13 +288,19 @@ components:
         items:
           type: array
           maxItems: 200
+          description: The Flags on this page, at most `limit`.
           items:
             $ref: '#/components/schemas/ExamIntegrityFlagResponse'
         next_cursor:
           type: string
-          description: Opaque continuation for the next page, omitted after the final page.
+          description: >-
+            Pass this as `cursor` to get the next page. Omitted on the last page. Don't parse or
+            build it yourself.
     ExamIntegrityEvidenceResponse:
-      description: Purpose-specific retained signal evidence for one integrity Flag.
+      description: >-
+        One evidence record kept for an integrity Flag. `signal_id` and `source` appear only for
+        `focus_loss`, and `browser` only for `browser_navigation`. The numeric signal members are 0 for
+        kinds they do not apply to.
       type: object
       additionalProperties: false
       required:
@@ -249,36 +318,43 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The evidence record's ID.
         exam_attempt_id:
           $ref: '#/components/schemas/ID'
+          description: The Attempt the evidence belongs to.
         participation_id:
           $ref: '#/components/schemas/ID'
+          description: The Participation the evidence came from.
         integrity_flag_id:
           $ref: '#/components/schemas/ID'
+          description: The Flag the evidence supports.
         generation:
           type: integer
           format: int64
           minimum: 1
+          description: The generation of that Participation.
         policy_kind:
           type: string
           description: >-
-            The policy that raised the flag: a core policy (connection_loss,
-            focus_loss or browser_navigation) or a capability's
-            "<plugin-id>.<kind>". Treat an unknown kind as opaque.
+            The policy the evidence belongs to, the same as its Flag's: a core
+            policy (connection_loss, focus_loss or browser_navigation) or a
+            capability's "<plugin-id>.<kind>". Treat an unknown kind as opaque.
           maxLength: 97
           pattern: ^(connection_loss|focus_loss|browser_navigation|[a-z][a-z0-9.-]{0,63}\.[a-z][a-z0-9_]{0,31})$
         signal_id:
           $ref: '#/components/schemas/ID'
+          description: The focus-loss signal this record was made from. Only for `focus_loss`.
         sequence:
           type: integer
           format: int64
           minimum: 0
+          description: The focus-loss signal's sequence number. 0 for other kinds.
         duration_milliseconds:
           type: integer
           format: int64
           minimum: 0
           maximum: 86400000
-          description: Observed policy-signal duration in milliseconds.
+          description: How long focus was lost, in milliseconds. 0 for other kinds.
         source:
           type: string
           enum:
@@ -286,21 +362,27 @@ components:
             - document_hidden
             - fullscreen_exited
             - window_blur
+          description: What the client reported as the cause of the focus loss. Only for `focus_loss`, when reported.
         missing_before:
           type: integer
           format: int64
           minimum: 0
-          description: Missing monotonic signal count observed before this evidence record.
+          description: How many earlier sequence numbers were missing when this signal arrived. 0 for other kinds.
         observed_at:
           type: string
           format: date-time
+          description: >-
+            When the server received the signal. For `connection_loss`, when the connection's lease
+            expired.
         recorded_at:
           type: string
           format: date-time
+          description: When the server stored the evidence record.
         browser:
           $ref: '#/components/schemas/BrowserIntegrityEvidence'
+          description: The blocked navigation. Only for `browser_navigation`.
     ExamIntegrityEvidenceListResponse:
-      description: One bounded page of purpose-specific integrity evidence.
+      description: One page of evidence records for a Flag.
       type: object
       additionalProperties: false
       required:
@@ -309,8 +391,11 @@ components:
         items:
           type: array
           maxItems: 200
+          description: The evidence records on this page, at most `limit`.
           items:
             $ref: '#/components/schemas/ExamIntegrityEvidenceResponse'
         next_cursor:
           type: string
-          description: Opaque continuation for the next page, omitted after the final page.
+          description: >-
+            Pass this as `cursor` to get the next page. Omitted on the last page. Don't parse or
+            build it yourself.

@@ -408,6 +408,7 @@ func httpAPISettings(
 		BuildInfo:               buildInfo,
 		Plugins:                 pluginDirectory{host: capabilities.plugins},
 		PublicURL:               snapshot.Server.PublicURL,
+		DocumentationURL:        snapshot.Server.DocumentationURL,
 		MaxBodyBytes:            snapshot.Server.MaxBodyBytes,
 		ReadTimeout:             snapshot.Server.ReadTimeout.Duration,
 		WriteTimeout:            snapshot.Server.WriteTimeout.Duration,

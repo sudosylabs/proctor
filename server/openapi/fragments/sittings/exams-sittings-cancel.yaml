@@ -16,7 +16,9 @@ paths:
       tags:
         - Sittings
       description: >-
-        Cancels one still-scheduled Sitting under an exact revision fence and retains a bounded private manager rationale in durable audit state. Cancellation never fabricates Attempts or Submissions and cannot rewrite a Sitting that has opened.
+        Cancels a Sitting that has not opened yet. Send the Sitting's current revision; the request fails
+        if it changed since you read it. Your private reason is kept for audit. Canceling never creates
+        Attempts or Submissions, and a Sitting that has already opened can't be canceled.
       x-proctor-auth: principal_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -72,7 +74,7 @@ paths:
 components:
   requestBodies:
     CancelExamSitting:
-      description: Exact current Sitting revision and private rationale for pre-open cancellation.
+      description: The Sitting's current revision and a private reason for canceling it.
       required: true
       content:
         application/json:
@@ -83,7 +85,7 @@ components:
             reason: The examination timetable was withdrawn.
   schemas:
     CancelExamSittingRequest:
-      description: Revision-fenced pre-open cancellation command.
+      description: The Sitting revision you last read and a private reason for canceling.
       type: object
       additionalProperties: false
       required:
@@ -94,10 +96,13 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Exact current Sitting revision used as an optimistic concurrency fence.
+          description: >-
+            The Sitting's current revision, as last read. The request fails with a conflict if the Sitting
+            has changed since.
         reason:
           type: string
           minLength: 1
           maxLength: 1000
           description: >-
-            Private manager rationale. Must be valid UTF-8, already trimmed, 1-1000 Unicode scalar values, and at most 4000 UTF-8 bytes.
+            Why you are canceling. It is kept for audit and is never shown to candidates. Send valid UTF-8
+            with no leading or trailing whitespace: 1 to 1000 characters and at most 4000 bytes.

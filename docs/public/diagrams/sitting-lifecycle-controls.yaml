@@ -1,0 +1,38 @@
+blocks:
+  - row:
+      - card: Scheduled
+        text: Its Revision, Class and window can still change.
+      - card: Open
+        text: Candidates take the Exam.
+        via: Start
+      - card: Closing
+        text: Seals every unfinished Attempt. You can watch it happen.
+        accent: true
+        via: Close
+      - card: Closed
+        text: Every Attempt that was created is finished.
+        via: Done
+  - row:
+      - card: Canceled
+        text: Never opens. No Attempts are created.
+        dashed: true
+      - card: Paused
+        text: Resume returns it to Open. The deadline doesn’t move.
+    links: none
+    from:
+      - {from: 1, to: 1, label: Cancel, dashed: true}
+      - {from: 2, to: 2, label: Pause}
+  - row:
+      - card: Sitting controls
+        text: Change the whole Sitting.
+        items:
+          - Pause, resume, extend
+          - Cancel, close early
+      - card: Attempt controls
+        text: Change one Attempt and keep their own record.
+        items:
+          - Kick
+          - Suspension
+          - Re-allow
+          - Manager end
+    links: none

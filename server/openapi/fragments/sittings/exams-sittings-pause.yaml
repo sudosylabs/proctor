@@ -16,7 +16,10 @@ paths:
       tags:
         - Sittings
       description: >-
-        Pauses one open Sitting under its exact revision fence and records the private manager rationale. The durable state change precedes best-effort realtime notification, so clients must confirm current state over HTTP after disruption.
+        Pauses an open Sitting and records your private reason. Send the Sitting's current revision; the
+        request fails if it changed since you read it. The pause is saved before realtime notifications go
+        out, and those notifications can be missed. After a disconnect, read the Sitting over HTTP to
+        confirm its state.
       x-proctor-auth: principal_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -73,7 +76,7 @@ paths:
 components:
   requestBodies:
     PauseExamSitting:
-      description: Exact current Sitting revision and private rationale for pausing delivery.
+      description: The Sitting's current revision and a private reason for pausing.
       required: true
       content:
         application/json:

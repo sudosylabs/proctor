@@ -12,12 +12,13 @@ paths:
       tags:
         - Data retention
       description: >-
-        Returns the current Session User’s own durable grace notices, including cancellation and delivery
-        status. The notice grants no examination record access. Reading it neither acknowledges delivery nor
-        changes cleanup. Candidate notices are optional; responsible Exam Managers and institution operators
-        receive them by default. Pending dates are invalidated when grace is canceled. Each notice names the
-        Exam title and the Sitting's scheduled times so the recipient can tell which records it covers; no
-        candidate, answer, or evidence content is included.
+        Returns the signed-in User's own notices about records entering deletion grace, with each notice's
+        cancellation and delivery status. A notice grants no access to examination records. Reading it doesn't
+        acknowledge delivery or change cleanup. Responsible Exam Managers and Institution operators get
+        notices by default. Candidates get them only when the policy turns candidate notices on. When grace is
+        canceled, the dates a notice gave no longer apply. Each notice names the Exam title and the Sitting's
+        scheduled times so the recipient can tell which records it covers. It includes no candidate, answer or
+        evidence content.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -41,7 +42,7 @@ paths:
       parameters:
         - in: query
           name: limit
-          description: Maximum number of the current User's retention notices to return in this page.
+          description: Maximum number of notices to return.
           schema:
             type: integer
             minimum: 1
@@ -49,7 +50,7 @@ paths:
             default: 100
         - in: query
           name: cursor
-          description: Opaque cursor from this endpoint.
+          description: The `next_cursor` value from the previous page. Treat it as an unreadable token and pass it unchanged.
           schema:
             type: string
             maxLength: 256
@@ -71,7 +72,7 @@ paths:
 components:
   responses:
     RetentionNoticesOK:
-      description: The current User’s notice page.
+      description: One page of the caller's retention notices.
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
@@ -80,9 +81,22 @@ components:
           schema:
             $ref: '#/components/schemas/RetentionNoticesResponse'
           example:
-            items: []
+            items:
+              - retirement_id: 5ebqfbnezgahdbx9oy7rfr6oro
+                exam_id: xpq79ar61ncrjiouey6d9tgp91
+                exam_sitting_id: 17778cuf6b17rhtapprfjozet8
+                submission_id: zq993bky9h3uj4saw8iywi38cy
+                exam_title: Introduction to Databases final
+                sitting_start_at: '2026-05-12T09:00:00Z'
+                sitting_end_at: '2026-05-12T11:00:00Z'
+                category: work
+                state: grace
+                created_at: '2026-08-01T00:00:00Z'
+                retire_after: '2026-08-08T00:00:00Z'
+                delivery_state: accepted
   schemas:
     RetentionNoticeResponse:
+      description: A notice that one category of a Submission's records has entered deletion grace.
       type: object
       additionalProperties: false
       required:
@@ -101,19 +115,24 @@ components:
       properties:
         retirement_id:
           $ref: '#/components/schemas/ID'
+          description: >-
+            ID of the scheduled Record Retirement the notice is about. Pages are ordered by this ID.
         exam_id:
           $ref: '#/components/schemas/ID'
+          description: Exam the records belong to.
         exam_sitting_id:
           $ref: '#/components/schemas/ID'
+          description: Sitting the records belong to.
         submission_id:
           $ref: '#/components/schemas/ID'
+          description: Submission whose records are due to be retired.
         exam_title:
           type: string
           minLength: 1
           maxLength: 200
           description: >-
-            Immutable title of the Exam Revision the Sitting delivered. Shown to every recipient of the notice,
-            even one who no longer has access to the Exam.
+            Title of the Exam revision the Sitting delivered. It can't change. Every recipient of the notice sees
+            it, even one who no longer has access to the Exam.
         sitting_start_at:
           type: string
           format: date-time
@@ -129,21 +148,31 @@ components:
             - integrity
             - browser_activity
             - security_operational
+          description: >-
+            Which records are due to be retired: the work, the integrity evidence, the Browser Activity or the
+            security operational data of the Submission.
         state:
           type: string
           enum:
             - grace
             - canceled
             - retired
+          description: >-
+            `grace` means retirement is scheduled and waits for `retire_after`. `canceled` means the scheduled
+            retirement was called off. `retired` means the records were removed.
         created_at:
           type: string
           format: date-time
+          description: Time the notice was created.
         retire_after:
           type: string
           format: date-time
+          description: >-
+            Earliest time the records may be retired. It no longer applies once the retirement is canceled.
         canceled_at:
           type: string
           format: date-time
+          description: Time the notice was canceled. Omitted unless it was canceled.
         delivery_state:
           type: string
           enum:
@@ -154,10 +183,15 @@ components:
             - suppressed
             - failed
             - canceled
+          description: >-
+            Status of the notice email. `pending` means the email hasn't been queued yet. The other values are
+            mail delivery states. Delivery doesn't mean the recipient read it.
         delivery_error_code:
           type: string
           maxLength: 128
+          description: Public reason the notice email failed or was suppressed. Omitted when there is none.
     RetentionNoticesResponse:
+      description: One page of retention notices.
       type: object
       additionalProperties: false
       required:
@@ -168,6 +202,9 @@ components:
           maxItems: 200
           items:
             $ref: '#/components/schemas/RetentionNoticeResponse'
+          description: Notices on this page, in retirement ID order.
         next_cursor:
           type: string
           maxLength: 256
+          description: >-
+            Token to pass as `cursor` to read the next page. Treat it as unreadable. Omitted on the last page.

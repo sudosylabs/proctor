@@ -188,7 +188,7 @@ func TestWriteErrorMapsTransportNeutralApplicationErrors(t *testing.T) {
 			var problem route.Problem
 			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 			require.Equal(t, tt.wantCode, problem.Code, "code")
-			require.Equal(t, "https://proctor.sudosylabs.com/problems/"+tt.wantCode, problem.Type)
+			require.Equal(t, "about:blank", problem.Type)
 			require.Equal(t, tt.wantStatus, problem.Status, "problem status")
 			require.Equal(t, "/academic-units/unit123", problem.Instance)
 			if tt.wantField != "" {
@@ -242,7 +242,7 @@ func TestApplicationErrorMappingCoversEveryRegisteredCode(t *testing.T) {
 		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 		require.Equal(t, code, problem.Code, "code %q problem = %#v", code, problem)
 		require.Equal(t, status, problem.Status, "code %q problem = %#v", code, problem)
-		require.Equal(t, "https://proctor.sudosylabs.com/problems/"+code, problem.Type, "code %q type", code)
+		require.Equal(t, "about:blank", problem.Type, "code %q type", code)
 	}
 }
 

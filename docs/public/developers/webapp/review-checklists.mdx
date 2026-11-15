@@ -1,147 +1,166 @@
 ---
-title: Review a Hosted Webapp Change
-description: Review a Proctor browser feature at each changed boundary before running generated-adapter, interaction, accessibility, browser, and production-build gates.
+title: Review a hosted webapp change
+description: Review a Proctor browser feature at each part it changes, then run the generated-adapter, interaction, accessibility, browser and production build checks.
 audience: developer
 maturity: preview
 slug: /developers/webapp/review-checklists/
 ---
 
-# Review a Hosted Webapp Change
+# Review a hosted webapp change
 
-Use the sections touched by the change, then finish with the cross-boundary
-review. A checklist supports judgment; it does not replace the current feature,
-component, API, and design-system contracts.
+Go through the sections your change touches, then finish with the review
+that spans every part. A checklist helps your judgment. It doesn't replace
+the current feature, component, API and design-system contracts.
 
-## Route and Bootstrap
+## Route and bootstrap
 
-- Is route membership authored in the server catalog and generated into the
+- Is the route listed in the server catalog by hand, and generated into the
   browser adapter?
-- Does the exhaustive descriptor declare one title, fragment policy,
-  purpose-specific bootstrap projection, and page renderer?
-- Are unknown paths rejected instead of captured by a generic fallback?
-- Is the complete fragment removed before parsing or React rendering?
-- Does the parser reject empty, extra, wrong-purpose, and malformed evidence?
-- Are query values independently bounded where a flow genuinely needs them?
-- Do root tests prove the route catalog and bootstrap union remain exhaustive?
+- Does the exhaustive descriptor declare one title, one fragment policy, one
+  bootstrap projection made for the route's purpose, and one page renderer?
+- Are unknown paths rejected, rather than caught by a general fallback?
+- Is the whole fragment removed before parsing and before React renders?
+- Does the parser reject empty, extra, malformed evidence, and evidence meant
+  for another purpose?
+- Where a flow really needs query values, does each one have its own length
+  limit?
+- Do the root tests prove that the route catalog and the bootstrap union are
+  still exhaustive?
 
-## Root and Page Composition
+## Root and page structure
 
-- Does the root own only document, bootstrap, dispatch, and fatal recovery?
-- Is the route page thin and explicit about its real dependencies?
-- Does the page contain one main landmark, one `h1`, and a working skip link?
-- Does the selected shell contract apply to this page family and state?
-- Is effective theme resolution shared by document and shell?
-- Has a feature avoided inventing a global store, service locator, router, or
-  authenticated shell?
+- Does the root own only the document, the bootstrap, dispatch and fatal
+  recovery?
+- Is the route page thin, and clear about the real dependencies it uses?
+- Does the page have one main landmark, one `h1` and a working skip link?
+- Does the chosen shell's contract fit this family of pages and this state?
+- Do the document and the shell share one resolved theme?
+- Has the feature avoided inventing a global store, service locator, router
+  or signed-in shell?
 
-## Feature Contract and State
+## Feature contract and state
 
-- Does the feature contract name real states, credentials, transport,
-  recovery, focus, privacy, and deliberate exclusions?
-- Are semantically distinct loading, empty, invalid, denied, expired,
-  unavailable, pending, complete, and fatal states kept distinct where they
-  change behavior?
-- Does ordinary recoverable failure preserve values and safe retry?
-- Are credentials and sensitive values cleared on the exact terminal outcomes
-  that make them obsolete?
-- Does state remain local to the owning feature rather than leaking into a
-  visual component or the root?
+- Does the feature contract name the real states, credentials, transport,
+  recovery, focus, privacy, and what it deliberately leaves out?
+- Where they change behavior, are loading, empty, invalid, denied, expired,
+  unavailable, pending, complete and fatal kept as separate states?
+- Does an ordinary recoverable failure keep the user's values and allow a
+  safe retry?
+- Are credentials and sensitive values cleared on exactly the final outcomes
+  that make them useless?
+- Does the state stay inside the feature that owns it, rather than leaking
+  into a visual component or the root?
 
 ## API and Problem Details
 
 - Does the action call the generated same-origin client?
-- Does the request include only the public contract fields?
-- Is the declared success status accepted exactly?
-- Are public error codes mapped into a bounded feature result?
-- Do unknown status, malformed body, unknown code, and network rejection fail
-  safely?
-- Is arbitrary server `title`, `detail`, identifier, or stack absent from
-  presentation?
-- Do cookie credentials, CSRF headers, and canonical-origin checks retain
-  their shared behavior?
-- Were OpenAPI and generated TypeScript changed at their sources rather than
-  patched?
+- Does the request include only the fields in the public contract?
+- Is exactly the declared success status accepted?
+- Are public error codes mapped into a small, fixed feature result?
+- Do an unknown status, a malformed body, an unknown code and a network
+  rejection all fail safely?
+- Is every arbitrary server `title`, `detail`, identifier or stack kept out
+  of the presentation?
+- Do cookie credentials, CSRF headers and the check against the
+  installation's own origin keep their shared behavior?
+- Were OpenAPI and the generated TypeScript changed at their sources, rather
+  than patched?
 
-## Localization and Content
+## Localization and content
 
 - Is every visible message in the server-owned `webapp.*` catalog?
-- Is the generated catalog current?
-- Are sentences complete messages rather than concatenated fragments?
-- Are placeholders bounded, safe, and escaped by ordinary React rendering?
-- Do dates, times, numbers, durations, and lists use `Intl` where applicable?
-- Does copy use canonical Proctor vocabulary and active, specific action names?
+- Is the generated catalog up to date?
+- Are sentences whole messages, not joined-up pieces?
+- Are placeholders limited and safe, and escaped by ordinary React
+  rendering?
+- Do dates, times, numbers, durations and lists use `Intl` where they apply?
+- Does the text use Proctor's own vocabulary, with active, specific action
+  names?
 - Do errors explain the next safe step without exposing protected state?
-- Does long copy wrap without clipping, overlay, or horizontal page overflow?
+- Does long text wrap without clipping, overlapping, or making the page
+  scroll sideways?
 
-## Forms and Focus
+## Forms and focus
 
-- Does every control have a visible label, stable name, correct type, input
-  mode, autocomplete value, and native required semantics where applicable?
-- Are descriptions and field errors adjacent and programmatically associated?
-- Does failed submission focus the first invalid control?
-- Does an asynchronous field rejection return focus only when orientation
-  benefits?
-- Does general form feedback remain beside the action without stealing focus?
-- Is there one announcement path for each asynchronous state change?
-- Are paste, zoom, native control affordances, and keyboard activation intact?
-- Are pending labels explicit and duplicate activation prevented?
-- Are secret confirmation values kept out of transport when they are only
-  browser validation?
+- Where they apply, does every control have a visible label, a stable name,
+  the right type, input mode and autocomplete value, and native required
+  semantics?
+- Are descriptions and field errors next to their field, and linked to it in
+  code?
+- Does a failed submission focus the first invalid control?
+- Does a field rejection from the server return focus only when that helps
+  the user find their place?
+- Does general form feedback stay beside the action without taking focus?
+- Is there one way of announcing each asynchronous change of state?
+- Do paste, zoom, native control features and keyboard activation all still
+  work?
+- Are pending labels explicit, and is a second activation blocked?
+- Are secret confirmation values kept out of requests when they only serve
+  validation in the browser?
 
-## Components and Visual System
+## Components and visual system
 
-- Does every reused component's contract match the needed behavior?
-- Was a new pattern kept local until a second consumer proved reuse?
-- If promoted, does the component have a narrow contract and focused tests?
-- Are styles colocated and built from semantic tokens?
+- Does the contract of every reused component match the behavior you need?
+- Was a new pattern kept local until a second consumer showed it was worth
+  sharing?
+- If it was promoted, does the component have a narrow contract and focused
+  tests?
+- Do styles live next to their code, and are they built from semantic
+  tokens?
 - Are literal colors, feature palettes, unreviewed shadows, arbitrary radii,
-  `transition: all`, removed outlines, and ad hoc z-index values absent?
-- Does state color represent real meaning and retain a text or structural cue?
-- Are product icons imported only through the owned adapter?
-- Are brand and provider marks kept outside the product-icon vocabulary?
+  `transition: all`, removed outlines and one-off z-index values all absent?
+- Does a state color stand for a real meaning, and is there also a text or
+  structural cue?
+- Are product icons imported only through the webapp's own adapter?
+- Are brand and provider marks kept out of the product icon set?
 
-## Responsive, Theme, and Motion
+## Responsive layout, themes and motion
 
-- Does the layout work at `390×844`, `768×1024`, and `1440×1024`?
-- Does 200% zoom preserve the task without page-level horizontal scrolling?
-- Do actions stack in meaningful document order when narrow?
-- Do short and long localized labels preserve control and content containment?
-- Do light, dark, and system preference use the same semantic roles?
-- Does reduced motion preserve complete state meaning and stop non-essential
-  repetition?
-- Do forced colors preserve focus, boundaries, state names, and actions?
-- Are focus rings visible and unclipped against every adjacent surface?
+- Does the layout work at `390×844`, `768×1024` and `1440×1024`?
+- At 200% zoom, can the user still do the task without the page scrolling
+  sideways?
+- On narrow screens, do actions stack in a sensible document order?
+- Do controls and content stay contained with both short and long localized
+  labels?
+- Do light, dark and system preference use the same semantic roles?
+- With reduced motion, is the full meaning of each state kept, and does
+  non-essential repetition stop?
+- In forced colors mode, do focus, boundaries, state names and actions
+  survive?
+- Are focus rings visible and uncut against every surface next to them?
 
-## Unit and Browser Evidence
+## Unit and browser evidence
 
-- Do unit tests cover pure parsing, exact response mapping, and component
-  semantics at their owning boundary?
-- Do browser fixtures contain only bounded synthetic data?
-- Do selectors prefer role, accessible name, label, stable ID, and contracted
-  diagnostic hooks in that order?
-- Are geometry assertions limited to meaningful stability, alignment,
-  containment, or overflow claims?
-- Do route scenarios prove history, request, state, recovery, focus,
-  announcement, navigation, and sensitive-data absence where applicable?
-- Does the suite run in pinned Chromium, Firefox, and WebKit?
-- Is platform-specific support claimed only when the actual platform was
-  reviewed?
+- Do unit tests cover pure parsing, exact response mapping and component
+  semantics, each in the part that owns it?
+- Do browser fixtures hold only small, made-up data?
+- Do selectors prefer, in this order, role, accessible name, label, stable
+  ID, and the diagnostic hooks a contract defines?
+- Do geometry assertions only check things that matter: stability,
+  alignment, containment or overflow?
+- Where they apply, do route scenarios prove history, the request, state,
+  recovery, focus, announcements, navigation, and that sensitive data is
+  absent?
+- Does the suite run in pinned Chromium, Firefox and WebKit?
+- Do you claim support for a platform only when someone reviewed that real
+  platform?
 
-## Cross-Boundary Review
+## Review across every part
 
-- Is there one authority for route membership, public HTTP shape, localization,
-  theme meaning, component behavior, and feature state?
-- Does each generated file identify and follow its human-owned source?
-- Could the feature still recover if the request fails, repeats, or returns an
+- Is there one source of truth each for which routes exist, the public HTTP
+  shape, localization, what themes mean, component behavior and feature
+  state?
+- Does each generated file name its hand-written source, and follow it?
+- Could the feature still recover if the request fails, repeats or returns an
   unknown response?
-- Can a credential, password, Invitation claim, private identifier, or
-  arbitrary server message enter the URL, DOM, storage, logs, screenshot, or
-  test failure?
-- Does the interface remain understandable without color, hover, motion, a
-  wide viewport, or a particular theme?
-- Do focused tests and the full webapp gate pass?
-- If public documentation or architecture changed, do the documentation and
-  architecture gates pass?
+- Could a credential, a password, an Invitation claim, a private identifier
+  or an arbitrary server message end up in the URL, the DOM, storage, logs, a
+  screenshot or a test failure?
+- Can people still understand the interface without color, hover, motion, a
+  wide screen or a particular theme?
+- Do the focused tests and the full webapp check pass?
+- If public documentation or the architecture changed, do the documentation
+  and architecture checks pass?
 
 Return to [developing the hosted webapp](../webapp-workflow.mdx) or the
-[password-reset vertical slice](./password-reset-slice.mdx).
+[password reset walkthrough](./password-reset-slice.mdx).

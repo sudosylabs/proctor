@@ -1,6 +1,6 @@
 ---
-title: Bootstrap an Installation
-description: Create the one Institution and first administrator for a new Proctor installation.
+title: Bootstrap an installation
+description: Create the single Institution and the first administrator for a new Proctor installation.
 audience: api-consumer
 maturity: preview
 sidebar_position: 1
@@ -8,22 +8,23 @@ sidebar_position: 1
 
 import Link from '@docusaurus/Link';
 
-# Bootstrap an Installation
+# Bootstrap an installation
 
-Bootstrap is a one-time installation transition. It creates the Institution,
-the first administrator account, and the authority needed for subsequent
-configuration.
+You bootstrap an installation once. The call creates the Institution, the
+first administrator account and the permissions needed to set up everything
+else.
 
-## 1. Check Bootstrap State
+## 1. Check whether the installation is bootstrapped
 
 Call <Link to="/api/reference/get-installation-status">Get installation bootstrap status</Link>
-without credentials. Continue only when the response says the installation is
-not bootstrapped.
+without credentials. Carry on only if the response says the installation is
+not bootstrapped yet.
 
-## 2. Submit the Bootstrap Secret Once
+## 2. Send the bootstrap secret once
 
-Obtain the bootstrap secret through the operator-controlled installation
-channel. Do not put it in a URL, shell history, source file, or support log.
+Get the bootstrap secret from the operator through the channel they control
+for the installation. Don't put it in a URL, shell history, source file or
+support log.
 
 ```bash
 curl --request POST \
@@ -47,43 +48,45 @@ curl --request POST \
   }'
 ```
 
-See <Link to="/api/reference/bootstrap-installation">Bootstrap installation</Link> for the
-current password, locale, and field constraints. The example values are
-synthetic.
+See <Link to="/api/reference/bootstrap-installation">Bootstrap installation</Link>
+for the current password, locale and field rules. The example values are made
+up.
 
-## 3. Establish a Normal Session
+## 3. Sign in normally
 
-After a successful bootstrap, discard the bootstrap secret from client memory
-and use <Link to="/api/reference/login">Login</Link> to establish the administrator's normal
-interactive Session. Bootstrap is not a reusable sign-in mechanism.
+Once bootstrap succeeds, remove the bootstrap secret from your client's memory.
+Then call <Link to="/api/reference/login">Login</Link> to start a normal
+interactive Session for the administrator. You can't use bootstrap to sign in
+again.
 
-## 4. Verify and Continue
+## 4. Check the result and carry on
 
-Read the bootstrap status again, then fetch <Link to="/api/reference/get-institution">the Institution</Link>
-with the new Session. Continue with the [Academic Structure recipe](./academic-structure.mdx)
-and configure admission policy through a preflight before replacing it.
+Read the bootstrap status again, then fetch
+<Link to="/api/reference/get-institution">the Institution</Link> with the new
+Session. Next, follow the [academic structure recipe](./academic-structure.mdx),
+and set up the admission policy by running a preflight before you replace it.
 
-If two bootstrap requests race, only the authoritative transition can succeed.
-Treat an already-bootstrapped response as a definitive state, not as a reason
-to retry with a different secret.
+If two bootstrap requests race, only one can succeed. A response saying the
+installation is already bootstrapped is final. Don't retry with a different
+secret.
 
-## 5. Complete First-administrator Safety
+## 5. Make the first administrator safe
 
-Bootstrap leaves the administrator email unverified because possession of a
-deployment secret does not prove mailbox control. Through ordinary account
-operations:
+Bootstrap leaves the administrator's email unverified, because holding a
+deployment secret doesn't prove someone controls the mailbox. Using the normal
+account calls:
 
-1. verify the mailbox;
-2. test transactional mail delivery;
-3. configure and enable an external provider at the deployment and Access
-   Policy boundaries;
-4. deliberately connect its immutable identity to the administrator;
-5. establish a second administrator with an independent usable method; and
-6. preflight any change that disables local login.
+1. Verify the mailbox.
+2. Test transactional mail delivery.
+3. Configure an external provider in the deployment and turn it on in the
+   Access Policy.
+4. Connect the provider's immutable identity to the administrator on purpose.
+5. Add a second administrator who has their own working sign-in method.
+6. Run a preflight before any change that turns off local login.
 
-The Access Policy and User-disablement transaction fence prevents removal of
-the last usable active-system-administrator path. Do not rely on that rejection
-as the only recovery plan. <Link to="/reference/command-line/">Host recovery</Link>
-is an offline operator procedure. Password recovery and the separately named
-MFA reset command never mint a Session; MFA reset requires fresh primary proof
-and explicit reenrollment before ordinary access returns.
+The Access Policy and the transaction that disables Users both refuse to remove
+the last way an active system administrator can sign in. Don't make that
+refusal your only recovery plan. <Link to="/reference/command-line/">Host recovery</Link>
+is an offline procedure for operators. Password recovery and the separate MFA
+reset command never create a Session. After an MFA reset, the person must give
+fresh primary proof and enroll again before normal access returns.

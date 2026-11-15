@@ -1,18 +1,18 @@
 ---
-title: Understand Repository Boundaries
-description: Choose the owning Proctor module or product surface without reversing dependency direction or duplicating contracts.
+title: Repository boundaries
+description: Find the module or part of the product that owns your change, keep dependencies pointing the right way, and avoid writing the same contract twice.
 audience: developer
 maturity: preview
 slug: /developers/repository-boundaries/
 ---
 
-# Understand Repository Boundaries
+# Repository boundaries
 
-Proctor is a monorepo, not a single Go module. The root workspace makes local
-development convenient, but each Go module retains its own dependency,
-compatibility, testing, and licensing boundary.
+Proctor is a monorepo, but it is not one Go module. The root workspace makes
+local development easier. Each Go module still keeps its own dependencies,
+compatibility promises, tests and license.
 
-## The Four Go Modules
+## The four Go modules
 
 | Module | Owns | Must not own |
 | --- | --- | --- |
@@ -21,47 +21,52 @@ compatibility, testing, and licensing boundary.
 | `packages/vfs` | Portable streaming file operations and local, memory, and S3-compatible backends | Proctor metadata, authorization, retention, Exam or User meaning |
 | `server` | Domain, application policy, persistence contracts and adapters, transports, runtime composition | Browser presentation or portable behavior without a Proctor-independent contract |
 
-The root `go.work` connects these modules for repository development. It is not
-a production dependency and cannot hide a module that fails independently.
+The root `go.work` file joins these modules together for work inside the
+repository. Production builds don't depend on it, and it can't hide a module
+that fails when built on its own.
 
-## Product Surfaces Outside the Go Workspace
+## Other parts of the product
 
-| Surface | Responsibility |
+| Directory | What it holds |
 | --- | --- |
-| `webapp` | The server-hosted React application and its browser contracts |
-| `docs/public` and `docs/api` | Task-oriented public guidance and authored API guidance |
-| `docs/site` | Docusaurus rendering, generated adapters, search, and presentation |
-| `build` and the root Makefile | Product lifecycle, local infrastructure, checks, packaging, and release inputs |
+| `webapp` | The React application the server hosts, and its browser contracts |
+| `docs/public` and `docs/api` | Task-based public guides and hand-written API guides |
+| `docs/site` | Docusaurus rendering, generated adapters, search and presentation |
+| `build` and the root Makefile | Product lifecycle, local infrastructure, checks, packaging and release inputs |
 | `deploy` | Tracked deployment support files and examples |
 
-These surfaces may be released with the server product, but they do not become
-additional Go modules or alternate composition roots.
+These parts can ship with the server, but they never become extra Go modules
+or another place where the server is assembled.
 
-## Decide Where a Change Belongs
+## Decide where a change belongs
 
 Ask these questions in order:
 
-1. **Is the behavior meaningful without Proctor?** A portable cache, mail, or
-   filesystem guarantee may belong in a reusable module. Institution, access,
-   examination, audit, and delivery policy remain in the server.
-2. **Who consumes the behavior?** Put a narrow interface beside the consumer.
-   Do not create a provider-shaped abstraction and ask every caller to depend
-   on it.
-3. **Is the responsibility stable?** File size, symmetry, or a hypothetical
-   future backend does not justify a package.
-4. **Where is concrete infrastructure selected?** Only the module-root
-   `server.New` composition path selects production adapters.
-5. **Which contract changes?** Update the exact component contract, public
-   contract, tests, or guide in the same slice.
+1. **Does the behavior make sense without Proctor?** A portable guarantee about
+   caching, mail or files may belong in a reusable module. Rules about
+   Institutions, access, examinations, audit and delivery stay in the server.
+2. **Who uses the behavior?** Put a narrow interface next to the code that uses
+   it. Don't design an abstraction around a provider and make every caller
+   depend on it.
+3. **Is the responsibility stable?** File size, symmetry or a backend you might
+   add one day are not reasons for a new package.
+4. **Where is the real infrastructure chosen?** Only the `server.New`
+   composition path at the module root picks production adapters.
+5. **Which contract changes?** Update that component contract, public
+   contract, test or guide in the same slice.
 
-## The Server Dependency Direction
+## Which way server dependencies point
 
-Inside `server`, domain models own local invariants. Application services own
-use-case policy, current authorization, transaction intent, audit, and effect
-timing. Persistence implements bounded Store contracts. HTTP and WebSocket are
-outer adapters that translate to and from application capabilities.
+Inside `server`, each layer has one job:
 
-Infrastructure points inward:
+- Domain models own the rules that a single model can check on its own.
+- Application services own use-case policy, current authorization, what a
+  transaction should do, audit, and when side effects happen.
+- Persistence implements the bounded Store contracts.
+- HTTP and WebSocket are outer adapters. They translate requests into
+  application calls and results back into responses.
+
+Infrastructure depends inward:
 
 ```text
 HTTP / WebSocket / Jobs
@@ -73,11 +78,12 @@ domain models + Store contracts
 SQL / Redis / VFS / SMTP / cluster adapters
 ```
 
-The arrows are dependency and policy direction, not request chronology.
-Application services never receive a platform service locator or root Store
-accessor, and transport code never reaches SQL directly.
+The arrows show which code depends on which, and where policy lives. They
+don't show the order in which a request runs. Application services never get a
+platform service locator or a root Store accessor. Transport code never calls
+SQL directly.
 
-## Stable Server Landmarks
+## Where things live in the server
 
 | Location | Use it for |
 | --- | --- |
@@ -90,30 +96,32 @@ accessor, and transport code never reaches SQL directly.
 | `server/platform` | Infrastructure lifecycle and health, never application service location |
 | module-root `server` | Concrete composition, readiness, serving, and reverse shutdown |
 
-Packages should be named for one responsibility. Avoid `util`, `common`,
-`shared`, `base`, `core`, `services`, or `repositories` as catch-all homes.
+Name each package after one responsibility. Don't use `util`, `common`,
+`shared`, `base`, `core`, `services` or `repositories` as a place to put
+everything else.
 
-## Prove the Boundary
+## Check the boundaries
 
-Run the import-policy gate whenever a server package or documentation of its
-boundaries changes:
+Run the import policy check whenever you change a server package, or the
+documentation that describes its boundaries:
 
 ```sh
 make -C server architecture
 ```
 
-Run every Go module without workspace assistance before changing a reusable
-module contract or its server consumption:
+Before you change a reusable module's contract, or how the server uses it, run
+every Go module without the workspace:
 
 ```sh
 make independent-modules
 ```
 
-The first command rejects forbidden production imports. The second runs test,
-race, vet, and build checks with `GOWORK=off` across all four modules.
+The first command rejects production imports that aren't allowed. The second
+runs test, race, vet and build checks with `GOWORK=off` across all four
+modules.
 
 ## Next
 
 - Make a [server change](./server-workflow.mdx).
 - Work on a [reusable module](./reusable-modules.mdx).
-- Review the complete [verification ladder](./testing.mdx).
+- Read the full [testing ladder](./testing.mdx).

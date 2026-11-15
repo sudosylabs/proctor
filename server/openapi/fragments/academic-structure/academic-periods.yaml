@@ -13,7 +13,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Lists Academic Periods visible through the caller's current Institution or Academic Unit authority, with stable owner-aware filtering. Periods describe effective academic time windows and do not themselves grant access to Classes or students.
+        Lists the Academic Periods the caller can see through permissions on the Institution or on Academic Units, ordered by start time, then name, then identifier. An Academic Period is a span of academic time, such as a year or semester. Seeing one gives no access to its Classes or students.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -38,7 +38,7 @@ paths:
         - name: q
           in: query
           required: false
-          description: Literal case-insensitive substring matched against name and display name.
+          description: Text to find in the Academic Period name or display name, matched literally and ignoring case.
           schema:
             type: string
         - $ref: '#/components/parameters/PageLimit'
@@ -64,7 +64,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Creates one named Academic Period under the exact Institution or Academic Unit owner after terminal scope authorization. The inclusive start and exclusive end are RFC 3339 instants, and an optional Idempotency-Key makes uncertain retries safe.
+        Creates an Academic Period owned by the Institution or by one Academic Unit. The caller needs permission on that owner itself. `start_at` is included in the Period and `end_at` is not. Both are RFC 3339 times. Send an Idempotency-Key so a retry after an unclear failure can't create a second Period.
       x-proctor-auth: principal_required
       x-proctor-idempotency: optional
       x-proctor-error-codes:
@@ -123,7 +123,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Returns one Academic Period only when its durable owner is visible to the current principal. The response reports its owner and time bounds without implying access to every Class that references it.
+        Returns one Academic Period when the caller can see its owner. The response gives its owner and start and end times. It does not give access to the Classes that run in it.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -165,7 +165,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Applies a partial presentation or time-window update while preserving the Period's original owner. The authoritative transition rejects bounds that would invalidate dependent academic structure or conflict with current durable state.
+        Changes some of an Academic Period's display fields or its start and end times. Its owner stays the same. Proctor rejects new times that would break the Classes and memberships that depend on the Period or that conflict with its current saved state.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -218,7 +218,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Archives one Academic Period only after proving that no active Class or enrollment still depends on it. History is retained, and the operation never cascades into Class deletion, membership termination, or student progression.
+        Archives one Academic Period, but only when no active Class or enrollment still depends on it. Its history is kept. Archiving never deletes Classes, ends memberships or moves students on.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -278,7 +278,7 @@ components:
       description: The Academic Period identifier.
   requestBodies:
     CreateAcademicPeriod:
-      description: Exact owner, canonical presentation, and RFC 3339 bounds for a new Academic Period.
+      description: The owner, machine name, display text and RFC 3339 start and end times for a new Academic Period.
       required: true
       content:
         application/json:
@@ -292,7 +292,7 @@ components:
             start_at: '2026-08-01T00:00:00Z'
             end_at: '2027-07-31T23:59:59Z'
     UpdateAcademicPeriod:
-      description: Partial Academic Period presentation or bounds update; ownership cannot change.
+      description: The Academic Period display fields or times to change. Its owner can't change.
       required: true
       content:
         application/json:
@@ -308,12 +308,36 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/AcademicPeriodResponse'
+          example:
+            revision: 2
+            id: sjebyge5cpbop1xwo4eds74ejb
+            created_at: '2026-07-15T09:00:00Z'
+            updated_at: '2026-07-28T10:30:00Z'
+            owner_type: institution
+            owner_id: wj3drgzdpnf54rxf5d8qd3dqne
+            name: 2026-2027
+            display_name: Academic Year 2026–2027
+            description: Academic year 2026 to 2027.
+            start_at: '2026-08-01T00:00:00Z'
+            end_at: '2027-09-01T00:00:00Z'
     AcademicPeriodCreated:
       description: Academic Period created
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/AcademicPeriodResponse'
+          example:
+            revision: 1
+            id: sjebyge5cpbop1xwo4eds74ejb
+            created_at: '2026-07-15T09:00:00Z'
+            updated_at: '2026-07-15T09:00:00Z'
+            owner_type: institution
+            owner_id: wj3drgzdpnf54rxf5d8qd3dqne
+            name: 2026-2027
+            display_name: 2026–2027
+            description: Academic year 2026 to 2027.
+            start_at: '2026-08-01T00:00:00Z'
+            end_at: '2027-08-01T00:00:00Z'
     AcademicPeriodListOK:
       description: Academic Period collection
       content:
@@ -321,7 +345,30 @@ components:
           schema:
             $ref: '#/components/schemas/AcademicPeriodListResponse'
           example:
-            items: []
+            items:
+              - revision: 1
+                id: sjebyge5cpbop1xwo4eds74ejb
+                created_at: '2026-07-15T09:00:00Z'
+                updated_at: '2026-07-15T09:00:00Z'
+                owner_type: institution
+                owner_id: wj3drgzdpnf54rxf5d8qd3dqne
+                name: 2026-2027
+                display_name: 2026–2027
+                description: Academic year 2026 to 2027.
+                start_at: '2026-08-01T00:00:00Z'
+                end_at: '2027-08-01T00:00:00Z'
+              - revision: 1
+                id: hmyjmj68dw6gdxctnghbrhwcth
+                created_at: '2026-07-20T14:00:00Z'
+                updated_at: '2026-07-20T14:00:00Z'
+                owner_type: academic_unit
+                owner_id: 14j8umgczgrdp95w77zuxmxfu9
+                name: 2026-2027-semester-2
+                display_name: Semester 2, 2026–2027
+                description: ''
+                start_at: '2027-01-11T00:00:00Z'
+                end_at: '2027-06-01T00:00:00Z'
+            next_cursor: eyJzdGFydF9hdCI6IjIwMjctMDEtMTFUMDA6MDA6MDBaIiwibmFtZSI6IjIwMjYtMjAyNy1zZW1lc3Rlci0yIiwiaWQiOiJobXlqbWo2OGR3NmdkeGN0bmdoYnJod2N0aCJ9
     AcademicPeriodArchived:
       description: Academic Period archived
       headers:
@@ -348,41 +395,54 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Current aggregate revision. Supply it as expected_revision on an edit or archive to protect a client snapshot from concurrent changes.
+          description: >-
+            Starts at 1 and goes up with every change. Send it as `expected_revision` on an update or archive so the
+            change fails if someone else changed the Academic Period first.
         id:
           $ref: '#/components/schemas/ID'
+          description: The Academic Period identifier.
         created_at:
           type: string
           format: date-time
+          description: When the Academic Period was created.
         updated_at:
           type: string
           format: date-time
+          description: When the Academic Period last changed.
         archived_at:
           type: string
           format: date-time
+          description: When the Academic Period was archived. Omitted while it is active.
         owner_type:
           type: string
           enum:
             - institution
             - academic_unit
+          description: Whether the Institution or an Academic Unit owns the Academic Period. It can't change.
         owner_id:
           $ref: '#/components/schemas/ID'
+          description: The identifier of the Institution or Academic Unit that owns the Academic Period.
         name:
           type: string
+          description: >-
+            Machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. Unique among
+            the owner's active Academic Periods.
         display_name:
           type: string
+          description: Name shown to people, up to 128 characters.
         description:
           type: string
+          description: Longer text shown to people, up to 1,024 characters. Empty when none was given.
         start_at:
           type: string
           format: date-time
-          description: Inclusive start time.
+          description: When the Academic Period starts. This instant is part of the Period.
         end_at:
           type: string
           format: date-time
-          description: Exclusive end time; must be after start_at.
+          description: When the Academic Period ends. This instant is not part of the Period, and it is always after `start_at`.
     AcademicPeriodListResponse:
-      description: One page of the collection in its stable order.
+      description: One page of Academic Periods, ordered by start time, then name, then identifier.
       type: object
       additionalProperties: false
       required:
@@ -392,10 +452,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AcademicPeriodResponse'
+          description: The Academic Periods on this page.
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
     CreateAcademicPeriodRequest:
-      description: Complete owner, presentation, and time window for a new Academic Period.
+      description: The owner, display fields and time span for a new Academic Period.
       type: object
       additionalProperties: false
       required:
@@ -411,22 +472,31 @@ components:
           enum:
             - institution
             - academic_unit
+          description: Whether the Institution or an Academic Unit owns the new Academic Period.
         owner_id:
           $ref: '#/components/schemas/ID'
+          description: The identifier of the Institution or Academic Unit named by `owner_type`.
         name:
           type: string
+          description: >-
+            Machine name: lowercase letters, digits, hyphens and underscores, starting with a letter or digit, at
+            most 64 characters. It must be unique among the owner's active Academic Periods.
         display_name:
           type: string
+          description: Name shown to people, 1 to 128 characters.
         description:
           type: string
+          description: Optional longer text shown to people, up to 1,024 characters.
         start_at:
           type: string
           format: date-time
+          description: When the Academic Period starts. This instant is part of the Period.
         end_at:
           type: string
           format: date-time
+          description: When the Academic Period ends. This instant is not part of the Period, and it must be after `start_at`.
     UpdateAcademicPeriodRequest:
-      description: Mutable Academic Period fields; omitted or null values leave the stored value unchanged.
+      description: The Academic Period fields you can change. Fields you leave out or send as null stay as they are, except where noted.
       type: object
       additionalProperties: false
       properties:
@@ -434,27 +504,36 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Optional positive revision from the last resource response. A stale value returns the resource conflict error without applying the edit. Omission preserves v1 compatibility; null is invalid.
+          description: >-
+            Optional. The `revision` from your last read. If the Academic Period has changed since, the request fails
+            with `academic_period.conflict` and nothing changes. Without it, the change applies whatever the current
+            revision. Null is rejected.
         name:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged. An empty string is present and subject to validation.
+          description: >-
+            New machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. It must be
+            unique among the owner's active Academic Periods. Omitted or null leaves it unchanged. An empty string is rejected.
         display_name:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged. An empty string is present and subject to validation.
+          description: >-
+            New name shown to people, 1 to 128 characters. Omitted or null leaves it unchanged. An empty string is
+            rejected.
         description:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged. An empty string is present and subject to validation.
+          description: >-
+            New longer text, up to 1,024 characters. Omitted or null leaves it unchanged. An empty string clears
+            it.
         start_at:
           type: string
           format: date-time
-          description: Omitted leaves the inclusive start unchanged; null is invalid.
+          description: New start time, which is part of the Period. Omitted leaves it unchanged. Null is rejected.
         end_at:
           type: string
           format: date-time
-          description: Omitted leaves the exclusive end unchanged; null is invalid.
+          description: New end time, which is not part of the Period and must be after the start. Omitted leaves it unchanged. Null is rejected.

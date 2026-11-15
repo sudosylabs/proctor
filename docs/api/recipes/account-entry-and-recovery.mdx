@@ -1,6 +1,6 @@
 ---
-title: Enter and Recover an Account
-description: Register, sign in, verify an email address, rotate a Session, and recover a local account without leaking account state or weakening policy.
+title: Sign in and recover an account
+description: Register, sign in, verify an email address, refresh a Session and recover a local account, without revealing whether an account exists or weakening the policy.
 audience: api-consumer
 maturity: preview
 sidebar_position: 2
@@ -8,144 +8,148 @@ sidebar_position: 2
 
 import Link from '@docusaurus/Link';
 
-# Enter and Recover an Account
+# Sign in and recover an account
 
-Account entry is governed by the current Access Policy. Start with
+The current Access Policy decides how people can get in. Start with
 <Link to="/api/reference/get-public-access-discovery">Public Access Discovery</Link>
-instead of guessing whether public registration, local login, an external
-provider, Invitation admission, or Desktop Authorization is available. The
-discovery document exposes safe capabilities, not provider secrets or account
-existence.
+rather than guessing whether public registration, local login, an external
+provider, Invitation admission or Desktop Authorization is available. The
+discovery document shows safe capabilities. It never shows provider secrets or
+whether an account exists.
 
-## 1. Choose an Admission Path
+## 1. Choose how the person gets in
 
-Public local registration is one admission path, not a generic User-creation
-API. Call <Link to="/api/reference/register-local-user">Register Local User</Link>
-only when discovery permits it. Supply the exact public schema: first name,
-last name, username, email, and a policy-compliant password.
+Public local registration is one way in. It is not a general API for creating
+Users. Call <Link to="/api/reference/register-local-user">Register Local User</Link>
+only when discovery says it is allowed. Send exactly the public fields: first
+name, last name, username, email and a password that meets the policy.
 
-The names are self-asserted presentation data. Registration creates an
-unverified User and local credential but grants no Affiliation, membership,
-Role Binding, or academic access. Treat
-`authentication.registration.invitation_required` as an instruction to use a
-valid Invitation, not as permission to retry another address or call an
+The person provides their own names, and Proctor uses them only for display.
+Registration creates an unverified User and a local credential. It grants no
+Affiliation, membership, Role Binding or academic access. If you get
+`authentication.registration.invitation_required`, the person needs a valid
+Invitation. Don't take it as a reason to try another address or to call an
 administrator-only User endpoint.
 
-Invitation admission is purpose-bearing and applies its frozen relationship or
-Role package only at successful acceptance. Follow
-[Invite and Link Users](./invite-and-link-users.mdx) for that transaction.
+An Invitation is issued for one purpose. It applies its frozen relationship or
+Role package only when someone accepts it successfully. Follow
+[Invite and link users](./invite-and-link-users.mdx) for that flow.
 
-## 2. Create a Web or Native Session
+## 2. Create a web or native Session
 
-For local credentials, call <Link to="/api/reference/login">Login</Link> with
-the declared `client_type`. Browser login establishes host-only cookies;
-eligible non-browser clients receive credentials in the response. Proctor
-Desktop does not call this route directly or reuse browser cookies—it follows
-[Desktop Authorization](./desktop-authorization.mdx).
+For local credentials, call <Link to="/api/reference/login">Login</Link> with the
+right `client_type`. A browser login sets host-only cookies. Eligible
+non-browser clients get their credentials in the response body. Proctor
+Desktop doesn't call this route or reuse browser cookies. It follows
+[Desktop Authorization](./desktop-authorization.mdx) instead.
 
-When MFA is active, include a current TOTP or one unused recovery code in the
-login ceremony. `authentication.mfa.required` means the primary credential was
-not enough; it does not authorize a second request that omits or downgrades the
-challenge. All invalid-credential outcomes are intentionally bounded, so a
-client must not turn response differences into account discovery.
+When MFA is on, include a current TOTP code or one unused recovery code in the
+login request. `authentication.mfa.required` means the primary credential alone
+wasn't enough. It doesn't let you send a second request that drops or weakens the
+challenge. Proctor deliberately limits what invalid-credential failures reveal.
+Don't use small differences in the responses to work out which accounts exist.
 
-For external login:
+To sign in with an external provider:
 
 1. Read <Link to="/api/reference/list-authentication-providers">List Authentication Providers</Link>.
-2. Navigate the browser to
+2. Send the browser to
    <Link to="/api/reference/begin-external-authentication">Begin External Authentication</Link>
-   for the selected provider. Do not fetch the redirect as a background API
-   request or copy provider state between browsers.
+   for the chosen provider. Don't fetch the redirect as a background API
+   request, and don't copy provider state from one browser to another.
 3. Let the provider return to
    <Link to="/api/reference/complete-external-authentication">Complete External Authentication</Link>.
-   The callback consumes the one-use state and browser binding; the fixed
-   hosted completion page confirms the resulting Web Session.
+   The callback uses up the one-time state and its browser binding. A fixed
+   hosted completion page then confirms the new Web Session.
 
-Email and username are never external-identity keys. An unlinked provider
-subject is admitted only under the current provider mode; a client must not
-implement its own email-match linking or auto-provisioning rule.
+Proctor never matches an external identity by email or username. It admits an
+unlinked provider subject only under the provider's current mode. Your client
+must not add its own rule for linking by email or for creating accounts.
 
-After an administrator-assisted MFA reset, a fresh primary proof may establish
-only a restricted Web Session. The Session's `mfa_recovery_required` flag
-routes the hosted journey to `/account/security` for new authenticator setup.
-Do not treat this Session as ordinary account access or continue an Invitation,
-provider-linking, or Desktop handoff before reenrollment completes. For an
-external-only account, the server requires a separate fresh proof bound to the
-same existing User and original provider. A normal provider callback alone
-cannot bypass that recovery requirement.
+After an administrator resets someone's MFA, a fresh password or provider proof
+may give them only a restricted Web Session. The Session's
+`mfa_recovery_required` flag sends the hosted flow to `/account/security` to set
+up a new authenticator. Don't treat this Session as normal account access, and
+don't continue an Invitation, provider link or Desktop handoff until the person
+has enrolled again. For an account that signs in only through a provider,
+Proctor requires a separate fresh proof for the same existing User from the
+original provider. A normal provider callback on its own can't skip that step.
 
-## 3. Verify the Current Email Address
+## 3. Verify the email address
 
-Successful public registration returns the generic `202 Accepted` response,
-queues the initial verification message, and returns neither a Session nor
-credential material. Use the credential from that message in the hosted
-verification page. The page requires an explicit person action before it calls
+A successful public registration returns a plain `202 Accepted` and queues the
+first verification email. It returns no Session and no credential. The person
+uses the credential from that email on the hosted verification page. The page
+waits for the person to press a button before it calls
 <Link to="/api/reference/complete-email-verification">Complete Email Verification</Link>,
-so mail scanners and link previews cannot consume the credential merely by
-opening the URL.
+so mail scanners and link previews can't use up the credential just by
+opening the link.
 
-If the person later signs in but still needs a fresh message, call
+If the person signs in later and still needs a new email, call
 <Link to="/api/reference/request-email-verification">Request Email Verification</Link>
-with that authenticated Session. Issuing another message may supersede the
-previous credential. Registration itself is not an authenticated Session and
-does not call this resend route.
+with that signed-in Session. Sending a new email may make the previous
+credential stop working. Registration doesn't give you a signed-in Session, so
+it never calls this resend route.
 
-The raw credential belongs in the URL fragment and must be removed from browser
-history before render. Expired, consumed, superseded, malformed, and
-concurrent-loser credentials all recover the same way: sign in, then request a
-fresh message for the authenticated account. Never log the fragment or echo it
-in an error.
+The raw credential travels in the URL fragment. Remove it from browser history
+before the page renders. Whatever the problem with a credential (expired,
+already used, replaced, malformed, or beaten by a concurrent request), the fix
+is the same: sign in, then request a new email for that account. Never log the
+fragment or repeat it in an error message.
 
-## 4. Recover a Local Password Without Enumeration
+## 4. Reset a local password without revealing accounts
 
 Call <Link to="/api/reference/request-password-reset">Request Password Reset</Link>
-with the normalized mailbox entered by the person. The accepted response is
-deliberately identical whether or not an eligible local account exists. Keep
-that response generic in UI, telemetry, timing analysis, and support scripts.
+with the normalized email address the person typed. The accepted response is
+the same whether or not an eligible local account exists. Keep it just as
+neutral in your UI, telemetry, timing analysis and support scripts.
 
-The hosted reset page captures the fragment credential, removes it from
-history, collects a new policy-compliant password, and calls
+The hosted reset page reads the credential from the fragment, removes it from
+history, asks for a new password that meets the policy and calls
 <Link to="/api/reference/complete-password-reset">Complete Password Reset</Link>.
-A successful completion consumes the credential, changes the password, and
-revokes the affected Sessions atomically. It does not silently create an
-Affiliation, link a provider, bypass MFA, or mint administrator authority.
+A successful reset uses up the credential, changes the password and revokes the
+affected Sessions in one transaction. It doesn't quietly create an Affiliation,
+link a provider, skip MFA or grant administrator rights.
 
-If completion is ambiguous, do not replay the same secret repeatedly. Return
-to login with the new password; if that fails, request a fresh reset message.
+If you can't tell whether the reset went through, don't keep resending the
+same secret. Send the person back to login with the new password. If that
+fails, request a new reset email.
 
-Password recovery does not remove local MFA or an assisted-recovery restriction.
-If the authenticator and every unused recovery code are also unavailable, use
-the institution's identity-verification process followed by the separately
-authorized MFA reset described in
-[Manage Account Security](./account-security.mdx#5-recover-after-an-assisted-mfa-reset).
-Fresh proof and successful reenrollment are still required afterwards.
+A password reset doesn't remove local MFA or a recovery restriction an
+administrator started. If the authenticator and every unused recovery code are
+also lost, the institution verifies the person's identity and then a
+separately authorized administrator resets MFA, as described in
+[Manage account security](./account-security.mdx#5-recover-after-an-assisted-mfa-reset).
+The person still has to give fresh proof and enroll a new authenticator
+afterwards.
 
-## 5. Rotate or End the Exact Session
+## 5. Refresh or end the current Session
 
-Use <Link to="/api/reference/refresh-session">Refresh Session</Link> only with
-the current refresh credential. Rotation replaces the access, refresh, and—on
-cookie transport—CSRF credentials. Reuse of a consumed refresh credential is
-treated as replay and invalidates the affected Session family.
+Call <Link to="/api/reference/refresh-session">Refresh Session</Link> only with
+the current refresh credential. Refreshing replaces the access and refresh
+credentials and, with cookies, the CSRF credential too. If a refresh credential
+that was already used comes back, Proctor treats it as a replay and invalidates
+that whole family of Sessions.
 
-Desktop-bound refresh uses `Authorization: DPoP` plus a fresh proof and current
-nonce. It is not interchangeable with a browser cookie or generic bearer
+A Desktop refresh uses `Authorization: DPoP` with a fresh proof and the
+current nonce. You can't swap it for a browser cookie or a plain bearer
 refresh.
 
-Call <Link to="/api/reference/logout">Logout</Link> to revoke the exact current
-Session and clear its browser cookies. Other Sessions remain active. For a lost
-or compromised device, continue with [Manage Account Security](./account-security.mdx)
-and revoke the smallest affected Session, Desktop Registration, or token.
+Call <Link to="/api/reference/logout">Logout</Link> to revoke the current
+Session and clear its browser cookies. The person's other Sessions stay
+active. For a lost or compromised device, continue with
+[Manage account security](./account-security.mdx) and revoke the narrowest
+thing affected: one Session, a Desktop Registration or a token.
 
-## Failure and Recovery
+## Failures and recovery
 
-| Failure | Correct response |
+| Failure | What to do |
 | --- | --- |
-| capability disabled | Refresh discovery; do not call a hidden method directly. |
-| invalid credentials | Show one bounded failure and apply backoff; do not reveal whether the User exists. |
-| verification link unusable | Request a fresh message from an authenticated Session. |
-| reset request accepted but no mail arrives | Preserve the generic response; check mail operations without confirming account existence. |
-| refresh replay or invalid Session | Discard local credentials and start a new supported login ceremony. |
-| provider is unlinked | Use Invitation admission or an authenticated provider-connection flow when policy permits; never match by email. |
-| MFA recovery is required | Continue to the hosted account-security page with the restricted Web Session and enroll a new authenticator. |
-| MFA service is unavailable during recovery | Ask the operator to restore enrollment service; the recovery restriction remains in force. |
-| sensitive task needs fresh proof | Use the hosted password or original-provider reauthentication flow, return to current state, then explicitly choose the action again. |
+| capability disabled | Read discovery again. Don't call a hidden method directly. |
+| invalid credentials | Show one neutral failure message and back off. Don't reveal whether the User exists. |
+| verification link unusable | Request a new email from a signed-in Session. |
+| reset request accepted but no mail arrives | Keep the neutral response. Check mail operations without confirming that the account exists. |
+| refresh replay or invalid Session | Throw away the local credentials and start a new supported login. |
+| provider is unlinked | Use Invitation admission, or a signed-in provider connection flow if the policy allows it. Never match by email. |
+| MFA recovery is required | Go to the hosted account security page with the restricted Web Session and enroll a new authenticator. |
+| MFA service is unavailable during recovery | Ask the operator to restore the enrollment service. The recovery restriction stays in place. |
+| sensitive task needs fresh proof | Use the hosted password or original-provider reauthentication flow, return to the current state, then choose the action again. |

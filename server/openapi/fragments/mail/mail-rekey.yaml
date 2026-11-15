@@ -13,7 +13,7 @@ paths:
       tags:
         - Mail
       description: >-
-        Starts one durable Job that re-encrypts active mail payloads from an explicitly retiring key to the configured primary key. Strong recent authentication and durable fencing prevent overlapping rotations or retirement without final zero-reference proof.
+        Starts a Job that re-encrypts stored mail payloads from the key you're retiring to the configured primary key. The caller must have signed in recently with strong authentication. Only one rotation can run at a time, and a key counts as safe to retire only when the finished Job shows that no payload uses it any more.
       x-proctor-auth: strong_recent_session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -67,14 +67,14 @@ paths:
         required: true
         schema:
           $ref: '#/components/schemas/ID'
-        description: The durable mail rekey Job whose safe progress is requested.
+        description: ID of the mail key rotation Job, as returned when it was started.
     get:
       operationId: getMailRekeyStatus
       summary: Inspect safe progress and final retirement proof for one mail rekey Job
       tags:
         - Mail
       description: >-
-        Returns bounded progress for one authorized mail rekey Job and, after completion, the counts required to prove whether the retiring key is safe to remove. No payload content, key bytes, recipients, or worker diagnostics are returned.
+        Returns the progress of one mail key rotation Job. After the Job succeeds, it also returns the final counts that show whether the retiring key is safe to remove. Payload content, key bytes, recipients and worker diagnostics are never included.
       x-proctor-auth: strong_recent_session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -115,17 +115,17 @@ paths:
 components:
   requestBodies:
     StartMailRekey:
-      description: Identifies the currently active non-primary key that this rotation must retire.
+      description: The key this rotation retires. It must be a key other than the primary that still encrypts stored payloads.
       required: true
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/MailRekeyRequest'
           example:
-            retiring_key_id: "0123456789abcdef0123456789abcdef"
+            retiring_key_id: 2b8f4c6a0e1d3957b2c4e6f8a0b1c3d5
   responses:
     MailRekeyAccepted:
-      description: Durable fenced mail payload-key rotation accepted
+      description: The key rotation Job was created.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -133,8 +133,13 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/MailRekeyResponse'
+          example:
+            job_id: f6tcxyfofj3n3buuqfjaw9j1jn
+            primary_key_id: 7d3e9a10c4b2f6e8a1d5c7b9e3f20a46
+            retiring_key_id: 2b8f4c6a0e1d3957b2c4e6f8a0b1c3d5
+            created_at: '2026-08-03T14:00:00Z'
     MailRekeyStatusOK:
-      description: Safe typed mail rekey progress and final retirement proof
+      description: The rotation's progress and, once it has succeeded, its final counts.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -142,9 +147,29 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/MailRekeyStatusResponse'
+          example:
+            job_id: f6tcxyfofj3n3buuqfjaw9j1jn
+            status: succeeded
+            primary_key_id: 7d3e9a10c4b2f6e8a1d5c7b9e3f20a46
+            retiring_key_id: 2b8f4c6a0e1d3957b2c4e6f8a0b1c3d5
+            created_at: '2026-08-03T14:00:00Z'
+            updated_at: '2026-08-03T14:06:20Z'
+            completed_at: '2026-08-03T14:06:20Z'
+            attempt_count: 1
+            maximum_attempts: 3
+            processed: 37
+            reencrypted: 37
+            progress:
+              current: 37
+              total: 37
+              stage: reencrypting
+            proof:
+              non_primary_references: 0
+              retiring_references: 0
+              retirement_safe: true
   schemas:
     MailRekeyRequest:
-      description: Exact retiring-key selection for a new fenced rotation Job.
+      description: Which key a new rotation Job retires.
       type: object
       additionalProperties: false
       required:
@@ -153,9 +178,9 @@ components:
         retiring_key_id:
           type: string
           pattern: ^[0-9a-f]{32}$
-          description: Non-secret identifier of the configured key to retire; it must not be the primary key.
+          description: ID of the configured key to retire, in lowercase hexadecimal. It must not be the primary key.
     MailRekeyResponse:
-      description: Durable identities created when the rotation Job is accepted.
+      description: The rotation Job that was created and the keys it works with.
       type: object
       additionalProperties: false
       required:
@@ -166,18 +191,21 @@ components:
       properties:
         job_id:
           $ref: '#/components/schemas/ID'
+          description: ID of the rotation Job. Use it to check progress.
         primary_key_id:
           type: string
           pattern: ^[0-9a-f]{32}$
+          description: ID of the primary key that payloads are re-encrypted with.
         retiring_key_id:
           type: string
           pattern: ^[0-9a-f]{32}$
+          description: ID of the key being retired.
         created_at:
           type: string
           format: date-time
-          description: Time when the rekey Job was created.
+          description: Time when the rotation Job was created.
     MailRekeyProgress:
-      description: Coarse bounded progress while active payloads are being re-encrypted.
+      description: Approximate progress while stored payloads are re-encrypted. Omitted until the Job has saved its first progress.
       type: object
       additionalProperties: false
       required:
@@ -189,18 +217,20 @@ components:
           type: integer
           format: int64
           minimum: 0
-          description: Active payloads processed so far.
+          description: Number of payloads checked so far.
         total:
           type: integer
           format: int64
           minimum: 1
-          description: Active payloads in the fenced processing set.
+          description: Number of payloads the rotation expects to check.
         stage:
           type: string
           enum:
             - reencrypting
+          description: Name of the stage the rotation is in.
     MailRekeyProof:
-      description: Final reference counts used to decide whether the retiring key may be removed.
+      description: >-
+        Final counts that show whether the retiring key can be removed. Present only after the rotation succeeds.
       type: object
       additionalProperties: false
       required:
@@ -212,17 +242,17 @@ components:
           type: integer
           format: int64
           minimum: 0
-          description: Active payload references to every non-primary key after processing.
+          description: Number of stored payloads still encrypted with any key other than the primary, after the rotation.
         retiring_references:
           type: integer
           format: int64
           minimum: 0
-          description: Active payload references still using the exact retiring key.
+          description: Number of stored payloads still encrypted with the retiring key.
         retirement_safe:
           type: boolean
-          description: True only when the final durable reference counts prove the retiring key can be removed.
+          description: True only when the final counts show that no payload uses the retiring key, so it can be removed.
     MailRekeyStatusResponse:
-      description: Safe Job status, progress, and optional final key-retirement proof.
+      description: Status and progress of a mail key rotation Job, with its final counts once it succeeds.
       type: object
       additionalProperties: false
       required:
@@ -239,41 +269,58 @@ components:
       properties:
         job_id:
           $ref: '#/components/schemas/ID'
+          description: ID of the rotation Job.
         status:
           $ref: '#/components/schemas/JobStatus'
+          description: Where the rotation Job is in its lifecycle.
         primary_key_id:
           type: string
           pattern: ^[0-9a-f]{32}$
+          description: ID of the primary key that payloads are re-encrypted with.
         retiring_key_id:
           type: string
           pattern: ^[0-9a-f]{32}$
+          description: ID of the key being retired.
         created_at:
           type: string
           format: date-time
+          description: Time when the rotation Job was created.
         updated_at:
           type: string
           format: date-time
+          description: Time of the rotation Job's most recent change.
         completed_at:
           type: string
           format: date-time
+          description: Time the rotation Job finished. Omitted while it has not finished.
         public_error_code:
           type: string
           maxLength: 128
+          description: Public reason for the Job's most recent failure, from the Job error codes. Omitted when there is none.
         attempt_count:
           type: integer
           minimum: 0
+          description: Number of execution Attempts made so far.
         maximum_attempts:
           type: integer
           minimum: 1
+          description: Most execution Attempts the Job's retry policy allows.
         processed:
           type: integer
           format: int64
           minimum: 0
+          description: Number of stored payloads the rotation has checked so far.
         reencrypted:
           type: integer
           format: int64
           minimum: 0
+          description: >-
+            Number of checked payloads that the rotation re-encrypted. It is never more than `processed`.
         progress:
           $ref: '#/components/schemas/MailRekeyProgress'
+          description: Progress of the re-encryption. Omitted until the Job has saved its first progress.
         proof:
           $ref: '#/components/schemas/MailRekeyProof'
+          description: >-
+            Final counts that show whether the retiring key can be removed. Present only after the Job
+            succeeds.

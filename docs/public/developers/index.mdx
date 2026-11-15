@@ -1,43 +1,48 @@
 ---
-title: Develop With Proctor
-description: Set up Proctor, find the correct ownership boundary, make a focused change, and verify it with the repository's real gates.
+title: Developer guide
+description: Run Proctor locally, find the part of the repository that owns your change, make the change, and check it with the same gates the repository uses.
 audience: developer
 maturity: preview
 slug: /developers/
 ---
 
-# Develop With Proctor
+# Developer guide
 
-Proctor is one product repository with four independently versioned Go modules,
-a server-hosted React application, and a separately built documentation site.
-This guide turns those boundaries into a contribution path: start the product,
-choose the owner of a change, use the nearest contract, and run checks in order
-of cost.
+This guide is for people who change Proctor itself. It walks you from a fresh
+checkout to a change that is ready for review.
+
+Proctor lives in one repository. It holds four Go modules that are each
+versioned on their own, a React application that the server hosts, and a
+documentation site that is built separately. Most of the work in a change is
+knowing which of these parts owns it. The guide follows that order: start the
+product, decide which part owns your change, work against the contract closest
+to it, and run checks from the cheapest to the most expensive.
 
 <Maturity state="preview">
-  The contributor environment, guarded synthetic fixture, module checks, API
-  compiler, browser gates, and documentation build are implemented. Production
-  deployment guidance remains intentionally incomplete until its operator
-  inputs are available.
+  The contributor environment, the guarded synthetic fixture, the module
+  checks, the API compiler, the browser gates and the documentation build all
+  work today. Guidance for production deployment is deliberately incomplete
+  until the operator inputs it depends on are available.
 </Maturity>
 
-## Start Here
+## Your path through the guide
 
-1. [Prepare the local environment](./local-setup.mdx), install the pinned
-   [tooling and debugger setup](./tooling-and-debugging.mdx), create the
-   guarded synthetic fixture, and prove your first browser session.
-2. [Tour the repository boundaries](./repository-boundaries.mdx) before
-   deciding where a change belongs.
-3. Follow the workflow for the surface you are changing, then use the
-   [verification ladder](./testing.mdx) before proposing the work.
+1. [Prepare your local environment](./local-setup.mdx) and install the pinned
+   [tools and debugger setup](./tooling-and-debugging.mdx). Create the guarded
+   synthetic fixture, then confirm that your first browser session works.
+2. [Learn the repository boundaries](./repository-boundaries.mdx) before you
+   decide where a change belongs.
+3. Follow the workflow for the part you are changing. Then work through the
+   [testing ladder](./testing.mdx) before you propose the change.
 
-If the environment or a workflow fails, start with
-[`make dev-doctor`](./troubleshooting/index.mdx). It is read-only and routes
-the first failing boundary to a focused diagnosis without erasing local state.
+If your environment or a workflow breaks, run
+[`make dev-doctor`](./troubleshooting/index.mdx) first. It changes nothing. It
+finds the first boundary that fails and points you to a focused diagnosis,
+without wiping your local state.
 
 <GovernedFigure asset="developer-repository-boundaries" />
 
-## Choose the Work You Are Doing
+## Pick the workflow for your change
 
 | Goal | Start with | Finish with |
 | --- | --- | --- |
@@ -51,21 +56,24 @@ the first failing boundary to a focused diagnosis without erasing local state.
 | Diagnose a failing development workflow | [Troubleshooting](./troubleshooting/index.mdx) | Narrow reproduction, boundary check, original workflow |
 | Prepare work for review | [Contribution checklist](./contribution-checklist.mdx) | Clean diff and the highest relevant repository gate |
 
-The [deep server-development manual](./server-workflow.mdx) now follows a
-change from package placement and domain policy through Store transactions,
-HTTP/OpenAPI, authorization and audit, Jobs, mail, files, realtime,
-clustering, runtime integration, and final review. Its
-[complete User Settings slice](./server/user-settings-slice.mdx) is the
-recommended first reading exercise for a new server contributor.
+Two of these workflows are full manuals.
 
-The [hosted webapp-development manual](./webapp-workflow.mdx) follows a
-browser feature from server-owned route membership through credential-safe
-bootstrap, generated API and localization adapters, interaction state,
-accessibility, responsive presentation, and three-engine browser evidence. Its
-[complete password-reset slice](./webapp/password-reset-slice.mdx) is the
-recommended first reading exercise for a new webapp contributor.
+The [server development manual](./server-workflow.mdx) follows a change all the
+way through the server. It starts with where the package goes and the domain
+rules, then covers Store transactions, HTTP and OpenAPI, authorization and
+audit, Jobs, mail, files, realtime, clustering, runtime integration and final
+review. If you are new to the server, read its
+[User Settings slice](./server/user-settings-slice.mdx) first. It shows one
+complete feature end to end.
 
-## Operate the Development Runtime
+The [webapp development manual](./webapp-workflow.mdx) follows a browser
+feature from the route the server hosts, through bootstrap that keeps
+credentials safe, generated API and localization adapters, interaction state,
+accessibility and responsive layout, to evidence from three browser engines.
+If you are new to the webapp, read its
+[password reset slice](./webapp/password-reset-slice.mdx) first.
+
+## Run the development environment
 
 | Need | Guide |
 | --- | --- |
@@ -75,28 +83,32 @@ recommended first reading exercise for a new webapp contributor.
 | Choose a root or module-scoped build command | [Make command reference](./make-commands.mdx) |
 | Install pinned tools, configure an editor, debug, profile, or trace | [Tooling and debugging](./tooling-and-debugging.mdx) |
 
-## Keep the Authority in One Place
+## Write each fact down once
 
-Public guides explain tasks and consequences. The OpenAPI YAML modules own the
-public HTTP contract. Component contracts and module READMEs own non-obvious
-behavior at their boundary. Code, tests, configuration, and command help remain
-the authority for implementation detail that can be discovered directly.
+Each kind of information has one home:
 
-When a change alters more than one of those authorities, update them together.
-Do not solve drift by copying the same inventory into several documents.
+- Public guides, like this one, explain tasks and what follows from them.
+- The OpenAPI YAML modules define the public HTTP contract.
+- Component contracts and module READMEs describe behavior at their boundary
+  that you could not guess from the code.
+- Code, tests, configuration and command help are the reference for any detail
+  you can find by reading them.
 
-## Four Rules That Prevent Expensive Mistakes
+When your change affects more than one of these, update them together. Don't
+fix drift by copying the same list into several documents.
 
-1. **Choose ownership before abstraction.** Add a package or interface only
-   for a stable responsibility with a real consumer.
-2. **Keep policy inward.** HTTP, WebSocket, SQL, Redis, SMTP, VFS, and Memberlist
-   adapters do not own business rules.
-3. **Commit before effects.** Durable state commits before cache invalidation,
-   cluster fan-out, realtime publication, or delivery.
-4. **Verify the smallest honest surface first.** A focused test gives fast
-   feedback; the relevant module and product gates prove the complete boundary.
+## Four rules that save rework
 
-## Reference Sources
+1. **Decide who owns it before you abstract it.** Add a package or interface
+   only for a responsibility that is stable and has a real consumer.
+2. **Keep policy on the inside.** The HTTP, WebSocket, SQL, Redis, SMTP, VFS
+   and Memberlist adapters don't own business rules.
+3. **Commit before side effects.** Durable state commits before any cache
+   invalidation, cluster fan-out, realtime publication or delivery.
+4. **Test the smallest honest scope first.** A focused test gives you fast
+   feedback. The module and product gates then prove the whole boundary.
+
+## Repository guides
 
 - [Product build guide](https://github.com/sudosylabs/Proctor/blob/main/build/README.md)
 - [Server development guide](https://github.com/sudosylabs/Proctor/blob/main/server/README.md)

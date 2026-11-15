@@ -13,7 +13,7 @@ paths:
       tags:
         - Users
       description: >-
-        Returns a self-scoped, live navigation projection for an interactive Web or Desktop Session. It conceals every withheld Review state and exposes only executable navigation hints. Personal Access Tokens cannot use this operation; every destination independently reauthorizes current state.
+        Lists your own Exam Sittings with their current state and what you can do now, for a Web or Desktop Session. Review results are hidden until they are released. The actions are hints for navigation only: each destination checks your access again. Personal Access Tokens can't use this operation.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -36,7 +36,7 @@ paths:
         - name: limit
           in: query
           required: false
-          description: Maximum number of self-scoped Exam activity rows to return in this keyset page.
+          description: Maximum number of Sittings to return in this page.
           schema:
             type: integer
             minimum: 1
@@ -45,7 +45,9 @@ paths:
         - name: cursor
           in: query
           required: false
-          description: Opaque live-view keyset cursor. Restart from the first page after invalidation.
+          description: >-
+            The `next_cursor` from the previous page, sent back unchanged. If the server rejects it, start again
+            from the first page.
           schema:
             type: string
       responses:
@@ -72,15 +74,75 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/CandidateExamActivityResponse'
+          example:
+            server_time: '2026-09-14T08:55:02Z'
+            items:
+              - exam_id: 6xoche483hwrx5rpu8jzjoe7qg
+                exam_sitting_id: 39kqk53i4cswfzbi7hbai1r8qg
+                title: Data Structures Midterm
+                academic_unit:
+                  id: 14j8umgczgrdp95w77zuxmxfu9
+                  display_name: School of Engineering
+                class:
+                  id: fotnmte5o3j9wftdm5rtbfofqr
+                  display_name: CS201 Group A
+                scheduled_start_at: '2026-09-14T09:00:00Z'
+                scheduled_end_at: '2026-09-14T11:00:00Z'
+                sitting_state: open
+                sitting_reason_code: null
+                activity_state: in_progress
+                access_state: resumable
+                allowed_actions:
+                  - resume
+                attempt:
+                  id: o87yi4tenx8kodmcuup1hmtsbo
+                  state: active
+                  suspension_reason_code: null
+                submission: null
+                result: null
+              - exam_id: nybc6xhg593upqice3sdeyro5k
+                exam_sitting_id: dfa1x1n7mkthyoziwxnupsmyia
+                title: Linear Algebra Quiz 2
+                academic_unit:
+                  id: 14j8umgczgrdp95w77zuxmxfu9
+                  display_name: School of Engineering
+                class:
+                  id: f6tcxyfofj3n3buuqfjaw9j1jn
+                  display_name: MA110 Group C
+                scheduled_start_at: '2026-09-07T13:00:00Z'
+                scheduled_end_at: '2026-09-07T14:00:00Z'
+                sitting_state: closed
+                sitting_reason_code: null
+                activity_state: results_available
+                access_state: result_available
+                allowed_actions:
+                  - view_result
+                attempt:
+                  id: 5ebqfbnezgahdbx9oy7rfr6oro
+                  state: submitted
+                  suspension_reason_code: null
+                submission:
+                  id: xpq79ar61ncrjiouey6d9tgp91
+                  submitted_at: '2026-09-07T13:48:10Z'
+                  provenance: candidate_submitted
+                result:
+                  released_at: '2026-09-10T16:00:00Z'
   schemas:
     ExamSubmissionProvenance:
       type: string
+      description: >-
+        How the Submission was made: the candidate submitted it, a manager ended the Attempt, or the Sitting
+        closed.
       enum:
         - candidate_submitted
         - manager_ended_attempt
         - sitting_closed
     CandidateExamActivityState:
       type: string
+      description: >-
+        Where the Exam stands for the candidate: not yet open (`upcoming`), open to join (`available`), an
+        Attempt under way (`in_progress`), submitted, with a released result (`results_available`), or no
+        longer open to the candidate (`past`).
       enum:
         - upcoming
         - available
@@ -90,6 +152,13 @@ components:
         - past
     CandidateExamAccessState:
       type: string
+      description: >-
+        Whether the candidate can enter now, and if not, why. `joinable` and `resumable` mean they can start or
+        continue. `sitting_paused` means the Sitting is paused, and `await_reallow` means the Attempt is
+        suspended until a manager lets the candidate back in. `blocked_by_other_attempt` means another
+        unfinished Attempt is in the way, and `not_eligible` means the candidate can't take part, for example
+        because they left the Class or manage the Exam. `not_open`, `submitted`, `result_available` and `ended`
+        follow the Sitting and Submission.
       enum:
         - not_open
         - joinable
@@ -103,6 +172,9 @@ components:
         - ended
     CandidateExamAllowedAction:
       type: string
+      description: >-
+        An action the client can offer now: start the Attempt (`enter`), continue it (`resume`), or open the
+        released result (`view_result`).
       enum:
         - enter
         - resume
@@ -110,6 +182,7 @@ components:
     CandidateExamActivityRelationResponse:
       type: object
       additionalProperties: false
+      description: A related record, by ID and display name.
       required: [id, display_name]
       properties:
         id:
@@ -117,20 +190,24 @@ components:
         display_name:
           type: string
           minLength: 1
+          description: Name shown to people.
     CandidateExamActivityAttemptResponse:
       type: object
       additionalProperties: false
+      description: The candidate's Attempt in this Sitting.
       required: [id, state, suspension_reason_code]
       properties:
         id:
           $ref: '#/components/schemas/ID'
         state:
           type: string
+          description: Current state of the Attempt.
           enum: [ready, active, suspended, submitted]
         suspension_reason_code:
           type:
             - string
             - "null"
+          description: Why the Attempt is suspended, or null when it is not suspended.
           enum:
             - secure_connectivity_lost
             - focus_policy_review_required
@@ -140,6 +217,7 @@ components:
     CandidateExamActivitySubmissionResponse:
       type: object
       additionalProperties: false
+      description: The candidate's Submission for this Sitting.
       required: [id, submitted_at, provenance]
       properties:
         id:
@@ -147,19 +225,23 @@ components:
         submitted_at:
           type: string
           format: date-time
+          description: Time the Submission was made.
         provenance:
           $ref: '#/components/schemas/ExamSubmissionProvenance'
     CandidateExamActivityResultResponse:
       type: object
       additionalProperties: false
+      description: The released result.
       required: [released_at]
       properties:
         released_at:
           type: string
           format: date-time
+          description: Time the result was released to the candidate.
     CandidateExamActivityItemResponse:
       type: object
       additionalProperties: false
+      description: One Exam Sitting the candidate is part of, with what they can do now.
       required:
         - exam_id
         - exam_sitting_id
@@ -179,22 +261,29 @@ components:
       properties:
         exam_id:
           $ref: '#/components/schemas/ID'
+          description: The Exam.
         exam_sitting_id:
           $ref: '#/components/schemas/ID'
+          description: The Sitting.
         title:
           type: string
           minLength: 1
           maxLength: 200
+          description: Title of the Exam.
         academic_unit:
           $ref: '#/components/schemas/CandidateExamActivityRelationResponse'
+          description: The Academic Unit that owns the Exam.
         class:
           $ref: '#/components/schemas/CandidateExamActivityRelationResponse'
+          description: The Class the Sitting is for.
         scheduled_start_at:
           type: string
           format: date-time
+          description: Scheduled start of the Sitting.
         scheduled_end_at:
           type: string
           format: date-time
+          description: Scheduled end of the Sitting.
         sitting_state:
           $ref: '#/components/schemas/ExamSittingState'
         sitting_reason_code:
@@ -202,6 +291,7 @@ components:
             - string
             - "null"
           maxLength: 64
+          description: The reason code recorded with the Sitting's current state, or null when there is none.
         activity_state:
           $ref: '#/components/schemas/CandidateExamActivityState'
         access_state:
@@ -210,31 +300,41 @@ components:
           type: array
           uniqueItems: true
           maxItems: 1
+          description: >-
+            The action to offer now, if any. `enter` and `resume` appear only for a Session from a registered
+            Proctor Desktop.
           items:
             $ref: '#/components/schemas/CandidateExamAllowedAction'
         attempt:
+          description: The candidate's Attempt, or null if they have none.
           oneOf:
             - $ref: '#/components/schemas/CandidateExamActivityAttemptResponse'
             - type: "null"
         submission:
+          description: The candidate's Submission, or null if there is none yet.
           oneOf:
             - $ref: '#/components/schemas/CandidateExamActivitySubmissionResponse'
             - type: "null"
         result:
+          description: The released result, or null until it is released.
           oneOf:
             - $ref: '#/components/schemas/CandidateExamActivityResultResponse'
             - type: "null"
     CandidateExamActivityResponse:
       type: object
       additionalProperties: false
+      description: A page of the candidate's Exam Sittings, latest scheduled start first.
       required: [server_time, items]
       properties:
         server_time:
           type: string
           format: date-time
+          description: The server's time when the page was read. Use it instead of the device clock.
         items:
           type: array
+          description: The Sittings on this page.
           items:
             $ref: '#/components/schemas/CandidateExamActivityItemResponse'
         next_cursor:
           type: string
+          description: Token for the next page. Send it back unchanged as `cursor`. Omitted on the last page.

@@ -1,0 +1,32 @@
+blocks:
+  - row:
+      - card: Requests
+        text: From browsers and Proctor Desktop
+      - card: Load balancer
+        text: Spreads requests across nodes
+      - card: Proctor nodes
+        text: One or more, all running the same code
+        accent: true
+  - row:
+      - group: Saved first
+        text: what you back up
+        accent: true
+        items:
+          - card: PostgreSQL
+            text: Application data
+          - card: File storage
+            text: Uploads and managed files
+      - group: Then
+        text: safe to lose and rebuild
+        dashed: true
+        columns: 2
+        items:
+          - card: Redis cache
+          - card: Live updates
+          - card: Other nodes
+          - card: Mail
+    links: none
+    from:
+      - {from: 3, to: 1, step: 1, label: Save, accent: true}
+      - {from: 3, to: 2, step: 2, label: Then tell others}
+  - note: Adding nodes adds capacity. It doesn’t change what is saved, or in what order.

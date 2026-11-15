@@ -8,7 +8,7 @@
 components:
   responses:
     ExamSittingOK:
-      description: Bounded Exam Sitting state
+      description: The Sitting's current state.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -16,9 +16,22 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamSittingResponse'
+          example:
+            id: 14j8umgczgrdp95w77zuxmxfu9
+            exam_id: wj3drgzdpnf54rxf5d8qd3dqne
+            exam_revision_id: ih1r84kij94nrwis97rft6rduh
+            class_id: 1asb7sk89dp1ex339fkh3te5t4
+            scheduled_start_at: '2026-12-14T09:00:00Z'
+            scheduled_end_at: '2026-12-14T11:00:00Z'
+            state: paused
+            created_at: '2026-11-20T14:12:05Z'
+            updated_at: '2026-12-14T09:41:17Z'
+            opened_at: '2026-12-14T09:00:02Z'
+            paused_at: '2026-12-14T09:41:17Z'
+            revision: 3
   schemas:
     ExamSittingManagerTransitionRequest:
-      description: Revision fence and private manager rationale for a Sitting lifecycle transition.
+      description: The Sitting revision you last read and a private reason for the lifecycle change.
       type: object
       additionalProperties: false
       required:
@@ -29,15 +42,21 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Exact current Sitting revision used as an optimistic concurrency fence.
+          description: >-
+            The Sitting's current revision, as last read. The request fails with a conflict if the Sitting
+            has changed since.
         reason:
           type: string
           minLength: 1
           maxLength: 1000
           description: >-
-            Private manager rationale. Must be valid UTF-8, already trimmed, 1-1000 Unicode scalar values, and at most 4000 UTF-8 bytes.
+            Why you are making the change. It is kept for audit and is never shown to candidates. Send
+            valid UTF-8 with no leading or trailing whitespace: 1 to 1000 characters and at most 4000 bytes.
     ExamSittingState:
-      description: Durable lifecycle state of one Exam Sitting.
+      description: >-
+        Where the Sitting is in its lifecycle. `scheduled` has not opened yet. `open` accepts candidates.
+        `paused` is temporarily stopped. `closing` is sealing unfinished Attempts. `closed` and `canceled`
+        are final.
       type: string
       enum:
         - scheduled
@@ -47,7 +66,10 @@ components:
         - closed
         - canceled
     ExamSittingReasonCode:
-      description: Stable safe classification for why a Sitting reached its current terminal state.
+      description: >-
+        Why the Sitting was canceled or closed. `manager_canceled`, `schedule_elapsed` and
+        `academic_structure_invalid` explain a cancellation. `manager_closed` and `scheduled_end_reached`
+        explain a closure. The code never contains the manager's private reason.
       type: string
       enum:
         - manager_canceled
@@ -56,7 +78,9 @@ components:
         - manager_closed
         - scheduled_end_reached
     ExamSittingResponse:
-      description: Bounded current manager projection of one Exam Sitting.
+      description: >-
+        One Sitting as a manager sees it. It never includes candidate credentials, private manager
+        reasons, answers or integrity evidence.
       type: object
       additionalProperties: false
       required:
@@ -73,47 +97,65 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The Sitting's ID.
         exam_id:
           $ref: '#/components/schemas/ID'
+          description: The Exam this Sitting delivers.
         exam_revision_id:
           $ref: '#/components/schemas/ID'
+          description: >-
+            The Exam Revision candidates receive. A live correction replaces it with the corrected
+            Revision.
         class_id:
           $ref: '#/components/schemas/ID'
+          description: The Class whose members can take this Sitting.
         scheduled_start_at:
           type: string
           format: date-time
-          description: RFC 3339 scheduled opening time.
+          description: When the Sitting is scheduled to open.
         scheduled_end_at:
           type: string
           format: date-time
-          description: RFC 3339 scheduled deadline before explicit extensions.
+          description: The Sitting's deadline. An extension moves it later.
         state:
           $ref: '#/components/schemas/ExamSittingState'
         created_at:
           type: string
           format: date-time
+          description: When the Sitting was scheduled.
         updated_at:
           type: string
           format: date-time
+          description: When the Sitting last changed.
         opened_at:
           type: string
           format: date-time
+          description: When the Sitting opened. Omitted until it opens.
         paused_at:
           type: string
           format: date-time
+          description: >-
+            When the current pause began. Present only while the Sitting is paused; resuming or closing
+            removes it.
         closing_at:
           type: string
           format: date-time
+          description: When closing began. Omitted until the Sitting starts closing.
         closed_at:
           type: string
           format: date-time
+          description: When the Sitting finished closing. Omitted until it is closed.
         canceled_at:
           type: string
           format: date-time
+          description: When the Sitting was canceled. Omitted unless it was canceled.
         reason_code:
           $ref: '#/components/schemas/ExamSittingReasonCode'
+          description: Why the Sitting was canceled or began closing. Omitted until one of those happens.
         revision:
           type: integer
           format: int64
           minimum: 1
-          description: Monotonic durable revision used by conditional Sitting commands.
+          description: >-
+            Goes up by one with every change to the Sitting. Send it as `expected_revision` when you
+            change the Sitting.

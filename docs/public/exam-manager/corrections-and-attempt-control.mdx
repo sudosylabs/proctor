@@ -1,76 +1,93 @@
 ---
-title: Correct Live Content and Control Attempts
-description: Apply one immutable live correction, require acknowledgement when needed, and distinguish Kick, Suspension, re-allow, and manager-ended Submission.
+title: Correct a live Exam and control Attempts
+description: Make one live correction, ask candidates to acknowledge it when needed, and tell apart Kick, Suspension, re-allow and ending an Attempt yourself.
 audience: exam-manager
 maturity: preview
 ---
 
 import Link from '@docusaurus/Link';
 
-# Correct Live Content and Control Attempts
+# Correct a live Exam and control Attempts
 
-An open or paused Sitting can receive an urgent correction without changing
-its identity or forcing candidates to rejoin. The correction creates another
-immutable Revision and retargets only that Sitting.
+You can send an urgent correction to an open or paused Sitting. The Sitting
+stays the same, and candidates don't have to join again. The correction
+creates another Revision that never changes, and points only that Sitting at
+it.
 
 <GovernedFigure asset="correction-acknowledgement-sequence" />
 
-## Keep the Correction Boundary Narrow
+## What a correction can change
 
-A live correction may change instructions, ordered Exam Resources, and Browser
-Policy. It cannot change Exam Policy, Starter Workspace,
-Class eligibility, or schedule. The operation verifies those protected digests
-match the current Revision.
+A live correction can change the instructions, the ordered Exam Resources and
+the Browser Policy. It can't change the Exam Policy, the Starter Workspace,
+which Class is eligible, or the schedule. Proctor checks that the digests of
+those protected parts still match the current Revision.
 
-For Resource bytes, stage each addition or replacement against the exact
-Sitting, base Revision, target kind, Manager, and expiry. Staging has no
-candidate-visible effect. The final correction submits one complete ordered
-manifest:
+To add or replace a Resource's file, you first stage it. Each stage is tied to
+the exact Sitting, the base Revision, the kind of target, you as the Manager,
+and an expiry time. Candidates can't see anything you stage.
 
-- omission removes a Resource;
-- order becomes its new position;
-- an item without a stage retains base content; and
-- an item with a ready stage selects those bytes.
+The correction itself then sends one complete, ordered list of Resources:
 
-Failed or abandoned stages stay invisible and become retention-eligible.
+- leaving a Resource out removes it;
+- its place in the list becomes its new position;
+- an item with no stage keeps its content from the base Revision;
+- an item with a ready stage uses the staged bytes.
 
-## Write a Candidate-safe Notice
+Stages that fail or that you abandon stay invisible, and become eligible to be
+cleaned up under retention.
 
-Every correction has a trimmed 1–500 character summary, canonically ordered
-changed areas, and an explicit acknowledgement requirement. Keep the private
-manager reason separate. Candidate notices must explain what changed without
-revealing internal policy evaluation, another candidate, or an accusation.
+## Write a notice candidates can safely read
 
-When acknowledgement is required, each Attempt must acknowledge notices oldest
-first. Pending acknowledgement blocks Workspace mutations,
-governed Browser navigation, and voluntary submission. It does not block
-protected reads, Participation renewal, Focus Loss or Browser Activity
-delivery, the acknowledgement itself, or authorized closure. The state belongs
-to the Attempt and survives reconnect or re-allow.
+Every correction has:
 
-## Distinguish Candidate Controls
+- a summary of 1–500 characters, with spaces trimmed from each end;
+- the list of areas that changed, in a standard order;
+- a clear yes or no on whether candidates must acknowledge it.
 
-| Control | What it means | What it preserves |
+Keep your private reason for the change separate. The candidate notice should
+explain what changed without revealing how policy is evaluated internally,
+mentioning another candidate, or accusing anyone.
+
+When acknowledgement is required, each Attempt must acknowledge notices in
+order, oldest first. While an acknowledgement is waiting, the candidate can't
+change their Workspace, navigate in the Exam browser or submit. They can
+still:
+
+- read protected content;
+- renew their Participation;
+- send Focus Loss and Browser Activity records;
+- send the acknowledgement itself;
+- have their Attempt closed by someone authorized.
+
+The pending acknowledgement belongs to the Attempt. It stays in place if the
+candidate reconnects or is allowed back in.
+
+## Know which control does what
+
+| Control | What it means | What it keeps |
 | --- | --- | --- |
-| Kick | authorized manual interruption that blocks the active Attempt | Attempt, Workspace, evidence, and distinct manual provenance |
-| automatic Suspension | policy or confirmed continuity enforcement | neutral evidence, Flag, triggering episode, and Workspace |
-| re-allow | closes one exact Suspension episode and returns the Attempt to Ready | Flags, evidence, immutable configuration, and prior generations |
-| manager end | seals any unfinished Ready, Active, or Suspended Attempt | last acknowledged Workspace and `manager_ended_attempt` Submission provenance |
-| Sitting close | seals every unfinished created Attempt at deadline or early close | `sitting_closed` Submission provenance and prior continuity cause |
+| Kick | an authorized person stops the active Attempt by hand | the Attempt, its Workspace, its evidence, and a separate record that this was manual |
+| automatic Suspension | the policy, or a confirmed loss of connection, stops the Attempt | neutral evidence, the Flag, the episode that triggered it, and the Workspace |
+| re-allow | closes one exact Suspension episode and puts the Attempt back to Ready | Flags, evidence, the fixed configuration and earlier generations |
+| manager end | seals any unfinished Ready, Active or Suspended Attempt | the last Workspace the server confirmed, with `manager_ended_attempt` recorded on the Submission |
+| Sitting close | seals every unfinished Attempt that was created, at the deadline or when you close early | `sitting_closed` recorded on the Submission, plus any earlier continuity cause |
 
-Kick requires the expected Attempt revision and a private bounded reason. It
-ends the candidate's live generation and Connection immediately and creates no
-Integrity Flag; the candidate sees only that a manager suspended the Attempt.
+To Kick a candidate, you give the expected Attempt revision and a short
+private reason. Kick immediately ends the candidate's live generation and
+Connection. It doesn't create an Integrity Flag. The candidate sees only that
+a manager suspended the Attempt.
 
-Re-allow requires the exact Suspension, expected Attempt revision, and a
-private bounded reason. Fresh admission creates a new Participation generation;
-old credentials cannot revive it. Reset only the triggering evaluation window,
-so later violations can enforce again.
+To re-allow, you give the exact Suspension, the expected Attempt revision and
+a short private reason. When the candidate enters again, Proctor starts a new
+Participation generation, and old credentials can't bring the old one back.
+Only the window that triggered the Suspension is reset, so later violations
+can still lead to enforcement.
 
-Manager end is terminal. It never reopens or resubmits an Attempt, and its
-private reason is absent from candidate, mail, realtime, and Submission
-projections. At or after the deadline, Sitting closure owns the otherwise
-equivalent sealing transition.
+Ending an Attempt yourself is final. It never reopens an Attempt or submits it
+again. Your private reason never appears in anything the candidate sees, in
+emails, in realtime updates or on the Submission. At or after the deadline,
+closing the Sitting does the same sealing instead.
 
 Use the <Link to="/api/recipes/manage-sitting">Sitting API recipe</Link> for
-operation-level fencing and safe retry.
+the checks on each operation and how to retry safely.

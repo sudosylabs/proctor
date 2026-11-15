@@ -2,22 +2,17 @@
   min-width: 0;
 }
 
-.home :global(.theme-doc-sidebar-container) {
-  display: none;
-}
-
 .shell :global(main) {
-  max-width: none;
   min-width: 0;
 }
 
-.shell :global(main > .container) {
-  max-width: 1440px;
-  padding-inline: clamp(var(--proctor-space-5), 2.5vw, var(--proctor-space-7));
-}
-
-.shell :global(main > .container > .row > .col) {
-  min-width: 0;
+/* The home page is a full-width contents page: no sidebar, no reading column,
+   no breadcrumbs and no end-of-page furniture. */
+.home :global(.theme-doc-sidebar-container),
+.home :global(.theme-doc-breadcrumbs),
+.home :global(.theme-doc-footer),
+.home :global(.pagination-nav) {
+  display: none;
 }
 
 .home :global(main) {
@@ -25,20 +20,21 @@
 }
 
 .home :global(main > .container) {
-  max-width: 1200px;
-  padding-inline: clamp(var(--proctor-space-4), 4vw, var(--proctor-space-7));
+  padding: 0 !important;
 }
 
-.reader :global(.theme-doc-markdown) {
-  max-width: 76ch;
+.home :global(main > .container > .row > .col) {
+  max-width: none !important;
 }
 
-.reader :global(.theme-doc-markdown:has(> .theme-api-markdown)) {
+.home :global([class*="docItemContainer"]) {
   max-width: none;
 }
 
-@media (max-width: 996px) {
-  .shell :global(main > .container) {
-    padding-inline: var(--proctor-space-4);
-  }
+.home :global(main[class*="docMainContainer"]) {
+  padding-left: 0;
+}
+
+.home :global(main > .container > .row) {
+  margin-top: 0 !important;
 }

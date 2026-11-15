@@ -1,7 +1,6 @@
 import Link from '@docusaurus/Link';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
-import DocIcon from '@site/src/components/DocIcon';
 import {guides} from '@site/navigation.mjs';
 import {searchEntries, type SearchEntry} from '@site/src/generated/search-index';
 import styles from './styles.module.css';
@@ -39,19 +38,29 @@ function score(entry: SearchEntry, normalizedQuery: string): number {
   return total;
 }
 
-function kindLabel(entry: SearchEntry): string {
+function groupLabel(entry: SearchEntry): string {
   switch (entry.kind) {
     case 'endpoint':
-      return 'Endpoint';
+      return 'Endpoints';
     case 'product-area':
-      return 'Product area';
+      return 'API areas';
     case 'realtime-message':
-      return 'Realtime';
+      return 'Realtime messages';
     case 'glossary':
       return 'Glossary';
+    case 'problem':
+      return 'Error codes';
     default:
-      return 'Guide';
+      return 'Guides';
   }
+}
+
+const openSearchEvent = 'proctor:open-search';
+
+// Lets other controls, such as the search field on the home page, open the
+// one search dialog instead of mounting a second index.
+export function openSearch(): void {
+  window.dispatchEvent(new Event(openSearchEvent));
 }
 
 export default function SearchBar(): React.JSX.Element {
@@ -77,7 +86,11 @@ export default function SearchBar(): React.JSX.Element {
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener(openSearchEvent, openSearch);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener(openSearchEvent, openSearch);
+    };
   }, [openSearch]);
 
   const matches = useMemo(() => {
@@ -99,21 +112,37 @@ export default function SearchBar(): React.JSX.Element {
     links[Math.max(0, Math.min(index, links.length - 1))]?.focus();
   };
 
+  const groups = useMemo(() => {
+    if (!query.trim()) return matches.length > 0 ? [{label: 'Start here', entries: matches}] : [];
+    const ordered: {label: string; entries: SearchEntry[]}[] = [];
+    for (const entry of matches) {
+      const label = groupLabel(entry);
+      let group = ordered.find((candidate) => candidate.label === label);
+      if (!group) {
+        group = {label, entries: []};
+        ordered.push(group);
+      }
+      group.entries.push(entry);
+    }
+    return ordered;
+  }, [matches, query]);
+
+  let resultIndex = -1;
+
   return (
     <>
       <button
-        aria-label="Search documentation"
+        aria-label="Search the docs"
         className={styles.trigger}
         onClick={openSearch}
         type="button">
-        <DocIcon name="search" />
-        <span className={styles.triggerLabel}>Search docs</span>
-        <kbd>⌘&nbsp;K</kbd>
+        <SearchIcon />
+        <span className={styles.triggerLabel}>Search</span>
+        <kbd>⌘K</kbd>
       </button>
 
       <dialog
-        aria-describedby="docs-search-scope"
-        aria-labelledby="docs-search-title"
+        aria-label="Search the docs"
         className={styles.dialog}
         onCancel={closeSearch}
         onClose={() => setQuery('')}
@@ -124,26 +153,9 @@ export default function SearchBar(): React.JSX.Element {
           }
         }}
         ref={dialogRef}>
-        <div className={styles.header}>
-          <div>
-            <p className={styles.eyebrow}>Local documentation index</p>
-            <h2 id="docs-search-title">Search Proctor Docs</h2>
-            <p className={styles.scope} id="docs-search-scope">
-              Guides, glossary terms, product areas, and all {endpointCount} endpoints.
-            </p>
-          </div>
-          <button
-            aria-label="Close documentation search"
-            className={styles.close}
-            onClick={closeSearch}
-            type="button">
-            <DocIcon name="close" />
-          </button>
-        </div>
-
         <label className={styles.searchField}>
-          <span className={styles.visuallyHidden}>Search documentation</span>
-          <DocIcon name="search" />
+          <SearchIcon />
+          <span className={styles.visuallyHidden}>Search</span>
           <input
             autoComplete="off"
             name="docs-query"
@@ -154,64 +166,90 @@ export default function SearchBar(): React.JSX.Element {
                 focusResult(0);
               }
             }}
-            placeholder="Search guides, terms, or GET /api/v1/…"
+            placeholder={`Search guides, settings, ${endpointCount} endpoints and error codes`}
             ref={inputRef}
             spellCheck={false}
             type="search"
             value={query}
           />
+          <button className={styles.close} onClick={closeSearch} type="button">
+            <kbd>Esc</kbd>
+            <span className={styles.visuallyHidden}>Close search</span>
+          </button>
         </label>
 
-        <div className={styles.resultMeta}>
-          <span>{query.trim() ? `${matches.length} best matches` : 'Recommended starting points'}</span>
-          <span aria-hidden="true">↑↓ navigate · Esc close</span>
-        </div>
-
         <div aria-live="polite" className={styles.results}>
-          {matches.length > 0 ? (
+          {groups.length > 0 ? (
             <ul ref={resultListRef}>
-              {matches.map((entry, index) => (
-                <li key={entry.id}>
-                  <Link
-                    className={styles.result}
-                    onClick={closeSearch}
-                    onKeyDown={(event) => {
-                      if (event.key === 'ArrowDown') {
-                        event.preventDefault();
-                        focusResult(index + 1);
-                      } else if (event.key === 'ArrowUp') {
-                        event.preventDefault();
-                        if (index === 0) inputRef.current?.focus();
-                        else focusResult(index - 1);
-                      }
-                    }}
-                    to={entry.href}>
-                    <span className={styles.resultContext}>
-                      <span className={styles.kind}>{kindLabel(entry)}</span>
-                      <span>{entry.group}</span>
-                    </span>
-                    <strong>{entry.title}</strong>
-                    {entry.method && entry.path ? (
-                      <span className={styles.endpoint}>
-                        <b>{entry.method}</b>
-                        <code>{entry.path}</code>
-                      </span>
-                    ) : (
-                      <span className={styles.description}>{entry.description}</span>
-                    )}
-                    <DocIcon className={styles.arrow} name="arrowRight" />
-                  </Link>
+              {groups.map((group) => (
+                <li key={group.label}>
+                  <div className={styles.groupLabel}>
+                    {group.label}
+                  </div>
+                  <ul>
+                    {group.entries.map((entry) => {
+                      resultIndex += 1;
+                      const index = resultIndex;
+                      return (
+                        <li key={entry.id}>
+                          <Link
+                            className={styles.result}
+                            onClick={closeSearch}
+                            onKeyDown={(event) => {
+                              if (event.key === 'ArrowDown') {
+                                event.preventDefault();
+                                focusResult(index + 1);
+                              } else if (event.key === 'ArrowUp') {
+                                event.preventDefault();
+                                if (index === 0) inputRef.current?.focus();
+                                else focusResult(index - 1);
+                              }
+                            }}
+                            to={entry.href}>
+                            {entry.method && entry.path ? (
+                              <span className={styles.endpoint}>
+                                <b>{entry.method}</b>
+                                <code>{entry.path}</code>
+                              </span>
+                            ) : (
+                              <span className={entry.kind === 'problem' ? styles.code : styles.title}>
+                                {entry.title}
+                              </span>
+                            )}
+                            <span className={styles.where}>
+                              {entry.method && entry.path ? entry.title : entry.description || entry.group}
+                            </span>
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </li>
               ))}
             </ul>
           ) : (
             <div className={styles.empty}>
-              <strong>No documentation matches “{query.trim()}”.</strong>
-              <span>Try a canonical term, task, endpoint method, or route fragment.</span>
+              <strong>Nothing matches “{query.trim()}”.</strong>
+              <span>Try a task, a setting name, an error code or part of an endpoint path.</span>
             </div>
           )}
         </div>
+
+        <div className={styles.footer}>
+          <span><kbd>↑</kbd> <kbd>↓</kbd> to move</span>
+          <span><kbd>↵</kbd> to open</span>
+          <span className={styles.private}>Runs in your browser; nothing is sent</span>
+        </div>
       </dialog>
     </>
+  );
+}
+
+function SearchIcon(): React.JSX.Element {
+  return (
+    <svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16">
+      <circle cx="7" cy="7" fill="none" r="4.75" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M10.5 10.5L14 14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+    </svg>
   );
 }

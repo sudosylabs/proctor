@@ -13,8 +13,13 @@ import (
 )
 
 type Server struct {
-	ListenAddress     string    `json:"ListenAddress"`
-	PublicURL         string    `json:"PublicURL"`
+	ListenAddress string `json:"ListenAddress"`
+	PublicURL     string `json:"PublicURL"`
+	// DocumentationURL is where the installation's documentation site is
+	// published, such as https://docs.example.edu. Problem Details then link
+	// each error to its page at <DocumentationURL>/problems/<code>. Empty
+	// sends type "about:blank": the error is described by its status and code.
+	DocumentationURL  string    `json:"DocumentationURL"`
 	WebappDirectory   string    `json:"WebappDirectory"`
 	TLS               ServerTLS `json:"TLS"`
 	ReadHeaderTimeout Duration  `json:"ReadHeaderTimeout"`
@@ -52,6 +57,25 @@ func defaultServer() Server {
 		MaxHeaderBytes:    1 << 20,
 		MaxBodyBytes:      1 << 20,
 		TrustedProxies:    []string{},
+	}
+}
+
+// validateDocumentationURL accepts an empty value or an absolute HTTP or
+// HTTPS URL with no user information, query or fragment.
+func validateDocumentationURL(raw string, add func(string, string)) {
+	if raw == "" {
+		return
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		add("server.documentation_url", "must be empty or an absolute HTTP or HTTPS URL")
+		return
+	}
+	if parsed.User != nil {
+		add("server.documentation_url", "user information is forbidden")
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" || parsed.ForceQuery {
+		add("server.documentation_url", "query and fragment are forbidden")
 	}
 }
 

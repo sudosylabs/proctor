@@ -1,68 +1,82 @@
 ---
-title: Errors, Limits, and Compatibility
-description: Review safe Problem Details, concealment, input bounds, idempotency, client compatibility, and pre-release contract limits.
+title: Errors, limits and compatibility
+description: Safe Problem Details, hiding protected resources, input limits, idempotency, client compatibility, and the limits of the pre-release contract.
 audience: security-reviewer
 maturity: preview
 ---
 
-# Errors, Limits, and Compatibility
+# Errors, limits and compatibility
 
-Public errors help an authorized client recover without exposing internal or
-protected state. Limits prevent untrusted input and retained evidence from
-becoming unbounded work. Compatibility checks keep unsupported clients from
-entering security-sensitive delivery.
+Public errors help an authorized client recover without revealing internal or
+protected state. Limits stop untrusted input and stored evidence from turning
+into unlimited work. Compatibility checks keep unsupported clients out of
+security-sensitive exam delivery.
 
-## Problem Details and Concealment
+## Problem Details and hiding protected resources
 
-Expected failures use stable dotted application codes and an allowlist of safe
-typed fields. HTTP maps them to RFC 9457 Problem Details; WebSocket uses its own
-versioned error envelope. Localized title/detail are presentation. SQL errors,
-provider payloads, stack traces, private IDs/state, and arbitrary strings stay
-internal.
+Expected failures use stable, dotted application codes and a fixed list of safe,
+typed fields. Over HTTP they become RFC 9457 Problem Details. WebSocket uses its
+own versioned error envelope. The localized title and detail are only for
+display. SQL errors, provider payloads, stack traces, private IDs and state,
+and free-form strings stay inside the server.
 
-Unknown or undeclared failures become one correlated internal error and are
-logged once at the outer boundary. A protected resource may return not found for
-denied, absent, mismatched, or unreleased states when existence is sensitive.
-The response must not vary across those cases.
+A failure that is unknown, or that no code declares, becomes a single internal
+error with a correlation ID. The outermost layer logs it once.
 
-## Bounded Inputs and Work
+When even the existence of a protected resource is sensitive, Proctor may
+return not found whether the request was denied, the resource is missing, the
+selectors don't match, or the result isn't released yet. The response must be
+the same in every one of those cases.
 
-The runtime applies header/body limits and per-operation stricter bounds before
-decoding or streaming. JSON is strict where declared. Collections use bounded
-pages and opaque cursors. WebSocket frames, replay, queues, fan-out, Browser
-Activity batches/sources/gaps, evidence, Reviews, uploads, Workspace paths,
-mail, Jobs, logs, and configuration values all have closed limits.
+## Limits on input and work
 
-Rejecting an oversized or malformed value is safer than truncating it into a
-different semantic command. Inventory limits during integrity finalization are
-errors to investigate, not permission to omit evidence.
+The runtime applies header and body limits, plus stricter limits for each
+operation, before it decodes or streams anything. JSON is parsed strictly where
+an operation declares it. Collections come back in limited pages with opaque
+cursors.
 
-## Idempotency and Unknown Outcomes
+All of these have fixed limits: WebSocket frames, replay, queues, fan-out,
+Browser Activity batches, sources and gaps, evidence, Reviews, uploads,
+Workspace paths, mail, Jobs, logs and configuration values.
 
-Security-sensitive mutations declare whether idempotency is required. Exact
-replay returns the retained semantic outcome after current authorization; a
-changed body conflicts. Transport credentials and fresh DPoP proof are not part
-of the semantic fingerprint. Unknown storage outcomes retain staged bytes or
-in-progress state until replay or bounded reconciliation resolves authority.
+Rejecting a value that is too large or malformed is safer than cutting it down
+into a command that means something different. If an inventory limit is hit
+while integrity evidence is being finalized, that is an error to investigate.
+It is not permission to leave evidence out.
 
-## Desktop and Node Compatibility
+## Idempotency and unknown outcomes
 
-`system/ping` compares Desktop release, build ID, platform, architecture, and
-realtime protocol against the compiled catalog and current policy. Unsupported,
-revoked, too-old, too-new, maintenance, and protocol-incompatible clients are
-denied before admission. The client cannot self-assert compatibility.
+Each security-sensitive change declares whether it needs an idempotency key.
+Replaying the exact same request returns the stored outcome, after checking
+current permissions. Replaying it with a changed body is a conflict.
 
-Memberlist peers advertise compiled protocol metadata. Malformed, duplicate,
-or incompatible peers are rejected during join and later admission. Lost peer
-messages do not affect durable correctness.
+The transport credentials and the fresh DPoP proof are not part of what Proctor
+compares between requests. When the outcome of a storage write is unknown,
+Proctor keeps the staged bytes or the in-progress state. They stay until a
+replay, or a limited reconciliation step, settles what is true.
 
-## API and Release Compatibility
+## Desktop and node compatibility
 
-The API uses `/api/v1`, but the product has not made its first supported-release
-compatibility commitment. During this pre-release period, server, OpenAPI,
-agreement tests, and compatible clients move together. Development databases
-from earlier incompatible baseline histories must be recreated; the server does
-not fabricate lifecycle facts to migrate them.
+`system/ping` compares the Desktop release, build ID, platform, architecture
+and realtime protocol against the build catalog compiled into the server and
+the current policy. Proctor refuses a client before admission if it is
+unsupported, revoked, too old, too new, in maintenance, or speaks an
+incompatible protocol. A client can't declare itself compatible.
+
+Memberlist peers advertise protocol metadata compiled into their build. Proctor
+rejects malformed, duplicate or incompatible peers when they join, and again at
+later admission. Lost peer messages don't affect whether stored data is
+correct.
+
+## API and release compatibility
+
+The API lives under `/api/v1`, but the product hasn't yet made the
+compatibility commitment that comes with a first supported release. Until
+then, the server, the OpenAPI description, the agreement tests and compatible
+clients change together.
+
+Development databases created from earlier, incompatible baseline histories
+must be recreated. The server doesn't invent lifecycle facts to migrate them.
 
 {/* TODO(security-support-deprecation): Define supported release channels,
 security-update windows, stable API deprecation notice, and mixed-version client

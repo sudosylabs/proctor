@@ -79,13 +79,13 @@ func TestRoutingFailuresUseProblemDetails(t *testing.T) {
 	}{
 		{
 			http.MethodGet, "/missing", http.StatusNotFound, "route.not_found", "",
-			"https://proctor.sudosylabs.com/problems/route.not_found",
+			"about:blank",
 			"Resource not found", "The requested resource was not found.",
 		},
 		{
 			http.MethodPost, "/health/live", http.StatusMethodNotAllowed,
 			"route.method_not_allowed", http.MethodGet,
-			"https://proctor.sudosylabs.com/problems/route.method_not_allowed",
+			"about:blank",
 			"Method not allowed",
 			"The request method is not allowed for this resource.",
 		},
@@ -194,7 +194,7 @@ func TestAuthenticationBoundaryRejectsMissingAmbiguousAndURLCredentials(t *testi
 			var problem compatibilityProblem
 			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 			require.Equal(t, "authentication.required", problem.Code)
-			require.Equal(t, "https://proctor.sudosylabs.com/problems/authentication.required", problem.Type)
+			require.Equal(t, "about:blank", problem.Type)
 			require.Equal(t, "Authentication required", problem.Title)
 			require.Equal(t, http.StatusUnauthorized, problem.Status)
 			require.Equal(t, "Authentication is required.", problem.Detail)

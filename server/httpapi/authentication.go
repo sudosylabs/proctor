@@ -204,6 +204,8 @@ func sessionRevocationReasonPresentation(reason model.SessionRevocationReason) s
 		return "The Desktop Registration was revoked."
 	case model.SessionRevocationAttemptSessionLock:
 		return "Signed out when an exam attempt became active."
+	case model.SessionRevocationExpired:
+		return "The session expired."
 	default:
 		return ""
 	}

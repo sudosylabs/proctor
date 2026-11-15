@@ -13,8 +13,8 @@ paths:
       tags:
         - Mail
       description: >-
-        Lists authorized durable delivery metadata for the allowlisted template and filters, most recently updated first unless `sort` and `dir` choose another order. Recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, SMTP credentials, or provider diagnostics. A delivery addressed to a User carries `recipient_display_name` only when the caller can see that User now; the page's names are read once.
-        The first page, read without a cursor, also reports `total`: the mail deliveries the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
+        Lists the mail deliveries the caller may see that match the filters. Results are most recently updated first, unless `sort` and `dir` choose another order. Recipient addresses stay masked. The response never includes encrypted payloads, message bodies, SMTP credentials or mail provider diagnostics. A delivery addressed to a User carries `recipient_display_name` only when the caller can see that User right now. The names are looked up once for the whole page.
+        The first page, read without a cursor, also reports `total`: the number of deliveries that match the filters and that the caller may see, across all pages. The count is exact below 10,000. At 10,000 it stops and `total_is_lower_bound` is true. Later pages carry no total, so keep the one from the first page.
       x-proctor-auth: principal_required
       x-proctor-error-codes:
         - authorization.denied
@@ -44,51 +44,52 @@ paths:
             minimum: 1
             maximum: 200
             default: 50
-          description: Maximum number of delivery projections to return.
+          description: Maximum number of deliveries to return.
         - name: cursor
           in: query
           schema:
             type: string
-          description: Opaque continuation emitted by the preceding page for the same filters.
+          description: >-
+            The `next_cursor` value from the previous page. Send the same filters, `sort` and `dir` with it. Treat it as an unreadable token: don't parse it or build one.
         - name: state
           in: query
           schema:
             type: array
             items:
               $ref: '#/components/schemas/MailDeliveryState'
-          description: Optional set of durable delivery states to include.
+          description: Return only deliveries in these states. Repeat the parameter to include several. Omit it to include every state.
         - name: template_key
           in: query
           schema:
             type: array
             items:
               $ref: '#/components/schemas/MailTemplateKey'
-          description: Optional set of template keys to include.
+          description: Return only deliveries of these templates. Repeat the parameter to include several. Omit it to include every template.
         - name: recipient_user_id
           in: query
           schema:
             $ref: '#/components/schemas/ID'
           description: >-
-            Include only deliveries addressed to this User. A delivery to an Invitation has no recipient User and
-            never matches; mail history is never searched by address.
+            Return only deliveries addressed to this User. A delivery to an Invitation has no recipient User, so it
+            never matches. Mail history can't be searched by email address.
         - name: created_after
           in: query
           schema:
             type: string
             format: date-time
-          description: Include deliveries created at or after this RFC 3339 instant.
+          description: Return only deliveries created at or after this time (RFC 3339).
         - name: created_before
           in: query
           schema:
             type: string
             format: date-time
-          description: Include deliveries created before this RFC 3339 instant.
+          description: Return only deliveries created before this time (RFC 3339).
         - name: sort
           in: query
           required: false
           description: >-
-            Order by the last update (`updated`, the default) or by creation (`created`), then by delivery identity.
-            A cursor continues only the sort and direction that produced it.
+            Sort by the time of the last change (`updated`, the default) or by creation time (`created`). Ties are
+            broken by delivery ID. A cursor only works with the sort and direction that produced it.
           schema:
             type: string
             enum:
@@ -98,7 +99,7 @@ paths:
         - name: dir
           in: query
           required: false
-          description: Newest first (`desc`, the default) or oldest first (`asc`) by the `sort` instant.
+          description: Newest first (`desc`, the default) or oldest first (`asc`), by the time `sort` names.
           schema:
             type: string
             enum:
@@ -127,14 +128,14 @@ paths:
         required: true
         schema:
           $ref: '#/components/schemas/ID'
-        description: The durable mail delivery to retrieve.
+        description: ID of the mail delivery to return.
     get:
       operationId: getMailDelivery
       summary: Get one safe mail delivery status
       tags:
         - Mail
       description: >-
-        Returns safe lifecycle metadata for one authorized durable delivery. The projection keeps the recipient masked and omits payload ciphertext, plaintext message content, SMTP response detail, and encryption-key material. It names the recipient User with `recipient_display_name` only when the caller can see that User now.
+        Returns the status of one mail delivery the caller may see. The recipient address stays masked. The response never includes the encrypted payload, the message content, SMTP response details or encryption keys. It names the recipient User in `recipient_display_name` only when the caller can see that User right now.
       x-proctor-auth: principal_required
       x-proctor-error-codes:
         - authentication.required
@@ -177,14 +178,14 @@ paths:
         required: true
         schema:
           $ref: '#/components/schemas/ID'
-        description: The queued mail delivery to cancel.
+        description: ID of the queued mail delivery to cancel.
     post:
       operationId: cancelMailDelivery
       summary: Cancel queued mail delivery work
       tags:
         - Mail
       description: >-
-        Cancels one exact authorized delivery only while it is still queued and prevents a worker from beginning that occurrence. The transition retains delivery history and audit provenance and never deletes the encrypted payload record as a side effect.
+        Cancels one delivery while it is still queued, so no worker starts sending it. A delivery that has left the queue can't be canceled. The delivery's history and audit record are kept, and canceling doesn't delete its encrypted payload.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -241,14 +242,14 @@ paths:
         required: true
         schema:
           $ref: '#/components/schemas/ID'
-        description: The failed durable mail delivery to retry.
+        description: ID of the failed mail delivery to retry.
     post:
       operationId: retryMailDelivery
       summary: Retry a still-relevant failed mail delivery
       tags:
         - Mail
       description: >-
-        Requeues an authorized failed delivery only when its message is still relevant and its bounded retry policy permits another Attempt. Prior Attempt and failure metadata remain durable, and a terminally stale or ineligible delivery fails without sending.
+        Puts a failed delivery back in the queue, but only while its message is still worth sending and its retry limit allows another attempt. Earlier attempts and failure details are kept. A delivery past its deadline, or one whose recipient can no longer receive it, is rejected and nothing is sent.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -301,7 +302,7 @@ paths:
 components:
   responses:
     MailDeliveryOK:
-      description: Safe durable mail delivery status
+      description: The delivery's current status.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -309,8 +310,24 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/MailDeliveryResponse'
+          example:
+            id: p6y6sf8ac6m5if373fkkebj7j6
+            occurrence_id: sjebyge5cpbop1xwo4eds74ejb
+            target_user_id: hmyjmj68dw6gdxctnghbrhwcth
+            template_key: exam.sitting_scheduled
+            template_digest: 3f8a1c0d9b2e4f6a7c8d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d
+            masked_recipient: t***@example.edu
+            state: accepted
+            created_at: '2026-08-01T10:00:00Z'
+            updated_at: '2026-08-01T10:00:04Z'
+            message_date: '2026-08-01T10:00:00Z'
+            deadline: '2026-08-04T10:00:00Z'
+            message_id: <p6y6sf8ac6m5if373fkkebj7j6@proctor.example.edu>
+            attempt_count: 1
+            accepted_at: '2026-08-01T10:00:04Z'
+            recipient_display_name: Tunde Bello
     MailDeliveryListOK:
-      description: Bounded safe mail delivery collection
+      description: One page of mail deliveries.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -319,12 +336,43 @@ components:
           schema:
             $ref: '#/components/schemas/MailDeliveryListResponse'
           example:
-            items: []
-            total: 0
+            items:
+              - id: 6xoche483hwrx5rpu8jzjoe7qg
+                occurrence_id: 39kqk53i4cswfzbi7hbai1r8qg
+                target_invitation_id: fotnmte5o3j9wftdm5rtbfofqr
+                template_key: access.student_class_invitation
+                template_digest: 9c1e7b3a5d2f4e6081a3b5c7d9e1f20314253647586970a1b2c3d4e5f6071829
+                masked_recipient: s***@example.edu
+                state: failed
+                created_at: '2026-08-02T08:30:00Z'
+                updated_at: '2026-08-02T08:30:06Z'
+                message_date: '2026-08-02T08:30:00Z'
+                deadline: '2026-08-09T08:30:00Z'
+                message_id: <6xoche483hwrx5rpu8jzjoe7qg@proctor.example.edu>
+                attempt_count: 1
+                failed_at: '2026-08-02T08:30:06Z'
+                public_failure_code: mail.transport.permanent
+              - id: p6y6sf8ac6m5if373fkkebj7j6
+                occurrence_id: sjebyge5cpbop1xwo4eds74ejb
+                target_user_id: hmyjmj68dw6gdxctnghbrhwcth
+                template_key: exam.sitting_scheduled
+                template_digest: 3f8a1c0d9b2e4f6a7c8d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d
+                masked_recipient: t***@example.edu
+                state: accepted
+                created_at: '2026-08-01T10:00:00Z'
+                updated_at: '2026-08-01T10:00:04Z'
+                message_date: '2026-08-01T10:00:00Z'
+                deadline: '2026-08-04T10:00:00Z'
+                message_id: <p6y6sf8ac6m5if373fkkebj7j6@proctor.example.edu>
+                attempt_count: 1
+                accepted_at: '2026-08-01T10:00:04Z'
+                recipient_display_name: Tunde Bello
+            next_cursor: eyJzb3J0IjoidXBkYXRlZCIsImRpciI6ImRlc2MifQ
+            total: 57
             total_is_lower_bound: false
   schemas:
     MailDeliveryListResponse:
-      description: One bounded page of safe mail delivery projections.
+      description: One page of mail deliveries.
       type: object
       additionalProperties: false
       required:
@@ -334,16 +382,17 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MailDeliveryResponse'
+          description: Deliveries on this page, in the requested order.
         next_cursor:
           type: string
-          description: Opaque continuation for the next page, omitted after the final page.
+          description: Token to pass as `cursor` to read the next page. Treat it as unreadable. Omitted on the last page.
         total:
           type: integer
           minimum: 0
           maximum: 10000
           description: >-
-            Mail deliveries matching the filters and the caller's visibility across every page, present only on the
-            first page. At 10,000 counting stops and `total_is_lower_bound` is true.
+            Number of deliveries, across all pages, that match the filters and that the caller may see. Present only
+            on the first page. Counting stops at 10,000, and then `total_is_lower_bound` is true.
         total_is_lower_bound:
           type: boolean
-          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.
+          description: True when `total` reached the 10,000 limit and there may be more deliveries. Present whenever `total` is.

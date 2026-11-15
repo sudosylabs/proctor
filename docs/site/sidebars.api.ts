@@ -4,10 +4,10 @@ import realtimeSidebar from '../api/reference/realtime-protocol/sidebar';
 
 const sidebars: SidebarsConfig = {
   apiSidebar: [
-    {type: 'doc', id: 'index', label: 'API Overview'},
+    {type: 'doc', id: 'index', label: 'Overview'},
     {
       type: 'category',
-      label: 'Integration Guides',
+      label: 'Guides',
       collapsed: true,
       items: [
         'guides/getting-started',
@@ -23,7 +23,7 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
-      label: 'End-to-End Recipes',
+      label: 'Recipes',
       collapsed: true,
       items: [
         'recipes/bootstrap-installation',
@@ -46,13 +46,13 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
-      label: 'Endpoint Reference',
+      label: 'Endpoints',
       collapsed: false,
       items: referenceSidebar,
     },
     {
       type: 'category',
-      label: 'Realtime Reference',
+      label: 'Realtime messages',
       collapsed: true,
       items: realtimeSidebar,
     },

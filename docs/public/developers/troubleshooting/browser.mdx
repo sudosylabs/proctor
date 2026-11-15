@@ -1,59 +1,61 @@
 ---
-title: Browser Application
-description: Diagnose hosted-build identity, Vite proxying, browser origins, generated-contract drift, browser tests, traces, and cross-browser failures.
+title: Browser application
+description: Track down problems with the hosted build, the Vite proxy, browser origins, out-of-date generated code, browser tests, traces and differences between browsers.
 audience: developer
 maturity: preview
 ---
 
-# Browser Application
+# Browser application
 
-Proctor has two intentional browser workflows. `make run-server` serves the
-compiled, production-shaped webapp. `make run-webapp` runs Vite with hot module
-replacement and proxies API and WebSocket traffic to Proctor. Name which one is
-failing before comparing their behavior.
+Proctor has two ways to run the webapp in a browser, on purpose.
+`make run-server` serves the compiled webapp, set up as it is in production.
+`make run-webapp` runs Vite with hot module replacement and passes API and
+WebSocket traffic through to Proctor. Work out which one is failing before you
+compare how they behave.
 
-## Identify the Serving Mode
+## Work out which mode you're in
 
-| Observation | Hosted build | Vite workflow |
+| What to look at | Hosted build | Vite |
 | --- | --- | --- |
-| Browser URL | Server public URL, normally port `8065` | Vite URL, normally port `5173` |
-| Assets | `webapp/dist` | Vite development server |
-| Build identity | `webapp/dist/webapp-build.json` must match | Development bundle |
-| API and WebSocket path | Served by the same Proctor origin | Proxied to `PROCTOR_SERVER_DEV_URL` |
+| Browser URL | The server's public URL, usually port `8065` | The Vite URL, usually port `5173` |
+| Where files come from | `webapp/dist` | The Vite development server |
+| Build identity | `webapp/dist/webapp-build.json` must match | A development bundle |
+| API and WebSocket | Served from the same Proctor origin | Passed through to `PROCTOR_SERVER_DEV_URL` |
 
-If the hosted login route fails, start with:
+If the hosted sign-in route fails, start with:
 
 ```sh
 make webapp-build
 make dev-doctor
 ```
 
-Do not delete `webapp/dist` as a first step. Its build identity is useful
-evidence when the server refuses stale or mismatched assets.
+Don't delete `webapp/dist` first. If the server refuses files that are out of
+date or don't match, the build identity in that folder tells you why.
 
-## Use the Browser Network Record
+## Read the browser's network record
 
-For one failing interaction, record:
+For one interaction that fails, write down:
 
-- document origin and request URL;
-- method, status, Problem Details `code`, and request ID;
-- whether the request was cookie or bearer authenticated;
-- whether an unsafe cookie request carried the CSRF header; and
-- whether the response was HTML, JSON, a redirect, or an asset.
+- The page's origin and the request URL.
+- The method, status, Problem Details `code` and request ID.
+- Whether the request used a cookie or a bearer token.
+- Whether a cookie request that changes data sent the CSRF header.
+- Whether the response was HTML, JSON, a redirect or a static file.
 
 Never copy credential values, cookies, authorization headers, CSRF tokens,
-private response bodies, exam answers, or student data. Prefer a synthetic
-fixture and a redacted screenshot that contains only the relevant surface.
+private response bodies, exam answers or student data. Use made-up test data
+where you can, and a screenshot cropped and redacted to show only the part
+that matters.
 
-If an API call or WebSocket works directly but fails through Vite, compare the
-visible browser origin, configured public URL, and
-`PROCTOR_SERVER_DEV_URL`. Correct those values as one origin decision; do not
-disable Origin or CSRF enforcement.
+If an API call or WebSocket works when you call it directly but fails through
+Vite, compare the origin the browser shows, the configured public URL, and
+`PROCTOR_SERVER_DEV_URL`. Fix those values together, as one decision about
+the origin. Don't turn off Origin or CSRF checks.
 
-## Detect Generated-Contract Drift
+## Find out-of-date generated code
 
-Generated adapters can compile while being stale relative to their authored
-source. Run the checks owned by the surface:
+Generated adapters can still compile after their source has changed. Run the
+checks for the area you're working on:
 
 ```sh
 make -C server openapi-check
@@ -64,21 +66,22 @@ npm run routes:check
 npm run check:design-system
 ```
 
-When a check reports drift, change the authored source and run its repository
-generator. Do not hand-edit a generated adapter to silence the check. The
-[webapp workflow](../webapp-workflow.mdx) maps each source to its generator.
+When a check reports a difference, change the source file and run the
+repository's generator for it. Don't edit a generated adapter by hand to make
+the check pass. The [webapp workflow](../webapp-workflow.mdx) shows which
+generator belongs to each source.
 
-## Reduce Browser-Test Failures
+## Narrow down browser test failures
 
-Install the repository's browser engines when Playwright reports that they are
-missing:
+If Playwright says the browser engines are missing, install the ones the
+repository uses:
 
 ```sh
 cd webapp
 npx playwright install chromium firefox webkit
 ```
 
-Reproduce one project before running the matrix:
+Reproduce the failure in one browser before you run them all:
 
 ```sh
 npm run test:browser -- --project=chromium
@@ -86,33 +89,34 @@ npm run test:browser -- --project=firefox
 npm run test:browser -- --project=webkit
 ```
 
-A one-browser failure is evidence of a compatibility, timing, focus, or
-platform behavior difference. Do not add arbitrary delay until you identify
-the condition the test should observe. Use accessible roles and stable user
-outcomes rather than implementation selectors.
+If only one browser fails, the cause is a difference in compatibility, timing,
+focus or platform behavior. Don't add an arbitrary delay. First find the
+condition the test should wait for. Select elements by accessible role and
+check results the user would see, not implementation details.
 
-Playwright retains traces on failure under ignored test output. A trace can
-contain complete URLs, DOM text, request metadata, and screenshots. Review it
-locally and redact it before sharing. Never commit traces or screenshots
-captured from a non-synthetic environment.
+Playwright keeps a trace when a test fails, in test output that Git ignores. A
+trace can contain full URLs, page text, request details and screenshots.
+Review it on your machine and redact it before you share it. Never commit
+traces or screenshots taken from an environment with real data.
 
-## Use the Repository Debugging Entry Points
+## Debugging tools in the repository
 
-Use browser developer tools and Playwright traces for browser state. VS Code
-contributors can use the tracked hosted-webapp or Vite Chrome launch
-configuration. Use the repository's Delve targets when the failing request must
-be followed into Go code. The complete VS Code, GoLand, Neovim, CLI, profiling,
-and trace recipes are in [tooling and debugging](../tooling-and-debugging.mdx).
+Use the browser's developer tools and Playwright traces to look at browser
+state. If you use VS Code, the repository includes Chrome launch
+configurations for the hosted webapp and for Vite. When you need to follow a
+request into Go code, use the repository's Delve targets. The full recipes for
+VS Code, GoLand, Neovim, the CLI, profiling and traces are in
+[tooling and debugging](../tooling-and-debugging.mdx).
 
-## Prove the Recovery
+## Confirm the fix
 
-Repeat the narrow interaction in the serving mode that failed. Then run:
+Repeat the small interaction in the mode that failed. Then run:
 
 ```sh
 cd webapp
 npm run check
 ```
 
-For a hosted-build defect, rebuild and prove the production-shaped route on
-the foreground server. For a browser behavior defect, run the full Chromium,
-Firefox, and WebKit matrix.
+For a problem with the hosted build, rebuild it and check the route on the
+server running in the foreground. For a problem with browser behavior, run
+the full set of Chromium, Firefox and WebKit tests.

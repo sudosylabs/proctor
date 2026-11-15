@@ -1,6 +1,6 @@
 ---
-title: Set Up an Institution
-description: Understand the order for establishing Proctor's academic structure, identities, access policy, and scoped authority.
+title: Set up an Institution
+description: The order in which you set up academic structure, sign-in rules, the Access Policy and who can do what in Proctor.
 audience: institution-administrator
 maturity: preview
 slug: /institution-admin/
@@ -8,85 +8,91 @@ slug: /institution-admin/
 
 import Link from '@docusaurus/Link';
 
-# Set Up an Institution
+# Set up an Institution
 
-Every Proctor installation contains one <Term id="institution">Institution</Term>.
-Its academic hierarchy, identity policy, and scoped authority provide the
-context in which examinations are created and delivered.
+Every Proctor installation holds one <Term id="institution">Institution</Term>.
+Its academic structure, its rules for who can sign in, and the permissions you
+grant at each level together decide how exams are created and delivered.
 
 <Maturity state="preview">
-  The administrative server contracts are implemented, but the complete visual
-  administration journey is not. Use this guide to understand the model; use the
-  API guide for current integration work.
+  The administration features exist on the server, but the full set of
+  administration screens does not yet. Use this guide to understand how the
+  pieces fit together, and use the API guide for integration work today.
 </Maturity>
 
-## Establish the Structure in Order
+## Set things up in this order
 
-1. **Bootstrap the Installation and Institution.** The first protected setup
-   establishes the installation identity and initial administrative authority.
-2. **Create <Term id="academic-unit">Academic Units</Term>.** Model faculties,
-   schools, departments, or other hierarchical organizational units.
+1. **Bootstrap the installation and the Institution.** This first protected
+   setup step creates the installation's identity and the first
+   administrator's authority.
+2. **Create <Term id="academic-unit">Academic Units</Term>.** Use them for
+   faculties, schools, departments or any other units in your hierarchy.
 3. **Define <Term id="programme">Programmes</Term> and <Term id="programme-level">Programme Levels</Term>.**
-   Programmes belong to their academic context; levels describe progression
-   within them.
+   Each Programme belongs to its place in the academic structure. Its levels
+   describe how students progress through it.
 4. **Open <Term id="academic-period">Academic Periods</Term> and <Term id="class">Classes</Term>.**
-   A Class is the concrete student roster for a Programme level in an applicable
-   Academic Period.
-5. **Configure identity and onboarding.** Choose allowed login paths, admission
-   rules, and invitation behavior before bringing people into the institution.
-6. **Grant roles through scoped bindings.** Affiliations and memberships record
-   relationships. They do not themselves grant unrestricted permissions.
+   A Class is the actual list of students for one Programme Level in an
+   Academic Period that applies to it.
+5. **Configure sign-in and onboarding.** Before you bring people in, choose
+   which sign-in methods are allowed, who may join, and how Invitations
+   behave.
+6. **Grant Roles through scoped bindings.** Affiliations and memberships
+   record relationships. On their own they never grant broad permissions.
 
 <GovernedFigure asset="academic-structure-ownership-map" />
 
-## Keep 3 Concepts Separate
+## Keep three ideas apart
 
-| Concept | What it expresses | What it does not imply |
+| Idea | What it records | What it does not give |
 | --- | --- | --- |
 | <Term id="affiliation">Affiliation</Term> | A person's relationship with the Institution | Permission to administer every resource |
-| Membership | Placement in an Academic Unit or Class | An unrestricted role |
-| <Term id="role-binding">Role Binding</Term> | Permission at Institution, Academic Unit, or Class scope | Ownership outside that scope |
+| Membership | A place in an Academic Unit or Class | Any broad Role |
+| <Term id="role-binding">Role Binding</Term> | Permissions at Institution, Academic Unit or Class level | Control outside that level |
 
-## Read the Governing Model
+## Where to go next
 
-- [Govern account access](./access-policy.mdx) before admitting people or
-  removing an administrator authentication path.
-- [Build the academic structure](./academic-structure.mdx) with explicit
-  ownership, applicability, archive, and retry rules.
-- [Manage people and scoped authority](./people-and-authority.mdx) without
-  turning membership into permission.
-- [Inspect audit history](./audit-history.mdx) through the caller's current
-  authorized scope.
-- [Proctor glossary](../reference/glossary.mdx) defines Institution, Academic
-  Unit, Programme, Academic Period, and Class.
+- [Govern account access](./access-policy.mdx) before you admit people or
+  remove a way for an administrator to sign in.
+- [Build the academic structure](./academic-structure.mdx), including who owns
+  what, which Periods apply where, archiving and retries.
+- [Manage people and permissions](./people-and-authority.mdx) without letting
+  membership turn into permission.
+- [Inspect audit history](./audit-history.mdx) within the scope you are
+  currently allowed to see.
+- The [Proctor glossary](../reference/glossary.mdx) defines Institution,
+  Academic Unit, Programme, Academic Period and Class.
 - <Link to="/api/recipes/bootstrap-installation">Bootstrap an installation</Link>
-  to establish the Institution and first administrative authority.
+  creates the Institution and the first administrator's authority.
 - <Link to="/api/recipes/academic-structure">Build the academic structure</Link>
-  with explicit hierarchy, period, and roster ownership.
+  sets up the hierarchy, Periods and Class lists explicitly.
 - <Link to="/api/recipes/invite-and-link-users">Invite and link users</Link>
-  through the supported onboarding contracts.
+  through the supported onboarding operations.
 
-## Important Vocabulary
+## Words to use
 
-Use **Class**, not Group, for the concrete roster. Use <Term id="exam-manager">Exam
-Manager</Term> for an Exam's creator or another teacher with equal management
-authority. “Proctor” is the product name and does not silently grant a person a
-special role.
+Say **Class**, not Group, for a list of students. Say <Term id="exam-manager">Exam
+Manager</Term> for the person who created an Exam, or another teacher with the
+same right to manage it. "Proctor" is the product's name. It never quietly
+gives anyone a special role.
 
-## First-administrator checklist
+## First administrator checklist
 
-Bootstrap creates the Institution, first User, password credential, protected
-`system_admin` Role and binding, Access Policy revision 1, and successful audit
-as one transaction. It does not create a Session or prove mailbox control.
+Bootstrap creates all of the following in one transaction: the Institution,
+the first User, their password, the protected `system_admin` Role and its
+binding, Access Policy revision 1, and an audit record of the success. It does
+not create a Session, and it does not prove that the administrator controls
+the email address.
 
 After bootstrap, the first administrator should:
 
-1. sign in through the ordinary hosted login;
-2. verify the bootstrap email address;
+1. sign in through the normal hosted sign-in page;
+2. verify the email address used during bootstrap;
 3. test transactional mail;
-4. configure, enable, and deliberately connect any external provider;
-5. establish another administrator with an independent usable method; and
-6. only then consider disabling local login.
+4. configure and enable any external sign-in provider, then link to it on
+   purpose;
+5. set up a second administrator who has their own working way to sign in;
+6. only then consider turning off local sign-in.
 
-Host recovery is an offline operator procedure, not an administrator endpoint.
-Do not weaken Access Policy to substitute for tested recovery.
+Recovering access on the host is an offline procedure for the operator. There
+is no administrator endpoint for it. Do not loosen the Access Policy as a
+stand-in for a recovery process you have tested.

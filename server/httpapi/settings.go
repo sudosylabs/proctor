@@ -44,9 +44,12 @@ type Settings struct {
 	BuildInfo BuildInfo
 	// Plugins reports the active plugins GET /system/plugins lists and
 	// whether readiness is degraded by a failed plugin.
-	Plugins      Plugins
-	PublicURL    string
-	MaxBodyBytes int64
+	Plugins   Plugins
+	PublicURL string
+	// DocumentationURL is the installation's documentation site, which Problem
+	// Details link to. Empty sends type "about:blank".
+	DocumentationURL string
+	MaxBodyBytes     int64
 	// ReadTimeout and WriteTimeout repeat the server-wide connection
 	// deadlines. Streaming upload and binary download routes extend them by
 	// the time their declared size takes at the minimum admitted throughput.

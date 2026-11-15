@@ -1,55 +1,67 @@
 ---
-title: Keep Work and Continuity Acknowledged
-description: Distinguish local editing, remotely authoritative Workspace state, Connection liveness, Participation renewal, reconnect, and Suspension.
+title: Keep your work and connection confirmed
+description: The difference between editing on your computer and work the server has saved, and how staying connected, renewing, reconnecting and Suspension work.
 audience: candidate
 maturity: preview
 ---
 
-# Keep Work and Continuity Acknowledged
+# Keep your work and connection confirmed
 
-The Attempt Workspace is remotely authoritative. A local editor buffer,
-WebSocket write, or “saved” indicator is not durable until
-the server acknowledges the exact mutation and Workspace Cursor.
+The server holds the real copy of your Attempt Workspace. Text in your local
+editor, a message sent over the WebSocket, or a “saved” indicator doesn't mean
+your work is safely stored. It is stored only once the server confirms that
+exact change and its Workspace Cursor.
 
-## Work Inside the Protected Workspace
+## Working in your Workspace
 
-The Starter Workspace is copied logically into one private Attempt Workspace.
-Exam Resources remain read-only outside it. Workspace paths are case-sensitive
-POSIX-relative values and `.proctor` is reserved. Links, devices, sockets,
-traversal, and recursive deletion of non-empty directories are rejected.
+Proctor copies the Starter Workspace into your own private Attempt Workspace.
+Exam Resources stay outside it, and you can read them but not change them.
 
-Each file has a stable Entry identity, mutable path, and opaque current Content
-Version. Create, replace, move, and delete compare expected state and use an
-Attempt-scoped idempotency key. After acknowledgement, retain the new Content
-Version and Workspace Cursor.
+Workspace paths are case-sensitive, relative POSIX paths, and `.proctor` is
+reserved. Proctor rejects links, devices, sockets, paths that climb out of the
+Workspace, and deleting a folder that still has things in it.
 
-## Separate Ping, Renewal, and Connection
+Each file has a fixed Entry identity, a path that can change, and a current
+Content Version, which is an opaque value. Creating, replacing, moving and
+deleting a file each check that the file is still in the state you expect, and
+each uses an idempotency key that belongs to your Attempt. Once the server
+confirms a change, keep the new Content Version and Workspace Cursor.
+
+## Ping, renewal and Connection are different things
 
 <GovernedFigure asset="participation-lease-timeline" />
 
-- WebSocket ping tests transport liveness only.
-- Authenticated Participation renewal proves the generation and advances its
-  PostgreSQL lease through a monotonic sequence.
-- A Connection is one durable transport child of the current Participation.
+- A WebSocket ping only checks that the network link is alive.
+- Renewing your Participation, with your sign-in proof, shows that this is
+  still your generation. Each renewal carries a sequence number that only
+  goes up, and extends the generation's lease, which is kept in PostgreSQL.
+- A Connection is one lasting record of a network link, and it belongs to
+  your current Participation.
 
-Desktop schedules renewal at the server-provided interval. A duplicate sequence
-returns its retained result; a stale sequence cannot extend the lease. Brief
-reconnect before expiry may retain the generation. Expiry permanently fences
-it, closes the Connection, records neutral Connection Loss evidence, and
-suspends the Attempt.
+Desktop renews at the interval the server gives it. If a sequence number is
+sent twice, the server returns the result it already gave. An out-of-date
+sequence number can't extend the lease. If you reconnect quickly, before the
+lease expires, you may keep the same generation.
 
-One failed request or ping is not Connection Loss. Confirmed lease expiry is.
-The candidate message should say secure continuity could not be renewed, not
-accuse the candidate or reveal internal lease/generation vocabulary.
+When the lease expires, the generation is shut off for good. The server
+closes the Connection, records neutral Connection Loss evidence, and suspends
+the Attempt.
 
-## Recover From Interruption
+One failed request or ping is not Connection Loss. A confirmed lease expiry
+is. The message you see should say that your secure connection couldn't be
+renewed. It shouldn't accuse you of anything, or use internal words like
+lease or generation.
 
-After a recoverable reconnect, refetch the presentation and reconcile the
-ordered Workspace journal from the last acknowledged cursor. If history cannot
-bridge the cursor, replace the local view from a complete manifest. Never push
-an unacknowledged local tree over authoritative state.
+## Getting back on track after an interruption
 
-After expiry, Kick, or automatic Suspension, only an authorized Manager can
-re-allow the exact episode. Fresh admission creates a new Participation
-generation; prior credentials, sequence numbers, and Connections remain fenced.
-The same Attempt, Workspace, configuration, Flags, and evidence continue.
+After you reconnect successfully, Desktop fetches the Exam view again and
+catches up with the ordered list of Workspace changes since the last
+confirmed cursor. If the history doesn't go back far enough, Desktop replaces
+its local copy with a complete list of files from the server. It must never
+push unconfirmed local files over the copy the server holds.
+
+After the lease expires, after you are Kicked, or after an automatic
+Suspension, only an authorized Manager can allow you back in for that exact
+episode. Entering again creates a new Participation generation. Old
+credentials, sequence numbers and Connections stay shut off. You keep the
+same Attempt, Workspace, configuration, Flags and evidence.

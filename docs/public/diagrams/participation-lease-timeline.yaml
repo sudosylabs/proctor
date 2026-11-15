@@ -1,0 +1,31 @@
+blocks:
+  - row:
+      - card: Admitted
+        text: Generation 1 starts, with a Connection.
+      - card: Renewals
+        text: Each one extends the lease. Its sequence number only goes up.
+      - card: Quick reconnect
+        text: Before the lease expires, the same generation can carry on.
+      - card: Lease expires
+        text: Measured by the server’s clock. Renewal can’t bring it back.
+        accent: true
+  - row:
+      - card: Suspended
+        text: The Connection closes. Connection Loss evidence and one Flag are recorded.
+      - card: Manager allows back
+        text: Only an authorized Manager can let the candidate in again.
+      - card: Generation 2
+        text: A fresh admission to the same Attempt. Generation 1 stays shut off.
+    from:
+      - {from: 4, to: 1, accent: true}
+  - row:
+      - group: Three different signals
+        text: only an expired lease is Connection Loss
+        columns: 3
+        items:
+          - card: Ping
+            text: Checks the network link is alive
+          - card: Renewal
+            text: Extends the lease
+          - card: Failed request
+            text: Not Connection Loss on its own

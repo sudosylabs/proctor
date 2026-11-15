@@ -13,7 +13,7 @@ paths:
       operationId: archiveExam
       summary: Archive an active Exam
       description: >-
-        Archives the active Exam only when its expected aggregate revision still matches, preventing a stale manager from hiding newer work. Archiving preserves Drafts, immutable Revisions, management provenance, Sittings, Attempts, and audit history.
+        Archives an active Exam. The change is made only if expected_revision still matches the Exam's current revision, so a Manager working from an old copy can't hide newer work. Archiving keeps the Draft, published Revisions, Manager history, Sittings, Attempts and audit history.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -70,7 +70,7 @@ components:
   requestBodies:
     ArchiveExam:
       required: true
-      description: Supplies the last observed Exam aggregate revision required for the concurrency-safe archive transition.
+      description: The Exam revision you last saw.
       content:
         application/json:
           schema:
@@ -79,7 +79,7 @@ components:
             expected_revision: 3
   responses:
     ExamIdentityOK:
-      description: Exam identity
+      description: The archived Exam.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -87,6 +87,16 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamIdentityResponse'
+          example:
+            id: 8uk3fh7sw1mxqdbt5yrcg4oz9a
+            academic_unit_id: q4nzk1xwe7rbdg3cyjoth5mupa
+            creator_user_id: c9me3tsk7oyhx1bwuadgz5nqrf
+            owner_user_id: c9me3tsk7oyhx1bwuadgz5nqrf
+            default_revision_id: t1oekp5dqa7nwrzhcx3by9mug4
+            created_at: '2026-07-20T10:00:00Z'
+            updated_at: '2026-09-30T17:00:00Z'
+            archived_at: '2026-09-30T17:00:00Z'
+            revision: 4
   schemas:
     ArchiveExamRequest:
       type: object
@@ -98,3 +108,4 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The Exam revision you last saw. If the Exam has changed since, the request fails with a conflict.

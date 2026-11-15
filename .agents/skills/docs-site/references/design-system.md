@@ -14,69 +14,64 @@ validator. Edit the source module, not either adapter.
 
 ## Direction
 
-The subject is self-hosted examination infrastructure. The audience needs to
-read for long periods and needs assurance about authority, sequence, state,
-and recovery. The primary visual language is therefore a restrained technical
-handbook: a strongly branded global bar, quiet paper-like reading surfaces,
-visible navigation depth, generous prose rhythm, and compact evidence cues.
-Ordinary prose is allowed to look like prose. It does not sit inside cards,
-badges, tinted panels, or repeated full-width rules merely to make a page feel
-designed.
+Proctor documentation should read like a carefully edited technical handbook:
+neutral greys, one sans family, hairline structure and generous whitespace.
+Every element is there because a reader needs it. Nothing is styled only to
+make a page look designed.
 
-Purple owns the global navigation and marks the current path, authoritative
-actions, and selected technical state. It should occupy few, deliberate
-surfaces. A large pale-purple rectangle is not the default treatment for
-guidance, metadata, search results, or navigation. Those components rely first
-on typography, spacing, and one-dimensional rules.
+Purple is reserved for links, focus, the reader's current location in the
+outline, and a few syntax roles. It does not fill the header, panels, badges or
+backgrounds. Status colors (teal, amber, coral) mark state only: a response
+status dot, a warning icon, a required field.
 
-The signature illustration element is the **fenced evidence plate**. A plate
-is a bounded surface with a restrained 8-pixel drafting grid and one clearly
-emphasized relationship. Use it for an illustration, architecture map, or
-other evidence that must be inspected separately from prose. Do not cover
-ordinary pages in a grid or repeat the Proctor mark as a pattern.
+Structure comes from typography, spacing and one-pixel rules. Do not use
+eyebrow labels, uppercase micro-headings, tinted callout boxes, colored left
+borders, cards around ordinary prose, or decorative numbering. A note is a
+bordered box whose icon carries the tone.
 
-The signature reading cue is a **registration rule**: a short purple line that
-anchors guide metadata, selected navigation, or a factual note to the same
-left-hand reading edge. It is never used as an arbitrary divider, and several
-rules must not compete in the same component.
-
-The desktop reading structure is intentionally asymmetric:
+The desktop structure is:
 
 ```text
-┌──────────────────── global navigation ────────────────────┐
-│ section navigation │ 72–76ch reading column │ page outline │
-│                    │ wider evidence when needed            │
-└────────────────────────────────────────────────────────────┘
+┌──────────── sticky header: lockup, sections, search ────────────┐
+│ section rail │ 45rem reading column │ "On this page" │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-The API reference may use a denser specialist variant, but it inherits the
-same typography, colors, spacing, and interaction states.
+The header stays fixed at the top while content scrolls beneath it. The
+outline column hides below `1200px`; the section rail moves into the menu below
+`997px`.
 
 ## Reading surfaces
 
-Guide pages keep a `72–76ch` prose measure, contextual section navigation on
-the left, and an on-page outline on the right when headings warrant one. A
-compact metadata line before the page heading identifies the intended audience
-and content maturity. That line is orientation, not a decorative badge row.
+A page head is the title, then one quiet line naming the audience and content
+maturity, then the lead paragraph. The head ends with a hairline. Section
+headings are sentence case with no rule beneath them. Tables use horizontal
+rules only. Lists of destinations use the ruled link list: title, one line of
+description, a chevron.
 
-Page headings are editorial rather than promotional. Use a compact display
-size, a comfortable lead paragraph, and whitespace to separate sections.
-Second-level headings do not receive a full-width border by default. Tables use
-horizontal reading rules rather than a boxed spreadsheet grid. Code blocks and
-search are raised only as much as their interaction requires.
+The section rail hangs every page list from one hairline; the current page
+darkens its own segment of that line. The end of a page has one row with
+"Edit this page" and "Report a problem with this page", then a ruled pager
+whose previous and next halves are divided by a hairline.
 
-API overview pages use the same reader but may begin with a contract summary:
-what is authoritative, how much of the contract is indexed, and whether the
-reference can send requests. Endpoint pages use the full available article
-width and split it `61/39` between the operation contract and code/request
-panel. Below the desktop breakpoint those panels stack in document order.
+Every code block uses one frame: a title or tab row, a copy action, an optional
+line-number gutter and highlighted lines. Syntax colors are tokens, so one
+Prism theme serves both color modes.
 
-An endpoint presents information in this order: operation name, exact method
-and OpenAPI path, purpose, Proctor request requirements, request details, then
-responses. HTTP methods identify protocol data but do not receive arbitrary
-rainbow colors; the selected technical accent remains purple. Teal and coral
-are reserved for successful and failed response states. Code-language tabs
-are neutral until selected.
+Endpoint pages split the width between the contract and a sticky request
+sample. The contract reads as requirements, parameters, request body and
+responses, each as ruled property rows with a monospace name, a muted type and
+a "required" marker. Response statuses are tabs with a teal or coral dot. The
+request form and authorization summary of the API theme are hidden; these
+pages never send requests.
+
+Error-code pages at `/problems/<code>` show the code as the title, the
+catalog meaning as the lead, then causes, fixes, an example response and
+related codes, with generated details (status, retry, endpoints) beside them.
+
+Diagrams are drawn on the page in the site's own type and colour tokens, so
+they follow the light and dark themes and print like the surrounding text.
+Screenshots keep a light plate because they show the light product.
 
 ## Core palette
 
@@ -87,7 +82,7 @@ derived tokens, not new meanings.
 | --- | --- | --- |
 | Proctor purple | `#5C00AA` | Proctor-controlled, authoritative, selected, or primary path |
 | Ink | `#161616` | Content and neutral structure |
-| Paper | `#FFFFFF` | Reading canvas and print-stable evidence plate |
+| Paper | `#FFFFFF` | Reading canvas and screenshot plate |
 | Teal | `#0B766E` | Reconstructible/transient effects or a successfully completed outcome |
 | Amber | `#95520D` | Human intervention, caution, paused, or incomplete state |
 | Coral | `#B4233C` | Denied, invalid, destructive, unavailable, or fail-closed outcome |
@@ -112,55 +107,50 @@ standard foreground/surface pairs in both themes.
 
 ### Theme surfaces
 
+The site's neutral values are tuned for long reading. They live in
+`tokens.mjs`; this table records their intent.
+
 | Role | Light | Dark |
 | --- | --- | --- |
-| Canvas | `#FFFFFF` | `#141016` |
-| Sidebar | `#FAF9FB` | `#1B151E` |
-| Surface | `#FFFFFF` | `#211A25` |
-| Raised surface | `#FFFFFF` | `#2A2130` |
-| Border | `#E1DCE5` | `#3B3142` |
-| Strong border | `#C8C0CE` | `#584A60` |
-| Primary text | `#161616` | `#F8F6FA` |
-| Muted text | `#655F69` | `#AEA4B3` |
-
-Illustrations remain light evidence plates in both site themes so their print,
-contrast, and review result does not change with the surrounding page.
+| Canvas | `#FFFFFF` | `#0D0D0F` |
+| Surface (inline code, hover) | `#F6F6F7` | `#17171A` |
+| Border | `#E8E8EB` | `#25252A` |
+| Strong border | `#D6D6DB` | `#35353C` |
+| Primary text | `#17171A` | `#F3F3F5` |
+| Secondary text | `#404047` | `#C8C8CE` |
+| Muted text | `#686871` | `#8F8F98` |
+| Accent | `#5C00AA` | `#BB9DFF` |
 
 ## Typography
 
-Use locally bundled IBM Plex. The accepted Proctor wordmark was derived from
-IBM Plex Sans Medium, so the documentation extends an existing brand choice.
-No page or asset depends on a visitor having a commercial system font.
+The site, including its diagrams, uses locally bundled Geist Sans and Geist
+Mono.
 
 | Role | Family | Allowed weights |
 | --- | --- | --- |
-| Headings, interface, prose, illustration objects | IBM Plex Sans | `400`, `500`, `600`, `700` |
-| Code, protocol values, state keys, utility annotations | IBM Plex Mono | `400`, `600` |
+| Headings, interface, prose | Geist Sans | `400`, `500`, `600` |
+| Code, protocol values, error codes, paths | Geist Mono | `400`, `500` |
 
-Do not request synthetic intermediate weights such as `650`, `720`, or `780`.
-Do not set a literal font family in a page stylesheet. Use the generated
-`--ifm-font-family-base` and `--ifm-font-family-monospace` variables.
+Do not request weights outside this set. Do not set a literal font family in a
+page stylesheet. Use the generated `--ifm-font-family-base` and
+`--ifm-font-family-monospace` variables.
 
-The site type scale is:
-
-| Role | Size | Line height | Default weight |
+| Role | Size | Line height | Weight |
 | --- | --- | --- | --- |
-| Caption | `0.75rem` | `1.5` | `400` |
-| Utility label | `0.75rem` | `1.25` | `600` |
-| Small body | `0.875rem` | `1.6` | `400` |
-| Body | `1rem` | `1.7` | `400` |
-| Small heading | `1.25rem` | `1.35` | `600` |
-| Section heading | `1.625rem` | `1.25` | `600` |
-| Page heading | `2.625rem` | `1.1` | `600` |
+| Utility and captions | `0.78–0.84rem` | `1.5` | `400` or `500` |
+| Small body | `0.875–0.9rem` | `1.6` | `400` |
+| Body | `1rem` | `1.72` | `400` |
+| Lead | `1.125rem` | `1.6` | `400` |
+| Subsection heading | `1.0625rem` | `1.4` | `600` |
+| Section heading | `1.375rem` | `1.3` | `600` |
+| Page heading | `2.125rem` | `1.15` | `600` |
 
-Responsive page headings may use `clamp()` around the page-heading token. Body
-copy stays within `72–76ch`; a large viewport is not permission to lengthen a
-line.
+Headings tighten their tracking as they grow. Body copy stays within a `45rem`
+column; a wide viewport is not permission to lengthen a line.
 
-Illustrations use only three intrinsic text sizes: `18px` object names, `14px`
-short supporting labels, and `12px` IBM Plex Mono utility annotations. Do not
-place smaller text in a 1200×720 figure. If the content does not fit, delete
-detail or split the illustration.
+Diagrams use `15px` card titles, `13px` supporting text and `12px` arrow
+labels at the real column width, never text scaled down from a larger canvas.
+If the content does not fit, delete detail or split the diagram.
 
 ## Spacing and geometry
 
@@ -183,12 +173,12 @@ Use three radii consistently:
 
 - controls and small tags: `6px`;
 - cards: `12px`;
-- evidence plates and large diagram objects: `16px`;
+- screenshot plates: `16px`;
 - pills: fully rounded only for a real status, token, or compact action.
 
 A card is not a pill, and adjacent objects do not receive different radii for
 visual variety. Shadows are limited to genuinely elevated surfaces such as a
-search dialog. Ordinary cards and illustrations use borders and spacing.
+search dialog. Ordinary cards and diagrams use borders and spacing.
 
 ## Icons
 
@@ -227,81 +217,56 @@ technology. A standalone icon supplies a short accessible title. Adding a name
 requires a recurring use, an entry in this table, a geometry review at all
 three sizes, and an update to the icon contract test.
 
-## Illustration grammar
+## Diagram grammar
 
-Every current-system diagram declares `visual_system` as
-`proctor-assurance-v1` in the governed asset registry.
+A diagram is a YAML layout in `docs/public/diagrams/<id>.yaml`, registered in
+the asset registry with `visual_system: proctor-diagrams-v2`. The grammar and
+its validator live in
+[`diagrams/index.mjs`](../../../../docs/site/diagrams/index.mjs); the
+`Diagram` component draws it. Authors choose structure and words, never
+coordinates or colours.
 
-### Canvas and density
+- **Rows** place up to four cards, groups or branches side by side, joined by
+  arrows that may carry a short label and a step number. Below 600px of
+  available width every row stacks top to bottom and the arrows turn down.
+- **Connectors** join items of one row to items of the row below, to fan out
+  or to continue a sequence.
+- **Cards** carry a title of one to three words and one short sentence, or a
+  few short lines.
+- **Groups** frame related cards under a title and a short subtitle.
+- **Branches** fan one spine out to final outcomes.
+- **Notes** close a diagram with its main point when the drawing needs one.
 
-- Canvas: `1200×720` with a matching view box.
-- Safe inset: `56px` on every side.
-- Drafting grid: `8px`, using the plate-grid token at one-pixel width.
-- Primary objects: normally four to seven.
-- Focal elements: one, or at most two when a comparison is the point.
-- One illustration communicates one claim. Split state, ownership, and
-  transport behavior when combining them would require explanatory prose.
+### Visual rules
 
-The page heading names the subject. The figure contains only object names,
-short state labels, and necessary relationship labels. The visible caption
-states the invariant. Do not repeat a poster title, subtitle, paragraph,
-footnote, or prose-heavy legend inside the SVG.
-
-### Objects and strokes
-
-- Large objects use a `16px` radius and `2px` border.
-- Small controls use a `6px` radius.
-- Passive context uses ink or gray borders on paper.
-- The authoritative or selected object uses purple fill or border, not both on
-  every object in the path.
-- Semantic surfaces use their corresponding soft token and retain a textual or
-  geometric cue.
-- All shapes align to the 8-pixel grid; use a 4-pixel optical offset only when
-  stroke centering otherwise appears uneven.
-
-### Connectors and arrows
-
-- Primary connectors are `3px`; secondary relationships are `2px`; the
-  drafting grid and annotation brackets are `1px`.
-- Arrowheads are `12×12px`. Use one marker geometry across the complete asset
-  set.
-- Solid purple: authoritative ownership, commit, or primary transition.
-- Dashed purple: explicit reference that is not ownership.
-- Dashed teal: reconstructible or best-effort effect after a durable outcome.
-- Amber: a human intervention or deliberately incomplete transition.
-- Coral: rejection or fail-closed termination.
-- Gray: passive context or a neutral alternative.
-
-Every connector begins at a visible source boundary and ends with its arrow tip
-on a meaningful target boundary. Orthogonal branches share an actual path
-segment or junction dot. A branch may not stop near a spine, and an arrow may
-not terminate in whitespace. Labels sit at least `8px` away from a connector
-and never cover a bend or junction.
-
-### Annotation rail
-
-An evidence plate may end with one short bracket or rail stating the invariant
-made visible by the drawing. The rail uses a one-pixel neutral stroke and no
-more than two lines of 14px text. It must not become a second caption or a place
-to rescue an unclear illustration.
+- One accent per diagram, on the element or path that matters most. Everything
+  else is ink, grey text and hairline borders on the page background.
+- Dashed borders and lines mean separate, optional, or safe to lose.
+- No fills, tints, shadows, grids, frames, eyebrow labels, uppercase tags, or
+  numbered badges. Order comes from layout and arrow labels.
+- The diagram has no title; the page heading names the subject and the
+  caption states the point once.
+- Labels are plain language. Keep canonical Proctor terms, but drop slogans and
+  internal jargon; the page prose carries exact technical detail.
+- One diagram makes one claim. Split it rather than squeeze it.
 
 ## Vocabulary in visual design
 
 Use canonical Proctor terms from the repository
-[`glossary` skill](../../glossary/SKILL.md). An
-illustration label is not a place to create a shorter synonym such as “session”
+[`glossary` skill](../../glossary/SKILL.md). A
+diagram label is not a place to create a shorter synonym such as “session”
 for Exam Sitting or “group” for Class. If a canonical term makes the drawing
 too dense, simplify the drawing rather than rename the concept.
 
 The glossary and tooltip slice will make selected first occurrences
-explainable. Tooltips do not appear inside illustrations, headings, code, or
+explainable. Tooltips do not appear inside diagrams, headings, code, or
 API paths.
 
 ## Interaction and motion
 
 Movement must explain a state change or preserve orientation. Hover movement is
 limited to a small translation on a real interactive target. Do not animate
-illustration paths, add ambient particles, or scatter unrelated transitions.
+diagram paths, add ambient particles, or scatter unrelated transitions.
 All motion honors `prefers-reduced-motion` and leaves the complete meaning
 available without animation.
 
@@ -328,11 +293,11 @@ Authored stylesheets may use semantic custom properties and `color-mix()`, but
 they may not introduce literal colors, the retired `cobalt`/`aqua` token names,
 or unbundled font weights. The design-system audit rejects those forms.
 
-## Retired illustration systems
+## Retired diagram systems
 
-The four original diagrams were simplified and redrawn under
-`proctor-assurance-v1`. The former `legacy-cobalt-v0` palette is not an
-alternative theme and is no longer accepted by the registry validator.
+Diagrams were once fixed 1200×720 SVG plates (`proctor-assurance-v1`, and
+before that `legacy-cobalt-v0`). Both were replaced by `proctor-diagrams-v2`
+and are no longer accepted by the registry validator.
 
 ## Acceptance checklist
 
@@ -343,9 +308,9 @@ Before a visible slice is complete, inspect it in a browser:
 - keyboard order, focus visibility, and reduced motion;
 - text contrast, line length, zoom, and narrow-width wrapping;
 - no unintended horizontal overflow;
-- figures at page width and full size;
+- diagrams at desktop width and stacked at phone width; screenshots at page width and full size;
 - connector continuity, text containment, and print contrast;
-- locally served IBM Plex with no third-party font request; and
+- locally served Geist with no third-party font request; and
 - no semantic color used merely for visual variety.
 
 Screenshots are evidence for the review, not a substitute for exercising the

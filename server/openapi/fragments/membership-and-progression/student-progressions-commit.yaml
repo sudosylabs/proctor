@@ -13,7 +13,10 @@ paths:
       operationId: commitStudentProgression
       summary: Commit one exact student progression preview
       description: >-
-        Applies the exact authorized dry-run preview only when its revision and digest still match current source, destination, and student state. The named aggregate transition ends and creates enrollments atomically and preserves history for every affected student.
+        Applies the dry-run preview you reviewed, but only if its revision and digest still match the current source
+        Class, destination Class and students. For every affected student, enrollments are ended and created together
+        in one step, and earlier enrollments keep their history. The work runs in the background; poll the
+        progression to follow it.
       x-proctor-auth: principal_required
       x-proctor-idempotency: required
       tags:
@@ -71,7 +74,7 @@ paths:
 components:
   requestBodies:
     CommitStudentProgression:
-      description: Exact immutable preview revision and digest to apply transactionally.
+      description: The revision and digest of the preview you reviewed.
       required: true
       content:
         application/json:
@@ -79,10 +82,12 @@ components:
             $ref: '#/components/schemas/StudentProgressionCommitRequest'
           example:
             expected_revision: 3
-            preview_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+            preview_digest: f64551fcd6f07823cb87971cfb91446425da18286b3ab1ef935e0cbd7a69f68a
   schemas:
     StudentProgressionCommitRequest:
-      description: Revision and SHA-256 digest fencing commit to the reviewed dry-run preview.
+      description: >-
+        The revision and SHA-256 digest of the dry-run preview you reviewed. The commit is refused if the preview has
+        changed since.
       type: object
       additionalProperties: false
       required:
@@ -93,7 +98,8 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The progression's `revision` when you reviewed it.
         preview_digest:
           type: string
           pattern: ^[0-9a-f]{64}$
-          description: SHA-256 digest of the exact immutable preview, encoded as lowercase hexadecimal.
+          description: The progression's `preview_digest`, a SHA-256 digest in lowercase hexadecimal.

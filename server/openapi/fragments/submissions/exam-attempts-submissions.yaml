@@ -14,10 +14,10 @@ paths:
       operationId: acknowledgeExamAttemptCorrection
       summary: Acknowledge one required live correction for an active Attempt
       description: >-
-        Records the candidate's acknowledgement of the oldest pending required correction after rechecking the
-        current Revision, active Participation generation, registered-key Session, continuity credential, and
-        open Attempt Connection. Exact replay returns the retained acknowledgement without repeating mutation
-        effects.
+        Records that the candidate has read the oldest correction still waiting for acknowledgement. The
+        server first checks the current Revision, the active Participation and its generation, the
+        registered desktop Session, the Attempt credential and the open Attempt connection. Repeating the
+        request with the same Idempotency-Key returns the saved acknowledgement and changes nothing else.
       tags:
         - Submissions
       x-proctor-auth: session_required
@@ -84,23 +84,24 @@ paths:
       tags:
         - Submissions
       description: >-
-        Atomically seals one active Exam Attempt by pinning its acknowledged Workspace manifest and terminal
-        integrity position. The Session-bound continuity selectors and current Class membership are rechecked
-        in the transaction. An exact Idempotency-Key replay returns the retained 201 receipt without duplicate
-        realtime or unbind effects.
+        Submits an active Attempt. In one step the server seals the Workspace as the client last saw it
+        acknowledged and records the final integrity position. It checks the Session's Attempt credential
+        and connection, and that the candidate is still in the Class. Repeating the request with the same
+        Idempotency-Key returns the same 201 receipt without repeating realtime notifications or other side
+        effects.
       x-codeSamples:
         - lang: Shell
           source: |-
             curl --fail-with-body \
               --request POST \
-              --url 'https://proctor.example.edu/api/v1/exam-attempts/<exam-attempt-id>/submissions' \
+              --url 'https://proctor.example.edu/api/v1/exam-attempts/6xoche483hwrx5rpu8jzjoe7qg/submissions' \
               --header 'Authorization: DPoP <desktop-session-access-credential>' \
               --header 'DPoP: <fresh-proof-for-this-post-target-and-current-nonce>' \
               --header 'X-Proctor-Attempt-Credential: <attempt-credential>' \
               --header 'X-Proctor-Attempt-Connection-ID: <attempt-connection-id>' \
               --header 'Idempotency-Key: docs-submit-001' \
               --header 'Content-Type: application/json' \
-              --data '{"participation_id":"<participation-id>","generation":2,"expected_current_revision_id":"<revision-id>","expected_workspace_cursor":18,"final_focus_loss_sequence":3}'
+              --data '{"participation_id":"o87yi4tenx8kodmcuup1hmtsbo","generation":2,"expected_current_revision_id":"ih1r84kij94nrwis97rft6rduh","expected_workspace_cursor":18,"final_focus_loss_sequence":3}'
       x-proctor-auth: session_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -165,8 +166,8 @@ components:
   requestBodies:
     AcknowledgeExamCorrection:
       description: >-
-        Exact active Participation fence and current Revision observed while acknowledging the path-selected
-        oldest required correction.
+        The active Participation, its generation and the current Revision the client shows, for the
+        correction named in the path.
       required: true
       content:
         application/json:
@@ -189,11 +190,13 @@ components:
             expected_workspace_cursor: 18
             final_focus_loss_sequence: 3
       description: >-
-        The active Participation generation and final acknowledged client positions required to atomically
-        seal the Attempt Workspace as a Submission.
+        The active Participation and its generation, plus the last Workspace cursor and focus-loss sequence
+        the client saw acknowledged.
   responses:
     ExamCorrectionAcknowledged:
-      description: Retained acknowledgement for the exact required correction
+      description: >-
+        The correction is acknowledged. Repeating the request with the same Idempotency-Key returns the same
+        acknowledgement.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -201,8 +204,48 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/AcknowledgeExamCorrectionResponse'
+          example:
+            current_revision_id: 889766ufjgio6kbpzjbufozksq
+            revision_id: 889766ufjgio6kbpzjbufozksq
+            acknowledgement_state: acknowledged
+            acknowledged_at: '2026-12-14T09:55:03Z'
+            runtime_capabilities:
+              schema_version: 1
+              server_time: '2026-12-14T09:55:03Z'
+              interaction_state: interactive
+              attempt_configuration:
+                attempt_configuration_revision: yftfs48pasu5fd6czhcwz6b4x3
+                presentation:
+                  color_theme: dark
+                  prefer_high_contrast: false
+                  zoom_percent: 100
+                  editor_font_size_px: 14
+                  editor_line_height_px: 22
+                  reduced_motion: false
+                  screen_reader_mode: auto
+                  announcement_mode: auto
+                  cursor_style: line
+                  cursor_blinking: blink
+                approved_commands: []
+                approved_keybindings: []
+                digest: sha256:af0e275da6b68d95fa034c87358d9736e4502c8602f32f8b89ee4e04ce5ac137
+              focus_loss_collection_enabled: true
+              pending_correction_capabilities: []
+              workspace_mutation_allowed: true
+              submission_allowed: true
+              browser:
+                state: disabled
+              exam_revision:
+                admission_revision_id: ih1r84kij94nrwis97rft6rduh
+                current_revision_id: 889766ufjgio6kbpzjbufozksq
+                acknowledgement_required: false
+              departure:
+                allowed: false
+                reason: attempt_in_progress
     ExamSubmissionReceiptCreated:
-      description: Candidate-safe retained receipt for a committed Submission or its exact replay
+      description: >-
+        The Attempt was submitted. Repeating the request with the same Idempotency-Key returns the same
+        receipt.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -210,6 +253,21 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamSubmissionReceiptResponse'
+          example:
+            submission_id: 39kqk53i4cswfzbi7hbai1r8qg
+            receipt_code: 7QXR-4M2K-HV9D-3JNP
+            exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
+            exam_revision_id: ih1r84kij94nrwis97rft6rduh
+            state: submitted
+            workspace_cursor: 18
+            manifest_digest: 11ae3038c1fe627502b6596d5598808bb5339e26b1bfed1924adec0458cc1b26
+            submitted_at: '2026-12-14T10:48:09Z'
+            browser_activity:
+              state: not_applicable
+              inventory_revision: 1
+              source_count: 0
+              pending_source_count: 0
+              incomplete_source_count: 0
   schemas:
     SubmitExamAttemptRequest:
       type: object
@@ -223,29 +281,29 @@ components:
       properties:
         participation_id:
           $ref: '#/components/schemas/ID'
-          description: The active Participation identifier returned by the successful Attempt connection.
+          description: The active Participation ID returned when the Attempt connected.
         generation:
           type: integer
           format: int64
           minimum: 1
-          description: The active Participation connection generation.
+          description: The generation of the active Participation, returned when the Attempt connected.
         expected_current_revision_id:
           $ref: '#/components/schemas/ID'
-          description: The current Exam Sitting Revision displayed by the client.
+          description: The Exam Revision the client is showing. The request fails if a correction replaced it.
         expected_workspace_cursor:
           type: integer
           format: int64
           minimum: 0
-          description: The last Workspace mutation cursor acknowledged by the client.
+          description: The last Workspace change cursor the server acknowledged to the client.
         final_focus_loss_sequence:
           type: integer
           format: int64
           minimum: 0
-          description: The final focus-loss sequence observed by the client; zero is valid.
+          description: The last focus-loss sequence number the client reported. Send 0 if it reported none.
       description: >-
-        Submit the acknowledged Workspace and current Exam Revision with the existing Focus Loss final
-        sequence. Browser settlement is calculated by the server across all Attempt sources; browser activity
-        fields are not accepted.
+        What the client last saw: the acknowledged Workspace, the current Exam Revision and the final
+        focus-loss sequence. The server works out browser activity itself across every source in the
+        Attempt, so browser activity members are not accepted.
     AcknowledgeExamCorrectionRequest:
       type: object
       additionalProperties: false
@@ -253,18 +311,24 @@ components:
         - participation_id
         - generation
         - expected_current_revision_id
+      description: The active Participation and the Revision the client shows when acknowledging.
       properties:
         participation_id:
           $ref: '#/components/schemas/ID'
+          description: The active Participation ID returned when the Attempt connected.
         generation:
           type: integer
           format: int64
           minimum: 1
+          description: The generation of the active Participation.
         expected_current_revision_id:
           $ref: '#/components/schemas/ID'
+          description: >-
+            The Exam Revision the client is showing. The request fails if another correction replaced it.
     AcknowledgeExamCorrectionResponse:
       type: object
       additionalProperties: false
+      description: The saved acknowledgement and what the candidate can do now.
       required:
         - revision_id
         - current_revision_id
@@ -274,18 +338,25 @@ components:
       properties:
         current_revision_id:
           $ref: '#/components/schemas/ID'
+          description: The Exam Revision the Sitting delivers now.
         runtime_capabilities:
           $ref: '#/components/schemas/CandidateRuntimeCapabilities'
+          description: What the candidate can do after this acknowledgement.
         revision_id:
           $ref: '#/components/schemas/ID'
+          description: The correction Revision that was acknowledged.
         acknowledgement_state:
           type: string
           const: acknowledged
+          description: Always `acknowledged`.
         acknowledged_at:
           type: string
           format: date-time
+          description: When the candidate acknowledged the correction.
     ExamSubmissionReceiptResponse:
-      description: Candidate-safe retained receipt for an atomically sealed Submission.
+      description: >-
+        The receipt for a sealed Submission. It is safe to show the candidate and is the same every time it
+        is returned.
       type: object
       additionalProperties: false
       required:
@@ -301,6 +372,7 @@ components:
       properties:
         submission_id:
           $ref: '#/components/schemas/ID'
+          description: The Submission's ID.
         receipt_code:
           type: string
           pattern: ^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$
@@ -311,23 +383,26 @@ components:
             groups of four separated by hyphens.
         exam_attempt_id:
           $ref: '#/components/schemas/ID'
+          description: The Attempt that was sealed.
         exam_revision_id:
           $ref: '#/components/schemas/ID'
+          description: The Exam Revision the Sitting delivered when the Submission was sealed.
         state:
           type: string
           const: submitted
+          description: Always `submitted`.
         workspace_cursor:
           type: integer
           format: int64
           minimum: 0
-          description: Final acknowledged Workspace mutation cursor sealed into the Submission.
+          description: The last acknowledged Workspace change cursor, which is what was sealed.
         manifest_digest:
           $ref: '#/components/schemas/SHA256'
-          description: SHA-256 digest of the immutable sealed Workspace manifest.
+          description: The SHA-256 digest of the sealed Workspace manifest, as lowercase hex.
         submitted_at:
           type: string
           format: date-time
-          description: RFC 3339 time at which the Submission committed.
+          description: When the Submission was sealed.
         browser_activity:
           $ref: '#/components/schemas/BrowserSubmissionSettlement'
     BrowserSubmissionSettlement:
@@ -347,28 +422,37 @@ components:
             - settled
             - pending
             - incomplete
+          description: >-
+            `not_applicable` when the Attempt has no browser sources. Otherwise `pending` while any source
+            can still deliver, then `incomplete` if any source is missing data, or `settled` when every
+            source is complete.
         inventory_revision:
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
+          description: Starts at 1 and goes up each time the server updates this summary.
         source_count:
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
+          description: The number of browser activity sources across all Participations in the Attempt.
         pending_source_count:
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
+          description: The number of sources that can still deliver activity. At most `source_count`.
         incomplete_source_count:
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
+          description: >-
+            The number of sources with missing or unretained activity. At most `source_count`. A source can
+            be both pending and incomplete.
       description: >-
-        Server-owned inventory across every source and Participation in the Attempt. Pending takes precedence
-        while any source remains settleable. Pending and incomplete counts describe independent facts. Every
-        source must be complete for settled; not_applicable requires no source history. Eligible late delivery
-        updates this inventory without changing submitted content.
+        The server's summary of browser activity across every source and Participation in the Attempt.
+        Activity that arrives late but is still accepted updates this summary. It never changes the
+        submitted work.

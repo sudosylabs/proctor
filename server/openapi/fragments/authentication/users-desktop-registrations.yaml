@@ -13,7 +13,7 @@ paths:
         - $ref: '#/components/parameters/PageCursor'
       operationId: listDesktopRegistrations
       summary: List the current User's Desktop Registrations
-      description: Returns only bounded registration presentation and compatibility metadata; public keys, thumbprints, proofs, and Session identities are never exposed.
+      description: Lists the current User's Desktop Registrations, newest first, including revoked ones. Each entry has its name and the Desktop build details. Public keys, key thumbprints, proofs and Session IDs are never returned.
       tags: [Authentication]
       x-proctor-auth: session_required
       x-proctor-error-codes: [desktop_registration.unavailable, authentication.reauthentication_required, authentication.session_required, request.invalid, authentication.required, authentication.token_invalid, authentication.credential_ambiguous, authentication.dpop.invalid, authentication.dpop.replayed, authentication.dpop.use_nonce, authentication.dpop.unavailable]
@@ -34,7 +34,7 @@ paths:
       operationId: renameDesktopRegistration
       summary: Rename one Desktop Registration
       description: >-
-        Gives one of the current User's active Desktop Registrations the name they chose. The name is trimmed, loses bidirectional and invisible formatting code points, and must be 1 to 128 characters without control characters. It labels the device in the User's own registration and Session lists, and a later Desktop sign-in with the same key keeps it instead of the device name the Desktop reports. Renaming changes no key, Session, or credential, so any interactive Session may do it without recent authentication; Personal Access Tokens cannot. Repeating the request with the same name leaves the same result. A revoked registration is security history and cannot be renamed; a registration of another User is not found. Every rename is audited and appears in the User's own account history.
+        Gives one of the current User's active Desktop Registrations the name they chose. The name is trimmed, loses bidirectional and invisible formatting code points, and must be 1 to 128 characters without control characters. It labels the device in the User's own registration and Session lists, and a later Desktop sign-in with the same key keeps it instead of the device name the Desktop reports. Renaming changes no key, Session or credential, so any interactive Session can do it without a recent sign-in. A Personal Access Token can't. Sending the same name again gives the same result. A revoked registration is kept as security history and can't be renamed. Another User's registration returns not found. Every rename is audited and appears in the User's own account history.
       tags: [Authentication]
       parameters:
         - $ref: '#/components/parameters/DesktopRegistrationID'
@@ -60,7 +60,7 @@ paths:
     delete:
       operationId: revokeDesktopRegistration
       summary: Irreversibly revoke one Desktop Registration
-      description: Requires strong recent interactive authentication and atomically revokes the registration and all bound Session credential families.
+      description: Revokes one Desktop Registration for good. It needs an interactive Session that has passed two-step verification and has signed in or reauthenticated recently. In the same step, every Session bound to the registration is revoked, along with its access and refresh credentials.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -95,7 +95,7 @@ components:
       name: desktop_registration_id
       in: path
       required: true
-      description: Exact Desktop Registration identity from the current User's private registration list.
+      description: The ID of one Desktop Registration from the current User's registration list.
       schema: {$ref: '#/components/schemas/ID'}
   requestBodies:
     RenameDesktopRegistration:
@@ -115,10 +115,10 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/DesktopRegistrationResponse'}
           example:
-            id: ybndrfg8ejkmcpqxot1uwisza3
+            id: ih1r84kij94nrwis97rft6rduh
             display_name: Library laptop
             desktop_release: 1.4.0
-            desktop_build_id: build-2026-08
+            desktop_build_id: darwin-arm64-1.4.0
             platform: darwin
             architecture: arm64
             realtime_protocol: 1
@@ -127,12 +127,36 @@ components:
             status: active
             current: false
     DesktopRegistrationListOK:
-      description: Current User's Desktop Registration security history
+      description: The current User's Desktop Registrations, including revoked ones
       headers:
         Cache-Control: {$ref: '#/components/headers/NoStore'}
       content:
         application/json:
           schema: {$ref: '#/components/schemas/DesktopRegistrationListResponse'}
+          example:
+            items:
+              - id: ih1r84kij94nrwis97rft6rduh
+                display_name: Library laptop
+                desktop_release: 1.4.0
+                desktop_build_id: darwin-arm64-1.4.0
+                platform: darwin
+                architecture: arm64
+                realtime_protocol: 1
+                created_at: '2026-08-01T09:00:00Z'
+                last_used_at: '2026-08-12T14:30:00Z'
+                status: active
+                current: true
+              - id: p6y6sf8ac6m5if373fkkebj7j6
+                display_name: Home desktop
+                desktop_release: 1.3.2
+                desktop_build_id: win32-x64-1.3.2
+                platform: win32
+                architecture: x64
+                realtime_protocol: 1
+                created_at: '2026-05-20T18:10:00Z'
+                last_used_at: '2026-06-30T19:45:00Z'
+                status: revoked
+                current: false
   schemas:
     RenameDesktopRegistrationRequest:
       type: object
@@ -153,23 +177,25 @@ components:
       properties:
         items:
           type: array
+          description: The registrations on this page, newest first.
           items:
             $ref: '#/components/schemas/DesktopRegistrationResponse'
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
+          description: Pass this back as cursor to get the next page. Left out on the last page.
     DesktopRegistrationResponse:
       type: object
       additionalProperties: false
       required: [id, display_name, desktop_release, desktop_build_id, platform, architecture, realtime_protocol, created_at, last_used_at, status, current]
       properties:
-        id: {$ref: '#/components/schemas/ID'}
-        display_name: {type: string, maxLength: 128}
-        desktop_release: {type: string, maxLength: 64}
-        desktop_build_id: {type: string, maxLength: 128}
-        platform: {type: string, enum: [darwin, win32, linux]}
-        architecture: {type: string, enum: [arm64, x64]}
-        realtime_protocol: {type: integer, minimum: 1}
-        created_at: {type: string, format: date-time}
-        last_used_at: {type: string, format: date-time}
-        status: {type: string, enum: [active, revoked]}
-        current: {type: boolean}
+        id: {description: "The Desktop Registration ID.", $ref: '#/components/schemas/ID'}
+        display_name: {description: "The name shown for this Desktop. It is the name the User chose, or else the device name the Desktop last reported.", type: string, maxLength: 128}
+        desktop_release: {description: "The Desktop release version from the latest sign-in.", type: string, maxLength: 64}
+        desktop_build_id: {description: "The Desktop build identifier from the latest sign-in.", type: string, maxLength: 128}
+        platform: {description: "The operating system the Desktop runs on, from the latest sign-in.", type: string, enum: [darwin, win32, linux]}
+        architecture: {description: "The processor architecture the Desktop was built for, from the latest sign-in.", type: string, enum: [arm64, x64]}
+        realtime_protocol: {description: "The realtime protocol version the Desktop reported at the latest sign-in.", type: integer, minimum: 1}
+        created_at: {description: "When the Desktop was first registered.", type: string, format: date-time}
+        last_used_at: {description: "When a Desktop sign-in last used this registration.", type: string, format: date-time}
+        status: {description: "active while the registration can sign in, or revoked once it has been revoked for good.", type: string, enum: [active, revoked]}
+        current: {description: "Whether the request was made by a Desktop Session bound to this registration.", type: boolean}

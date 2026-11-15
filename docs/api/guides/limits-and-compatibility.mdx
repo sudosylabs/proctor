@@ -1,66 +1,76 @@
 ---
-title: Limits and Compatibility
-description: Design Proctor clients for bounded inputs, rate controls, the pre-release compatibility boundary, and safe observability.
+title: Limits and compatibility
+description: Build Proctor clients that respect input limits and rate controls, cope with pre-release changes, and log safely.
 audience: api-consumer
 maturity: preview
 sidebar_position: 8
 ---
 
-# Limits and Compatibility
+# Limits and compatibility
 
-Proctor rejects input before unbounded parsing. Treat every request body,
-collection page, upload, log entry, and retry loop as bounded even when an
-installation has not published a narrower local policy.
+Proctor rejects input before it parses more than its limits allow. Treat
+every request body, page of a collection, upload, log entry and retry loop as
+limited, even when an installation hasn't published a stricter local policy.
 
-## Client Limits
+## Limits for your client
 
-- Use the endpoint's documented `limit` range; never request or assume an
-  unbounded collection.
-- Stream file content where the client library permits it and enforce the
-  endpoint's maximum before upload.
-- Put only documented fields in request objects. Unknown JSON fields are
-  rejected.
-- Send exactly one JSON value and the declared media type.
-- Apply exponential backoff with jitter to documented transient failures and
-  realtime reconnects.
-- Respect an installation's response headers and stable error codes when it
-  applies rate or concurrency controls. Do not evade them with parallel
-  credentials.
+- Stay within the endpoint's documented `limit` range. Never request or
+  assume a collection without limits.
+- Stream file content where your client library allows it, and check the
+  endpoint's maximum before you upload.
+- Put only documented fields in request objects. Proctor rejects unknown JSON
+  fields.
+- Send exactly one JSON value, with the declared media type.
+- Use exponential backoff with jitter for documented transient failures and
+  for realtime reconnects.
+- When an installation applies rate or concurrency controls, follow its
+  response headers and stable error codes. Don't get around them by using
+  several credentials in parallel.
 
-The public multipart hard boundary is 100 MiB plus 64 KiB of overhead, but a
-specific route or installation policy can be lower. No generic maximum should
-override the endpoint schema.
+The hard limit for a public multipart request is 100 MiB plus 64 KiB of
+overhead. A particular route or installation policy can set a lower limit,
+and no general maximum overrides the endpoint schema.
 
-## Compatibility Within `/api/v1`
+## Compatibility within `/api/v1`
 
-Proctor has not yet made its first supported-release API commitment. During
-this pre-release period, the `/api/v1` contract may change in place when the
-server, generated contract, and compatible first-party clients are activated
-together. There is no parallel version created solely to preserve an older
-development contract. Pin the reviewed OpenAPI artifact and server build used
-by every integration instead of treating the path suffix as a support promise.
+Proctor hasn't yet committed to an API for a first supported release. Until
+it does, the `/api/v1` contract may change in place. When it changes, the
+server, the generated contract and compatible first-party clients are
+switched over together. Proctor doesn't create a parallel version just to
+keep an older development contract alive. Pin the reviewed OpenAPI file and
+the server build that each integration uses, and don't read the version in
+the path as a promise of support.
 
-After the first supported release, established meanings evolve additively
+After the first supported release, existing meanings only gain additions,
 unless an explicit compatibility decision introduces another version and a
-migration path. Additive evolution can include operations, optional request
-fields, response fields, open enum values, and new stable error codes. A robust
-client in either period:
+way to migrate. Additions can include operations, optional request fields,
+response fields, values in open enums and new stable error codes.
 
-- ignores unknown response object fields;
-- handles unknown error and realtime event types safely;
-- does not exhaustively switch over an open value without a fallback;
-- sends only fields supported by the contract version it targets; and
-- does not derive meaning from opaque identifiers, cursors, ETags, or tokens.
+In either period, a well-behaved client:
 
-After that supported-release boundary, removing a field, making an input
-required, or changing established behavior requires an explicit compatibility
-decision. The checked-in OpenAPI contract is authoritative for a build; pin or
-archive the contract used to generate a client so every update is deliberate.
+- ignores response fields it doesn't know
+- handles unknown error types and realtime event types safely
+- always has a fallback when it switches over an open set of values
+- sends only fields that the contract version it targets supports
+- never reads meaning into opaque identifiers, cursors, ETags or tokens
 
-## Observability Without Exposure
+After the first supported release, removing a field, making an input
+required or changing existing behavior needs an explicit compatibility
+decision. For any build, the OpenAPI contract checked into the repository is
+the source of truth. Pin or archive the contract you generate a client from,
+so that every update is a deliberate choice.
 
-Safe client telemetry includes the HTTP method, route template, status,
-duration, stable `code`, and `request_id`. Do not log bearer, DPoP, or refresh
-credentials; DPoP proofs or nonces; cookies; CSRF values; invitation secrets;
-Attempt credentials; student answers; raw Exam content; or unbounded
-user-controlled fields.
+## Telemetry without leaks
+
+Your client telemetry can safely include the HTTP method, the route template,
+the status, the duration, the stable `code` and the `request_id`. Never log:
+
+- bearer, DPoP or refresh credentials
+- DPoP proofs or nonces
+- cookies
+- CSRF values
+- invitation secrets
+- Attempt credentials
+- student answers
+- raw Exam content
+- fields controlled by users that have no length limit

@@ -13,7 +13,10 @@ paths:
       operationId: commitOnboardingImport
       summary: Commit one exact validated onboarding preview
       description: >-
-        Starts application of the exact immutable preview only when its revision, digest, and selected commit policy still match. Per-row transactions preserve bounded outcomes, and the operation never accepts an unvalidated or silently changed upload.
+        Starts applying the preview you reviewed, but only if its revision and digest still match and the commit
+        policy you chose allows it. Each row is applied on its own and gets its own outcome. A file that was not
+        validated, or that changed since, is never applied. The work runs in the background; poll the import to
+        follow it.
       tags:
         - Invitations and onboarding
       x-proctor-auth: principal_required
@@ -72,20 +75,21 @@ paths:
 components:
   requestBodies:
     CommitOnboardingImport:
-      description: Exact immutable preview revision and digest plus the explicit valid-row commit policy.
+      description: The revision and digest of the preview you reviewed, and the commit policy.
       required: true
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/OnboardingImportCommitRequest'
           example:
-            expected_revision: 4
-            preview_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+            expected_revision: 2
+            preview_digest: 43bb00d0ce7790a53b91256b370c887b24791a5539a6fbfb70c5870e8c91ae5d
             policy: require_all_valid
   schemas:
     OnboardingImportCommitRequest:
       type: object
       additionalProperties: false
+      description: The revision and SHA-256 digest of the preview you reviewed, and how to treat invalid rows.
       required:
         - expected_revision
         - preview_digest
@@ -95,11 +99,16 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The import's `revision` when you reviewed it.
         preview_digest:
           type: string
           pattern: ^[0-9a-f]{64}$
+          description: The import's `preview_digest`, a SHA-256 digest in lowercase hexadecimal.
         policy:
           type: string
           enum:
             - require_all_valid
             - valid_rows_only
+          description: >-
+            `require_all_valid` refuses the commit if any row is invalid. `valid_rows_only` commits the valid rows and
+            skips the invalid ones.

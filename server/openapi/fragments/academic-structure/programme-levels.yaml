@@ -15,7 +15,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Returns one active Programme Level when its owning Programme hierarchy is visible to the caller. The projection does not expand Classes or confer authority over their rosters.
+        Returns one active Programme Level when the caller can see the Programme and Academic Unit above it. The response does not include its Classes and gives no access to their rosters.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -57,7 +57,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Applies a partial canonical or presentation update while preserving the Level's Programme owner. Dependent Classes retain their stable parent identity and block changes that would violate current structure.
+        Changes some of a Programme Level's name and display fields. The Programme that owns it stays the same. Its Classes keep pointing to it, and a change that would break their structure is rejected.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -110,7 +110,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Archives one Programme Level only when it has no active Classes. The transition retains history and never cascades into Class archival, enrollment termination, or Role Binding removal.
+        Archives one Programme Level, but only when it has no active Classes. Its history is kept. Archiving never archives Classes, ends enrollments or removes Role Bindings.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -162,7 +162,7 @@ paths:
 components:
   requestBodies:
     UpdateProgrammeLevel:
-      description: Partial Programme Level presentation update; its Programme owner cannot change.
+      description: The Programme Level fields to change. The Programme that owns it can't change.
       required: true
       content:
         application/json:
@@ -178,6 +178,15 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ProgrammeLevelResponse'
+          example:
+            revision: 2
+            id: iqcx3qc9sbbt6ocshszfqgq6ci
+            created_at: '2026-08-03T10:00:00Z'
+            updated_at: '2026-08-10T08:20:00Z'
+            programme_id: g63dcrphk8idgyjgzbrpajosz6
+            name: level-100
+            display_name: Level 100
+            description: First year of the programme.
     ProgrammeLevelArchived:
       description: Programme Level archived
       headers:
@@ -185,7 +194,9 @@ components:
           $ref: '#/components/headers/NoStore'
   schemas:
     UpdateProgrammeLevelRequest:
-      description: Mutable Programme Level fields; omitted or null metadata values remain unchanged; expected_revision, when present, must be a positive integer.
+      description: >-
+        The Programme Level fields you can change. Fields you leave out or send as null stay as they are. When you
+        send `expected_revision`, it must be a positive integer.
       type: object
       additionalProperties: false
       properties:
@@ -193,19 +204,28 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Optional positive revision from the last resource response. A stale value returns the resource conflict error without applying the edit. Omission preserves v1 compatibility; null is invalid.
+          description: >-
+            Optional. The `revision` from your last read. If the Programme Level has changed since, the request fails
+            with `programme_level.conflict` and nothing changes. Without it, the change applies whatever the current
+            revision. Null is rejected.
         name:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged. An empty string is present and subject to validation.
+          description: >-
+            New machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. It must be
+            unique among the Programme's active Programme Levels. Omitted or null leaves it unchanged. An empty string is rejected.
         display_name:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged. An empty string is present and subject to validation.
+          description: >-
+            New name shown to people, 1 to 128 characters. Omitted or null leaves it unchanged. An empty string is
+            rejected.
         description:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged. An empty string is present and subject to validation.
+          description: >-
+            New longer text, up to 1,024 characters. Omitted or null leaves it unchanged. An empty string clears
+            it.

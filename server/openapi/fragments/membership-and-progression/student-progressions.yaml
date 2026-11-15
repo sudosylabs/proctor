@@ -13,8 +13,15 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Lists the unexpired student progressions the caller could read one by one, newest first. A single read requires progression authority on both the source and the destination Class, so a progression appears only when the caller's current Institution, Academic Unit, or Class progression authority covers both. Items are summary projections without rows, each naming its source and destination Classes; read one progression for its preview or result rows.
-        The first page, read without a cursor, also reports `total`: the progressions the filters and the caller's authority match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
+        Lists the student progressions that have not expired and that you could read one by one, newest first.
+        Reading a progression needs progression authority over both its source and its destination Class, so a
+        progression appears only when your current Institution, Academic Unit or Class progression authority covers
+        both. Items are summaries without rows, each naming its source and destination Classes. Read one progression
+        to see its preview or result rows.
+
+        The first page, read without a cursor, also reports `total`: the number of progressions the filters and your
+        authority match across all pages. It is exact below 10,000; at 10,000 counting stops and
+        `total_is_lower_bound` is true. Later pages carry no total, so keep the first page's.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -85,14 +92,14 @@ paths:
         - name: cursor
           in: query
           required: false
-          description: Continue from the opaque cursor returned by the preceding page.
+          description: The `next_cursor` from the previous page, passed back unchanged.
           schema:
             type: string
             maxLength: 512
         - name: limit
           in: query
           required: false
-          description: Maximum number of student progressions to return in this page.
+          description: The most student progressions to return on this page.
           schema:
             type: integer
             minimum: 1
@@ -127,7 +134,9 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Creates a durable Job that validates the exact source and destination Classes and Academic Periods without changing enrollment. Its immutable preview and digest expose bounded row outcomes for review before commit.
+        Starts a background Job that checks the source and destination Classes and Academic Periods without changing
+        any enrollment. When it finishes, the progression holds a preview of each student's outcome and a digest of
+        that preview. Review the preview, then commit it.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -188,7 +197,8 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Returns the authorized immutable preview or terminal result for one progression Job. The projection is bounded and contains no credentials, student answers, or unsafe worker diagnostics.
+        Returns the preview or final result of one progression you may read. It contains no credentials, student
+        answers or internal worker diagnostics.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -232,7 +242,7 @@ paths:
 components:
   responses:
     StudentProgressionListOK:
-      description: Bounded authorized student progression page
+      description: One page of the student progressions you may read.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -241,12 +251,40 @@ components:
           schema:
             $ref: '#/components/schemas/StudentProgressionListResponse'
           example:
-            items: []
-            total: 0
+            items:
+              - id: 1asb7sk89dp1ex339fkh3te5t4
+                mode: student_progression
+                state: completed
+                scope_type: class
+                scope_id: 6xoche483hwrx5rpu8jzjoe7qg
+                source_period_id: p6y6sf8ac6m5if373fkkebj7j6
+                source_class_id: sjebyge5cpbop1xwo4eds74ejb
+                destination_period_id: hmyjmj68dw6gdxctnghbrhwcth
+                destination_class_id: 6xoche483hwrx5rpu8jzjoe7qg
+                source_class_name: Year 10 Chemistry A
+                destination_class_name: Year 11 Chemistry A
+                effective_at: '2027-08-01T00:00:00Z'
+                preview_digest: f64551fcd6f07823cb87971cfb91446425da18286b3ab1ef935e0cbd7a69f68a
+                total_rows: 3
+                valid_rows: 2
+                invalid_rows: 1
+                succeeded_rows: 2
+                no_op_rows: 0
+                failed_rows: 0
+                skipped_rows: 1
+                parse_job_id: saqjfmjqqy9mo1yj4zwed73333
+                execution_job_id: 33py5k58f3z7keydj3fzkjs1kk
+                created_at: '2027-06-20T09:00:00Z'
+                updated_at: '2027-06-20T09:12:40Z'
+                expires_at: '2027-06-27T09:00:00Z'
+                revision: 4
+            total: 1
             total_is_lower_bound: false
   requestBodies:
     DryRunStudentProgression:
-      description: Exact source and destination academic structure plus the future effective instant to validate without mutation.
+      description: >-
+        The source and destination Class and Academic Period, and the instant the change takes effect. The dry-run
+        checks them without changing anything.
       required: true
       content:
         application/json:
@@ -260,7 +298,7 @@ components:
             effective_at: "2027-08-01T00:00:00Z"
   schemas:
     StudentProgressionListResponse:
-      description: Student progression summaries newest first, without rows.
+      description: Student progression summaries, newest first, without rows.
       type: object
       additionalProperties: false
       required:
@@ -269,23 +307,23 @@ components:
         items:
           type: array
           maxItems: 200
+          description: The progressions on this page.
           items:
             $ref: '#/components/schemas/OnboardingImportResponse'
         next_cursor:
-          type: string
-          description: Opaque continuation for the next page, omitted after the final page.
+          $ref: '#/components/schemas/NextCursor'
         total:
           type: integer
           minimum: 0
           maximum: 10000
           description: >-
-            Student progressions matching the filters and the caller's authority across every page, present only on the
-            first page. At 10,000 counting stops and `total_is_lower_bound` is true.
+            How many student progressions match the filters and your authority across all pages. Present only on the
+            first page. Counting stops at 10,000, and then `total_is_lower_bound` is true.
         total_is_lower_bound:
           type: boolean
-          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.
+          description: True when counting stopped at 10,000 and there may be more. Present with `total`.
     StudentProgressionDryRunRequest:
-      description: Exact source, destination, and effective instant for an immutable progression preview.
+      description: The source, destination and effective instant to preview.
       type: object
       additionalProperties: false
       required:
@@ -297,12 +335,20 @@ components:
       properties:
         source_period_id:
           $ref: '#/components/schemas/ID'
+          description: The Academic Period of the source Class.
         source_class_id:
           $ref: '#/components/schemas/ID'
+          description: The Class whose students move.
         destination_period_id:
           $ref: '#/components/schemas/ID'
+          description: The Academic Period of the destination Class.
         destination_class_id:
           $ref: '#/components/schemas/ID'
+          description: The Class the students move into. It must be a different Class from the source.
         effective_at:
           type: string
           format: date-time
+          description: >-
+            When the students start in the destination Class. It must fall within the destination Academic Period.
+            When both Classes are in the same Academic Period, each student is transferred; otherwise each is
+            enrolled in the destination Class.

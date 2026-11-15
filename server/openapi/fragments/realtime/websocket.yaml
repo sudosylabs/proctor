@@ -13,13 +13,13 @@ paths:
       tags:
         - Realtime
       description: >-
-        Upgrades an authenticated interactive Session to the versioned Proctor WebSocket protocol. A new connection receives its durable connection ID and monotonic sequence in the hello envelope. Reconnectors may supply the prior connection_id and last processed sequence_number for bounded node-local replay; otherwise the server signals resynchronization.
+        Opens a Proctor WebSocket connection for a signed-in Session. The first `hello` message gives the connection's ID and its starting sequence number, which goes up with every message. To reconnect, send the old `connection_id` and the last `sequence_number` you processed. If the same server node still has the missed messages, it sends them again. Otherwise it sends `resync_required`, and the client should reload its state.
       x-codeSamples:
         - lang: Shell
           source: |-
             websocat \
               --header='Authorization: Bearer <interactive-session-access-token>' \
-              'wss://proctor.example.edu/api/v1/websocket?connection_id=<connection-id>&sequence_number=42'
+              'wss://proctor.example.edu/api/v1/websocket?connection_id=rpn96r4g3jfk3t41u4dus44bzc&sequence_number=42'
       x-proctor-auth: session_required
       x-proctor-error-codes:
         - authentication.required
@@ -43,7 +43,7 @@ paths:
           required: false
           schema:
             $ref: '#/components/schemas/ID'
-          description: A prior connection ID to resume local bounded replay. Supply it together with sequence_number.
+          description: The ID of an earlier connection to resume. Send it with `sequence_number`.
         - name: sequence_number
           in: query
           required: false
@@ -52,7 +52,7 @@ paths:
             format: int64
             minimum: 0
           description: >-
-            The last sequence processed for the requested connection. Zero is valid and connection_id is required when present.
+            The last sequence number you processed on that connection. Zero is allowed. Send it with `connection_id`.
       responses:
         "101":
           description: Switching Protocols

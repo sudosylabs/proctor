@@ -11,8 +11,13 @@ paths:
       operationId: listInvitations
       summary: List Invitations within the caller's authorized scope
       description: >-
-        Lists bounded safe Invitation metadata visible through the caller's current Institution, Academic Unit, or Class authority. Claims, delivery payloads, recipient secrets, provider state, and acceptance credentials are never returned.
-        The first page, read without a cursor, also reports `total`: the Invitations the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
+        Lists the Invitations you can see through your current Institution, Academic Unit or Class authority. Items
+        hold safe metadata only. Claims, email contents, recipient secrets, mail provider state and acceptance
+        credentials are never returned.
+
+        The first page, read without a cursor, also reports `total`: the number of Invitations the filters and your
+        visibility match across all pages. It is exact below 10,000; at 10,000 counting stops and
+        `total_is_lower_bound` is true. Later pages carry no total, so keep the first page's.
       tags:
         - Invitations and onboarding
       x-proctor-auth: principal_required
@@ -40,7 +45,7 @@ paths:
         - name: purpose
           in: query
           required: false
-          description: Restrict results to the immutable Invitation workflow that will be accepted.
+          description: Return only Invitations with this purpose.
           schema:
             type: string
             enum:
@@ -51,7 +56,7 @@ paths:
         - name: state
           in: query
           required: false
-          description: Restrict results to Invitations in this current lifecycle state.
+          description: Return only Invitations in this state.
           schema:
             type: string
             enum:
@@ -63,41 +68,41 @@ paths:
         - name: email
           in: query
           required: false
-          description: Match the normalized intended recipient email exactly.
+          description: Return only Invitations sent to exactly this address, compared after normalizing it.
           schema:
             type: string
             format: email
         - name: target_id
           in: query
           required: false
-          description: Match the exact Class, Academic Unit, or Institution targeted by the Invitation.
+          description: Return only Invitations for this exact Class, Academic Unit or Institution.
           schema:
             $ref: '#/components/schemas/ID'
         - name: created_after
           in: query
           required: false
-          description: Return Invitations created at or after this RFC 3339 instant.
+          description: Return only Invitations created at or after this instant.
           schema:
             type: string
             format: date-time
         - name: created_before
           in: query
           required: false
-          description: Return Invitations created before this RFC 3339 instant.
+          description: Return only Invitations created before this instant.
           schema:
             type: string
             format: date-time
         - name: cursor
           in: query
           required: false
-          description: Continue from the opaque cursor returned by the preceding page.
+          description: The `next_cursor` from the previous page, passed back unchanged.
           schema:
             type: string
             maxLength: 512
         - name: limit
           in: query
           required: false
-          description: Maximum number of Invitations to return in this page.
+          description: The most Invitations to return on this page.
           schema:
             type: integer
             minimum: 1
@@ -125,7 +130,8 @@ paths:
       operationId: getInvitation
       summary: Get one Invitation within the caller's authorized scope
       description: >-
-        Returns one safe immutable Invitation package and lifecycle state when authorized for its exact scope. The projection omits its one-time claim and all mail payload or credential material.
+        Returns one Invitation, what it grants and its state, if you may see its scope. The response never includes
+        the one-time claim, the email contents or any credential.
       tags:
         - Invitations and onboarding
       x-proctor-auth: principal_required
@@ -168,7 +174,9 @@ paths:
       operationId: acceptStudentClassInvitation
       summary: Accept a student Class Invitation using its one-time claim
       description: >-
-        Atomically creates or admits the student account and exact Class enrollment encoded by the claim. The transition rechecks Invitation state, policy, Class eligibility, and effective-period uniqueness before consuming the claim.
+        Creates or admits the student account and the Class enrollment that the claim stands for, in one step. Before
+        it uses up the claim, it checks the Invitation's state, the Access Policy and the Class again, and that the
+        enrollment does not clash with another in the same Academic Period.
       tags:
         - Invitations and onboarding
       x-proctor-auth: public
@@ -189,13 +197,13 @@ paths:
       security: []
       requestBody:
         required: true
-        description: Supplies the one-time claim and profile credentials used to create or admit the student account.
+        description: The one-time claim from the Invitation email, and the password and profile for the student account.
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/AcceptStudentClassInvitationRequest'
             example:
-              claim: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+              claim: 2IpyNuCaKGazPneWZPgJHzvc1vdw7PV4aonvCyId37s
               password: correct-horse-battery-staple-2026
               username: student.one
               display_name: Student One
@@ -203,11 +211,17 @@ paths:
               timezone: Europe/Paris
       responses:
         "200":
-          description: Invitation accepted or replay resolved
+          description: The Invitation was accepted, or an earlier identical acceptance was returned.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/InvitationAcceptanceResponse'
+              example:
+                user_id: jxcnnw8a7u4ux5azhhmby97xh7
+                invitation_id: ccrzmhoygspnzijnponpyw4zmu
+                affiliation_id: rga9cuen6wdafkq3c6mpn3kas8
+                class_member_id: o59e9myujxww7zfc3kx4rn6wk5
+                replayed: false
         "400":
           $ref: '#/components/responses/BadRequest'
         "429":
@@ -219,7 +233,9 @@ paths:
       operationId: acceptTeacherAcademicUnitInvitation
       summary: Accept a teacher Academic Unit Invitation using its one-time claim
       description: >-
-        Atomically applies the immutable teacher relationship and delegated Academic Unit Role package after rechecking current policy and scope validity. The one-time claim is consumed and never becomes a reusable credential.
+        Creates the teacher account and applies the teacher relationship and Academic Unit Role the Invitation
+        records, in one step, after checking the current Access Policy and that the scope is still valid. The
+        one-time claim is used up and can never be used again.
       tags:
         - Invitations and onboarding
       x-proctor-auth: public
@@ -240,13 +256,13 @@ paths:
         - authentication.password.identity_invalid
       requestBody:
         required: true
-        description: Supplies the one-time claim and profile credentials used to create or admit the teacher account.
+        description: The one-time claim from the Invitation email, and the password and profile for the teacher account.
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/AcceptTeacherAcademicUnitInvitationRequest'
             example:
-              claim: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+              claim: JCPcYrAzk0xF_0tMv6-lLn8wNNQMJANizm90rm9cgWY
               password: careful-teacher-passphrase-2026
               username: teacher.one
               display_name: Teacher One
@@ -254,11 +270,18 @@ paths:
               timezone: Europe/Paris
       responses:
         "200":
-          description: Invitation accepted or replay resolved
+          description: The Invitation was accepted, or an earlier identical acceptance was returned.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/InvitationAcceptanceResponse'
+              example:
+                user_id: xgqjjg7fnyeqnueo58grucaoqy
+                invitation_id: id9tzepftxa3h5uben569yr37h
+                affiliation_id: p9qhih5ecxfmifwxzocb4a4pat
+                academic_unit_member_id: fd4he19dek64i1uoo3xu638kkr
+                role_binding_id: 9tq4y1cdbbxwnspu3ojoa8hmrz
+                replayed: false
         "400":
           $ref: '#/components/responses/BadRequest'
         "429":
@@ -270,7 +293,9 @@ paths:
       operationId: acceptAcademicUnitRoleInvitation
       summary: Accept an Academic Unit Role Invitation as the authenticated User
       description: >-
-        Applies the exact Academic Unit Role package to the authenticated intended User after rechecking scope and policy. Acceptance cannot change the package or transfer it to another account.
+        Applies the Academic Unit Role the Invitation records to you, the signed-in User it was sent to, after
+        checking the scope and the Access Policy again. Acceptance cannot change what the Invitation grants or pass it
+        to another account.
       tags:
         - Invitations and onboarding
       x-proctor-auth: session_required
@@ -296,20 +321,25 @@ paths:
           csrfToken: []
       requestBody:
         required: true
-        description: Supplies the one-time claim whose immutable Academic Unit Role package will be applied to the current User.
+        description: The one-time claim of the Academic Unit Role Invitation to accept as the signed-in User.
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/AcceptScopedRoleInvitationRequest'
             example:
-              claim: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+              claim: 2TRSHJWS39QTbBRa05Er-c39xctr79Ge9SWZasZqSGA
       responses:
         "200":
-          description: Invitation accepted or exact outcome replayed
+          description: The Invitation was accepted, or the outcome of an earlier identical acceptance was returned.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/InvitationAcceptanceResponse'
+              example:
+                user_id: wj3drgzdpnf54rxf5d8qd3dqne
+                invitation_id: kq8ewbhn3zr5ap6xsy1ofdm4ui
+                role_binding_id: 7ugcsj9wnebd1hmq4taxo8yzrk
+                replayed: false
         "400":
           $ref: '#/components/responses/BadRequest'
         "401":
@@ -325,7 +355,9 @@ paths:
       operationId: acceptInstitutionRoleInvitation
       summary: Accept an Institution Role Invitation as the authenticated User
       description: >-
-        Applies the exact Institution Role package to the authenticated intended User after strong current authorization invariants are rechecked. The immutable package cannot be repurposed for another Role or User.
+        Applies the Institution Role the Invitation records to you, the signed-in User it was sent to, after the
+        strict authorization checks for Institution Roles are run again. The Invitation cannot be used for another
+        Role or User.
       tags:
         - Invitations and onboarding
       x-proctor-auth: session_required
@@ -351,20 +383,25 @@ paths:
           csrfToken: []
       requestBody:
         required: true
-        description: Supplies the one-time claim whose immutable Institution Role package will be applied to the current User.
+        description: The one-time claim of the Institution Role Invitation to accept as the signed-in User.
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/AcceptScopedRoleInvitationRequest'
             example:
-              claim: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+              claim: 3bccheCqCcpjrmgYuT-1oF_RH9lXXwQ_4BKEF2W3Rg0
       responses:
         "200":
-          description: Invitation accepted or exact outcome replayed
+          description: The Invitation was accepted, or the outcome of an earlier identical acceptance was returned.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/InvitationAcceptanceResponse'
+              example:
+                user_id: wj3drgzdpnf54rxf5d8qd3dqne
+                invitation_id: zb6mfx1rkaew3ncypoh8d4ts9j
+                role_binding_id: 3jdn5wpxagoi6rbuk1eh7fzmcy
+                replayed: false
         "400":
           $ref: '#/components/responses/BadRequest'
         "401":
@@ -378,7 +415,7 @@ paths:
 components:
   responses:
     InvitationAdministrationListOK:
-      description: Bounded authorized Invitation administration page
+      description: One page of the Invitations you can see.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -387,8 +424,45 @@ components:
           schema:
             $ref: '#/components/schemas/InvitationAdministrationListResponse'
           example:
-            items: []
-            total: 0
+            items:
+              - id: ccrzmhoygspnzijnponpyw4zmu
+                purpose: student_class
+                state: pending
+                class_id: sjebyge5cpbop1xwo4eds74ejb
+                academic_period_id: p6y6sf8ac6m5if373fkkebj7j6
+                start_at: '2026-09-01T00:00:00Z'
+                expires_at: '2026-08-27T10:00:00Z'
+                email: student.one@example.edu
+                inviter_user_id: rpn96r4g3jfk3t41u4dus44bzc
+                created_at: '2026-08-20T10:00:00Z'
+                updated_at: '2026-08-20T10:00:03Z'
+                revision: 1
+                delivery:
+                  template_key: access.student_class_invitation
+                  state: accepted
+                  masked_recipient: s***@example.edu
+                  created_at: '2026-08-20T10:00:00Z'
+                  updated_at: '2026-08-20T10:00:03Z'
+                  deadline: '2026-08-21T10:00:00Z'
+                  accepted_at: '2026-08-20T10:00:03Z'
+              - id: id9tzepftxa3h5uben569yr37h
+                purpose: teacher_academic_unit
+                state: accepted
+                academic_unit_id: 889766ufjgio6kbpzjbufozksq
+                role_id: nybc6xhg593upqice3sdeyro5k
+                role_actions:
+                  - exam.create
+                  - class.view
+                start_at: '2026-08-10T09:00:00Z'
+                expires_at: '2026-08-17T09:00:00Z'
+                email: teacher.one@example.edu
+                inviter_user_id: rpn96r4g3jfk3t41u4dus44bzc
+                accepted_user_id: xgqjjg7fnyeqnueo58grucaoqy
+                created_at: '2026-08-10T09:00:00Z'
+                updated_at: '2026-08-11T15:42:10Z'
+                revision: 2
+            next_cursor: eyJjcmVhdGVkX2F0IjoiMjAyNi0wOC0xMFQwOTowMDowMFoifQ
+            total: 37
             total_is_lower_bound: false
   schemas:
     AcceptStudentClassInvitationRequest:
@@ -403,28 +477,38 @@ components:
           type: string
           minLength: 43
           maxLength: 43
+          description: The one-time claim from the Invitation email.
         password:
           type: string
+          description: The password for the new account. It must meet the password policy.
         username:
           type: string
           maxLength: 64
+          description: The username for the new account.
         display_name:
           type: string
-          maxLength: 512
+          maxLength: 128
+          description: The new account's display name.
         first_name:
           type: string
-          maxLength: 256
+          maxLength: 64
+          description: The account holder's first name.
         last_name:
           type: string
-          maxLength: 256
+          maxLength: 64
+          description: The account holder's last name.
         locale:
           type: string
           maxLength: 35
+          description: The account's language, as a language tag such as `en`.
         timezone:
           type: string
           maxLength: 64
+          description: >-
+            The account's time zone, such as `Europe/Paris`. Omit it to use the time zone the inviter suggested.
     AcceptTeacherAcademicUnitInvitationRequest:
       $ref: '#/components/schemas/AcceptStudentClassInvitationRequest'
+      description: The same fields as accepting a student Class Invitation.
     AcceptScopedRoleInvitationRequest:
       type: object
       additionalProperties: false
@@ -434,26 +518,29 @@ components:
         claim:
           type: string
           minLength: 43
-          maxLength: 128
+          maxLength: 43
+          description: The one-time claim from the Invitation email.
     InvitationAdministrationListResponse:
       type: object
       additionalProperties: false
+      description: One page of Invitations. Only the first page carries `total`.
       required:
         - items
       properties:
         items:
           type: array
+          description: The Invitations on this page.
           items:
             $ref: '#/components/schemas/InvitationAdministrationResponse'
         next_cursor:
-          type: string
+          $ref: '#/components/schemas/NextCursor'
         total:
           type: integer
           minimum: 0
           maximum: 10000
           description: >-
-            Invitations matching the filters and the caller's visibility across every page, present only on the
-            first page. At 10,000 counting stops and `total_is_lower_bound` is true.
+            How many Invitations match the filters and your visibility across all pages. Present only on the first
+            page. Counting stops at 10,000, and then `total_is_lower_bound` is true.
         total_is_lower_bound:
           type: boolean
-          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.
+          description: True when counting stopped at 10,000 and there may be more. Present with `total`.

@@ -71,8 +71,10 @@ documents only its plugin decodes and validates, handed over in
 
 The execution environment, `server/plugin/execution`, is the first plugin to
 use most of these seams; [it is described below](#the-execution-environment).
-[Design the Execution Environment](execution-environment.mdx) records why it
-needs each one.
+Execution is moving into the core, and
+[Design the Execution Environment](execution-environment.mdx) records that
+design. The plugin and the seams only it uses are deleted when the core
+version lands.
 
 Native capabilities live in the core's registry, which the signed Desktop
 release supplies: each capability's fields, reasons, stability time and fact

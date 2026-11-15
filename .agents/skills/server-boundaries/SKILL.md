@@ -16,7 +16,8 @@ description: Design or change Proctor server packages, dependency direction, app
      [application reference](references/application.md);
    - root wiring, startup ownership, readiness, or disposal:
      [composition reference](references/composition.md);
-   - the terminal plugin, its seams, batch workspace writes, or execenv:
+   - core execution, terminals, Workspace authors, batch workspace writes, or
+     execenv:
      [execution environment rules](references/execution-environment.md).
    Completion: every affected production dependency is accounted for.
 3. Keep domain and application policy independent of HTTP, WebSocket, SQL,

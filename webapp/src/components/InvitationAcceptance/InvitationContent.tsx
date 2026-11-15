@@ -190,7 +190,7 @@ export function InvitationContent({
       <TaskStateAnnouncement message={invitationHeading(institutionName)} />
       <section className={styles.page} aria-labelledby="join-heading">
         <AccessTaskIntro
-          kind={message("webapp.join.kind")}
+
           focusHeading={retryRequested}
           heading={invitationHeading(institutionName)}
           body={message(ledes[transaction.requirement][transaction.purpose])}
@@ -489,8 +489,7 @@ function InvitationRouteState({
       focusHeading={focusHeading}
       heading={heading}
       headingID="join-heading"
-      label={message("webapp.join.kind")}
-      labelTone={labelTone}
+      status={labelTone === undefined ? undefined : { label: message("webapp.join.kind"), tone: labelTone }}
     >
       {children}
     </TaskState>

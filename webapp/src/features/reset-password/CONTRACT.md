@@ -22,7 +22,7 @@ states only that other devices will be signed out, without a progress
 indicator or additional server state.
 
 Completion and server-reported unusable-link replacements use the shared
-`TaskState` hierarchy, a teal or coral kind line, and the persistent polite
+`TaskState` hierarchy, a teal or coral status line, and the persistent polite
 announcement. Completion offers `Sign in`; the unusable-link state states the
 1-hour single-use lifetime (the server default) and offers `Send a new link`
 to `/account/forgot-password` plus a quiet return to sign in. A replacement caused

@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
 
-import { AccessPageShell } from "../../components/AccessPageShell/AccessPageShell";
+import { AccessPageShell, RailItem, TaskRail } from "../../components/AccessPageShell/AccessPageShell";
 import { AccessTaskIntro } from "../../components/AccessTaskIntro/AccessTaskIntro";
 import { Button } from "../../components/Button/Button";
 import { FormFeedback } from "../../components/FormFeedback/FormFeedback";
@@ -46,7 +46,7 @@ export function DesktopReauthenticationContent({ actions, snapshot }: {
         ? "webapp.desktop_reauthentication.checking.heading" : "webapp.desktop_reauthentication.returning.heading");
       return <>
         <TaskStateAnnouncement message={heading} />
-        <TaskState busy heading={heading} headingID={headingID} label={message("webapp.desktop_reauthentication.kind")}
+        <TaskState busy heading={heading} headingID={headingID}
           body={message(view.kind === "checking"
             ? "webapp.desktop_reauthentication.checking.body" : "webapp.desktop_reauthentication.approved.returning")} />
       </>;
@@ -86,7 +86,7 @@ function Terminal({ body, children, focusHeading, heading, tone }: {
   return <>
     <TaskStateAnnouncement message={focusHeading ? heading : ""} />
     <TaskState heading={heading} headingID={headingID} focusHeading={focusHeading} body={body}
-      label={message("webapp.desktop_reauthentication.kind")} labelTone={tone}>
+      status={tone === undefined ? undefined : { label: message("webapp.desktop_reauthentication.kind"), tone: tone }}>
       {children}
     </TaskState>
   </>;
@@ -108,7 +108,7 @@ function Proof({ actions, context, snapshot }: {
     <section className={styles.page} aria-labelledby={headingID}>
       <TaskStateAnnouncement message={pending === undefined ? "" : message("webapp.desktop_reauthentication.working")} />
       <AccessTaskIntro headingID={headingID} focusHeading={snapshot.focusHeading}
-        kind={message("webapp.desktop_reauthentication.kind")}
+
         heading={message("webapp.desktop_reauthentication.heading")}
         body={provider === undefined
           ? message("webapp.desktop_reauthentication.lede.password", { Name: context.name })
@@ -128,7 +128,11 @@ function Proof({ actions, context, snapshot }: {
           </TaskStateActions>
           <FormFeedback message={feedbackMessage(snapshot.feedback)} />
         </>}
-      <p className={styles.note}>{message("webapp.desktop_reauthentication.note")}</p>
+      <TaskRail>
+        <RailItem>
+          <p>{message("webapp.desktop_reauthentication.note")}</p>
+        </RailItem>
+      </TaskRail>
     </section>
   );
 }

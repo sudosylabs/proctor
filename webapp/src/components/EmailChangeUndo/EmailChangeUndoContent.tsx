@@ -90,8 +90,7 @@ export function EmailChangeUndoContent({
         focusHeading={transitioned}
         heading={message(copy.heading)}
         headingID="undo-email-change-heading"
-        label={message("webapp.undo_email_change.kind")}
-        labelTone={copy.tone}
+        status={copy.tone === undefined ? undefined : { label: message("webapp.undo_email_change.kind"), tone: copy.tone }}
       >
         {change !== undefined && (state === "ready" || state === "rate_limited" || state === "unavailable") ? (
           <FactList className={styles.afterBody} aria-label={message("webapp.undo_email_change.facts.label")}>

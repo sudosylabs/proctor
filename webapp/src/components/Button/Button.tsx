@@ -36,6 +36,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         aria-busy={isLoading || undefined}
         className={classes(styles.button, styles[variant], className)}
+        data-proctor-button-variant={variant}
         disabled={disabled || isLoading}
         type={type}
       >
@@ -65,6 +66,7 @@ export const ButtonLink = forwardRef<HTMLAnchorElement, ButtonLinkProps>(
         {...props}
         ref={ref}
         className={classes(styles.button, styles[variant], className)}
+        data-proctor-button-variant={variant}
       />
     );
   },

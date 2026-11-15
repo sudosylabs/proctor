@@ -1,16 +1,19 @@
 # Input field contract
 
 `InputField` is the domain-neutral single-line field proven by the hosted
-login, setup, and registration forms. It owns the visible label, required
-marker, native input, optional description, inline error, and their stable
+login, setup, and registration forms. It owns the visible label, native
+input, read-only mark, optional description, inline error, and their stable
 programmatic associations. `PasswordField` adds the repeated password
 disclosure behavior without owning password policy, validation, credentials,
 or submission state.
 
-Every required field receives both the native `required` attribute and a
-visible asterisk. The asterisk is decorative because the native constraint
-already exposes the state to assistive technology. `errorMessage` controls
-`aria-invalid` and an associated inline error; `description` and `describedBy`
+Every required field receives the native `required` attribute and no visual
+mark; hosted forms are mostly required, so the consumer labels the exception
+by ending an optional field's label with “(optional)”. A `readOnly` field
+without a trailing control shows the `readOnly` lock icon at the inline end,
+the subtle background, and the subtle foreground, and keeps its strong
+boundary. `errorMessage` controls `aria-invalid`, a two-pixel danger boundary,
+and an associated inline error; `description` and `describedBy`
 are combined without replacing one another. Consumers provide the correct
 `name`, `type`, `inputMode`, `autoComplete`, capitalization, spellcheck,
 controlled value, and change behavior for their real field.

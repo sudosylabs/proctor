@@ -299,7 +299,7 @@ export function auditTokenContract(tokens = designTokens) {
           `${id} ${foregroundName} on ${backgroundName}`,
           color[foregroundName],
           color[backgroundName],
-          4.5,
+          7,
         );
       }
     }
@@ -308,8 +308,24 @@ export function auditTokenContract(tokens = designTokens) {
       `${id} link on canvas`,
       color['foreground-link'],
       color['background-canvas'],
-      4.5,
+      7,
     );
+    checkContrast(
+      failures,
+      `${id} danger state text on canvas`,
+      color['state-danger'],
+      color['background-canvas'],
+      7,
+    );
+    for (const state of ['success', 'warning']) {
+      checkContrast(
+        failures,
+        `${id} ${state} state text on canvas`,
+        color[`state-${state}`],
+        color['background-canvas'],
+        4.5,
+      );
+    }
     checkContrast(
       failures,
       `${id} inverse foreground`,
@@ -323,29 +339,33 @@ export function auditTokenContract(tokens = designTokens) {
         `${id} action label on ${action}`,
         color['action-on-primary'],
         color[action],
-        4.5,
+        7,
       );
     }
-    for (const action of [
-      'action-secondary',
-      'action-secondary-hover',
-      'action-secondary-active',
-    ]) {
+    for (const action of ['action-secondary-hover', 'action-secondary-active']) {
       checkContrast(
         failures,
         `${id} secondary action label on ${action}`,
         color['action-on-secondary'],
         color[action],
-        4.5,
+        7,
       );
     }
+    // The resting secondary action is transparent, so its label sits on the canvas.
+    checkContrast(
+      failures,
+      `${id} secondary action label on canvas`,
+      color['action-on-secondary'],
+      color['background-canvas'],
+      7,
+    );
     for (const action of ['action-danger', 'action-danger-hover', 'action-danger-active']) {
       checkContrast(
         failures,
         `${id} danger action label on ${action}`,
         color['action-on-danger'],
         color[action],
-        4.5,
+        7,
       );
     }
     for (const state of ['info', 'success', 'warning', 'danger']) {
@@ -374,6 +394,13 @@ export function auditTokenContract(tokens = designTokens) {
         failures,
         `${id} interactive border on ${backgroundName}`,
         color['border-interactive'],
+        color[backgroundName],
+        3,
+      );
+      checkContrast(
+        failures,
+        `${id} field boundary on ${backgroundName}`,
+        color['border-strong'],
         color[backgroundName],
         3,
       );

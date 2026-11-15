@@ -3,9 +3,12 @@
 `Icon` is the sole product-icon adapter for the server-hosted webapp. It maps
 stable, semantic Proctor names to selected Lucide React glyphs so feature code
 does not depend on library names or APIs. The current vocabulary is
-`showPassword`, `hidePassword`, and `loading`; a new name is added only after
-a concrete product use proves its meaning. Inline notices rely on text and a
-semantic rule instead of an icon.
+`showPassword`, `hidePassword`, `loading`, the status-line marks
+`stateSuccess`, `stateWarning`, and `stateDanger`, the form-failure mark
+`error`, and the read-only field mark `readOnly`; a new name is added only
+after a concrete product use proves its meaning. A state icon always sits
+beside the word it marks, so colour and shape add to the text rather than
+replace it.
 
 The component owns inline SVG rendering, the design-system `16px`, `20px`, and
 `24px` size tokens, a consistent `2px` stroke, `currentColor`, and a stable

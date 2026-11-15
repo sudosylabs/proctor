@@ -37,8 +37,9 @@ component proven by real consumers. The first such component is
 frame shared by every hosted route; it does not establish a general
 authenticated application shell or navigation. Focused task introductions use
 the [`AccessTaskIntro`](./src/components/AccessTaskIntro/CONTRACT.md)
-contract, and labelled facts a person checks before or after an action use
-[`FactList`](./src/components/FactList/CONTRACT.md).
+contract, labelled facts a person checks before or after an action use
+[`FactList`](./src/components/FactList/CONTRACT.md), and a long task is divided
+into numbered [`FormGroup`](./src/components/FormGroup/CONTRACT.md) parts.
 Their loading, unavailable, terminal, and context-replacement states use the
 narrow [`TaskState`](./src/components/TaskState/CONTRACT.md) contract for a
 consistent hierarchy, responsive action rhythm, live announcement, and
@@ -66,12 +67,13 @@ Purple identifies the primary Proctor-controlled path. Teal, amber, and coral
 appear only when their state meaning is true. Neutral surfaces carry the rest
 of the interface.
 
-The signature structural idea is the **verification rail**. A future page may
-use a quiet, persistent region to keep the smallest useful chain of Exam,
-Sitting, Attempt, save, connectivity, or integrity state visible beside the
-current task. It is evidence, not decoration: it appears only when losing that
-context would make an action ambiguous. Its exact component and responsive
-placement remain page-design work.
+The signature structural idea is the **verification rail**: a quiet column
+beside the task that keeps the context a person needs to act safely — who is
+asking, what a link allows, when a request expires, what changes, and where to
+get help. It is evidence, not decoration. Hosted pages carry it today (see
+[Hosted page shell](#hosted-page-shell)); a future Exam page uses the same
+column for the smallest useful chain of Exam, Sitting, Attempt, save,
+connectivity, or integrity state.
 
 The system follows five principles:
 
@@ -207,25 +209,39 @@ documentation identity while serving denser product interaction:
 | Surface | `#FFFFFF` | `#1C1C1C` |
 | Raised surface | `#FFFFFF` | `#242424` |
 | Primary text | `#161616` | `#F5F3FF` |
-| Muted text | `#655F69` | `#A1A1AA` |
-| Default border | `#E1DCE5` | `#2E2E2E` |
+| Muted text | `#57515C` | `#B4B4BC` |
+| Default border (hairline rules) | `#E1DCE5` | `#2E2E2E` |
+| Strong border (field boundary) | `#857D8C` | `#7C7C86` |
+| Interactive border (secondary action) | `#57515C` | `#7C7C86` |
 | Focus | `#5C00AA` | `#F5F3FF` |
 
-Dark presentation uses a neutral working environment and a brighter adaptive
-violet for interaction. Its governed accent roles are primary `#A855F7`, hover
-`#C084FC`, on-primary `#0A0A0A`, focus `#F5F3FF`, and link `#E9D5FF`.
-Success uses `#3ECF8E` on `#0F241C`, warning uses `#F5B942` on `#2A2110`, and
-danger uses `#F87171` on `#2A1218`. These state surfaces are reserved for
-actual state evidence rather than general section tinting.
+Dark presentation uses a neutral working environment and a lighter adaptive
+violet for interaction. Its governed accent roles are primary `#BF8BFA`, hover
+`#D0ABFC`, active `#C99CFB`, on-primary `#0A0A0A`, focus `#F5F3FF`, and link
+`#E9D5FF`. Success uses `#3ECF8E`, warning `#F5B942`, and danger `#FB8F8F`.
+State surfaces stay reserved for actual state evidence rather than general
+section tinting; hosted pages show state through words, icons, and coloured
+text on the canvas, never a tinted box.
+
+A secondary action is neutral: a transparent fill, an interactive-border
+outline, and a primary-text label. Purple belongs only to the view's primary
+action and to links, so a secondary action never competes with the primary
+one.
 
 A destructive or irreversible primary action uses the danger action roles in
-place of purple: coral `#B4233C` with hover `#961C31` and a paper label in
-light, and `#F87171` with hover `#FCA5A5` and a `#0A0A0A` label in dark. The
-audit holds the label to `4.5:1` on every danger action state.
+place of purple: `#A51F37` with hover `#8C1A2F`, active `#73152A`, and a paper
+label in light; `#FB8F8F` with hover `#FCA5A5`, active `#F98080`, and a
+`#0A0A0A` label in dark.
 
-The audit verifies standard foreground/surface pairs at `4.5:1`, state text on
-its state surface at `4.5:1`, and focus rings at `3:1` against their adjacent
-surfaces. Disabled content is not relied upon to convey required information.
+The release floor is WCAG 2.2 AA; the product targets AAA text contrast where
+the palette allows it. The audit holds every text role (default, subtle,
+muted, link, danger state, and every action label in every state) to `7:1`
+against the backgrounds it sits on. Success and warning state text is held to
+`4.5:1` and always appears with an icon and a word. Field boundaries,
+interactive borders, and focus rings are held to `3:1` against every adjacent
+background, which satisfies WCAG 1.4.11 for the parts needed to identify a
+control. Hairline rules are decorative grouping and carry no required
+meaning. Disabled content is not relied upon to convey required information.
 
 ## Typography
 
@@ -261,8 +277,9 @@ The tracked scale is:
 | Large heading | `2rem` | `1.15` |
 | Display | `clamp(1.875rem, 1.6rem + 1vw, 2.25rem)` | `1.08` |
 
-Body copy uses a maximum `74ch` measure. Headings use balanced wrapping when
-supported. Data columns use tabular numerals. A viewport may change layout and
+Body copy uses a maximum `74ch` measure. Headings use `text-wrap: pretty`
+when supported: it avoids a lone last word without the balanced split that
+breaks compound words such as “two-step” at their hyphen. Data columns use tabular numerals. A viewport may change layout and
 display size, but it does not shrink ordinary body text below the tracked
 scale.
 
@@ -342,10 +359,12 @@ The initial measures are `36rem` for focused forms, `74ch` for prose, `72rem`
 for content, and `90rem` for the complete application frame. They are bounds,
 not instructions to fill every viewport.
 
-The hosted page shell gives the governed Proctor lockup clear space
-without an adjacent decorative rule. An effective light-scheme product theme
-uses the flat purple-mark, ink-wordmark lockup; an effective dark-scheme product
-theme uses the flat purple-mark, white-wordmark lockup. The transparent 2.5D
+The hosted page shell gives the governed Proctor lockup clear space; the only
+rule beside it is the hairline divider before the Institution name. An
+effective light-scheme product theme uses the 2.5D purple-mark, ink-wordmark
+lockup; an effective dark-scheme product theme uses the 2.5D ivory-front,
+white-wordmark lockup, because the flat purple mark falls below `2:1` on the
+dark canvas. The transparent 2.5D
 browser favicon remains a browser-chrome policy that follows the system
 preference: purple for system light and ivory with lilac for system dark. An
 explicit product theme does not rewrite that favicon choice. The black mark is
@@ -360,32 +379,56 @@ portal preserves stacking and focus ownership.
 ### Hosted page shell
 
 Every hosted route uses one shell; there are no split, single, or status
-variants. From top to bottom:
+variants. One grid owns the page: a `72rem` content frame with `48px` side gutters
+(`20px` below `48rem`) and twelve columns with a `24px` gutter. The masthead,
+task column, and rail all start on the same left edge, so nothing floats in
+the middle of the viewport.
 
-1. **Masthead.** The theme-aware lockup at the inline start and the
-   Institution display name at the inline end, muted and small. The name is
-   omitted until public discovery supplies it and is hidden below `30rem`.
-2. **Task column.** One centred `main` landmark bounded by the `36rem` form
-   measure, with a consistent block start so the kind line and heading land
-   in the same place on every route. Wider grouped forms, Institution
-   context, and terminal outcomes all live in this column in document order;
-   nothing sits beside it, and short content is not vertically centred.
-3. **Footer.** A hairline rule over the column's width, then muted
-   label-size text: “Signed in as {name} · Sign out” when the page has a
-   confirmed identity, and a help line that names the Institution.
+1. **Masthead.** A full-width row above a hairline rule. At the inline start,
+   the theme-aware lockup followed by a hairline divider and the Institution
+   display name, muted and small, so the Proctor and Institution identities
+   read as one group. At the inline end, only on a page with a confirmed
+   identity: “Signed in as {name}” and the page-owned sign-out control. Below
+   `48rem` a signed-in masthead shows only the name and sign-out control (the
+   “Signed in as” words remain for assistive technology) and drops the
+   Institution name, which the rail and lede still carry.
+2. **Task column.** One `main` landmark spanning columns one to six (about
+   `36rem`), with a consistent block start so the heading lands in the same
+   place on every route. Short content is not vertically centred.
+3. **Verification rail.** An `aside` spanning columns eight to twelve, with a
+   hairline rule on its inline start that is only as tall as its content. Its
+   first heading shares the task heading's cap line. It holds page-owned rail
+   items — context that makes the action safe, secondary routes such as
+   “Create an account”, and evidence such as an expiry time — followed by the
+   shell's help item, “Need help? Contact {Institution}.”, which every route
+   carries. Below `48rem` the rail follows the task in document order, under a
+   hairline rule. Information a person needs **before** acting (a required
+   secret, a time limit) is also given as a short note under the lede, and the
+   matching rail item is hidden at that width, so nothing needed first ever
+   appears after the action.
+
+There is no footer: the help line and the signed-in identity live in the rail
+and the masthead.
 
 Hierarchy inside the column comes from type, spacing, and hairline rules
 only: no cards, tinted callout boxes, pill badges, uppercase eyebrows, accent
-rails, or decorative icons. A task opens with a quiet sentence-case **kind
-line** (muted; teal, amber, or coral only when it reports that real terminal
-outcome), the condensed display **heading**, and a **lede** in the subtle
-foreground. Facts the person must check use the hairline `FactList`. Stable
-evidence uses the unboxed `Notice`: supporting text with an optional bold
-lead and, for success, warning, or danger, a small square state marker.
-Related decisions further down a page are separated by a hairline rule and a
-small heading rather than a panel. Purple appears only on the view's one
-primary action and on links; teal, amber, and coral only for real state. When
-that one action is destructive or irreversible it uses the `danger` button
+rails, or decorative icons. A task opens with the condensed display
+**heading** and a **lede** in the subtle foreground. A **status line** above
+the heading appears only when the page reports a real outcome — success,
+warning, or danger — and pairs its colour with an icon and a word; there is no
+neutral kind line repeating the heading. Facts the person must check use the
+hairline `FactList`. Stable evidence uses the unboxed `Notice`. Related
+decisions further down a page are separated by a hairline rule and a small
+heading rather than a panel. A long form is divided into numbered groups — a
+muted monospace numeral (`01`) beside a small heading — separated by hairline
+rules, so proximity and a shared heading show which fields belong together.
+
+The view's one primary action spans the task column, so the form keeps one
+right edge and the primary action carries the most visual weight. A secondary
+action keeps its content width beside or below it; a pair of secondary
+actions shares the width equally below `48rem`. Text actions (Cancel, Back to
+sign in) sit below the primary action, aligned to the column's start. When the
+one action is destructive or irreversible it uses the `danger` button
 instead, so the view then carries no purple action.
 
 The live status region of a task remains mounted across task replacement. It
@@ -394,7 +437,7 @@ user-triggered replacement removes the invoking control and orientation would
 otherwise be lost. Initial loading and ordinary status updates never steal
 focus; validation continues to focus the first invalid field. Pending task
 content uses a bounded spinner and supporting message, retaining an
-accessible heading and any available kind line. Under `30rem`, task-state
+accessible heading. Under `30rem`, task-state
 actions stack in document order and fill the available inline size.
 Action-adjacent submission failures remain owned by `FormFeedback`.
 
@@ -406,14 +449,18 @@ Hover never reveals required information. Actions use `button`; navigation
 uses a real link. Compound controls use `focus-within` when the group needs a
 single visible boundary.
 
-Required single-line fields use the native `required` attribute and a visible
-asterisk that is hidden from assistive technology; native semantics expose the
-constraint without polluting the accessible label. Descriptions and errors
+Required fields use the native `required` attribute with no visual mark.
+Hosted forms are mostly required fields, so the exception is labelled
+instead: an optional field appends “(optional)” to its label in the muted
+foreground. A read-only field (a value the person cannot change here) uses the
+subtle background, the subtle foreground, and a lock icon at the inline end,
+and its description says why it cannot change. Descriptions and errors
 remain adjacent and programmatically associated. Password disclosure is an
 icon-only button centered within the input boundary, with a localized
-accessible name, matching title, and pressed state. Checkbox controls align to
-the first line of their label, and the complete label/control row is one hit
-target.
+accessible name, matching title, and pressed state. Checkbox controls are drawn from tokens — a strong-border box on the field
+background that fills with the primary action colour when checked — so their
+boundary meets `3:1` in every theme; they align to the first line of their
+label, and the complete label/control row is one hit target.
 
 The focus indicator is a three-pixel semantic focus ring with enough offset to
 remain visible against adjacent surfaces. Sticky regions, dialogs, and
@@ -453,9 +500,11 @@ Durable rules include:
 - never block paste into passwords, one-time codes, or any other input;
 - place validation guidance beside its field, associate it programmatically,
   and focus the first invalid field after a failed submission;
-- keep a general submission failure beside the action that produced it,
-  persist it until recovery makes it obsolete, and do not move focus merely to
-  announce it;
+- keep a general submission failure beside the action that produced it, as an
+  error icon, a bold lead naming what happened, and the recovery step — never
+  in a tinted box — persist it until recovery makes it obsolete, and do not
+  move focus merely to announce it; a failure that cannot be attributed to one
+  field (such as wrong sign-in credentials) marks no field as invalid;
 - announce asynchronous validation and completion through an appropriate live
   region without moving focus unnecessarily;
 - give icon-only actions an accessible name and hide decorative icons;
@@ -567,7 +616,7 @@ presented as Safari coverage. The application uses capability detection and
 progressive enhancement rather than user-agent branching.
 
 CSS Grid, Flexbox, custom properties, logical properties, and ordinary dynamic
-viewport units are foundation capabilities. Container queries, balanced text,
+viewport units are foundation capabilities. Container queries, pretty text wrapping,
 popover behavior, view transitions, and other newer presentation features are
 enhancements until the affected slice proves its fallback. Missing an
 enhancement may reduce polish but must not conceal information, prevent an

@@ -22,9 +22,10 @@ removes and the page shows as a warning beside the same choice. A signed-in
 browser Web Session is never offered or used as proof.
 
 The heading is “Confirm it’s you”; the lede names the Desktop Session's
-account and says the proof is “to continue in Proctor Desktop”. A muted
-closing line says the proof applies to Proctor Desktop only. The shell shows
-no signed-in footer because this browser is not signed in.
+account and says the proof is “to continue in Proctor Desktop”. A
+verification-rail item says the proof applies to Proctor Desktop only. The
+shell masthead shows no signed-in identity because this browser is not signed
+in.
 
 As soon as the request is proved (after the password, or on return from the
 provider) the journey approves it without another click and navigates only to

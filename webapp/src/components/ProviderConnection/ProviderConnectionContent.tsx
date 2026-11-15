@@ -6,10 +6,10 @@ import type {
   ProviderConnectionContextResult,
 } from "../../features/connect-provider/ProviderConnectionApi";
 import { message } from "../../i18n/messages";
+import { RailItem, TaskRail } from "../AccessPageShell/AccessPageShell";
 import { AccessTaskIntro } from "../AccessTaskIntro/AccessTaskIntro";
 import { Button, ButtonLink } from "../Button/Button";
 import { FormFeedback } from "../FormFeedback/FormFeedback";
-import { Notice } from "../Notice/Notice";
 import {
   TaskState,
   TaskStateActions,
@@ -177,7 +177,7 @@ function ProviderChooser({
   return (
     <section className={styles.page} aria-labelledby="connect-provider-heading">
       <AccessTaskIntro
-        kind={message("webapp.connect_provider.kind")}
+
         heading={heading}
         body={
           single === undefined
@@ -218,7 +218,11 @@ function ProviderChooser({
           ))}
         </fieldset>
       ) : null}
-      <Notice role="note">{message("webapp.connect_provider.note")}</Notice>
+      <TaskRail>
+        <RailItem>
+          <p>{message("webapp.connect_provider.note")}</p>
+        </RailItem>
+      </TaskRail>
       <div className={styles.actionGroup}>
         <TaskStateActions>
           <Button
@@ -288,7 +292,6 @@ function ProviderRouteState({
       focusHeading={focusHeading}
       heading={heading}
       headingID="connect-provider-heading"
-      label={message("webapp.connect_provider.kind")}
     >
       {children}
     </TaskState>

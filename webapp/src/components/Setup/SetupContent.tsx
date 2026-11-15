@@ -9,7 +9,6 @@ import type {
 import { message } from "../../i18n/messages";
 import {
   AccessTaskIntro,
-  type AccessTaskKindTone,
 } from "../AccessTaskIntro/AccessTaskIntro";
 import { Button, ButtonLink } from "../Button/Button";
 import { Fact, FactList } from "../FactList/FactList";
@@ -61,7 +60,7 @@ export function SetupContent({
     return (
       <SetupState
         focusHeading
-        kindTone="success"
+        succeeded
         heading={message("webapp.setup.created.heading", {
           Institution: created.institutionDisplayName,
         })}
@@ -108,13 +107,13 @@ function SetupState({
   children,
   focusHeading = false,
   heading,
-  kindTone,
+  succeeded = false,
 }: {
   body: string;
   children: ReactNode;
   focusHeading?: boolean;
   heading: string;
-  kindTone?: AccessTaskKindTone;
+  succeeded?: boolean;
 }) {
   return (
     <section className={styles.page} aria-labelledby="setup-heading">
@@ -123,8 +122,7 @@ function SetupState({
         focusHeading={focusHeading}
         heading={heading}
         headingID="setup-heading"
-        kind={message("webapp.setup.kind")}
-        kindTone={kindTone}
+        status={succeeded ? { label: message("webapp.setup.kind"), tone: "success" } : undefined}
       />
       {children}
     </section>

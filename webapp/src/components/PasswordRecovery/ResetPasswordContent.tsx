@@ -122,8 +122,7 @@ export function ResetPasswordContent({
           focusHeading={transitioned}
           heading={heading}
           headingID="reset-heading"
-          label={message("webapp.reset_password.kind")}
-          labelTone={complete ? "success" : "danger"}
+          status={{ label: message("webapp.reset_password.kind"), tone: complete ? "success" : "danger" }}
         >
           <TaskStateActions className={styles.afterBody}>
             {complete ? (
@@ -151,7 +150,6 @@ export function ResetPasswordContent({
       <TaskStateAnnouncement message="" />
       <section className={styles.page} aria-labelledby="reset-heading">
         <AccessTaskIntro
-          kind={message("webapp.reset_password.kind")}
           heading={message("webapp.reset_password.context.heading")}
           body={message("webapp.reset_password.context.body")}
           headingID="reset-heading"

@@ -86,8 +86,7 @@ export function AuthorizationCompletePage() {
       <TaskState
         key={state}
         busy={state === "checking"}
-        label={content.label}
-        labelTone={content.tone}
+        status={content.tone === undefined ? undefined : { label: content.label, tone: content.tone }}
         heading={content.heading}
         headingID="authorization-complete-heading"
         focusHeading={focusUnavailable}

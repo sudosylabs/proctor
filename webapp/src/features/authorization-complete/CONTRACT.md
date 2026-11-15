@@ -94,10 +94,11 @@ call, or provider restart. It never uses animation as the only indication of
 pending work.
 
 Initial confirmation uses the shared Loading indicator and supporting message
-within the shared `TaskState` in the shell task column. The kind line remains
-visible, and the page heading remains accessible without taking focus. There
-is no centred card, coloured rail, or icon; the kind line turns teal for a
-confirmed sign-in and amber for a recovery restriction. The
+within the shared `TaskState` in the shell task column. The page heading
+remains visible without taking focus. There is no centred card or coloured
+panel; a status line (icon and label in the state colour) appears only for a
+real outcome: teal for a confirmed sign-in and amber for a recovery
+restriction. The
 existing page-owned live region announces progress. An explicit retry keeps
 its current result in place and shows the spinner inside the retry button.
 
@@ -116,7 +117,7 @@ same deterministic Session check.
 
 Signed in uses the heading intent “You’re signed in” and supporting copy that
 the page may be closed. It offers account security and adding a sign-in method
-without exposing User fields (the shell footer carries no signed-in name here)
+without exposing User fields (the shell masthead carries no signed-in name here)
 or adding a general authenticated navigation shell. A recovery-required response
 instead explains reenrollment and offers the same bounded security destination.
 

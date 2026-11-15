@@ -10,7 +10,7 @@ import { useAsyncResource } from "../../app/AsyncResource";
 import { useHostedInstitution } from "../../auth/HostedInstitution";
 import { navigateToProvider } from "../../auth/navigation";
 import type { PublicAccessDiscovery } from "../../auth/PublicAccessDiscovery";
-import { AccessPageShell } from "../../components/AccessPageShell/AccessPageShell";
+import { AccessPageShell, RailItem } from "../../components/AccessPageShell/AccessPageShell";
 import { AccessTaskIntro } from "../../components/AccessTaskIntro/AccessTaskIntro";
 import { AuthenticationCodeField, isCompleteAuthenticationCode, type AuthenticationCodeValue } from "../../components/AuthenticationCodeField/AuthenticationCodeField";
 import { Button, ButtonLink } from "../../components/Button/Button";
@@ -48,11 +48,21 @@ export function LoginPage({ externalLoginFailed }: LoginPageProps) {
   const institution = useHostedInstitution();
 
   return (
-    <AccessPageShell skipLabel={message("webapp.login.skip_to_main")}>
+    <AccessPageShell
+      skipLabel={message("webapp.login.skip_to_main")}
+      rail={
+        discoveryState.kind === "ready" && !mfaRequired ? (
+          <NewcomerRail
+            discovery={discoveryState.discovery}
+            institutionName={institution.displayName}
+          />
+        ) : undefined
+      }
+    >
       <section className={styles.page} aria-labelledby="login-heading">
         {mfaRequired ? (
           <AccessTaskIntro
-            kind={message("webapp.login.mfa.kind")}
+
             heading={message("webapp.login.mfa.heading")}
             headingID="login-heading"
             body={message("webapp.login.mfa.lede")}
@@ -81,7 +91,6 @@ export function LoginPage({ externalLoginFailed }: LoginPageProps) {
         <div className={styles.discovery}>
           <DiscoveryContent
             authenticate={authenticateLocal}
-            institutionName={institution.displayName}
             mfaRequired={mfaRequired}
             state={discoveryState}
             onMFARequiredChange={setMFARequired}
@@ -96,7 +105,6 @@ export function LoginPage({ externalLoginFailed }: LoginPageProps) {
 
 interface DiscoveryContentProps {
   authenticate: AuthenticateLocal;
-  institutionName?: string;
   mfaRequired: boolean;
   onAuthenticationAction(): void;
   onMFARequiredChange(required: boolean): void;
@@ -106,7 +114,6 @@ interface DiscoveryContentProps {
 
 function DiscoveryContent({
   authenticate,
-  institutionName,
   mfaRequired,
   onAuthenticationAction,
   onMFARequiredChange,
@@ -167,7 +174,6 @@ function DiscoveryContent({
     <LoginMethods
       authenticate={authenticate}
       discovery={state.discovery}
-      institutionName={institutionName}
       mfaRequired={mfaRequired}
       onAuthenticationAction={onAuthenticationAction}
       onMFARequiredChange={onMFARequiredChange}
@@ -198,14 +204,12 @@ function RouteState({
 function LoginMethods({
   authenticate,
   discovery,
-  institutionName,
   mfaRequired,
   onAuthenticationAction,
   onMFARequiredChange,
 }: {
   authenticate: AuthenticateLocal;
   discovery: PublicAccessDiscovery;
-  institutionName?: string;
   mfaRequired: boolean;
   onAuthenticationAction(): void;
   onMFARequiredChange(required: boolean): void;
@@ -224,20 +228,18 @@ function LoginMethods({
         />
       ) : null}
 
-      {hasLocal && hasProviders ? (
-        <div className={styles.separator} aria-hidden="true">
-          <span>{message("webapp.login.method_separator")}</span>
-        </div>
-      ) : null}
-
       {hasProviders ? (
-        <fieldset className={styles.providerGroup}>
-          <legend className={styles.visuallyHidden}>
+        <section
+          className={hasLocal ? `${styles.providerGroup} ${styles.afterLocal}` : styles.providerGroup}
+          aria-labelledby="login-provider-heading"
+        >
+          <h2 id="login-provider-heading">
             {message("webapp.login.provider.group")}
-          </legend>
+          </h2>
           {discovery.providers.map((provider) => (
             <Button
               key={provider.id}
+              className={styles.provider}
               variant="secondary"
               onClick={() => {
                 onAuthenticationAction();
@@ -255,41 +257,45 @@ function LoginMethods({
               })}
             </Button>
           ))}
-        </fieldset>
-      ) : null}
-
-      {mfaRequired ? null : (
-        <section
-          className={styles.newcomer}
-          aria-labelledby="login-newcomer-heading"
-        >
-          <h2 id="login-newcomer-heading">
-            {message("webapp.login.registration.prompt")}
-          </h2>
-          <p>
-            {institutionName === undefined
-              ? message("webapp.login.registration.invitation_unnamed")
-              : message("webapp.login.registration.invitation", {
-                  Institution: institutionName,
-                })}
-            {discovery.capabilities.public_registration ? (
-              <>
-                {" "}
-                {richMessage("webapp.login.registration.open", {
-                  Link: (
-                    <a href="/register">
-                      {message("webapp.login.registration.action")}
-                    </a>
-                  ),
-                })}
-              </>
-            ) : null}
-          </p>
         </section>
-      )}
+      ) : null}
     </div>
   );
 }
+
+/** The newcomer route moves from the task column into the verification rail. */
+function NewcomerRail({
+  discovery,
+  institutionName,
+}: {
+  discovery: PublicAccessDiscovery;
+  institutionName?: string;
+}) {
+  return (
+    <RailItem heading={message("webapp.login.registration.prompt")}>
+      <p>
+        {institutionName === undefined
+          ? message("webapp.login.registration.invitation_unnamed")
+          : message("webapp.login.registration.invitation", {
+              Institution: institutionName,
+            })}
+        {discovery.capabilities.public_registration ? (
+          <>
+            {" "}
+            {richMessage("webapp.login.registration.open", {
+              Link: (
+                <a href="/register">
+                  {message("webapp.login.registration.action")}
+                </a>
+              ),
+            })}
+          </>
+        ) : null}
+      </p>
+    </RailItem>
+  );
+}
+
 
 function LocalLoginForm({
   authenticate,
@@ -387,15 +393,8 @@ function LocalLoginForm({
         requestAnimationFrame(() => mfaCodeRef.current?.focus());
         return;
       }
-      if (result.kind === "invalid_credentials" && !mfaRequired) {
-        // The credentials are rejected as a pair; the message sits under the
-        // password, which is the field the person usually retypes.
-        const errorMessage = message("webapp.login.form.error.credentials_rejected");
-        setFieldErrors({ password: errorMessage });
-        setLiveMessage(errorMessage);
-        requestAnimationFrame(() => passwordRef.current?.focus());
-        return;
-      }
+      // Rejected credentials fall through to the form-level failure: either
+      // value may be wrong, so no field is marked and focus stays put.
 
       let safeError: string;
       switch (result.kind) {

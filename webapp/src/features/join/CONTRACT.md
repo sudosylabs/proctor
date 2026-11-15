@@ -30,8 +30,8 @@ acceptance.
 It is read only from the shared, fully validated, same-origin discovery result;
 malformed or origin-mismatched discovery is treated as absent presentation.
 
-The ready account and Session variants share one intro: the Invitation kind
-line, a heading that names the Institution when discovery supplies it, and a
+The ready account and Session variants share one intro: a heading that names
+the Institution when discovery supplies it, and a
 lede chosen from the closed purpose and requirement. A `FactList` then states
 what the Invitation is for (the purpose as a plain role word) and when it
 expires, formatted with `Intl` in the viewer's locale and time zone inside a
@@ -42,8 +42,8 @@ or invented. The account form or the single Session action follows. The page pre
 transaction internals.
 
 Loading, unavailable, invalid, and accepted route states use the shared
-`TaskState` hierarchy and persistent polite announcement, with the kind line
-toned only for a real outcome (danger for an unusable link, warning for an
+`TaskState` hierarchy and persistent polite announcement, with a status line
+only for a real outcome (danger for an unusable link, warning for an
 unavailable check, success after acceptance). The unusable-link state names
 the possible causes together without revealing which applies, and offers sign
 in plus a support contact when the Institution publishes a support address.

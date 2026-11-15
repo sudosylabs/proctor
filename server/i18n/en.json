@@ -4226,10 +4226,6 @@
     "translation": "Sign-in methods you can add"
   },
   {
-    "id": "webapp.connect_provider.kind",
-    "translation": "Sign-in methods"
-  },
-  {
     "id": "webapp.connect_provider.loading.body",
     "translation": "Checking which sign-in methods you can add…"
   },
@@ -5026,16 +5022,8 @@
     "translation": "Checking how you can sign in…"
   },
   {
-    "id": "webapp.login.method_separator",
-    "translation": "or"
-  },
-  {
     "id": "webapp.login.mfa.heading",
     "translation": "Enter your code"
-  },
-  {
-    "id": "webapp.login.mfa.kind",
-    "translation": "Sign in"
   },
   {
     "id": "webapp.login.mfa.lede",
@@ -5790,10 +5778,6 @@
     "translation": "Finish within {{.Duration}}."
   },
   {
-    "id": "webapp.security.setup.heading",
-    "translation": "Scan this code"
-  },
-  {
     "id": "webapp.security.setup.key",
     "translation": "Setup key"
   },
@@ -5824,6 +5808,14 @@
   {
     "id": "webapp.security.setup.section.heading",
     "translation": "Turn on two-step verification"
+  },
+  {
+    "id": "webapp.security.setup.step.code",
+    "translation": "Enter the code it shows"
+  },
+  {
+    "id": "webapp.security.setup.step.scan",
+    "translation": "Scan the code"
   },
   {
     "id": "webapp.security.sign_in",
@@ -5932,6 +5924,14 @@
   {
     "id": "webapp.setup.already_initialized.heading",
     "translation": "Proctor is already set up"
+  },
+  {
+    "id": "webapp.setup.before.body",
+    "translation": "You need the setup key from whoever runs this server."
+  },
+  {
+    "id": "webapp.setup.before.heading",
+    "translation": "Before you start"
   },
   {
     "id": "webapp.setup.created.administrator",
@@ -6074,6 +6074,18 @@
     "translation": "Creating institution…"
   },
   {
+    "id": "webapp.setup.group.administrator",
+    "translation": "Your administrator account"
+  },
+  {
+    "id": "webapp.setup.group.authorization",
+    "translation": "Authorize this setup"
+  },
+  {
+    "id": "webapp.setup.group.institution",
+    "translation": "Institution"
+  },
+  {
     "id": "webapp.setup.heading",
     "translation": "Set up your institution"
   },
@@ -6116,6 +6128,10 @@
   {
     "id": "webapp.shell.help.unnamed",
     "translation": "Need help? Contact your institution."
+  },
+  {
+    "id": "webapp.shell.rail.label",
+    "translation": "About this page"
   },
   {
     "id": "webapp.shell.signed_in",

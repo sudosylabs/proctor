@@ -82,8 +82,7 @@ export function EmailVerificationContent({
         focusHeading={transitioned}
         heading={message(copy.heading)}
         headingID="verify-email-heading"
-        label={message("webapp.verify_email.kind")}
-        labelTone={copy.tone}
+        status={copy.tone === undefined ? undefined : { label: message("webapp.verify_email.kind"), tone: copy.tone }}
       >
         <TaskStateActions className={styles.actions}>
           <VerificationActions

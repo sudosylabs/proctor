@@ -41,13 +41,13 @@ retry.
 ## Document and semantic structure
 
 The page requests the stable title `Confirm email · Proctor`. It uses the
-shared hosted shell column and the shared `TaskState` hierarchy: the quiet
-`Confirm email` kind line, one state-specific `h1`, a lede, and the state's
-actions, plus one persistent polite live region (`TaskStateAnnouncement`).
-There is no separate centred layout, outcome marker, or evidence note. The
-kind line is teal when verified, coral when the link is unusable, amber when
-the result is unavailable, and muted otherwise; the heading and lede always
-state the outcome in words. The ready lede states the single-use, 24-hour
+shared hosted shell column and the shared `TaskState` hierarchy: a
+`Confirm email` status line only for a real outcome, one state-specific `h1`,
+a lede, and the state's actions, plus one persistent polite live region
+(`TaskStateAnnouncement`). There is no separate centred layout or evidence
+note. The status line is teal when verified, coral when the link is unusable,
+and amber when the result is unavailable; the ready and pending states show
+none. The heading and lede always state the outcome in words. The ready lede states the single-use, 24-hour
 lifetime (the server default).
 
 On entry with a captured token the route makes one read-only `POST

@@ -3,9 +3,11 @@
 `FormFeedback` is the domain-neutral submission-result region shared by the
 hosted forms. It presents a persistent form-level failure beside the action
 that produced it. Field-specific validation, and server failures the page can
-attribute to one field (wrong credentials under the password, a rejected setup
-key under that key), remain owned by `InputField` or the feature's native
-control and are never moved into this component.
+attribute to one field (a rejected setup key under that key), remain owned by
+`InputField` or the feature's native control and are never moved into this
+component. A failure that cannot be attributed to one field — wrong sign-in
+credentials, where either value may be wrong — belongs here and marks no field
+invalid.
 
 The component is always mounted with `role="status"`, `aria-live="polite"`,
 and `aria-atomic="true"`. A changed message is therefore announced without
@@ -24,9 +26,10 @@ to make room. Copy grows in normal document flow and is never clipped,
 truncated, overlaid, or constrained to a fixed height. The component adds no
 transition, so a message appears without animated movement.
 
-Visible failures compose the shared `Notice` danger treatment. The component
-adds no panel, icon, shadow, radius, dismissal, timer, portal, or toast
-behavior. A failure remains visible until the owning feature makes it obsolete
+A visible failure is the `error` icon beside the message in the danger
+foreground at medium weight; forced colors keep the text in `CanvasText` and
+the mark in a system colour. The component adds no panel, tint, shadow,
+radius, dismissal, timer, portal, or toast behavior. A failure remains visible until the owning feature makes it obsolete
 through an edit, retry, state transition, or successful completion. The stable
 `data-proctor-form-feedback` attribute is a diagnostic test hook and does not
 drive product behavior.

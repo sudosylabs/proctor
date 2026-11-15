@@ -14,14 +14,17 @@
     font-weight: var(--proctor-font-weight-semibold);
     line-height: var(--proctor-line-height-display);
     letter-spacing: var(--proctor-letter-spacing-display);
-    text-wrap: balance;
+    text-wrap: pretty;
   }
 
-  .label {
-    margin-block-end: calc(var(--proctor-space-3) - var(--proctor-space-4));
-    color: var(--proctor-color-foreground-muted);
+  /* A status line names a real outcome with colour, an icon, and a word. */
+  .status {
+    display: flex;
+    align-items: center;
+    gap: var(--proctor-space-2);
+    margin-block-end: calc(var(--proctor-space-1) - var(--proctor-space-4));
     font-size: var(--proctor-font-size-body-small);
-    font-weight: var(--proctor-font-weight-medium);
+    font-weight: var(--proctor-font-weight-semibold);
     line-height: var(--proctor-line-height-body-small);
   }
 
@@ -44,19 +47,32 @@
     line-height: var(--proctor-line-height-body-large);
   }
 
+  /* Pending content keeps the heading and reserves its region so nothing jumps. */
   .loading {
-    display: grid;
+    display: flex;
     min-inline-size: 0;
-    min-block-size: 20rem;
-    place-items: center;
+    min-block-size: 10rem;
+    align-items: flex-start;
+    padding-block-start: var(--proctor-space-4);
     color: var(--proctor-color-foreground-muted);
   }
 
+  /* In the task column the indicator and its message start on the column edge. */
+  .loading [data-proctor-loading],
+  .loading [data-proctor-loading] > * {
+    align-items: flex-start;
+    font-size: var(--proctor-font-size-body);
+    line-height: var(--proctor-line-height-body);
+    text-align: start;
+  }
+
+  /* The primary action spans the column; secondary and text actions follow it. */
   .actions {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--proctor-space-3) var(--proctor-space-5);
+    gap: var(--proctor-space-4) var(--proctor-space-5);
     align-items: center;
+    padding-block-start: var(--proctor-space-4);
   }
 
   .visuallyHidden {
@@ -77,8 +93,13 @@
       flex-direction: column;
     }
 
-    .actions > * {
+    .actions > *:not([data-proctor-button-variant="text"]) {
       inline-size: 100%;
+    }
+
+    /* Text actions keep the column's start edge rather than centring in a full row. */
+    .actions > [data-proctor-button-variant="text"] {
+      align-self: flex-start;
     }
   }
 }

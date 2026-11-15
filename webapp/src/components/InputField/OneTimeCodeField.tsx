@@ -4,7 +4,7 @@ import { forwardRef } from "react";
 
 import "./InputOTPCompatibility.css";
 
-import { RequiredMark, type InputFieldProps } from "./InputField";
+import type { InputFieldProps } from "./InputField";
 import fieldStyles from "./InputField.module.css";
 import styles from "./OneTimeCodeField.module.css";
 
@@ -23,7 +23,7 @@ export const OneTimeCodeField = forwardRef<HTMLInputElement, OneTimeCodeFieldPro
 
     return <div className={fieldStyles.field}>
       <div className={fieldStyles.labelRow}>
-        <label htmlFor={id}>{label}{required ? <RequiredMark /> : null}</label>
+        <label htmlFor={id}>{label}</label>
       </div>
       <OTPInput {...props} ref={ref} id={id} required={required} disabled={disabled}
         type="text" maxLength={6} pattern={REGEXP_ONLY_DIGITS} inputMode="numeric" autoComplete="one-time-code"

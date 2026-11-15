@@ -56,9 +56,10 @@ page drops its reference after a restored, invalid, or conflict outcome.
 The link-unavailable state does not distinguish malformed, expired, already
 used, or superseded tokens; it states the single-use, 72-hour window (the
 server default). The page uses the shared hosted shell column and `TaskState`
-hierarchy with the `Security` kind line: coral while the unrecognised change
-is pending and for unusable or conflicting links, teal once restored, and
-amber when the undo is unavailable. Focus moves to the new heading after a
+hierarchy with a `Security` status line (icon and label in the state
+colour): coral while the unrecognised change is pending and for unusable or
+conflicting links, teal once restored, and amber when the undo is
+unavailable. Focus moves to the new heading after a
 user-triggered outcome, and one persistent polite live region announces it. All copy uses
 `webapp.undo_email_change.*` messages in `server/i18n`.
 

@@ -78,25 +78,28 @@ the document controller. The visible structure contains:
 
 - a first-focusable skip link targeting `main-content`;
 - exactly one `main` landmark with `id="main-content"`;
-- exactly one page heading, “Sign in to Proctor”, with no kind line, and a
+- exactly one page heading, “Sign in to Proctor”, with no status line, and a
   lede naming the Institution once discovery supplies it;
 - safe Proctor and Institution presentation, provided by the shell masthead;
 - the generic external-login failure notice when bootstrap supplies it;
 - a local-login form when `capabilities.local_login` is true;
-- an external-provider action for every descriptor in `providers`;
-- a “New to Proctor?” section, separated by a hairline rule, explaining that
-  people join through an Invitation from the Institution; and
+- an external-provider action for every descriptor in `providers`, in a
+  section headed “Sign in with your institution”;
+- a “New to Proctor?” verification-rail item explaining that people join
+  through an Invitation from the Institution; and
 - only the registration and recovery links admitted below.
 
-Actions keep their natural width beside the column's start edge and fill the
-column below `30rem`. The empty `FormFeedback` region takes no space, so the
-method separator follows the submit action at the form's ordinary rhythm.
+The submit action spans the task column. Provider actions are full-width
+secondary buttons; when the local form is present their section follows it
+under a hairline rule with its visible small heading, and there is no “or”
+divider. The empty `FormFeedback` region takes no space, so the provider
+section follows the submit action at the form's ordinary rhythm.
 
 There is no autofocus on page load. Loading, failure, and method availability
 do not move focus. Each changed state has one announcement path: progress, the MFA transition,
 and field-placed server failures use the page-owned live region, while a
-general submission failure uses the always-mounted `FormFeedback` region
-after the submit action.
+general submission failure, including rejected credentials, uses the
+always-mounted `FormFeedback` region after the submit action.
 Focus moves only for invalid form input or the MFA transition described below.
 
 All authored page copy uses `webapp.login.*` messages in `server/i18n`; the
@@ -129,8 +132,8 @@ The ready state follows the full method matrix:
 
 - local only: show the local form;
 - provider only: show every provider action;
-- hybrid: show the local form and every provider action with a semantic text
-  separator;
+- hybrid: show the local form and, under a hairline rule, the headed provider
+  section;
 - one external-only provider: still require an explicit Continue action; and
 - several providers: present a labelled provider chooser without selecting or
   redirecting automatically.
@@ -138,7 +141,7 @@ The ready state follows the full method matrix:
 The password-recovery link to `/account/forgot-password` appears only while
 local login is available. The registration link to `/register` appears only
 while `capabilities.public_registration` is true, inside the “New to Proctor?”
-sentence; otherwise that section states only the Invitation route. `/join` is not a generic
+rail sentence; otherwise that rail item states only the Invitation route. `/join` is not a generic
 login-page action; Invitation links carry their own purpose into that route.
 
 Discovery retry returns through Loading and re-evaluates every capability and
@@ -193,9 +196,9 @@ Back does not restore a submitted credential form.
 
 `authentication.mfa.required` changes the same feature into an MFA challenge;
 it is not presented as a failed password. The page heading becomes an
-`AccessTaskIntro` with the kind line “Sign in”, the heading “Enter your code”,
-and a lede naming the authenticator app. The credential fields, provider
-actions, and “New to Proctor?” section leave the page; the submit action reads
+`AccessTaskIntro` with the heading “Enter your code” and a lede naming the
+authenticator app, without a status line. The credential fields, provider
+actions, and “New to Proctor?” rail item leave the page; the submit action reads
 “Verify”, and a text action returns to the credential step. The challenge
 shows one visibly labelled `mfa_code` control using the shared
 [`authentication-code field`](../../components/AuthenticationCodeField/CONTRACT.md).
@@ -263,7 +266,7 @@ it does not receive or compare server codes.
 
 | Problem code | Page behavior |
 | --- | --- |
-| `authentication.credentials_invalid` | One generic error that names the email and password together, placed under the password field (the field the person retypes) with focus moved there; both values are kept. It does not identify the login ID, password, User state, or local-login policy as the cause. During the MFA step, where the password is not shown, it uses the form-level region instead |
+| `authentication.credentials_invalid` | One generic form-level error that names the email and password together, shown in `FormFeedback` beside the submit action. Either value may be wrong, so no field is marked invalid and focus does not move; both values are kept. It does not identify the login ID, password, User state, or local-login policy as the cause |
 | `authentication.mfa.required` | Enter the MFA continuation |
 | `authentication.mfa.code_invalid` | MFA-control error; keep the challenge active |
 | `authentication.mfa.unavailable` | Recoverable MFA challenge error; never bypass MFA |
@@ -320,7 +323,7 @@ The feature is complete only when tests cover:
 
 - every discovery state and the full local/provider method matrix;
 - canonical-origin mismatch and malformed discovery;
-- local success, generic credentials failure under the password field,
+- local success, generic form-level credentials failure that marks no field,
   duplicate-submit prevention,
   rate limiting, Session maximum, transport failure, and retry;
 - TOTP and recovery-code MFA, invalid code, verifier unavailability, Back, and

@@ -4,6 +4,7 @@ import { desktopAccountName, type DesktopAuthorizationAccount, type DesktopAutho
 import type { DesktopAuthorizationJourney, DesktopJourneySnapshot, DesktopLocalFeedback, DesktopTerminalState } from "../../features/desktop-authorization/DesktopAuthorizationJourney";
 import { formatDateTime } from "../../i18n/dateTime";
 import { message } from "../../i18n/messages";
+import { RailItem, TaskRail } from "../AccessPageShell/AccessPageShell";
 import { AccessTaskIntro } from "../AccessTaskIntro/AccessTaskIntro";
 import { AuthenticationCodeField, isCompleteAuthenticationCode, type AuthenticationCodeValue } from "../AuthenticationCodeField/AuthenticationCodeField";
 import { Button, ButtonLink } from "../Button/Button";
@@ -12,7 +13,6 @@ import { FormFeedback } from "../FormFeedback/FormFeedback";
 import { InputField } from "../InputField/InputField";
 import { PasswordField } from "../InputField/PasswordField";
 import { Loading } from "../Loading/Loading";
-import { Notice } from "../Notice/Notice";
 import {
   TaskState,
   TaskStateActions,
@@ -55,7 +55,7 @@ export function DesktopAuthorizationContent({ journey }: DesktopAuthorizationCon
           busy
           heading={message("webapp.desktop_authorization.checking.heading")}
           headingID="desktop-heading"
-          label={message("webapp.desktop_authorization.kind")}
+
         />
       </>
     );
@@ -71,8 +71,7 @@ export function DesktopAuthorizationContent({ journey }: DesktopAuthorizationCon
           focusHeading={focusHeading}
           heading={message("webapp.desktop_authorization.unavailable.heading")}
           headingID="desktop-heading"
-          label={message("webapp.desktop_authorization.kind")}
-          labelTone="warning"
+          status={{ label: message("webapp.desktop_authorization.kind"), tone: "warning" }}
         >
           <TaskStateActions>
             <Button disabled={pending !== undefined} onClick={journey.retry}>
@@ -108,7 +107,7 @@ export function DesktopAuthorizationContent({ journey }: DesktopAuthorizationCon
       />
       <section className={styles.page} aria-labelledby="desktop-heading">
         <AccessTaskIntro
-          kind={message("webapp.desktop_authorization.kind")}
+
           focusHeading={focusHeading}
           heading={message("webapp.desktop_authorization.heading")}
           body={message("webapp.desktop_authorization.lede", {
@@ -150,12 +149,11 @@ export function DesktopAuthorizationContent({ journey }: DesktopAuthorizationCon
             </Button>
           </TaskStateActions>
           <FormFeedback message={feedback} />
-          <Notice
-            role="note"
-            lead={message("webapp.desktop_authorization.note.lead")}
-          >
-            {message("webapp.desktop_authorization.note.body")}
-          </Notice>
+          <TaskRail>
+            <RailItem heading={message("webapp.desktop_authorization.note.lead")}>
+              <p>{message("webapp.desktop_authorization.note.body")}</p>
+            </RailItem>
+          </TaskRail>
         </div>
       </section>
     </>
@@ -180,7 +178,7 @@ function AuthenticationContent({
       />
       <section className={styles.page} aria-labelledby="desktop-heading">
         <AccessTaskIntro
-          kind={message("webapp.desktop_authorization.kind")}
+
           focusHeading={focusHeading}
           heading={message("webapp.desktop_authorization.authentication.heading")}
           body={message("webapp.desktop_authorization.authentication.body", {
@@ -195,19 +193,20 @@ function AuthenticationContent({
             authenticating={pending === "authenticate"}
           />
         ) : null}
-        {context.localLoginEnabled && context.externalProviders.length > 0 ? (
-          <div className={styles.separator} aria-hidden="true">
-            <span>{message("webapp.login.method_separator")}</span>
-          </div>
-        ) : null}
         {context.externalProviders.length > 0 ? (
-          <fieldset className={styles.providerGroup}>
-            <legend className={styles.visuallyHidden}>
+          <section
+            className={context.localLoginEnabled
+              ? `${styles.providerGroup} ${styles.afterLocal}`
+              : styles.providerGroup}
+            aria-labelledby="desktop-provider-heading"
+          >
+            <h2 id="desktop-provider-heading">
               {message("webapp.desktop_authorization.provider.group")}
-            </legend>
+            </h2>
             {context.externalProviders.map((provider) => (
               <Button
                 key={provider.id}
+                className={styles.provider}
                 disabled={pending !== undefined}
                 variant="secondary"
                 onClick={() => onProvider(provider)}
@@ -217,7 +216,7 @@ function AuthenticationContent({
                 })}
               </Button>
             ))}
-          </fieldset>
+          </section>
         ) : null}
         <Button
           disabled={pending !== undefined && pending !== "cancel"}
@@ -407,8 +406,7 @@ function TerminalContent({
       focusHeading={focusHeading}
       heading={content.heading}
       headingID="desktop-heading"
-      label={message("webapp.desktop_authorization.kind")}
-      labelTone={content.tone}
+      status={content.tone === undefined ? undefined : { label: message("webapp.desktop_authorization.kind"), tone: content.tone }}
     >
       {state === "approved" ? (
         <Loading

@@ -90,7 +90,6 @@ export function ReauthenticationContent({ actions, externalProofFailed, loading,
     return <>
       <TaskStateAnnouncement message={heading} />
       <TaskState heading={heading} headingID="reauthentication-heading" focusHeading={focusHeading} busy={loading}
-        label={message("webapp.reauthenticate.kind")}
         body={message(loading ? "webapp.security.loading.body" : noSession ? "webapp.security.no_session.body" : "webapp.security.unavailable.body")}>
         {!loading ? <TaskStateActions>{noSession
           ? <ButtonLink href="/login">{message("webapp.security.sign_in")}</ButtonLink>
@@ -120,8 +119,9 @@ export function ReauthenticationContent({ actions, externalProofFailed, loading,
     <section className={styles.page} aria-labelledby="reauthentication-heading">
       <TaskStateAnnouncement message={pending ? message("webapp.security.working") : ""} />
       <AccessTaskIntro key={step} headingID="reauthentication-heading" focusHeading={focusHeading}
-        kind={message(requiresRecovery ? "webapp.security.eyebrow" : "webapp.reauthenticate.kind")}
-        kindTone={requiresRecovery ? "warning" : complete ? "success" : undefined}
+        status={requiresRecovery
+          ? { label: message("webapp.security.eyebrow"), tone: "warning" }
+          : complete ? { label: message("webapp.reauthenticate.kind"), tone: "success" } : undefined}
         heading={message(requiresRecovery
           ? context.recoveryRequired ? "webapp.security.restore_access" : "webapp.security.enrollment_required.heading"
           : complete ? "webapp.reauthenticate.complete.heading" : "webapp.reauthenticate.heading")}

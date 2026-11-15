@@ -29,37 +29,20 @@
     min-inline-size: 0;
   }
 
-  .providerGroup {
-    padding: 0;
-    border: 0;
-    margin: 0;
+  /* After the password form, other ways in sit under a hairline and a small heading. */
+  .afterLocal {
+    padding-block-start: var(--proctor-space-6);
+    border-block-start: var(--proctor-border-width-hairline) solid
+      var(--proctor-color-border-default);
   }
 
-  .separator {
-    display: flex;
-    align-items: center;
-    gap: var(--proctor-space-3);
-    color: var(--proctor-color-foreground-muted);
-    font-size: var(--proctor-font-size-body-small);
+  .providerGroup h2 {
+    font-size: var(--proctor-font-size-heading-small);
+    font-weight: var(--proctor-font-weight-semibold);
+    line-height: var(--proctor-line-height-heading-small);
   }
 
-  .separator::before,
-  .separator::after {
-    block-size: var(--proctor-border-width-hairline);
-    background: var(--proctor-color-border-default);
-    content: "";
-    flex: 1;
-  }
-
-  .visuallyHidden {
-    position: absolute;
-    overflow: hidden;
-    inline-size: 1px;
-    block-size: 1px;
-    padding: 0;
-    border: 0;
-    margin: -1px;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
+  .provider {
+    inline-size: 100%;
   }
 }

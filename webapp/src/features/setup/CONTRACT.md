@@ -13,7 +13,7 @@ with a boolean `initialized` value.
 
 - While the request is pending, the page names the bounded check and exposes
   no form. The shared Loading indicator and message occupy the main content
-  reservation while the setup kind line, heading, and lede remain visible.
+  reservation while the setup heading and lede remain visible.
 - When `initialized` is false, the setup form becomes available.
 - When `initialized` is true, the page explains that Proctor is already set
   up and links to `/login`; it never offers to replace the Institution or
@@ -60,7 +60,7 @@ generated API client.
 ## Completion and failure
 
 A successful response clears live secrets and presents a completion state
-distinct from the already-set-up state: a success-toned kind line, a heading
+distinct from the already-set-up state: a success status line, a heading
 naming the new Institution, a lede giving the next step, a `FactList` of what
 was created (the Institution display name; the administrator name, or username
 when no name was given, and email), and a normal link to `/login`. Those
@@ -93,9 +93,15 @@ and action row remain stationary while ordinary failure copy appears.
 
 ## Presentation
 
-The page uses the single task column of `AccessPageShell`. An
-`AccessTaskIntro` (kind line, page heading, lede) precedes the flat ordered
-form, which is not a wizard or a large floating card. The lede says setup runs
+The page uses the task column of `AccessPageShell`. An `AccessTaskIntro`
+(page heading and lede) precedes the form, which is not a wizard or a large
+floating card. Its fields sit in three numbered `FormGroup`s separated by
+hairline rules: `01` “Institution” (display name, short name, description),
+`02` “Your administrator account” (full name, email, username, password), and
+`03` “Authorize this setup” (setup key). A verification-rail item, “Before you
+start: you need the setup key from whoever runs this server”, is marked
+`beforeTask`; below `48rem` the same sentence appears under the lede
+instead, so it never follows the action. The lede says setup runs
 once and what it creates; there is no standing caution notice, and the
 generic failure says that nothing was changed. The task remains
 one-dimensional at every width and at 200% zoom.

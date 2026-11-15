@@ -21,11 +21,6 @@
     letter-spacing: var(--proctor-letter-spacing-label);
   }
 
-  .requiredMark {
-    margin-inline-start: var(--proctor-space-1);
-    color: var(--proctor-color-foreground-muted);
-    font-weight: var(--proctor-font-weight-bold);
-  }
 
   .labelAccessory {
     font-size: var(--proctor-font-size-body-small);
@@ -54,19 +49,22 @@
     border-color: var(--proctor-color-border-interactive);
   }
 
+  /* An invalid field gets a two-pixel danger boundary; padding absorbs the extra pixel. */
   .input[aria-invalid="true"] {
+    border-width: var(--proctor-border-width-strong);
     border-color: var(--proctor-color-state-danger);
+    padding-inline-start: calc(var(--proctor-space-4) - 1px);
   }
 
   /* A read-only value is still focusable and selectable; it reads as settled
      rather than editable, without the reduced contrast of disabled. */
   .input:read-only:not(:disabled) {
-    border-color: var(--proctor-color-border-default);
     background: var(--proctor-color-background-subtle);
+    color: var(--proctor-color-foreground-subtle);
   }
 
   .input:read-only:not(:disabled):hover {
-    border-color: var(--proctor-color-border-default);
+    border-color: var(--proctor-color-border-strong);
   }
 
   .input:disabled {
@@ -137,5 +135,16 @@
     .passwordToggle {
       border: var(--proctor-border-width-hairline) solid ButtonText;
     }
+  }
+
+  /* A value the person cannot change here also carries a lock mark. */
+  .readOnlyMark {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: var(--proctor-space-3);
+    display: flex;
+    align-items: center;
+    color: var(--proctor-color-foreground-muted);
+    pointer-events: none;
   }
 }

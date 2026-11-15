@@ -7,11 +7,13 @@ import { formatMinutes, minutesUntil, useProviderName } from "../../features/acc
 import { formatDate } from "../../i18n/dateTime";
 import { message } from "../../i18n/messages";
 import { richMessage } from "../../i18n/richMessage";
-import { AccessTaskIntro, type AccessTaskKindTone } from "../AccessTaskIntro/AccessTaskIntro";
+import { RailItem, TaskRail } from "../AccessPageShell/AccessPageShell";
+import { AccessTaskIntro } from "../AccessTaskIntro/AccessTaskIntro";
+import { FormGroup } from "../FormGroup/FormGroup";
 import { Button, ButtonLink } from "../Button/Button";
 import { Fact, FactList } from "../FactList/FactList";
 import { Notice } from "../Notice/Notice";
-import { TaskState, TaskStateActions, TaskStateAnnouncement } from "../TaskState/TaskState";
+import { TaskState, TaskStateActions, TaskStateAnnouncement, type TaskStatus } from "../TaskState/TaskState";
 import { RecoveryCodes } from "./RecoveryCodes";
 import { AuthenticatorSetup as AuthenticatorSetupContent } from "./AuthenticatorSetup";
 import { SecurityCodeForm } from "./SecurityCodeForm";
@@ -141,7 +143,6 @@ export function AccountSecurityContent({ actions, loading, onRefresh, state }: {
     return <>
       <TaskStateAnnouncement message={heading} />
       <TaskState heading={heading} headingID="security-heading" focusHeading={focusHeading} busy={loading}
-        label={message("webapp.security.eyebrow")}
         body={message(loading ? "webapp.security.loading.body" : noSession ? "webapp.security.no_session.body" : "webapp.security.unavailable.body")}>
         {!loading ? <TaskStateActions>{noSession
           ? <ButtonLink href="/login">{message("webapp.security.sign_in")}</ButtonLink>
@@ -165,7 +166,8 @@ export function AccountSecurityContent({ actions, loading, onRefresh, state }: {
     <section className={styles.page} aria-labelledby="security-heading">
       <TaskStateAnnouncement message={pending ? message("webapp.security.working") : announcement} />
       <AccessTaskIntro key={task.kind} headingID="security-heading" focusHeading={focusHeading}
-        kind={content.kind} kindTone={content.tone} heading={content.heading} body={content.body} />
+        status={content.status} heading={content.heading} body={content.body}
+        beforeTaskNote={content.beforeTaskNote} />
       {task.kind === "status" && context !== undefined ? <StatusSummary context={context} providerName={providerName}
         verify={<Button variant="text" disabled={pending} onClick={() => changeTask({ kind: "challenge" })}>
           {message("webapp.security.challenge.action")}
@@ -175,11 +177,23 @@ export function AccountSecurityContent({ actions, loading, onRefresh, state }: {
         onRegenerate={() => changeTask({ kind: "confirm_regenerate" })}
         onDisable={() => changeTask({ kind: "confirm_disable" })} /> : null}
       {task.kind === "setup" ? <>
-        <AuthenticatorSetupContent setup={task.setup} />
-        <Notice>{message("webapp.security.setup.private")}</Notice>
-        <SecurityCodeForm pending={pending} onSubmit={activate} enrollment cancel={cancel}
-          describedBy="authenticator-setup-expiry" deadline={setupDeadline(task.setup.expiresAt)} />
+        <div className={styles.steps}>
+          <FormGroup as="section" number={1} headingID="authenticator-step-scan"
+            heading={message("webapp.security.setup.step.scan")}>
+            <AuthenticatorSetupContent setup={task.setup} />
+          </FormGroup>
+          <FormGroup as="section" number={2} headingID="authenticator-step-code"
+            heading={message("webapp.security.setup.step.code")}>
+            <SecurityCodeForm pending={pending} onSubmit={activate} enrollment cancel={cancel}
+              describedBy="authenticator-setup-expiry" deadline={setupDeadline(task.setup.expiresAt)} />
+          </FormGroup>
+        </div>
         {feedback}
+        <TaskRail>
+          <RailItem beforeTask>
+            <p>{message("webapp.security.setup.private")}</p>
+          </RailItem>
+        </TaskRail>
       </> : null}
       {task.kind === "codes" ? <RecoveryCodes codes={task.codes} onDone={() => refresh(message("webapp.security.codes.saved"))} /> : null}
       {task.kind === "challenge" ? <>
@@ -369,15 +383,14 @@ function StatusSections({ context, feedback, onDisable, onRefresh, onRegenerate,
   </>;
 }
 
-function taskCopy(task: Task): { kind: string; tone?: AccessTaskKindTone; heading: string; body: string } {
-  const twoStep = message("webapp.security.kind.two_step");
+function taskCopy(task: Task): { status?: TaskStatus; heading: string; body: string; beforeTaskNote?: string } {
   switch (task.kind) {
-    case "status": return { kind: message("webapp.security.eyebrow"), heading: message("webapp.security.heading"), body: message("webapp.security.body") };
-    case "setup": return { kind: twoStep, heading: message("webapp.security.setup.heading"), body: message("webapp.security.setup.body") };
-    case "codes": return { kind: twoStep, tone: "success", heading: message("webapp.security.codes.heading"), body: message("webapp.security.codes.body") };
-    case "challenge": return { kind: twoStep, heading: message("webapp.security.challenge.heading"), body: message("webapp.security.challenge.body") };
-    case "confirm_disable": return { kind: twoStep, tone: "danger", heading: message("webapp.security.disable.heading"), body: message("webapp.security.disable.body") };
-    case "confirm_regenerate": return { kind: message("webapp.security.regenerate.section.heading"), heading: message("webapp.security.regenerate.heading"), body: message("webapp.security.regenerate.body") };
-    case "uncertain": return { kind: message("webapp.security.eyebrow"), heading: message("webapp.security.uncertain.heading"), body: message("webapp.security.uncertain.body") };
+    case "status": return { heading: message("webapp.security.heading"), body: message("webapp.security.body") };
+    case "setup": return { heading: message("webapp.security.setup.section.heading"), body: message("webapp.security.setup.body"), beforeTaskNote: message("webapp.security.setup.private") };
+    case "codes": return { status: { label: message("webapp.security.kind.two_step"), tone: "success" }, heading: message("webapp.security.codes.heading"), body: message("webapp.security.codes.body") };
+    case "challenge": return { heading: message("webapp.security.challenge.heading"), body: message("webapp.security.challenge.body") };
+    case "confirm_disable": return { heading: message("webapp.security.disable.heading"), body: message("webapp.security.disable.body") };
+    case "confirm_regenerate": return { heading: message("webapp.security.regenerate.heading"), body: message("webapp.security.regenerate.body") };
+    case "uncertain": return { status: { label: message("webapp.security.eyebrow"), tone: "warning" }, heading: message("webapp.security.uncertain.heading"), body: message("webapp.security.uncertain.body") };
   }
 }

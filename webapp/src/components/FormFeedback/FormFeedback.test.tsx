@@ -20,12 +20,13 @@ describe("FormFeedback", () => {
     expect(markup).toMatch(/^<div [^>]*><\/div>$/);
   });
 
-  it("presents a failure with the shared danger evidence treatment", () => {
+  it("presents a failure as an error mark and words, without a box", () => {
     const markup = renderToStaticMarkup(
       <FormFeedback message="Review the details and try again." />,
     );
 
     expect(markup).toContain("Review the details and try again.");
-    expect(markup).toContain('data-proctor-notice-tone="danger"');
+    expect(markup).toContain('data-proctor-icon="error"');
+    expect(markup).not.toContain("data-proctor-notice");
   });
 });

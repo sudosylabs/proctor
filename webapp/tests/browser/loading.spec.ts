@@ -74,11 +74,8 @@ for (const colorScheme of ["light", "dark"] as const) {
         await expect(loader).toHaveCount(0);
         expect(await box(heading)).toEqual(headingBefore);
         expect(await box(masthead)).toEqual(mastheadBefore);
-        if (width >= 480) {
-          await expect(institution).toHaveText(discovery.institution.display_name);
-        } else {
-          await expect(institution).toBeHidden();
-        }
+        // An unauthenticated masthead keeps the Institution beside the lockup at every width.
+        await expect(institution).toHaveText(discovery.institution.display_name);
         await expect(page.locator(".proctor-skip-link")).toBeFocused();
         await noOverflow(page);
       } finally { release(); }

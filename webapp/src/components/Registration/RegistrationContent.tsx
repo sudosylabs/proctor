@@ -9,9 +9,9 @@ import type {
 import { message } from "../../i18n/messages";
 import {
   AccessTaskIntro,
-  type AccessTaskKindTone,
 } from "../AccessTaskIntro/AccessTaskIntro";
 import { Button, ButtonLink } from "../Button/Button";
+import type { TaskStatus } from "../TaskState/TaskState";
 import { Loading } from "../Loading/Loading";
 import { RegistrationForm, RegistrationIntro } from "./RegistrationForm";
 import styles from "./Registration.module.css";
@@ -41,8 +41,7 @@ export function RegistrationContent({
     return (
       <RegistrationState
         focusHeading
-        kind={message("webapp.register.accepted.label")}
-        kindTone="success"
+        status={{ label: message("webapp.register.accepted.label"), tone: "success" }}
         heading={message("webapp.register.accepted.heading")}
         body={message("webapp.register.accepted.body")}
       >
@@ -77,7 +76,7 @@ export function RegistrationContent({
   if (state.kind === "invitation_required") {
     return (
       <RegistrationState
-        kindTone="warning"
+        status={{ label: message("webapp.register.kind"), tone: "warning" }}
         heading={message("webapp.register.invitation_required.heading")}
         body={
           institution.displayName === undefined
@@ -149,15 +148,13 @@ function RegistrationState({
   children,
   focusHeading = false,
   heading,
-  kind = message("webapp.register.kind"),
-  kindTone,
+  status,
 }: {
   body: string;
   children: ReactNode;
   focusHeading?: boolean;
   heading: string;
-  kind?: string;
-  kindTone?: AccessTaskKindTone;
+  status?: TaskStatus;
 }) {
   return (
     <section className={styles.page} aria-labelledby="register-heading">
@@ -166,8 +163,7 @@ function RegistrationState({
         focusHeading={focusHeading}
         heading={heading}
         headingID="register-heading"
-        kind={kind}
-        kindTone={kindTone}
+        status={status}
       />
       <div className={styles.actions}>{children}</div>
     </section>

@@ -178,6 +178,9 @@ type constructionCatalogWithJobs struct {
 
 func (c constructionCatalogWithJobs) Job() store.JobStore { return c.jobs }
 
+// DomainEvent has no store in this catalog; the dispatch handler is constructed without one.
+func (constructionCatalogWithJobs) DomainEvent() store.DomainEventStore { return nil }
+
 // MFA has no store in this catalog; the MFA rekey handler is constructed without one.
 func (c constructionCatalogWithJobs) MFA() store.MFAStore       { return nil }
 func (constructionCatalogWithJobs) Mail() store.MailStore       { return nil }
@@ -347,6 +350,7 @@ func TestApplicationJobDefinitionsIncludeSittingLifecycleAndDailyRecovery(t *tes
 		jobs.NewDefaultProfilePictureJobs(jobs.DefaultProfilePictureJobsDependencies{Jobs: constructionJobStoreStub{}}),
 		onboarding.Ports{ImportJobs: constructionOnboardingImportJobsStub{}},
 		mail.NewHealth(false),
+		nil,
 	)
 	_, err := job.NewRegistry(definitions.descriptors)
 	require.NoError(t, err)

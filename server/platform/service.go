@@ -141,6 +141,7 @@ func newService(
 	); err != nil {
 		return nil, err
 	}
+	reportUnavailableProviders(resources.Logger, resources.ExternalAuthentication)
 
 	service := &Service{
 		resources:       resources,
@@ -181,6 +182,7 @@ func newService(
 			if err := service.resources.ExternalAuthentication.Configure(current.Authentication.External); err != nil {
 				return fmt.Errorf("reconfigure external authentication providers: %w", err)
 			}
+			reportUnavailableProviders(service.resources.Logger, service.resources.ExternalAuthentication)
 			return nil
 		}),
 		service.resources.Configuration.AddListener(func(old, current config.Config) error {
@@ -396,4 +398,13 @@ func enabledExternalAuthenticationProviders(settings config.Config) int {
 		}
 	}
 	return providers
+}
+
+// reportUnavailableProviders warns about each configured external sign-in
+// provider left out because its plugin is turned off or has failed.
+func reportUnavailableProviders(logger *logging.Logger, registry *externalauth.Registry) {
+	for _, id := range registry.Unavailable() {
+		logger.Warn("external authentication provider is unavailable: its sign-in plugin is turned off or has failed",
+			logging.String("provider_id", id))
+	}
 }

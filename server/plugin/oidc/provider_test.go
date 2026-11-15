@@ -28,6 +28,7 @@ import (
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform/externalauth"
+	"github.com/sudosylabs/proctor/server/plugin"
 )
 
 func TestProviderAuthorizationCodePKCEAndClaims(t *testing.T) {
@@ -108,7 +109,8 @@ func TestProviderAuthorizationCodePKCEAndClaims(t *testing.T) {
 	serverURL = server.URL
 	oidcServer.SetIssuer(server.URL)
 
-	created, err := NewFactory().New(testSettings(server.URL))
+	settings := testSettings(server.URL)
+	created, err := settings.build()
 	require.NoError(t, err)
 	provider := created.(*Provider)
 	state := model.NewCredentialToken()
@@ -116,7 +118,7 @@ func TestProviderAuthorizationCodePKCEAndClaims(t *testing.T) {
 	callbackURL := "https://proctor.example.edu/api/v1/auth/providers/campus-oidc/callback"
 	challenge, err := provider.Begin(
 		context.Background(),
-		externalauth.BeginRequest{
+		plugin.BeginRequest{
 			CallbackURL: callbackURL, State: state, Proof: proof,
 		},
 	)
@@ -134,9 +136,9 @@ func TestProviderAuthorizationCodePKCEAndClaims(t *testing.T) {
 	require.NotEmpty(t, nonce)
 	assertion, err := provider.Complete(
 		context.Background(),
-		externalauth.CompleteRequest{
+		plugin.CompleteRequest{
 			CallbackURL: callbackURL, State: state, Proof: proof,
-			Callback: model.ExternalAuthenticationCallback{
+			Callback: plugin.Callback{
 				Values: map[string][]string{
 					"state": {state},
 					"code":  {code},
@@ -145,13 +147,12 @@ func TestProviderAuthorizationCodePKCEAndClaims(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	require.Equal(t, "campus-oidc", assertion.ProviderID)
 	require.Equal(t, "opaque-oidc-subject", assertion.Subject)
 	require.Equal(t, "oidc.student", assertion.Username)
 	require.Equal(t, "oidc.student@example.edu", assertion.Email)
 	require.True(t, assertion.EmailVerified)
 	require.Equal(t, "example.edu", assertion.HomeOrganization)
-	require.Equal(t, model.AuthenticationMultiFactor, assertion.AuthenticationStrength)
+	require.Equal(t, plugin.AuthenticationMultiFactor, assertion.AuthenticationStrength)
 	require.Len(t, assertion.Affiliations, 2)
 }
 
@@ -172,7 +173,8 @@ func TestProviderRejectsCallbackAndRedactsExchangeFailure(
 	}))
 	defer server.Close()
 	oidcServer.SetIssuer(server.URL)
-	created, err := NewFactory().New(testSettings(server.URL))
+	settings := testSettings(server.URL)
+	created, err := settings.build()
 	require.NoError(t, err)
 	provider := created.(*Provider)
 	state := model.NewCredentialToken()
@@ -180,16 +182,16 @@ func TestProviderRejectsCallbackAndRedactsExchangeFailure(
 	callbackURL := "https://proctor.example.edu/callback"
 	_, err = provider.Begin(
 		context.Background(),
-		externalauth.BeginRequest{
+		plugin.BeginRequest{
 			CallbackURL: callbackURL, State: state, Proof: proof,
 		},
 	)
 	require.NoError(t, err)
 	_, err = provider.Complete(
 		context.Background(),
-		externalauth.CompleteRequest{
+		plugin.CompleteRequest{
 			CallbackURL: callbackURL, State: state, Proof: proof,
-			Callback: model.ExternalAuthenticationCallback{
+			Callback: plugin.Callback{
 				Values: map[string][]string{
 					"state": {state},
 					"code":  {secretBody},
@@ -197,33 +199,65 @@ func TestProviderRejectsCallbackAndRedactsExchangeFailure(
 			},
 		},
 	)
-	require.ErrorIs(t, err, externalauth.ErrAuthenticationRejected)
+	require.ErrorIs(t, err, plugin.ErrAuthenticationRejected)
 	require.NotContains(t, err.Error(), secretBody)
+}
+
+// testProvider is a configured OpenID Connect provider: Proctor's envelope
+// and the plugin's own settings and secrets.
+type testProvider struct {
+	ID            string
+	AutoProvision bool
+	Settings      Settings
+	Secrets       Secrets
 }
 
 func testSettings(
 	issuer string,
-) config.ExternalAuthenticationProvider {
-	return config.ExternalAuthenticationProvider{
-		ID: "campus-oidc", Type: config.ExternalAuthenticationTypeOIDC,
-		DisplayName: "Campus OIDC", Enabled: true, AutoProvision: true,
-		OIDC: &config.OIDCProvider{
+) testProvider {
+	return testProvider{
+		ID: "campus-oidc", AutoProvision: true,
+		Settings: Settings{
 			Issuer: issuer, ClientID: "proctor-client",
-			ClientSecret:     "proctor-secret",
 			Scopes:           []string{"openid", "profile", "email"},
 			Timeout:          config.Duration{Duration: 5 * time.Second},
 			MaxResponseBytes: 64 * 1024,
+			Claims: externalauth.ClaimMapping{
+				Subject: "sub", Username: "preferred_username",
+				Email: "email", EmailVerifiedClaim: "email_verified",
+				FirstName: "given_name", LastName: "family_name",
+				HomeOrganization:         "schacHomeOrganization",
+				Affiliation:              "eduPersonAffiliation",
+				AllowedHomeOrganizations: []string{"example.edu"},
+				MultiFactorAttribute:     "amr",
+				MultiFactorValues:        []string{"mfa"},
+			},
 		},
-		Claims: config.ExternalClaimMapping{
-			Subject: "sub", Username: "preferred_username",
-			Email: "email", EmailVerifiedClaim: "email_verified",
-			FirstName: "given_name", LastName: "family_name",
-			HomeOrganization:         "schacHomeOrganization",
-			Affiliation:              "eduPersonAffiliation",
-			AllowedHomeOrganizations: []string{"example.edu"},
-			MultiFactorAttribute:     "amr",
-			MultiFactorValues:        []string{"mfa"},
-		},
+		Secrets: Secrets{ClientSecret: "proctor-secret"},
+	}
+}
+
+func (p testProvider) definition() plugin.IdentityProviderDefinition {
+	settings, err := json.Marshal(p.Settings)
+	if err != nil {
+		panic(err)
+	}
+	secrets, err := json.Marshal(p.Secrets) //nolint:gosec // G117: a test provider's made-up client secret, marshaled as its Secrets document.
+	if err != nil {
+		panic(err)
+	}
+	return plugin.IdentityProviderDefinition{ID: p.ID, AutoProvision: p.AutoProvision, Settings: settings, Secrets: secrets}
+}
+
+func (p testProvider) build() (plugin.IdentityProvider, error) {
+	return New(p.definition())
+}
+
+func (p testProvider) Envelope() config.ExternalAuthenticationProvider {
+	definition := p.definition()
+	return config.ExternalAuthenticationProvider{
+		ID: p.ID, Type: Type, DisplayName: "Campus OIDC", Enabled: true,
+		AutoProvision: p.AutoProvision, Settings: definition.Settings, Secrets: definition.Secrets,
 	}
 }
 
@@ -260,13 +294,13 @@ func TestProviderFreshProofRequiresAuthenticationTimeAfterBoundFlow(t *testing.T
 			discovery.SetIssuer(issuer)
 			settings := testSettings(issuer)
 			settings.AutoProvision = false
-			settings.Claims.AllowedHomeOrganizations = nil
-			created, err := NewFactory().New(settings)
+			settings.Settings.Claims.AllowedHomeOrganizations = nil
+			created, err := settings.build()
 			require.NoError(t, err)
 			provider := created.(*Provider)
 			provider.now = func() time.Time { return now.Add(500 * time.Millisecond) }
 			state, proof := model.NewCredentialToken(), model.NewCredentialToken()
-			request := externalauth.BeginRequest{CallbackURL: "https://proctor.example.edu/callback", State: state, Proof: proof, FreshAuthentication: true}
+			request := plugin.BeginRequest{CallbackURL: "https://proctor.example.edu/callback", State: state, Proof: proof, FreshAuthentication: true}
 			start, err := provider.Begin(context.Background(), request)
 			require.NoError(t, err)
 			u, err := url.Parse(start.RedirectURL)
@@ -275,13 +309,13 @@ func TestProviderFreshProofRequiresAuthenticationTimeAfterBoundFlow(t *testing.T
 			require.Equal(t, "login", u.Query().Get("prompt"), "fresh OIDC request lacks authenticated freshness constraints")
 			require.Equal(t, "0", u.Query().Get("max_age"), "fresh OIDC request lacks authenticated freshness constraints")
 			require.NotEmpty(t, nonce, "fresh OIDC request lacks authenticated freshness constraints")
-			assertion, err := provider.Complete(context.Background(), externalauth.CompleteRequest{CallbackURL: request.CallbackURL, State: state, Proof: proof, AuthenticationStartedAt: now.Add(100 * time.Millisecond), Callback: model.ExternalAuthenticationCallback{Values: map[string][]string{"state": {state}, "code": {"fresh-code"}}}})
+			assertion, err := provider.Complete(context.Background(), plugin.CompleteRequest{CallbackURL: request.CallbackURL, State: state, Proof: proof, AuthenticationStartedAt: now.Add(100 * time.Millisecond), Callback: plugin.Callback{Values: map[string][]string{"state": {state}, "code": {"fresh-code"}}}})
 			if test.valid {
 				require.NoError(t, err)
-				require.Equal(t, now.UnixMilli(), assertion.AuthenticatedAt)
+				require.Equal(t, now.UnixMilli(), assertion.AuthenticatedAt.UnixMilli())
 			} else {
 				require.Error(t, err, "unverified primary freshness was accepted")
-				require.Nil(t, assertion, "unverified primary freshness was accepted")
+				require.Zero(t, assertion, "unverified primary freshness was accepted")
 			}
 		})
 	}

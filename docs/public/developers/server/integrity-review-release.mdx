@@ -73,9 +73,10 @@ operation:
 
 Finalization combines the existing bounded integrity inventory with the
 Browser groups, their kept copies and overflow, and the ordered digest of
-native conditions. Native conditions do not become Flags, and they don't need
-made-up decisions for each condition. Never quietly cut an inventory short to
-make finalization succeed.
+native conditions. Native conditions are the server's rule status changes and
+need no decision of their own. When an enforce rule's check fails, it raises
+its capability's `native.<capability>` Flag, which needs a decision like any
+other. Never quietly cut an inventory short to make finalization succeed.
 
 Earlier finalization snapshots never change. When fresh qualifying Browser or
 native condition records arrive, they:

@@ -277,7 +277,7 @@ func TestExamAttemptManagementLockAdmitsSittingRenewals(t *testing.T, ss store.S
 		ParticipationID: connected.Participation.ID, ConnectionID: connected.Connection.ID, CandidateUserID: candidate.ID,
 		SessionID: session.ID, DesktopRegistrationID: session.DesktopRegistrationID, DPoPKeyThumbprint: session.DPoPKeyThumbprint,
 		Generation: connected.Participation.Generation, Sequence: 1, ContinuityCredentialHash: credentialHash}
-	prepareParticipationRenewalCoverage(t, ctx, ss, renewal)
+	prepareParticipationSecurityControl(t, ctx, ss, renewal)
 
 	err = hold(t, ctx, &store.ExamAttemptReallow{ExamID: fixture.examID, SittingID: fixture.sitting.ID, AttemptID: kicked.AttemptID,
 		ActorUserID: fixture.manager.ID}, func(ctx context.Context) error {

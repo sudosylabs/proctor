@@ -11,17 +11,17 @@ paths:
       - $ref: '#/components/parameters/SubmissionID'
     get:
       operationId: listNativeConditions
-      summary: Inspect minimized native condition transitions for a Submission
+      summary: Inspect the native rule status changes of a Submission
       tags:
         - Integrity review
       description: >-
-        Lists the native condition changes the desktop app reported for one Submission, such as a
-        condition opening, repeating or recovering. You need the same permission as for reading integrity
-        evidence. Listing them does not create a Flag or declare a violation. Each record says when it was
-        received and interpreted, and which delivery stream and policy it came under. Operational health,
-        gaps and resets are not included. A page holds at most 100 records. When the Submission's
-        integrity data is retired, these records are removed with it, whatever the retention of other
-        native data. Responses are not cached.
+        Requires the same current Submission integrity-view authorization as detailed evidence. Returns every change
+        of a native rule's status as the server evaluated it on the facts Desktop reported, with the delivery position
+        that caused it (batch 0 is the state reported at Start), original receipt and interpretation times, and
+        immutable stream and policy provenance. An occurrence opens when a rule becomes not met and closes when it is
+        met again; an enforce occurrence that opens also raises its capability's native Flag. The facts themselves
+        are not returned. Pages contain at most 100 records. Integrity retirement removes this material independently of native operational retention.
+        No-store; cursors are purpose-specific opaque keysets.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -52,15 +52,13 @@ paths:
             minimum: 1
             maximum: 100
             default: 50
-          description: Maximum number of native condition records to return.
+          description: Maximum number of native condition transitions to return.
         - name: cursor
           in: query
           schema:
             type: string
-            description: A page cursor.
-          description: >-
-            The `next_cursor` from the previous page. Pass it back unchanged and do not parse or build it
-            yourself.
+            description: Opaque native condition identity cursor.
+          description: Opaque continuation from the preceding native condition page.
       responses:
         '200':
           $ref: '#/components/responses/NativeConditionListOK'
@@ -81,9 +79,6 @@ components:
     NativeConditionEvidence:
       type: object
       additionalProperties: false
-      description: >-
-        One native condition change, kept as integrity data. It records an observation only, not a
-        finding.
       required:
         - id
         - attempt_id
@@ -97,8 +92,7 @@ components:
         - matrix_id
         - batch_sequence
         - record_index
-        - occurrence
-        - unresolved_opener
+        - transition
         - received_at
         - interpreted_at
       properties:
@@ -106,100 +100,120 @@ components:
           type: string
           minLength: 26
           maxLength: 26
-          description: The record's ID.
         attempt_id:
           type: string
           minLength: 26
           maxLength: 26
-          description: The Attempt the record belongs to.
         participation_id:
           type: string
           minLength: 26
           maxLength: 26
-          description: The Participation whose desktop app reported the condition.
         generation:
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
-          description: The generation of that Participation.
         stream_id:
           type: string
           minLength: 1
           maxLength: 128
-          description: The native delivery stream the record arrived on.
         security_session_id:
           type: string
           minLength: 1
           maxLength: 128
-          description: The desktop app's native security session that reported the condition.
         policy_revision_id:
           type: string
           minLength: 26
           maxLength: 26
-          description: The Exam Revision whose native policy was in force.
         policy_digest:
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
-          description: The digest of that native policy, as `sha256:` followed by lowercase hex.
         application_release_id:
           type: string
           minLength: 1
           maxLength: 128
-          description: The desktop app release that reported the condition.
         matrix_id:
           type: string
           minLength: 1
           maxLength: 128
-          description: The desktop capability matrix the policy was checked against.
         batch_sequence:
           type: integer
           format: int64
-          minimum: 1
+          minimum: 0
           maximum: 20000
-          description: The sequence number of the delivery batch that carried the record.
         record_index:
           type: integer
           minimum: 0
           maximum: 63
-          description: The record's position within that batch, starting at 0.
-        occurrence:
-          $ref: '#/components/schemas/NativeOccurrence'
-          description: The condition change as the desktop app reported it.
-        unresolved_opener:
-          type: boolean
-          description: >-
-            True when the server never received the report that opened this condition, because of a
-            delivery gap. It stays true for later changes to the same condition.
+        transition:
+          $ref: '#/components/schemas/NativeRuleTransition'
         received_at:
           type: string
           format: date-time
-          description: When the server received the batch that carried the record.
         interpreted_at:
           type: string
           format: date-time
-          description: When the server interpreted the record and kept it.
+    NativeRuleTransition:
+      type: object
+      additionalProperties: false
+      required:
+        - rule_id
+        - capability
+        - mode
+        - reason
+        - to
+        - at
+      properties:
+        rule_id:
+          type: string
+          maxLength: 128
+        capability:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,63}$
+        mode:
+          type: string
+          enum:
+            - enforce
+            - observe
+        reason:
+          type: string
+          maxLength: 128
+          description: The reason ID Desktop's registry publishes for the rule; Desktop owns its wording.
+        from:
+          $ref: '#/components/schemas/NativeRuleReport'
+        to:
+          $ref: '#/components/schemas/NativeRuleReport'
+        at:
+          type: string
+          format: date-time
+          description: The device time of the change; it never moves backwards within a Participation.
+        occurrence:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9007199254740991
+          description: The rule's occurrence this change opened or closed, counted from 1 per Participation.
+        event:
+          type: string
+          enum:
+            - opened
+            - closed
     NativeConditionListResponse:
       type: object
       additionalProperties: false
-      description: One page of native condition records for a Submission.
       required:
         - items
       properties:
         items:
           type: array
           maxItems: 100
-          description: The records on this page, at most `limit`.
           items:
             $ref: '#/components/schemas/NativeConditionEvidence'
         next_cursor:
           type: string
-          description: >-
-            Pass this as `cursor` to get the next page. Omitted on the last page. Don't parse or
-            build it yourself.
   responses:
     NativeConditionListOK:
-      description: One page of private native condition records. They are observations, never a finding of guilt.
+      description: Bounded private native condition transitions, never a guilt finding.
       headers:
         Cache-Control:
           schema:
@@ -210,38 +224,4 @@ components:
           schema:
             $ref: '#/components/schemas/NativeConditionListResponse'
           example:
-            items:
-              - id: dpbj4ddm3hw8fkicm7nuazihkg
-                attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
-                participation_id: o87yi4tenx8kodmcuup1hmtsbo
-                generation: 2
-                stream_id: 7pkerc6qjs471e6sqtao5m6yts
-                security_session_id: xuw695fzjuadfwesyypr1ogjqm
-                policy_revision_id: ih1r84kij94nrwis97rft6rduh
-                policy_digest: sha256:b9b095828d7c47f4d9d3e42dfd9186f23d0c128fd00f621546225e178624e5ba
-                application_release_id: desktop-2026.12.0
-                matrix_id: darwin-arm64.2026-11
-                batch_sequence: 14
-                record_index: 0
-                occurrence:
-                  kind: occurrence
-                  occurrence_id: hsjp3kfuc9pfh88o4qe69d67j9
-                  condition_id: capture.active
-                  detector_id: capture
-                  detector_version: 1
-                  capability_id: capture
-                  mode: observe
-                  status: opened
-                  first_observed_at: '2026-12-14T09:31:04.120Z'
-                  last_confirmed_at: '2026-12-14T09:31:04.120Z'
-                  repeat_count: 1
-                  certainty: complete
-                  gap_count: 0
-                  source_ranges:
-                    - source_id: capture-session
-                      source_instance_id: x9kykw7917z54rmzbbnig69jnp
-                      first_sequence: 0
-                      last_sequence: 1
-                unresolved_opener: false
-                received_at: '2026-12-14T09:31:05.402Z'
-                interpreted_at: '2026-12-14T09:31:05.418Z'
+            items: []

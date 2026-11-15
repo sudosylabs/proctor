@@ -42,6 +42,9 @@ type Settings struct {
 	Localizer route.Localizer
 	Health    Health
 	BuildInfo BuildInfo
+	// Plugins reports the active plugins GET /system/plugins lists and
+	// whether readiness is degraded by a failed plugin.
+	Plugins   Plugins
 	PublicURL string
 	// DocumentationURL is the installation's documentation site, which Problem
 	// Details link to. Empty sends type "about:blank".

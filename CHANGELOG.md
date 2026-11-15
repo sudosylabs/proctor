@@ -8,7 +8,66 @@ module when a change is not server-only. No module has been released yet.
 
 ## [Unreleased]
 
+### Added
+
+- Server: native capabilities decided on the server. The release's capability
+  registry (fields, reasons, fact schemas, baseline rules) compiles each policy
+  into activations and rules; `GET /api/v1/exam-sittings/{id}/security-policy`
+  gives the readiness overview the policy before Start, the server decides
+  admission from the reported facts, and it re-evaluates the same rules on the
+  facts streamed during the Attempt. An enforce rule that stops being met
+  raises its own `native.<capability>` Flag, one per rule.
+- Server: an Exam's native families compile into rules on the release's
+  registry: process applications (the catalog's never-allowable applications
+  always blocked, plus an optional allowlist), clipboard, printing, removable
+  storage, virtualization, network, camera and microphone. Each family has an
+  `outcome`, `flag` or, when enforcing, `flag_and_suspend`, which suspends the
+  Attempt like Focus Loss.
+- Server: native delivery keeps up to 64 MiB per Participation and 256 MiB
+  per Attempt, twice Browser's, since every fact carries a full state.
+- Server: the AsyncAPI document describes Desktop's Attempt commands,
+  `exam_attempt.connect`, `exam_attempt.renew`, `exam_attempt.security.update`
+  and `exam_attempt.focus_loss`, with their replies; the connect reply's nested
+  objects are checked against their OpenAPI components. A Focus Loss Flag on
+  an Exam that records the screen now tells Desktop to fetch its clip request,
+  as native Flags do.
+- Server: enforcement certification. Each Desktop release signs, per
+  capability on its target platform, whether enforcement is certified there.
+  Enforce mode and `flag_and_suspend` refuse Start on an uncertified target;
+  observe mode runs anywhere, the baseline always runs, and nothing is
+  certified on Linux.
+- Server: screen clips. When the Exam records the screen, managers ask for a
+  range with a private reason (at most 10 per Attempt), a Flag asks for the
+  minute either side of it, Desktop uploads signed 8 MiB chunks, and managers
+  play them back with byte ranges. Requests and playback are audited, and
+  integrity retirement purges the chunks. A recording Exam starts only when
+  the recorder is permitted and has at least 3072 MiB free (registry
+  `e4c05771`, capability `screen_recording`). The readiness overview and the
+  prepared preflight carry a `screen_recording_disclosure` for Desktop to show
+  before Start.
+
 ### Removed
+
+- Server: native `occurrence` delivery records, their continuity checks and
+  `unresolved_opener`. Desktop now sends `capability_fact`,
+  `participation_confirmed` and `rule_status` records, and native condition
+  evidence is the server's rule status changes (**breaking**).
+- Server: native family options the release cannot check:
+  `allowed_storage_function_class_ids`, `allowed_managed_profile_ids`,
+  `allowed_adapter_class_ids`, `allowed_tunnel_class_ids`, and the
+  `route_change` and `network_source_health` network options. Every family
+  now requires `outcome` (**breaking**).
+- Server: the native source and coverage model. The preflight report is now
+  one fresh fact per activated capability plus Desktop's rule statuses, with
+  no `source_manifest_digest`, sources, coverage, baseline or posture; the
+  lease renewal's `security_coverage` becomes `security_control`, carrying
+  only its sequence, binding and delivery watermarks; `coverage_transition`
+  records and source reset receipts are gone, and gaps and resets name their
+  `capability`. The board's `native_security.sources` is removed, and
+  `exam.security.posture_blocked` splits into `exam.security.readiness_unmet`
+  (Connect with a report that does not meet the readiness rules) and
+  `exam.security.interaction_blocked` (a change after native delivery has
+  closed) (**breaking**).
 
 - Server: the webapp build manifest and the devseed journal no longer carry
   a `schema_version`; a manifest or journal that does is rejected.
@@ -17,6 +76,12 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
+- Server: each external sign-in provider's protocol settings belong to its
+  plugin. A provider keeps `ID`, `Type`, `DisplayName`, `Enabled` and
+  `AutoProvision`; the `CAS`, `OIDC` and `Claims` blocks become one
+  `Settings` document (claims under `Settings.Claims`) and the OIDC client
+  secret moves to `Secrets.ClientSecret`, always redacted. The plugin checks
+  them when it builds the provider (**breaking**).
 - Server: list filters. `GET /api/v1/users` takes repeatable `role_id` (at
   most 16; current Role Bindings inside the caller's `role_binding.view`
   scopes, and only for a caller with Institution-wide `role.view`, else

@@ -10,7 +10,6 @@ package sqlstore
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -18,8 +17,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-func controlReceipt(sequence int64, result string) securityControlReceipt {
-	return securityControlReceipt{Sequence: sequence, Digest: model.SHA256Fingerprint([]byte(fmt.Sprint(sequence, result))), Result: result, ResetIDs: []string{}, Rejections: [][2]int64{}}
+func controlReceipt(sequence int64, body string) securityControlReceipt {
+	return securityControlReceipt{Sequence: sequence, Digest: model.SHA256Fingerprint([]byte(fmt.Sprint(sequence, body))), Rejections: [][2]int64{}}
 }
 func TestNativeControlLedgerOrdersFaultsAndReplays(t *testing.T) {
 	ledger := newNativeControlLedger()
@@ -37,7 +36,7 @@ func TestNativeControlLedgerOrdersFaultsAndReplays(t *testing.T) {
 	receipt, processed, err := ledger.Lookup(9, accepted.Digest)
 	require.NoError(t, err, "replay rolled processed boundary back")
 	require.True(t, processed, "replay rolled processed boundary back")
-	require.Equal(t, "accepted", receipt.Result, "replay rolled processed boundary back")
+	require.Equal(t, accepted.Digest, receipt.Digest, "replay rolled processed boundary back")
 	require.Equal(t, int64(11), ledger.ProcessedSequence, "replay rolled processed boundary back")
 	require.Equal(t, fault.Digest, *ledger.ProcessedDigest, "replay rolled processed boundary back")
 	_, _, conflictErr := ledger.Lookup(11, accepted.Digest)
@@ -66,9 +65,6 @@ func TestNativeControlLedgerOrdersFaultsAndReplays(t *testing.T) {
 }
 func TestControlReceiptFitsReservedSlot(t *testing.T) {
 	receipt := controlReceipt(9007199254740991, "reset_conflict")
-	for i := 0; i < 11; i++ {
-		receipt.ResetIDs = append(receipt.ResetIDs, fmt.Sprintf("%03d%s", i, strings.Repeat("a", 125)))
-	}
 	for i := int64(0); i < 50; i++ {
 		receipt.Rejections = append(receipt.Rejections, [2]int64{i, 1})
 	}
@@ -86,10 +82,10 @@ func TestControlReceiptFitsReservedSlot(t *testing.T) {
 	require.NoError(t, err, "cache exceeded reservation")
 	require.LessOrEqual(t, len(raw), model.SecurityControlCacheMaxBytes, "cache exceeded reservation")
 	// No mutable caller slice or digest pointer aliases the retained ledger.
-	receipt.ResetIDs[0] = "modified"
-	require.NotEqual(t, "modified", ledger.Receipts[127].ResetIDs[0], "caller mutated retained receipt")
+	receipt.Rejections[0] = [2]int64{999, 999}
+	require.NotEqual(t, [2]int64{999, 999}, ledger.Receipts[127].Rejections[0], "caller mutated retained receipt")
 	replay, _, err := ledger.Lookup(128, receipt.Digest)
 	require.NoError(t, err)
-	replay.ResetIDs[0] = "modified"
-	require.NotEqual(t, "modified", ledger.Receipts[127].ResetIDs[0], "replay projection mutated retained receipt")
+	replay.Rejections[0] = [2]int64{999, 999}
+	require.NotEqual(t, [2]int64{999, 999}, ledger.Receipts[127].Rejections[0], "replay projection mutated retained receipt")
 }

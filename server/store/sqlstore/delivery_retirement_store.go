@@ -146,11 +146,9 @@ func retireSubmissionSecurityOperational(ctx context.Context, tx *sqlxTxWrapper,
 	}
 
 	for _, table := range []string{
-		"exam_native_occurrences",
 		"exam_native_delivery_records",
 		"exam_native_delivery_batches",
 		"exam_native_delivery_declarations",
-		"exam_native_source_resets",
 	} {
 		if _, execErr := tx.Exec(
 			ctx,
@@ -194,12 +192,13 @@ func retireSubmissionSecurityOperational(ctx context.Context, tx *sqlxTxWrapper,
 	}
 
 	// The fixed owner remains for lifetime quotas and current-key authorization;
-	// health, occurrence, reset and gap documents have a separate expiry purpose.
+	// health, fact, reset and gap documents have a separate expiry purpose.
 	if _, execErr := tx.Exec(
 		ctx,
 		`UPDATE exam_attempt_security_owners
-		SET binding_canonical = '{}', latest_report_canonical = '{}',
+		SET binding_canonical = '{}',
 			control_ledger_canonical = '{}', control_body_canonical = NULL,
+			native_interpretation_canonical = NULL,
 			closure_canonical = NULL, upload_expired = true, summary_canonical = NULL,
 			summary_received_at = NULL
 		WHERE exam_attempt_id = ?`,

@@ -13,6 +13,7 @@ import (
 	"net/url"
 
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/events"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/config"
@@ -66,6 +67,7 @@ func applicationDependencies(
 	}
 
 	return app.Dependencies{
+		EventSubscriptions:      func() []events.Subscription { return eventSubscriptions(capabilities.plugins) },
 		Store:                   capabilities.persistence,
 		Cache:                   cache,
 		MailDeliverySender:      mailer,

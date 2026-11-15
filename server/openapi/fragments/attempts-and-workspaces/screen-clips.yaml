@@ -1,0 +1,914 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips:
+    parameters:
+      - $ref: '#/components/parameters/ExamID'
+      - $ref: '#/components/parameters/ExamSittingID'
+      - $ref: '#/components/parameters/ExamAttemptID'
+    get:
+      operationId: listExamAttemptScreenClips
+      summary: List an Attempt's screen clips
+      tags:
+        - Attempts and workspaces
+      description: >-
+        Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state:
+        requested, recording the future part of its range, uploading, ready or failed. Managers' reasons are never
+        returned.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.unavailable
+        - exam.delivery.metadata_capacity
+        - exam.sitting.invalid
+        - exam.sitting.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+      responses:
+        '200':
+          description: The Attempt's screen clips
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScreenClipListResponse'
+              example:
+                items: []
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    post:
+      operationId: requestExamAttemptScreenClip
+      summary: Request a range of a candidate's recorded screen
+      tags:
+        - Attempts and workspaces
+      description: >-
+        An Exam Manager's request for part of the screen Desktop records on the candidate's device, for an Exam whose
+        native policy turns the screen recorder on. The range is either from the start of the session or an explicit
+        start and end of at most six hours; it may end up to ten minutes after the request, and Desktop waits for that
+        part before cutting the clip. A request made while the Attempt is suspended waits until the candidate resumes.
+        The manager's reason is required, audited as an attempt, and stored with the request; it is never returned.
+        An Attempt takes at most ten manager requests. Requests stop once the Attempt has ended.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: required
+      x-proctor-error-codes:
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.state_conflict
+        - exam.attempt.screen_recording_off
+        - exam.attempt.screen_clip_limit_reached
+        - exam.attempt.unavailable
+        - idempotency.key_required
+        - idempotency.key_invalid
+        - idempotency.conflict
+        - idempotency.in_progress
+        - exam.delivery.metadata_capacity
+        - exam.sitting.invalid
+        - exam.sitting.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        $ref: '#/components/requestBodies/RequestExamAttemptScreenClip'
+      responses:
+        '200':
+          $ref: '#/components/responses/ExamAttemptScreenClipOK'
+        '201':
+          $ref: '#/components/responses/ExamAttemptScreenClipOK'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips/{screen_clip_id}/content:
+    parameters:
+      - $ref: '#/components/parameters/ExamID'
+      - $ref: '#/components/parameters/ExamSittingID'
+      - $ref: '#/components/parameters/ExamAttemptID'
+      - $ref: '#/components/parameters/ScreenClipID'
+    get:
+      operationId: playExamAttemptScreenClip
+      summary: Play a ready screen clip
+      tags:
+        - Attempts and workspaces
+      description: >-
+        Streams a ready clip to one of the Sitting's Exam Managers, or once the Attempt is submitted to someone allowed
+        to review its Submission, whole or by one byte range so a player can seek.
+        Each playback, a request from the clip's first byte, is audited. Multiple ranges, or a range past the clip's
+        end, are refused.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.state_conflict
+        - exam.attempt.unavailable
+        - exam.delivery.metadata_capacity
+        - exam.sitting.invalid
+        - exam.sitting.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - name: Range
+          in: header
+          required: false
+          description: One byte range, such as bytes=0-1048575, bytes=1048576- or bytes=-4096.
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/ScreenClipContent'
+        '206':
+          $ref: '#/components/responses/ScreenClipPartialContent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+    get:
+      operationId: listCandidateScreenClipRequests
+      summary: List the screen clip requests the candidate's Desktop has not taken
+      tags:
+        - Attempts and workspaces
+      description: >-
+        Lists, newest first, the screen clip requests waiting for the candidate's Desktop, after validating the
+        Session-bound Attempt credential and open Connection. Requests queued while the Attempt was suspended appear
+        once the candidate resumes. Each item carries the range to cut; never who asked or why.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CandidateAttemptCredential'
+        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/ScreenClipRequestListOK'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/take:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+      - $ref: '#/components/parameters/ScreenClipID'
+    post:
+      operationId: takeCandidateScreenClipRequest
+      summary: Take one screen clip request
+      tags:
+        - Attempts and workspaces
+      description: >-
+        Records that the candidate's Desktop took a request and is recording what remains of its range. The request
+        then belongs to the Participation that took it. Taking it again through the same Participation returns it
+        unchanged.
+      x-codeSamples:
+        - lang: Shell
+          source: |-
+            curl --fail-with-body \
+              --request POST \
+              --url 'https://proctor.example.edu/api/v1/exam-attempts/dgjcx1ia56br8kpous3h9nfemq/screen-clip-requests/twz47ydgjcx1ia56br8kpous3h/take' \
+              --header 'Authorization: DPoP <registered-desktop-session-access-token>' \
+              --header 'DPoP: <proof>' \
+              --header 'X-Proctor-Attempt-Credential: <attempt-continuity-credential>' \
+              --header 'X-Proctor-Attempt-Connection-ID: <attempt-connection-id>'
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.state_conflict
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/CandidateAttemptCredential'
+        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+      responses:
+        '200':
+          $ref: '#/components/responses/CandidateScreenClipOK'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/upload:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+      - $ref: '#/components/parameters/ScreenClipID'
+    post:
+      operationId: beginCandidateScreenClipUpload
+      summary: Declare the screen clip about to be uploaded
+      tags:
+        - Attempts and workspaces
+      description: >-
+        Declares a taken clip's media type, exact size and the SHA-256 of every chunk in order. Every chunk is
+        chunk_bytes long except the last, which holds the rest. The clip's content digest is the SHA-256 of that
+        manifest. A clip that would take the Attempt's clips past 6 GiB is refused. Declaring the same clip again
+        returns it unchanged. Once the Participation that took the clip has closed, as at submission, Desktop
+        continues the upload without the Attempt credential and Connection headers until that Participation's upload
+        deadline; a clip not complete by then fails with upload_deadline.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.state_conflict
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - exam.attempt.screen_clip_too_large
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/NativeDeliveryCredential'
+        - $ref: '#/components/parameters/NativeDeliveryConnectionID'
+      requestBody:
+        $ref: '#/components/requestBodies/BeginCandidateScreenClipUpload'
+      responses:
+        '200':
+          $ref: '#/components/responses/ScreenClipUploadOK'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    get:
+      operationId: getCandidateScreenClipUpload
+      summary: Read where a screen clip upload stands
+      tags:
+        - Attempts and workspaces
+      description: >-
+        Returns the clip and the numbers of the chunks that arrived, so Desktop resumes an interrupted upload with
+        the rest.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.state_conflict
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/NativeDeliveryCredential'
+        - $ref: '#/components/parameters/NativeDeliveryConnectionID'
+      responses:
+        '200':
+          $ref: '#/components/responses/ScreenClipUploadOK'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/upload/chunks/{chunk}:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+      - $ref: '#/components/parameters/ScreenClipID'
+      - name: chunk
+        in: path
+        required: true
+        description: The chunk's number, from 1.
+        schema:
+          type: integer
+          minimum: 1
+    put:
+      operationId: uploadCandidateScreenClipChunk
+      summary: Upload one chunk of a screen clip
+      tags:
+        - Attempts and workspaces
+      description: >-
+        Streams one chunk as the raw request body, with its exact Content-Length. The bytes are checked against the
+        hash the clip declared for that chunk and kept only if they match. Sending a stored chunk again changes
+        nothing, so a chunk whose response was lost can be sent again.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.state_conflict
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/NativeDeliveryCredential'
+        - $ref: '#/components/parameters/NativeDeliveryConnectionID'
+      requestBody:
+        required: true
+        description: >-
+          The chunk's raw bytes, exactly the size the declared upload gives that chunk: 8 MiB (8388608 bytes) for
+          every chunk but the last.
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+              maxLength: 8388608
+      x-codeSamples:
+        - lang: Shell
+          source: |-
+            curl --fail-with-body \
+              --request PUT \
+              --url 'https://proctor.example.edu/api/v1/exam-attempts/dgjcx1ia56br8kpous3h9nfemq/screen-clip-requests/twz47ydgjcx1ia56br8kpous3h/upload/chunks/1' \
+              --header 'Authorization: DPoP <registered-desktop-session-access-token>' \
+              --header 'DPoP: <proof>' \
+              --header 'X-Proctor-Attempt-Credential: <attempt-continuity-credential>' \
+              --header 'X-Proctor-Attempt-Connection-ID: <attempt-connection-id>' \
+              --header 'Content-Type: application/octet-stream' \
+              --data-binary @chunk-0001.bin
+      responses:
+        '200':
+          $ref: '#/components/responses/ScreenClipChunkOK'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/upload/complete:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+      - $ref: '#/components/parameters/ScreenClipID'
+    post:
+      operationId: completeCandidateScreenClipUpload
+      summary: Finish a screen clip upload
+      tags:
+        - Attempts and workspaces
+      description: >-
+        Makes a clip whose every chunk arrived ready to play. The body carries the clip's content digest and the
+        installation key's ES256 signature over the exact bytes of that digest (its 64 lowercase hexadecimal
+        characters), raw r and s in unpadded base64url. The signature must verify with the key of the Desktop
+        registration uploading the clip; it is stored with the clip so a reviewer can check the clip later from the
+        clip and its record alone. Completing it again returns it unchanged.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.state_conflict
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - exam.attempt.screen_clip_incomplete
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/NativeDeliveryCredential'
+        - $ref: '#/components/parameters/NativeDeliveryConnectionID'
+      requestBody:
+        $ref: '#/components/requestBodies/CompleteCandidateScreenClipUpload'
+      responses:
+        '200':
+          $ref: '#/components/responses/CandidateScreenClipOK'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  parameters:
+    ScreenClipID:
+      name: screen_clip_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ID'
+      description: The screen clip identifier.
+  requestBodies:
+    CompleteCandidateScreenClipUpload:
+      required: true
+      description: The clip's content digest and the installation key's signature over it.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CompleteCandidateScreenClipUploadRequest'
+          example:
+            content_digest: 7d1a54127b222502f5b79b5fb0803061152a44f92b37e23c6527baf665d4da9a
+            signature: IcHJ1bNctXFVhTF0-ay6LIFS44MN3zPJw36YbQsF8C0haUjE4cuDhg0o1daUkq3Rf_VIJ_Me5s6cnjdzIYeWdQ
+    BeginCandidateScreenClipUpload:
+      required: true
+      description: The clip's media type, exact size and the SHA-256 of every chunk in order.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BeginCandidateScreenClipUploadRequest'
+          example:
+            media_type: video/mp4
+            size_bytes: 8388618
+            chunk_sha256:
+              - 2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae
+              - fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9
+    RequestExamAttemptScreenClip:
+      required: true
+      description: >-
+        The range to cut, either from the start of the session or from an explicit start, and the manager's private
+        reason.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RequestExamAttemptScreenClipRequest'
+          example:
+            from_session_start: false
+            start: '2026-11-12T09:58:00Z'
+            end: '2026-11-12T10:00:00Z'
+            reason: The candidate seemed to read from a second screen.
+  responses:
+    ScreenClipContent:
+      description: The whole clip
+      headers:
+        Cache-Control:
+          schema:
+            type: string
+            const: private, no-store
+        Accept-Ranges:
+          schema:
+            type: string
+            const: bytes
+      content:
+        video/mp4:
+          schema:
+            type: string
+            format: binary
+        video/webm:
+          schema:
+            type: string
+            format: binary
+    ScreenClipPartialContent:
+      description: One byte range of the clip
+      headers:
+        Cache-Control:
+          schema:
+            type: string
+            const: private, no-store
+        Accept-Ranges:
+          schema:
+            type: string
+            const: bytes
+        Content-Range:
+          description: The range served, as bytes first-last/size.
+          schema:
+            type: string
+      content:
+        video/mp4:
+          schema:
+            type: string
+            format: binary
+        video/webm:
+          schema:
+            type: string
+            format: binary
+    ScreenClipUploadOK:
+      description: Where the clip's upload stands
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ScreenClipUploadResponse'
+    ScreenClipChunkOK:
+      description: The chunk is stored
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ScreenClipChunkResponse'
+          example:
+            chunk: 1
+    ExamAttemptScreenClipOK:
+      description: The saved request, without the manager's reason; 201 when created, 200 when replayed
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ScreenClipResponse'
+    ScreenClipRequestListOK:
+      description: The requests waiting for the candidate's Desktop
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ScreenClipListResponse'
+          example:
+            items: []
+    CandidateScreenClipOK:
+      description: The request the candidate's Desktop took
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ScreenClipResponse'
+  schemas:
+    RequestExamAttemptScreenClipRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - from_session_start
+        - end
+        - reason
+      properties:
+        from_session_start:
+          type: boolean
+          description: True for a range from the moment the candidate window opened; start is then omitted.
+        start:
+          type: string
+          format: date-time
+          description: The range's start, required unless from_session_start is true, and omitted then.
+        end:
+          type: string
+          format: date-time
+          description: The range's end, at most ten minutes after the request.
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: The manager's private reason. It is stored with the request and never returned.
+    ScreenClipRange:
+      type: object
+      additionalProperties: false
+      required:
+        - from_session_start
+        - end
+      properties:
+        from_session_start:
+          type: boolean
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+    ScreenClipResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - exam_attempt_id
+        - source
+        - state
+        - range
+        - requested_at
+        - updated_at
+        - revision
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        exam_attempt_id:
+          $ref: '#/components/schemas/ID'
+        source:
+          type: string
+          enum:
+            - manager
+            - incident
+        state:
+          type: string
+          enum:
+            - requested
+            - recording
+            - uploading
+            - ready
+            - failed
+        failure:
+          type: string
+          enum:
+            - attempt_ended
+            - not_recorded
+            - upload_deadline
+            - rejected
+          description: Why the clip failed; present only when state is failed.
+        range:
+          $ref: '#/components/schemas/ScreenClipRange'
+        requested_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+    ScreenClipListResponse:
+      description: One page of the collection in its stable order.
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScreenClipResponse'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    BeginCandidateScreenClipUploadRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - media_type
+        - size_bytes
+        - chunk_sha256
+      properties:
+        media_type:
+          type: string
+          enum:
+            - video/mp4
+            - video/webm
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 3221225472
+        chunk_sha256:
+          type: array
+          minItems: 1
+          maxItems: 384
+          description: The lowercase hexadecimal SHA-256 of every chunk, in order.
+          items:
+            type: string
+            pattern: ^[0-9a-f]{64}$
+    ScreenClipUploadResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - clip
+        - chunk_bytes
+        - chunk_count
+        - received_chunks
+        - content_digest
+      properties:
+        clip:
+          $ref: '#/components/schemas/ScreenClipResponse'
+        chunk_bytes:
+          type: integer
+          format: int64
+          description: The size of every chunk but the last.
+        chunk_count:
+          type: integer
+          minimum: 1
+          maximum: 384
+        received_chunks:
+          type: array
+          maxItems: 384
+          description: The numbers, from 1, of the chunks that arrived, in order.
+          items:
+            type: integer
+            minimum: 1
+        content_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          description: >-
+            The SHA-256 of the clip's manifest: "proctor-screen-clip-v1", the media type, size, chunk size and every
+            chunk hash in order, each followed by a line feed.
+    ScreenClipChunkResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - chunk
+      properties:
+        chunk:
+          type: integer
+          minimum: 1
+    CompleteCandidateScreenClipUploadRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - content_digest
+        - signature
+      properties:
+        content_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          description: The clip's content digest, as the upload status reports it.
+        signature:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{86}$
+          description: The installation key's ES256 signature over the content digest, raw r and s in unpadded base64url.

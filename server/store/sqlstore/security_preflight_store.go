@@ -86,7 +86,6 @@ func (s *SQLSecurityPreflightStore) PrepareSecurityPreflight(
 
 	agreement := input.Access.DesktopBuild.NativeAgreement
 	if input.NativeRegistryDigest != agreement.RegistryDigest() ||
-		input.SourceManifestDigest != agreement.SourceManifestDigest() ||
 		input.ConfigurationManifestFingerprint != input.Access.DesktopBuild.ConfigurationManifest.Fingerprint() {
 		return nil, preflightConflict("configuration_unsupported")
 	}
@@ -132,6 +131,10 @@ func (s *SQLSecurityPreflightStore) PrepareSecurityPreflight(
 				retention,
 				value.BrowserActivityDisclosure.MayCreateIntegrityEvidence,
 			)
+			if err != nil {
+				return err
+			}
+			value.ScreenRecordingDisclosure, err = model.NewScreenRecordingDisclosure(value.Resolved.Policy.ScreenRecording, retention)
 			if err != nil {
 				return err
 			}
@@ -212,10 +215,15 @@ func (s *SQLSecurityPreflightStore) prepareSecurityPreflight(
 	if err != nil {
 		return nil, err
 	}
+	recording, err := model.NewScreenRecordingDisclosure(resolved.Policy.ScreenRecording, retention)
+	if err != nil {
+		return nil, err
+	}
 
 	prepared := &store.SecurityPreflightPrepared{
 		ServerTime:                now,
 		BrowserActivityDisclosure: disclosure,
+		ScreenRecordingDisclosure: recording,
 		Challenge: model.SecurityPreflightChallenge{
 			PreflightID: input.PreflightID,
 			Challenge:   input.Challenge,
@@ -421,6 +429,7 @@ func (securityPreflightResultOutcome) outcomeDocument() {}
 type securityPreflightPreparedDocument struct {
 	ServerTime                 time.Time                        `json:"server_time"`
 	BrowserActivityDisclosure  model.BrowserActivityDisclosure  `json:"browser_activity_disclosure"`
+	ScreenRecordingDisclosure  *model.ScreenRecordingDisclosure `json:"screen_recording_disclosure"`
 	Challenge                  model.SecurityPreflightChallenge `json:"challenge"`
 	Resolved                   resolvedNativePolicyDocument     `json:"resolved"`
 	FrozenAttemptConfiguration *model.AttemptConfiguration      `json:"frozen_attempt_configuration,omitempty"`
@@ -431,80 +440,35 @@ func (securityPreflightPreparedDocument) outcomeDocument() {}
 // resolvedNativePolicyDocument spells model.ResolvedNativePolicy inside a
 // prepared preflight.
 type resolvedNativePolicyDocument struct {
-	Policy                 model.EffectiveExamSecurityPolicy   `json:"policy"`
-	PolicyContentDigest    string                              `json:"policy_content_digest"`
-	CapabilityMatrixDigest string                              `json:"capability_matrix_digest"`
-	CatalogBindings        []model.SecurityCatalogBinding      `json:"catalog_bindings"`
-	Sources                []model.NativeSourceID              `json:"sources"`
-	Categories             []model.NativeSourceCategory        `json:"categories"`
-	Requirements           []nativeCoverageRequirementDocument `json:"requirements"`
-}
-
-type nativeCoverageRequirementDocument struct {
-	CoverageKey   string                            `json:"coverage_key"`
-	CapabilityID  string                            `json:"capability_id"`
-	SourceID      model.NativeSourceID              `json:"source_id"`
-	RequiredClaim model.NativeCapabilityClaim       `json:"required_claim"`
-	Entry         model.NativeCapabilityMatrixEntry `json:"entry"`
-	Baseline      bool                              `json:"baseline"`
+	Policy                 model.EffectiveExamSecurityPolicy `json:"policy"`
+	PolicyContentDigest    string                            `json:"policy_content_digest"`
+	CapabilityMatrixDigest string                            `json:"capability_matrix_digest"`
+	CatalogBindings        []model.SecurityCatalogBinding    `json:"catalog_bindings"`
 }
 
 func newResolvedNativePolicyDocument(resolved model.ResolvedNativePolicy) resolvedNativePolicyDocument {
-	document := resolvedNativePolicyDocument{
+	return resolvedNativePolicyDocument{
 		Policy:                 resolved.Policy,
 		PolicyContentDigest:    resolved.PolicyContentDigest,
 		CapabilityMatrixDigest: resolved.CapabilityMatrixDigest,
 		CatalogBindings:        resolved.CatalogBindings,
-		Sources:                resolved.Sources,
-		Categories:             resolved.Categories,
 	}
-	if resolved.Requirements != nil {
-		// Keep an empty list distinct from an absent one: connection compares
-		// the canonical spelling of the stored and current resolution.
-		document.Requirements = make([]nativeCoverageRequirementDocument, 0, len(resolved.Requirements))
-	}
-	for _, requirement := range resolved.Requirements {
-		document.Requirements = append(document.Requirements, nativeCoverageRequirementDocument{
-			CoverageKey:   requirement.CoverageKey,
-			CapabilityID:  requirement.CapabilityID,
-			SourceID:      requirement.SourceID,
-			RequiredClaim: requirement.RequiredClaim,
-			Entry:         requirement.Entry,
-			Baseline:      requirement.Baseline,
-		})
-	}
-	return document
 }
 
 func (d resolvedNativePolicyDocument) model() model.ResolvedNativePolicy {
-	resolved := model.ResolvedNativePolicy{
+	return model.ResolvedNativePolicy{
 		Policy:                 d.Policy,
 		PolicyContentDigest:    d.PolicyContentDigest,
 		CapabilityMatrixDigest: d.CapabilityMatrixDigest,
 		CatalogBindings:        d.CatalogBindings,
-		Sources:                d.Sources,
-		Categories:             d.Categories,
 	}
-	if d.Requirements != nil {
-		resolved.Requirements = make([]model.NativeCoverageRequirement, 0, len(d.Requirements))
-	}
-	for _, requirement := range d.Requirements {
-		resolved.Requirements = append(resolved.Requirements, model.NativeCoverageRequirement{
-			CoverageKey:   requirement.CoverageKey,
-			CapabilityID:  requirement.CapabilityID,
-			SourceID:      requirement.SourceID,
-			RequiredClaim: requirement.RequiredClaim,
-			Entry:         requirement.Entry,
-			Baseline:      requirement.Baseline,
-		})
-	}
-	return resolved
 }
 
 func encodePreparedSecurityPreflight(prepared *store.SecurityPreflightPrepared) ([]byte, error) {
 	return encodeOutcome(securityPreflightPreparedDocument{
 		ServerTime:                 prepared.ServerTime,
 		BrowserActivityDisclosure:  prepared.BrowserActivityDisclosure,
+		ScreenRecordingDisclosure:  prepared.ScreenRecordingDisclosure,
 		Challenge:                  prepared.Challenge,
 		Resolved:                   newResolvedNativePolicyDocument(prepared.Resolved),
 		FrozenAttemptConfiguration: prepared.FrozenAttemptConfiguration,
@@ -519,6 +483,7 @@ func decodePreparedSecurityPreflight(raw []byte, agreement *model.DesktopNativeA
 	prepared := store.SecurityPreflightPrepared{
 		ServerTime:                 document.ServerTime,
 		BrowserActivityDisclosure:  document.BrowserActivityDisclosure,
+		ScreenRecordingDisclosure:  document.ScreenRecordingDisclosure,
 		Challenge:                  document.Challenge,
 		Resolved:                   document.Resolved.model(),
 		FrozenAttemptConfiguration: document.FrozenAttemptConfiguration,
@@ -527,6 +492,7 @@ func decodePreparedSecurityPreflight(raw []byte, agreement *model.DesktopNativeA
 		!prepared.ServerTime.Equal(prepared.Challenge.IssuedAt) ||
 		prepared.Resolved.Validate(agreement, prepared.ServerTime) != nil ||
 		prepared.BrowserActivityDisclosure.Validate() != nil ||
+		model.ValidateScreenRecordingDisclosure(prepared.ScreenRecordingDisclosure, prepared.Resolved.Policy.ScreenRecording) != nil ||
 		(prepared.FrozenAttemptConfiguration != nil && prepared.FrozenAttemptConfiguration.Validate() != nil) {
 		return prepared, invalidPersistedState("security_preflight", "prepared", model.ErrSecurityPreflightInvalid)
 	}
@@ -772,4 +738,51 @@ func (s *SQLSecurityPreflightStore) ResolveSecurityPreflightSitting(
 		return "", translateError("security_preflight", id, err)
 	}
 	return model.ParseExamSittingID(sitting)
+}
+
+// readinessOverviewScope names the overview's resolution, which grants and
+// records nothing; only its readiness digest is compared later.
+const readinessOverviewScope = "readiness-overview"
+
+// ReadSecurityPolicyOverview resolves the Sitting's policy for the readiness
+// overview without creating a preflight.
+func (s *SQLSecurityPreflightStore) ReadSecurityPolicyOverview(
+	ctx context.Context,
+	access store.SecurityPreflightAccess,
+) (*store.SecurityPolicyOverview, error) {
+	if !validSecurityPreflightAccess(access) {
+		return nil, store.NewErrInvalidInput("security_preflight", "overview", nil)
+	}
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "read security policy overview", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.SecurityPolicyOverview, error) {
+		guard, err := s.lockPreflightEligibility(ctx, tx, access)
+		if err != nil {
+			return nil, err
+		}
+		now := guard.DatabaseNow.UTC().Truncate(time.Millisecond)
+		revision, resolved, err := resolvePreflightPolicy(ctx, tx, &store.SecurityPreflightPrepare{
+			Access: access, PreflightID: readinessOverviewScope,
+		}, guard, now)
+		if err != nil {
+			return nil, err
+		}
+		retention, err := getRetentionPolicy(ctx, tx, "FOR SHARE OF p")
+		if err != nil {
+			return nil, err
+		}
+		disclosure, err := model.NewBrowserActivityDisclosure(retention, revision.BrowserPolicy.MayCreateIntegrityEvidence())
+		if err != nil {
+			return nil, err
+		}
+		recording, err := model.NewScreenRecordingDisclosure(resolved.Policy.ScreenRecording, retention)
+		if err != nil {
+			return nil, err
+		}
+		return &store.SecurityPolicyOverview{
+			ServerTime: now, Resolved: resolved,
+			BrowserActivityDisclosure: disclosure, ScreenRecordingDisclosure: recording,
+		}, nil
+	})
 }

@@ -111,15 +111,19 @@ components:
                 native_security:
                   retained_condition_records: 2
                   live_coverage_available: true
-                  sources:
-                    - source_id: display-topology
-                      health: healthy
-                      permission: granted
-                      complete: true
-                    - source_id: clipboard
-                      health: degraded
-                      permission: granted
-                      complete: false
+                  rules:
+                    - rule_id: baseline.single_display
+                      capability: display
+                      reason: display.single_display_required
+                      status: met
+                      occurrences: 1
+                  contained: true
+                  screen_clips:
+                    requested: 0
+                    recording: 0
+                    uploading: 0
+                    ready: 1
+                    failed: 0
               - candidate:
                   user_id: dfa1x1n7mkthyoziwxnupsmyia
                   username: student.bo
@@ -258,6 +262,7 @@ components:
           enum:
             - secure_connectivity_lost
             - focus_policy_review_required
+            - native_policy_review_required
             - manager_suspended
         reallow_available:
           description: Whether the caller can re-allow the Attempt now. True only when the caller is allowed to, the Exam isn't archived, the Sitting is Open or Paused and its scheduled end hasn't passed.
@@ -342,12 +347,95 @@ components:
     NativeSecuritySummary:
       type: object
       additionalProperties: false
-      description: A count of native condition records and the health of the live native sources. It holds no detector, occurrence or source instance IDs, and it is not a finding of misconduct.
+      description: >-
+        The candidate's live native standing: how many rule status changes are kept, whether the live Participation's
+        native delivery is open, each enforce rule's status as the server evaluates it, whether Desktop is containing the
+        candidate window, and the Attempt's screen clips by state. It contains no facts, source-instance or
+        application identities, and an application outside the catalog is never named. A rule that is not met is
+        not a misconduct finding; its Flag is reviewed like any other.
       required:
         - retained_condition_records
         - live_coverage_available
-        - sources
+        - rules
+        - contained
+        - screen_clips
       properties:
+        rules:
+          type: array
+          maxItems: 64
+          description: The live Participation's enforce rules, by rule ID; empty when nothing is live.
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - rule_id
+              - capability
+              - reason
+              - status
+              - occurrences
+            properties:
+              rule_id:
+                type: string
+                maxLength: 128
+              capability:
+                type: string
+                pattern: ^[a-z][a-z0-9_]{0,63}$
+              reason:
+                type: string
+                maxLength: 128
+                description: The registry's reason ID for the rule, such as display.single_display_required.
+              status:
+                type: string
+                enum:
+                  - met
+                  - not_met
+                  - unknown
+              unknown_cause:
+                type: string
+                enum:
+                  - unavailable
+                  - gap
+                  - unhealthy
+                  - permission
+                  - partial
+                  - checking
+              open_occurrence:
+                type: integer
+                format: int64
+                minimum: 1
+                description: The occurrence open now, counted from 1 in this Participation; absent when none is open.
+              occurrences:
+                type: integer
+                format: int64
+                minimum: 0
+        contained:
+          type: boolean
+          description: Whether Desktop reports it is containing the candidate window right now.
+        screen_clips:
+          type: object
+          additionalProperties: false
+          required:
+            - requested
+            - recording
+            - uploading
+            - ready
+            - failed
+          properties:
+            requested:
+              type: integer
+              minimum: 0
+            recording:
+              type: integer
+              minimum: 0
+            uploading:
+              type: integer
+              minimum: 0
+            ready:
+              type: integer
+              minimum: 0
+            failed:
+              type: integer
+              minimum: 0
         retained_condition_records:
           description: Number of native condition records kept for the Attempt. Zero once its integrity data has been retired.
           type: integer
@@ -355,44 +443,5 @@ components:
           minimum: 0
           maximum: 200000
         live_coverage_available:
-          description: Whether the Desktop has reported live native source coverage. When false, sources is empty.
           type: boolean
-        sources:
-          description: Health of each live native source.
-          type: array
-          maxItems: 11
-          items:
-            description: Health of one native source.
-            type: object
-            additionalProperties: false
-            required:
-              - source_id
-              - health
-              - permission
-              - complete
-            properties:
-              source_id:
-                description: The native source.
-                type: string
-              health:
-                description: Health the source last reported.
-                type: string
-                enum:
-                  - starting
-                  - healthy
-                  - degraded
-                  - failed
-                  - recovering
-                  - stopped
-              permission:
-                description: Whether the operating system lets the source run.
-                type: string
-                enum:
-                  - denied
-                  - granted
-                  - not_determined
-                  - restricted
-                  - unavailable
-              complete:
-                description: Whether the source reports complete coverage.
-                type: boolean
+          description: Whether the live Participation's native delivery is open, so rule statuses are current.

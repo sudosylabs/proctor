@@ -244,13 +244,12 @@ components:
           description: The Participation generation the Flag was raised in.
         policy_kind:
           type: string
-          enum:
-            - connection_loss
-            - focus_loss
-            - browser_navigation
           description: >-
-            The integrity policy that raised the Flag: a lost connection, lost window focus, or a blocked
-            browser navigation.
+            The policy that raised the flag: a core policy (connection_loss,
+            focus_loss or browser_navigation) or a capability's
+            "<plugin-id>.<kind>". Treat an unknown kind as opaque.
+          maxLength: 97
+          pattern: ^(connection_loss|focus_loss|browser_navigation|[a-z][a-z0-9.-]{0,63}\.[a-z][a-z0-9_]{0,31})$
         state:
           type: string
           enum:
@@ -336,11 +335,12 @@ components:
           description: The generation of that Participation.
         policy_kind:
           type: string
-          enum:
-            - connection_loss
-            - focus_loss
-            - browser_navigation
-          description: The integrity policy the evidence belongs to, the same as its Flag's.
+          description: >-
+            The policy the evidence belongs to, the same as its Flag's: a core
+            policy (connection_loss, focus_loss or browser_navigation) or a
+            capability's "<plugin-id>.<kind>". Treat an unknown kind as opaque.
+          maxLength: 97
+          pattern: ^(connection_loss|focus_loss|browser_navigation|[a-z][a-z0-9.-]{0,63}\.[a-z][a-z0-9_]{0,31})$
         signal_id:
           $ref: '#/components/schemas/ID'
           description: The focus-loss signal this record was made from. Only for `focus_loss`.

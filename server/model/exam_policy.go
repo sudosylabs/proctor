@@ -23,16 +23,8 @@ const (
 	ExamPolicySetMaxBytes   = 64 * 1024
 )
 
-type IntegrityThresholdOutcome string
-
-const (
-	IntegrityOutcomeFlag           IntegrityThresholdOutcome = "flag"
-	IntegrityOutcomeFlagAndWarn    IntegrityThresholdOutcome = "flag_and_warn"
-	IntegrityOutcomeFlagAndSuspend IntegrityThresholdOutcome = "flag_and_suspend"
-)
-
 type ConnectionLossPolicy struct {
-	Outcome IntegrityThresholdOutcome
+	Outcome IntegrityOutcome
 }
 
 type FocusLossPolicy struct {
@@ -40,7 +32,7 @@ type FocusLossPolicy struct {
 	MinimumDuration time.Duration
 	IncidentCount   int
 	Window          time.Duration
-	Outcome         IntegrityThresholdOutcome
+	Outcome         IntegrityOutcome
 }
 
 // ExamPolicySet is the complete typed policy copied into each new Exam Draft.
@@ -98,12 +90,11 @@ func (p ExamPolicySet) Validate() error {
 		return invalidModelError("ExamPolicySet.Validate", "exam_policy_set", "", "focus loss window is out of bounds", "")
 	}
 
-	switch p.FocusLoss.Outcome {
-	case IntegrityOutcomeFlag, IntegrityOutcomeFlagAndWarn, IntegrityOutcomeFlagAndSuspend:
-		return nil
-	default:
+	if !p.FocusLoss.Outcome.IsValid() {
 		return invalidModelError("ExamPolicySet.Validate", "exam_policy_set", "", "focus loss outcome is invalid", "")
 	}
+
+	return nil
 }
 
 type examPolicyWire struct {
@@ -113,15 +104,15 @@ type examPolicyWire struct {
 }
 
 type examConnectionPolicyWire struct {
-	Outcome IntegrityThresholdOutcome `json:"outcome"`
+	Outcome IntegrityOutcome `json:"outcome"`
 }
 
 type examFocusPolicyWire struct {
-	Enabled                     bool                      `json:"enabled"`
-	MinimumDurationMilliseconds int64                     `json:"minimum_duration_milliseconds"`
-	IncidentCount               int                       `json:"incident_count"`
-	WindowMilliseconds          int64                     `json:"window_milliseconds"`
-	Outcome                     IntegrityThresholdOutcome `json:"outcome"`
+	Enabled                     bool             `json:"enabled"`
+	MinimumDurationMilliseconds int64            `json:"minimum_duration_milliseconds"`
+	IncidentCount               int              `json:"incident_count"`
+	WindowMilliseconds          int64            `json:"window_milliseconds"`
+	Outcome                     IntegrityOutcome `json:"outcome"`
 }
 
 func EncodeExamPolicySet(policy ExamPolicySet) ([]byte, error) {
@@ -161,14 +152,14 @@ func DecodeExamPolicySet(data []byte) (ExamPolicySet, error) {
 	var wire struct {
 		Native         *NativeSecurityPolicy `json:"native"`
 		ConnectionLoss *struct {
-			Outcome *IntegrityThresholdOutcome `json:"outcome"`
+			Outcome *IntegrityOutcome `json:"outcome"`
 		} `json:"connection_loss"`
 		FocusLoss *struct {
-			Enabled                     *bool                      `json:"enabled"`
-			MinimumDurationMilliseconds *int64                     `json:"minimum_duration_milliseconds"`
-			IncidentCount               *int                       `json:"incident_count"`
-			WindowMilliseconds          *int64                     `json:"window_milliseconds"`
-			Outcome                     *IntegrityThresholdOutcome `json:"outcome"`
+			Enabled                     *bool             `json:"enabled"`
+			MinimumDurationMilliseconds *int64            `json:"minimum_duration_milliseconds"`
+			IncidentCount               *int              `json:"incident_count"`
+			WindowMilliseconds          *int64            `json:"window_milliseconds"`
+			Outcome                     *IntegrityOutcome `json:"outcome"`
 		} `json:"focus_loss"`
 	}
 	if err := decoder.Decode(&wire); err != nil {

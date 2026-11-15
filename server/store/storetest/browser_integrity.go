@@ -198,7 +198,7 @@ func TestBrowserIntegrityGroupCapacity(t *testing.T, ss store.Store) {
 	connected, focus := connectFocusLossFixture(t, ctx, ss, f, "group-capacity")
 	access := store.CandidateAttemptAccess{AttemptID: connected.Attempt.ID, CandidateUserID: f.candidate.ID, SessionID: f.session.ID, DesktopRegistrationID: f.session.DesktopRegistrationID, DPoPKeyThumbprint: f.session.DPoPKeyThumbprint, ConnectionID: connected.Connection.ID, ContinuityCredentialHash: focus.ContinuityCredentialHash}
 	renewal := &store.ExamAttemptParticipationRenewal{DesktopCompatibilityPolicyRevision: 1, AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID, ConnectionID: connected.Connection.ID, CandidateUserID: f.candidate.ID, SessionID: f.session.ID, Generation: connected.Participation.Generation, DesktopRegistrationID: f.session.DesktopRegistrationID, DPoPKeyThumbprint: f.session.DPoPKeyThumbprint, ContinuityCredentialHash: focus.ContinuityCredentialHash}
-	prepareParticipationRenewalCoverage(t, ctx, ss, renewal)
+	prepareParticipationSecurityControl(t, ctx, ss, renewal)
 	renew := func() {
 		renewal.Sequence++
 		_, err := ss.ExamAttempt().RenewParticipation(ctx, renewal)

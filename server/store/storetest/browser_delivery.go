@@ -195,7 +195,7 @@ func testBrowserPendingRepairReservation(t *testing.T, ss store.Store) {
 	// The rounds outlast one initial Participation lease on a loaded
 	// database, so the fixture renews it as a live client would.
 	renewal := &store.ExamAttemptParticipationRenewal{DesktopCompatibilityPolicyRevision: 1, AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID, ConnectionID: connected.Connection.ID, CandidateUserID: f.candidate.ID, SessionID: f.session.ID, Generation: connected.Participation.Generation, DesktopRegistrationID: f.session.DesktopRegistrationID, DPoPKeyThumbprint: f.session.DPoPKeyThumbprint, ContinuityCredentialHash: access.ContinuityCredentialHash}
-	prepareParticipationRenewalCoverage(t, ctx, ss, renewal)
+	prepareParticipationSecurityControl(t, ctx, ss, renewal)
 	renew := func() {
 		renewal.Sequence++
 		_, renewErr := ss.ExamAttempt().RenewParticipation(ctx, renewal)

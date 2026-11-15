@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/internal/nativetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -464,52 +465,7 @@ func desktopBuildFixture(t *testing.T) model.DesktopBuildTuple {
 		CapabilityMatrixIdentity:                "consistency-test-matrix",
 	}
 
-	digest := model.SHA256Fingerprint([]byte("synthetic-source-schema"))
-	definitions := []model.NativeCoverageDefinition{}
-	matrix := model.NativeCapabilityMatrix{
-		RegistryDigest: model.NativeRegistryDigest,
-		MatrixID:       build.CapabilityMatrixIdentity,
-		ReleaseID:      "synthetic-release",
-		TargetTuple:    build.DesktopTarget,
-	}
-	for _, baseline := range []struct {
-		key    string
-		source model.NativeSourceID
-	}{
-		{"baseline.capture", model.NativeSourceCapture},
-		{"baseline.display", model.NativeSourceDisplay},
-		{"baseline.window", model.NativeSourceWindow},
-	} {
-		definitions = append(definitions, model.NativeCoverageDefinition{
-			CoverageKey:         baseline.key,
-			CapabilityID:        "baseline",
-			SourceID:            baseline.source,
-			SourceSchemaDigest:  digest,
-			PermittedClaims:     []model.NativeCapabilityClaim{model.NativeClaimEnforce},
-			RequiredPermissions: []string{},
-			Baseline:            true,
-		})
-		matrix.Entries = append(matrix.Entries, model.NativeCapabilityMatrixEntry{
-			CoverageKey:         baseline.key,
-			SourceSchemaDigest:  digest,
-			Claim:               model.NativeClaimEnforce,
-			ComponentID:         "synthetic-component",
-			AdapterVersion:      "synthetic-adapter",
-			RequiredPermissions: []string{},
-			Limitations:         []string{},
-			Verification:        "passed",
-		})
-	}
-	agreement, err := model.NewDesktopNativeAgreement(
-		model.NativeRegistryDigest,
-		model.SHA256Fingerprint([]byte("synthetic-manifest")),
-		model.SHA256Fingerprint([]byte("synthetic-matrix")),
-		model.SHA256Fingerprint([]byte("synthetic-detectors")),
-		definitions,
-		matrix,
-		[]model.NativeDetectorDefinition{},
-	)
-	require.NoError(t, err)
+	agreement := nativetest.NativeAgreement(t, build)
 	build.NativeAgreement = agreement
 	return build
 }

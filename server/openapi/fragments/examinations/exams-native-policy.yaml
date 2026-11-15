@@ -13,11 +13,9 @@ paths:
       operationId: configureExamDraftNativePolicy
       summary: Replace native security selections on the active Exam Draft
       description: >-
-        Replaces the whole native policy on the Draft, with all ten families. The change is made only if
-        expected_revision still matches the Draft's current revision. The desktop_candidate baseline always applies
-        and you can't turn it off. Publishing fixes these choices in the Revision, so a later Draft edit never changes
-        an Attempt that is already running. Every catalog ID must come from a catalog the server has admitted when
-        the policy is applied to an Attempt.
+        Replaces the complete ten-family native policy at the expected Draft revision. The mandatory desktop_candidate
+        baseline cannot be disabled. Publication freezes these selections; live Participation native selections cannot
+        be changed by a Draft edit. Catalog IDs must refer to server-admitted catalogs when resolved for admission.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -75,7 +73,7 @@ components:
   requestBodies:
     ConfigureExamDraftNativePolicy:
       required: true
-      description: The Draft revision you last saw, and the complete new native policy.
+      description: Supplies the expected Draft revision and the complete replacement native security policy.
       content:
         application/json:
           schema:
@@ -88,40 +86,48 @@ components:
                 - allowed_application_ids: []
                   id: process_application
                   mode: disabled
+                  outcome: flag
                 - id: interactive_session
                   mode: disabled
+                  outcome: flag
                 - id: clipboard
                   mode: disabled
+                  outcome: flag
                   observe_os_clipboard_changes: false
                   strategy: disabled
                 - candidate_print_commands: not_applied
                   id: printing
                   mode: disabled
+                  outcome: flag
                   monitored_spooler: not_required
-                - allowed_storage_function_class_ids: []
-                  enabled_sub_capabilities: []
+                - enabled_sub_capabilities: []
                   id: removable_storage
                   mode: disabled
+                  outcome: flag
                 - id: virtualization
                   mode: disabled
+                  outcome: flag
                   rule: not_applied
-                - allowed_adapter_class_ids: []
-                  allowed_managed_profile_ids: []
-                  allowed_tunnel_class_ids: []
-                  enabled_sub_capabilities: []
+                - enabled_sub_capabilities: []
                   id: network_configuration
                   mode: disabled
+                  outcome: flag
                 - concurrent_use_check: not_required
                   id: camera
                   mode: disabled
+                  outcome: flag
                   require_ready: false
                 - concurrent_use_check: not_required
                   id: microphone
                   mode: disabled
+                  outcome: flag
                   require_ready: false
                 - id: external_capture
                   mode: disabled
-              registry_digest: sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0
+                  outcome: flag
+              registry_digest: sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d
+              screen_recording:
+                enabled: true
   schemas:
     ConfigureExamDraftNativePolicyRequest:
       type: object
@@ -134,65 +140,81 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: The Draft revision you last saw. If the Draft has changed since, the request fails with a conflict.
         native:
           $ref: '#/components/schemas/NativeSecurityPolicy'
-          description: The new native policy. It replaces the current one completely.
+    NativeScreenRecordingPolicy:
+      type: object
+      additionalProperties: false
+      description: >-
+        Whether Desktop records the candidate's screen on the device for the whole session, uploading only the ranges
+        the server requests. Off by default; the candidate is told before the Attempt starts. When on, the policy
+        activates the screen_recording capability with the readiness rule screen_recording.free_space: Start is
+        refused unless the recorder is permitted and the device has at least 3072 MiB free.
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
     NativeSecurityPolicy:
       type: object
       additionalProperties: false
       description: >-
-        What Proctor Desktop watches or blocks on the candidate's computer. It always includes the fixed baseline and
-        lists all ten families in a set order. The whole Exam policy, including this part, must fit in 64 KiB.
+        Complete native selection with an invariant baseline and exactly ten families in the documented order. Complete
+        canonical ExamPolicySet bytes are limited to 64 KiB.
       required:
         - registry_digest
         - baseline_id
         - families
+        - screen_recording
       properties:
+        screen_recording:
+          $ref: '#/components/schemas/NativeScreenRecordingPolicy'
         registry_digest:
           type: string
-          const: sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0
-          description: Identifies the version of the native capability registry this policy is written for. Use the value shown.
+          const: sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d
         baseline_id:
           type: string
           const: desktop_candidate
-          description: The baseline controls that always apply. Always desktop_candidate.
         families:
           type: array
           minItems: 10
           maxItems: 10
           description: >-
-            One entry for each family, in this order: process_application, interactive_session, clipboard, printing,
+            Exactly one family in this order: process_application, interactive_session, clipboard, printing,
             removable_storage, virtualization, network_configuration, camera, microphone, external_capture.
           items:
             oneOf:
               - type: object
-                description: Applications that start and stop on the candidate's computer during the Attempt.
                 additionalProperties: false
                 required:
                   - id
                   - mode
+                  - outcome
                   - allowed_application_ids
                 properties:
                   id:
-                    description: >-
-                      Identifies the family.
                     type: string
                     const: process_application
                   mode:
-                    description: >-
-                      How Proctor Desktop handles this family. disabled turns it off, observe only watches and reports, and enforce also applies the control.
                     type: string
                     enum:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   allowed_application_ids:
-                    description: >-
-                      Catalog IDs of applications the candidate may use. No catalog is available yet, so the list must be empty; a non-empty list is refused with `exam.invalid`. Sorted, unique, and empty when mode is disabled. Paths, names, commands and patterns are not accepted.
                     type: array
                     maxItems: 256
                     uniqueItems: true
+                    description: >-
+                      The only catalog applications the candidate may run, sorted and unique: IDs from the Desktop release's
+                      application catalog, each one it marks allowable. Empty adds no allowlist. When the family is on, the
+                      catalog's never-allowable applications are always blocked.
                     items:
                       type: string
                       minLength: 1
@@ -208,54 +230,54 @@ components:
                         allowed_application_ids:
                           const: []
               - type: object
-                description: Whether only one interactive user session is active on the candidate's computer.
                 additionalProperties: false
                 required:
                   - id
                   - mode
+                  - outcome
                 properties:
                   id:
-                    description: >-
-                      Identifies the family.
                     type: string
                     const: interactive_session
                   mode:
-                    description: >-
-                      How Proctor Desktop handles this family. disabled turns it off, observe only watches and reports, and enforce also applies the control.
                     type: string
                     enum:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
               - type: object
-                description: Clipboard use during the Attempt.
                 additionalProperties: false
                 required:
                   - id
                   - mode
+                  - outcome
                   - observe_os_clipboard_changes
                   - strategy
                 properties:
                   id:
-                    description: >-
-                      Identifies the family.
                     type: string
                     const: clipboard
                   mode:
-                    description: >-
-                      How Proctor Desktop handles this family. disabled turns it off, observe only watches and reports, and enforce also applies the control.
                     type: string
                     enum:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   observe_os_clipboard_changes:
-                    description: >-
-                      Whether Proctor Desktop watches for changes to the computer's clipboard. Must be true in observe mode and false when disabled.
                     type: boolean
                   strategy:
-                    description: >-
-                      private_attempt gives the candidate a clipboard that is private to the Attempt. Use private_attempt in enforce mode and disabled otherwise.
                     type: string
                     enum:
                       - disabled
@@ -290,37 +312,35 @@ components:
                         strategy:
                           const: private_attempt
               - type: object
-                description: Printing during the Attempt.
                 additionalProperties: false
                 required:
                   - id
                   - mode
+                  - outcome
                   - candidate_print_commands
                   - monitored_spooler
                 properties:
                   id:
-                    description: >-
-                      Identifies the family.
                     type: string
                     const: printing
                   mode:
-                    description: >-
-                      How Proctor Desktop handles this family. disabled turns it off, observe only watches and reports, and enforce also applies the control.
                     type: string
                     enum:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   candidate_print_commands:
-                    description: >-
-                      deny blocks print commands from the candidate. Use deny in enforce mode and not_applied otherwise.
                     type: string
                     enum:
                       - not_applied
                       - deny
                   monitored_spooler:
-                    description: >-
-                      required makes Proctor Desktop watch print jobs in the print spooler. Must be required in observe mode and not_required when disabled.
                     type: string
                     enum:
                       - not_required
@@ -355,41 +375,29 @@ components:
                         candidate_print_commands:
                           const: deny
               - type: object
-                description: Removable storage connected to the candidate's computer.
                 additionalProperties: false
                 required:
                   - id
                   - mode
-                  - allowed_storage_function_class_ids
+                  - outcome
                   - enabled_sub_capabilities
                 properties:
                   id:
-                    description: >-
-                      Identifies the family.
                     type: string
                     const: removable_storage
                   mode:
-                    description: >-
-                      How Proctor Desktop handles this family. disabled turns it off, observe only watches and reports, and enforce also applies the control.
                     type: string
                     enum:
                       - disabled
                       - observe
                       - enforce
-                  allowed_storage_function_class_ids:
-                    description: >-
-                      Catalog IDs of storage device classes the candidate may use. No catalog is available yet, so the list must be empty; a non-empty list is refused with `exam.invalid`. Sorted, unique, and empty when mode is disabled. Paths, names, commands and patterns are not accepted.
-                    type: array
-                    maxItems: 256
-                    uniqueItems: true
-                    items:
-                      type: string
-                      minLength: 1
-                      maxLength: 128
-                      pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   enabled_sub_capabilities:
-                    description: >-
-                      Which kinds of device to cover. removable_block_storage covers removable drives. portable_mtp covers devices that connect over the Media Transfer Protocol, such as phones. List at least one unless mode is disabled, and none when it is.
                     type: array
                     maxItems: 2
                     uniqueItems: true
@@ -405,8 +413,6 @@ components:
                           const: disabled
                     then:
                       properties:
-                        allowed_storage_function_class_ids:
-                          const: []
                         enabled_sub_capabilities:
                           const: []
                   - if:
@@ -426,29 +432,29 @@ components:
                         enabled_sub_capabilities:
                           minItems: 1
               - type: object
-                description: Whether the Attempt is running inside a virtual machine.
                 additionalProperties: false
                 required:
                   - id
                   - mode
+                  - outcome
                   - rule
                 properties:
                   id:
-                    description: >-
-                      Identifies the family.
                     type: string
                     const: virtualization
                   mode:
-                    description: >-
-                      How Proctor Desktop handles this family. disabled turns it off, observe only watches and reports, and enforce also applies the control.
                     type: string
                     enum:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   rule:
-                    description: >-
-                      block_recognized_guest looks for a recognized virtual machine. require_certified_physical_environment requires a certified physical computer. Use not_applied when mode is disabled.
                     type: string
                     enum:
                       - not_applied
@@ -484,67 +490,31 @@ components:
                             - block_recognized_guest
                             - require_certified_physical_environment
               - type: object
-                description: The network setup of the candidate's computer, such as proxies, VPNs, tunnels and routes.
                 additionalProperties: false
                 required:
                   - id
                   - mode
-                  - allowed_adapter_class_ids
-                  - allowed_managed_profile_ids
-                  - allowed_tunnel_class_ids
+                  - outcome
                   - enabled_sub_capabilities
                 properties:
                   id:
-                    description: >-
-                      Identifies the family.
                     type: string
                     const: network_configuration
                   mode:
-                    description: >-
-                      How Proctor Desktop handles this family. disabled turns it off, observe only watches and reports, and enforce also applies the control.
                     type: string
                     enum:
                       - disabled
                       - observe
                       - enforce
-                  allowed_adapter_class_ids:
-                    description: >-
-                      Catalog IDs of network adapter classes the candidate may use. No catalog is available yet, so the list must be empty; a non-empty list is refused with `exam.invalid`. Sorted, unique, and empty when mode is disabled. Paths, names, commands and patterns are not accepted.
-                    type: array
-                    maxItems: 256
-                    uniqueItems: true
-                    items:
-                      type: string
-                      minLength: 1
-                      maxLength: 128
-                      pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
-                  allowed_managed_profile_ids:
-                    description: >-
-                      Catalog IDs of managed network profiles the candidate may use. No catalog is available yet, so the list must be empty; a non-empty list is refused with `exam.invalid`. Sorted, unique, and empty when mode is disabled. Paths, names, commands and patterns are not accepted.
-                    type: array
-                    maxItems: 256
-                    uniqueItems: true
-                    items:
-                      type: string
-                      minLength: 1
-                      maxLength: 128
-                      pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
-                  allowed_tunnel_class_ids:
-                    description: >-
-                      Catalog IDs of tunnel classes the candidate may use. No catalog is available yet, so the list must be empty; a non-empty list is refused with `exam.invalid`. Sorted, unique, and empty when mode is disabled. Paths, names, commands and patterns are not accepted.
-                    type: array
-                    maxItems: 256
-                    uniqueItems: true
-                    items:
-                      type: string
-                      minLength: 1
-                      maxLength: 128
-                      pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   enabled_sub_capabilities:
-                    description: >-
-                      Which network signals to cover: system proxy settings, VPNs managed by the operating system, tunnel interfaces, route changes, and the health of the network data source. route_change is only ever observed, even in enforce mode. List at least one unless mode is disabled, and none when it is.
                     type: array
-                    maxItems: 5
+                    maxItems: 3
                     uniqueItems: true
                     items:
                       type: string
@@ -552,8 +522,6 @@ components:
                         - system_proxy_state
                         - os_managed_vpn_state
                         - tunnel_interface_state
-                        - route_change
-                        - network_source_health
                 allOf:
                   - if:
                       properties:
@@ -561,12 +529,6 @@ components:
                           const: disabled
                     then:
                       properties:
-                        allowed_adapter_class_ids:
-                          const: []
-                        allowed_managed_profile_ids:
-                          const: []
-                        allowed_tunnel_class_ids:
-                          const: []
                         enabled_sub_capabilities:
                           const: []
                   - if:
@@ -586,37 +548,35 @@ components:
                         enabled_sub_capabilities:
                           minItems: 1
               - type: object
-                description: The candidate's camera.
                 additionalProperties: false
                 required:
                   - id
                   - mode
+                  - outcome
                   - concurrent_use_check
                   - require_ready
                 properties:
                   id:
-                    description: >-
-                      Identifies the family.
                     type: string
                     const: camera
                   mode:
-                    description: >-
-                      How Proctor Desktop handles this family. disabled turns it off, observe only watches and reports, and enforce also applies the control.
                     type: string
                     enum:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   concurrent_use_check:
-                    description: >-
-                      supported_required checks whether another application is using the camera. When mode is not disabled, set this to supported_required, set require_ready to true, or both.
                     type: string
                     enum:
                       - not_required
                       - supported_required
                   require_ready:
-                    description: >-
-                      Whether the camera must be ready. Must be false when mode is disabled.
                     type: boolean
                 allOf:
                   - if:
@@ -644,37 +604,35 @@ components:
                             concurrent_use_check:
                               const: supported_required
               - type: object
-                description: The candidate's microphone.
                 additionalProperties: false
                 required:
                   - id
                   - mode
+                  - outcome
                   - concurrent_use_check
                   - require_ready
                 properties:
                   id:
-                    description: >-
-                      Identifies the family.
                     type: string
                     const: microphone
                   mode:
-                    description: >-
-                      How Proctor Desktop handles this family. disabled turns it off, observe only watches and reports, and enforce also applies the control.
                     type: string
                     enum:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   concurrent_use_check:
-                    description: >-
-                      supported_required checks whether another audio stream is running on the microphone. When mode is not disabled, set this to supported_required, set require_ready to true, or both.
                     type: string
                     enum:
                       - not_required
                       - supported_required
                   require_ready:
-                    description: >-
-                      Whether the microphone must be ready. Must be false when mode is disabled.
                     type: boolean
                 allOf:
                   - if:
@@ -702,23 +660,25 @@ components:
                             concurrent_use_check:
                               const: supported_required
               - type: object
-                description: External capture. Only disabled is accepted.
                 additionalProperties: false
                 required:
                   - id
                   - mode
+                  - outcome
                 properties:
                   id:
-                    description: >-
-                      Identifies the family.
                     type: string
                     const: external_capture
                   mode:
-                    description: >-
-                      Only disabled is accepted.
                     type: string
                     enum:
                       - disabled
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
           prefixItems:
             - properties:
                 id:

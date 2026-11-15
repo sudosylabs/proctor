@@ -1,0 +1,64 @@
+{
+  "title": "Security control result",
+  "description": "How the server processed Desktop's latest security control. A control never changes whether the candidate may interact; only closing native delivery does.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "processed_control_sequence",
+    "processed_control_digest",
+    "security_interaction_allowed",
+    "delivery_watermark_rejections"
+  ],
+  "properties": {
+    "processed_control_sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "processed_control_digest": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "security_interaction_allowed": {
+      "type": "boolean"
+    },
+    "delivery_watermark_rejections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "family",
+          "source_id",
+          "reason"
+        ],
+        "properties": {
+          "family": {
+            "type": "string",
+            "enum": [
+              "native",
+              "browser"
+            ]
+          },
+          "source_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "closed_source",
+              "position_limit"
+            ]
+          }
+        }
+      },
+      "description": "At most 50."
+    }
+  }
+}

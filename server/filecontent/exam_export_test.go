@@ -30,7 +30,7 @@ import (
 
 func exportContentFixture(t *testing.T, filesystem vfs.FileSystem) (*Content, exam.ExportArchiveInput) {
 	t.Helper()
-	content, err := New(filesystem, Policy{MaximumConcurrentOperations: 1}, nil)
+	content, err := New(filesystem, Policy{MaximumConcurrentOperations: 1, ExamExportFormat: fixedFormat(zipFormat(t))}, nil)
 	require.NoError(t, err)
 	objectID := model.NewAttemptWorkspaceObjectID()
 	original := []byte("original answer bytes\x00\n")
@@ -69,7 +69,7 @@ func TestExamExportArchiveIsStandaloneAndVerifiable(t *testing.T) {
 				require.False(t, exists, "duplicate ZIP member")
 				members[f.Name] = b
 			}
-			var manifest examExportManifest
+			var manifest portableExamExportManifest
 			err = json.Unmarshal(members["manifest.json"], &manifest)
 			require.NoError(t, err)
 			require.Equal(t, input.ExportID, manifest.ExportID, "incomplete standalone manifest")
@@ -192,4 +192,17 @@ func TestExamExportCancellationAndCapacityDoNotConsumeInput(t *testing.T) {
 	defer release()
 	_, err = content.BuildExamExport(context.Background(), input)
 	require.ErrorIs(t, err, ErrWorkCapacity)
+}
+
+// portableExamExportManifest is manifest.json as a reader of the archive sees
+// it, independent of the zip format's own types.
+type portableExamExportManifest struct {
+	ExportID model.ExamExportID `json:"export_id"`
+	Entries  []struct {
+		ArchivePath  string             `json:"archive_path"`
+		SizeBytes    int64              `json:"size_bytes"`
+		SHA256       string             `json:"sha256"`
+		SubmissionID model.SubmissionID `json:"submission_id"`
+		OriginalPath string             `json:"original_path"`
+	} `json:"entries"`
 }

@@ -45,6 +45,44 @@ components:
               id: ous3h9nfemqtwz47ydgjcx1ia5
             data:
               revision: 7
+    plugin_settings_changed:
+      name: plugin_settings_changed
+      title: Plugin settings changed
+      summary: Refetch the plugins; the event names the plugin and its new settings revision.
+      description: Refetch the plugins; the event names the plugin and its new settings revision, never setting values. Delivered to connections that subscribe to plugin.manage on the institution.
+      tags:
+        - name: event
+        - name: Institution
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: plugin_settings_changed
+              action:
+                type: string
+                const: plugin.manage
+              data:
+                $ref: '../../../schemas/realtime/plugin_settings_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: plugin_settings_changed
+            sequence: 41
+            action: plugin.manage
+            resource:
+              type: institution
+              id: ous3h9nfemqtwz47ydgjcx1ia5
+            data:
+              plugin_id: display-topology
+              revision: 3
     academic_unit_created:
       name: academic_unit_created
       title: Academic Unit created

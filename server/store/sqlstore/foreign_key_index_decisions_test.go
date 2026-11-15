@@ -146,7 +146,6 @@ var prefixServedForeignKeys = map[foreignKeyColumns]string{
 	{"exam_correction_resource_stages", "exam_id,exam_sitting_id"}:                                            "exam_sitting_id",      // exam_correction_resource_stages_sitting_state_idx(exam_sitting_id,state,id)
 	{"exam_correction_resource_stages", "file_revision_id,file_entry_id"}:                                     "file_revision_id",     // exam_correction_resource_stages_file_revision_id_key(file_revision_id)
 	{"exam_drafts", "exam_id,base_revision_id"}:                                                               "exam_id",              // exam_drafts_pkey(exam_id)
-	{"exam_native_occurrences", "participation_id,batch_sequence,record_index"}:                               "participation_id",     // exam_native_occurrences_pkey(participation_id,occurrence_id)
 	{"exam_resources", "selected_file_revision_id,file_entry_id"}:                                             "file_entry_id",        // exam_resources_file_entry_id_key(file_entry_id)
 	{"exam_revision_resources", "exam_id,exam_revision_id"}:                                                   "exam_revision_id",     // exam_revision_resources_pkey(exam_revision_id,resource_id)
 	{"exam_revision_starter_workspace_entries", "exam_id,entry_id"}:                                           "exam_id",              // exam_revision_starter_workspace_entries_object_idx(exam_id,object_id)

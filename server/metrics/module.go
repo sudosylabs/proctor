@@ -73,6 +73,9 @@ type Module struct {
 	workActive             *prometheus.GaugeVec
 	workRejected           *prometheus.CounterVec
 	workDuration           *prometheus.HistogramVec
+	pluginCalls            *prometheus.CounterVec
+	pluginCallDuration     *prometheus.HistogramVec
+	pluginState            *prometheus.GaugeVec
 	httpRequestBytes       *prometheus.HistogramVec
 	httpResponseBytes      *prometheus.HistogramVec
 	storeDuration          *prometheus.HistogramVec
@@ -152,6 +155,7 @@ func New(settings config.Metrics, build BuildInfo, sources Sources) (*Module, er
 		closeDone: make(chan struct{}),
 	}
 	module.newWorkCollectors()
+	module.newPluginCollectors()
 	module.newHTTPCollectors()
 	module.newStoreAndWebSocketCollectors()
 	module.newClusterCollectors()
@@ -723,6 +727,9 @@ func (m *Module) registerCollectors(registry *prometheus.Registry, build BuildIn
 		m.workActive,
 		m.workRejected,
 		m.workDuration,
+		m.pluginCalls,
+		m.pluginCallDuration,
+		m.pluginState,
 	)
 }
 

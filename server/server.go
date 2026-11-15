@@ -299,7 +299,12 @@ type runtimeComponents struct {
 	logger                *logging.Logger
 	jobs                  runtimeComponent
 	servingLease          monitoredRuntimeComponent
-	metrics               runtimeMetrics
+	// plugins deactivates the plugins once nothing can call into them.
+	plugins interface{ Close(context.Context) error }
+	// pluginReconciler keeps the plugins in step with saved settings; nil
+	// without persistence.
+	pluginReconciler *pluginReconciler
+	metrics          runtimeMetrics
 	// tracing flushes and stops span export; nil when tracing was never built.
 	tracing   runtimeTracing
 	transport runtimeTransport
@@ -527,6 +532,13 @@ func (s *Server) startupStages() []startupStage {
 				s.recordStarted(func(m *lifecycleMilestones) { m.jobsStarted = true })
 				s.components.logger.InfoContext(ctx, "durable jobs started")
 			},
+		})
+	}
+
+	if reconciler := s.components.pluginReconciler; reconciler != nil {
+		stages = append(stages, startupStage{
+			name:  "start plugin reconciler",
+			start: reconciler.Start,
 		})
 	}
 

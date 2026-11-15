@@ -1,0 +1,20 @@
+{
+  "title": "Plugin settings changed",
+  "description": "The plugin whose settings an administrator changed, and their revision after the committed change. No setting values are included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "plugin_id",
+    "revision"
+  ],
+  "properties": {
+    "plugin_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9.-]{0,63}$"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

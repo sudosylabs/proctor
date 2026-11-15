@@ -589,6 +589,137 @@ func TestManagerSuspendExamAttemptUsesRevisionFenceAndNeverReturnsPrivateReason(
 	require.Equal(t, http.StatusBadRequest, invalid.Code, "invalid revision status = %d body=%s", invalid.Code, invalid.Body.String())
 }
 
+func TestManagerScreenClipRequestNeverReturnsItsPrivateReason(t *testing.T) {
+	t.Parallel()
+	fake := newExamAttemptHTTPFake(t)
+	httpAPI := newExamAttemptFocusedAPI(t, fake)
+	path := "/api/v1/exams/" + fake.attempt.ExamID.String() + "/sittings/" + fake.attempt.SittingID.String() +
+		"/attempts/" + fake.attempt.ID.String() + "/screen-clips"
+	send := func(body, key string) *httptest.ResponseRecorder {
+		request := newJSONRequest(http.MethodPost, path, strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer credential")
+		request.Header.Set("Idempotency-Key", key)
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response
+	}
+
+	response := send(`{"from_session_start":true,"end":"2026-11-12T10:00:00Z","reason":"second voice heard"}`, "clip-once")
+	require.Equal(t, http.StatusCreated, response.Code, "body=%s", response.Body.String())
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	require.True(t, fake.screenClip.Range.FromSessionStart)
+	require.Equal(t, "second voice heard", fake.screenClip.PrivateReason)
+	require.Equal(t, "clip-once", fake.screenClip.IdempotencyKey)
+	body := response.Body.String()
+	require.NotContains(t, body, "second voice heard")
+	require.NotContains(t, body, "reason")
+	require.Contains(t, body, `"state":"requested"`)
+	require.Contains(t, body, `"from_session_start":true`)
+
+	response = send(`{"from_session_start":false,"start":"2026-11-12T09:58:00Z","end":"2026-11-12T10:00:00Z","reason":"r"}`, "clip-range")
+	require.Equal(t, http.StatusCreated, response.Code, "body=%s", response.Body.String())
+	require.False(t, fake.screenClip.Range.FromSessionStart)
+	require.Equal(t, time.Date(2026, 11, 12, 9, 58, 0, 0, time.UTC), fake.screenClip.Range.Start)
+
+	for name, body := range map[string]string{
+		"both start forms": `{"from_session_start":true,"start":"2026-11-12T09:58:00Z","end":"2026-11-12T10:00:00Z","reason":"r"}`,
+		"no start":         `{"from_session_start":false,"end":"2026-11-12T10:00:00Z","reason":"r"}`,
+		"bad end":          `{"from_session_start":true,"end":"soon","reason":"r"}`,
+	} {
+		require.Equal(t, http.StatusBadRequest, send(body, "clip-bad").Code, name)
+	}
+}
+
+func TestCandidateScreenClipChunksAreNumberedFromOneOnTheWire(t *testing.T) {
+	t.Parallel()
+	fake := newExamAttemptHTTPFake(t)
+	httpAPI := newExamAttemptFocusedAPI(t, fake)
+	clipID := model.NewScreenClipID()
+	base := "/api/v1/exam-attempts/" + fake.attempt.ID.String() + "/screen-clip-requests/" + clipID.String() + "/upload"
+	send := func(method, path string, body io.Reader) *httptest.ResponseRecorder {
+		request := httptest.NewRequestWithContext(t.Context(), method, path, body)
+		request.Header.Set("Authorization", "Bearer credential")
+		request.Header.Set(candidateAttemptCredentialHeader, model.NewCredentialToken())
+		request.Header.Set(candidateAttemptConnectionHeader, model.NewAttemptConnectionID().String())
+		if body != nil && method != http.MethodPut {
+			request.Header.Set("Content-Type", "application/json")
+		}
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response
+	}
+
+	hashes := `["` + strings.Repeat("a", 64) + `","` + strings.Repeat("b", 64) + `"]`
+	begun := send(http.MethodPost, base, strings.NewReader(`{"media_type":"video/mp4","size_bytes":8388618,"chunk_sha256":`+hashes+`}`))
+	require.Equal(t, http.StatusOK, begun.Code, "body=%s", begun.Body.String())
+	require.Equal(t, int64(8388618), fake.clipUpload.SizeBytes)
+	require.Contains(t, begun.Body.String(), `"chunk_count":2`)
+	require.Contains(t, begun.Body.String(), `"received_chunks":[]`)
+
+	status := send(http.MethodGet, base, nil)
+	require.Equal(t, http.StatusOK, status.Code, "body=%s", status.Body.String())
+	require.Contains(t, status.Body.String(), `"received_chunks":[1]`, "the first chunk is chunk 1")
+
+	chunk := send(http.MethodPut, base+"/chunks/2", strings.NewReader("0123456789"))
+	require.Equal(t, http.StatusOK, chunk.Code, "body=%s", chunk.Body.String())
+	require.Equal(t, 1, fake.clipChunk.Index, "chunk 2 is the second chunk")
+	require.Equal(t, int64(10), fake.clipChunk.Size)
+	require.Equal(t, "0123456789", string(fake.clipChunkBytes))
+	require.Contains(t, chunk.Body.String(), `"chunk":2`)
+
+	require.Equal(t, http.StatusNotFound, send(http.MethodPut, base+"/chunks/0", strings.NewReader("x")).Code,
+		"there is no chunk 0")
+
+	signature := strings.Repeat("s", model.DesktopSignatureLength)
+	completed := send(http.MethodPost, base+"/complete",
+		strings.NewReader(`{"content_digest":"`+strings.Repeat("d", 64)+`","signature":"`+signature+`"}`))
+	require.Equal(t, http.StatusOK, completed.Code, "body=%s", completed.Body.String())
+	require.Equal(t, strings.Repeat("d", 64), fake.clipCompletion.ContentDigest)
+	require.Equal(t, signature, fake.clipCompletion.Signature)
+	require.Contains(t, completed.Body.String(), `"state":"ready"`)
+}
+
+func TestManagersPlayScreenClipsByRange(t *testing.T) {
+	t.Parallel()
+	fake := newExamAttemptHTTPFake(t)
+	fake.clipContent = "0123456789abcdefghij"
+	httpAPI := newExamAttemptFocusedAPI(t, fake)
+	path := "/api/v1/exams/" + fake.attempt.ExamID.String() + "/sittings/" + fake.attempt.SittingID.String() +
+		"/attempts/" + fake.attempt.ID.String() + "/screen-clips/" + model.NewScreenClipID().String() + "/content"
+	play := func(rangeHeader string) *httptest.ResponseRecorder {
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+		request.Header.Set("Authorization", "Bearer credential")
+		if rangeHeader != "" {
+			request.Header.Set("Range", rangeHeader)
+		}
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response
+	}
+
+	whole := play("")
+	require.Equal(t, http.StatusOK, whole.Code, "body=%s", whole.Body.String())
+	require.Equal(t, fake.clipContent, whole.Body.String())
+	require.Equal(t, "bytes", whole.Header().Get("Accept-Ranges"))
+	require.Equal(t, "video/mp4", whole.Header().Get("Content-Type"))
+
+	require.Equal(t, 1, fake.playedClips, "a request asks the application once")
+
+	part := play("bytes=10-14")
+	require.Equal(t, http.StatusPartialContent, part.Code, "body=%s", part.Body.String())
+	require.Equal(t, 2, fake.playedClips, "a range request asks the application once")
+	require.Equal(t, "abcde", part.Body.String())
+	require.Equal(t, "bytes 10-14/20", part.Header().Get("Content-Range"))
+	require.Equal(t, "5", part.Header().Get("Content-Length"))
+
+	tail := play("bytes=-3")
+	require.Equal(t, http.StatusPartialContent, tail.Code)
+	require.Equal(t, "hij", tail.Body.String())
+
+	require.Equal(t, http.StatusBadRequest, play("bytes=30-").Code, "a range past the end is refused")
+	require.Equal(t, http.StatusBadRequest, play("bytes=0-1,4-5").Code, "multiple ranges are refused")
+}
+
 func TestManagerEndExamAttemptUsesRevisionFenceAndReturnsOnlySafeReceipt(t *testing.T) {
 	t.Parallel()
 	fake := newExamAttemptHTTPFake(t)
@@ -874,6 +1005,15 @@ type examAttemptHTTPFake struct {
 	workspaceOpen           attempt.OpenWorkspaceFileQuery
 	reallow                 attempt.ReallowCommand
 	suspend                 attempt.ManualSuspensionCommand
+	screenClip              attempt.RequestScreenClipCommand
+	takenClip               model.ScreenClipID
+	clipUpload              model.ScreenClipUpload
+	clipChunk               attempt.UploadScreenClipChunkCommand
+	clipChunkBytes          []byte
+	clipCompletion          attempt.CompleteScreenClipUploadCommand
+	clipContent             string
+	playedClips             int
+	playedClip              model.ScreenClipID
 	journalQuery            attempt.WorkspaceJournalQuery
 	journalPage             attempt.WorkspaceJournalPage
 	workspaceDirectory      attempt.CreateWorkspaceDirectoryCommand
@@ -1058,6 +1198,93 @@ func (f *examAttemptHTTPFake) ReallowExamAttempt(_ context.Context, inv invocati
 			EndedAt: model.OptionalTimeFrom(examAttempt.UpdatedAt), ReallowedByUserID: inv.Principal().UserID}}, nil
 }
 
+func (f *examAttemptHTTPFake) RequestScreenClip(_ context.Context, inv invocation.Invocation, command attempt.RequestScreenClipCommand) (attempt.RequestScreenClipResult, error) {
+	f.screenClip = command
+	at := f.attempt.UpdatedAt
+	return attempt.RequestScreenClipResult{Clip: store.ExamAttemptScreenClipView{
+		ID: model.NewScreenClipID(), AttemptID: command.AttemptID, Source: model.ScreenClipSourceManager,
+		RequestedByUserID: inv.Principal().UserID, Range: command.Range, State: model.ScreenClipRequested,
+		RequestedAt: at, UpdatedAt: at, Revision: 1,
+	}}, nil
+}
+
+func (f *examAttemptHTTPFake) PendingScreenClips(context.Context, invocation.Invocation, attempt.CandidateAccess) ([]store.ExamAttemptScreenClipView, error) {
+	return []store.ExamAttemptScreenClipView{}, nil
+}
+
+func (f *examAttemptHTTPFake) TakeScreenClip(
+	_ context.Context,
+	_ invocation.Invocation,
+	access attempt.CandidateAccess,
+	clipID model.ScreenClipID,
+) (store.ExamAttemptScreenClipView, error) {
+	f.takenClip = clipID
+	at := f.attempt.UpdatedAt
+	return store.ExamAttemptScreenClipView{
+		ID: clipID, AttemptID: access.AttemptID, Source: model.ScreenClipSourceManager,
+		Range: model.ScreenClipRange{FromSessionStart: true, End: at}, State: model.ScreenClipRecording,
+		DeliveredParticipationID: model.NewAttemptParticipationID(), RequestedAt: at, UpdatedAt: at, Revision: 2,
+	}, nil
+}
+
+func (f *examAttemptHTTPFake) BeginScreenClipUpload(
+	_ context.Context,
+	_ invocation.Invocation,
+	command attempt.BeginScreenClipUploadCommand,
+) (store.ExamAttemptScreenClipView, error) {
+	access, clipID, upload := command.Access, command.ClipID, command.Upload
+	f.clipUpload = upload
+	at := f.attempt.UpdatedAt
+	return store.ExamAttemptScreenClipView{
+		ID: clipID, AttemptID: access.AttemptID, Source: model.ScreenClipSourceManager,
+		Range: model.ScreenClipRange{FromSessionStart: true, End: at}, State: model.ScreenClipUploading,
+		DeliveredParticipationID: model.NewAttemptParticipationID(), Upload: upload.Clone(),
+		RequestedAt: at, UpdatedAt: at, Revision: 3,
+	}, nil
+}
+
+func (f *examAttemptHTTPFake) ScreenClipUploadStatus(
+	ctx context.Context,
+	inv invocation.Invocation,
+	access attempt.CandidateAccess,
+	clipID model.ScreenClipID,
+) (store.ExamAttemptScreenClipUploadStatus, error) {
+	clip, err := f.BeginScreenClipUpload(ctx, inv, attempt.BeginScreenClipUploadCommand{Access: access, ClipID: clipID, Upload: f.clipUpload})
+	return store.ExamAttemptScreenClipUploadStatus{Clip: clip, Received: []int{0}}, err
+}
+
+func (f *examAttemptHTTPFake) UploadScreenClipChunk(_ context.Context, _ invocation.Invocation, command attempt.UploadScreenClipChunkCommand) error {
+	body, err := io.ReadAll(command.Body)
+	f.clipChunk, f.clipChunkBytes = command, body
+	return err
+}
+
+func (f *examAttemptHTTPFake) CompleteScreenClipUpload(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command attempt.CompleteScreenClipUploadCommand,
+) (store.ExamAttemptScreenClipView, error) {
+	f.clipCompletion = command
+	clip, err := f.BeginScreenClipUpload(ctx, inv, attempt.BeginScreenClipUploadCommand{
+		Access: command.Access, ClipID: command.ClipID, Upload: f.clipUpload,
+	})
+	clip.State, clip.Signature = model.ScreenClipReady, command.Signature
+	return clip, err
+}
+
+func (f *examAttemptHTTPFake) ListScreenClips(context.Context, invocation.Invocation, model.ExamID, model.ExamSittingID, model.ExamAttemptID) ([]store.ExamAttemptScreenClipView, error) {
+	return []store.ExamAttemptScreenClipView{}, nil
+}
+
+func (f *examAttemptHTTPFake) PlayScreenClip(_ context.Context, _ invocation.Invocation, query attempt.ScreenClipQuery) (attempt.PlayScreenClipResult, error) {
+	f.playedClips++
+	f.playedClip = query.ClipID
+	return attempt.PlayScreenClipResult{MediaType: "video/mp4", SizeBytes: int64(len(f.clipContent)),
+		Open: func(start, length int64) (io.ReadCloser, error) {
+			return io.NopCloser(strings.NewReader(f.clipContent[start : start+length])), nil
+		}}, nil
+}
+
 func (f *examAttemptHTTPFake) SuspendExamAttempt(_ context.Context, inv invocation.Invocation, command attempt.ManualSuspensionCommand) (attempt.ManualSuspensionResult, error) {
 	f.suspend = command
 	examAttempt := *f.attempt
@@ -1159,6 +1386,10 @@ func (f *examAttemptHTTPFake) OpenCandidateExamWorkspaceFile(_ context.Context, 
 	f.content.Body = io.NopCloser(strings.NewReader("protected"))
 	f.content.ContentVersion = f.workspaceContentVersion
 	return f.content, nil
+}
+
+func (f *examAttemptHTTPFake) SecurityPolicyOverview(context.Context, invocation.Invocation, model.ExamSittingID) (*store.SecurityPolicyOverview, error) {
+	return nil, apperror.New("exam.attempt.unavailable")
 }
 
 func (f *examAttemptHTTPFake) PrepareExamSecurityPreflight(context.Context, invocation.Invocation, attempt.PrepareSecurityPreflightCommand) (*store.SecurityPreflightPrepared, error) {

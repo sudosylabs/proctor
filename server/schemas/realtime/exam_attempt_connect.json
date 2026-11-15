@@ -1,0 +1,39 @@
+{
+  "title": "Exam Attempt connect",
+  "description": "Binds this WebSocket to the candidate's Attempt in the Sitting: admits a new Attempt, rejoins a Ready one, or resumes the current Participation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "security",
+    "exam_sitting_id",
+    "idempotency_key",
+    "continuity_credential",
+    "configuration_manifest_fingerprint"
+  ],
+  "properties": {
+    "security": {
+      "$ref": "connect_security.json"
+    },
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Repeating the same connect with the same key replays its result."
+    },
+    "continuity_credential": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "description": "The Attempt Connection's continuity credential, chosen by Desktop at connect."
+    },
+    "configuration_manifest_fingerprint": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "initial_configuration": {
+      "type": "object",
+      "description": "Exactly the OpenAPI component AttemptConfigurationCandidate. Sent on first admission; omitted when rejoining or resuming."
+    }
+  }
+}

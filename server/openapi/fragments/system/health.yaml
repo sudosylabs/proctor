@@ -62,6 +62,8 @@ components:
       properties:
         status:
           type: string
-          description: Always `ok`. A failed check returns 503 with a Problem Details body instead.
+          description: >-
+            The successful health state. Readiness answers `degraded` when an enabled plugin has failed: the node still serves, without that plugin. The server log and the `proctor_plugin_state` metric name the plugin.
           enum:
             - ok
+            - degraded

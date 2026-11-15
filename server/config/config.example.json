@@ -223,5 +223,6 @@
         "Compress": false
       }
     ]
-  }
+  },
+  "Plugins": {}
 }

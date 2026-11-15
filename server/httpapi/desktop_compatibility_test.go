@@ -84,6 +84,7 @@ func TestSystemPingReturnsRequestSpecificNoStoreCompatibility(t *testing.T) {
 		systemResourceWithApplication(
 			systemHTTPHealth{live: true, ready: true},
 			BuildInfo{Version: "server-secret-not-for-ping"},
+			nil,
 			applicationFake,
 			func() time.Time { return now },
 		),
@@ -133,7 +134,7 @@ func TestSystemPingPublishesMaintenanceAvailabilityAndRetryTime(t *testing.T) {
 		t,
 		logger,
 		routetest.Authenticator{},
-		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, applicationFake, func() time.Time { return serverTime }),
+		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, nil, applicationFake, func() time.Time { return serverTime }),
 	)
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(),
@@ -167,7 +168,7 @@ func TestSystemPingOmitsRetryTimeNotLaterThanItsServerTime(t *testing.T) {
 		t,
 		logger,
 		routetest.Authenticator{},
-		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, applicationFake, func() time.Time { return serverTime }),
+		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, nil, applicationFake, func() time.Time { return serverTime }),
 	)
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(),
@@ -190,7 +191,7 @@ func TestSystemPingRejectsMalformedSelectorsWithoutEvaluation(t *testing.T) {
 		t,
 		logger,
 		routetest.Authenticator{},
-		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, applicationFake, time.Now),
+		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, nil, applicationFake, time.Now),
 	)
 	for _, target := range []string{
 		"/api/v1/system/ping?desktop_release=1.0.0&desktop_build_id=build&platform=darwin&architecture=arm64",
@@ -216,7 +217,7 @@ func TestSystemPingFailsClosedInsideSuccessfulResponseWhenUnavailable(t *testing
 		t,
 		logger,
 		routetest.Authenticator{},
-		systemResourceWithApplication(systemHTTPHealth{live: true}, BuildInfo{}, applicationFake, time.Now),
+		systemResourceWithApplication(systemHTTPHealth{live: true}, BuildInfo{}, nil, applicationFake, time.Now),
 	)
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(),

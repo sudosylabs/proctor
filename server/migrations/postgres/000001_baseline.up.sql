@@ -241,6 +241,19 @@ CREATE TABLE job_attempts (
 CREATE INDEX job_attempts_expired_idx ON job_attempts (lease_expires_at, id) WHERE status = 'running';
 CREATE INDEX job_attempts_incompatible_node_idx ON job_attempts (job_id, node_id) WHERE status = 'incompatible';
 
+-- The domain-event outbox. A row is written in the transaction that commits
+-- the fact it describes, together with its dispatch Job, and is deleted once
+-- that Job has delivered it. Data holds identifiers only.
+CREATE TABLE domain_events (
+    id varchar(26) PRIMARY KEY,
+    topic varchar(64) NOT NULL,
+    data jsonb NOT NULL,
+    occurred_at timestamptz NOT NULL,
+    CONSTRAINT domain_events_id_canonical_check CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    CONSTRAINT domain_events_topic_check CHECK (topic IN ('exam.attempt.submitted')),
+    CONSTRAINT domain_events_data_check CHECK (jsonb_typeof(data) = 'object' AND octet_length(data::text) <= 4096)
+);
+
 -- ---------------------------------------------------------------------------
 -- Identity domain
 -- ---------------------------------------------------------------------------
@@ -2327,16 +2340,27 @@ CREATE TRIGGER sessions_fence_active_attempt
 
 -- Integrity records are append-preserving facts. A Suspension is the one
 -- mutable enforcement episode: only its active-to-closed re-allow transition
--- may add the manager actor and private reason.
+-- may add the manager actor and private reason. policy_kind is a core policy
+-- or a capability's "<plugin-id>.<kind>"; a capability's evidence is its own
+-- bounded detail object, which the core stores but does not read.
 CREATE TABLE integrity_flags (
     id varchar(26) PRIMARY KEY,
     exam_attempt_id varchar(26) NOT NULL REFERENCES exam_attempts(id),
     generation bigint NOT NULL CHECK (generation > 0),
-    policy_kind varchar(32) NOT NULL CHECK (policy_kind IN ('connection_loss', 'focus_loss', 'browser_navigation')),
+    policy_kind varchar(97) NOT NULL CHECK (
+        policy_kind IN ('connection_loss', 'focus_loss', 'browser_navigation') OR
+        policy_kind ~ '^[a-z][a-z0-9.-]{0,63}\.[a-z][a-z0-9_]{0,31}$'
+    ),
+    native_rule_id varchar(128) CHECK (
+        native_rule_id ~ '^[a-z][a-z0-9_]{0,63}(\.[a-z][a-z0-9_]{0,63})*$'
+    ),
     state varchar(16) NOT NULL CHECK (state = 'open'),
     created_at timestamptz NOT NULL,
 
-    UNIQUE (id, exam_attempt_id, generation)
+    UNIQUE (id, exam_attempt_id, generation),
+    CONSTRAINT integrity_flags_native_rule_check CHECK (
+        (policy_kind LIKE 'native.%') = (native_rule_id IS NOT NULL)
+    )
 );
 
 CREATE TABLE integrity_evidence (
@@ -2345,7 +2369,10 @@ CREATE TABLE integrity_evidence (
     participation_id varchar(26) NOT NULL,
     integrity_flag_id varchar(26) NOT NULL,
     generation bigint NOT NULL CHECK (generation > 0),
-    policy_kind varchar(32) NOT NULL CHECK (policy_kind IN ('connection_loss', 'focus_loss', 'browser_navigation')),
+    policy_kind varchar(97) NOT NULL CHECK (
+        policy_kind IN ('connection_loss', 'focus_loss', 'browser_navigation') OR
+        policy_kind ~ '^[a-z][a-z0-9.-]{0,63}\.[a-z][a-z0-9_]{0,31}$'
+    ),
     focus_loss_signal_id varchar(26),
     sequence bigint,
     duration_milliseconds bigint,
@@ -2367,13 +2394,23 @@ CREATE TABLE integrity_evidence (
          duration_milliseconds BETWEEN 1 AND 86400000 AND
          (source IS NULL OR source IN ('window_blur', 'document_hidden', 'application_backgrounded', 'fullscreen_exited')) AND
          missing_before >= 0) OR
-        (policy_kind = 'browser_navigation' AND browser_detail_canonical IS NOT NULL AND focus_loss_signal_id IS NULL AND sequence IS NULL AND duration_milliseconds IS NULL AND source IS NULL AND missing_before IS NULL)
+        (policy_kind = 'browser_navigation' AND browser_detail_canonical IS NOT NULL AND focus_loss_signal_id IS NULL AND sequence IS NULL AND duration_milliseconds IS NULL AND source IS NULL AND missing_before IS NULL) OR
+        (policy_kind NOT IN ('connection_loss', 'focus_loss', 'browser_navigation') AND detail IS NOT NULL AND
+         browser_detail_canonical IS NULL AND focus_loss_signal_id IS NULL AND sequence IS NULL AND
+         duration_milliseconds IS NULL AND source IS NULL AND missing_before IS NULL)
     ),
-    browser_detail_canonical bytea CHECK(browser_detail_canonical IS NULL OR octet_length(browser_detail_canonical) BETWEEN 1 AND 262656)
+    CONSTRAINT integrity_evidence_detail_check CHECK (
+        detail IS NULL OR
+        (policy_kind NOT IN ('connection_loss', 'focus_loss', 'browser_navigation') AND
+         jsonb_typeof(detail) = 'object' AND octet_length(detail::text) <= 65536)
+    ),
+    browser_detail_canonical bytea CHECK(browser_detail_canonical IS NULL OR octet_length(browser_detail_canonical) BETWEEN 1 AND 262656),
+    detail jsonb
 );
 
-CREATE UNIQUE INDEX integrity_flags_legacy_group_idx ON integrity_flags(exam_attempt_id,generation,policy_kind) WHERE policy_kind <> 'browser_navigation';
-CREATE UNIQUE INDEX integrity_evidence_legacy_sequence_idx ON integrity_evidence(exam_attempt_id,generation,policy_kind,sequence) WHERE policy_kind <> 'browser_navigation';
+CREATE UNIQUE INDEX integrity_flags_legacy_group_idx ON integrity_flags(exam_attempt_id,generation,policy_kind) WHERE policy_kind IN ('connection_loss', 'focus_loss');
+CREATE UNIQUE INDEX integrity_flags_native_rule_idx ON integrity_flags(exam_attempt_id,generation,native_rule_id) WHERE native_rule_id IS NOT NULL;
+CREATE UNIQUE INDEX integrity_evidence_legacy_sequence_idx ON integrity_evidence(exam_attempt_id,generation,policy_kind,sequence) WHERE policy_kind IN ('connection_loss', 'focus_loss');
 
 -- One bounded mutable evaluator exists per Participation generation. It keeps
 -- only the latest accepted outcome needed for natural sequence replay, bounded
@@ -2476,7 +2513,7 @@ CREATE TABLE exam_attempt_suspensions (
     suspension_attempt_revision bigint NOT NULL CHECK (suspension_attempt_revision > 1),
     state varchar(16) NOT NULL CHECK (state IN ('active', 'closed')),
     source varchar(16) NOT NULL CHECK (source IN ('policy', 'manual')),
-    candidate_reason varchar(64) NOT NULL CHECK (candidate_reason IN ('secure_connectivity_lost', 'focus_policy_review_required', 'manager_suspended')),
+    candidate_reason varchar(64) NOT NULL CHECK (candidate_reason IN ('secure_connectivity_lost', 'focus_policy_review_required', 'native_policy_review_required', 'manager_suspended')),
     started_at timestamptz NOT NULL,
     ended_at timestamptz,
     reallowed_by_user_id varchar(26) REFERENCES users(id),
@@ -2486,7 +2523,7 @@ CREATE TABLE exam_attempt_suspensions (
     UNIQUE (id, exam_attempt_id, participation_id, generation),
     CONSTRAINT exam_attempt_suspensions_provenance_check CHECK (
         (source = 'policy' AND integrity_flag_id IS NOT NULL AND suspended_by_user_id IS NULL AND
-         suspension_private_reason IS NULL AND candidate_reason IN ('secure_connectivity_lost', 'focus_policy_review_required')) OR
+         suspension_private_reason IS NULL AND candidate_reason IN ('secure_connectivity_lost', 'focus_policy_review_required', 'native_policy_review_required')) OR
         (source = 'manual' AND integrity_flag_id IS NULL AND suspended_by_user_id IS NOT NULL AND
          candidate_reason = 'manager_suspended' AND suspension_private_reason = btrim(suspension_private_reason) AND
          char_length(suspension_private_reason) BETWEEN 1 AND 1000 AND octet_length(suspension_private_reason) <= 4000)
@@ -2507,6 +2544,103 @@ CREATE TABLE exam_attempt_suspensions (
 
 CREATE UNIQUE INDEX exam_attempt_suspensions_one_active_key
     ON exam_attempt_suspensions (exam_attempt_id) WHERE state = 'active';
+
+-- A screen clip is one requested range of a candidate's screen, which
+-- Desktop records on the device for the whole session. A request waits as
+-- requested until the Desktop of a current Participation takes it, so a
+-- request made while the Attempt is suspended is queued. A manager's request
+-- keeps its private reason here and nowhere else; an incident's names the
+-- Flag it is about.
+CREATE TABLE exam_attempt_screen_clips (
+    id varchar(26) PRIMARY KEY,
+    exam_attempt_id varchar(26) NOT NULL REFERENCES exam_attempts(id),
+    source varchar(16) NOT NULL CHECK (source IN ('manager', 'incident')),
+    requested_by_user_id varchar(26) REFERENCES users(id),
+    private_reason text,
+    integrity_flag_id varchar(26) REFERENCES integrity_flags(id),
+    range_from_session_start boolean NOT NULL,
+    range_start timestamptz,
+    range_end timestamptz NOT NULL,
+    state varchar(16) NOT NULL CHECK (state IN ('requested', 'recording', 'uploading', 'ready', 'failed')),
+    failure varchar(32) CHECK (failure IN ('attempt_ended', 'not_recorded', 'upload_deadline', 'rejected')),
+    delivered_participation_id varchar(26) REFERENCES exam_attempt_participations(id),
+    media_type varchar(32) CHECK (media_type IN ('video/mp4', 'video/webm')),
+    size_bytes bigint CHECK (size_bytes BETWEEN 1 AND 3221225472),
+    chunk_sha256 text[] CHECK (cardinality(chunk_sha256) BETWEEN 1 AND 384),
+    content_digest char(64) CHECK (content_digest ~ '^[0-9a-f]{64}$'),
+    content_signature varchar(86) CHECK (content_signature ~ '^[A-Za-z0-9_-]{86}$'),
+    requested_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL CHECK (updated_at >= requested_at),
+    revision bigint NOT NULL CHECK (revision > 0),
+    CONSTRAINT exam_attempt_screen_clips_id_canonical_check CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    CONSTRAINT exam_attempt_screen_clips_exam_attempt_id_canonical_check CHECK (exam_attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    CONSTRAINT exam_attempt_screen_clips_requested_by_user_id_canonical_check CHECK (requested_by_user_id IS NULL OR requested_by_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    CONSTRAINT exam_attempt_screen_clips_integrity_flag_id_canonical_check CHECK (integrity_flag_id IS NULL OR integrity_flag_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    CONSTRAINT exam_attempt_screen_clips_delivered_pa_d3ddaa2b_canonical_check CHECK (delivered_participation_id IS NULL OR delivered_participation_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    CONSTRAINT exam_attempt_screen_clips_provenance_check CHECK (
+        (source = 'manager' AND requested_by_user_id IS NOT NULL AND integrity_flag_id IS NULL AND
+         private_reason = btrim(private_reason) AND char_length(private_reason) BETWEEN 1 AND 1000 AND
+         octet_length(private_reason) <= 4000) OR
+        (source = 'incident' AND integrity_flag_id IS NOT NULL AND requested_by_user_id IS NULL AND
+         private_reason IS NULL AND NOT range_from_session_start)
+    ),
+    CONSTRAINT exam_attempt_screen_clips_range_check CHECK (
+        (range_from_session_start AND range_start IS NULL) OR
+        (NOT range_from_session_start AND range_start < range_end AND range_end - range_start <= interval '6 hours')
+    ),
+    CONSTRAINT exam_attempt_screen_clips_lifecycle_check CHECK (
+        (state = 'requested' AND delivered_participation_id IS NULL AND failure IS NULL) OR
+        (state IN ('recording', 'uploading', 'ready') AND delivered_participation_id IS NOT NULL AND failure IS NULL) OR
+        (state = 'failed' AND failure IS NOT NULL AND
+         (delivered_participation_id IS NOT NULL OR failure = 'attempt_ended'))
+    ),
+    CONSTRAINT exam_attempt_screen_clips_upload_check CHECK (
+        (state IN ('requested', 'recording') AND media_type IS NULL AND size_bytes IS NULL AND
+         chunk_sha256 IS NULL AND content_digest IS NULL AND content_signature IS NULL) OR
+        (state IN ('uploading', 'ready') AND media_type IS NOT NULL AND size_bytes IS NOT NULL AND
+         chunk_sha256 IS NOT NULL AND content_digest IS NOT NULL AND
+         cardinality(chunk_sha256) = (size_bytes + 8388607) / 8388608 AND
+         (content_signature IS NOT NULL) = (state = 'ready')) OR
+        state = 'failed'
+    )
+);
+
+-- The chunks of a clip that have arrived. Each was checked against the hash
+-- its clip declared before its row was written, so a clip whose chunks are
+-- all here is whole.
+CREATE TABLE exam_attempt_screen_clip_chunks (
+    screen_clip_id varchar(26) NOT NULL REFERENCES exam_attempt_screen_clips(id),
+    chunk_index integer NOT NULL CHECK (chunk_index BETWEEN 0 AND 383),
+    CONSTRAINT exam_attempt_screen_clip_chunks_screen_clip_id_canonical_check CHECK (screen_clip_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    sha256 char(64) NOT NULL CHECK (sha256 ~ '^[0-9a-f]{64}$'),
+    size_bytes bigint NOT NULL CHECK (size_bytes BETWEEN 1 AND 8388608),
+    received_at timestamptz NOT NULL,
+    PRIMARY KEY (screen_clip_id, chunk_index)
+);
+
+CREATE INDEX exam_attempt_screen_clips_attempt_idx ON exam_attempt_screen_clips (exam_attempt_id, requested_at);
+CREATE INDEX exam_attempt_screen_clips_requested_by_idx ON exam_attempt_screen_clips (requested_by_user_id)
+    WHERE requested_by_user_id IS NOT NULL;
+CREATE INDEX exam_attempt_screen_clips_flag_idx ON exam_attempt_screen_clips (integrity_flag_id)
+    WHERE integrity_flag_id IS NOT NULL;
+CREATE INDEX exam_attempt_screen_clips_participation_idx ON exam_attempt_screen_clips (delivered_participation_id)
+    WHERE delivered_participation_id IS NOT NULL;
+
+-- A request Desktop never took can no longer be recorded once the Attempt is
+-- submitted, whichever path submitted it. Requests already taken may finish
+-- uploading until their Participation's upload deadline.
+CREATE FUNCTION fail_untaken_screen_clips() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE exam_attempt_screen_clips
+    SET state = 'failed', failure = 'attempt_ended',
+        updated_at = GREATEST(statement_timestamp(), requested_at), revision = revision + 1
+    WHERE exam_attempt_id = NEW.id AND state = 'requested';
+    RETURN NEW;
+END $$;
+CREATE TRIGGER exam_attempts_fail_untaken_screen_clips
+    AFTER UPDATE OF state ON exam_attempts
+    FOR EACH ROW WHEN (NEW.state = 'submitted' AND OLD.state IS DISTINCT FROM 'submitted')
+    EXECUTE FUNCTION fail_untaken_screen_clips();
 
 ALTER TABLE exam_attempt_focus_loss_evaluations
     ADD CONSTRAINT exam_attempt_focus_loss_evaluations_suspension_fkey
@@ -3788,6 +3922,18 @@ CREATE TABLE desktop_compatibility_policies (
         CHECK (institution_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$')
 );
 
+CREATE TABLE plugin_settings (
+    plugin_id varchar(64) PRIMARY KEY CHECK (plugin_id ~ '^[a-z][a-z0-9.-]{0,63}$'),
+    revision bigint NOT NULL CHECK (revision > 0),
+    enabled boolean NOT NULL,
+    settings jsonb NOT NULL CHECK (
+        jsonb_typeof(settings) = 'object' AND
+        octet_length(settings::text) <= 65536
+    ),
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL CHECK (updated_at >= created_at)
+);
+
 CREATE TABLE access_policy_transitions (
     access_policy_id varchar(26) NOT NULL REFERENCES access_policies(id) ON DELETE CASCADE,
     from_revision bigint NOT NULL CHECK (from_revision > 0),
@@ -4905,6 +5051,21 @@ CREATE TABLE retention_purge_objects (
 );
 CREATE INDEX retention_purge_objects_pending_idx ON retention_purge_objects (verify_after, retirement_id, object_id) WHERE absence_verified_at IS NULL;
 
+-- The screen clips an integrity retirement removed, whose chunk keys File
+-- Content purges and then observes absent.
+CREATE TABLE retention_purge_screen_clips (
+    retirement_id varchar(26) NOT NULL REFERENCES retention_retirements(id),
+    screen_clip_id varchar(26) NOT NULL,
+    CONSTRAINT retention_purge_screen_clips_retirement_id_canonical_check CHECK (retirement_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    CONSTRAINT retention_purge_screen_clips_screen_clip_id_canonical_check CHECK (screen_clip_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    chunk_count smallint NOT NULL CHECK (chunk_count BETWEEN 1 AND 384),
+    absence_verified_at timestamptz,
+    verify_after timestamptz NOT NULL DEFAULT '-infinity',
+    PRIMARY KEY (retirement_id, screen_clip_id)
+);
+CREATE INDEX retention_purge_screen_clips_pending_idx ON retention_purge_screen_clips (verify_after, retirement_id, screen_clip_id)
+    WHERE absence_verified_at IS NULL;
+
 CREATE FUNCTION retention_allows_integrity_delete(attempt_id varchar) RETURNS boolean
 LANGUAGE sql STABLE AS $$
     SELECT EXISTS(SELECT 1 FROM retention_retirements r JOIN exam_submissions sub ON sub.id=r.submission_id
@@ -5129,7 +5290,7 @@ CREATE TABLE exam_attempt_delivery_budgets (
     browser_summary_only boolean NOT NULL DEFAULT false,
     browser_stop_reason varchar(40) CHECK (browser_stop_reason IN ('records','bytes','positions','metadata','local_loss_inventory_exhausted')),
  native_retained_records bigint NOT NULL DEFAULT 0 CHECK(native_retained_records BETWEEN 0 AND 200000),
- native_retained_bytes bigint NOT NULL DEFAULT 0 CHECK(native_retained_bytes BETWEEN 0 AND 134217728),
+ native_retained_bytes bigint NOT NULL DEFAULT 0 CHECK(native_retained_bytes BETWEEN 0 AND 268435456),
  native_rate_tokens integer NOT NULL DEFAULT 8000 CHECK(native_rate_tokens BETWEEN 0 AND 8000),
     native_rate_at timestamptz,
     native_pending_bytes bigint NOT NULL DEFAULT 0 CHECK(native_pending_bytes BETWEEN 0 AND 2097152)
@@ -5145,7 +5306,6 @@ CREATE TABLE exam_attempt_security_owners (
  registration_id varchar(26) NOT NULL REFERENCES desktop_registrations(id),
  key_thumbprint text NOT NULL,
  binding_canonical bytea NOT NULL CHECK(octet_length(binding_canonical) <= 131072),
- latest_report_canonical bytea NOT NULL CHECK(octet_length(latest_report_canonical) <= 65536),
  control_ledger_canonical bytea NOT NULL CHECK(octet_length(control_ledger_canonical)<=262656),
  control_body_canonical bytea CHECK(octet_length(control_body_canonical)<=65536),
  browser_correction_starts integer NOT NULL DEFAULT 0 CHECK(browser_correction_starts BETWEEN 0 AND 32),
@@ -5171,17 +5331,13 @@ CREATE TABLE exam_attempt_security_owners (
     summary_final boolean NOT NULL DEFAULT false,
     stop_reason varchar(40) CHECK (stop_reason IN ('records','bytes','positions','metadata','local_loss_inventory_exhausted')),
  retained_records bigint NOT NULL DEFAULT 0 CHECK(retained_records BETWEEN 0 AND 50000),
- retained_bytes bigint NOT NULL DEFAULT 0 CHECK(retained_bytes BETWEEN 0 AND 33554432),
- interpreted_through_sequence bigint NOT NULL DEFAULT 0 CHECK(interpreted_through_sequence BETWEEN 0 AND 20000)
+ retained_bytes bigint NOT NULL DEFAULT 0 CHECK(retained_bytes BETWEEN 0 AND 67108864),
+ interpreted_through_sequence bigint NOT NULL DEFAULT 0 CHECK(interpreted_through_sequence BETWEEN 0 AND 20000),
+ -- The server's evaluation of the native rules: each capability's latest
+ -- facts and each rule's tracker. NULL once retired.
+ native_interpretation_canonical bytea CHECK(octet_length(native_interpretation_canonical) <= 262144)
 );
 CREATE INDEX exam_attempt_security_owners_attempt ON exam_attempt_security_owners(exam_attempt_id);
-
-CREATE TABLE exam_native_source_resets (
- participation_id varchar(26) NOT NULL REFERENCES exam_attempt_security_owners(participation_id),
- reset_id text NOT NULL,
- reset_canonical bytea NOT NULL CHECK(octet_length(reset_canonical)<=262656),
- PRIMARY KEY(participation_id,reset_id)
-);
 
 CREATE TABLE exam_native_delivery_declarations (
     participation_id varchar(26) NOT NULL REFERENCES exam_attempt_security_owners(participation_id),
@@ -5207,21 +5363,11 @@ CREATE TABLE exam_native_delivery_records (
  participation_id varchar(26) NOT NULL,
  batch_sequence bigint NOT NULL,
  record_index smallint NOT NULL CHECK(record_index BETWEEN 0 AND 63),
- kind varchar(24) NOT NULL CHECK(kind IN ('occurrence','coverage_transition','source_reset','source_gap')),
+ kind varchar(24) NOT NULL CHECK(kind IN ('capability_fact','participation_confirmed','rule_status','source_reset','source_gap')),
  record_canonical bytea NOT NULL CHECK(octet_length(record_canonical) <= 262144),
  metadata_canonical bytea NOT NULL CHECK(octet_length(metadata_canonical) <= 65536),
  PRIMARY KEY(participation_id,batch_sequence,record_index),
  FOREIGN KEY(participation_id,batch_sequence) REFERENCES exam_native_delivery_batches(participation_id,batch_sequence)
-);
-
-CREATE TABLE exam_native_occurrences (
- participation_id varchar(26) NOT NULL,
- occurrence_id varchar(128) NOT NULL,
- batch_sequence bigint NOT NULL,
- record_index smallint NOT NULL,
- unresolved_opener boolean NOT NULL,
- PRIMARY KEY(participation_id,occurrence_id),
- FOREIGN KEY(participation_id,batch_sequence,record_index) REFERENCES exam_native_delivery_records(participation_id,batch_sequence,record_index)
 );
 
 CREATE TABLE browser_delivery_retired_sources (
@@ -5297,10 +5443,12 @@ CREATE TABLE native_condition_evidence (
  id varchar(26) PRIMARY KEY,
  exam_attempt_id varchar(26) NOT NULL REFERENCES exam_attempts(id),
  participation_id varchar(26) NOT NULL REFERENCES exam_attempt_participations(id),
- batch_sequence bigint NOT NULL CHECK(batch_sequence BETWEEN 1 AND 20000),
+ -- Batch 0 is the state Desktop reported at Start.
+ batch_sequence bigint NOT NULL CHECK(batch_sequence BETWEEN 0 AND 20000),
  record_index smallint NOT NULL CHECK(record_index BETWEEN 0 AND 63),
+ transition_index smallint NOT NULL CHECK(transition_index BETWEEN 0 AND 127),
  canonical bytea NOT NULL CHECK(octet_length(canonical) BETWEEN 1 AND 264192),
- UNIQUE(participation_id,batch_sequence,record_index)
+ UNIQUE(participation_id,batch_sequence,record_index,transition_index)
 );
 CREATE INDEX native_condition_evidence_attempt ON native_condition_evidence(exam_attempt_id,id);
 CREATE FUNCTION guard_native_condition_evidence() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -5342,10 +5490,6 @@ ALTER TABLE exam_attempt_security_owners
     ADD CONSTRAINT exam_attempt_security_owners_registration_id_canonical_check
     CHECK (registration_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
-ALTER TABLE exam_native_source_resets
-    ADD CONSTRAINT exam_native_source_resets_participation_id_canonical_check
-    CHECK (participation_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
-
 ALTER TABLE exam_native_delivery_declarations
     ADD CONSTRAINT exam_native_delivery_declarations_part_45578e73_canonical_check
     CHECK (participation_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
@@ -5356,10 +5500,6 @@ ALTER TABLE exam_native_delivery_batches
 
 ALTER TABLE exam_native_delivery_records
     ADD CONSTRAINT exam_native_delivery_records_participation_id_canonical_check
-    CHECK (participation_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
-
-ALTER TABLE exam_native_occurrences
-    ADD CONSTRAINT exam_native_occurrences_participation_id_canonical_check
     CHECK (participation_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
 ALTER TABLE browser_delivery_retired_sources

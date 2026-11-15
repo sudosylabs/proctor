@@ -631,6 +631,10 @@ func sealExamSubmission(ctx context.Context, tx *sqlxTxWrapper, input *store.Exa
 	if err != nil {
 		return zero, err
 	}
+	events := domainEventIdentities{EventID: input.DomainEventID, JobID: input.DomainEventJobID}
+	if !events.valid() {
+		return zero, store.NewErrInvalidInput("exam_submission", "domain_event", nil)
+	}
 
 	tail := input.Access.FinalFocusLossSequence - integrityTail.AcceptedSequence
 	if tail > math.MaxInt64-integrityTail.TotalUnresolved {
@@ -747,6 +751,9 @@ func sealExamSubmission(ctx context.Context, tx *sqlxTxWrapper, input *store.Exa
 		return zero, err
 	}
 	if err = insertExamSubmissionReceiptMail(ctx, tx, input.Notice, payloadKeyID); err != nil {
+		return zero, err
+	}
+	if err = insertExamAttemptSubmittedEvent(ctx, tx, events, submission, target.SittingID, target.ExamID, databaseNow); err != nil {
 		return zero, err
 	}
 
@@ -1463,7 +1470,19 @@ func (s *SQLExamSubmissionStore) Resolve(ctx context.Context, submissionID model
 	if !submissionID.IsValid() {
 		return nil, store.NewErrInvalidInput("exam_submission", "id", nil)
 	}
+	return s.resolveSubmission(ctx, "sub.id", submissionID.String())
+}
 
+func (s *SQLExamSubmissionStore) ResolveAttempt(ctx context.Context, attemptID model.ExamAttemptID) (*store.ExamSubmissionAuthorization, error) {
+	if !attemptID.IsValid() {
+		return nil, store.NewErrInvalidInput("exam_submission", "exam_attempt_id", nil)
+	}
+	return s.resolveSubmission(ctx, "sub.exam_attempt_id", attemptID.String())
+}
+
+// resolveSubmission reads the authorization projection of the sealed
+// Submission whose column equals value.
+func (s *SQLExamSubmissionStore) resolveSubmission(ctx context.Context, column, value string) (*store.ExamSubmissionAuthorization, error) {
 	var row struct {
 		SubmissionID    string `db:"submission_id"`
 		ExamID          string `db:"exam_id"`
@@ -1477,13 +1496,16 @@ func (s *SQLExamSubmissionStore) Resolve(ctx context.Context, submissionID model
 		FROM exam_submissions sub
 		JOIN exam_attempts a ON a.id = sub.exam_attempt_id
 		JOIN exams e ON e.id = a.exam_id
-		WHERE sub.id = ?
-			AND sub.sealed = true`, submissionID.String()); err != nil {
-		return nil, translateError("exam_submission", submissionID.String(), err)
+		WHERE `+column+` = ?
+			AND sub.sealed = true`, value); err != nil {
+		return nil, translateError("exam_submission", value, err)
 	}
 
-	result := &store.ExamSubmissionAuthorization{SubmissionID: submissionID}
+	result := &store.ExamSubmissionAuthorization{}
 	var err error
+	if result.SubmissionID, err = model.ParseSubmissionID(row.SubmissionID); err != nil {
+		return nil, invalidPersistedState("exam_submission", "id", err)
+	}
 	if result.ExamID, err = model.ParseExamID(row.ExamID); err != nil {
 		return nil, invalidPersistedState("exam_submission", "exam_id", err)
 	}

@@ -20,28 +20,33 @@ import (
 func preflightFixture(t *testing.T) (NativePolicyResolution, ResolvedNativePolicy, SecurityPreflightChallenge, SecurityPreflightReport) {
 	t.Helper()
 	input := nativeResolutionFixture(t)
-	setNativeFamily(t, &input, 2, `{"id":"clipboard","mode":"observe","strategy":"disabled","observe_os_clipboard_changes":true}`)
+	setNativeFamily(t, &input, 2, `{"id":"clipboard","mode":"observe","strategy":"disabled","observe_os_clipboard_changes":true,"outcome":"flag"}`)
 	resolved, err := ResolveNativePolicy(input)
 	require.NoError(t, err)
 	challenge := SecurityPreflightChallenge{PreflightID: "synthetic-preflight", Challenge: base64.RawURLEncoding.EncodeToString(make([]byte, 32)), IssuedAt: input.ActivationTime, ExpiresAt: input.ActivationTime.Add(SecurityPreflightLifetime)}
-	report := SecurityPreflightReport{Challenge: challenge.Challenge, PolicyDigest: resolved.Policy.Digest, PolicyContentDigest: resolved.PolicyContentDigest, CapabilityMatrixDigest: resolved.CapabilityMatrixDigest, SecuritySessionID: "synthetic-security-session", SourceManifestDigest: input.Build.NativeAgreement.SourceManifestDigest(), SelectedSourceCategories: resolved.Categories, Sources: []NativeSourceCoverage{}, Coverage: []NativeCoverageClaim{}, Baseline: NativeBaselineReport{ConstrainedWindow: "verified", SinglePhysicalDisplay: "verified", ContentProtection: "verified"}, Posture: "degraded", ReportedAt: input.ActivationTime}
-	for _, source := range resolved.Sources {
-		for _, r := range resolved.Requirements {
-			if r.SourceID == source {
-				report.Sources = append(report.Sources, NativeSourceCoverage{SourceID: source, SourceInstanceID: "synthetic-" + string(source), Sequence: 0, SourceSchemaDigest: r.Entry.SourceSchemaDigest, AdapterVersion: r.Entry.AdapterVersion, Health: "healthy", Permission: "granted", Complete: true, GapCount: 0})
-				break
-			}
-		}
-	}
-	for _, r := range resolved.Requirements {
-		state := "ready"
-		if r.Entry.Claim == NativeClaimUnavailable {
-			state = "unavailable"
-		}
-		report.Coverage = append(report.Coverage, NativeCoverageClaim{CoverageKey: r.CoverageKey, SourceSchemaDigest: r.Entry.SourceSchemaDigest, Claim: r.Entry.Claim, State: state})
-	}
+	report := SecurityPreflightReport{Challenge: challenge.Challenge, PolicyDigest: resolved.Policy.Digest, PolicyContentDigest: resolved.PolicyContentDigest, SecuritySessionID: "synthetic-security-session", Capabilities: readinessFor(resolved.Policy.Activations), Rules: []NativeRuleReport{}, ReportedAt: input.ActivationTime}
 	return input, resolved, challenge, report
 }
+
+// readinessFor reports every activated capability as compliant, in
+// activation order: the baseline's from compliantStart, and an unchanged
+// clipboard.
+func readinessFor(activations []NativeActivation) []NativeCapabilityReadiness {
+	baseline := map[NativeCapabilityID]NativeCapabilityReadiness{}
+	for _, readiness := range compliantStart() {
+		baseline[readiness.Capability] = readiness
+	}
+	reported := []NativeCapabilityReadiness{}
+	for _, activation := range activations {
+		readiness, ok := baseline[activation.Capability]
+		if !ok {
+			readiness = readinessOf(activation.Capability, NativeCertaintyComplete, `{"changes":0}`, `{}`)
+		}
+		reported = append(reported, readiness)
+	}
+	return reported
+}
+
 func TestSecurityPreflightEligibleDegradedObservation(t *testing.T) {
 	input, resolved, challenge, report := preflightFixture(t)
 	result, err := EvaluateSecurityPreflight(challenge, resolved, input.Build.NativeAgreement, report, input.ActivationTime)
@@ -62,24 +67,45 @@ func TestSecurityPreflightEligibleDegradedObservation(t *testing.T) {
 	require.True(t, result.ExpiresAt.Equal(challenge.ExpiresAt), "client time extended the challenge")
 }
 func TestSecurityPreflightBlocksWithoutInventingEvidence(t *testing.T) {
-	for name, mutate := range map[string]func(*SecurityPreflightReport){"baseline": func(r *SecurityPreflightReport) { r.Baseline.ContentProtection = "unavailable" }, "source health": func(r *SecurityPreflightReport) { r.Sources[0].Health = "failed" }, "incomplete source": func(r *SecurityPreflightReport) { r.Sources[0].Complete = false }, "source gap": func(r *SecurityPreflightReport) { r.Sources[0].GapCount = 1 }, "enforced coverage": func(r *SecurityPreflightReport) { r.Coverage[0].State = "degraded" }, "contained": func(r *SecurityPreflightReport) { r.Posture = "contained" }} {
+	displayAt := func(r *SecurityPreflightReport) *NativeCapabilityReadiness {
+		for i := range r.Capabilities {
+			if r.Capabilities[i].Capability == "display" {
+				return &r.Capabilities[i]
+			}
+		}
+		t.Fatal("no display in the report")
+		return nil
+	}
+	for name, mutate := range map[string]func(*SecurityPreflightReport){
+		"second display": func(r *SecurityPreflightReport) {
+			displayAt(r).Summary = json.RawMessage(`{"active_physical":2,"connected_total":2}`)
+		},
+		"unhealthy source": func(r *SecurityPreflightReport) { displayAt(r).Health = NativeHealthFailed },
+		"partial state":    func(r *SecurityPreflightReport) { displayAt(r).Certainty = NativeCertaintyPartial },
+		"no permission":    func(r *SecurityPreflightReport) { displayAt(r).Permission = NativePermissionDenied },
+	} {
 		t.Run(name, func(t *testing.T) {
 			input, resolved, challenge, report := preflightFixture(t)
 			mutate(&report)
 			result, err := EvaluateSecurityPreflight(challenge, resolved, input.Build.NativeAgreement, report, input.ActivationTime)
 			require.NoError(t, err, "result = %#v", result)
 			require.Equal(t, "blocked", result.Admission, "result = %#v", result)
-			require.NotEmpty(t, result.ReasonCodes, "result = %#v", result)
+			require.Equal(t, []SecurityReasonCode{SecurityReasonNativeRuleUnmet}, result.ReasonCodes, "result = %#v", result)
 		})
 	}
 }
-func TestSecurityPreflightRejectsForgedAgreementAndSourceSets(t *testing.T) {
-	for name, mutate := range map[string]func(*SecurityPreflightReport){"challenge": func(r *SecurityPreflightReport) {
-		r.Challenge = base64.RawURLEncoding.EncodeToString([]byte(strings.Repeat("x", 32)))
-	}, "policy": func(r *SecurityPreflightReport) { r.PolicyDigest = SHA256Fingerprint([]byte("other")) }, "content": func(r *SecurityPreflightReport) { r.PolicyContentDigest = SHA256Fingerprint([]byte("other")) }, "matrix": func(r *SecurityPreflightReport) { r.CapabilityMatrixDigest = SHA256Fingerprint([]byte("other")) }, "manifest": func(r *SecurityPreflightReport) { r.SourceManifestDigest = SHA256Fingerprint([]byte("other")) }, "missing source": func(r *SecurityPreflightReport) { r.Sources = r.Sources[:2] }, "missing claim": func(r *SecurityPreflightReport) { r.Coverage = r.Coverage[:3] }, "self selected categories": func(r *SecurityPreflightReport) { r.SelectedSourceCategories = []NativeSourceCategory{} }, "adapter": func(r *SecurityPreflightReport) { r.Sources[0].AdapterVersion = "other" }, "schema": func(r *SecurityPreflightReport) { r.Sources[0].SourceSchemaDigest = SHA256Fingerprint([]byte("other")) }, "unavailable made ready": func(r *SecurityPreflightReport) {
-		r.Coverage[3].Claim = NativeClaimEnforce
-		r.Coverage[3].State = "ready"
-	}} {
+func TestSecurityPreflightRejectsForgedReports(t *testing.T) {
+	for name, mutate := range map[string]func(*SecurityPreflightReport){
+		"challenge": func(r *SecurityPreflightReport) {
+			r.Challenge = base64.RawURLEncoding.EncodeToString([]byte(strings.Repeat("x", 32)))
+		},
+		"policy":             func(r *SecurityPreflightReport) { r.PolicyDigest = SHA256Fingerprint([]byte("other")) },
+		"content":            func(r *SecurityPreflightReport) { r.PolicyContentDigest = SHA256Fingerprint([]byte("other")) },
+		"missing capability": func(r *SecurityPreflightReport) { r.Capabilities = r.Capabilities[1:] },
+		"reordered": func(r *SecurityPreflightReport) {
+			r.Capabilities[0], r.Capabilities[1] = r.Capabilities[1], r.Capabilities[0]
+		},
+	} {
 		t.Run(name, func(t *testing.T) {
 			input, resolved, challenge, report := preflightFixture(t)
 			mutate(&report)
@@ -92,7 +118,15 @@ func TestSecurityPreflightExactCodec(t *testing.T) {
 	_, _, _, report := preflightFixture(t)
 	raw, err := report.Canonical()
 	require.NoError(t, err)
-	for name, document := range map[string]string{"missing boolean": strings.Replace(string(raw), `"complete":true,`, "", 1), "null boolean": strings.Replace(string(raw), `"complete":true`, `"complete":null`, 1), "unknown member": strings.Replace(string(raw), `"sequence":0`, `"sequence":0,"raw_inventory":[]`, 1), "unsafe integer": strings.Replace(string(raw), `"sequence":0`, `"sequence":9007199254740992`, 1), "integer exponent": strings.Replace(string(raw), `"sequence":0`, `"sequence":0e0`, 1), "duplicate": strings.Replace(string(raw), `"sequence":0`, `"sequence":0,"sequence":0`, 1), "uppercase": strings.Replace(string(raw), `"complete":`, `"COMPLETE":`, 1), "null category list": strings.Replace(string(raw), `"selected_source_categories":["os-clipboard-change"]`, `"selected_source_categories":null`, 1)} {
+	for name, document := range map[string]string{
+		"unknown member":   strings.Replace(string(raw), `"sequence":1`, `"sequence":1,"raw_inventory":[]`, 1),
+		"unsafe integer":   strings.Replace(string(raw), `"sequence":1`, `"sequence":9007199254740992`, 1),
+		"integer exponent": strings.Replace(string(raw), `"sequence":1`, `"sequence":1e0`, 1),
+		"duplicate":        strings.Replace(string(raw), `"sequence":1`, `"sequence":1,"sequence":1`, 1),
+		"uppercase":        strings.Replace(string(raw), `"certainty":`, `"CERTAINTY":`, 1),
+		"null rules":       strings.Replace(string(raw), `"rules":[]`, `"rules":null`, 1),
+		"old member":       strings.Replace(string(raw), `"rules":[]`, `"rules":[],"posture":"compliant"`, 1),
+	} {
 		t.Run(name, func(t *testing.T) {
 			var value SecurityPreflightReport
 			require.Error(t, json.Unmarshal([]byte(document), &value), "invalid report accepted")

@@ -1,0 +1,27 @@
+{
+  "title": "Exam Attempt security update",
+  "description": "Carries a security control between renewals. It never extends the lease. The whole data object is at most 16 KiB.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "generation",
+    "continuity_credential",
+    "security_control"
+  ],
+  "properties": {
+    "generation": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "The Participation generation."
+    },
+    "continuity_credential": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "description": "The Attempt Connection's continuity credential."
+    },
+    "security_control": {
+      "$ref": "security_control.json"
+    }
+  }
+}

@@ -52,12 +52,16 @@ exists.
 | --- | --- | --- | --- | --- |
 | reusable modules | `packages/cache` and below, `packages/mail` and below, `packages/vfs` and below | any except `server` and below | any | none |
 | composition root | `server` | any | any | none |
+| plugin contracts | `plugin` | none | none | none |
+| plugins | below `plugin` | `plugin`, `model`, `config`, `platform/externalauth` | any | none |
+| plugin host | `pluginhost` | `plugin` | none | infrastructure |
 | model build tools | `model/internal/idgen` and below | none | none | none |
 | route error-code analysis for tests | `internal/errorflow` | none | `golang.org/x/tools/go` and below | none |
 | static TLS key pair files | `internal/tlscert` | none | none | none |
 | ACME adapter | `internal/autocert` | none | `golang.org/x/crypto/acme`, `golang.org/x/net/idna` | none |
 | OpenAPI compiler | `internal/openapidoc` | none | `github.com/getkin/kin-openapi/openapi3`, `gopkg.in/yaml.v3` | infrastructure except `io/fs` |
 | AsyncAPI compiler | `internal/asyncapidoc` | none | `github.com/santhosh-tekuri/jsonschema/v6`, `gopkg.in/yaml.v3` | infrastructure except `io/fs` |
+| native fact schemas | `internal/factschema` | `model` | `github.com/santhosh-tekuri/jsonschema/v6` | infrastructure |
 | error catalog compiler | `internal/errorcatalog` | none | `gopkg.in/yaml.v3` | infrastructure except `net/http` |
 | browser origin serialization | `internal/weborigin` | none | none | infrastructure |
 | canonical agreement JSON | `internal/canonicaljson` | none | none | infrastructure |
@@ -66,8 +70,9 @@ exists.
 | SQL store adapter | `store/sqlstore` and below | `model`, `internal/canonicaljson`, `store`, `config`, `migrations` | any | none |
 | local cache store layer | `store/localcachelayer` and below | `model`, `store`, `packages/cache` | none | infrastructure |
 | generic store layers | `store/timerlayer` and below, `store/retrylayer` and below | `model`, `store` | none | infrastructure |
-| concrete jobs | `app/jobs` and below | `model`, `store`, `secretseal`, `app/invocation`, `app/job`, `app/mail`, `app/user`, `app/exam`, `app/exam/attempt`, `app/exam/sitting` | none | infrastructure |
+| concrete jobs | `app/jobs` and below | `model`, `store`, `secretseal`, `app/invocation`, `app/job`, `app/mail`, `app/user`, `app/exam`, `app/exam/attempt`, `app/exam/sitting`, `app/events` | none | infrastructure |
 | job engine | `app/job` and below | `logging`, `model`, `store`, `app/access`, `app/apperror`, `app/invocation` | none | infrastructure |
+| domain event dispatch | `app/events` and below | `model`, `plugin` | none | infrastructure |
 | realtime application | `app/realtime` and below | `logging`, `model`, `app/apperror` | none | infrastructure |
 | mail application | `app/mail` and below | `model`, `store`, `secretseal`, `app/exam`, `localization`, `app/access`, `app/apperror`, `app/invocation`, `app/paging` | `golang.org/x/net/html` | infrastructure except `io/fs` |
 | application error vocabulary | `app/apperror` | `model`, `store` | none | infrastructure |
@@ -78,8 +83,8 @@ exists.
 | exam manager access consumers | `app/exam`, `app/exam/correction`, `app/exam/resource`, `app/exam/workspace` | `app/access`, `app/apperror`, `app/idempotency`, `app/invocation`, `app/exam/manageraccess`, `app/realtime`, `model`, `store` | none | infrastructure |
 | exam mail and safe Markdown consumers | `app/exam/attempt`, `app/exam/review` | `app/access`, `app/apperror`, `app/idempotency`, `app/invocation`, `app/mail`, `app/realtime`, `model`, `store`, `app/exam/safemarkdown` | none | infrastructure |
 | safe Markdown | `app/exam/safemarkdown` | none | none | infrastructure |
-| file-content adapter | `filecontent` and below | `app/exam`, `app/user`, `model`, `packages/vfs` | `github.com/HugoSmits86/nativewebp`, `github.com/disintegration/imaging`, below `github.com/pdfcpu/pdfcpu`, `golang.org/x/image/webp` | infrastructure except `os` |
-| Desktop release verification | `desktoprelease` | `model`, `internal/canonicaljson` | none | infrastructure |
+| file-content adapter | `filecontent` and below | `app/exam`, `app/user`, `model`, `plugin`, `packages/vfs` | `github.com/HugoSmits86/nativewebp`, `github.com/disintegration/imaging`, below `github.com/pdfcpu/pdfcpu`, `golang.org/x/image/webp` | infrastructure except `os` |
+| Desktop release verification | `desktoprelease` | `model`, `internal/canonicaljson`, `internal/factschema` | none | infrastructure |
 | secret sealing | `secretseal` | none | none | infrastructure |
 | localization | `localization` | none | `github.com/nicksnyder/go-i18n/v2/i18n` and below, `golang.org/x/text/language` | infrastructure except `io/fs` |
 | access application | `app/access` | `app/apperror`, `app/invocation`, `model`, `store` | none | infrastructure |
@@ -91,7 +96,7 @@ exists.
 | onboarding application | `app/onboarding` | `app/academic`, `app/access`, `app/administration`, `app/apperror`, `app/idempotency`, `app/identity`, `app/internal/batchitem`, `app/invocation`, `app/jobs`, `app/mail`, `app/paging`, `app/realtime`, `app/user`, `model`, `store` | none | infrastructure |
 | search application | `app/search` | `app/access`, `app/apperror`, `app/exam`, `app/invocation`, `app/paging`, `app/user`, `model`, `store` | none | infrastructure |
 | batch item context | `app/internal/batchitem` | `model`, `store` | none | infrastructure |
-| application | `app` | `logging`, `app/academic`, `app/access`, `app/administration`, `app/identity`, `app/onboarding`, `app/user`, `app/apperror`, `app/invocation`, `model`, `store`, `app/job`, `app/jobs`, `app/realtime`, `app/mail`, `app/search`, `secretseal`, `app/exam` and below | none | infrastructure |
+| application | `app` | `logging`, `app/academic`, `app/access`, `app/administration`, `app/identity`, `app/onboarding`, `app/user`, `app/apperror`, `app/invocation`, `model`, `store`, `app/job`, `app/jobs`, `app/events`, `app/realtime`, `app/mail`, `app/search`, `secretseal`, `app/exam` and below | none | infrastructure |
 | hosted webapp transport | `webui` | none | none | none |
 | HTTP routing kernel | `httpapi/route` | `logging`, `app/apperror`, `app/invocation`, `app/paging`, `model`, `localization`, `internal/weborigin` | below `github.com/gorilla` | infrastructure except `net/http` |
 | HTTP resources | `httpapi` and below | `httpapi/route`, `logging`, `app`, `app/academic`, `app/administration`, `app/apperror`, `app/identity`, `app/invocation`, `app/job`, `app/mail`, `app/onboarding`, `app/paging`, `app/search`, `app/user`, `app/exam` and below, `model`, `store`, `localization` | none | infrastructure except `net/http` |
@@ -100,7 +105,7 @@ exists.
 | cluster adapters | `cluster/local` and below, `cluster/memberlist` and below | `cluster` | any | none |
 | metrics | `metrics` | `config`, `internal/tlscert`, `store/timerlayer`, `store/localcachelayer`, `platform`, `cluster`, `packages/vfs`, `packages/mail` | `github.com/prometheus/client_golang` and below | none |
 | tracing | `tracing` | `config` | `go.opentelemetry.io/otel` and below | none |
-| external-auth adapters | `platform/externalauth` and below | `config`, `model`, `platform/externalauth` | any | none |
+| external-auth adapters | `platform/externalauth` and below | `config`, `model`, `plugin` | any | none |
 | platform lifecycle | `platform` | any except below `packages/cache`, below `packages/mail`, below `packages/vfs`, below `cluster`, below `platform/externalauth`, `store/sqlstore`, `metrics`, `app` and below, `httpapi` and below, `websocket` and below | none | none |
 | healthcheck executable | `cmd/proctor-healthcheck` | none | none | none |
 | offline operator commands | `operator` | `config`, `model`, `store`, `store/sqlstore` | none | infrastructure |
@@ -111,7 +116,7 @@ exists.
 | development seed HTTP client | `cmd/ptool/devseed` | none | none | none |
 | unknown ptool children | below `cmd/ptool` | none | none | all |
 | mail preview executable | `cmd/mailpreview` | `app/mail`, `localization`, `model` | none | none |
-| configuration | `config` | `model` | any | none |
+| configuration | `config` | `model`, `plugin` | any | none |
 | leaf infrastructure | `logging`, `migrations` | none | any | none |
 
 <!-- End of generated dependency rules. -->

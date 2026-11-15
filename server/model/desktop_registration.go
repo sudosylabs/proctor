@@ -67,6 +67,28 @@ func (j DesktopPublicJWK) PublicKey() (*ecdsa.PublicKey, error) {
 	return &ecdsa.PublicKey{Curve: elliptic.P256(), X: x, Y: y}, nil
 }
 
+// DesktopSignatureLength is the base64url length of a raw ES256 signature,
+// the 64 bytes of r and s.
+const DesktopSignatureLength = 86
+
+// VerifySignature reports whether signature, a raw ES256 signature (r then
+// s, 32 bytes each) in unpadded base64url as JWS spells it, signs message
+// with this key.
+func (j DesktopPublicJWK) VerifySignature(message []byte, signature string) bool {
+	key, err := j.PublicKey()
+	if err != nil || len(signature) != DesktopSignatureLength {
+		return false
+	}
+	// Strict decoding refuses a final character whose unused bits are set,
+	// so each signature has exactly one spelling.
+	raw, err := rawBase64URL.Strict().DecodeString(signature)
+	if err != nil || len(raw) != 64 {
+		return false
+	}
+	digest := sha256.Sum256(message)
+	return ecdsa.Verify(key, digest[:], new(big.Int).SetBytes(raw[:32]), new(big.Int).SetBytes(raw[32:]))
+}
+
 // Thumbprint returns the RFC 7638 SHA-256 JWK thumbprint. The member order is
 // the required lexicographic order for an EC key: crv, kty, x, y.
 func (j DesktopPublicJWK) Thumbprint() (string, error) {

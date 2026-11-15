@@ -80,21 +80,11 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 	casProvider := config.ExternalAuthenticationProvider{
 		ID: providerID, Type: "cas", DisplayName: "Campus CAS",
 		Enabled: true, AutoProvision: true,
-		CAS: &config.CASProvider{
-			BaseURL:          casServer.URL + "/cas",
-			ValidationPath:   "/p3/serviceValidate",
-			Timeout:          config.Duration{Duration: 5 * time.Second},
-			MaxResponseBytes: 64 * 1024,
-		},
-		Claims: config.ExternalClaimMapping{
-			Subject: "user", Username: "uid", Email: "mail",
-			FirstName: "givenName", LastName: "sn",
-			HomeOrganization:         "schacHomeOrganization",
-			AllowedHomeOrganizations: []string{"example.edu"},
-			TrustEmail:               true,
-			MultiFactorAttribute:     "authnContext",
-			MultiFactorValues:        []string{"mfa"},
-		},
+		Settings: json.RawMessage(`{"BaseURL":"` + casServer.URL + `/cas",` +
+			`"ValidationPath":"/p3/serviceValidate","Timeout":"5s","MaxResponseBytes":65536,` +
+			`"Claims":{"Subject":"user","Username":"uid","Email":"mail","FirstName":"givenName","LastName":"sn",` +
+			`"HomeOrganization":"schacHomeOrganization","AllowedHomeOrganizations":["example.edu"],` +
+			`"TrustEmail":true,"MultiFactorAttribute":"authnContext","MultiFactorValues":["mfa"]}}`),
 	}
 	connectionProvider := casProvider
 	connectionProvider.ID = connectionProviderID
@@ -367,7 +357,7 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 		Actions: []string{"invitation.accept"}, Limit: 10, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
 	require.NoError(t, err, "CAS Invitation acceptance audits")
 	require.Len(t, invitationAudits, 1, "CAS Invitation acceptance audits")
-	require.Equal(t, config.ExternalAuthenticationTypeCAS, invitationAudits[0].AuthMethod, "CAS Invitation acceptance audits")
+	require.Equal(t, "cas", invitationAudits[0].AuthMethod, "CAS Invitation acceptance audits")
 	invitationReplay := httptest.NewRecorder()
 	helper.Handler().ServeHTTP(invitationReplay, invitationCallbackRequest.Clone(context.Background()))
 	require.Equal(t, http.StatusUnauthorized, invitationReplay.Code, "invitation callback replay = %d body=%s", invitationReplay.Code, invitationReplay.Body.String())

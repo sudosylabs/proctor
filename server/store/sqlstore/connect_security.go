@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/internal/canonicaljson"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -26,8 +27,11 @@ type admittedSecurityBinding struct {
 }
 type connectSecurityAllocation struct {
 	binding admittedSecurityBinding
-	report  []byte
 	now     time.Time
+	// registry and capabilities start the server's evaluation of the native
+	// rules from the facts Desktop reported at Start.
+	registry     *model.NativeCapabilityRegistry
+	capabilities []model.NativeCapabilityReadiness
 }
 
 func (s *SQLExamAttemptStore) prepareConnectSecurity(
@@ -145,7 +149,7 @@ func (s *SQLExamAttemptStore) prepareConnectSecurity(
 		return zero, err
 	}
 	if evaluated.Admission != "eligible" {
-		return zero, preflightConflict("posture_blocked")
+		return zero, preflightConflict("readiness_unmet")
 	}
 
 	if first {
@@ -202,7 +206,10 @@ func (s *SQLExamAttemptStore) prepareConnectSecurity(
 		return zero, store.NewErrInvalidInput("security", "binding_size", nil)
 	}
 
-	return connectSecurityAllocation{binding: binding, report: row.Report, now: row.DatabaseNow}, nil
+	return connectSecurityAllocation{
+		binding: binding, now: row.DatabaseNow,
+		registry: input.DesktopBuild.NativeAgreement.CapabilityRegistry(), capabilities: report.Capabilities,
+	}, nil
 }
 
 func persistConnectSecurity(
@@ -298,10 +305,10 @@ func persistConnectSecurity(
 		ctx,
 		`INSERT INTO exam_attempt_security_owners(
 			participation_id, exam_attempt_id, delivery_stream_id, security_session_id, session_id,
-			registration_id, key_thumbprint, binding_canonical, latest_report_canonical,
+			registration_id, key_thumbprint, binding_canonical,
 			control_ledger_canonical, reserved_bytes, created_at
 		)
-		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		security.ParticipationID.String(),
 		attemptID,
 		security.DeliveryStreamID,
@@ -310,7 +317,6 @@ func persistConnectSecurity(
 		input.DesktopRegistrationID.String(),
 		input.DPoPKeyThumbprint,
 		binding,
-		allocation.report,
 		ledger,
 		model.NativeOwnerReservationBytes,
 		allocation.now,
@@ -325,6 +331,10 @@ func persistConnectSecurity(
 		attemptID,
 	); execErr != nil {
 		return execErr
+	}
+
+	if err = startNativeInterpretation(ctx, tx, allocation); err != nil {
+		return err
 	}
 
 	result, err := tx.Exec(
@@ -539,7 +549,6 @@ func (s *SQLSecurityPreflightStore) RecoverSecurityPolicy(
 		recovery, err := recoverNativeControl(
 			ctx,
 			tx,
-			attemptID,
 			participationID,
 			security.DeliveryStreamID,
 			guard.State == string(model.ExamSittingOpen),
@@ -553,4 +562,39 @@ func (s *SQLSecurityPreflightStore) RecoverSecurityPolicy(
 		recovery.FrozenAttemptConfiguration = configuration
 		return recovery, nil
 	})
+}
+
+// startNativeInterpretation evaluates the participation rules on the facts
+// Desktop reported at Start and keeps the result as batch 0. A policy that
+// activates nothing has no interpretation.
+func startNativeInterpretation(ctx context.Context, tx *sqlxTxWrapper, allocation connectSecurityAllocation) error {
+	security := allocation.binding.Security
+	if len(security.Policy.Activations) == 0 {
+		return nil
+	}
+	state, opening, err := model.StartNativeInterpretation(allocation.registry, security.Policy, allocation.capabilities, allocation.now)
+	if err != nil {
+		return preflightConflict("readiness_unmet")
+	}
+	raw, err := json.Marshal(state)
+	if err == nil {
+		raw, err = canonicaljson.Canonicalize(raw, model.NativeInterpretationMaxBytes)
+	}
+	if err != nil {
+		return err
+	}
+	if _, err = tx.Exec(
+		ctx,
+		`UPDATE exam_attempt_security_owners SET native_interpretation_canonical = ? WHERE participation_id = ?`,
+		raw,
+		security.ParticipationID.String(),
+	); err != nil {
+		return err
+	}
+	owner := nativeDeliveryOwner{ParticipationID: security.ParticipationID.String(), Now: allocation.now}
+	if err = retainNativeTransitions(ctx, tx, owner, allocation.binding, 0, 0, opening); err != nil {
+		return err
+	}
+	flags := nativeFlagRaiser{owner: owner, binding: allocation.binding}
+	return flags.raise(ctx, tx, opening)
 }

@@ -57,11 +57,18 @@ the Submission. The manifest, which never changes, is what counts.
 
 <GovernedFigure asset="integrity-review-release-boundary" />
 
-Native condition records keep selected changes reported by detectors, and
-where each came from. They don't create a Flag, a warning or a suspension on
-their own. If the record of a condition starting was lost, its unresolved
-changes still show. The health of each reporting source is tracked
-separately from the conditions kept for Review.
+Native condition records keep every change in a native rule's status, as the
+server worked it out from what the candidate's Desktop reported: which rule,
+why, when, and whether the change began or ended a stretch when the rule wasn't
+met. When a rule the Exam enforces stops being met, Proctor raises a Flag for
+that capability, such as a second display, with one piece of evidence each time
+it happens. Rules that only observe, and stretches where Proctor couldn't tell,
+never raise one.
+
+When the Exam records the screen, a Flag also asks the candidate's Desktop for
+the minute either side of it. You can ask for other ranges yourself, with a
+short private reason, up to ten per Attempt. Each request and each playback is
+audited.
 
 Look at these together:
 
@@ -69,9 +76,11 @@ Look at these together:
   record the Participation, the fixed policy Revision and the rule.
 - **Evidence** keeps a limited number of qualifying episodes, with a summary
   of any beyond that.
-- **Native conditions** keep checked changes without needing a decision on a
-  Flag. When you finalize the Review, you acknowledge the current list of
-  them.
+- **Native conditions** keep each rule status change. When you finalize the
+  Review, you acknowledge the current list of them. Native Flags need a
+  decision like any other Flag.
+- **Screen clips** are the recorded ranges asked for around Flags or by a
+  manager. A clip still uploading after the deadline shows as failed.
 - **Discrepancies** keep gaps, missing acknowledgements of corrections,
   incomplete Browser Activity, late Focus Loss and other uncertainty, in the
   open.

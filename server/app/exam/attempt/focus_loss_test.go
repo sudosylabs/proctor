@@ -70,7 +70,7 @@ func TestEvaluateFocusLossHashesCredentialAuditsSafeScopeAndPublishesCommittedWa
 	// warned, and the Sitting board is invalidated after both.
 	require.Equal(t, []realtimetest.Call{
 		pub(realtime.NewExamAttemptIntegrityFlaggedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Flag.ID,
-			result.PolicyOutcome, result.RetainedEvidenceCount, result.EvidenceOverflowCount, result.ReceivedAt)),
+			model.IntegrityPolicyFocusLoss, result.PolicyOutcome, result.RetainedEvidenceCount, result.EvidenceOverflowCount, result.ReceivedAt)),
 		pub(realtime.NewCandidateExamAttemptFocusLossWarningEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.ReceivedAt)),
 		sittingBoardChangedCall(t, result.ExamID, result.SittingID),
 	}, f.publisher.Calls())
@@ -220,7 +220,7 @@ func TestEvaluateFocusLossDuplicateAcknowledgesPriorDecisionWithoutRepeatingEffe
 		ParticipationID: participationID, Generation: 2, Signal: signal, AcceptedSequence: 8,
 		DatabaseTime: signal.ReceivedAt, CollectionEnabled: true, Qualified: true, ThresholdCrossed: true,
 		PolicyOutcome: model.IntegrityOutcomeFlagAndWarn, RetainedEvidenceCount: 1, Flag: flag,
-		FlagCreated: true, CandidateWarningCreated: true, ManagerNotificationRequired: true, Duplicate: true}
+		FlagCreated: true, ScreenClipRequested: true, CandidateWarningCreated: true, ManagerNotificationRequired: true, Duplicate: true}
 	result, err := f.service.EvaluateExamAttemptFocusLoss(context.Background(), f.inv, FocusLossCommand{SchemaVersion: model.FocusLossSignalSchemaVersion, AttemptID: f.attemptID,
 		ParticipationID: participationID, ConnectionID: f.connectionID, Generation: 2, Sequence: 8,
 		DurationMilliseconds: 2500, Source: model.FocusLossSourceDocumentHidden,
@@ -282,7 +282,7 @@ func TestEvaluateFocusLossProjectsCommittedPolicySuspensionAndPublishesOnce(t *t
 		pub(realtime.NewExamAttemptConnectionClosedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Connection.ID,
 			result.Connection.CloseReason, result.Connection.ClosedAt.Time)),
 		pub(realtime.NewExamAttemptIntegrityFlaggedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Flag.ID,
-			result.PolicyOutcome, result.RetainedEvidenceCount, result.EvidenceOverflowCount, result.ReceivedAt)),
+			model.IntegrityPolicyFocusLoss, result.PolicyOutcome, result.RetainedEvidenceCount, result.EvidenceOverflowCount, result.ReceivedAt)),
 		pub(realtime.NewExamAttemptPolicySuspendedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Connection.ID,
 			result.Flag.ID, result.Suspension.ID, result.Attempt.Revision, result.ReceivedAt)),
 		pub(realtime.NewCandidateExamAttemptSuspendedEvent(result.SittingID, result.AttemptID, result.CandidateUserID,
@@ -432,4 +432,42 @@ func focusLossTargetFixture(f *fixture, participationID model.AttemptParticipati
 	return &store.ExamAttemptFocusLossTarget{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
 		ClassID: f.sitting.ClassID, CandidateUserID: f.userID, AttemptID: f.attemptID,
 		ParticipationID: participationID, Generation: generation}
+}
+
+func TestEvaluateFocusLossAsksDesktopForTheFlagsScreenClip(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	participationID := model.NewAttemptParticipationID()
+	signalID, flagID := model.NewFocusLossSignalID(), model.NewIntegrityFlagID()
+	receivedAt := f.at.Add(time.Second)
+	signal, err := model.NewFocusLossSignal(signalID, f.attemptID, participationID, 3, 11, 2500,
+		model.FocusLossSourceDocumentHidden, receivedAt)
+	require.NoError(t, err)
+	flag, err := model.NewIntegrityFlag(flagID, f.attemptID, 3, model.IntegrityPolicyFocusLoss, receivedAt)
+	require.NoError(t, err)
+	f.focusSignalID = signalID
+	f.focusFlagID = flagID
+	f.persistence.focusTarget = focusLossTargetFixture(f, participationID, 3)
+	f.persistence.focusResult = &store.ExamAttemptFocusLossResult{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
+		ClassID: f.sitting.ClassID, CandidateUserID: f.userID, AttemptID: f.attemptID,
+		ParticipationID: participationID, Generation: 3, Signal: signal, AcceptedSequence: 11, DatabaseTime: receivedAt,
+		CollectionEnabled: true, Qualified: true, ThresholdCrossed: true, PolicyOutcome: model.IntegrityOutcomeFlag,
+		RetainedEvidenceCount: 1, Flag: flag, FlagCreated: true, ScreenClipRequested: true,
+		ManagerNotificationRequired: true}
+
+	result, err := f.service.EvaluateExamAttemptFocusLoss(context.Background(), f.inv, FocusLossCommand{
+		SchemaVersion: model.FocusLossSignalSchemaVersion,
+		AttemptID:     f.attemptID, ParticipationID: participationID, ConnectionID: f.connectionID,
+		Generation: 3, Sequence: 11, DurationMilliseconds: 2500, Source: model.FocusLossSourceDocumentHidden,
+		ContinuityCredential: model.NewCredentialToken(),
+	})
+	require.NoError(t, err)
+	require.True(t, result.ScreenClipRequested)
+	pub := published(t)
+	require.Equal(t, []realtimetest.Call{
+		pub(realtime.NewExamAttemptIntegrityFlaggedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Flag.ID,
+			model.IntegrityPolicyFocusLoss, result.PolicyOutcome, result.RetainedEvidenceCount, result.EvidenceOverflowCount, result.ReceivedAt)),
+		sittingBoardChangedCall(t, result.ExamID, result.SittingID),
+		pub(realtime.NewCandidateScreenClipsRequestedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.ReceivedAt)),
+	}, f.publisher.Calls(), "the Flag is announced, then Desktop is told to read its clip requests")
 }

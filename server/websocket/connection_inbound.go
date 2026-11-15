@@ -530,7 +530,7 @@ func (c *connectionRuntime) handleExamAttemptRenew(ctx context.Context, request 
 		c.principal,
 		metadata,
 	), attempt.RenewParticipationCommand{
-		SecurityCoverage:     decoded.SecurityCoverage,
+		Security:             decoded.SecurityControl,
 		AttemptID:            binding.attemptID,
 		ParticipationID:      binding.participationID,
 		ConnectionID:         binding.connectionID,
@@ -555,7 +555,7 @@ func (c *connectionRuntime) handleExamAttemptRenew(ctx context.Context, request 
 	}
 
 	encoded, err := json.Marshal(examAttemptRenewResponse{
-		SecurityCoverage: securityCoverageFrom(result.SecurityCoverage),
+		SecurityControl:  securityControlFrom(result.Security),
 		Generation:       result.Generation,
 		AcceptedSequence: result.AcceptedSequence,
 		DatabaseTime:     model.FormatRFC3339(result.DatabaseTime),
@@ -760,10 +760,10 @@ func (c *connectionRuntime) handleExamAttemptSecurityUpdate(ctx context.Context,
 
 	metadata := c.metadata
 	metadata.RequestID = fmt.Sprintf("%s:%d", c.id, request.Sequence)
-	result, err := attempts.UpdateExamSecurityCoverage(ctx, invocation.New(
+	result, err := attempts.UpdateExamSecurity(ctx, invocation.New(
 		c.principal,
 		metadata,
-	), attempt.UpdateSecurityCoverageCommand{
+	), attempt.UpdateExamSecurityCommand{
 		Access: attempt.CandidateAccess{
 			AttemptID:            binding.attemptID,
 			ConnectionID:         binding.connectionID,
@@ -771,7 +771,7 @@ func (c *connectionRuntime) handleExamAttemptSecurityUpdate(ctx context.Context,
 		},
 		ParticipationID: binding.participationID,
 		Generation:      binding.generation,
-		Coverage:        decoded.SecurityCoverage,
+		Control:         decoded.SecurityControl,
 	})
 	if err != nil {
 		code, presentation := examAttemptRenewError(err)
@@ -784,7 +784,7 @@ func (c *connectionRuntime) handleExamAttemptSecurityUpdate(ctx context.Context,
 		return
 	}
 
-	encoded, err := json.Marshal(securityCoverageFrom(result))
+	encoded, err := json.Marshal(securityControlFrom(result))
 	if err != nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorAttemptRenewalFailed)
 		return

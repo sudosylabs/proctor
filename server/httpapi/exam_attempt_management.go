@@ -128,19 +128,34 @@ type sittingCandidateStatusListResponse struct {
 	NextCursor      string                               `json:"next_cursor,omitempty"`
 }
 
-// nativeSecuritySummaryResponse presents a Candidate's live native coverage
-// to the Sitting manager without detector or occurrence identities.
+// nativeSecuritySummaryResponse presents a Candidate's live native standing
+// to the Sitting manager without facts or application identities.
 type nativeSecuritySummaryResponse struct {
-	RetainedConditionRecords int64                               `json:"retained_condition_records"`
-	LiveCoverageAvailable    bool                                `json:"live_coverage_available"`
-	Sources                  []nativeSourceHealthSummaryResponse `json:"sources"`
+	RetainedConditionRecords int64                        `json:"retained_condition_records"`
+	LiveCoverageAvailable    bool                         `json:"live_coverage_available"`
+	Rules                    []nativeRuleStandingResponse `json:"rules"`
+	Contained                bool                         `json:"contained"`
+	ScreenClips              screenClipCountsResponse     `json:"screen_clips"`
 }
 
-type nativeSourceHealthSummaryResponse struct {
-	SourceID   model.NativeSourceID `json:"source_id"`
-	Health     string               `json:"health"`
-	Permission string               `json:"permission"`
-	Complete   bool                 `json:"complete"`
+// nativeRuleStandingResponse is one enforce rule's live status. Reason is
+// the registry's reason ID, which the client words.
+type nativeRuleStandingResponse struct {
+	RuleID         string                   `json:"rule_id"`
+	Capability     model.NativeCapabilityID `json:"capability"`
+	Reason         string                   `json:"reason"`
+	Status         model.NativeRuleStatus   `json:"status"`
+	UnknownCause   model.NativeUnknownCause `json:"unknown_cause,omitempty"`
+	OpenOccurrence int64                    `json:"open_occurrence,omitempty"`
+	Occurrences    int64                    `json:"occurrences"`
+}
+
+type screenClipCountsResponse struct {
+	Requested int `json:"requested"`
+	Recording int `json:"recording"`
+	Uploading int `json:"uploading"`
+	Ready     int `json:"ready"`
+	Failed    int `json:"failed"`
 }
 
 func nativeSecuritySummaryFrom(value *model.NativeSecuritySummary) *nativeSecuritySummaryResponse {
@@ -151,20 +166,17 @@ func nativeSecuritySummaryFrom(value *model.NativeSecuritySummary) *nativeSecuri
 	response := &nativeSecuritySummaryResponse{
 		RetainedConditionRecords: value.RetainedConditionRecords,
 		LiveCoverageAvailable:    value.LiveCoverageAvailable,
+		Rules:                    make([]nativeRuleStandingResponse, 0, len(value.Rules)),
+		Contained:                value.Contained,
+		ScreenClips:              screenClipCountsResponse(value.ScreenClips),
 	}
-	if value.Sources != nil {
-		response.Sources = make([]nativeSourceHealthSummaryResponse, 0, len(value.Sources))
-	}
-
-	for _, source := range value.Sources {
-		response.Sources = append(response.Sources, nativeSourceHealthSummaryResponse{
-			SourceID:   source.SourceID,
-			Health:     source.Health,
-			Permission: source.Permission,
-			Complete:   source.Complete,
+	for _, rule := range value.Rules {
+		response.Rules = append(response.Rules, nativeRuleStandingResponse{
+			RuleID: rule.Rule.RuleID, Capability: rule.Capability, Reason: rule.Reason,
+			Status: rule.Rule.Status, UnknownCause: rule.Rule.UnknownCause,
+			OpenOccurrence: rule.OpenOccurrence, Occurrences: rule.Occurrences,
 		})
 	}
-
 	return response
 }
 

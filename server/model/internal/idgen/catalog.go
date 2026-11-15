@@ -49,6 +49,7 @@ var entityIDs = []idSpec{
 	{typeName: "SubmissionReviewID", fieldName: "submission_review_id", constructorSubject: "submission-review"},
 	{typeName: "IntegrityDiscrepancyID", fieldName: "integrity_discrepancy_id", constructorSubject: "integrity-discrepancy"},
 	{typeName: "AttemptSuspensionID", fieldName: "attempt_suspension_id", constructorSubject: "attempt-suspension"},
+	{typeName: "ScreenClipID", fieldName: "screen_clip_id", constructorSubject: "screen-clip"},
 	{typeName: "AttemptWorkspaceEntryID", fieldName: "attempt_workspace_entry_id", constructorSubject: "attempt-workspace-entry"},
 	{typeName: "AttemptWorkspaceObjectID", fieldName: "attempt_workspace_object_id", constructorSubject: "attempt-workspace-object"},
 	{typeName: "StarterWorkspaceEntryID", fieldName: "starter_workspace_entry_id", constructorSubject: "starter-workspace-entry"},
@@ -77,6 +78,7 @@ var entityIDs = []idSpec{
 	{typeName: "AuditEventID", fieldName: "audit_event_id", constructorSubject: "audit-event"},
 	{typeName: "MailOccurrenceID", fieldName: "mail_occurrence_id", constructorSubject: "mail-occurrence"},
 	{typeName: "MailDeliveryID", fieldName: "mail_delivery_id", constructorSubject: "mail-delivery"},
+	{typeName: "DomainEventID", fieldName: "domain_event_id", constructorSubject: "domain-event"},
 	{typeName: "ExternalLoginStateID", fieldName: "external_login_state_id", constructorSubject: "external-login-state"},
 	{
 		typeName:           "BrowserAuthenticationTransactionID",

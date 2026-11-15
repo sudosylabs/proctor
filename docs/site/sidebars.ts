@@ -221,6 +221,11 @@ const sidebars: SidebarsConfig = {
             },
             {
               type: 'doc',
+              id: 'developers/server/plugins',
+              label: 'Plugins',
+            },
+            {
+              type: 'doc',
               id: 'developers/server/user-settings-slice',
               label: 'A complete vertical slice',
             },
@@ -384,6 +389,11 @@ const sidebars: SidebarsConfig = {
               type: 'doc',
               id: 'reference/configuration/localization-and-logging',
               label: 'Localization and logging',
+            },
+            {
+              type: 'doc',
+              id: 'reference/configuration/plugins',
+              label: 'Plugins',
             },
           ],
         },

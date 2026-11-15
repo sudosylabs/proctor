@@ -27,6 +27,9 @@ type ManagerAuthorizer interface {
 	AuthorizeSittingManage(context.Context, invocation.Invocation, model.ExamSittingID) (access.ManagerAuthorization, error)
 	AuthorizeSubmissionView(context.Context, invocation.Invocation, model.SubmissionID) error
 	AuthorizeBrowserActivityView(context.Context, invocation.Invocation, model.ExamSittingID) (access.BrowserActivityAuthorization, error)
+	AuthorizeScreenClipView(
+		context.Context, invocation.Invocation, model.ExamSittingID, model.ExamAttemptID,
+	) (ScreenClipViewAuthorization, error)
 }
 
 // Auditor is the part of *access.Auditor the Attempt use cases call. Begin
@@ -73,6 +76,11 @@ type Content interface {
 		string,
 	) (*model.AttemptWorkspaceContent, error)
 	OpenAttemptWorkspaceObject(context.Context, model.AttemptWorkspaceObjectID) (io.ReadCloser, error)
+	// StageScreenClipChunk stores one chunk of a screen clip if its bytes are
+	// the given size and match the given hash.
+	StageScreenClipChunk(context.Context, model.ScreenClipID, int, io.Reader, int64, string) error
+	// OpenScreenClipChunk opens length bytes of one stored chunk from offset.
+	OpenScreenClipChunk(context.Context, model.ScreenClipID, int, int64, int64) (io.ReadCloser, error)
 }
 
 // SubmissionMailPreparation contains only the safe identity needed to freeze
@@ -159,7 +167,12 @@ type Dependencies struct {
 	NewWorkspaceVersion func() model.WorkspaceContentVersion
 	NewSubmission       func() model.SubmissionID
 	NewReceiptCode      func() model.SubmissionReceiptCode
-	Operational         OperationalRecorder
+	// NewDomainEvent and NewJob propose the exam.attempt.submitted outbox row
+	// and its dispatch Job that a fresh voluntary, automatic or manager seal
+	// commits with the Submission.
+	NewDomainEvent func() model.DomainEventID
+	NewJob         func() model.JobID
+	Operational    OperationalRecorder
 }
 
 // OperationalRecorder receives the outcome of each use case the module
@@ -206,6 +219,8 @@ type Service struct {
 	newWorkspaceVersion  func() model.WorkspaceContentVersion
 	newSubmissionID      func() model.SubmissionID
 	newReceiptCode       func() model.SubmissionReceiptCode
+	newDomainEventID     func() model.DomainEventID
+	newJobID             func() model.JobID
 
 	liveControls     controlAdmission
 	deliveryControls controlAdmission
@@ -244,7 +259,9 @@ func New(deps Dependencies) (*Service, error) {
 		deps.NewWorkspaceObject == nil ||
 		deps.NewWorkspaceVersion == nil ||
 		deps.NewSubmission == nil ||
-		deps.NewReceiptCode == nil {
+		deps.NewReceiptCode == nil ||
+		deps.NewDomainEvent == nil ||
+		deps.NewJob == nil {
 		return nil, errors.New("Exam Attempt dependencies are required")
 	}
 
@@ -281,6 +298,8 @@ func New(deps Dependencies) (*Service, error) {
 		newWorkspaceVersion:  deps.NewWorkspaceVersion,
 		newSubmissionID:      deps.NewSubmission,
 		newReceiptCode:       deps.NewReceiptCode,
+		newDomainEventID:     deps.NewDomainEvent,
+		newJobID:             deps.NewJob,
 		liveControls:         controlAdmission{lane: liveControlLane},
 		deliveryControls:     controlAdmission{lane: deliveryControlLane},
 	}, nil

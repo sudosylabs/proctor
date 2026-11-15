@@ -243,6 +243,8 @@ func newAttempts(
 		NewWorkspaceVersion: model.NewWorkspaceContentVersion,
 		NewSubmission:       model.NewSubmissionID,
 		NewReceiptCode:      model.NewSubmissionReceiptCode,
+		NewDomainEvent:      model.NewDomainEventID,
+		NewJob:              model.NewJobID,
 		Operational:         operationalRecorderAdapter{recorder: deps.OperationalRecorder},
 	})
 }

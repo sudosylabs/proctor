@@ -54,6 +54,29 @@ contract:
   allow HTTPS addresses and paths. Navigation that is blocked is recorded. The
   rules are never quietly widened to let it through.
 
+Each Desktop security family has a mode: disabled, observe or enforce:
+
+- An observed family only records.
+- An enforced family stops the candidate starting while its check isn't met,
+  and raises a Flag when the check stops being met during the Exam. Choose its
+  outcome: a Flag, or a Flag and a suspension.
+
+Turning on the applications family always blocks the apps the Desktop release
+never allows, such as remote-control and screen-sharing tools. Its allowed list
+may name only apps the release marks as allowable. When the list names any, no
+other catalog app may run.
+
+If the candidate's Desktop release can't check a family, the Exam is refused
+at Start rather than the family being skipped. Each Desktop release says on
+which platforms each check is reliable enough to enforce. An enforced family
+refuses Start on a platform where it isn't, while an observed family runs
+everywhere. Nothing can be enforced on Linux yet.
+
+When the Exam records the screen, a candidate can start only once their
+Desktop is allowed to record and has at least 3 GiB free, which is enough for a
+long session and the clips cut from it. Linux can't record yet, so an Exam that
+records can't start there.
+
 ## Check before you publish
 
 Check:

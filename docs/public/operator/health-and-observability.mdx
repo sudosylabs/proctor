@@ -36,6 +36,12 @@ lease that is rejected, or a lease renewal that keeps failing past its retry
 margin. Proctor then removes readiness and stops serving, rather than run
 without the durable proof that it is the serving node.
 
+A failed plugin never removes readiness. While an enabled plugin has failed,
+`GET /health/ready` still answers `200`, but with `"status": "degraded"`, and
+the node keeps serving without that plugin. The server log and the
+`proctor_plugin_state` metric name the plugin. See
+[Plugins configuration](../reference/configuration/plugins.mdx).
+
 The serving lease lasts 30 seconds and renews every 5 seconds. Each lease
 operation has 5 seconds to finish. Proctor retries a failed renewal every
 second, as long as an attempt can still finish at least 5 seconds before the
@@ -49,7 +55,8 @@ Metrics have their own listener on each node, by default `127.0.0.1:8067`. It
 serves `GET /metrics` and, only when you turn on [profiling](#profiling), the
 Go runtime profiles. Scrape every node, because Memberlist doesn't combine
 metrics across nodes. The `proctor_` families cover readiness, HTTP, stores,
-caches, WebSocket, cluster, Jobs, VFS, mail and selected domain outcomes.
+caches, WebSocket, cluster, Jobs, VFS, mail, plugins and selected domain
+outcomes.
 
 If you bind the listener to anything other than loopback, the configuration
 must use static TLS and a random bearer token of 32 to 512 bytes. Keep the
@@ -94,6 +101,19 @@ every statement in a transaction. The record carries the request's
 `request_id` and, with tracing on, the store span's `trace_id`. The default,
 `0s`, turns the log off. `proctor_store_operation_duration_seconds` still gives
 you the aggregate view.
+
+### Plugins
+
+| Family | Meaning |
+| --- | --- |
+| `proctor_plugin_state` | 1 for each compiled-in plugin's current state (`disabled`, `active` or `failed`), 0 for its other states |
+| `proctor_plugin_calls_total` | calls from the server into a plugin, by `operation` and `outcome` (`ok`, `error`, `panic`, `unavailable`, `timeout`) |
+| `proctor_plugin_call_duration_seconds` | duration of those calls |
+
+A `panic` or `timeout` outcome is a defect in the plugin. After three panics a
+plugin moves to `failed`. `unavailable` counts calls refused because the
+plugin had already failed. `error` includes the plugin's ordinary refusals,
+such as a sign-in the provider rejected.
 
 ## Profiling
 

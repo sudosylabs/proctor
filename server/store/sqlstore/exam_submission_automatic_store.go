@@ -267,6 +267,10 @@ func sealAutomaticExamSubmission(
 	if err != nil {
 		return nil, err
 	}
+	events := domainEventIdentities{EventID: input.DomainEventID, JobID: input.DomainEventJobID}
+	if !events.valid() {
+		return nil, store.NewErrInvalidInput("exam_submission", "domain_event", nil)
+	}
 	if !automaticExamSubmissionSealable(row) {
 		return nil, store.NewErrConflict("exam_attempt", "exam_attempt_state", nil)
 	}
@@ -373,6 +377,9 @@ func sealAutomaticExamSubmission(
 		return nil, err
 	}
 	if err = insertExamSubmissionReceiptMail(ctx, tx, input.Notice, payloadKeyID); err != nil {
+		return nil, err
+	}
+	if err = insertExamAttemptSubmittedEvent(ctx, tx, events, submission, target.SittingID, target.ExamID, databaseNow); err != nil {
 		return nil, err
 	}
 

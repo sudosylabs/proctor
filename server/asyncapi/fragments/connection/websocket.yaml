@@ -27,6 +27,8 @@ channels:
         $ref: '#/components/messages/user_profile_picture_changed'
       access_policy_changed:
         $ref: '#/components/messages/access_policy_changed'
+      plugin_settings_changed:
+        $ref: '#/components/messages/plugin_settings_changed'
       job.changed:
         $ref: '#/components/messages/job.changed'
       onboarding_import.changed:
@@ -89,6 +91,8 @@ channels:
         $ref: '#/components/messages/exam_attempt_workspace_changed'
       exam_attempt_focus_warning:
         $ref: '#/components/messages/exam_attempt_focus_warning'
+      exam_attempt_screen_clips_requested:
+        $ref: '#/components/messages/exam_attempt_screen_clips_requested'
       exam_attempt_integrity_flagged:
         $ref: '#/components/messages/exam_attempt_integrity_flagged'
       exam_attempt_submitted:
@@ -109,6 +113,22 @@ channels:
         $ref: '#/components/messages/ping'
       pong:
         $ref: '#/components/messages/pong'
+      exam_attempt.connect:
+        $ref: '#/components/messages/exam_attempt.connect'
+      exam_attempt_connect_reply:
+        $ref: '#/components/messages/exam_attempt_connect_reply'
+      exam_attempt.focus_loss:
+        $ref: '#/components/messages/exam_attempt.focus_loss'
+      exam_attempt_focus_loss_reply:
+        $ref: '#/components/messages/exam_attempt_focus_loss_reply'
+      exam_attempt.renew:
+        $ref: '#/components/messages/exam_attempt.renew'
+      exam_attempt_renew_reply:
+        $ref: '#/components/messages/exam_attempt_renew_reply'
+      exam_attempt.security.update:
+        $ref: '#/components/messages/exam_attempt.security.update'
+      security_control_reply:
+        $ref: '#/components/messages/security_control_reply'
       subscribe:
         $ref: '#/components/messages/subscribe'
       unsubscribe:
@@ -157,6 +177,7 @@ operations:
       - $ref: '#/channels/websocket/messages/user_settings_changed'
       - $ref: '#/channels/websocket/messages/user_profile_picture_changed'
       - $ref: '#/channels/websocket/messages/access_policy_changed'
+      - $ref: '#/channels/websocket/messages/plugin_settings_changed'
       - $ref: '#/channels/websocket/messages/job.changed'
       - $ref: '#/channels/websocket/messages/onboarding_import.changed'
       - $ref: '#/channels/websocket/messages/onboarding_import.changed_for_creator'
@@ -188,6 +209,7 @@ operations:
       - $ref: '#/channels/websocket/messages/exam_attempt_access_reallowed'
       - $ref: '#/channels/websocket/messages/exam_attempt_workspace_changed'
       - $ref: '#/channels/websocket/messages/exam_attempt_focus_warning'
+      - $ref: '#/channels/websocket/messages/exam_attempt_screen_clips_requested'
       - $ref: '#/channels/websocket/messages/exam_attempt_integrity_flagged'
       - $ref: '#/channels/websocket/messages/exam_attempt_submitted'
       - $ref: '#/channels/websocket/messages/exam_attempt_submitted_for_candidate'
@@ -213,6 +235,119 @@ operations:
     x-proctor-error-codes:
       - websocket.request.invalid
       - websocket.rate_limited
+  receiveExamAttemptConnect:
+    action: receive
+    channel:
+      $ref: '#/channels/websocket'
+    title: Connect to the Exam Attempt
+    summary: The server admits, rejoins or resumes the Attempt and binds this connection.
+    messages:
+      - $ref: '#/channels/websocket/messages/exam_attempt.connect'
+    reply:
+      channel:
+        $ref: '#/channels/websocket'
+      messages:
+        - $ref: '#/channels/websocket/messages/exam_attempt_connect_reply'
+        - $ref: '#/channels/websocket/messages/command_error'
+    x-proctor-error-codes:
+      - websocket.request.invalid
+      - websocket.rate_limited
+      - exam.attempt.already_connected
+      - exam.attempt.unavailable
+      - exam.attempt.sitting_not_open
+      - exam.attempt.state_conflict
+      - exam.delivery.metadata_capacity
+      - exam.security.attempt_not_ready
+      - exam.security.catalog_missing
+      - exam.security.configuration_unsupported
+      - exam.security.policy_changed
+      - exam.security.preflight_consumed
+      - exam.security.preflight_expired
+      - exam.security.preflight_report_changed
+      - exam.security.preflight_required
+      - exam.security.preflight_superseded
+      - exam.security.readiness_unmet
+      - exam.security.resume_required
+      - exam.security.session_changed
+      - resource.not_found
+      - authorization.denied
+  receiveExamAttemptFocusLoss:
+    action: receive
+    channel:
+      $ref: '#/channels/websocket'
+    title: Report a Focus Loss
+    summary: The server applies the Exam's Focus Loss policy to the signal.
+    messages:
+      - $ref: '#/channels/websocket/messages/exam_attempt.focus_loss'
+    reply:
+      channel:
+        $ref: '#/channels/websocket'
+      messages:
+        - $ref: '#/channels/websocket/messages/exam_attempt_focus_loss_reply'
+        - $ref: '#/channels/websocket/messages/command_error'
+    x-proctor-error-codes:
+      - websocket.request.invalid
+      - websocket.rate_limited
+      - authentication.token_invalid
+      - exam.attempt.connection_closed
+      - exam.attempt.connection_lost
+      - exam.attempt.focus_loss_conflict
+      - exam.attempt.sitting_not_open
+      - exam.attempt.state_conflict
+      - exam.attempt.unavailable
+      - resource.not_found
+  receiveExamAttemptRenew:
+    action: receive
+    channel:
+      $ref: '#/channels/websocket'
+    title: Renew the Exam Attempt Participation
+    summary: The server extends the lease and processes the security control.
+    messages:
+      - $ref: '#/channels/websocket/messages/exam_attempt.renew'
+    reply:
+      channel:
+        $ref: '#/channels/websocket'
+      messages:
+        - $ref: '#/channels/websocket/messages/exam_attempt_renew_reply'
+        - $ref: '#/channels/websocket/messages/command_error'
+    x-proctor-error-codes:
+      - websocket.request.invalid
+      - websocket.rate_limited
+      - exam.attempt.connection_closed
+      - exam.attempt.connection_lost
+      - exam.attempt.sitting_not_open
+      - exam.attempt.state_conflict
+      - exam.attempt.unavailable
+      - exam.security.control_conflict
+      - exam.security.policy_changed
+      - resource.not_found
+      - authorization.denied
+  receiveExamAttemptSecurityUpdate:
+    action: receive
+    channel:
+      $ref: '#/channels/websocket'
+    title: Update the security control
+    summary: The server processes a security control without extending the lease.
+    messages:
+      - $ref: '#/channels/websocket/messages/exam_attempt.security.update'
+    reply:
+      channel:
+        $ref: '#/channels/websocket'
+      messages:
+        - $ref: '#/channels/websocket/messages/security_control_reply'
+        - $ref: '#/channels/websocket/messages/command_error'
+    x-proctor-error-codes:
+      - websocket.request.invalid
+      - websocket.rate_limited
+      - exam.attempt.connection_closed
+      - exam.attempt.connection_lost
+      - exam.attempt.sitting_not_open
+      - exam.attempt.state_conflict
+      - exam.attempt.unavailable
+      - exam.security.control_conflict
+      - exam.security.policy_changed
+      - resource.not_found
+      - authorization.denied
   receiveSubscribe:
     action: receive
     channel:

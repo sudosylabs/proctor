@@ -186,6 +186,9 @@ type Dependencies struct {
 	// changes into the Workspace before a voluntary or manager seal. It is
 	// optional: without one, nothing is settled.
 	EnvironmentSettler EnvironmentSettler
+	// Environments are the Attempt Environments a manager replaces. It is
+	// optional: without it, no Attempt has one.
+	Environments store.AttemptEnvironmentStore
 }
 
 // EnvironmentSettler settles an Attempt's execution environment before its
@@ -234,6 +237,8 @@ type Service struct {
 	operational   OperationalRecorder
 	environments  EnvironmentWaker
 	settler       EnvironmentSettler
+	// environmentStore holds the Attempt Environments; nil when none exist.
+	environmentStore store.AttemptEnvironmentStore
 
 	newAttemptID         func() model.ExamAttemptID
 	newWorkspaceID       func() model.ExamAttemptWorkspaceID
@@ -317,6 +322,7 @@ func New(deps Dependencies) (*Service, error) {
 		operational:          deps.Operational,
 		environments:         deps.EnvironmentWaker,
 		settler:              deps.EnvironmentSettler,
+		environmentStore:     deps.Environments,
 		newAttemptID:         deps.NewAttemptID,
 		newWorkspaceID:       deps.NewWorkspaceID,
 		newParticipationID:   deps.NewParticipation,

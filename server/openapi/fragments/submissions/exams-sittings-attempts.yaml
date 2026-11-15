@@ -457,6 +457,7 @@ components:
         - entry_id
         - kind
         - path
+        - author
       properties:
         entry_id:
           $ref: '#/components/schemas/ID'
@@ -467,6 +468,8 @@ components:
             - directory
         path:
           $ref: '#/components/schemas/StarterWorkspacePath'
+        author:
+          $ref: '#/components/schemas/WorkspaceAuthor'
         content_version:
           $ref: '#/components/schemas/WorkspaceContentVersion'
         media_type:

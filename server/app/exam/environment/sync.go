@@ -520,6 +520,7 @@ func (o *owner) processes(ctx context.Context) (uint64, error) {
 	if len(page.Events) == 0 || page.Next <= after {
 		return 0, nil
 	}
+	o.origins.attribute(o.row.Epoch, page.Events)
 	for _, chunk := range processChunks(page.Events) {
 		at := chunk[0].At
 		if at.IsZero() {
@@ -543,6 +544,54 @@ func (o *owner) processes(ctx context.Context) (uint64, error) {
 	}
 	o.row.ProcessCursor = int64(page.Next) //nolint:gosec // G115: sequences stay below 2^53.
 	return page.Next, nil
+}
+
+// The kinds of command log event the attribution reads.
+const (
+	processStarted = "started"
+	processExited  = "exited"
+)
+
+// maxProcessOrigins bounds the processes one machine's attribution keeps.
+const maxProcessOrigins = 1 << 14
+
+// processOrigins attributes every started process to the tag of the started
+// process it descends from: a process Start created carries its own tag, and
+// a descendant takes its parent's. It follows one machine epoch and is kept
+// in memory only, so an owner that restarts, or reads past events another
+// owner stored, attributes nothing it did not see start: its records leave
+// Origin empty rather than guess.
+type processOrigins struct {
+	epoch string
+	byPID map[int]string
+}
+
+// attribute sets Origin on each event of epoch's command log, in order.
+func (p *processOrigins) attribute(epoch string, events []ProcessEvent) {
+	if p.epoch != epoch || p.byPID == nil {
+		p.epoch, p.byPID = epoch, map[int]string{}
+	}
+	for index := range events {
+		event := &events[index]
+		switch event.Kind {
+		case processStarted:
+			origin := event.Tag
+			if origin == "" && event.ParentPID != 0 {
+				origin = p.byPID[event.ParentPID]
+			}
+			// A start under a known PID is a program started in place, or a
+			// reused PID; either way it is that process now.
+			delete(p.byPID, event.PID)
+			if origin != "" && len(p.byPID) < maxProcessOrigins {
+				p.byPID[event.PID] = origin
+			}
+			event.Origin = origin
+		case processExited:
+			// The PID may be reused after its exit.
+			event.Origin = p.byPID[event.PID]
+			delete(p.byPID, event.PID)
+		}
+	}
 }
 
 // processChunks splits events into records of bounded detail.

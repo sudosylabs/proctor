@@ -19,6 +19,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"io"
 	"math/big"
@@ -32,8 +33,10 @@ import (
 	"github.com/sudosylabs/execenv"
 	"github.com/sudosylabs/execenv/memory"
 
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/app/exam/environment"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
 	"github.com/sudosylabs/proctor/server/app/identity"
@@ -77,7 +80,9 @@ func (b *integrationBodies) Next(context.Context) (io.Reader, error) {
 // with an execution policy is published, the candidate connects, the
 // environment is placed and the starter file reaches the guest, a guest file
 // is harvested by the environment author, an editor save reaches the guest,
-// default ignore patterns keep a dependency install off the record, a lost
+// default ignore patterns keep a dependency install off the record, a
+// command typed into a terminal is in the command log with the terminal as
+// its origin and its input is recorded, a lost
 // machine gives a new incarnation and a gap, the submit settles a guest
 // change made just before it into the Submission, and the Submission revokes
 // the machine.
@@ -193,7 +198,7 @@ func TestAttemptEnvironmentEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	configured, err := helper.App.ExamAuthoring.ConfigureExamDraftExecution(ctx, managerInv, exam.ConfigureDraftExecutionCommand{
 		ExamID: created.Exam.ID, ExpectedDraftRevision: file.DraftRevision,
-		Execution:      model.ExecutionPolicy{Enabled: true, Profile: profile, Terminals: 1},
+		Execution:      model.ExecutionPolicy{Enabled: true, Profile: profile, Terminals: 1, RecordInput: true},
 		IdempotencyKey: "execution-flow-policy",
 	})
 	require.NoError(t, err)
@@ -315,6 +320,34 @@ func TestAttemptEnvironmentEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	eventually(func() bool { return readGuest(grantID, "editor.py") == string(saved) }, "the editor's save reaches the guest")
 
+	// The candidate opens a terminal and types a command into it, from
+	// whichever node serves the request.
+	opened, err := helper.App.Terminals.OpenTerminal(ctx, desktop.inv, access, environment.Window{})
+	require.NoError(t, err)
+	require.Equal(t, "terminal:1", opened.Tag)
+	_, err = helper.App.Terminals.OpenTerminal(ctx, desktop.inv, access, environment.Window{})
+	require.True(t, apperror.Is(err, "exam.attempt.terminal_limit_reached"), "the policy allows one terminal: %v", err)
+	session, err := helper.App.Terminals.AttachTerminal(ctx, desktop.inv, access, opened.Tag)
+	require.NoError(t, err)
+	output, err := session.Output(ctx, 0)
+	require.NoError(t, err)
+	typed := []byte("echo terminal-ran\n")
+	next, err := session.Write(ctx, 0, typed)
+	require.NoError(t, err)
+	require.EqualValues(t, len(typed), next)
+	var shown []byte
+	for !strings.Contains(string(shown), "terminal-ran\r\n") {
+		event, nextErr := output.Next(ctx)
+		require.NoError(t, nextErr)
+		shown = append(shown, event.Data...)
+	}
+	require.NoError(t, output.Close())
+	session.Close(ctx)
+	eventually(func() bool {
+		row, getErr := persistence.AttemptEnvironment().Get(ctx, connected.Attempt.ID)
+		return getErr == nil && row.ProcessCursor >= 3
+	}, "the owner stores the terminal's command log")
+
 	// Default ignore patterns keep a dependency install in the guest.
 	require.NoError(t, guests.MkdirGuest(ctx, grantID, "node_modules"))
 	require.NoError(t, guests.WriteGuest(ctx, grantID, "node_modules/dep.js", []byte("module.exports = 1\n")))
@@ -350,8 +383,30 @@ func TestAttemptEnvironmentEndToEnd(t *testing.T) {
 		SubmissionID: submitted.SubmissionID, Limit: 100,
 	})
 	require.NoError(t, err)
-	restartGaps := 0
+	restartGaps, terminalCommands, terminalInputs := 0, 0, 0
 	for _, item := range evidence.Items {
+		switch item.Kind {
+		case model.AttemptEvidenceProcess:
+			var detail struct {
+				Events []struct {
+					Kind   string   `json:"kind"`
+					Argv   []string `json:"argv"`
+					Origin string   `json:"origin"`
+				} `json:"events"`
+			}
+			require.NoError(t, json.Unmarshal(item.Detail, &detail))
+			for _, event := range detail.Events {
+				if event.Kind == "started" && len(event.Argv) > 1 && event.Argv[1] == "terminal-ran" {
+					terminalCommands++
+					require.Equal(t, "terminal:1", event.Origin, "the command log names the terminal")
+				}
+			}
+		case model.AttemptEvidenceInput:
+			terminalInputs++
+			require.Equal(t, model.NewEnvironmentWorkspaceAuthor(0, "terminal:1"), item.Author)
+			require.EqualValues(t, 1, item.Sequence, "numbered by the input offset")
+			require.NotContains(t, string(item.Detail), "terminal-ran\r\n", "output is never recorded")
+		}
 		require.NotContains(t, string(item.Detail), "settle_incomplete", "the settle finished in time")
 		if item.Gap() && strings.Contains(string(item.Detail), `"gap":"environment_restarted"`) {
 			restartGaps++
@@ -359,6 +414,8 @@ func TestAttemptEnvironmentEndToEnd(t *testing.T) {
 		}
 	}
 	require.Equal(t, 1, restartGaps, "the restart is one gap")
+	require.Equal(t, 1, terminalCommands, "the typed command is in the sealed command log")
+	require.Equal(t, 1, terminalInputs, "the typed input is recorded once")
 }
 
 // mustIncarnation reads the incarnation an environment author names.

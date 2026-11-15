@@ -114,7 +114,12 @@ func New(deps Dependencies) (*App, error) {
 		Classes:            deps.Store.Class(),
 	})
 	counts := administration.NewCounts(administrationCountsDependencies(onboardingPorts, runtime))
+	terminals, err := newTerminals(deps, exams.attempts)
+	if err != nil {
+		return nil, err
+	}
 	return &App{
+		Terminals:         terminals,
 		Identity:          identities,
 		Onboarding:        onboardings,
 		Administration:    administrations,

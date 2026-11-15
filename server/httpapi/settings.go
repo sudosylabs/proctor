@@ -8,6 +8,7 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"net/netip"
 	"time"
@@ -61,6 +62,44 @@ type Settings struct {
 	// WebSocket is the sibling transport constructed at composition root.
 	// HTTP owns only route mounting and session middleware around Accept.
 	WebSocket WebSocketTransport
+	// BinarySockets upgrades a request to a binary socket, such as a
+	// terminal's. Nil refuses every binary socket as unavailable.
+	BinarySockets BinarySocketTransport
+}
+
+// BinarySocket is one upgraded binary WebSocket. Read returns the next
+// binary message; Write sends one. A failure of either ends the socket.
+type BinarySocket interface {
+	Read(ctx context.Context) ([]byte, error)
+	Write(ctx context.Context, message []byte) error
+}
+
+// BinarySocketOutcome says how a binary socket's server ended, which
+// chooses the close code the client sees.
+type BinarySocketOutcome int
+
+// The outcomes of a binary socket.
+const (
+	// BinarySocketDone closes normally.
+	BinarySocketDone BinarySocketOutcome = iota
+	// BinarySocketAccessEnded closes with the access-ended code (4003).
+	BinarySocketAccessEnded
+	// BinarySocketFailed closes as an internal error.
+	BinarySocketFailed
+)
+
+// BinarySocketTransport upgrades an authenticated request to a binary
+// WebSocket and runs serve on it. Composition supplies the sibling WebSocket
+// transport. An error it returns describes a pre-upgrade refusal and leaves
+// the response uncommitted.
+type BinarySocketTransport interface {
+	ServeBinarySocket(
+		writer http.ResponseWriter,
+		request *http.Request,
+		allowMissingOrigin bool,
+		maxMessageBytes int64,
+		serve func(ctx context.Context, socket BinarySocket) BinarySocketOutcome,
+	) error
 }
 
 // WebSocketTransport is the narrow mount surface HTTP needs from the sibling

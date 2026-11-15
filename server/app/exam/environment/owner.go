@@ -196,6 +196,7 @@ type owner struct {
 	lastObserved time.Time
 	ignore       ignoreCache
 	processLag   bool
+	origins      processOrigins
 }
 
 // echo is a harvested change the owner confirmed to the machine, kept until
@@ -292,6 +293,10 @@ func (o *owner) step(ctx context.Context) (time.Duration, error) {
 	if o.row.Desired == model.AttemptEnvironmentDesiredEnded {
 		return 0, o.teardown(ctx)
 	}
+	if o.row.ReplacePending() {
+		// A manager asked for a new machine built from the Workspace.
+		return 0, restartError{reason: "manager"}
+	}
 	if o.machine == nil {
 		if err := o.establish(ctx); err != nil {
 			return 0, err
@@ -377,8 +382,14 @@ func (o *owner) completeSettle(ctx context.Context) error {
 // spec is the machine the row names. It is derived from the row alone, so
 // every owner ensures exactly the same one.
 func (o *owner) spec(grantID string) MachineSpec {
-	return MachineSpec{GrantID: grantID, Image: o.row.Image, Network: o.row.Network, Resources: o.row.Resources,
-		IdleSuspend: o.row.IdleWindow}
+	return machineSpec(o.row, grantID)
+}
+
+// machineSpec is the machine an environment row names under grantID. The
+// owner and every node that serves a terminal derive it the same way.
+func machineSpec(row *model.AttemptEnvironment, grantID string) MachineSpec {
+	return MachineSpec{GrantID: grantID, Image: row.Image, Network: row.Network, Resources: row.Resources,
+		IdleSuspend: row.IdleWindow}
 }
 
 // establish reaches the machine the row names, or places a new one.

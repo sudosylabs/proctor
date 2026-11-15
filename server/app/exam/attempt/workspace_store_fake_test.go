@@ -48,6 +48,10 @@ func (*attemptWorkspaceStoreFake) AppendAttemptEvidence(context.Context, *store.
 	panic("attempt use cases do not append Attempt evidence")
 }
 
+func (*attemptWorkspaceStoreFake) AppendTerminalInput(context.Context, *store.ExamAttemptTerminalInputAppend) (*store.ExamAttemptEvidenceAppendResult, error) {
+	panic("attempt use cases do not record terminal input")
+}
+
 func (f *attemptWorkspaceStoreFake) List(_ context.Context, options store.CandidateWorkspaceListOptions) (*store.CandidateAttemptWorkspacePage, error) {
 	f.lists++
 	f.readAccess = options.Access

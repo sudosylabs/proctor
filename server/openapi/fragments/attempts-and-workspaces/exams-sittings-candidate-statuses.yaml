@@ -226,6 +226,31 @@ components:
           minimum: 0
         native_security:
           $ref: '#/components/schemas/NativeSecuritySummary'
+        environment:
+          $ref: '#/components/schemas/SittingCandidateEnvironmentResponse'
+    SittingCandidateEnvironmentResponse:
+      type: object
+      additionalProperties: false
+      description: >-
+        The candidate's execution environment, present once the Attempt has one. Incarnation counts the
+        machines it has had; a manager names it to replace the current one.
+      required:
+        - state
+        - desired
+        - incarnation
+      properties:
+        state:
+          $ref: '#/components/schemas/AttemptEnvironmentState'
+        desired:
+          $ref: '#/components/schemas/AttemptEnvironmentDesired'
+        incarnation:
+          type: integer
+          format: int64
+          minimum: 0
+        waiting_since:
+          type: string
+          format: date-time
+          description: When the current wait for an execution host with room began.
     ExamSittingCandidateStatusesResponse:
       type: object
       additionalProperties: false
@@ -235,6 +260,7 @@ components:
         - exam_sitting_id
         - sitting_state
         - sitting_revision
+        - environments_waiting_capacity
         - items
       properties:
         server_time:
@@ -250,6 +276,11 @@ components:
           type: integer
           format: int64
           minimum: 1
+        environments_waiting_capacity:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many of the Sitting's execution environments wait for a host with room, across every page.
         items:
           type: array
           items:

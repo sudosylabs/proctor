@@ -340,6 +340,16 @@ codes:
     description: "The correction acknowledgement does not match the pending correction."
   - code: exam.attempt.desktop_incompatible
     description: "The Desktop build is not compatible with the current Desktop Compatibility Policy."
+  - code: exam.attempt.environment_changed
+    description: "The Attempt's execution environment has a newer machine than the one named; read the board again."
+  - code: exam.attempt.environment_ended
+    description: "The Attempt's execution environment has ended with its Submission."
+  - code: exam.attempt.environment_not_found
+    description: "The Attempt's Exam Revision does not give it an execution environment."
+  - code: exam.attempt.environment_not_running
+    description: "The Attempt's execution environment has no running machine now, such as while it starts, waits for capacity or is frozen; retry once it runs."
+  - code: exam.attempt.environment_unavailable
+    description: "The installation runs no execution environments, or the execution host could not be reached; retry later."
   - code: exam.attempt.focus_loss_conflict
     description: "The focus-loss report is out of sequence."
     websocket_fallback: true
@@ -373,6 +383,12 @@ codes:
     websocket_fallback: true
   - code: exam.attempt.suspension_conflict
     description: "The Attempt is suspended or the suspension changed."
+  - code: exam.attempt.terminal_exited
+    description: "The terminal has exited; open another."
+  - code: exam.attempt.terminal_limit_reached
+    description: "The candidate already has as many terminals running as the Exam allows, or the machine has opened as many as it may."
+  - code: exam.attempt.terminal_not_found
+    description: "No terminal with that number runs on the Attempt's current machine."
   - code: exam.attempt.unavailable
     description: "The Attempt operation failed; retry later."
     websocket_fallback: true

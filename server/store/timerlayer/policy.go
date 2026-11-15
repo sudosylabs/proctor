@@ -440,6 +440,7 @@ const (
 	methodMarkObjectsReady                          methodName = "mark_objects_ready"
 	methodApplyBatch                                methodName = "apply_batch"
 	methodAppendAttemptEvidence                     methodName = "append_environment_evidence"
+	methodAppendTerminalInput                       methodName = "append_terminal_input"
 	methodListAttemptEvidence                       methodName = "list_attempt_evidence"
 	methodMoveEntry                                 methodName = "move_entry"
 	methodReplaceFile                               methodName = "replace_file"

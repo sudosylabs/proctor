@@ -36,6 +36,7 @@ type rig struct {
 	t            *testing.T
 	attemptID    model.ExamAttemptID
 	host         *memory.Host
+	hosts        *executionhost.Hosts
 	environments *environmentsFake
 	workspace    *workspaceFake
 	evidence     *evidenceFake
@@ -61,7 +62,7 @@ func newRig(t *testing.T, timing environment.OwnerTiming) *rig {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = hosts.Close() })
 	now := time.Now().UTC()
-	r := &rig{t: t, attemptID: model.NewExamAttemptID(), host: host, workspace: newWorkspaceFake(), evidence: &evidenceFake{},
+	r := &rig{t: t, attemptID: model.NewExamAttemptID(), host: host, hosts: hosts, workspace: newWorkspaceFake(), evidence: &evidenceFake{},
 		wake: make(chan struct{}, 1), done: make(chan error, 1)}
 	r.environments = &environmentsFake{row: model.AttemptEnvironment{
 		AttemptID: r.attemptID, SittingID: model.NewExamSittingID(), ProfileID: model.NewEnvironmentProfileID(),
@@ -267,4 +268,24 @@ func TestNewOwnersRefusesMissingDependencies(t *testing.T) {
 	t.Parallel()
 	_, err := environment.NewOwners(environment.OwnerDependencies{})
 	require.Error(t, err)
+}
+
+func TestOwnerReplacesTheMachineAManagerNamed(t *testing.T) {
+	t.Parallel()
+	r := newRig(t, environment.OwnerTiming{})
+	r.running()
+	old := r.grant()
+	r.environments.mu.Lock()
+	r.environments.row.ReplaceBefore = r.environments.row.Incarnation + 1
+	r.environments.row.Revision++
+	r.environments.mu.Unlock()
+	r.poke()
+	require.Eventually(t, func() bool {
+		row := r.environments.snapshot()
+		return row.Incarnation == 1 && !row.ReplacePending() && row.State == model.AttemptEnvironmentRunning &&
+			row.ProjectionCursor == r.workspace.cursor()
+	}, eventually, tick, "the owner builds a new machine from the Workspace")
+	require.NotEqual(t, old, r.grant())
+	require.Equal(t, "print(1)\n", r.guest("src/main.py"))
+	require.Equal(t, 1, r.evidence.gaps("environment_restarted"), "the replacement is recorded as a restart")
 }

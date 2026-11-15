@@ -1,0 +1,539 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/exam-attempts/{exam_attempt_id}/environment:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+    get:
+      operationId: getCandidateEnvironment
+      summary: Read the Attempt's execution environment
+      tags:
+        - Attempts and workspaces
+      description: >-
+        Returns what the Attempt's execution environment does and how far the Attempt Workspace has
+        reached it. A Workspace entry whose last journal change is past projection_cursor is not in the
+        machine yet, which a client can mark as not yet synced. A guest change waits about a second at
+        most before it is saved, so the client needs no marker for that direction.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - exam.attempt.environment_not_found
+        - exam.attempt.environment_unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CandidateAttemptCredential'
+        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+      responses:
+        '200':
+          $ref: '#/components/responses/CandidateEnvironment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exam-attempts/{exam_attempt_id}/environment/terminals:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+    post:
+      operationId: openCandidateTerminal
+      summary: Open a terminal in the Attempt's execution environment
+      tags:
+        - Attempts and workspaces
+      description: >-
+        Starts a terminal running the image's login shell on the Attempt's current machine and answers with its number and tag. Terminals are numbered in the order the machine opened them, terminal:1, terminal:2 and so on, and a number is never reused on that machine. At most the Exam's number of terminals run at once; past it the request fails with exam.attempt.terminal_limit_reached. The environment must be running: while it starts, waits for capacity or is frozen the request fails with exam.attempt.environment_not_running. A request whose response was lost may have opened a terminal, so a client lists the terminals before opening another. Every command a terminal runs is in the Attempt's command log, and when the Exam records terminal input the input is kept too; output never is.
+      x-codeSamples:
+        - lang: Shell
+          source: |-
+            curl --fail-with-body \
+              --request POST \
+              --url 'https://proctor.example.edu/api/v1/exam-attempts/<exam-attempt-id>/environment/terminals' \
+              --header 'Authorization: DPoP <desktop-session-access-credential>' \
+              --header 'DPoP: <fresh-proof-for-this-post-target-and-current-nonce>' \
+              --header 'X-Proctor-Attempt-Credential: <attempt-credential>' \
+              --header 'X-Proctor-Attempt-Connection-ID: <attempt-connection-id>' \
+              --header 'Content-Type: application/json' \
+              --data '{"cols":120,"rows":32}'
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - exam.attempt.environment_not_found
+        - exam.attempt.environment_not_running
+        - exam.attempt.environment_unavailable
+        - exam.attempt.terminal_limit_reached
+        - exam.attempt.terminal_not_found
+        - exam.attempt.terminal_exited
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/CandidateAttemptCredential'
+        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+      requestBody:
+        $ref: '#/components/requestBodies/OpenCandidateTerminal'
+      responses:
+        '201':
+          $ref: '#/components/responses/CandidateTerminalOpened'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    get:
+      operationId: listCandidateTerminals
+      summary: List the terminals in the Attempt's execution environment
+      tags:
+        - Attempts and workspaces
+      description: >-
+        Lists the candidate's terminals on the Attempt's current machine, running or exited, in number order, with where each one's output and input stand. A client reconnecting after a restart reads it to reattach. A new machine, after the old one was lost or replaced, starts with no terminals.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - exam.attempt.environment_not_found
+        - exam.attempt.environment_not_running
+        - exam.attempt.environment_unavailable
+        - exam.attempt.terminal_limit_reached
+        - exam.attempt.terminal_not_found
+        - exam.attempt.terminal_exited
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CandidateAttemptCredential'
+        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+      responses:
+        '200':
+          $ref: '#/components/responses/CandidateTerminals'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exam-attempts/{exam_attempt_id}/environment/terminals/{terminal}/signal:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+      - $ref: '#/components/parameters/CandidateTerminalNumber'
+    post:
+      operationId: signalCandidateTerminal
+      summary: Interrupt what a terminal runs
+      tags:
+        - Attempts and workspaces
+      description: >-
+        Sends the terminal an interrupt, as Ctrl+C does in a terminal that reads its keys. A candidate may only interrupt; the server ends terminals itself when the machine ends. An exited terminal fails with exam.attempt.terminal_exited, and a number the current machine never opened with exam.attempt.terminal_not_found.
+      x-codeSamples:
+        - lang: Shell
+          source: |-
+            curl --fail-with-body \
+              --request POST \
+              --url 'https://proctor.example.edu/api/v1/exam-attempts/<exam-attempt-id>/environment/terminals/1/signal' \
+              --header 'Authorization: DPoP <desktop-session-access-credential>' \
+              --header 'DPoP: <fresh-proof-for-this-post-target-and-current-nonce>' \
+              --header 'X-Proctor-Attempt-Credential: <attempt-credential>' \
+              --header 'X-Proctor-Attempt-Connection-ID: <attempt-connection-id>' \
+              --header 'Content-Type: application/json' \
+              --data '{"signal":"interrupt"}'
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - exam.attempt.environment_not_found
+        - exam.attempt.environment_not_running
+        - exam.attempt.environment_unavailable
+        - exam.attempt.terminal_limit_reached
+        - exam.attempt.terminal_not_found
+        - exam.attempt.terminal_exited
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/CandidateAttemptCredential'
+        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+      requestBody:
+        $ref: '#/components/requestBodies/SignalCandidateTerminal'
+      responses:
+        '204':
+          description: The terminal was interrupted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exam-attempts/{exam_attempt_id}/environment/terminals/{terminal}/socket:
+    parameters:
+      - $ref: '#/components/parameters/ExamAttemptID'
+      - $ref: '#/components/parameters/CandidateTerminalNumber'
+    get:
+      operationId: connectCandidateTerminal
+      summary: Upgrade to a terminal's binary socket
+      tags:
+        - Attempts and workspaces
+      description: |-
+        Upgrades to a binary WebSocket attached to one terminal. Any Proctor node serves it by reaching the execution machine itself, so a reconnect may land on another node and resume exactly. The terminal is attached before the upgrade: a refusal answers as a problem.
+
+        Every message is one binary frame whose first byte is its type; integers are big-endian. The client's first message is ATTACH or SCREEN.
+
+        Client frames:
+        - `0x01` ATTACH `offset:u64`: stream output from offset. A reconnecting client sends the output offset it holds, and output still in the terminal's history is replayed, so full-screen programs come back intact.
+        - `0x02` SCREEN: answer with the screen. As the first message, also stream output from the screen's offset; a client with no screen of its own draws it, then continues.
+        - `0x03` INPUT `offset:u64` `data` (1 to 16,384 bytes): input written at offset. Bytes the terminal already took are dropped, so after a lost connection the client resends everything after the last INPUT offset it saw, and nothing types twice.
+        - `0x04` RESIZE `cols:u16` `rows:u16`: the terminal's new window, 1 to 1,000 each way.
+
+        Server frames:
+        - `0x81` OUTPUT `offset:u64` `data`: output bytes at offset, at most 32 KiB.
+        - `0x82` TRUNCATED `from:u64` `to:u64`: output from to to that the history no longer holds.
+        - `0x83` EXIT `code:i32` `signal:i32`: the terminal exited; the socket then closes normally.
+        - `0x84` INPUT `offset:u64`: the terminal's input offset after an INPUT, accepted or not.
+        - `0x85` SCREEN `offset:u64` `cols:u16` `rows:u16` `cursor_row:u16` `cursor_col:u16` `flags:u8` `data`: the screen as of offset; flag bit 0 is the alternate screen, bit 1 a hidden cursor, and data redraws it on a blank terminal of that size.
+        - `0x86` ERROR `code`: a refused frame, by its public error code in UTF-8, such as exam.attempt.invalid for input past the terminal's input offset; the socket stays open.
+
+        Several sockets may read one terminal, such as the candidate's two windows; they share one input offset. The socket closes normally after EXIT or a malformed frame, with 4003 once the Attempt is sealed, its Participation ends, or its machine ends or is replaced, and with 1011 on a server failure. Access is checked again every 15 seconds while the socket is open. Terminal bytes never travel between Proctor nodes, and output is never recorded.
+      x-codeSamples:
+        - lang: Shell
+          source: |-
+            websocat --binary \
+              --header='Authorization: DPoP <desktop-session-access-credential>' \
+              --header='DPoP: <fresh-proof-for-this-get-target-and-current-nonce>' \
+              --header='X-Proctor-Attempt-Credential: <attempt-credential>' \
+              --header='X-Proctor-Attempt-Connection-ID: <attempt-connection-id>' \
+              'wss://proctor.example.edu/api/v1/exam-attempts/<exam-attempt-id>/environment/terminals/1/socket'
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.unavailable
+        - exam.attempt.registered_desktop_required
+        - exam.delivery.metadata_capacity
+        - exam.attempt.environment_not_found
+        - exam.attempt.environment_not_running
+        - exam.attempt.environment_unavailable
+        - exam.attempt.terminal_limit_reached
+        - exam.attempt.terminal_not_found
+        - exam.attempt.terminal_exited
+        - websocket.origin.invalid
+        - websocket.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CandidateAttemptCredential'
+        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+      responses:
+        '101':
+          description: Switching Protocols to the terminal socket
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  parameters:
+    CandidateTerminalNumber:
+      name: terminal
+      in: path
+      required: true
+      description: The terminal's number on the Attempt's current machine, from 1; terminal 1 has the tag terminal:1.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 64
+  requestBodies:
+    OpenCandidateTerminal:
+      required: true
+      description: The window the terminal starts with. Both members are optional together; without them the terminal is 80 columns by 24 rows.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OpenCandidateTerminalRequest'
+          example:
+            cols: 120
+            rows: 32
+    SignalCandidateTerminal:
+      required: true
+      description: The signal to send; a candidate may only interrupt.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SignalCandidateTerminalRequest'
+          example:
+            signal: interrupt
+  responses:
+    CandidateEnvironment:
+      description: The Attempt's execution environment
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CandidateEnvironmentResponse'
+    CandidateTerminalOpened:
+      description: The terminal that opened
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CandidateTerminal'
+          example:
+            number: 2
+            tag: terminal:2
+            running: true
+            started_at: '2026-08-01T09:12:30Z'
+            output_offset: 0
+            input_offset: 0
+    CandidateTerminals:
+      description: The candidate's terminals on the current machine, and how many may run at once
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CandidateTerminals'
+          example:
+            terminal_limit: 2
+            terminals:
+              - number: 1
+                tag: terminal:1
+                running: false
+                started_at: '2026-08-01T09:02:11Z'
+                exit_code: 0
+                output_offset: 18342
+                input_offset: 921
+              - number: 2
+                tag: terminal:2
+                running: true
+                started_at: '2026-08-01T09:12:30Z'
+                output_offset: 2048
+                input_offset: 37
+  schemas:
+    CandidateEnvironmentResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - state
+        - desired
+        - incarnation
+        - projection_cursor
+        - terminal_limit
+      properties:
+        state:
+          $ref: '#/components/schemas/AttemptEnvironmentState'
+        desired:
+          $ref: '#/components/schemas/AttemptEnvironmentDesired'
+        incarnation:
+          type: integer
+          format: int64
+          minimum: 0
+        projection_cursor:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The Workspace journal cursor the machine holds.
+        terminal_limit:
+          type: integer
+          minimum: 1
+          maximum: 8
+        waiting_since:
+          type: string
+          format: date-time
+          description: When the current wait for an execution host with room began.
+    OpenCandidateTerminalRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        cols:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          description: Columns; supply it with rows.
+        rows:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          description: Rows; supply it with cols.
+    SignalCandidateTerminalRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - signal
+      properties:
+        signal:
+          type: string
+          enum:
+            - interrupt
+    CandidateTerminal:
+      type: object
+      additionalProperties: false
+      required:
+        - number
+        - tag
+        - running
+        - output_offset
+        - input_offset
+      properties:
+        number:
+          type: integer
+          minimum: 1
+          description: The terminal's number on the current machine, which addresses it in the terminal routes.
+        tag:
+          type: string
+          description: The terminal's process tag, which the command log names as the origin of every command it ran.
+        running:
+          type: boolean
+        started_at:
+          type: string
+          format: date-time
+        exit_code:
+          type: integer
+          description: The exit status of a terminal that exited on its own.
+        exit_signal:
+          type: integer
+          description: The signal that ended a terminal that exited by one.
+        output_offset:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many bytes the terminal has written; an ATTACH from it streams only new output.
+        input_offset:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many bytes of input the terminal has taken; the next INPUT is written at it.
+    CandidateTerminals:
+      type: object
+      additionalProperties: false
+      required:
+        - terminal_limit
+        - terminals
+      properties:
+        terminal_limit:
+          type: integer
+          minimum: 1
+          description: How many terminals the Exam lets the candidate run at once.
+        terminals:
+          type: array
+          maxItems: 64
+          items:
+            $ref: '#/components/schemas/CandidateTerminal'

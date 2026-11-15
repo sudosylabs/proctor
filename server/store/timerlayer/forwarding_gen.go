@@ -1912,6 +1912,12 @@ func (s *timedExamAttemptWorkspaceStore) AppendAttemptEvidence(arg0 context.Cont
 	})
 }
 
+func (s *timedExamAttemptWorkspaceStore) AppendTerminalInput(arg0 context.Context, arg1 *store.ExamAttemptTerminalInputAppend) (*store.ExamAttemptEvidenceAppendResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodAppendTerminalInput), func(callCtx context.Context) (*store.ExamAttemptEvidenceAppendResult, error) {
+		return s.next.AppendTerminalInput(callCtx, arg1)
+	})
+}
+
 func (s *timedExamAttemptWorkspaceStore) List(arg0 context.Context, arg1 store.CandidateWorkspaceListOptions) (*store.CandidateAttemptWorkspacePage, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodList), func(callCtx context.Context) (*store.CandidateAttemptWorkspacePage, error) {
 		return s.next.List(callCtx, arg1)
@@ -4129,6 +4135,12 @@ func (s *timedAttemptEnvironmentStore) RequestSettle(arg0 context.Context, arg1 
 func (s *timedAttemptEnvironmentStore) RecordSettleIncomplete(arg0 context.Context, arg1 *store.AttemptEnvironmentSettleGap) error {
 	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateAttemptEnvironment, methodRecordSettleIncomplete), func(callCtx context.Context) error {
 		return s.next.RecordSettleIncomplete(callCtx, arg1)
+	})
+}
+
+func (s *timedAttemptEnvironmentStore) Replace(arg0 context.Context, arg1 *store.AttemptEnvironmentReplacement, arg2 *store.CommandIdempotency) (*store.AttemptEnvironmentReplacementResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAttemptEnvironment, methodReplace), func(callCtx context.Context) (*store.AttemptEnvironmentReplacementResult, error) {
+		return s.next.Replace(callCtx, arg1, arg2)
 	})
 }
 

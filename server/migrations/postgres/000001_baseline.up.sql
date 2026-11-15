@@ -5791,6 +5791,10 @@ CREATE TABLE exam_attempt_environments (
     settle_requested bigint NOT NULL DEFAULT 0 CHECK (settle_requested >= 0),
     settle_completed bigint NOT NULL DEFAULT 0
         CHECK (settle_completed >= 0 AND settle_completed <= settle_requested),
+    -- A manager's replacement: the owner replaces the machine until its
+    -- incarnation reaches this one.
+    replace_before bigint NOT NULL DEFAULT 0
+        CHECK (replace_before >= 0 AND replace_before <= incarnation + 1),
     revision bigint NOT NULL CHECK (revision > 0),
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL CHECK (updated_at >= created_at),

@@ -591,6 +591,30 @@ func TestManagerSuspendExamAttemptUsesRevisionFenceAndNeverReturnsPrivateReason(
 	require.Equal(t, http.StatusBadRequest, invalid.Code, "invalid revision status = %d body=%s", invalid.Code, invalid.Body.String())
 }
 
+func TestManagerReplaceEnvironmentNamesTheIncarnationSeen(t *testing.T) {
+	t.Parallel()
+	fake := newExamAttemptHTTPFake(t)
+	httpAPI := newExamAttemptFocusedAPI(t, fake)
+	path := "/api/v1/exams/" + fake.attempt.ExamID.String() + "/sittings/" + fake.attempt.SittingID.String() +
+		"/attempts/" + fake.attempt.ID.String() + "/environment/replace"
+	send := func(body, key string) *httptest.ResponseRecorder {
+		request := newJSONRequest(http.MethodPost, path, strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer credential")
+		request.Header.Set("Idempotency-Key", key)
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response
+	}
+	response := send(`{"expected_incarnation":0}`, "replace-once")
+	require.Equal(t, http.StatusOK, response.Code, "body=%s", response.Body.String())
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	require.Equal(t, fake.attempt.ID, fake.replaceEnvironment.AttemptID)
+	require.Equal(t, int64(0), fake.replaceEnvironment.ExpectedIncarnation)
+	require.Equal(t, "replace-once", fake.replaceEnvironment.IdempotencyKey)
+	require.Contains(t, response.Body.String(), `"replace_before":1`)
+	require.Equal(t, http.StatusBadRequest, send(`{"expected_incarnation":-1}`, "replace-negative").Code)
+}
+
 func TestManagerScreenClipRequestNeverReturnsItsPrivateReason(t *testing.T) {
 	t.Parallel()
 	fake := newExamAttemptHTTPFake(t)
@@ -1306,6 +1330,7 @@ type examAttemptHTTPFake struct {
 	workspaceOpen           attempt.OpenWorkspaceFileQuery
 	reallow                 attempt.ReallowCommand
 	suspend                 attempt.ManualSuspensionCommand
+	replaceEnvironment      attempt.ReplaceEnvironmentCommand
 	screenClip              attempt.RequestScreenClipCommand
 	takenClip               model.ScreenClipID
 	clipUpload              model.ScreenClipUpload
@@ -1596,6 +1621,13 @@ func (f *examAttemptHTTPFake) SuspendExamAttempt(_ context.Context, inv invocati
 			ParticipationID: model.NewAttemptParticipationID(), Generation: 1, State: model.AttemptSuspensionActive,
 			Source: model.AttemptSuspensionSourceManual, CandidateReason: model.AttemptSuspensionCandidateReasonManagerSuspended,
 			StartedAt: examAttempt.UpdatedAt, SuspendedByUserID: inv.Principal().UserID}}, nil
+}
+
+func (f *examAttemptHTTPFake) ReplaceExamAttemptEnvironment(_ context.Context, _ invocation.Invocation, command attempt.ReplaceEnvironmentCommand) (attempt.ReplaceEnvironmentResult, error) {
+	f.replaceEnvironment = command
+	return attempt.ReplaceEnvironmentResult{Environment: model.AttemptEnvironment{AttemptID: command.AttemptID,
+		State: model.AttemptEnvironmentRunning, Desired: model.AttemptEnvironmentDesiredRunning,
+		Incarnation: command.ExpectedIncarnation}, ReplaceBefore: command.ExpectedIncarnation + 1}, nil
 }
 
 func (f *examAttemptHTTPFake) GetCandidateExamPresentation(_ context.Context, _ invocation.Invocation, access attempt.CandidateAccess) (attempt.Presentation, error) {

@@ -86,6 +86,12 @@ type AttemptEnvironmentOwnerSave struct {
 // returns the saved environment with the next revision. An owner completes
 // only settles that were asked, and never undoes one.
 //
+// Replace records a manager's replacement under command idempotency and
+// completes its audit: the environment of another incarnation conflicts with
+// attempt_environment_incarnation, an ended one with
+// attempt_environment_ended, and an Attempt without one is not found. Asking
+// again for the same incarnation changes nothing.
+//
 // RequestSettle asks the Attempt's environment for one more settle and
 // returns its number, or zero when the Attempt has no environment or it has
 // ended. RecordSettleIncomplete gives up on settle number Settle when the
@@ -99,6 +105,35 @@ type AttemptEnvironmentStore interface {
 	SaveOwner(context.Context, *AttemptEnvironmentOwnerSave) (*model.AttemptEnvironment, error)
 	RequestSettle(context.Context, model.ExamAttemptID) (int64, error)
 	RecordSettleIncomplete(context.Context, *AttemptEnvironmentSettleGap) error
+	Replace(context.Context, *AttemptEnvironmentReplacement, *CommandIdempotency) (*AttemptEnvironmentReplacementResult, error)
+}
+
+// AttemptEnvironmentReplaceOperation is the command operation of a manager's
+// environment replacement.
+const AttemptEnvironmentReplaceOperation = "exam.attempt.environment.replace"
+
+// AttemptEnvironmentReplacement asks the owner to replace the machine of
+// incarnation ExpectedIncarnation with a new one built from the Workspace.
+// The actor must manage the Sitting (or hold its override) and not be the
+// candidate, and the Sitting must not be closing or closed.
+type AttemptEnvironmentReplacement struct {
+	ExamID              model.ExamID
+	SittingID           model.ExamSittingID
+	AttemptID           model.ExamAttemptID
+	ActorUserID         model.UserID
+	ManagerOverride     bool
+	ExpectedIncarnation int64
+	AuditEventID        model.AuditEventID
+	AuditAt             time.Time
+}
+
+// AttemptEnvironmentReplacementResult is the environment after the request.
+// ReplaceBefore is the incarnation the owner moves to; Replayed reports an
+// exact command replay.
+type AttemptEnvironmentReplacementResult struct {
+	Environment   *model.AttemptEnvironment
+	ReplaceBefore int64
+	Replayed      bool
 }
 
 // AttemptEnvironmentSettleGap names the settle a seal stopped waiting for.

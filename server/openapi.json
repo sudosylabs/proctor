@@ -117,6 +117,17 @@
           "type": "string"
         }
       },
+      "CandidateTerminalNumber": {
+        "description": "The terminal's number on the Attempt's current machine, from 1; terminal 1 has the tag terminal:1.",
+        "in": "path",
+        "name": "terminal",
+        "required": true,
+        "schema": {
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
       "ClassID": {
         "description": "The Class identifier.",
         "in": "path",
@@ -1722,6 +1733,21 @@
         "description": "Exact original native batch, 1..64 closed records and at most 256 KiB. Retries preserve prior_acknowledgement and all canonical content.",
         "required": true
       },
+      "OpenCandidateTerminal": {
+        "content": {
+          "application/json": {
+            "example": {
+              "cols": 120,
+              "rows": 32
+            },
+            "schema": {
+              "$ref": "#/components/schemas/OpenCandidateTerminalRequest"
+            }
+          }
+        },
+        "description": "The window the terminal starts with. Both members are optional together; without them the terminal is 80 columns by 24 rows.",
+        "required": true
+      },
       "PasswordReauthentication": {
         "content": {
           "application/json": {
@@ -1991,6 +2017,20 @@
         "description": "Complete revision-fenced replacement. Every policy setting is required, including empty values.",
         "required": true
       },
+      "ReplaceExamAttemptEnvironment": {
+        "content": {
+          "application/json": {
+            "example": {
+              "expected_incarnation": 0
+            },
+            "schema": {
+              "$ref": "#/components/schemas/ReplaceExamAttemptEnvironmentRequest"
+            }
+          }
+        },
+        "description": "Names the incarnation of the machine to replace, as the candidate-status board showed it.",
+        "required": true
+      },
       "ReplaceInvitation": {
         "content": {
           "application/json": {
@@ -2234,6 +2274,20 @@
           }
         },
         "description": "Complete bounded minimized preflight report, with no native content or inventory.",
+        "required": true
+      },
+      "SignalCandidateTerminal": {
+        "content": {
+          "application/json": {
+            "example": {
+              "signal": "interrupt"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/SignalCandidateTerminalRequest"
+            }
+          }
+        },
+        "description": "The signal to send; a candidate may only interrupt.",
         "required": true
       },
       "StartMFARekey": {
@@ -3119,6 +3173,21 @@
         },
         "description": "Build information"
       },
+      "CandidateEnvironment": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CandidateEnvironmentResponse"
+            }
+          }
+        },
+        "description": "The Attempt's execution environment",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
       "CandidateExamActivityOK": {
         "content": {
           "application/json": {
@@ -3228,6 +3297,66 @@
         "headers": {
           "Cache-Control": {
             "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
+      "CandidateTerminalOpened": {
+        "content": {
+          "application/json": {
+            "example": {
+              "input_offset": 0,
+              "number": 2,
+              "output_offset": 0,
+              "running": true,
+              "started_at": "2026-08-01T09:12:30Z",
+              "tag": "terminal:2"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/CandidateTerminal"
+            }
+          }
+        },
+        "description": "The terminal that opened",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "CandidateTerminals": {
+        "content": {
+          "application/json": {
+            "example": {
+              "terminal_limit": 2,
+              "terminals": [
+                {
+                  "exit_code": 0,
+                  "input_offset": 921,
+                  "number": 1,
+                  "output_offset": 18342,
+                  "running": false,
+                  "started_at": "2026-08-01T09:02:11Z",
+                  "tag": "terminal:1"
+                },
+                {
+                  "input_offset": 37,
+                  "number": 2,
+                  "output_offset": 2048,
+                  "running": true,
+                  "started_at": "2026-08-01T09:12:30Z",
+                  "tag": "terminal:2"
+                }
+              ]
+            },
+            "schema": {
+              "$ref": "#/components/schemas/CandidateTerminals"
+            }
+          }
+        },
+        "description": "The candidate's terminals on the current machine, and how many may run at once",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
           }
         }
       },
@@ -3682,6 +3811,21 @@
         "headers": {
           "Cache-Control": {
             "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
+      "ExamAttemptEnvironmentReplaced": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ReplaceExamAttemptEnvironmentResponse"
+            }
+          }
+        },
+        "description": "The environment after the replacement was asked",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
           }
         }
       },
@@ -8445,6 +8589,29 @@
         ],
         "type": "string"
       },
+      "AttemptEnvironmentDesired": {
+        "description": "What the Attempt's facts ask the execution environment to be.",
+        "enum": [
+          "ended",
+          "frozen",
+          "running"
+        ],
+        "type": "string"
+      },
+      "AttemptEnvironmentState": {
+        "description": "What the execution environment's machine is doing now.",
+        "enum": [
+          "creating",
+          "ended",
+          "frozen",
+          "lost",
+          "pending",
+          "running",
+          "suspended",
+          "waiting_capacity"
+        ],
+        "type": "string"
+      },
       "AttemptEvidence": {
         "additionalProperties": false,
         "properties": {
@@ -10625,6 +10792,46 @@
         ],
         "type": "object"
       },
+      "CandidateEnvironmentResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "desired": {
+            "$ref": "#/components/schemas/AttemptEnvironmentDesired"
+          },
+          "incarnation": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "projection_cursor": {
+            "description": "The Workspace journal cursor the machine holds.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AttemptEnvironmentState"
+          },
+          "terminal_limit": {
+            "maximum": 8,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "waiting_since": {
+            "description": "When the current wait for an execution host with room began.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "desired",
+          "incarnation",
+          "projection_cursor",
+          "terminal_limit"
+        ],
+        "type": "object"
+      },
       "CandidateExamAccessState": {
         "enum": [
           "not_open",
@@ -11249,6 +11456,77 @@
           "browser",
           "exam_revision",
           "departure"
+        ],
+        "type": "object"
+      },
+      "CandidateTerminal": {
+        "additionalProperties": false,
+        "properties": {
+          "exit_code": {
+            "description": "The exit status of a terminal that exited on its own.",
+            "type": "integer"
+          },
+          "exit_signal": {
+            "description": "The signal that ended a terminal that exited by one.",
+            "type": "integer"
+          },
+          "input_offset": {
+            "description": "How many bytes of input the terminal has taken; the next INPUT is written at it.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "number": {
+            "description": "The terminal's number on the current machine, which addresses it in the terminal routes.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "output_offset": {
+            "description": "How many bytes the terminal has written; an ATTACH from it streams only new output.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "tag": {
+            "description": "The terminal's process tag, which the command log names as the origin of every command it ran.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "tag",
+          "running",
+          "output_offset",
+          "input_offset"
+        ],
+        "type": "object"
+      },
+      "CandidateTerminals": {
+        "additionalProperties": false,
+        "properties": {
+          "terminal_limit": {
+            "description": "How many terminals the Exam lets the candidate run at once.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "terminals": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateTerminal"
+            },
+            "maxItems": 64,
+            "type": "array"
+          }
+        },
+        "required": [
+          "terminal_limit",
+          "terminals"
         ],
         "type": "object"
       },
@@ -15225,6 +15503,11 @@
           "exam.attempt.continuity_invalid",
           "exam.attempt.correction_conflict",
           "exam.attempt.desktop_incompatible",
+          "exam.attempt.environment_changed",
+          "exam.attempt.environment_ended",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_not_running",
+          "exam.attempt.environment_unavailable",
           "exam.attempt.focus_loss_conflict",
           "exam.attempt.invalid",
           "exam.attempt.management_authority_conflict",
@@ -15239,6 +15522,9 @@
           "exam.attempt.sitting_not_open",
           "exam.attempt.state_conflict",
           "exam.attempt.suspension_conflict",
+          "exam.attempt.terminal_exited",
+          "exam.attempt.terminal_limit_reached",
+          "exam.attempt.terminal_not_found",
           "exam.attempt.unavailable",
           "exam.attempt.workspace.content_conflict",
           "exam.attempt.workspace.cursor_conflict",
@@ -17084,6 +17370,12 @@
       "ExamSittingCandidateStatusesResponse": {
         "additionalProperties": false,
         "properties": {
+          "environments_waiting_capacity": {
+            "description": "How many of the Sitting's execution environments wait for a host with room, across every page.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
           "exam_id": {
             "$ref": "#/components/schemas/ID"
           },
@@ -17118,6 +17410,7 @@
           "exam_sitting_id",
           "sitting_state",
           "sitting_revision",
+          "environments_waiting_capacity",
           "items"
         ],
         "type": "object"
@@ -17958,6 +18251,9 @@
           }
         ],
         "properties": {
+          "author": {
+            "$ref": "#/components/schemas/WorkspaceAuthor"
+          },
           "content_version": {
             "$ref": "#/components/schemas/WorkspaceContentVersion"
           },
@@ -17993,7 +18289,8 @@
         "required": [
           "entry_id",
           "kind",
-          "path"
+          "path",
+          "author"
         ],
         "type": "object"
       },
@@ -23463,6 +23760,24 @@
         ],
         "type": "object"
       },
+      "OpenCandidateTerminalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "cols": {
+            "description": "Columns; supply it with rows.",
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "rows": {
+            "description": "Rows; supply it with cols.",
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "PasswordReauthenticationRequest": {
         "additionalProperties": false,
         "properties": {
@@ -24504,6 +24819,53 @@
         "required": [
           "expected_revision",
           "resource_ids"
+        ],
+        "type": "object"
+      },
+      "ReplaceExamAttemptEnvironmentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_incarnation": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_incarnation"
+        ],
+        "type": "object"
+      },
+      "ReplaceExamAttemptEnvironmentResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "desired": {
+            "$ref": "#/components/schemas/AttemptEnvironmentDesired"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "incarnation": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "replace_before": {
+            "description": "The incarnation the owner moves to; the replacement is done once incarnation reaches it.",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AttemptEnvironmentState"
+          }
+        },
+        "required": [
+          "exam_attempt_id",
+          "state",
+          "desired",
+          "incarnation",
+          "replace_before"
         ],
         "type": "object"
       },
@@ -27098,6 +27460,21 @@
         ],
         "type": "object"
       },
+      "SignalCandidateTerminalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "signal": {
+            "enum": [
+              "interrupt"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "signal"
+        ],
+        "type": "object"
+      },
       "SittingCandidateAttemptResponse": {
         "additionalProperties": false,
         "properties": {
@@ -27144,6 +27521,34 @@
           "created_at",
           "updated_at",
           "submission"
+        ],
+        "type": "object"
+      },
+      "SittingCandidateEnvironmentResponse": {
+        "additionalProperties": false,
+        "description": "The candidate's execution environment, present once the Attempt has one. Incarnation counts the machines it has had; a manager names it to replace the current one.",
+        "properties": {
+          "desired": {
+            "$ref": "#/components/schemas/AttemptEnvironmentDesired"
+          },
+          "incarnation": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AttemptEnvironmentState"
+          },
+          "waiting_since": {
+            "description": "When the current wait for an execution host with room began.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "desired",
+          "incarnation"
         ],
         "type": "object"
       },
@@ -27218,6 +27623,9 @@
           },
           "current_class_membership": {
             "type": "boolean"
+          },
+          "environment": {
+            "$ref": "#/components/schemas/SittingCandidateEnvironmentResponse"
           },
           "integrity_attention_count": {
             "format": "int64",
@@ -36130,6 +36538,446 @@
         "x-proctor-idempotency": "required"
       }
     },
+    "/api/v1/exam-attempts/{exam_attempt_id}/environment": {
+      "get": {
+        "description": "Returns what the Attempt's execution environment does and how far the Attempt Workspace has reached it. A Workspace entry whose last journal change is past projection_cursor is not in the machine yet, which a client can mark as not yet synced. A guest change waits about a second at most before it is saved, so the client needs no marker for that direction.",
+        "operationId": "getCandidateEnvironment",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CandidateEnvironment"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Read the Attempt's execution environment",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ]
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/environment/terminals": {
+      "get": {
+        "description": "Lists the candidate's terminals on the Attempt's current machine, running or exited, in number order, with where each one's output and input stand. A client reconnecting after a restart reads it to reattach. A new machine, after the old one was lost or replaced, starts with no terminals.",
+        "operationId": "listCandidateTerminals",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CandidateTerminals"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List the terminals in the Attempt's execution environment",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_not_running",
+          "exam.attempt.environment_unavailable",
+          "exam.attempt.terminal_limit_reached",
+          "exam.attempt.terminal_not_found",
+          "exam.attempt.terminal_exited",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ],
+      "post": {
+        "description": "Starts a terminal running the image's login shell on the Attempt's current machine and answers with its number and tag. Terminals are numbered in the order the machine opened them, terminal:1, terminal:2 and so on, and a number is never reused on that machine. At most the Exam's number of terminals run at once; past it the request fails with exam.attempt.terminal_limit_reached. The environment must be running: while it starts, waits for capacity or is frozen the request fails with exam.attempt.environment_not_running. A request whose response was lost may have opened a terminal, so a client lists the terminals before opening another. Every command a terminal runs is in the Attempt's command log, and when the Exam records terminal input the input is kept too; output never is.",
+        "operationId": "openCandidateTerminal",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/OpenCandidateTerminal"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/CandidateTerminalOpened"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Open a terminal in the Attempt's execution environment",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/exam-attempts/\u003cexam-attempt-id\u003e/environment/terminals' \\\n  --header 'Authorization: DPoP \u003cdesktop-session-access-credential\u003e' \\\n  --header 'DPoP: \u003cfresh-proof-for-this-post-target-and-current-nonce\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003cattempt-credential\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e' \\\n  --header 'Content-Type: application/json' \\\n  --data '{\"cols\":120,\"rows\":32}'"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_not_running",
+          "exam.attempt.environment_unavailable",
+          "exam.attempt.terminal_limit_reached",
+          "exam.attempt.terminal_not_found",
+          "exam.attempt.terminal_exited",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/environment/terminals/{terminal}/signal": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        },
+        {
+          "$ref": "#/components/parameters/CandidateTerminalNumber"
+        }
+      ],
+      "post": {
+        "description": "Sends the terminal an interrupt, as Ctrl+C does in a terminal that reads its keys. A candidate may only interrupt; the server ends terminals itself when the machine ends. An exited terminal fails with exam.attempt.terminal_exited, and a number the current machine never opened with exam.attempt.terminal_not_found.",
+        "operationId": "signalCandidateTerminal",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/SignalCandidateTerminal"
+        },
+        "responses": {
+          "204": {
+            "description": "The terminal was interrupted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Interrupt what a terminal runs",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/exam-attempts/\u003cexam-attempt-id\u003e/environment/terminals/1/signal' \\\n  --header 'Authorization: DPoP \u003cdesktop-session-access-credential\u003e' \\\n  --header 'DPoP: \u003cfresh-proof-for-this-post-target-and-current-nonce\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003cattempt-credential\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e' \\\n  --header 'Content-Type: application/json' \\\n  --data '{\"signal\":\"interrupt\"}'"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_not_running",
+          "exam.attempt.environment_unavailable",
+          "exam.attempt.terminal_limit_reached",
+          "exam.attempt.terminal_not_found",
+          "exam.attempt.terminal_exited",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/environment/terminals/{terminal}/socket": {
+      "get": {
+        "description": "Upgrades to a binary WebSocket attached to one terminal. Any Proctor node serves it by reaching the execution machine itself, so a reconnect may land on another node and resume exactly. The terminal is attached before the upgrade: a refusal answers as a problem.\n\nEvery message is one binary frame whose first byte is its type; integers are big-endian. The client's first message is ATTACH or SCREEN.\n\nClient frames:\n- `0x01` ATTACH `offset:u64`: stream output from offset. A reconnecting client sends the output offset it holds, and output still in the terminal's history is replayed, so full-screen programs come back intact.\n- `0x02` SCREEN: answer with the screen. As the first message, also stream output from the screen's offset; a client with no screen of its own draws it, then continues.\n- `0x03` INPUT `offset:u64` `data` (1 to 16,384 bytes): input written at offset. Bytes the terminal already took are dropped, so after a lost connection the client resends everything after the last INPUT offset it saw, and nothing types twice.\n- `0x04` RESIZE `cols:u16` `rows:u16`: the terminal's new window, 1 to 1,000 each way.\n\nServer frames:\n- `0x81` OUTPUT `offset:u64` `data`: output bytes at offset, at most 32 KiB.\n- `0x82` TRUNCATED `from:u64` `to:u64`: output from to to that the history no longer holds.\n- `0x83` EXIT `code:i32` `signal:i32`: the terminal exited; the socket then closes normally.\n- `0x84` INPUT `offset:u64`: the terminal's input offset after an INPUT, accepted or not.\n- `0x85` SCREEN `offset:u64` `cols:u16` `rows:u16` `cursor_row:u16` `cursor_col:u16` `flags:u8` `data`: the screen as of offset; flag bit 0 is the alternate screen, bit 1 a hidden cursor, and data redraws it on a blank terminal of that size.\n- `0x86` ERROR `code`: a refused frame, by its public error code in UTF-8, such as exam.attempt.invalid for input past the terminal's input offset; the socket stays open.\n\nSeveral sockets may read one terminal, such as the candidate's two windows; they share one input offset. The socket closes normally after EXIT or a malformed frame, with 4003 once the Attempt is sealed, its Participation ends, or its machine ends or is replaced, and with 1011 on a server failure. Access is checked again every 15 seconds while the socket is open. Terminal bytes never travel between Proctor nodes, and output is never recorded.",
+        "operationId": "connectCandidateTerminal",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching Protocols to the terminal socket"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Upgrade to a terminal's binary socket",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "websocat --binary \\\n  --header='Authorization: DPoP \u003cdesktop-session-access-credential\u003e' \\\n  --header='DPoP: \u003cfresh-proof-for-this-get-target-and-current-nonce\u003e' \\\n  --header='X-Proctor-Attempt-Credential: \u003cattempt-credential\u003e' \\\n  --header='X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e' \\\n  'wss://proctor.example.edu/api/v1/exam-attempts/\u003cexam-attempt-id\u003e/environment/terminals/1/socket'"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_not_running",
+          "exam.attempt.environment_unavailable",
+          "exam.attempt.terminal_limit_reached",
+          "exam.attempt.terminal_not_found",
+          "exam.attempt.terminal_exited",
+          "websocket.origin.invalid",
+          "websocket.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        },
+        {
+          "$ref": "#/components/parameters/CandidateTerminalNumber"
+        }
+      ]
+    },
     "/api/v1/exam-attempts/{exam_attempt_id}/presentation": {
       "get": {
         "description": "Returns the Exam title, bounded Markdown instructions, admitted capacity policy, and ordered resource manifest visible to the active candidate Attempt. The request rechecks the Session-bound Attempt credential and open Connection; no answer or manager-only state is included. Capacity is frozen to the original admission Revision and does not change with Institution policy updates or live corrections. Instructions and resources follow the current Sitting Revision.",
@@ -42113,6 +42961,103 @@
           "exam.attempt.state_conflict",
           "exam.attempt.sitting_not_open",
           "exam.attempt.management_authority_conflict",
+          "exam.attempt.conflict",
+          "exam.attempt.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "exam.delivery.metadata_capacity",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
+    "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/environment/replace": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamSittingID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ],
+      "post": {
+        "description": "An Exam Manager's repair for an execution environment that misbehaves. Names the incarnation the manager saw on the candidate-status board; the environment's owner then replaces that machine with a new incarnation built from the Attempt Workspace and records the restart as an execution.gap. Nothing the candidate saved is lost; processes, terminals and ignored files that only the old machine held are. Repeating the request for the same incarnation changes nothing; a newer incarnation fails with exam.attempt.environment_changed and an ended environment with exam.attempt.environment_ended. Like a kick, it is refused once the Sitting is closing.",
+        "operationId": "replaceExamAttemptEnvironment",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ReplaceExamAttemptEnvironment"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ExamAttemptEnvironmentReplaced"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Replace a candidate's execution environment with a new machine",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.environment_changed",
+          "exam.attempt.environment_ended",
+          "exam.attempt.sitting_not_open",
           "exam.attempt.conflict",
           "exam.attempt.unavailable",
           "idempotency.key_required",

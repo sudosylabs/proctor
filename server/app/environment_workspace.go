@@ -148,7 +148,7 @@ func environmentReadError(err error) error {
 	if refused := environmentAccessError(err); refused != nil {
 		return refused
 	}
-	if code := apperror.CodeOf(err, ""); code == "resource.not_found" || code == "exam.attempt.not_found" {
+	if apperror.Is(err, "resource.not_found") || apperror.Is(err, "exam.attempt.not_found") {
 		return fmt.Errorf("%w: %w", environment.ErrWorkspaceEntryNotFound, err)
 	}
 	return err

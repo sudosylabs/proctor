@@ -1104,6 +1104,11 @@ components:
         - exam.attempt.continuity_invalid
         - exam.attempt.correction_conflict
         - exam.attempt.desktop_incompatible
+        - exam.attempt.environment_changed
+        - exam.attempt.environment_ended
+        - exam.attempt.environment_not_found
+        - exam.attempt.environment_not_running
+        - exam.attempt.environment_unavailable
         - exam.attempt.focus_loss_conflict
         - exam.attempt.invalid
         - exam.attempt.management_authority_conflict
@@ -1118,6 +1123,9 @@ components:
         - exam.attempt.sitting_not_open
         - exam.attempt.state_conflict
         - exam.attempt.suspension_conflict
+        - exam.attempt.terminal_exited
+        - exam.attempt.terminal_limit_reached
+        - exam.attempt.terminal_not_found
         - exam.attempt.unavailable
         - exam.attempt.workspace.content_conflict
         - exam.attempt.workspace.cursor_conflict

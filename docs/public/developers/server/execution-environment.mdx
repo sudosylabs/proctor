@@ -184,9 +184,11 @@ An *Attempt Environment* is one row per Attempt that uses execution:
 | Fence | The last execenv fence revision applied |
 | Cursors | The Workspace cursor projected, and the observation and process-log positions acknowledged |
 
-Each process the core starts has its own row: its tag (`terminal:1`,
-`terminal:2`, later others), its author, its kind (`terminal` with a PTY, or
-`command`), and when it started and exited, with its status.
+The processes the core starts are not rows. The machine is the authority for
+what runs on it, and any node asks it: a process's tag (`terminal:1`,
+`terminal:2`, later others) names its kind and, through the kind, its author,
+and the machine reports when it started and how it exited. A new incarnation
+starts with no processes.
 
 The environment belongs to the **Attempt**, not to a Participation. A
 disconnect freezes it and a reconnect thaws it, so the machine, its processes
@@ -294,22 +296,41 @@ scratch home and ignored paths never do.
 
 ### Processes and terminals
 
-- The core starts processes by tag and records each with its author. Terminals
-  are PTY processes, `terminal:1` up to the policy's limit.
+- The core starts processes by tag. Terminals are PTY processes running the
+  image's login shell, tagged `terminal:1`, `terminal:2` and so on in the order
+  the machine opened them. A machine never reuses a tag, so a terminal's input
+  offsets, and the input evidence numbered by them, belong to one process; at
+  most the policy's number of terminals run at once, and a machine opens at
+  most 64. A terminal's tag makes the candidate its author.
 - **Input** is written at an offset, so a resend after a lost connection never
-  types twice. Resize and signals are passed through.
-- **Any Proctor node** serves a terminal socket. It checks the candidate's
-  Attempt access and attaches to the grant itself. Terminal bytes never travel
-  over cluster peer delivery, which is best effort and drops the oldest
-  messages.
+  types twice. Resize and interrupt are passed through; a candidate may send no
+  other signal.
+- **Any Proctor node** serves a terminal. The Attempt service checks the
+  candidate's Attempt access; the node then reads the environment row, which
+  must be running, ensures the machine from the row exactly as the owner does,
+  refuses a machine of another epoch, and writes under the row's current
+  control fence, reading the row once more when the owner has moved it. It
+  holds no lease. Terminal bytes never travel over cluster peer delivery, which
+  is best effort and drops the oldest messages.
 - **Reconnect.** The client sends the output offset it has, and the server
-  replays from there, so even full-screen programs come back intact. A client
-  with no screen of its own asks for the `Screen`, draws it, and attaches from
-  its offset.
+  replays from there, reporting what the history no longer holds, so even
+  full-screen programs come back intact. A client with no screen of its own
+  asks for the `Screen`, draws it, and attaches from its offset.
 - **Several attachers** may read one terminal, such as the candidate on two
-  windows. Input is accepted only from the process's author.
+  windows. Input is accepted only from the process's author, and the
+  attachers share one input offset.
+- **The socket** is a binary WebSocket whose frames carry output at an
+  offset, truncation, the exit, input at an offset with the offset it reached,
+  the window and the screen; the operation's description in the API reference
+  is its contract. An open socket checks the candidate's access and the
+  environment row every 15 seconds and closes with 4003 once the Attempt is
+  sealed, the Participation ends, or the machine ends or is replaced.
 - **The process log** names, for every command, the tag of the terminal or
-  tool that ran it.
+  tool that ran it: the owner follows each started process's parent to the
+  process a Start created and records that tag as the event's `origin`, beside
+  the host's own `tag`. The attribution lives in the owner's memory for one
+  machine epoch, so an owner that takes over attributes only what it saw
+  start; its records leave `origin` empty rather than guess.
 
 ### When something fails
 
@@ -330,7 +351,7 @@ ended.
 
 | Kind | What it holds |
 | --- | --- |
-| `execution.process` | The command log: bounded command line, working directory, start, exit status and duration, with the process tag |
+| `execution.process` | The command log: bounded command line, working directory, start, exit status and duration, with the process tag and the `origin` terminal or tool |
 | `execution.input` | Terminal input with its timing and window size changes, only when the Exam opts in |
 | `execution.gap` | A lost machine, a wait for capacity, a settle gap or a break in the process log |
 | `execution.overwritten` | A guest change lost to a newer Workspace version |
@@ -338,15 +359,21 @@ ended.
 
 - **Storage.** Bounded records in PostgreSQL, with an inventory that carries a
   digest chain and refuses updates once sealed. Each Attempt keeps at most
-  4,096 records and 8 MiB. Large payloads, such as long terminal input
-  recordings, become chunks in the VFS that a record references. Appends after
-  the Submission are refused, except the settle's.
+  4,096 records and 8 MiB; an append past them is counted, not stored. Appends
+  after the Submission are refused, except the settle's.
 - **The command log** comes from execenv's guest agent, which runs outside the
   candidate's workload. The workload cannot read or change it, and a gap in its
   sequence is itself recorded. Candidates are told that commands are logged.
   Work that starts no process, such as `exec()` inside Python, is invisible.
 - **Terminal input** is captured at the Proctor node that serves the socket,
-  so it never passes through the guest. Output is never recorded.
+  so it never passes through the guest. Output is never recorded. It is
+  stored as `execution.input` records, not VFS chunks: what a session wrote
+  within about a second, up to 16 KiB, is one record by the incarnation and
+  the terminal's tag, numbered by its first byte's input offset, so a resend
+  repeats a record rather than adding one. The serving node holds no lease,
+  so its append is checked against the environment's current incarnation and
+  the Attempt's lack of a Submission instead. A window change is kept with the
+  input after it.
 - **Review.** A command line can hold an answer, so the streams are sealed with
   the Submission and only reviewers see them. Gaps and overwritten changes are
   review context, never Flags.
@@ -375,10 +402,13 @@ execution is on for the installation. Publication never dials a host.
 
 | Route | Purpose |
 | --- | --- |
-| `GET /exam-attempts/{id}/environment` | State and a summary of sync status |
-| `POST /exam-attempts/{id}/environment/terminals` | Open a terminal; answers with its tag |
-| `GET /exam-attempts/{id}/environment/terminals/{tag}/socket` | Binary socket: output and input by offset, resize, screen |
-| `POST /exam-attempts/{id}/environment/terminals/{tag}/signal` | Interrupt |
+| `GET /exam-attempts/{id}/environment` | State, incarnation, terminal limit, and `projection_cursor`: a Workspace entry whose last change is past it is not in the machine yet |
+| `POST /exam-attempts/{id}/environment/terminals` | Open a terminal; answers with its number and tag |
+| `GET /exam-attempts/{id}/environment/terminals` | The terminals on the current machine and the policy's limit |
+| `GET /exam-attempts/{id}/environment/terminals/{n}/socket` | Binary socket: output and input by offset, resize, screen |
+| `POST /exam-attempts/{id}/environment/terminals/{n}/signal` | Interrupt |
+
+A terminal is addressed by its number `n`, so terminal `1` is `terminal:1`.
 
 The Workspace routes are unchanged, apart from the per-path sync status.
 
@@ -386,9 +416,18 @@ The Workspace routes are unchanged, apart from the per-path sync status.
 
 - **Managers** see, for each Sitting, environment states and how many
   candidates wait for capacity, and can replace a candidate's environment.
+  The Sitting's candidate-status board carries each candidate's environment
+  (state, desired state, incarnation, and since when it waits for capacity)
+  and a Sitting-wide count of environments waiting for capacity.
+  `POST /exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/environment/replace`
+  names the incarnation the manager saw; the owner replaces that machine
+  from the Workspace and records the restart as a gap. Asking again for the
+  same incarnation changes nothing, and a newer incarnation conflicts.
 - **Reviewers** see the command log, terminal input when recorded, gaps,
   overwritten and refused changes, and authorship for every entry in the
-  Submission.
+  Submission. The evidence comes from the Submission's Attempt evidence
+  route, and each entry of the Submission manifest names the author of its
+  last change.
 
 ### Clients
 
@@ -417,7 +456,6 @@ Two small additions, neither of which changes an existing contract:
 New core tables, in the baseline migration:
 
 - `exam_attempt_environments`, one row per Attempt that uses execution;
-- `exam_attempt_environment_processes`;
 - `attempt_runtime_leases`, the owners' fenced leases;
 - `exam_attempt_evidence` and `exam_attempt_evidence_inventories`, which
   replace capability evidence;
@@ -431,7 +469,7 @@ fenced lease is the environment's Workspace access.
 
 ## Build order
 
-Each step is a vertical slice with its own tests.
+Each step is a vertical slice with its own tests. Steps 1 to 5 are built. The execenv additions of step 6 are built in execenv and wait for its next release before Proctor adopts them.
 
 1. **Workspace foundation:** authors on the journal, audit and idempotency
    outcomes, the last author of every entry sealed in the Submission, and
@@ -450,9 +488,11 @@ Each step is a vertical slice with its own tests.
    grouped harvest batches. `server/plugin/execution` and its seams are
    deleted in this step, and evidence is appended under the owner's fence
    instead of a binding.
-4. **Processes and terminals:** tags, the terminal socket with offsets and
-   screens, the command log as evidence, and VFS chunks for terminal input
-   recordings.
+4. **Processes and terminals:** tags, the terminal routes and socket with
+   offsets and screens, the command log as evidence with each command's origin, and
+   terminal input as `execution.input` records rather than the VFS chunks this
+   step first named. Processes are read from the machine; no process rows
+   are kept.
 5. **API:** the candidate, manager and reviewer routes, and sync status.
 6. **The execenv additions,** alongside steps 3 and 4.
 7. **Clients:** the Desktop terminal pane and editor updates, and the webapp

@@ -35,7 +35,7 @@ const (
 var ErrBinarySocketText = errors.New("binary socket received a text message")
 
 // BinarySocket is one upgraded WebSocket that carries binary messages only,
-// for a protocol other than the realtime one, such as a plugin's terminal.
+// for a protocol other than the realtime one, such as a candidate's terminal.
 // It is not a Hub connection: it has no subscriptions, events or replay.
 type BinarySocket struct {
 	conn    *gorilla.Conn

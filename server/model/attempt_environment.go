@@ -119,6 +119,9 @@ type AttemptEnvironment struct {
 	// was recorded as incomplete. A settle is pending while it is behind.
 	SettleRequested int64
 	SettleCompleted int64
+	// ReplaceBefore is the incarnation a manager's replacement asked for:
+	// while Incarnation is below it, the owner replaces the machine.
+	ReplaceBefore int64
 
 	// Revision fences the owner's writes.
 	Revision  int64
@@ -149,6 +152,8 @@ func (e *AttemptEnvironment) Validate() error {
 	case e.ControlFence < 0 || e.ProjectionCursor < 0 || e.ObservationCursor < 0 || e.ProcessCursor < 0 ||
 		e.EvidenceSequence < 0:
 		return invalidModelError(where, "attempt_environment", "cursors", "cannot be negative", "")
+	case e.ReplaceBefore < 0 || e.ReplaceBefore > e.Incarnation+1:
+		return invalidModelError(where, "attempt_environment", "replace_before", "asks at most for the next incarnation", "")
 	case e.SettleCompleted < 0 || e.SettleRequested < e.SettleCompleted:
 		return invalidModelError(where, "attempt_environment", "settle", "completes only what was requested", "")
 	case !validProjectedVersions(e.ProjectedVersions):
@@ -295,6 +300,12 @@ func (e *AttemptEnvironment) ApplyFact(fact AttemptEnvironmentFact, participatio
 	e.Generation = generation
 	e.touch(at)
 	return true
+}
+
+// ReplacePending reports whether a manager asked to replace the current
+// machine and the owner has not yet.
+func (e *AttemptEnvironment) ReplacePending() bool {
+	return e.Incarnation < e.ReplaceBefore
 }
 
 // SettlePending reports whether a settle was asked and not yet finished.

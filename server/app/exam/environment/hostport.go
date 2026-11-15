@@ -46,6 +46,11 @@ var (
 	// ErrMachineTooLarge: metadata over its bound, or the machine's disk is
 	// full.
 	ErrMachineTooLarge = errors.New("execution machine too large")
+	// ErrMachineBusy: the machine runs as many processes as it may.
+	ErrMachineBusy = errors.New("execution machine busy")
+	// ErrProcessExited: the process has exited and takes no more input,
+	// size or signal.
+	ErrProcessExited = errors.New("execution process exited")
 )
 
 // HostReport is one reachable host's readiness: whether it places new
@@ -286,6 +291,10 @@ type ProcessEvent struct {
 	ExitCode  *int      `json:"exit_code,omitempty"`
 	Signal    int       `json:"signal,omitempty"`
 	Dropped   uint64    `json:"dropped,omitempty"`
+	// Origin is the tag of the started process this one descends from,
+	// such as the terminal that ran it. The owner sets it; the host never
+	// does, and Tag stays the host's.
+	Origin string `json:"origin,omitempty"`
 }
 
 // ProcessDropped is the kind of the event that stands in for lost ones.
@@ -327,5 +336,113 @@ type Machine interface {
 	AcknowledgeObservations(ctx context.Context, fence Fence, through uint64) error
 	ObserveProcesses(ctx context.Context, fence Fence, after uint64, limit int) (ProcessPage, error)
 	AcknowledgeProcesses(ctx context.Context, fence Fence, through uint64) error
+	Processes
 	Revoke(ctx context.Context) error
+}
+
+// Window is a terminal's size in character cells.
+type Window struct {
+	Cols uint16
+	Rows uint16
+}
+
+// MaxWindowCells bounds a window's columns and rows.
+const MaxWindowCells = 1000
+
+// Valid reports whether the window has a size within its bound.
+func (w Window) Valid() bool {
+	return w.Cols > 0 && w.Rows > 0 && w.Cols <= MaxWindowCells && w.Rows <= MaxWindowCells
+}
+
+// ProcessSpec starts one process. A terminal has a PTY of its window and,
+// with no Argv, runs the image's login shell.
+type ProcessSpec struct {
+	Tag  string
+	Argv []string
+	PTY  *Window
+}
+
+// ProcessInfo describes one process a Start created, running or exited.
+// Output is the end offset of its terminal output and Input how many bytes
+// of input it took.
+type ProcessInfo struct {
+	Tag        string
+	PTY        bool
+	Started    time.Time
+	Running    bool
+	ExitCode   int
+	ExitSignal int
+	Output     uint64
+	Input      uint64
+}
+
+// OutputKind is what one ProcessOutput carries.
+type OutputKind uint8
+
+// The events of an attachment.
+const (
+	// OutputData is terminal bytes at Offset.
+	OutputData OutputKind = iota + 1
+	// OutputTruncated says bytes from Offset to To left the history before
+	// this reader got them.
+	OutputTruncated
+	// OutputExit is the process's exit, always the last event.
+	OutputExit
+)
+
+// ProcessOutput is one event of an attachment.
+type ProcessOutput struct {
+	Kind       OutputKind
+	Offset     uint64
+	To         uint64
+	Data       []byte
+	ExitCode   int
+	ExitSignal int
+}
+
+// ProcessAttachment reads one terminal's output from an offset. Next
+// returns io.EOF after OutputExit, and ErrMachineRevoked or ErrMachineLost
+// once the machine has ended.
+type ProcessAttachment interface {
+	Next(ctx context.Context) (ProcessOutput, error)
+	Close() error
+}
+
+// Screen is a terminal's screen as of output Offset: Data redraws it on a
+// blank terminal of Window's size, and attaching from Offset continues it.
+type Screen struct {
+	Data         []byte
+	Offset       uint64
+	Window       Window
+	AltScreen    bool
+	CursorRow    int
+	CursorCol    int
+	CursorHidden bool
+}
+
+// ProcessSignal is a signal the core may send a process.
+type ProcessSignal string
+
+// The signals the core sends.
+const (
+	SignalInterrupt ProcessSignal = "interrupt"
+)
+
+// Processes runs a machine's processes by tag. Starting, input, size and
+// signals carry the current fence and need a running machine; reading does
+// not. A Start under a running tag is ErrMachineConflict; one under an
+// exited tag replaces it.
+type Processes interface {
+	StartProcess(ctx context.Context, fence Fence, spec ProcessSpec) (ProcessInfo, error)
+	ListProcesses(ctx context.Context) ([]ProcessInfo, error)
+	// AttachProcess reads a terminal's output from offset; output older
+	// than its history is reported as truncated.
+	AttachProcess(ctx context.Context, tag string, from uint64) (ProcessAttachment, error)
+	// WriteInput appends data at offset and returns the process's input
+	// offset after it. Bytes it already took are dropped, so a resend never
+	// types twice; an offset past what it took is ErrMachineConflict.
+	WriteInput(ctx context.Context, fence Fence, tag string, offset uint64, data []byte) (uint64, error)
+	Resize(ctx context.Context, fence Fence, tag string, window Window) error
+	SignalProcess(ctx context.Context, fence Fence, tag string, signal ProcessSignal) error
+	Screen(ctx context.Context, tag string) (Screen, error)
 }

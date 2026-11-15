@@ -1,0 +1,157 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/environment/replace:
+    parameters:
+      - $ref: '#/components/parameters/ExamID'
+      - $ref: '#/components/parameters/ExamSittingID'
+      - $ref: '#/components/parameters/ExamAttemptID'
+    post:
+      operationId: replaceExamAttemptEnvironment
+      summary: Replace a candidate's execution environment with a new machine
+      tags:
+        - Attempts and workspaces
+      description: >-
+        An Exam Manager's repair for an execution environment that misbehaves. Names the incarnation the
+        manager saw on the candidate-status board; the environment's owner then replaces that machine
+        with a new incarnation built from the Attempt Workspace and records the restart as an
+        execution.gap. Nothing the candidate saved is lost; processes, terminals and ignored files that
+        only the old machine held are. Repeating the request for the same incarnation changes nothing;
+        a newer incarnation fails with exam.attempt.environment_changed and an ended environment with
+        exam.attempt.environment_ended. Like a kick, it is refused once the Sitting is closing.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: required
+      x-proctor-error-codes:
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.environment_changed
+        - exam.attempt.environment_ended
+        - exam.attempt.sitting_not_open
+        - exam.attempt.conflict
+        - exam.attempt.unavailable
+        - idempotency.key_required
+        - idempotency.key_invalid
+        - idempotency.conflict
+        - idempotency.in_progress
+        - exam.delivery.metadata_capacity
+        - exam.sitting.invalid
+        - exam.sitting.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        $ref: '#/components/requestBodies/ReplaceExamAttemptEnvironment'
+      responses:
+        '200':
+          $ref: '#/components/responses/ExamAttemptEnvironmentReplaced'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  requestBodies:
+    ReplaceExamAttemptEnvironment:
+      required: true
+      description: Names the incarnation of the machine to replace, as the candidate-status board showed it.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ReplaceExamAttemptEnvironmentRequest'
+          example:
+            expected_incarnation: 0
+  responses:
+    ExamAttemptEnvironmentReplaced:
+      description: The environment after the replacement was asked
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ReplaceExamAttemptEnvironmentResponse'
+  schemas:
+    AttemptEnvironmentState:
+      type: string
+      description: What the execution environment's machine is doing now.
+      enum:
+        - creating
+        - ended
+        - frozen
+        - lost
+        - pending
+        - running
+        - suspended
+        - waiting_capacity
+    AttemptEnvironmentDesired:
+      type: string
+      description: What the Attempt's facts ask the execution environment to be.
+      enum:
+        - ended
+        - frozen
+        - running
+    ReplaceExamAttemptEnvironmentRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_incarnation
+      properties:
+        expected_incarnation:
+          type: integer
+          format: int64
+          minimum: 0
+    ReplaceExamAttemptEnvironmentResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - exam_attempt_id
+        - state
+        - desired
+        - incarnation
+        - replace_before
+      properties:
+        exam_attempt_id:
+          $ref: '#/components/schemas/ID'
+        state:
+          $ref: '#/components/schemas/AttemptEnvironmentState'
+        desired:
+          $ref: '#/components/schemas/AttemptEnvironmentDesired'
+        incarnation:
+          type: integer
+          format: int64
+          minimum: 0
+        replace_before:
+          type: integer
+          format: int64
+          minimum: 1
+          description: The incarnation the owner moves to; the replacement is done once incarnation reaches it.

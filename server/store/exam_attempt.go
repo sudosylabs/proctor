@@ -1265,8 +1265,18 @@ type SittingCandidateSuspension struct {
 	ReallowAvailable bool
 }
 
+// SittingCandidateEnvironment is a candidate's execution environment as
+// the Sitting's managers see it.
+type SittingCandidateEnvironment struct {
+	State        model.AttemptEnvironmentState
+	Desired      model.AttemptEnvironmentDesired
+	Incarnation  int64
+	WaitingSince model.OptionalTime
+}
+
 type SittingCandidateStatusItem struct {
 	NativeSecurity          *model.NativeSecuritySummary
+	Environment             *SittingCandidateEnvironment
 	Candidate               SittingCandidateIdentity
 	CurrentClassMembership  bool
 	Attempt                 *SittingCandidateStatusAttempt
@@ -1281,7 +1291,10 @@ type SittingCandidateStatusPage struct {
 	SittingID       model.ExamSittingID
 	SittingState    model.ExamSittingState
 	SittingRevision int64
-	Items           []SittingCandidateStatusItem
+	// EnvironmentsWaitingCapacity counts the Sitting's environments waiting
+	// for an execution host with room, across every page.
+	EnvironmentsWaitingCapacity int64
+	Items                       []SittingCandidateStatusItem
 }
 
 // ConsistentWith reports whether the page is for the given Exam and Sitting,

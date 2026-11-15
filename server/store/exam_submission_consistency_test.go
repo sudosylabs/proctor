@@ -169,7 +169,7 @@ func TestExamSubmissionSealResultConsistentWithRejectsEachInconsistency(t *testi
 
 	require.False(t, (*result)(nil).ConsistentWith(target, sealAccess, proposed, proposedCode))
 	requireEachInconsistencyRejected(t, consistent, check, append(sealScopeInconsistencies(),
-		inconsistency[result]{"receipt at another workspace cursor", func(r *result) { r.Receipt.WorkspaceCursor++ }},
+		inconsistency[result]{"receipt before the expected workspace cursor", func(r *result) { r.Receipt.WorkspaceCursor-- }},
 		inconsistency[result]{"receipt of another Exam Revision", func(r *result) { r.Receipt.ExamRevisionID = model.NewExamRevisionID() }},
 		inconsistency[result]{"invalid browser settlement", func(r *result) { r.Receipt.BrowserActivity.InventoryRevision = 0 }},
 	))

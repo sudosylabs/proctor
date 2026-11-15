@@ -38,10 +38,15 @@ type attemptEnvironmentInputs struct {
 	cluster     borrowedCluster
 	logger      *logging.Logger
 	nodeID      string
+	// allowUnisolated accepts hosts that share the machine's kernel, for
+	// development; dial, when set, replaces dialing a host.
+	allowUnisolated bool
+	dial            executionhost.Dialer
 }
 
-// prepareAttemptEnvironments builds the waker the application needs, or
-// nil when the installation runs no execution environments.
+// prepareAttemptEnvironments builds the waker and the execution host
+// clients the application needs, or nil when the installation runs no
+// execution environments. Nothing is dialed until a host is used.
 func prepareAttemptEnvironments(snapshot config.Config, inputs attemptEnvironmentInputs) (*attemptEnvironments, error) {
 	if !snapshot.Execution.Enabled || inputs.persistence.AttemptEnvironment() == nil {
 		return nil, nil
@@ -53,16 +58,23 @@ func prepareAttemptEnvironments(snapshot config.Config, inputs attemptEnvironmen
 	if err != nil {
 		return nil, fmt.Errorf("construct attempt environment waker: %w", err)
 	}
-	return &attemptEnvironments{waker: waker}, nil
+	hosts, err := executionhost.New(executionhost.Config{Hosts: snapshot.Execution.Hosts, Dial: inputs.dial,
+		AllowUnisolated: inputs.allowUnisolated || inputs.dial != nil})
+	if err != nil {
+		return nil, fmt.Errorf("construct execution hosts: %w", err)
+	}
+	return &attemptEnvironments{waker: waker, hosts: hosts}, nil
 }
 
-// attach gives the application the waker and its diagnostics.
+// attach gives the application the waker, its diagnostics and the hosts
+// its terminals reach machines through.
 func (e *attemptEnvironments) attach(deps *app.Dependencies, inputs attemptEnvironmentInputs) {
 	if e == nil {
 		return
 	}
 	deps.EnvironmentWaker = e.waker
 	deps.EnvironmentDiagnostics = environmentReporter(inputs)
+	deps.EnvironmentHosts = e.hosts
 }
 
 // complete builds the owners and their runtime over the application.
@@ -70,17 +82,11 @@ func (e *attemptEnvironments) complete(
 	snapshot config.Config,
 	inputs attemptEnvironmentInputs,
 	application *app.App,
-	allowUnisolated bool,
-	dial executionhost.Dialer,
 ) error {
 	if e == nil {
 		return nil
 	}
-	hosts, err := executionhost.New(executionhost.Config{Hosts: snapshot.Execution.Hosts, Dial: dial,
-		AllowUnisolated: allowUnisolated || dial != nil})
-	if err != nil {
-		return fmt.Errorf("construct execution hosts: %w", err)
-	}
+	hosts := e.hosts
 	workspace, err := app.NewEnvironmentWorkspace(application.Attempts)
 	if err != nil {
 		return fmt.Errorf("construct attempt environment workspace: %w", err)
@@ -107,7 +113,7 @@ func (e *attemptEnvironments) complete(
 		return fmt.Errorf("construct attempt environment runtime: %w", err)
 	}
 	e.waker.attach(runtime)
-	e.runtime, e.hosts = runtime, hosts
+	e.runtime = runtime
 	return nil
 }
 

@@ -333,6 +333,15 @@ func (p *CandidateWorkspaceJournalPage) NotBehind(afterCursor int64) bool {
 // Attempt. Once the Submission exists the inventory is fixed and nothing more
 // is accepted.
 //
+// AppendTerminalInput stores one execution.input record from the node that
+// serves a terminal, which holds no lease: it requires the environment's
+// current incarnation to be the one named, with the environment not ended,
+// and the Attempt to have no Submission. Another incarnation conflicts with
+// attempt_environment_incarnation, an Attempt without an environment is not
+// found, and a sealed one conflicts with exam_attempt_state. The record is
+// then stored exactly as AppendAttemptEvidence stores one, by the
+// incarnation and terminal's author.
+//
 // ApplyBatch atomically applies every mutation in order: it changes the
 // logical hierarchy and current content pointers, advances the Workspace
 // Cursor once per mutation, appends one journal record per mutation, marks
@@ -363,6 +372,7 @@ func (p *CandidateWorkspaceJournalPage) NotBehind(afterCursor int64) bool {
 // metadata. ReleaseObjectCleanup handles known physical-removal failure.
 type ExamAttemptWorkspaceStore interface {
 	AppendAttemptEvidence(context.Context, *ExamAttemptEvidenceAppend) (*ExamAttemptEvidenceAppendResult, error)
+	AppendTerminalInput(context.Context, *ExamAttemptTerminalInputAppend) (*ExamAttemptEvidenceAppendResult, error)
 	List(context.Context, CandidateWorkspaceListOptions) (*CandidateAttemptWorkspacePage, error)
 	ResolveFile(context.Context, ExamAttemptWorkspaceReadAccess, model.AttemptWorkspaceEntryID) (*CandidateWorkspaceContent, error)
 	ListJournal(context.Context, CandidateWorkspaceJournalOptions) (*CandidateWorkspaceJournalPage, error)

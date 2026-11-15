@@ -31,8 +31,8 @@ func newSQLAttemptEnvironmentStore(sqlStore *SQLStore) store.AttemptEnvironmentS
 const attemptEnvironmentColumns = `exam_attempt_id, exam_sitting_id, environment_profile_id, image, cpu_millis,
 	memory_bytes, disk_bytes, network, idle_window_seconds, terminals, record_input, desired, state, generation,
 	incarnation, host, grant_id, epoch, control_fence, projection_cursor, observation_cursor, process_cursor,
-	projected_versions, evidence_sequence, waiting_since, settle_requested, settle_completed, revision, created_at,
-	updated_at`
+	projected_versions, evidence_sequence, waiting_since, settle_requested, settle_completed, replace_before, revision,
+	created_at, updated_at`
 
 type attemptEnvironmentRow struct {
 	AttemptID         string         `db:"exam_attempt_id"`
@@ -61,6 +61,7 @@ type attemptEnvironmentRow struct {
 	EvidenceSequence  int64          `db:"evidence_sequence"`
 	SettleRequested   int64          `db:"settle_requested"`
 	SettleCompleted   int64          `db:"settle_completed"`
+	ReplaceBefore     int64          `db:"replace_before"`
 	WaitingSince      sql.NullTime   `db:"waiting_since"`
 	Revision          int64          `db:"revision"`
 	CreatedAt         time.Time      `db:"created_at"`
@@ -79,7 +80,7 @@ func (r attemptEnvironmentRow) model() (*model.AttemptEnvironment, error) {
 		Host: r.Host.String, GrantID: r.GrantID.String, Epoch: r.Epoch.String,
 		ControlFence: r.ControlFence, ProjectionCursor: r.ProjectionCursor, ObservationCursor: r.ObservationCursor,
 		ProcessCursor: r.ProcessCursor, EvidenceSequence: r.EvidenceSequence, Revision: r.Revision,
-		SettleRequested: r.SettleRequested, SettleCompleted: r.SettleCompleted,
+		SettleRequested: r.SettleRequested, SettleCompleted: r.SettleCompleted, ReplaceBefore: r.ReplaceBefore,
 		CreatedAt: model.TimeUTC(r.CreatedAt), UpdatedAt: model.TimeUTC(r.UpdatedAt),
 	}
 	if err := json.Unmarshal(r.ProjectedVersions, &environment.ProjectedVersions); err != nil {
@@ -243,7 +244,7 @@ func createAttemptEnvironment(
 		return nil, store.NewErrInvalidInput("attempt_environment", "creation", nil).Wrap(err)
 	}
 	if _, err = tx.Exec(ctx, `INSERT INTO exam_attempt_environments (`+attemptEnvironmentColumns+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, 0, 0, 0, 0, '{}', 0, NULL, 0, 0, 1, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, 0, 0, 0, 0, '{}', 0, NULL, 0, 0, 0, 1, ?, ?)`,
 		environment.AttemptID.String(), environment.SittingID.String(), environment.ProfileID.String(), environment.Image,
 		environment.Resources.CPUMillis, environment.Resources.MemoryBytes, environment.Resources.DiskBytes,
 		string(environment.Network), int64(environment.IdleWindow/time.Second), environment.Terminals, environment.RecordInput,

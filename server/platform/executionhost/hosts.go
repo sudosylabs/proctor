@@ -374,6 +374,8 @@ func translate(operation string, err error) error {
 		{execenv.ErrTooLarge, environment.ErrMachineTooLarge},
 		{execenv.ErrQuota, environment.ErrMachineTooLarge},
 		{execenv.ErrMissingContent, environment.ErrMachineConflict},
+		{execenv.ErrBusy, environment.ErrMachineBusy},
+		{execenv.ErrClosed, environment.ErrProcessExited},
 		{execenv.ErrDraining, environment.ErrHostUnavailable},
 		{execenv.ErrUnavailable, environment.ErrHostUnavailable},
 		{execenv.ErrUnknownImage, environment.ErrHostUnavailable},

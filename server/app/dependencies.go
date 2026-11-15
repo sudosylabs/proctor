@@ -93,6 +93,9 @@ type Dependencies struct {
 	// EnvironmentDiagnostics receives execution environment failures nobody
 	// else sees, such as a settle that could not be asked. Nil drops them.
 	EnvironmentDiagnostics func(model.ExamAttemptID, error)
+	// EnvironmentHosts reaches the execution hosts, so any node serves a
+	// candidate's terminals. Nil serves none.
+	EnvironmentHosts environment.Hosts
 	// SupportAddress is the operator-configured help mailbox that public
 	// discovery publishes for hosted pages; empty publishes none.
 	SupportAddress string

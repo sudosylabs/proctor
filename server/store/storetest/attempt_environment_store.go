@@ -87,6 +87,48 @@ func TestAttemptEnvironmentStore(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.Empty(t, repeated.Changed)
 
+	// The Sitting's managers see the environment on the board.
+	board, err := ss.ExamAttempt().ListSittingCandidateStatuses(ctx, store.SittingCandidateStatusListOptions{
+		ExamID: fixture.examID, SittingID: sittingID, ExcludeCandidateUserID: fixture.manager.ID, Limit: 10})
+	require.NoError(t, err)
+	require.Zero(t, board.EnvironmentsWaitingCapacity)
+	var listed *store.SittingCandidateEnvironment
+	for _, item := range board.Items {
+		if item.Attempt != nil && item.Attempt.ID == attemptID {
+			listed = item.Environment
+		}
+	}
+	require.NotNil(t, listed, "the board shows the candidate's environment")
+	require.Equal(t, model.AttemptEnvironmentPending, listed.State)
+	require.Equal(t, model.AttemptEnvironmentDesiredRunning, listed.Desired)
+
+	// A manager asks for a new machine of the incarnation they saw; asking
+	// again repeats, and another incarnation conflicts.
+	replace := func(t *testing.T, expected int64, key string) (*store.AttemptEnvironmentReplacementResult, error) {
+		t.Helper()
+		return environments.Replace(ctx, &store.AttemptEnvironmentReplacement{ExamID: fixture.examID, SittingID: sittingID,
+			AttemptID: attemptID, ActorUserID: fixture.manager.ID, ExpectedIncarnation: expected,
+			AuditEventID: saveExamAttemptReallowAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()},
+			examCommand(fixture.manager.ID, store.AttemptEnvironmentReplaceOperation, key, key))
+	}
+	replaced, err := replace(t, 0, "replace-first")
+	require.NoError(t, err)
+	require.Equal(t, int64(1), replaced.ReplaceBefore)
+	require.True(t, replaced.Environment.ReplacePending())
+	replayed, err := replace(t, 0, "replace-first")
+	require.NoError(t, err)
+	require.True(t, replayed.Replayed)
+	again, err := replace(t, 0, "replace-again")
+	require.NoError(t, err)
+	require.Equal(t, replaced.Environment.Revision, again.Environment.Revision, "the same incarnation again changes nothing")
+	_, err = replace(t, 1, "replace-newer")
+	requireConflictConstraint(t, err, "attempt_environment_incarnation")
+	_, err = environments.Replace(ctx, &store.AttemptEnvironmentReplacement{ExamID: fixture.examID, SittingID: sittingID,
+		AttemptID: attemptID, ActorUserID: fixture.candidate.ID, ExpectedIncarnation: 0,
+		AuditEventID: saveExamAttemptReallowAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()},
+		examCommand(fixture.candidate.ID, store.AttemptEnvironmentReplaceOperation, "replace-self", "replace-self"))
+	require.True(t, store.IsNotFound(err), "the candidate is no manager: %v", err)
+
 	// A Sitting fact reaches every environment in the Sitting.
 	paused, err := environments.ApplyFact(ctx, model.AttemptEnvironmentFact{Kind: model.AttemptEnvironmentFactSittingPaused,
 		SittingID: sittingID, OccurredAt: model.NowUTC()})

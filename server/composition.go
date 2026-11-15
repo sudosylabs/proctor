@@ -137,7 +137,8 @@ func composeConsumers(
 	}
 	applicationDeps.Plugins = pluginCatalog{host: capabilities.plugins, reconciler: reconciler}
 	environmentInputs := attemptEnvironmentInputs{persistence: capabilities.persistence, cluster: capabilities.cluster,
-		logger: capabilities.logger, nodeID: capabilities.nodeID}
+		logger: capabilities.logger, nodeID: capabilities.nodeID,
+		allowUnisolated: input.serviceEnvironment == ServiceEnvironmentDev, dial: input.overrides.ExecutionHostDial}
 	environments, err := prepareAttemptEnvironments(snapshot, environmentInputs)
 	if err != nil {
 		return nil, err
@@ -148,8 +149,7 @@ func composeConsumers(
 	if err != nil {
 		return nil, fmt.Errorf("construct application: %w", err)
 	}
-	if err = environments.complete(snapshot, environmentInputs, application, input.serviceEnvironment == ServiceEnvironmentDev,
-		input.overrides.ExecutionHostDial); err != nil {
+	if err = environments.complete(snapshot, environmentInputs, application); err != nil {
 		return nil, err
 	}
 	// An absent runtime stays an untyped nil so the Server skips its stage.
@@ -431,6 +431,7 @@ func httpAPISettings(
 		RecentAuthenticationTTL: snapshot.Authentication.RecentAuthenticationTTL.Duration,
 		NodeID:                  capabilities.nodeID,
 		WebSocket:               webSocketHub,
+		BinarySockets:           binarySocketTransport{hub: webSocketHub},
 	}, nil
 }
 

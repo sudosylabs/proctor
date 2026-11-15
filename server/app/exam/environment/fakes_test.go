@@ -90,6 +90,7 @@ type evidenceFake struct {
 	store.ExamAttemptWorkspaceStore
 	mu      sync.Mutex
 	records []store.ExamAttemptEvidenceAppend
+	inputs  []store.ExamAttemptTerminalInputAppend
 }
 
 func (f *evidenceFake) AppendAttemptEvidence(_ context.Context, input *store.ExamAttemptEvidenceAppend) (*store.ExamAttemptEvidenceAppendResult, error) {
@@ -106,6 +107,31 @@ func (f *evidenceFake) AppendAttemptEvidence(_ context.Context, input *store.Exa
 	}
 	f.records = append(f.records, *input)
 	return &store.ExamAttemptEvidenceAppendResult{}, nil
+}
+
+func (f *evidenceFake) AppendTerminalInput(_ context.Context, input *store.ExamAttemptTerminalInputAppend) (*store.ExamAttemptEvidenceAppendResult, error) {
+	if !input.Valid() {
+		return nil, store.NewErrInvalidInput("attempt_evidence", "terminal_input", nil)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, record := range f.inputs {
+		if record.Incarnation == input.Incarnation && record.Tag == input.Tag && record.Sequence == input.Sequence {
+			if string(record.Detail) != string(input.Detail) {
+				return nil, store.NewErrConflict("attempt_evidence", "attempt_evidence_sequence", nil)
+			}
+			return &store.ExamAttemptEvidenceAppendResult{Repeated: true}, nil
+		}
+	}
+	f.inputs = append(f.inputs, *input)
+	return &store.ExamAttemptEvidenceAppendResult{}, nil
+}
+
+// terminalInputs returns every recorded terminal input record.
+func (f *evidenceFake) terminalInputs() []store.ExamAttemptTerminalInputAppend {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.inputs)
 }
 
 // details returns the details of every record of kind.

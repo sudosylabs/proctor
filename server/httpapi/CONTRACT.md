@@ -153,11 +153,14 @@ catalog before serving, validates results before applying response effects,
 owns ordinary response and Problem Details writing, and fails closed when an
 operation returns an undeclared error. Redirects, bounded uploads, and binary
 downloads use named protocol-specific results recorded in the manifest rather
-than an unrestricted response-writer escape hatch. The WebSocket handshake is
-the only raw response exception: it is a named, session-authenticated upgrade
+than an unrestricted response-writer escape hatch. Upgrades are the only raw
+response exception: the WebSocket handshake, and binary sockets such as a
+candidate's terminal (a GET whose path ends in `/socket` and whose protocol
+name ends in `-socket`). Each is a named, session-authenticated upgrade
 operation whose parameters, request metadata, and pre-upgrade failures remain
 kernel-owned. After a successful upgrade, the sibling transport owns the
-connection lifecycle. The catalog exposes no mutable router or late-registration
+connection lifecycle; a binary socket's frame protocol is the resource's and
+is documented in its OpenAPI operation. The catalog exposes no mutable router or late-registration
 seam.
 
 `httpapi.New` takes the application and a `Settings` value that names an

@@ -66,6 +66,20 @@ This file holds only the rules that must not drift.
 - PTY bytes never travel over cluster peer delivery. Any node serves a
   terminal by attaching to the grant itself. Input is written by offset and
   accepted only from the process's author.
+- A terminal node holds no lease. It acts only on the machine the
+  environment row names while the row says running: the spec derived from
+  the row as the owner derives it, the row's epoch, the row's current control
+  fence. It never writes the row.
+- The Attempt service owns the candidate access check; terminal use cases
+  take an already verified Attempt and recheck it while a socket is open.
+- A machine never reuses a process tag, so input offsets, and the evidence
+  sequences derived from them, name one process. A tag's prefix names its
+  kind and author (`terminal:` is the candidate's).
+- Command log attribution is an `origin` beside the host's `tag`, never a
+  rewrite of it, and is left empty when the owner did not see the start.
+- Terminal input is `execution.input` evidence appended through the store's
+  incarnation-checked operation, never a VFS object and never under the
+  owner's lease.
 - Execution evidence goes into Attempt-owned, append-only Attempt evidence of
   typed kinds. Appends after the Submission are refused; a settle gap is
   recorded before the seal.

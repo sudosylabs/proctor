@@ -119,13 +119,25 @@ type sittingCandidateStatusCursor struct {
 }
 
 type sittingCandidateStatusListResponse struct {
-	ServerTime      string                               `json:"server_time"`
-	ExamID          string                               `json:"exam_id"`
-	ExamSittingID   string                               `json:"exam_sitting_id"`
-	SittingState    model.ExamSittingState               `json:"sitting_state"`
-	SittingRevision int64                                `json:"sitting_revision"`
-	Items           []sittingCandidateStatusItemResponse `json:"items"`
-	NextCursor      string                               `json:"next_cursor,omitempty"`
+	ServerTime      string                 `json:"server_time"`
+	ExamID          string                 `json:"exam_id"`
+	ExamSittingID   string                 `json:"exam_sitting_id"`
+	SittingState    model.ExamSittingState `json:"sitting_state"`
+	SittingRevision int64                  `json:"sitting_revision"`
+	// EnvironmentsWaitingCapacity counts the Sitting's execution
+	// environments waiting for a host with room, across every page.
+	EnvironmentsWaitingCapacity int64                                `json:"environments_waiting_capacity"`
+	Items                       []sittingCandidateStatusItemResponse `json:"items"`
+	NextCursor                  string                               `json:"next_cursor,omitempty"`
+}
+
+// sittingCandidateEnvironmentResponse is a candidate's execution
+// environment on the board.
+type sittingCandidateEnvironmentResponse struct {
+	State        model.AttemptEnvironmentState   `json:"state"`
+	Desired      model.AttemptEnvironmentDesired `json:"desired"`
+	Incarnation  int64                           `json:"incarnation"`
+	WaitingSince *string                         `json:"waiting_since,omitempty"`
 }
 
 // nativeSecuritySummaryResponse presents a Candidate's live native standing
@@ -181,13 +193,14 @@ func nativeSecuritySummaryFrom(value *model.NativeSecuritySummary) *nativeSecuri
 }
 
 type sittingCandidateStatusItemResponse struct {
-	NativeSecurity          *nativeSecuritySummaryResponse      `json:"native_security,omitempty"`
-	Candidate               sittingCandidateIdentityResponse    `json:"candidate"`
-	CurrentClassMembership  bool                                `json:"current_class_membership"`
-	Attempt                 *sittingCandidateAttemptResponse    `json:"attempt"`
-	Presence                sittingCandidatePresenceResponse    `json:"presence"`
-	Suspension              *sittingCandidateSuspensionResponse `json:"suspension"`
-	IntegrityAttentionCount int64                               `json:"integrity_attention_count"`
+	NativeSecurity          *nativeSecuritySummaryResponse       `json:"native_security,omitempty"`
+	Environment             *sittingCandidateEnvironmentResponse `json:"environment,omitempty"`
+	Candidate               sittingCandidateIdentityResponse     `json:"candidate"`
+	CurrentClassMembership  bool                                 `json:"current_class_membership"`
+	Attempt                 *sittingCandidateAttemptResponse     `json:"attempt"`
+	Presence                sittingCandidatePresenceResponse     `json:"presence"`
+	Suspension              *sittingCandidateSuspensionResponse  `json:"suspension"`
+	IntegrityAttentionCount int64                                `json:"integrity_attention_count"`
 }
 
 type sittingCandidateIdentityResponse struct {
@@ -426,12 +439,13 @@ func (h examAttemptHandlers) listCandidateStatuses(request route.Request) (route
 	}
 
 	response := sittingCandidateStatusListResponse{
-		ServerTime:      model.FormatRFC3339(page.ServerTime),
-		ExamID:          page.ExamID.String(),
-		ExamSittingID:   page.SittingID.String(),
-		SittingState:    page.SittingState,
-		SittingRevision: page.SittingRevision,
-		Items:           make([]sittingCandidateStatusItemResponse, 0, len(page.Items)),
+		ServerTime:                  model.FormatRFC3339(page.ServerTime),
+		ExamID:                      page.ExamID.String(),
+		ExamSittingID:               page.SittingID.String(),
+		SittingState:                page.SittingState,
+		SittingRevision:             page.SittingRevision,
+		EnvironmentsWaitingCapacity: page.EnvironmentsWaitingCapacity,
+		Items:                       make([]sittingCandidateStatusItemResponse, 0, len(page.Items)),
 	}
 	for _, item := range page.Items {
 		mapped := sittingCandidateStatusItemResponse{
@@ -448,6 +462,14 @@ func (h examAttemptHandlers) listCandidateStatuses(request route.Request) (route
 		if item.Presence.LastLeaseRenewedAt.Valid {
 			value := model.FormatRFC3339(item.Presence.LastLeaseRenewedAt.Time)
 			mapped.Presence.LastLeaseRenewedAt = &value
+		}
+		if environment := item.Environment; environment != nil {
+			mapped.Environment = &sittingCandidateEnvironmentResponse{State: environment.State,
+				Desired: environment.Desired, Incarnation: environment.Incarnation}
+			if environment.WaitingSince.Valid {
+				value := model.FormatRFC3339(environment.WaitingSince.Time)
+				mapped.Environment.WaitingSince = &value
+			}
 		}
 
 		if item.Presence.LeaseExpiresAt.Valid {
@@ -591,6 +613,46 @@ func (h examAttemptHandlers) suspend(request route.Request) (route.Result, error
 		ConnectionClosed:  result.ConnectionClosed,
 	}
 	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
+}
+
+// replaceEnvironmentRequest names the incarnation the manager saw.
+type replaceEnvironmentRequest struct {
+	ExpectedIncarnation int64 `json:"expected_incarnation"`
+}
+
+// replaceEnvironmentResponse is the environment after the request.
+type replaceEnvironmentResponse struct {
+	ExamAttemptID string                          `json:"exam_attempt_id"`
+	State         model.AttemptEnvironmentState   `json:"state"`
+	Desired       model.AttemptEnvironmentDesired `json:"desired"`
+	Incarnation   int64                           `json:"incarnation"`
+	ReplaceBefore int64                           `json:"replace_before"`
+}
+
+func (h examAttemptHandlers) replaceEnvironment(request route.Request) (route.Result, error) {
+	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
+	if err != nil {
+		return route.Result{}, err
+	}
+	var body replaceEnvironmentRequest
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
+	}
+	if body.ExpectedIncarnation < 0 {
+		return route.Result{}, route.InvalidRequest(errors.New("expected_incarnation must be zero or more"))
+	}
+	result, err := h.app.ReplaceExamAttemptEnvironment(request.Context, request.Invocation(), attempt.ReplaceEnvironmentCommand{
+		ExamID: examID, SittingID: sittingID, AttemptID: attemptID,
+		ExpectedIncarnation: body.ExpectedIncarnation, IdempotencyKey: request.IdempotencyKey,
+	})
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, replaceEnvironmentResponse{
+		ExamAttemptID: result.Environment.AttemptID.String(), State: result.Environment.State,
+		Desired: result.Environment.Desired, Incarnation: result.Environment.Incarnation,
+		ReplaceBefore: result.ReplaceBefore,
+	}).WithHeaders(noStoreHeaders()), nil
 }
 
 func (h examAttemptHandlers) getManaged(request route.Request) (route.Result, error) {

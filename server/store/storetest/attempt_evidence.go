@@ -28,7 +28,8 @@ type AttemptEvidenceExportProbe func(t *testing.T, ctx context.Context, submissi
 
 // TestAttemptEvidence verifies the environment evidence append, its
 // owner check, its author's streams, repeat and conflict handling and
-// bounds, and that the seal fixes the inventory that review reads, lists and
+// bounds, the terminal input append and its incarnation check, and that the
+// seal fixes the inventory that review reads, lists and
 // exports.
 func TestAttemptEvidence(t *testing.T, ss store.Store, export AttemptEvidenceExportProbe) {
 	t.Helper()
@@ -168,6 +169,60 @@ func TestAttemptEvidence(t *testing.T, ss store.Store, export AttemptEvidenceExp
 			require.NoError(t, item.Record.Validate())
 		}
 	}
+
+	t.Run("TerminalInput", func(t *testing.T) {
+		terminal := newExecutionAttemptFixture(t, ctx, ss)
+		terminalConnected, terminalFocus := connectFocusLossFixture(t, ctx, ss, terminal, "attempt-evidence-terminal-input")
+		terminalOwner, _ := ownTestEnvironment(t, ctx, ss, terminalConnected.Attempt.ID, terminal.sitting.ID,
+			terminalConnected.Participation.Generation)
+		typedAt := model.NowUTC().Add(-time.Second).Truncate(time.Millisecond)
+		inputAt := func(incarnation, sequence int64, tag, detail string) *store.ExamAttemptTerminalInputAppend {
+			return &store.ExamAttemptTerminalInputAppend{AttemptID: terminalConnected.Attempt.ID, Incarnation: incarnation,
+				Tag: tag, EvidenceID: model.NewIntegrityEvidenceID(), Sequence: sequence, Detail: json.RawMessage(detail),
+				ObservedAt: typedAt}
+		}
+
+		first, err := workspaces.AppendTerminalInput(ctx, inputAt(0, 1, "terminal:1", `{"events":[{"input":"bHMK"}]}`))
+		require.NoError(t, err)
+		require.False(t, first.Repeated)
+		require.Equal(t, model.AttemptEvidenceInput, first.Evidence.Kind)
+		require.Equal(t, model.NewEnvironmentWorkspaceAuthor(0, "terminal:1"), first.Evidence.Author,
+			"the record is the incarnation's and the terminal's")
+
+		again, err := workspaces.AppendTerminalInput(ctx, inputAt(0, 1, "terminal:1", `{"events":[{"input":"bHMK"}]}`))
+		require.NoError(t, err)
+		require.True(t, again.Repeated, "a resend at the same offset repeats")
+		require.Equal(t, first.Evidence, again.Evidence)
+		_, err = workspaces.AppendTerminalInput(ctx, inputAt(0, 1, "terminal:1", `{"events":[{"input":"cm0K"}]}`))
+		requireConflictConstraint(t, err, "attempt_evidence_sequence")
+		other, err := workspaces.AppendTerminalInput(ctx, inputAt(0, 1, "terminal:2", `{"events":[{"input":"cm0K"}]}`))
+		require.NoError(t, err)
+		require.False(t, other.Repeated, "each terminal is its own stream")
+
+		_, err = workspaces.AppendTerminalInput(ctx, inputAt(0, 2, "Terminal 1", `{}`))
+		var invalid *store.ErrInvalidInput
+		require.ErrorAs(t, err, &invalid, "a tag outside the process tag alphabet")
+		_, err = workspaces.AppendTerminalInput(ctx, inputAt(0, 0, "terminal:1", `{}`))
+		require.ErrorAs(t, err, &invalid, "a zero sequence")
+
+		// Only the environment's current incarnation records.
+		terminalOwner.incarnate(t, ctx, 1)
+		_, err = workspaces.AppendTerminalInput(ctx, inputAt(0, 2, "terminal:1", `{}`))
+		requireConflictConstraint(t, err, "attempt_environment_incarnation")
+		_, err = workspaces.AppendTerminalInput(ctx, inputAt(1, 1, "terminal:1", `{}`))
+		require.NoError(t, err)
+
+		sealAccess := submissionAccess(terminalFocus, terminal.sitting.ExamRevisionID, terminalConnected.Workspace.Cursor, 0)
+		seal := &store.ExamSubmissionSeal{SubmissionID: model.NewSubmissionID(), ReceiptCode: model.NewSubmissionReceiptCode(),
+			Access: sealAccess, AuditEventID: saveExamAttemptAudit(t, ctx, ss, terminal).ID, AuditAt: model.NowUTC(),
+			DomainEventID: model.NewDomainEventID(), DomainEventJobID: model.NewJobID()}
+		attachSubmissionReceipt(t, ctx, ss, terminal.candidate, seal)
+		_, err = ss.ExamSubmission().Seal(ctx, seal, examCommand(terminal.candidate.ID, store.ExamSubmissionSealOperation,
+			"attempt-evidence-terminal-seal", "attempt-evidence-terminal-seal"))
+		require.NoError(t, err)
+		_, err = workspaces.AppendTerminalInput(ctx, inputAt(1, 2, "terminal:1", `{}`))
+		requireConflictConstraint(t, err, "exam_attempt_state")
+	})
 
 	t.Run("Bounds", func(t *testing.T) {
 		bounded := newExecutionAttemptFixture(t, ctx, ss)

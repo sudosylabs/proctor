@@ -139,6 +139,7 @@ type ExamAttemptApplication interface {
 	OpenCandidateExamWorkspaceFile(context.Context, invocation.Invocation, attempt.OpenWorkspaceFileQuery) (attempt.OpenedContent, error)
 	ReallowExamAttempt(context.Context, invocation.Invocation, attempt.ReallowCommand) (attempt.ReallowResult, error)
 	SuspendExamAttempt(context.Context, invocation.Invocation, attempt.ManualSuspensionCommand) (attempt.ManualSuspensionResult, error)
+	ReplaceExamAttemptEnvironment(context.Context, invocation.Invocation, attempt.ReplaceEnvironmentCommand) (attempt.ReplaceEnvironmentResult, error)
 	RequestScreenClip(context.Context, invocation.Invocation, attempt.RequestScreenClipCommand) (attempt.RequestScreenClipResult, error)
 	PendingScreenClips(context.Context, invocation.Invocation, attempt.CandidateAccess) ([]store.ExamAttemptScreenClipView, error)
 	TakeScreenClip(context.Context, invocation.Invocation, attempt.CandidateAccess, model.ScreenClipID) (store.ExamAttemptScreenClipView, error)
@@ -192,6 +193,7 @@ func examAttemptResource(app ExamAttemptApplication) route.Resource {
 	managerSubmissionContent := managerSubmission + "/files/{attempt_workspace_entry_id}/content"
 	reallow := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/reallow"
 	suspend := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/suspend"
+	replaceEnvironment := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/environment/replace"
 	screenClips := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips"
 	screenClipRequests := "/exam-attempts/{exam_attempt_id}/screen-clip-requests"
 	return route.NewResource("exam-attempts",
@@ -349,6 +351,33 @@ func examAttemptResource(app ExamAttemptApplication) route.Resource {
 				"exam.sitting.unavailable",
 			},
 			Handle: h.suspend,
+		},
+		route.Endpoint{
+			Method:      http.MethodPost,
+			Path:        replaceEnvironment,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.environment_changed",
+				"exam.attempt.environment_ended",
+				"exam.attempt.sitting_not_open",
+				"exam.attempt.conflict",
+				"exam.attempt.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"exam.delivery.metadata_capacity",
+				"exam.sitting.invalid",
+				"exam.sitting.unavailable",
+			},
+			Handle: h.replaceEnvironment,
 		},
 		route.Endpoint{
 			Method:      http.MethodPost,

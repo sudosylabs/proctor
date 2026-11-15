@@ -66,8 +66,9 @@ type VerifiedCandidateAccess struct {
 // runs, and nothing else: a Desktop Session with its registered key, the
 // Attempt's open Connection and continuity credential, an active
 // Participation with an unexpired lease, an active Attempt and a Sitting
-// that is open or paused before its end. The plugin route guard calls it
-// before any plugin code sees the request.
+// that is open or paused before its end. It writes nothing. The candidate's
+// terminals call it before they act, and again while a terminal socket
+// stays open, so a sealed Attempt or an ended Participation ends them.
 func (s *Service) VerifyCandidateAttemptAccess(
 	ctx context.Context,
 	inv invocation.Invocation,

@@ -56,6 +56,33 @@ func (r *ExamAttemptEvidenceAppendResult) Consistent(input *ExamAttemptEvidenceA
 		r.Evidence.SameClaim(claim)
 }
 
+// ExamAttemptTerminalInputAppend appends one execution.input record from
+// the node that serves a terminal, which holds no runtime lease. The
+// record's author is the environment incarnation and the terminal's tag;
+// Sequence numbers that terminal's input stream. EvidenceID is the proposed
+// identity of a new record.
+type ExamAttemptTerminalInputAppend struct {
+	AttemptID   model.ExamAttemptID
+	Incarnation int64
+	Tag         string
+	EvidenceID  model.IntegrityEvidenceID
+	Sequence    int64
+	Detail      json.RawMessage
+	ObservedAt  time.Time
+}
+
+// Author is the record's author: the incarnation and the terminal.
+func (a *ExamAttemptTerminalInputAppend) Author() model.AttemptWorkspaceAuthor {
+	return model.NewEnvironmentWorkspaceAuthor(a.Incarnation, a.Tag)
+}
+
+// Valid reports whether every field is well formed.
+func (a *ExamAttemptTerminalInputAppend) Valid() bool {
+	return a != nil && a.AttemptID.IsValid() && a.Incarnation >= 0 && model.IsValidAttemptEnvironmentProcessTag(a.Tag) &&
+		a.EvidenceID.IsValid() && model.ValidAttemptEvidenceClaim(model.AttemptEvidenceInput, a.Author(), a.Sequence, a.Detail) &&
+		!a.ObservedAt.IsZero()
+}
+
 // AttemptEvidenceListOptions selects one page of a sealed Submission's
 // Attempt evidence for review.
 type AttemptEvidenceListOptions struct {

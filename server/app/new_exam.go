@@ -241,6 +241,7 @@ func newAttempts(
 		NewFocusLossSignal:  model.NewFocusLossSignalID,
 		EnvironmentWaker:    deps.EnvironmentWaker,
 		EnvironmentSettler:  environmentSettler(deps),
+		Environments:        deps.Store.AttemptEnvironment(),
 		NewDiscrepancy:      model.NewIntegrityDiscrepancyID,
 		NewWorkspaceEntry:   model.NewAttemptWorkspaceEntryID,
 		NewWorkspaceObject:  model.NewAttemptWorkspaceObjectID,

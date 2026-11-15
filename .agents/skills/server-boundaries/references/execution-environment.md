@@ -20,9 +20,12 @@ This file holds only the rules that must not drift.
 
 - The Attempt Workspace is the only authority for candidate files. The guest
   is a synced copy; journal order decides every conflict.
-- Admission and the Submission seal never wait on an environment. A settle
-  (freeze, drain, harvest) runs before each seal within its budget; anything
-  it misses is a recorded settle gap, and the seal proceeds.
+- Admission and the Submission seal never wait long on an environment. A
+  settle (drain, harvest, confirm, then freeze) runs before each seal within
+  its budget. It is asked through the environment row, so the owner answers
+  it on any node; anything it misses is a settle gap recorded before the
+  seal, and the seal proceeds. A voluntary seal's expected cursor fences only
+  candidate changes.
 - One Attempt Environment per Attempt, across Participations. It is driven by
   Attempt facts, never by a client.
 - One owner per environment, under a fenced runtime lease. Every core write
@@ -64,7 +67,8 @@ This file holds only the rules that must not drift.
   terminal by attaching to the grant itself. Input is written by offset and
   accepted only from the process's author.
 - Execution evidence goes into Attempt-owned, append-only Attempt evidence of
-  typed kinds. Appends after the Submission are refused, except the settle's.
+  typed kinds. Appends after the Submission are refused; a settle gap is
+  recorded before the seal.
 - The process log comes from the guest agent outside the workload. Terminal
   input is recorded only when the policy opts in, is captured at the serving
   node, and never includes output. Both are sealed evidence that only

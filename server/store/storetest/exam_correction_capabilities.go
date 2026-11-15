@@ -9,7 +9,6 @@ package storetest
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"testing"
 
@@ -91,19 +90,6 @@ func testCorrectionCapabilityGates(t *testing.T, ss store.Store) {
 			} else {
 				require.NoError(t, err)
 				cursor = changed.Changes[0].Cursor
-			}
-			// The environment writes under the same correction gate.
-			_, environment := bindTestEnvironment(t, ctx, ss, connected.Attempt.ID, connected.Participation.Generation,
-				environmentIdentity(fmt.Sprintf("grant-correction-%d", caseIndex), "epoch-1", 0))
-			harvested, err := ss.ExamAttemptWorkspace().ApplyBatch(ctx, newAttemptWorkspaceBatch(t, ctx, ss, fixture, environment,
-				store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
-					EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "harvested-after-correction"}),
-				attemptWorkspaceBatchCommand(fixture.candidate.ID, "correction-environment"))
-			if blocked(model.CandidateCapabilityWorkspace) {
-				requireConflictConstraint(t, err, "exam_correction_acknowledgement_required")
-			} else {
-				require.NoError(t, err)
-				cursor = harvested.Changes[0].Cursor
 			}
 			source := browserSourceID(501 + caseIndex)
 			_, err = startBrowserSourceFixture(t, ctx, ss, &store.BrowserActivitySourceStart{Access: access,

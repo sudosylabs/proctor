@@ -143,6 +143,13 @@ export const glossaryTerms = [
     "avoid": "Execution host, container image, deployment configuration"
   },
   {
+    "id": "attempt-environment",
+    "term": "Attempt Environment",
+    "section": "Examinations",
+    "definition": "The one isolated execution machine of an exam attempt whose revision enables execution, created from the frozen environment profile and kept in step with the attempt workspace. It freezes when the candidate's participation ends and thaws when they return; only the submission ends it. Its changes are the candidate's own work.",
+    "avoid": "Terminal, execution grant, shared sandbox"
+  },
+  {
     "id": "exam-capacity-policy",
     "term": "Exam Capacity Policy",
     "section": "Examinations",

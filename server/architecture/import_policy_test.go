@@ -483,6 +483,18 @@ var dependencyRules = []dependencyRule{
 		),
 	},
 	{
+		// The Attempt Environment area owns execution environments: their
+		// facts, the runtime that holds their leases, and their owners. It
+		// reaches an execution host only through its own port.
+		name:           "exam execution environment",
+		sources:        []pathPattern{exact(serverModule + "/app/exam/environment")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+		),
+	},
+	{
 		name:           "safe Markdown",
 		sources:        []pathPattern{exact(serverModule + "/app/exam/safemarkdown")},
 		deniedStandard: standardInfrastructure,
@@ -820,6 +832,18 @@ var dependencyRules = []dependencyRule{
 		thirdParty: allImports(),
 	},
 	{
+		// The execution host adapter implements the Attempt Environment's
+		// host port over execenv; no execenv type leaves it.
+		name:    "execution host adapter",
+		sources: []pathPattern{subtree(serverModule + "/platform/executionhost")},
+		project: only(
+			exact(serverModule+"/app/exam/environment"),
+			exact(serverModule+"/config"),
+			exact(serverModule+"/model"),
+		),
+		thirdParty: only(subtree("github.com/sudosylabs/execenv")),
+	},
+	{
 		name:    "platform lifecycle",
 		sources: []pathPattern{exact(serverModule + "/platform")},
 		project: allExcept(
@@ -828,6 +852,7 @@ var dependencyRules = []dependencyRule{
 			descendants(repositoryModule+"/packages/vfs"),
 			descendants(serverModule+"/cluster"),
 			descendants(serverModule+"/platform/externalauth"),
+			subtree(serverModule+"/platform/executionhost"),
 			exact(serverModule+"/store/sqlstore"),
 			// metrics wraps the platform ports, so the edge points one way.
 			exact(serverModule+"/metrics"),
@@ -975,10 +1000,12 @@ func TestDependencyRulePrecedence(t *testing.T) {
 		{packagePath: serverModule + "/app/exam", wantRule: "exam manager access consumers"},
 		{packagePath: serverModule + "/app/exam/review", wantRule: "exam mail and safe Markdown consumers"},
 		{packagePath: serverModule + "/app/exam/safemarkdown", wantRule: "safe Markdown"},
+		{packagePath: serverModule + "/app/exam/environment", wantRule: "exam execution environment"},
 		{packagePath: serverModule + "/app/internal/batchitem", wantRule: "batch item context"},
 		{packagePath: serverModule + "/app", wantRule: "application"},
 		{packagePath: serverModule + "/store/sqlstore", wantRule: "SQL store adapter"},
 		{packagePath: serverModule + "/platform/externalauth", wantRule: "external-auth adapters"},
+		{packagePath: serverModule + "/platform/executionhost", wantRule: "execution host adapter"},
 		{packagePath: serverModule + "/plugin/oidc", wantRule: "plugins"},
 		{packagePath: serverModule + "/internal/openapidoc", wantRule: "OpenAPI compiler"},
 		{packagePath: serverModule + "/internal/asyncapidoc", wantRule: "AsyncAPI compiler"},

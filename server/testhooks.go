@@ -23,6 +23,7 @@ import (
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform"
+	"github.com/sudosylabs/proctor/server/platform/executionhost"
 	"github.com/sudosylabs/proctor/server/plugin"
 	"github.com/sudosylabs/proctor/server/store"
 	"github.com/sudosylabs/proctor/server/store/localcachelayer"
@@ -65,6 +66,11 @@ type TestingOverrides struct {
 	// built-in plugin with the same ID, and the others follow the built-in
 	// ones.
 	Plugins []plugin.Plugin
+	// ExecutionHostDial replaces how the node reaches its configured
+	// execution hosts, so tests can use in-process hosts. It also accepts
+	// hosts without isolation. Production always dials the configured
+	// addresses and requires isolation.
+	ExecutionHostDial executionhost.Dialer
 	// AllowMissingJobs is an explicit lifecycle-only test policy. Production
 	// construction always requires durable Job persistence and a Job runtime.
 	AllowMissingJobs bool

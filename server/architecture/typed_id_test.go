@@ -58,6 +58,10 @@ var typedIDNames = map[string]string{
 	"MessageID":                 "RFC 5322 Message-ID header",
 	"ContentID":                 "MIME Content-ID of an inline asset",
 	"InstallationID":            "public installation identity token",
+	"GrantID":                   "execution host grant identity, an opaque token the host keeps (model.IsValidAttemptEnvironmentGrantID)",
+	"grantID":                   "execution host grant identity, an opaque token the host keeps (model.IsValidAttemptEnvironmentGrantID)",
+	"TransferID":                "execution host content transfer token",
+	"MutationID":                "execution host projection mutation identity, the owner's retry key",
 }
 
 // typedIDAllowlist names individual sites that keep a plain string identifier,

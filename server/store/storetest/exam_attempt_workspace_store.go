@@ -572,7 +572,7 @@ writesComplete:
 	if len(probes) > 0 && probes[0].SetParticipationLeaseExpired != nil {
 		testExamAttemptWorkspaceSuspensionAndMultiNodeReplay(t, ctx, ss, workspace, probes[0])
 	}
-	testAttemptEnvironmentBinding(t, ss, workspace, probes...)
+	testAttemptEnvironmentWriter(t, ss, workspace, probes...)
 	testAttemptWorkspaceBatches(t, ss, workspace)
 	testAttemptWorkspaceRecursiveDeletion(t, ss, workspace, probes...)
 }
@@ -1024,12 +1024,12 @@ type attemptWorkspaceBatchAudit struct {
 	Replayed             bool
 	OriginalAuditEventID string
 	Author               model.AttemptWorkspaceAuthor
-	BindingID            string
+	Fence                int64
 }
 
 // requireAttemptWorkspaceBatchAudit asserts that a batch audit carries only
 // safe scope, counts by operation, the cursor range of result and the
-// writer's author, plus the binding of an environment writer.
+// writer's author, plus the lease fence of an environment writer.
 func requireAttemptWorkspaceBatchAudit(t *testing.T, audit *model.AuditEvent, mutationCount int,
 	result *store.ExamAttemptWorkspaceBatchResult,
 ) attemptWorkspaceBatchAudit {
@@ -1043,8 +1043,8 @@ func requireAttemptWorkspaceBatchAudit(t *testing.T, audit *model.AuditEvent, mu
 	require.NoError(t, json.Unmarshal(data["author_ref"], &decoded.Author.Ref))
 	require.Equal(t, result.Changes[0].Author, decoded.Author, "batch audit author = %s", audit.Result)
 	if decoded.Author.Kind == model.AttemptWorkspaceAuthorEnvironment {
-		keys = append(keys, "environment_binding_id")
-		require.NoError(t, json.Unmarshal(data["environment_binding_id"], &decoded.BindingID))
+		keys = append(keys, "environment_lease_fence")
+		require.NoError(t, json.Unmarshal(data["environment_lease_fence"], &decoded.Fence))
 	}
 	if _, replayed := data["idempotency_replayed"]; replayed {
 		keys = append(keys, "idempotency_replayed", "original_audit_event_id")

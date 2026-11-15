@@ -8,6 +8,9 @@
 -- Rolls back the pre-release schema baseline. Development databases should
 -- normally be dropped and recreated rather than rolled back.
 
+DROP TABLE IF EXISTS attempt_runtime_leases;
+DROP SEQUENCE IF EXISTS attempt_runtime_fences;
+DROP TABLE IF EXISTS exam_attempt_environments;
 DROP TRIGGER IF EXISTS exam_submissions_seal_attempt_evidence ON exam_submissions;
 DROP FUNCTION IF EXISTS seal_attempt_evidence_inventory();
 DROP TABLE IF EXISTS exam_attempt_evidence_inventories;
@@ -132,8 +135,6 @@ DROP TABLE IF EXISTS browser_activity_events;
 DROP TABLE IF EXISTS browser_activity_sources;
 DROP TABLE IF EXISTS exam_attempt_connections;
 DROP FUNCTION IF EXISTS guard_attempt_connection_mutation();
-DROP TABLE IF EXISTS exam_attempt_environment_bindings;
-DROP FUNCTION IF EXISTS guard_attempt_environment_binding_mutation();
 DROP TRIGGER IF EXISTS exam_attempt_participations_started ON exam_attempt_participations;
 DROP TRIGGER IF EXISTS exam_attempt_participations_ended ON exam_attempt_participations;
 DROP FUNCTION IF EXISTS start_attempt_participation_generation();

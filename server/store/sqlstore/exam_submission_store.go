@@ -357,8 +357,9 @@ func verifyCommittedExamSubmissionCausal(
 		return store.NewErrConflict("attempt_connection", "attempt_connection_closed", nil)
 	}
 
-	if causal.WorkspaceCursor != access.ExpectedWorkspaceCursor {
-		return store.NewErrConflict("attempt_workspace", "attempt_workspace_cursor", nil)
+	if err := requireNoCandidateChangesAfter(ctx, tx, row.WorkspaceID, access.ExpectedWorkspaceCursor,
+		causal.WorkspaceCursor); err != nil {
+		return err
 	}
 	if causal.FinalFocusLossSequence != access.FinalFocusLossSequence {
 		return store.NewErrConflict("focus_loss_signal", "focus_loss_sequence", nil)
@@ -438,10 +439,41 @@ func verifyActiveExamSubmissionSealAccess(
 	if pendingAcknowledgements != 0 {
 		return store.NewErrConflict("exam_submission", "exam_correction_acknowledgement_required", nil)
 	}
-	if row.WorkspaceCursor != access.ExpectedWorkspaceCursor {
-		return store.NewErrConflict("attempt_workspace", "attempt_workspace_cursor", nil)
-	}
+	return requireNoCandidateChangesAfter(ctx, tx, row.WorkspaceID, access.ExpectedWorkspaceCursor, row.WorkspaceCursor)
+}
 
+// requireNoCandidateChangesAfter accepts a voluntary seal's expected cursor
+// when every journaled change after it, up to the Workspace's current
+// cursor, was made by the execution environment. A candidate change after
+// it, an expected cursor past the current one, or a change no longer
+// journaled conflicts with attempt_workspace_cursor.
+func requireNoCandidateChangesAfter(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	workspaceID string,
+	expected int64,
+	current int64,
+) error {
+	if expected == current {
+		return nil
+	}
+	conflict := store.NewErrConflict("attempt_workspace", "attempt_workspace_cursor", nil)
+	if expected > current {
+		return conflict
+	}
+	var changes struct {
+		Journaled   int64 `db:"journaled"`
+		ByCandidate int64 `db:"by_candidate"`
+	}
+	if err := tx.Get(ctx, &changes, `SELECT COUNT(*) AS journaled,
+			COUNT(*) FILTER (WHERE author_kind <> 'environment') AS by_candidate
+		FROM exam_attempt_workspace_journal
+		WHERE workspace_id = ? AND cursor > ? AND cursor <= ?`, workspaceID, expected, current); err != nil {
+		return fmt.Errorf("read the Workspace changes after the seal cursor: %w", err)
+	}
+	if changes.Journaled != current-expected || changes.ByCandidate != 0 {
+		return conflict
+	}
 	return nil
 }
 

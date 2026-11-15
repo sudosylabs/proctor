@@ -15,6 +15,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
+	"github.com/sudosylabs/proctor/server/app/exam/environment"
 	"github.com/sudosylabs/proctor/server/app/exam/resource"
 	"github.com/sudosylabs/proctor/server/app/exam/review"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
@@ -188,7 +189,7 @@ func newSittings(
 		Auditor:       shared.audit.MutationAudit(),
 		SystemAuditor: shared.audit.SystemAudit(),
 		Publisher:     shared.realtime,
-		Jobs:          jobs.NewExamSittingLifecycleJobFactory(time.Now, model.NewJobID),
+		Jobs:          sittingLifecycleJobs(deps),
 		Mail:          scheduleMail,
 		Now:           time.Now,
 		NewID:         model.NewExamSittingID,
@@ -238,11 +239,12 @@ func newAttempts(
 		NewFlag:             model.NewIntegrityFlagID,
 		NewSuspension:       model.NewAttemptSuspensionID,
 		NewFocusLossSignal:  model.NewFocusLossSignalID,
+		EnvironmentWaker:    deps.EnvironmentWaker,
+		EnvironmentSettler:  environmentSettler(deps),
 		NewDiscrepancy:      model.NewIntegrityDiscrepancyID,
 		NewWorkspaceEntry:   model.NewAttemptWorkspaceEntryID,
 		NewWorkspaceObject:  model.NewAttemptWorkspaceObjectID,
 		NewWorkspaceVersion: model.NewWorkspaceContentVersion,
-		NewEnvironment:      model.NewAttemptEnvironmentBindingID,
 		NewSubmission:       model.NewSubmissionID,
 		NewReceiptCode:      model.NewSubmissionReceiptCode,
 		NewDomainEvent:      model.NewDomainEventID,
@@ -359,4 +361,37 @@ func newExamExports(deps Dependencies, shared sharedMechanics, authorizer *acces
 		NewID:       model.NewExamExportID,
 		NewJobID:    model.NewJobID,
 	})
+}
+
+// attemptEnvironmentSettleBudget bounds how long a seal waits for an
+// execution environment to settle.
+const attemptEnvironmentSettleBudget = 5 * time.Second
+
+// sittingLifecycleJobs delays a closing Sitting's sealing Job by the settle
+// budget when the installation runs execution environments.
+func sittingLifecycleJobs(deps Dependencies) jobs.ExamSittingLifecycleJobFactory {
+	factory := jobs.NewExamSittingLifecycleJobFactory(time.Now, model.NewJobID)
+	if deps.ExecutionEnabled {
+		factory = factory.WithSettleBudget(attemptEnvironmentSettleBudget)
+	}
+	return factory
+}
+
+// environmentSettler settles execution environments before their seals when
+// the installation runs them; otherwise nothing settles.
+func environmentSettler(deps Dependencies) attempt.EnvironmentSettler {
+	if !deps.ExecutionEnabled || deps.Store.AttemptEnvironment() == nil {
+		return nil
+	}
+	settler, err := environment.NewSettler(environment.SettlerConfig{
+		Environments:  deps.Store.AttemptEnvironment(),
+		Waker:         deps.EnvironmentWaker,
+		Budget:        attemptEnvironmentSettleBudget,
+		NewEvidenceID: model.NewIntegrityEvidenceID,
+		Report:        deps.EnvironmentDiagnostics,
+	})
+	if err != nil {
+		return nil
+	}
+	return settler
 }

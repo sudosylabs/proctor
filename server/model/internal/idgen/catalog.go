@@ -42,7 +42,6 @@ var entityIDs = []idSpec{
 	{typeName: "ExamExportID", fieldName: "exam_export_id", constructorSubject: "examination export"},
 	{typeName: "AttemptParticipationID", fieldName: "attempt_participation_id", constructorSubject: "attempt-participation"},
 	{typeName: "AttemptConnectionID", fieldName: "attempt_connection_id", constructorSubject: "attempt-connection"},
-	{typeName: "AttemptEnvironmentBindingID", fieldName: "attempt_environment_binding_id", constructorSubject: "attempt-environment-binding"},
 	{typeName: "EnvironmentProfileID", fieldName: "environment_profile_id", constructorSubject: "environment-profile"},
 	{typeName: "FocusLossSignalID", fieldName: "focus_loss_signal_id", constructorSubject: "focus-loss-signal"},
 	{typeName: "IntegrityEvidenceID", fieldName: "integrity_evidence_id", constructorSubject: "integrity-evidence"},

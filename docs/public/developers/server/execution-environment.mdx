@@ -102,7 +102,10 @@ whose expected version is stale is refused. Each author reacts in its own way:
   content, as an editor does when a file changed on disk.
 - **The environment** does not retry. The core projects the current Workspace
   version back into the guest and keeps the lost guest version as an
-  *overwritten* evidence record.
+  *overwritten* evidence record. Until execenv can discard an unconfirmed
+  guest change, a projection onto it is refused; when the refusal outlasts
+  three rounds without new guest activity, the owner replaces the machine
+  from the Workspace and records a gap.
 - **A later actor** is told its change was superseded.
 
 A guest's changes are separate system calls, not a transaction. The harvest
@@ -267,17 +270,24 @@ lacks.
 
 ### The settle and the seal
 
-The seal never waits on an environment, but a cooperative environment should
-not lose its last second. A *settle* runs before every seal:
+The seal never waits long on an environment, but a cooperative environment
+should not lose its last second. A *settle* runs before every seal:
 
-1. Freeze the guest, so no process can write.
-2. Drain: one complete observation and a harvest of everything in it.
-3. Confirm and acknowledge.
+1. Drain: one complete observation and a harvest of everything in it.
+2. Confirm and acknowledge.
+3. Freeze the guest, when the environment is to be frozen. execenv serves no
+   observation once a machine is frozen, so the drain comes first.
 
-A voluntary submit settles, then seals. When a Sitting closes, every running
-environment of the Sitting settles in parallel, then the sealing Job runs. Each
-settle has 5 seconds. Past that, or with the host unreachable, the seal goes
-ahead and a *settle gap* is recorded.
+A settle is asked through the environment's row, so the owner answers it on
+whichever node holds the lease: the seal counts one more requested settle,
+wakes the owner, and waits until the owner records it complete. A voluntary
+submit and a manager end settle, then seal; a replay settles nothing. A
+closing Sitting asks every environment of the Sitting to settle, and its
+sealing Job waits the settle budget before it runs. Each settle has 5 seconds.
+Past that, or with the host unreachable, the seal records a *settle gap*
+(`{"gap": "settle_incomplete"}`, by the current incarnation's `settle`
+stream) and goes ahead. A voluntary seal's expected cursor fences only the
+candidate's own changes, so what the settle harvested is sealed.
 
 Only Attempt Workspace content counts. Terminal output, shell history, the
 scratch home and ignored paths never do.
@@ -395,6 +405,12 @@ Two small additions, neither of which changes an existing contract:
 2. **The writing process.** The guest agent maps the process that wrote a path
    to the tagged process it descends from, and the observation carries that
    tag. A path written by several processes names the last.
+3. **Discarding a guest change.** A projection may replace an unconfirmed
+   guest change on the paths it writes, so a change that lost to the journal
+   is overwritten in place instead of replacing the machine.
+4. **Suspending a frozen machine.** Idle suspend applies to a machine the
+   owner froze, not only to a running one, so a long absence frees its
+   memory.
 
 ## Data model
 
@@ -410,8 +426,8 @@ New core tables, in the baseline migration:
 
 Removed with the plugin: its records and leases, Exam plugin sections, plugin
 routes, workers, event subscriptions, and the plugin capabilities for
-Workspace access and evidence. The environment bindings go when the fenced
-environment access replaces them.
+Workspace access and evidence, and the environment bindings: the owner's
+fenced lease is the environment's Workspace access.
 
 ## Build order
 
@@ -426,9 +442,10 @@ Each step is a vertical slice with its own tests.
    evidence, with the seal, review, export and retention moved over.
 3. **Attempt Environment:** the execution policy, environment profiles and
    the execution configuration first, since nothing can create an
-   environment without them; then the model, lifecycle, placement, templates
-   and seeds, sync and the settle, under the owner's fenced runtime lease with
-   wakeups. The three Workspace changes whose only reader is the owner land
+   environment without them; then the model, lifecycle, placement, sync and
+   the settle, under the owner's fenced runtime lease with wakeups. Seeds and
+   retention by cursor are deferred: an environment starts empty and is
+   initialized with the full Workspace, and a pruned journal restarts it. The three Workspace changes whose only reader is the owner land
    here with it: change notifications in the core, retention by cursor, and
    grouped harvest batches. `server/plugin/execution` and its seams are
    deleted in this step, and evidence is appended under the owner's fence

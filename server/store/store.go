@@ -120,6 +120,8 @@ type Catalog interface {
 	DesktopCompatibilityPolicy() DesktopCompatibilityPolicyStore
 	PluginSettings() PluginSettingsStore
 	EnvironmentProfile() EnvironmentProfileStore
+	AttemptEnvironment() AttemptEnvironmentStore
+	AttemptRuntimeLease() AttemptRuntimeLeaseStore
 	RetentionPolicy() RetentionPolicyStore
 	Retention() RetentionStore
 	ClusterDiscovery() ClusterDiscoveryStore

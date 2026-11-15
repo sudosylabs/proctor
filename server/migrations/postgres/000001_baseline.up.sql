@@ -2080,34 +2080,6 @@ CREATE INDEX exam_attempt_participations_session_active_idx
     ON exam_attempt_participations (session_id, exam_attempt_id)
     WHERE state = 'active';
 
--- An execution environment writes the Attempt Workspace on the candidate's
--- behalf only through its live binding to the Attempt's current Participation
--- generation. The grant, epoch and incarnation are opaque execenv identities;
--- a grant and epoch pair is never bound twice. Ending the generation ends the
--- binding in the same transaction, and a newer incarnation replaces it.
-CREATE TABLE exam_attempt_environment_bindings (
-    id varchar(26) PRIMARY KEY,
-    exam_attempt_id varchar(26) NOT NULL,
-    participation_id varchar(26) NOT NULL,
-    generation bigint NOT NULL CHECK (generation > 0),
-    grant_id varchar(64) NOT NULL CHECK (grant_id ~ '^[A-Za-z0-9._:-]{1,64}$'),
-    epoch varchar(128) NOT NULL CHECK (epoch ~ '^[A-Za-z0-9._:-]{1,128}$'),
-    incarnation bigint NOT NULL CHECK (incarnation >= 0),
-    created_at timestamptz NOT NULL,
-    ended_at timestamptz CHECK (ended_at >= created_at),
-    -- The same grant and epoch, and so the same shell, may serve each of an
-    -- Attempt's generations in turn, but only once per generation.
-    UNIQUE (grant_id, epoch, generation),
-    CONSTRAINT exam_attempt_environment_bindings_participation_fkey
-        FOREIGN KEY (participation_id, exam_attempt_id, generation)
-        REFERENCES exam_attempt_participations(id, exam_attempt_id, generation)
-);
-
-CREATE UNIQUE INDEX exam_attempt_environment_bindings_one_live_key
-    ON exam_attempt_environment_bindings (exam_attempt_id) WHERE ended_at IS NULL;
-CREATE INDEX exam_attempt_environment_bindings_participation_idx
-    ON exam_attempt_environment_bindings (participation_id, exam_attempt_id, generation);
-
 CREATE TABLE exam_attempt_connections (
     id varchar(26) PRIMARY KEY,
     exam_attempt_id varchar(26) NOT NULL,
@@ -2397,17 +2369,13 @@ CREATE TRIGGER exam_attempt_participations_started
 
 -- Every path that ends a Participation generation (lease expiry, Kick, policy
 -- suspension, Session revocation, Submission, manager end, automatic seal)
--- ends that generation's live environment binding and records the
--- exam.attempt.participation.ended event in the same transaction. One
--- trigger does both, so the two can never disagree about which transitions
--- end a generation, and paths added later are covered too.
+-- records the exam.attempt.participation.ended event in the same
+-- transaction. One trigger covers them all, so paths added later are covered
+-- too.
 CREATE FUNCTION end_attempt_participation_generation() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
     IF OLD.state = 'active' AND NEW.state = 'ended' THEN
-        UPDATE exam_attempt_environment_bindings b
-           SET ended_at = GREATEST(NEW.ended_at, b.created_at)
-         WHERE b.participation_id = NEW.id AND b.ended_at IS NULL;
         PERFORM enqueue_domain_event('exam.attempt.participation.ended',
             attempt_participation_event_data(NEW) || jsonb_build_object('reason', NEW.end_reason), NEW.ended_at);
     END IF;
@@ -2417,23 +2385,6 @@ $$;
 CREATE TRIGGER exam_attempt_participations_ended
     AFTER UPDATE OF state ON exam_attempt_participations FOR EACH ROW
     EXECUTE FUNCTION end_attempt_participation_generation();
-
-CREATE FUNCTION guard_attempt_environment_binding_mutation() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-    IF NEW.id IS DISTINCT FROM OLD.id OR NEW.exam_attempt_id IS DISTINCT FROM OLD.exam_attempt_id OR
-       NEW.participation_id IS DISTINCT FROM OLD.participation_id OR NEW.generation IS DISTINCT FROM OLD.generation OR
-       NEW.grant_id IS DISTINCT FROM OLD.grant_id OR NEW.epoch IS DISTINCT FROM OLD.epoch OR
-       NEW.incarnation IS DISTINCT FROM OLD.incarnation OR NEW.created_at IS DISTINCT FROM OLD.created_at OR
-       OLD.ended_at IS NOT NULL THEN
-        RAISE EXCEPTION 'Attempt environment binding identity or terminal state changed' USING ERRCODE = '55000';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE TRIGGER exam_attempt_environment_bindings_guard
-    BEFORE UPDATE ON exam_attempt_environment_bindings FOR EACH ROW
-    EXECUTE FUNCTION guard_attempt_environment_binding_mutation();
 
 CREATE FUNCTION guard_attempt_connection_mutation() RETURNS trigger
 LANGUAGE plpgsql AS $$
@@ -5800,6 +5751,76 @@ $$;
 CREATE TRIGGER exam_submissions_seal_attempt_evidence
     AFTER INSERT ON exam_submissions
     FOR EACH ROW EXECUTE FUNCTION seal_attempt_evidence_inventory();
+
+-- One execution environment per Attempt whose Revision enables execution,
+-- created at the first admission. The profile it was created from is copied
+-- in. Desired follows Attempt facts and only moves forward to ended; State is
+-- what the owner made of it. Revision fences the owner's writes, which also
+-- require the owner's current runtime lease.
+CREATE TABLE exam_attempt_environments (
+    exam_attempt_id varchar(26) PRIMARY KEY REFERENCES exam_attempts(id),
+    exam_sitting_id varchar(26) NOT NULL REFERENCES exam_sittings(id),
+    environment_profile_id varchar(26) NOT NULL REFERENCES environment_profiles(id),
+    image varchar(64) NOT NULL CHECK (image ~ '^[A-Za-z0-9._:-]{1,64}$'),
+    cpu_millis bigint NOT NULL CHECK (cpu_millis BETWEEN 100 AND 64000),
+    memory_bytes bigint NOT NULL CHECK (memory_bytes BETWEEN 134217728 AND 68719476736),
+    disk_bytes bigint NOT NULL CHECK (disk_bytes BETWEEN 67108864 AND 274877906944),
+    network varchar(16) NOT NULL CHECK (network IN ('none', 'allowlist')),
+    idle_window_seconds integer NOT NULL CHECK (idle_window_seconds BETWEEN 60 AND 86400),
+    terminals smallint NOT NULL CHECK (terminals BETWEEN 1 AND 8),
+    record_input boolean NOT NULL,
+    desired varchar(16) NOT NULL CHECK (desired IN ('running', 'frozen', 'ended')),
+    state varchar(24) NOT NULL CHECK (state IN (
+        'pending', 'creating', 'running', 'frozen', 'suspended', 'waiting_capacity', 'lost', 'ended'
+    )),
+    generation bigint NOT NULL CHECK (generation > 0),
+    incarnation bigint NOT NULL CHECK (incarnation >= 0),
+    host varchar(63),
+    grant_id varchar(128),
+    epoch varchar(128),
+    control_fence bigint NOT NULL CHECK (control_fence >= 0),
+    projection_cursor bigint NOT NULL CHECK (projection_cursor >= 0),
+    observation_cursor bigint NOT NULL CHECK (observation_cursor >= 0),
+    process_cursor bigint NOT NULL CHECK (process_cursor >= 0),
+    -- The content version of each file the machine holds at
+    -- projection_cursor, as {entry ID: version}.
+    projected_versions jsonb NOT NULL CHECK (jsonb_typeof(projected_versions) = 'object'),
+    evidence_sequence bigint NOT NULL CHECK (evidence_sequence >= 0),
+    waiting_since timestamptz,
+    -- Settles asked before a seal, and the last one finished or given up.
+    settle_requested bigint NOT NULL DEFAULT 0 CHECK (settle_requested >= 0),
+    settle_completed bigint NOT NULL DEFAULT 0
+        CHECK (settle_completed >= 0 AND settle_completed <= settle_requested),
+    revision bigint NOT NULL CHECK (revision > 0),
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL CHECK (updated_at >= created_at),
+    CONSTRAINT exam_attempt_environments_grant_check CHECK (
+        (host IS NULL) = (grant_id IS NULL) AND (grant_id IS NULL) = (epoch IS NULL)
+    ),
+    CONSTRAINT exam_attempt_environments_ended_check CHECK (state <> 'ended' OR desired = 'ended')
+);
+CREATE INDEX exam_attempt_environments_sitting_idx ON exam_attempt_environments (exam_sitting_id);
+CREATE INDEX exam_attempt_environments_profile_idx ON exam_attempt_environments (environment_profile_id);
+CREATE INDEX exam_attempt_environments_live_idx ON exam_attempt_environments (exam_attempt_id)
+    WHERE NOT (desired = 'ended' AND state = 'ended');
+
+-- Fences for attempt_runtime_leases. One sequence for every Attempt keeps
+-- an Attempt's fences growing after its lease is released and deleted.
+CREATE SEQUENCE attempt_runtime_fences AS bigint;
+
+-- One node's fenced, PostgreSQL-clocked claim to own one Attempt's runtime,
+-- such as its execution environment. Disposable: an expired row is free to
+-- claim, and the claim takes the next fence.
+CREATE TABLE attempt_runtime_leases (
+    exam_attempt_id varchar(26) PRIMARY KEY REFERENCES exam_attempts(id),
+    node_id varchar(128) NOT NULL CHECK (char_length(node_id) > 0),
+    fence bigint NOT NULL CHECK (fence > 0),
+    acquired_at timestamptz NOT NULL,
+    renewed_at timestamptz NOT NULL,
+    expires_at timestamptz NOT NULL,
+    CONSTRAINT attempt_runtime_leases_lifetime_check
+        CHECK (renewed_at >= acquired_at AND expires_at > renewed_at)
+);
 
 -- Canonical domain identifiers remain constrained independently of foreign keys.
 ALTER TABLE exam_security_preflights

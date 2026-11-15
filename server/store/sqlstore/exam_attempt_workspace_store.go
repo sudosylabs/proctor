@@ -88,12 +88,6 @@ type attemptWorkspaceMutationTargetRow struct {
 	SessionRevokedAt  sql.NullTime `db:"session_revoked_at"`
 	SessionIdleExpiry time.Time    `db:"session_idle_expires_at"`
 	SessionExpiry     time.Time    `db:"session_expires_at"`
-
-	// The execution environment's binding.
-	BindingGrantID     string       `db:"binding_grant_id"`
-	BindingEpoch       string       `db:"binding_epoch"`
-	BindingIncarnation int64        `db:"binding_incarnation"`
-	BindingEndedAt     sql.NullTime `db:"binding_ended_at"`
 }
 
 func validAttemptWorkspaceWriteAccess(access store.ExamAttemptWorkspaceWriteAccess) bool {
@@ -116,10 +110,11 @@ func validAttemptWorkspaceWriteAccess(access store.ExamAttemptWorkspaceWriteAcce
 }
 
 // lockAttemptWorkspaceMutationTarget is the one write-access check of every
-// batch step. The access kind changes only how the writer is proved: the
-// editor by Session, key, Connection and credential, the environment by its
-// live binding. Membership, Sitting, Attempt, Participation and correction
-// gates are the same for both.
+// batch step. The editor is proved by Session, key, Connection and
+// credential, and also needs current membership, an Open Sitting, an Active
+// Attempt and Participation and no pending correction. The environment owner
+// is proved by its current lease and incarnation and needs only an Attempt
+// with no Submission.
 func lockAttemptWorkspaceMutationTarget(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -141,50 +136,38 @@ func lockAttemptWorkspaceMutationTarget(
 		}
 		row, err = lockAttemptWorkspaceEditorRow(ctx, tx, access)
 	case store.ExamAttemptWorkspaceEnvironmentAccess:
-		if candidateID, err = attemptCandidate(ctx, tx, attemptID); err != nil {
-			return nil, time.Time{}, err
-		}
-		if err = lockAttemptWorkspaceEnrollmentFence(ctx, tx, attemptID, candidateID); err != nil {
-			return nil, time.Time{}, err
-		}
-		row, err = lockAttemptWorkspaceEnvironmentRow(ctx, tx, access, candidateID)
+		row, err = lockAttemptWorkspaceEnvironmentRow(ctx, tx, access)
 	}
 	if err != nil {
 		return nil, time.Time{}, err
 	}
 
-	databaseNow, err := lockAttemptWorkspaceMembership(ctx, tx, attemptID, candidateID, row.ClassID)
-	if err != nil {
-		return nil, time.Time{}, err
-	}
-	if err = checkAttemptWorkspaceMutationAccess(ctx, tx, access, row, databaseNow); err != nil {
-		return nil, time.Time{}, err
-	}
-	if err = lockSecurityInteraction(ctx, tx, attemptID); err != nil {
-		return nil, time.Time{}, err
+	var databaseNow time.Time
+	switch access := access.(type) {
+	case store.ExamAttemptWorkspaceEnvironmentAccess:
+		if err = checkAttemptEnvironmentOwner(ctx, tx, access, row.AttemptState); err != nil {
+			return nil, time.Time{}, err
+		}
+		if err = tx.Get(ctx, &databaseNow, `SELECT statement_timestamp()`); err != nil {
+			return nil, time.Time{}, fmt.Errorf("read Attempt Workspace decision time: %w", err)
+		}
+		databaseNow = model.TimeUTC(databaseNow)
+	default:
+		if databaseNow, err = lockAttemptWorkspaceMembership(ctx, tx, attemptID, candidateID, row.ClassID); err != nil {
+			return nil, time.Time{}, err
+		}
+		if err = checkAttemptWorkspaceMutationAccess(ctx, tx, access, row, databaseNow); err != nil {
+			return nil, time.Time{}, err
+		}
+		// The native security gate admits the candidate's own interaction;
+		// the environment owner is not candidate interaction.
+		if err = lockSecurityInteraction(ctx, tx, attemptID); err != nil {
+			return nil, time.Time{}, err
+		}
 	}
 
 	target, err := attemptWorkspaceTarget(row)
 	return target, databaseNow, err
-}
-
-// attemptCandidate reads the candidate an Attempt belongs to, which never
-// changes, so an environment writer is resolved to the candidate before the
-// candidate-first lock order is taken.
-func attemptCandidate(ctx context.Context, tx *sqlxTxWrapper, attemptID model.ExamAttemptID) (model.UserID, error) {
-	var value string
-	if err := tx.Get(ctx, &value, `SELECT candidate_user_id FROM exam_attempts WHERE id = ?`, attemptID.String()); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", store.NewErrNotFound("attempt_workspace_access", attemptID.String())
-		}
-		return "", fmt.Errorf("resolve Attempt candidate: %w", err)
-	}
-
-	candidateID, err := model.ParseUserID(value)
-	if err != nil {
-		return "", invalidPersistedState("exam_attempt", "candidate_user_id", err)
-	}
-	return candidateID, nil
 }
 
 // lockAttemptWorkspaceEnrollmentFence resolves the Attempt's Academic Period
@@ -292,15 +275,13 @@ func lockAttemptWorkspaceEditorRow(
 	return row, nil
 }
 
-// lockAttemptWorkspaceEnvironmentRow locks the Attempt, the Participation
-// generation its binding names and the Workspace, and share-locks the binding,
-// Sitting, User and academic structure behind them. A concurrent rebind or
-// generation end therefore waits for the batch, or the batch sees it.
+// lockAttemptWorkspaceEnvironmentRow locks the Attempt and its Workspace and
+// share-locks the Sitting. The owner's lease and incarnation are checked
+// after, under their own share locks.
 func lockAttemptWorkspaceEnvironmentRow(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	access store.ExamAttemptWorkspaceEnvironmentAccess,
-	candidateID model.UserID,
 ) (attemptWorkspaceMutationTargetRow, error) {
 	var row attemptWorkspaceMutationTargetRow
 	err := tx.Get(
@@ -308,37 +289,15 @@ func lockAttemptWorkspaceEnvironmentRow(
 		&row,
 		`SELECT a.exam_id, a.exam_sitting_id, s.class_id, a.candidate_user_id, w.id AS workspace_id,
 			a.admission_revision_id, s.exam_revision_id AS current_revision_id,
-			a.state AS attempt_state, s.state AS sitting_state, s.scheduled_end_at,
-			p.state AS participation_state, p.generation, p.lease_expires_at,
-			b.grant_id AS binding_grant_id, b.epoch AS binding_epoch,
-			b.incarnation AS binding_incarnation, b.ended_at AS binding_ended_at,
-			u.archived_at AS user_archived_at,
-			u.disabled_at AS user_disabled_at, cl.archived_at AS class_archived_at,
-			pl.archived_at AS level_archived_at, pr.archived_at AS programme_archived_at,
-			au.archived_at AS unit_archived_at, ap.archived_at AS period_archived_at
+			a.state AS attempt_state, s.state AS sitting_state, s.scheduled_end_at
 		FROM exam_attempts a
 		JOIN exam_attempt_workspaces w ON w.exam_attempt_id = a.id
 		JOIN exam_sittings s ON s.id = a.exam_sitting_id
 			AND s.exam_id = a.exam_id
-		JOIN exam_attempt_environment_bindings b ON b.id = ?
-			AND b.exam_attempt_id = a.id
-		JOIN exam_attempt_participations p ON p.id = b.participation_id
-			AND p.exam_attempt_id = a.id
-			AND p.generation = b.generation
-		JOIN users u ON u.id = a.candidate_user_id
-		JOIN classes cl ON cl.id = s.class_id
-		JOIN programme_levels pl ON pl.id = cl.programme_level_id
-		JOIN programmes pr ON pr.id = pl.programme_id
-		JOIN academic_units au ON au.id = pr.academic_unit_id
-		JOIN academic_periods ap ON ap.id = cl.academic_period_id
-			AND ap.institution_id = au.institution_id
 		WHERE a.id = ?
-			AND a.candidate_user_id = ?
-		FOR UPDATE OF a, p, w
-		FOR SHARE OF b, s, u, cl, pl, pr, au, ap`,
-		access.BindingID.String(),
+		FOR UPDATE OF a, w
+		FOR SHARE OF s`,
 		access.AttemptID.String(),
-		candidateID.String(),
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -396,10 +355,9 @@ func lockAttemptWorkspaceMembership(
 	return databaseNow, nil
 }
 
-// checkAttemptWorkspaceMutationAccess requires the current Participation
-// generation, the writer's proof (the editor's credential and open Connection
-// and active Session, or the environment's live matching binding), live
-// Attempt and Sitting states, no pending Workspace correction
+// checkAttemptWorkspaceMutationAccess requires the editor's current
+// Participation generation, credential, open Connection and active Session,
+// live Attempt and Sitting states, no pending Workspace correction
 // acknowledgement, and an active User and academic structure.
 func checkAttemptWorkspaceMutationAccess(
 	ctx context.Context,
@@ -417,16 +375,6 @@ func checkAttemptWorkspaceMutationAccess(
 		if subtle.ConstantTimeCompare([]byte(row.CredentialHash), []byte(access.ContinuityCredentialHash)) != 1 ||
 			row.ConnectionState != string(model.AttemptConnectionOpen) {
 			return store.NewErrConflict("attempt_participation", "attempt_participation_credential", nil)
-		}
-	case store.ExamAttemptWorkspaceEnvironmentAccess:
-		if row.Generation != access.Generation {
-			return store.NewErrConflict("attempt_participation", "attempt_participation_generation", nil)
-		}
-		if row.BindingEndedAt.Valid ||
-			row.BindingGrantID != access.Identity.GrantID ||
-			row.BindingEpoch != access.Identity.Epoch ||
-			row.BindingIncarnation != access.Identity.Incarnation {
-			return store.NewErrConflict("attempt_environment_binding", "attempt_environment_binding_current", nil)
 		}
 	}
 
@@ -477,7 +425,7 @@ func checkAttemptWorkspaceMutationAccess(
 }
 
 // lockAttemptWorkspaceReadGuard checks live read access for the candidate's
-// Desktop or for the environment bound to the current generation.
+// Desktop or for the owner of the Attempt's environment.
 func lockAttemptWorkspaceReadGuard(
 	ctx context.Context,
 	tx *sqlxTxWrapper,

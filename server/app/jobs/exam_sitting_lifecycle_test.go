@@ -46,6 +46,18 @@ func TestExamSittingLifecycleJobFactoryFencesEachBoundaryByRevision(t *testing.T
 	require.NoError(t, err)
 	assertExamSittingLifecycleJob(t, finalize, model.JobTypeExamSittingSealing, sittingID,
 		model.ExamSittingLifecycleJobFinalize, 6, at, nextDeadline)
+
+	// With execution environments the sealing Job waits for them to settle;
+	// the boundary Jobs do not move.
+	settling := factory.WithSettleBudget(5 * time.Second)
+	delayed, err := settling.FinalizeJob(sittingID, 6, nextDeadline)
+	require.NoError(t, err)
+	assertExamSittingLifecycleJob(t, delayed, model.JobTypeExamSittingSealing, sittingID,
+		model.ExamSittingLifecycleJobFinalize, 6, at, nextDeadline.Add(5*time.Second))
+	boundary, err := settling.DeadlineJob(sittingID, 7, nextDeadline)
+	require.NoError(t, err)
+	assertExamSittingLifecycleJob(t, boundary, model.JobTypeExamSittingLifecycle, sittingID,
+		model.ExamSittingLifecycleJobDeadline, 7, at, nextDeadline)
 }
 
 func TestExamSittingLifecycleHandlerReconcilesAndTreatsStaleWorkAsSuccess(t *testing.T) {

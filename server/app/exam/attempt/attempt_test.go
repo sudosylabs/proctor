@@ -111,6 +111,7 @@ func TestContentSelectorsPreserveCandidateAccessErrors(t *testing.T) {
 }
 
 type fixture struct {
+	settler                   *settlerFake
 	service                   *Service
 	inv                       invocation.Invocation
 	userID                    model.UserID
@@ -144,7 +145,7 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	f := &fixture{userID: model.NewUserID(), attemptID: model.NewExamAttemptID(), connectionID: model.NewAttemptConnectionID(),
-		at: time.Date(2026, time.August, 17, 9, 0, 0, 0, time.UTC)}
+		at: time.Date(2026, time.August, 17, 9, 0, 0, 0, time.UTC), settler: &settlerFake{}}
 	f.sitting = &model.ExamSitting{ID: model.NewExamSittingID(), ExamID: model.NewExamID(), ExamRevisionID: model.NewExamRevisionID(),
 		ClassID: model.NewClassID(), State: model.ExamSittingOpen, ScheduledStartAt: f.at.Add(-time.Hour), ScheduledEndAt: f.at.Add(time.Hour),
 		CreatedAt: f.at.Add(-2 * time.Hour), UpdatedAt: f.at, Revision: 2}
@@ -198,7 +199,6 @@ func newFixture(t *testing.T) *fixture {
 		NewWorkspaceEntry:   func() model.AttemptWorkspaceEntryID { return entryIDOrNew(f.workspace) },
 		NewWorkspaceObject:  model.NewAttemptWorkspaceObjectID,
 		NewWorkspaceVersion: func() model.WorkspaceContentVersion { return workspaceVersionOrNew(f.workspace) },
-		NewEnvironment:      model.NewAttemptEnvironmentBindingID,
 		NewSubmission: func() model.SubmissionID {
 			if f.submissionID.IsValid() {
 				return f.submissionID
@@ -211,8 +211,9 @@ func newFixture(t *testing.T) *fixture {
 			}
 			return model.NewSubmissionReceiptCode()
 		},
-		NewDomainEvent: model.NewDomainEventID,
-		NewJob:         model.NewJobID,
+		NewDomainEvent:     model.NewDomainEventID,
+		NewJob:             model.NewJobID,
+		EnvironmentSettler: f.settler,
 	})
 	require.NoError(t, err)
 	f.service = service
@@ -477,4 +478,13 @@ func chainHasCode(err error, code string) bool {
 		err = failure.Unwrap()
 	}
 	return false
+}
+
+// settlerFake records the Attempts it was asked to settle.
+type settlerFake struct {
+	settled []model.ExamAttemptID
+}
+
+func (s *settlerFake) Settle(_ context.Context, attemptID model.ExamAttemptID) {
+	s.settled = append(s.settled, attemptID)
 }

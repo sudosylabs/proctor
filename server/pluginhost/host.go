@@ -440,10 +440,10 @@ func (e *entry) currentState() State {
 // registrar is the plugin.Host one plugin's Activate receives. It accepts
 // registrations only while Activate runs.
 type registrar struct {
-	host       *Host
-	entry      *entry
-	settings   json.RawMessage
-	secrets    json.RawMessage
+	host     *Host
+	entry    *entry
+	settings json.RawMessage
+	secrets  json.RawMessage
 
 	mu   sync.Mutex
 	open bool

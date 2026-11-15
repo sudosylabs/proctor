@@ -84,10 +84,6 @@ type AttemptParticipationID string
 // AttemptConnectionID identifies one transport connection admitted to an Attempt Participation.
 type AttemptConnectionID string
 
-// AttemptEnvironmentBindingID identifies one binding of an execution
-// environment to an Attempt Participation generation.
-type AttemptEnvironmentBindingID string
-
 // EnvironmentProfileID identifies one immutable environment profile: the
 // image, resources and limits an Attempt Environment is created with.
 type EnvironmentProfileID string

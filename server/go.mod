@@ -29,7 +29,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
-	github.com/sudosylabs/execenv v0.3.2-0.20261114222258-f1874cc85135
+	github.com/sudosylabs/execenv v0.4.0
 	github.com/sudosylabs/proctor/packages/cache v0.0.0-20261111213109-79e3170a5027
 	github.com/sudosylabs/proctor/packages/mail v0.0.0-20261111210501-268c5a24e5c4
 	github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261111210501-268c5a24e5c4
@@ -50,6 +50,7 @@ require (
 )
 
 require (
+	connectrpc.com/connect v1.21.1 // indirect
 	filippo.io/edwards25519 v1.1.1 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -77,7 +78,7 @@ require (
 	github.com/hhrutter/tiff v1.0.6 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
-	github.com/klauspost/compress v1.19.2 // indirect
+	github.com/klauspost/compress v1.20.4 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/klauspost/crc32 v1.3.0 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect

@@ -50,6 +50,7 @@ func TestSubmitSealsExactAcknowledgedStateBeforePublishingEffects(t *testing.T) 
 		IdempotencyKey: "test-key",
 	})
 	require.NoError(t, err)
+	require.Equal(t, []model.ExamAttemptID{f.attemptID}, f.settler.settled, "the environment settles before the seal")
 	principal := f.inv.Principal()
 	sealAccess := f.submissions.resolvedAccess
 	require.Equal(t, f.attemptID, sealAccess.AttemptID, "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
@@ -125,6 +126,7 @@ func TestSubmitReplayReturnsRetainedReceiptAndSuppressesEffects(t *testing.T) {
 	require.Nil(t, f.submissions.seal.Notice, "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.publisher.Calls())
 	require.Equal(t, int64(0), f.submissions.seal.ExpectedRecipientRevision, "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.publisher.Calls())
 	require.False(t, f.mail.request.SubmissionID.IsValid(), "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.publisher.Calls())
+	require.Empty(t, f.settler.settled, "a replay settles nothing")
 }
 
 func TestManagedSubmissionNestedOwnershipMismatchIsConcealed(t *testing.T) {

@@ -1147,6 +1147,21 @@ func newExamAttemptFixtureWithOptions(t *testing.T, ctx context.Context, ss stor
 	browser *model.BrowserPolicy, capacity model.ExamCapacityPolicy, withResource bool, natives ...examAttemptFixtureNative,
 ) examAttemptFixture {
 	t.Helper()
+	return newExamAttemptFixtureWithExecutionOptions(t, ctx, ss, focus, browser, capacity, withResource, nil, natives...)
+}
+
+// newExamAttemptFixtureWithExecution publishes the fixture Revision with an
+// execution policy naming profileID, with execution enabled.
+func newExamAttemptFixtureWithExecution(t *testing.T, ctx context.Context, ss store.Store, execution model.ExecutionPolicy) examAttemptFixture {
+	t.Helper()
+	return newExamAttemptFixtureWithExecutionOptions(t, ctx, ss, nil, nil, model.ExamCapacityPolicy{}, false, &execution)
+}
+
+func newExamAttemptFixtureWithExecutionOptions(t *testing.T, ctx context.Context, ss store.Store, focus *model.FocusLossPolicy,
+	browser *model.BrowserPolicy, capacity model.ExamCapacityPolicy, withResource bool, execution *model.ExecutionPolicy,
+	natives ...examAttemptFixtureNative,
+) examAttemptFixture {
+	t.Helper()
 	unit, programme := saveProgrammeParents(t, ctx, ss, "attempt-unit")
 	if !capacity.IsZero() {
 		institution, err := ss.Institution().GetSingleton(ctx)
@@ -1194,6 +1209,18 @@ func newExamAttemptFixtureWithOptions(t *testing.T, ctx context.Context, ss stor
 		require.NoError(t, updateErr)
 		draftRevision = updated.Value.Draft.Revision
 	}
+	if execution != nil {
+		if execution.Profile == "" {
+			execution.Profile = saveFixtureEnvironmentProfile(t, ctx, ss, unit.InstitutionID, manager.ID)
+		}
+		focusAudit := newExamDraftFocusLossUpdate(t, ctx, ss, created.Value.Exam.ID, manager.ID, draftRevision, model.FocusLossPolicy{}, now)
+		updated, updateErr := ss.ExamAuthoring().UpdateDraftExecution(ctx, &store.ExamDraftExecutionUpdate{
+			ExamID: created.Value.Exam.ID, ActorUserID: manager.ID, ExpectedRevision: draftRevision, Execution: *execution,
+			UpdatedAt: now.Add(time.Millisecond), AuditEventID: focusAudit.AuditEventID, AuditAt: focusAudit.AuditAt,
+		}, examCommand(manager.ID, "exam.draft.execution.configure", "attempt-execution", "attempt-execution"))
+		require.NoError(t, updateErr)
+		draftRevision = updated.Value.Draft.Revision
+	}
 	var resourceID model.ExamResourceID
 	if withResource {
 		resourceID = model.NewExamResourceID()
@@ -1217,6 +1244,7 @@ func newExamAttemptFixtureWithOptions(t *testing.T, ctx context.Context, ss stor
 	require.NoError(t, err)
 	draftRevision++
 	publication := examRevisionPublication(t, ctx, ss, created.Value.Exam.ID, manager.ID, programme.AcademicUnitID, draftRevision, now.Add(3*time.Millisecond))
+	publication.ExecutionEnabled = execution != nil
 	published, err := ss.ExamRevision().Publish(ctx, publication, examCommand(manager.ID, "exam.revision.publish", "attempt-revision", "attempt-revision"))
 	require.NoError(t, err)
 	// PostgreSQL decides that a new start is strictly future. A loaded host

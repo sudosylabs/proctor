@@ -68,7 +68,7 @@ func (s *Service) applyWorkspaceBatch(
 		"author_ref":      batch.Access.WorkspaceAuthor().Ref,
 	}
 	if environment, ok := batch.Access.(store.ExamAttemptWorkspaceEnvironmentAccess); ok {
-		value["environment_binding_id"] = environment.BindingID.String()
+		value["environment_lease_fence"] = environment.Fence
 	}
 	auditID, err := writer.beginAudit(ctx, target, value)
 	if err != nil {
@@ -94,6 +94,10 @@ func (s *Service) applyWorkspaceBatch(
 	}
 
 	if !result.Replayed {
+		// The environment's own writes need no wake; its owner made them.
+		if s.environments != nil && batch.Access.WorkspaceAuthor().Kind == model.AttemptWorkspaceAuthorCandidate {
+			s.environments.Wake(result.AttemptID)
+		}
 		if effectErr := s.publishWorkspaceChanged(ctx, result); effectErr != nil {
 			s.publisher.Report(ctx, "exam_attempt_workspace_changed", effectErr)
 		}

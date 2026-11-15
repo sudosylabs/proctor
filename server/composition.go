@@ -136,10 +136,26 @@ func composeConsumers(
 		return nil, err
 	}
 	applicationDeps.Plugins = pluginCatalog{host: capabilities.plugins, reconciler: reconciler}
+	environmentInputs := attemptEnvironmentInputs{persistence: capabilities.persistence, cluster: capabilities.cluster,
+		logger: capabilities.logger, nodeID: capabilities.nodeID}
+	environments, err := prepareAttemptEnvironments(snapshot, environmentInputs)
+	if err != nil {
+		return nil, err
+	}
+	environments.attach(&applicationDeps, environmentInputs)
 
 	application, err := app.New(applicationDeps)
 	if err != nil {
 		return nil, fmt.Errorf("construct application: %w", err)
+	}
+	if err = environments.complete(snapshot, environmentInputs, application, input.serviceEnvironment == ServiceEnvironmentDev,
+		input.overrides.ExecutionHostDial); err != nil {
+		return nil, err
+	}
+	// An absent runtime stays an untyped nil so the Server skips its stage.
+	var environmentRuntime runtimeComponent
+	if environments != nil {
+		environmentRuntime = environments
 	}
 	clusterFanout, err := newRealtimeClusterAdapter(capabilities.cluster)
 	if err != nil {
@@ -218,6 +234,7 @@ func composeConsumers(
 		settings:              runtimeSettingsFromConfig(snapshot.Server),
 		logger:                capabilities.logger,
 		jobs:                  jobRuntime,
+		environments:          environmentRuntime,
 		servingLease:          servingLease,
 		transport:             rootTransport,
 		websocket:             webSocketHub,

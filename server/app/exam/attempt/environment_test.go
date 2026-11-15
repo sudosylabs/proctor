@@ -19,12 +19,11 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// environmentCaller is the execution plugin's runtime task.
-var environmentCaller = invocation.Task("plugin.execenv.harvest")
+// environmentCaller is the environment owner's runtime task.
+var environmentCaller = invocation.Task("execution")
 
-func environmentBindingFixture(f *fixture) EnvironmentBinding {
-	return EnvironmentBinding{AttemptID: f.attemptID, BindingID: model.NewAttemptEnvironmentBindingID(),
-		Identity: model.AttemptEnvironmentIdentity{GrantID: "grant-1", Epoch: "epoch-1", Incarnation: 2}, Generation: 3}
+func environmentOwnerFixture(f *fixture) EnvironmentOwner {
+	return EnvironmentOwner{AttemptID: f.attemptID, Incarnation: 2, Fence: 7}
 }
 
 func TestEnvironmentBatchWritesAsTheCandidateThroughTheSameBatch(t *testing.T) {
@@ -35,17 +34,16 @@ func TestEnvironmentBatchWritesAsTheCandidateThroughTheSameBatch(t *testing.T) {
 	f.workspace.proposedVersion = model.NewWorkspaceContentVersion()
 	checksum := strings.Repeat("c", 64)
 	f.content.attemptContent = &model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: 4, SHA256: checksum}
-	binding := environmentBindingFixture(f)
+	owner := environmentOwnerFixture(f)
 	mutations := []WorkspaceBatchMutation{createFile("main.go", checksum, 4)}
 
 	result, err := f.service.ApplyEnvironmentWorkspaceBatch(context.Background(), environmentCaller, EnvironmentWorkspaceBatchCommand{
-		Binding: binding, Mutations: mutations, Content: batchContent(f, "main"), IdempotencyKey: "harvest-1"})
+		Owner: owner, Mutations: mutations, Content: batchContent(f, "main"), IdempotencyKey: "harvest-1"})
 	require.NoError(t, err)
 
-	want := store.ExamAttemptWorkspaceEnvironmentAccess{AttemptID: binding.AttemptID, BindingID: binding.BindingID,
-		Identity: binding.Identity, Generation: binding.Generation}
+	want := store.ExamAttemptWorkspaceEnvironmentAccess{AttemptID: owner.AttemptID, Incarnation: owner.Incarnation, Fence: owner.Fence}
 	require.Len(t, f.workspace.reservations, 1)
-	require.Equal(t, want, f.workspace.reservations[0].Access, "the Store proves the writer by its binding")
+	require.Equal(t, want, f.workspace.reservations[0].Access, "the Store proves the writer by its owner")
 	require.Len(t, f.workspace.readied, 1)
 	require.Equal(t, want, f.workspace.readied[0].Access)
 	require.Equal(t, want, f.workspace.batch().Access)
@@ -64,8 +62,8 @@ func TestEnvironmentBatchWritesAsTheCandidateThroughTheSameBatch(t *testing.T) {
 	require.Equal(t, f.sitting.ClassID.String(), f.systemAudit.scopeID)
 	require.Equal(t, store.ExamAttemptWorkspaceBatchOperation, f.systemAudit.operation)
 	require.Equal(t, map[string]any{"exam_attempt_id": f.attemptID.String(), "mutation_count": 1, "author_kind": "environment",
-		"author_ref":             model.NewEnvironmentWorkspaceAuthor(binding.Identity.Incarnation, "").Ref,
-		"environment_binding_id": binding.BindingID.String(), "system_task": "plugin.execenv.harvest"}, f.systemAudit.values)
+		"author_ref":              model.NewEnvironmentWorkspaceAuthor(owner.Incarnation, "").Ref,
+		"environment_lease_fence": owner.Fence, "system_task": "execution"}, f.systemAudit.values)
 	require.Nil(t, f.audit.values, "no Principal-bearing audit is begun for an environment")
 	require.Equal(t, []string{"workspace.reserve", "content.next", "content.stage", "workspace.ready",
 		"system.audit.on_behalf", "workspace.apply", "effects"}, f.order)
@@ -73,30 +71,27 @@ func TestEnvironmentBatchWritesAsTheCandidateThroughTheSameBatch(t *testing.T) {
 	require.Equal(t, workspaceID, result.WorkspaceID)
 	require.Equal(t, f.userID, result.CandidateUserID)
 	require.Len(t, result.Changes, 1)
-	require.Equal(t, model.NewEnvironmentWorkspaceAuthor(binding.Identity.Incarnation, ""), result.Changes[0].Author)
+	require.Equal(t, model.NewEnvironmentWorkspaceAuthor(owner.Incarnation, ""), result.Changes[0].Author)
 	require.Equal(t, int64(5), result.Changes[0].Cursor)
 	require.Equal(t, workspaceChangedCalls(t, result), f.publisher.Calls(), "the candidate gets the usual refetch hint")
 }
 
-func TestEnvironmentBatchRefusesAnIncompleteBindingBeforeTheStore(t *testing.T) {
+func TestEnvironmentBatchRefusesAnIncompleteOwnerBeforeTheStore(t *testing.T) {
 	t.Parallel()
-	for name, change := range map[string]func(*EnvironmentBinding){
-		"no binding":       func(b *EnvironmentBinding) { b.BindingID = "" },
-		"no Attempt":       func(b *EnvironmentBinding) { b.AttemptID = "" },
-		"no generation":    func(b *EnvironmentBinding) { b.Generation = 0 },
-		"invalid grant":    func(b *EnvironmentBinding) { b.Identity.GrantID = "grant/1" },
-		"invalid epoch":    func(b *EnvironmentBinding) { b.Identity.Epoch = "" },
-		"negative counter": func(b *EnvironmentBinding) { b.Identity.Incarnation = -1 },
+	for name, change := range map[string]func(*EnvironmentOwner){
+		"no Attempt":           func(o *EnvironmentOwner) { o.AttemptID = "" },
+		"no fence":             func(o *EnvironmentOwner) { o.Fence = 0 },
+		"negative incarnation": func(o *EnvironmentOwner) { o.Incarnation = -1 },
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			f := newFixture(t)
 			workspaceTargetFixture(f)
-			binding := environmentBindingFixture(f)
-			change(&binding)
+			owner := environmentOwnerFixture(f)
+			change(&owner)
 			_, err := f.service.ApplyEnvironmentWorkspaceBatch(context.Background(), environmentCaller, EnvironmentWorkspaceBatchCommand{
-				Binding: binding, Mutations: []WorkspaceBatchMutation{createDirectory("src")}, IdempotencyKey: "harvest"})
-			requireBatchFault(t, err, "exam.attempt.invalid", "environment_binding", "")
+				Owner: owner, Mutations: []WorkspaceBatchMutation{createDirectory("src")}, IdempotencyKey: "harvest"})
+			requireBatchFault(t, err, "exam.attempt.invalid", "environment_owner", "")
 			require.Empty(t, f.order, "nothing reached the Store")
 		})
 	}
@@ -106,36 +101,26 @@ func TestEnvironmentUseCasesRequireASystemCaller(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	workspaceTargetFixture(f)
-	binding := environmentBindingFixture(f)
+	owner := environmentOwnerFixture(f)
 	for name, call := range map[string]func() error{
-		"bind": func() error {
-			_, err := f.service.BindExecutionEnvironment(context.Background(), invocation.System{},
-				BindExecutionEnvironmentCommand{AttemptID: f.attemptID, Generation: 1, Identity: binding.Identity})
-			return err
-		},
-		"end": func() error {
-			_, err := f.service.EndExecutionEnvironmentBinding(context.Background(), invocation.System{},
-				EndExecutionEnvironmentBindingCommand{AttemptID: f.attemptID, BindingID: binding.BindingID})
-			return err
-		},
 		"batch": func() error {
 			_, err := f.service.ApplyEnvironmentWorkspaceBatch(context.Background(), invocation.System{},
-				EnvironmentWorkspaceBatchCommand{Binding: binding, Mutations: []WorkspaceBatchMutation{createDirectory("src")}, IdempotencyKey: "k"})
+				EnvironmentWorkspaceBatchCommand{Owner: owner, Mutations: []WorkspaceBatchMutation{createDirectory("src")}, IdempotencyKey: "k"})
 			return err
 		},
 		"list": func() error {
 			_, err := f.service.ListEnvironmentWorkspace(context.Background(), invocation.System{},
-				EnvironmentWorkspaceQuery{Binding: binding, ExpectedCursor: -1, Limit: 1})
+				EnvironmentWorkspaceQuery{Owner: owner, ExpectedCursor: -1, Limit: 1})
 			return err
 		},
 		"journal": func() error {
 			_, err := f.service.ListEnvironmentWorkspaceJournal(context.Background(), invocation.System{},
-				EnvironmentWorkspaceJournalQuery{Binding: binding, Limit: 1})
+				EnvironmentWorkspaceJournalQuery{Owner: owner, Limit: 1})
 			return err
 		},
 		"file": func() error {
 			_, err := f.service.OpenEnvironmentWorkspaceFile(context.Background(), invocation.System{},
-				EnvironmentWorkspaceFileQuery{Binding: binding, EntryID: model.NewAttemptWorkspaceEntryID()})
+				EnvironmentWorkspaceFileQuery{Owner: owner, EntryID: model.NewAttemptWorkspaceEntryID()})
 			return err
 		},
 	} {
@@ -144,68 +129,36 @@ func TestEnvironmentUseCasesRequireASystemCaller(t *testing.T) {
 	}
 }
 
-func TestEnvironmentBatchMapsAnEndedBindingToAClosedConnection(t *testing.T) {
+func TestEnvironmentBatchMapsAStaleOwnerToAClosedConnection(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	workspaceTargetFixture(f)
-	f.workspace.reserveErr = store.NewErrConflict("attempt_environment_binding", "attempt_environment_binding_current", nil)
+	f.workspace.reserveErr = store.NewErrConflict("attempt_environment", "attempt_environment_owner", nil)
 	_, err := f.service.ApplyEnvironmentWorkspaceBatch(context.Background(), environmentCaller, EnvironmentWorkspaceBatchCommand{
-		Binding: environmentBindingFixture(f), Mutations: []WorkspaceBatchMutation{createDirectory("src")}, IdempotencyKey: "harvest"})
+		Owner: environmentOwnerFixture(f), Mutations: []WorkspaceBatchMutation{createDirectory("src")}, IdempotencyKey: "harvest"})
 	requireBatchFault(t, err, "exam.attempt.connection_closed", "", "")
 	require.Nil(t, f.systemAudit.values, "a refused writer begins no audit")
 }
 
-func TestBindExecutionEnvironmentProposesABindingAndChecksTheResult(t *testing.T) {
+func TestEnvironmentReadsUseTheOwnerAsReadAccess(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	command := BindExecutionEnvironmentCommand{AttemptID: f.attemptID, Generation: 2,
-		Identity: model.AttemptEnvironmentIdentity{GrantID: "grant-1", Epoch: "epoch-1", Incarnation: 1}}
-	bound, err := f.service.BindExecutionEnvironment(context.Background(), environmentCaller, command)
-	require.NoError(t, err)
-	require.NotNil(t, f.workspace.bind)
-	require.True(t, f.workspace.bind.BindingID.IsValid())
-	require.Equal(t, f.workspace.bind.BindingID, bound.Binding.ID)
-	require.Equal(t, command.AttemptID, f.workspace.bind.AttemptID)
-	require.Equal(t, command.Generation, f.workspace.bind.Generation)
-	require.Equal(t, command.Identity, f.workspace.bind.Identity)
-	require.True(t, bound.Binding.Live())
-
-	// A result for another identity is never trusted.
-	f.workspace.bindResult = &store.ExamAttemptEnvironmentBindResult{Binding: bound.Binding}
-	f.workspace.bindResult.Binding.Identity.Incarnation = 9
-	_, err = f.service.BindExecutionEnvironment(context.Background(), environmentCaller, command)
-	requireBatchFault(t, err, "exam.attempt.unavailable", "", "")
-
-	_, err = f.service.BindExecutionEnvironment(context.Background(), environmentCaller, BindExecutionEnvironmentCommand{AttemptID: f.attemptID,
-		Generation: 2, Identity: model.AttemptEnvironmentIdentity{GrantID: "", Epoch: "e"}})
-	requireBatchFault(t, err, "exam.attempt.invalid", "environment_binding", "")
-
-	f.workspace.bindResult = nil
-	f.workspace.bindErr = store.NewErrConflict("attempt_participation", "attempt_participation_generation", nil)
-	_, err = f.service.BindExecutionEnvironment(context.Background(), environmentCaller, command)
-	requireBatchFault(t, err, "exam.attempt.connection_closed", "", "")
-}
-
-func TestEnvironmentReadsUseTheBindingAsReadAccess(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	binding := environmentBindingFixture(f)
-	want := store.ExamAttemptWorkspaceEnvironmentAccess{AttemptID: binding.AttemptID, BindingID: binding.BindingID,
-		Identity: binding.Identity, Generation: binding.Generation}
+	owner := environmentOwnerFixture(f)
+	want := store.ExamAttemptWorkspaceEnvironmentAccess{AttemptID: owner.AttemptID, Incarnation: owner.Incarnation, Fence: owner.Fence}
 	workspaceID := model.NewExamAttemptWorkspaceID()
 	f.workspace.page = &store.CandidateAttemptWorkspacePage{WorkspaceID: workspaceID, Cursor: 3}
-	_, err := f.service.ListEnvironmentWorkspace(context.Background(), environmentCaller, EnvironmentWorkspaceQuery{Binding: binding,
+	_, err := f.service.ListEnvironmentWorkspace(context.Background(), environmentCaller, EnvironmentWorkspaceQuery{Owner: owner,
 		ExpectedCursor: -1, Limit: 50})
 	require.NoError(t, err)
 	require.Equal(t, want, f.workspace.readAccess)
 
 	f.workspace.readAccess = nil
 	f.workspace.journalPage = &store.CandidateWorkspaceJournalPage{WorkspaceID: workspaceID, CurrentCursor: 3}
-	_, err = f.service.ListEnvironmentWorkspaceJournal(context.Background(), environmentCaller, EnvironmentWorkspaceJournalQuery{Binding: binding,
+	_, err = f.service.ListEnvironmentWorkspaceJournal(context.Background(), environmentCaller, EnvironmentWorkspaceJournalQuery{Owner: owner,
 		AfterCursor: 1, Limit: 50})
 	require.NoError(t, err)
 	require.Equal(t, want, f.workspace.readAccess)
 
-	_, err = f.service.OpenEnvironmentWorkspaceFile(context.Background(), environmentCaller, EnvironmentWorkspaceFileQuery{Binding: binding})
+	_, err = f.service.OpenEnvironmentWorkspaceFile(context.Background(), environmentCaller, EnvironmentWorkspaceFileQuery{Owner: owner})
 	requireBatchFault(t, err, "exam.attempt.invalid", "attempt_workspace_entry_id", "")
 }

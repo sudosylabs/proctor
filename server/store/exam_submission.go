@@ -26,6 +26,12 @@ const (
 // generation, owning Session-bound open Connection, expected acknowledged
 // Workspace Cursor, and final client Focus Loss high-water under its locks.
 // Sequence zero is valid when the client has emitted no Focus Loss claim.
+//
+// ExpectedWorkspaceCursor fences only the candidate's own changes: the seal
+// conflicts with attempt_workspace_cursor when a candidate-authored change
+// follows it, or when the changes after it are no longer all journaled.
+// Changes by the execution environment after it are accepted and sealed, so
+// the Submission's cursor may be later than the expected one.
 type ExamSubmissionSealAccess struct {
 	AttemptID                 model.ExamAttemptID
 	ParticipationID           model.AttemptParticipationID
@@ -123,7 +129,7 @@ func (r *ExamSubmissionSealResult) ConsistentWith(
 		!r.Receipt.ReceiptCode.IsValid() ||
 		r.Receipt.AttemptID != sealAccess.AttemptID ||
 		!r.Sealed() ||
-		r.Receipt.WorkspaceCursor != sealAccess.ExpectedWorkspaceCursor ||
+		r.Receipt.WorkspaceCursor < sealAccess.ExpectedWorkspaceCursor ||
 		r.Receipt.ExamRevisionID != sealAccess.ExpectedCurrentRevisionID ||
 		!IsValidWorkspaceSHA256(r.Receipt.ManifestDigest) ||
 		r.Receipt.SubmittedAt.IsZero() ||

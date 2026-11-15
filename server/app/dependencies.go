@@ -14,6 +14,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
+	"github.com/sudosylabs/proctor/server/app/exam/environment"
 	"github.com/sudosylabs/proctor/server/app/exam/resource"
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
 	"github.com/sudosylabs/proctor/server/app/identity"
@@ -85,6 +86,13 @@ type Dependencies struct {
 	// ExecutionEnabled is whether Exams may publish with an execution
 	// environment.
 	ExecutionEnabled bool
+	// EnvironmentWaker wakes the owner of an Attempt's execution environment
+	// after its facts or Workspace change. Nil wakes nobody; the runtime's
+	// backstop still finds the change.
+	EnvironmentWaker environment.Waker
+	// EnvironmentDiagnostics receives execution environment failures nobody
+	// else sees, such as a settle that could not be asked. Nil drops them.
+	EnvironmentDiagnostics func(model.ExamAttemptID, error)
 	// SupportAddress is the operator-configured help mailbox that public
 	// discovery publishes for hosted pages; empty publishes none.
 	SupportAddress string

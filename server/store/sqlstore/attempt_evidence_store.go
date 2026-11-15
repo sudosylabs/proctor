@@ -10,6 +10,7 @@ package sqlstore
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -37,8 +38,9 @@ func (row attemptEvidenceInventoryRow) value() (model.AttemptEvidenceInventory, 
 	return value, validatePersistedModel("attempt_evidence_inventory", value)
 }
 
-// AppendAttemptEvidence stores one Attempt evidence record through a
-// live environment binding, by the binding's environment author. Concurrent appends for one Attempt serialize on
+// AppendAttemptEvidence stores one Attempt evidence record through the
+// environment owner's current lease and incarnation, by that incarnation's
+// author. Concurrent appends for one Attempt serialize on
 // its inventory row; the seal takes the Attempt row for update, so no append
 // interleaves with it, and the schema refuses any record once the Submission
 // exists.
@@ -62,80 +64,98 @@ func (s *SQLExamAttemptWorkspaceStore) AppendAttemptEvidence(
 			return nil, err
 		}
 
-		var databaseNow time.Time
-		if err := tx.Get(ctx, &databaseNow, `SELECT statement_timestamp()`); err != nil {
-			return nil, fmt.Errorf("read Attempt evidence time: %w", err)
-		}
-		recordedAt := databaseNow.UTC().Truncate(time.Millisecond)
-		author := input.Access.WorkspaceAuthor()
-
-		inventory, err := lockAttemptEvidenceInventory(ctx, tx, input.Access.AttemptID)
-		if err != nil {
-			return nil, err
-		}
-
-		observedAt := input.ObservedAt.UTC().Truncate(time.Millisecond)
-		var stored []byte
-		err = tx.Get(ctx, &stored, `SELECT canonical
-			FROM exam_attempt_evidence
-			WHERE exam_attempt_id = ?
-				AND kind = ?
-				AND author_kind = ?
-				AND author_ref = ?
-				AND sequence = ?`, input.Access.AttemptID.String(), string(input.Kind), string(author.Kind), author.Ref,
-			input.Sequence)
-		switch {
-		case err == nil:
-			existing, decodeErr := model.DecodeAttemptEvidence(stored)
-			if decodeErr != nil {
-				return nil, invalidPersistedState("attempt_evidence", "canonical", decodeErr)
-			}
-			claim := existing
-			claim.Detail, claim.ObservedAt = input.Detail, minTime(observedAt, existing.RecordedAt)
-			if !existing.SameClaim(claim) {
-				return nil, store.NewErrConflict("attempt_evidence", "attempt_evidence_sequence", nil)
-			}
-			return &store.ExamAttemptEvidenceAppendResult{Evidence: existing, Repeated: true}, nil
-		case !errors.Is(err, sql.ErrNoRows):
-			return nil, fmt.Errorf("find repeated Attempt evidence: %w", err)
-		}
-
-		record := model.AttemptEvidence{ID: input.EvidenceID, AttemptID: input.Access.AttemptID, Kind: input.Kind,
-			Author: author, Sequence: input.Sequence, Detail: input.Detail,
-			ObservedAt: minTime(observedAt, recordedAt), RecordedAt: recordedAt}
-		canonical, err := record.Canonical()
-		if err != nil {
-			return nil, store.NewErrInvalidInput("attempt_evidence", "append", err)
-		}
-		if !inventory.Admits(len(canonical)) {
-			if _, err = tx.Exec(ctx, `UPDATE exam_attempt_evidence_inventories
-				SET overflow = overflow + 1
-				WHERE exam_attempt_id = ?`, input.Access.AttemptID.String()); err != nil {
-				return nil, fmt.Errorf("count refused Attempt evidence: %w", err)
-			}
-			return &store.ExamAttemptEvidenceAppendResult{Refused: true}, nil
-		}
-
-		if _, err = tx.Exec(ctx, `INSERT INTO exam_attempt_evidence (
-				id, exam_attempt_id, kind, author_kind, author_ref, sequence, canonical, recorded_at
-			)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			record.ID.String(), record.AttemptID.String(), string(record.Kind), string(author.Kind), author.Ref,
-			record.Sequence, canonical, record.RecordedAt,
-		); err != nil {
-			return nil, translateError("attempt_evidence", record.ID.String(), err)
-		}
-		if inventory, err = inventory.Append(canonical, record.Gap()); err != nil {
-			return nil, err
-		}
-		if _, err = tx.Exec(ctx, `UPDATE exam_attempt_evidence_inventories
-			SET records = ?, bytes = ?, gaps = ?, digest = ?
-			WHERE exam_attempt_id = ?`,
-			inventory.Records, inventory.Bytes, inventory.Gaps, inventory.Digest, input.Access.AttemptID.String()); err != nil {
-			return nil, fmt.Errorf("extend Attempt evidence inventory: %w", err)
-		}
-		return &store.ExamAttemptEvidenceAppendResult{Evidence: record}, nil
+		return appendAttemptEvidence(ctx, tx, input.Access.AttemptID, input.EvidenceID, input.Kind,
+			input.Access.WorkspaceAuthor(), input.Sequence, input.Detail, input.ObservedAt)
 	})
+}
+
+// appendAttemptEvidence stores one record by author in the caller's
+// transaction, after the caller checked who may append: it repeats the same
+// claim, refuses a different one for the same stream sequence, counts an
+// append over the bounds and extends the inventory.
+func appendAttemptEvidence(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	attemptID model.ExamAttemptID,
+	evidenceID model.IntegrityEvidenceID,
+	kind model.AttemptEvidenceKind,
+	author model.AttemptWorkspaceAuthor,
+	sequence int64,
+	detail json.RawMessage,
+	observedAtInput time.Time,
+) (*store.ExamAttemptEvidenceAppendResult, error) {
+	var databaseNow time.Time
+	if err := tx.Get(ctx, &databaseNow, `SELECT statement_timestamp()`); err != nil {
+		return nil, fmt.Errorf("read Attempt evidence time: %w", err)
+	}
+	recordedAt := databaseNow.UTC().Truncate(time.Millisecond)
+
+	inventory, err := lockAttemptEvidenceInventory(ctx, tx, attemptID)
+	if err != nil {
+		return nil, err
+	}
+
+	observedAt := observedAtInput.UTC().Truncate(time.Millisecond)
+	var stored []byte
+	err = tx.Get(ctx, &stored, `SELECT canonical
+		FROM exam_attempt_evidence
+		WHERE exam_attempt_id = ?
+			AND kind = ?
+			AND author_kind = ?
+			AND author_ref = ?
+			AND sequence = ?`, attemptID.String(), string(kind), string(author.Kind), author.Ref,
+		sequence)
+	switch {
+	case err == nil:
+		existing, decodeErr := model.DecodeAttemptEvidence(stored)
+		if decodeErr != nil {
+			return nil, invalidPersistedState("attempt_evidence", "canonical", decodeErr)
+		}
+		claim := existing
+		claim.Detail, claim.ObservedAt = detail, minTime(observedAt, existing.RecordedAt)
+		if !existing.SameClaim(claim) {
+			return nil, store.NewErrConflict("attempt_evidence", "attempt_evidence_sequence", nil)
+		}
+		return &store.ExamAttemptEvidenceAppendResult{Evidence: existing, Repeated: true}, nil
+	case !errors.Is(err, sql.ErrNoRows):
+		return nil, fmt.Errorf("find repeated Attempt evidence: %w", err)
+	}
+
+	record := model.AttemptEvidence{ID: evidenceID, AttemptID: attemptID, Kind: kind,
+		Author: author, Sequence: sequence, Detail: detail,
+		ObservedAt: minTime(observedAt, recordedAt), RecordedAt: recordedAt}
+	canonical, err := record.Canonical()
+	if err != nil {
+		return nil, store.NewErrInvalidInput("attempt_evidence", "append", err)
+	}
+	if !inventory.Admits(len(canonical)) {
+		if _, err = tx.Exec(ctx, `UPDATE exam_attempt_evidence_inventories
+			SET overflow = overflow + 1
+			WHERE exam_attempt_id = ?`, attemptID.String()); err != nil {
+			return nil, fmt.Errorf("count refused Attempt evidence: %w", err)
+		}
+		return &store.ExamAttemptEvidenceAppendResult{Refused: true}, nil
+	}
+
+	if _, err = tx.Exec(ctx, `INSERT INTO exam_attempt_evidence (
+			id, exam_attempt_id, kind, author_kind, author_ref, sequence, canonical, recorded_at
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		record.ID.String(), record.AttemptID.String(), string(record.Kind), string(author.Kind), author.Ref,
+		record.Sequence, canonical, record.RecordedAt,
+	); err != nil {
+		return nil, translateError("attempt_evidence", record.ID.String(), err)
+	}
+	if inventory, err = inventory.Append(canonical, record.Gap()); err != nil {
+		return nil, err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE exam_attempt_evidence_inventories
+		SET records = ?, bytes = ?, gaps = ?, digest = ?
+		WHERE exam_attempt_id = ?`,
+		inventory.Records, inventory.Bytes, inventory.Gaps, inventory.Digest, attemptID.String()); err != nil {
+		return nil, fmt.Errorf("extend Attempt evidence inventory: %w", err)
+	}
+	return &store.ExamAttemptEvidenceAppendResult{Evidence: record}, nil
 }
 
 // lockAttemptEvidenceInventory creates the Attempt's empty inventory on

@@ -624,28 +624,6 @@ func (s *examAttemptStore) ResolveCandidateResource(
 	})
 }
 
-// BindEnvironment is retried as a whole: an identical live binding repeats,
-// so a retry after an unknown commit returns the same binding.
-func (s *examAttemptWorkspaceStore) BindEnvironment(
-	ctx context.Context,
-	input *store.ExamAttemptEnvironmentBind,
-) (*store.ExamAttemptEnvironmentBindResult, error) {
-	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptEnvironmentBindResult, error) {
-		return s.ExamAttemptWorkspaceStore.BindEnvironment(ctx, input)
-	})
-}
-
-// EndEnvironmentBinding is retried as a whole: ending an ended binding
-// returns it unchanged.
-func (s *examAttemptWorkspaceStore) EndEnvironmentBinding(
-	ctx context.Context,
-	input *store.ExamAttemptEnvironmentBindingEnd,
-) (*store.ExamAttemptEnvironmentBindingEndResult, error) {
-	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptEnvironmentBindingEndResult, error) {
-		return s.ExamAttemptWorkspaceStore.EndEnvironmentBinding(ctx, input)
-	})
-}
-
 func (s *examAttemptWorkspaceStore) List(
 	ctx context.Context,
 	options store.CandidateWorkspaceListOptions,
@@ -1279,6 +1257,28 @@ func (s *servingNodeLeaseStore) Upsert(ctx context.Context, claim *store.Serving
 }
 
 // Delete withdraws only the exact incarnation, so replay is idempotent.
+// Get is a read.
+func (s *attemptEnvironmentStore) Get(ctx context.Context, attemptID model.ExamAttemptID) (*model.AttemptEnvironment, error) {
+	return retryCall1(ctx, s.layer, func() (*model.AttemptEnvironment, error) { return s.AttemptEnvironmentStore.Get(ctx, attemptID) })
+}
+
+// Renew only extends the caller's exact fence, so a replay after a lost
+// commit extends the same lease again or reports it lost.
+func (s *attemptRuntimeLeaseStore) Renew(
+	ctx context.Context,
+	lease store.AttemptRuntimeLease,
+	lifetime time.Duration,
+) (*store.AttemptRuntimeLease, error) {
+	return retryCall1(ctx, s.layer, func() (*store.AttemptRuntimeLease, error) {
+		return s.AttemptRuntimeLeaseStore.Renew(ctx, lease, lifetime)
+	})
+}
+
+// Release deletes only the caller's exact fence, so a replay is idempotent.
+func (s *attemptRuntimeLeaseStore) Release(ctx context.Context, lease store.AttemptRuntimeLease) error {
+	return retryCall0(ctx, s.layer, func() error { return s.AttemptRuntimeLeaseStore.Release(ctx, lease) })
+}
+
 func (s *servingNodeLeaseStore) Delete(ctx context.Context, input *store.ServingNodeLeaseDeletion) error {
 	nodeID := input.NodeID
 	leaseID := input.LeaseID

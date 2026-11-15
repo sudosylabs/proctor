@@ -33,19 +33,22 @@ func IsValidWorkspaceSHA256(value string) bool {
 }
 
 // ExamAttemptWorkspaceWriteAccess names who writes one batch. It is one of
-// two kinds, and both write as the candidate through their current
-// Participation generation:
+// two kinds:
 //
 //   - ExamAttemptWorkspaceEditorAccess: the candidate's own Desktop, proved by
-//     Session, registered key, open Connection and continuity credential.
-//   - ExamAttemptWorkspaceEnvironmentAccess: an execution environment on the
-//     candidate's behalf, proved by its live environment binding.
+//     Session, registered key, open Connection and continuity credential. It
+//     also requires current Class membership, an Open Sitting before its
+//     deadline, an Active Attempt, the exact active unexpired Participation
+//     generation and no pending Workspace correction acknowledgement.
+//   - ExamAttemptWorkspaceEnvironmentAccess: the Attempt's execution
+//     environment on the candidate's behalf, proved by its owner's current
+//     runtime lease. It requires only that lease, the environment's current
+//     incarnation and an Attempt with no Submission, so the owner can harvest
+//     the guest's last changes while the Attempt is frozen or past its
+//     deadline, until the seal.
 //
 // Persistence rechecks the chosen kind once per reservation, readiness and
-// batch, and on every exact replay. Everything else a write requires is the
-// same for both kinds: current Class membership, Open Sitting before its
-// deadline, Active Attempt, the exact active unexpired Participation
-// generation and no pending Workspace correction acknowledgement.
+// batch, and on every exact replay.
 type ExamAttemptWorkspaceWriteAccess interface {
 	// WorkspaceAttemptID is the Attempt whose Workspace is written.
 	WorkspaceAttemptID() model.ExamAttemptID
@@ -55,9 +58,8 @@ type ExamAttemptWorkspaceWriteAccess interface {
 }
 
 // ExamAttemptWorkspaceReadAccess names who reads the live Attempt Workspace:
-// the candidate's Desktop (CandidateAttemptAccess) or the execution
-// environment bound to the current Participation generation
-// (ExamAttemptWorkspaceEnvironmentAccess).
+// the candidate's Desktop (CandidateAttemptAccess) or the owner of the
+// Attempt's execution environment (ExamAttemptWorkspaceEnvironmentAccess).
 type ExamAttemptWorkspaceReadAccess interface {
 	WorkspaceAttemptID() model.ExamAttemptID
 	examAttemptWorkspaceReadAccess()
@@ -88,19 +90,18 @@ func (a ExamAttemptWorkspaceEditorAccess) WorkspaceAuthor() model.AttemptWorkspa
 
 func (ExamAttemptWorkspaceEditorAccess) examAttemptWorkspaceWriteAccess() {}
 
-// ExamAttemptWorkspaceEnvironmentAccess is the selector an execution
-// environment writes and reads through, on the candidate's behalf. It names
-// the binding and repeats the identity and generation it was made for;
-// persistence requires that binding to be live and to match all of them, and
-// the generation to be the Attempt's current active Participation with an
-// unexpired lease. No Session, key, Connection or continuity credential is
-// involved: the binding is the core's own proof that the environment belongs
-// to this generation. The candidate is resolved from the Attempt.
+// ExamAttemptWorkspaceEnvironmentAccess is the selector the owner of an
+// Attempt's execution environment writes and reads through, on the
+// candidate's behalf. Fence is the owner's runtime lease fence and
+// Incarnation the environment incarnation it acts for; persistence requires
+// that lease to be the Attempt's current unexpired one, the incarnation to
+// be the environment's current one, and the Attempt to have no Submission.
+// No Session, Connection or Participation is involved. The candidate is
+// resolved from the Attempt.
 type ExamAttemptWorkspaceEnvironmentAccess struct {
-	AttemptID  model.ExamAttemptID
-	BindingID  model.AttemptEnvironmentBindingID
-	Identity   model.AttemptEnvironmentIdentity
-	Generation int64
+	AttemptID   model.ExamAttemptID
+	Incarnation int64
+	Fence       int64
 }
 
 func (a ExamAttemptWorkspaceEnvironmentAccess) WorkspaceAttemptID() model.ExamAttemptID {
@@ -108,12 +109,12 @@ func (a ExamAttemptWorkspaceEnvironmentAccess) WorkspaceAttemptID() model.ExamAt
 }
 
 func (a ExamAttemptWorkspaceEnvironmentAccess) WorkspaceAuthor() model.AttemptWorkspaceAuthor {
-	return model.NewEnvironmentWorkspaceAuthor(a.Identity.Incarnation, "")
+	return model.NewEnvironmentWorkspaceAuthor(a.Incarnation, "")
 }
 
 // Valid reports whether every selector field is well formed.
 func (a ExamAttemptWorkspaceEnvironmentAccess) Valid() bool {
-	return a.AttemptID.IsValid() && a.BindingID.IsValid() && a.Identity.Validate() == nil && a.Generation > 0
+	return a.AttemptID.IsValid() && a.Incarnation >= 0 && a.Fence > 0
 }
 
 func (ExamAttemptWorkspaceEnvironmentAccess) examAttemptWorkspaceWriteAccess() {}
@@ -123,39 +124,6 @@ func (ExamAttemptWorkspaceEnvironmentAccess) examAttemptWorkspaceReadAccess() {}
 func (a CandidateAttemptAccess) WorkspaceAttemptID() model.ExamAttemptID { return a.AttemptID }
 
 func (CandidateAttemptAccess) examAttemptWorkspaceReadAccess() {}
-
-// ExamAttemptEnvironmentBind binds an execution environment identity to the
-// Attempt's current Participation generation. BindingID is the proposed
-// identity of a new binding.
-type ExamAttemptEnvironmentBind struct {
-	BindingID  model.AttemptEnvironmentBindingID
-	AttemptID  model.ExamAttemptID
-	Generation int64
-	Identity   model.AttemptEnvironmentIdentity
-}
-
-// ExamAttemptEnvironmentBindResult is the live binding. Replaced is the
-// binding of an earlier incarnation for the same generation that this one
-// ended. Repeated reports that the identical binding was already live and
-// nothing changed.
-type ExamAttemptEnvironmentBindResult struct {
-	Binding  model.AttemptEnvironmentBinding
-	Replaced *model.AttemptEnvironmentBinding
-	Repeated bool
-}
-
-// ExamAttemptEnvironmentBindingEnd ends one binding of the Attempt.
-type ExamAttemptEnvironmentBindingEnd struct {
-	AttemptID model.ExamAttemptID
-	BindingID model.AttemptEnvironmentBindingID
-}
-
-// ExamAttemptEnvironmentBindingEndResult is the ended binding. Changed is
-// false when it had already ended.
-type ExamAttemptEnvironmentBindingEndResult struct {
-	Binding model.AttemptEnvironmentBinding
-	Changed bool
-}
 
 // ExamAttemptWorkspaceMutationTarget is the bounded preflight projection used
 // to begin one Class-scoped audit attempt and address post-commit candidate
@@ -339,32 +307,21 @@ func (p *CandidateWorkspaceJournalPage) NotBehind(afterCursor int64) bool {
 // Every write is one batch: ReserveObjects, then VFS staging, then
 // MarkObjectsReady, then ApplyBatch. Each checks access once for the whole
 // batch. The editor and the execution environment both write this way; the
-// access kind decides only how the writer is proved and the journal author.
-// The command outcome is keyed under the candidate either way, and audit adds
-// the author, and for the environment its binding, to the aggregate data.
+// access kind decides how the writer is proved, what else it requires and
+// the journal author. The command outcome is keyed under the candidate
+// either way, and audit adds the author, and for the environment its lease
+// fence, to the aggregate data.
 // Every changed entry records the author of its last change, which a
 // Submission seals.
 //
 // The reads take either the candidate's Desktop access or an environment
 // access and return the same manifest, file and journal projections.
 //
-// BindEnvironment binds an execution environment identity to the Attempt's
-// current Participation generation, only while the Attempt is Active and that
-// generation is active with an unexpired lease. At most one binding per
-// Attempt is live. Binding the identical live identity again repeats it;
-// binding a newer incarnation for the same generation ends the old binding
-// and creates the new one atomically. An older or equal incarnation, a grant
-// and epoch pair already bound, or a grant bound to another Attempt conflict
-// with attempt_environment_binding_identity. Ending the generation, on any
-// path, ends its binding in the same transaction. EndEnvironmentBinding ends
-// one binding and repeats its terminal result.
-//
 // AppendAttemptEvidence stores one Attempt evidence record through an
-// environment access, under the same binding check as the environment's
-// reads: the binding live and matching, its generation the Attempt's active
-// Participation with an unexpired lease, the Attempt Active, the Sitting
-// readable before its deadline, and the candidate account active; otherwise
-// the Attempt is concealed as not found. The record belongs to the Attempt,
+// environment access, under the same check as the environment's reads and
+// writes: the owner's current lease and incarnation and no Submission. A
+// stale lease or incarnation conflicts with attempt_environment_owner; an
+// Attempt with a Submission conflicts with exam_attempt_state. The record belongs to the Attempt,
 // names the access's author and is stamped with PostgreSQL time; an
 // observation time after it is clamped to it. Its kind is one of the core's.
 // The kind, author and sequence identify it: the same claim again returns the
@@ -405,8 +362,6 @@ func (p *CandidateWorkspaceJournalPage) NotBehind(afterCursor int64) bool {
 // stale-claim retry repeats removal before CompleteObjectCleanup deletes the
 // metadata. ReleaseObjectCleanup handles known physical-removal failure.
 type ExamAttemptWorkspaceStore interface {
-	BindEnvironment(context.Context, *ExamAttemptEnvironmentBind) (*ExamAttemptEnvironmentBindResult, error)
-	EndEnvironmentBinding(context.Context, *ExamAttemptEnvironmentBindingEnd) (*ExamAttemptEnvironmentBindingEndResult, error)
 	AppendAttemptEvidence(context.Context, *ExamAttemptEvidenceAppend) (*ExamAttemptEvidenceAppendResult, error)
 	List(context.Context, CandidateWorkspaceListOptions) (*CandidateAttemptWorkspacePage, error)
 	ResolveFile(context.Context, ExamAttemptWorkspaceReadAccess, model.AttemptWorkspaceEntryID) (*CandidateWorkspaceContent, error)

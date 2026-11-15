@@ -40,8 +40,8 @@ const (
 	// admission that follows a re-allow.
 	DomainEventTopicExamAttemptParticipationStarted DomainEventTopic = "exam.attempt.participation.started"
 	// DomainEventTopicExamAttemptParticipationEnded is recorded when a
-	// Participation generation ends, on every path that ends one. It is the
-	// transition that also ends the generation's environment binding.
+	// Participation generation ends, on every path that ends one. It freezes
+	// the Attempt's execution environment, or ends it with the seal.
 	DomainEventTopicExamAttemptParticipationEnded DomainEventTopic = "exam.attempt.participation.ended"
 	// DomainEventTopicExamSittingPaused is recorded when a Sitting pauses.
 	DomainEventTopicExamSittingPaused DomainEventTopic = "exam.sitting.paused"

@@ -597,7 +597,7 @@ func completeAttemptWorkspaceBatchAudit(
 		"author_ref":             outcome.AuthorRef,
 	}
 	if environment, ok := batch.Access.(store.ExamAttemptWorkspaceEnvironmentAccess); ok {
-		data["environment_binding_id"] = environment.BindingID.String()
+		data["environment_lease_fence"] = environment.Fence
 	}
 	if replayed {
 		data["idempotency_replayed"] = true

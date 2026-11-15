@@ -464,34 +464,30 @@ limit, and capacity is checked once against the state the batch leaves.
 
 The execution environment writes through the same use case and Store
 operation on the candidate's behalf; it is a second access kind, not a second
-path. Its proof is an environment binding the core keeps in
-`exam_attempt_environment_bindings`: an opaque grant ID (at most 64 bytes of
-`[A-Za-z0-9._:-]`), epoch (at most 128 bytes of the same) and incarnation,
-bound to one Attempt and one Participation generation. At most one binding
-per Attempt is live. Binding is allowed only while the Attempt is Active and
-the generation is its active Participation with an unexpired lease; the same
-identity again repeats the binding, and a newer incarnation for the same
-generation replaces it atomically. A grant belongs to one Attempt for good. A
-grant and epoch pair keeps the incarnation it was first bound with, and is
-bound at most once per generation, so the same grant and its shell can serve
-each later generation after a reconnect. The binding ends when its
-generation ends, on every path, in the same transaction (a trigger on the
-Participation row), or when the owner ends it. An environment batch repeats
-the binding, its identity and generation, and passes every editor gate except
-Session, key, Connection and credential: current Class membership, Open
-Sitting before its deadline, Active Attempt, active unexpired generation, and
-no pending Workspace correction acknowledgement. A binding that ended,
-was replaced, or does not match conflicts with
-`attempt_environment_binding_current`. Its changes carry the `environment`
+path. Its proof is its owner's runtime lease: the access names the Attempt,
+the lease fence (`attempt_runtime_leases`) and the environment incarnation
+(`exam_attempt_environments`), and persistence requires that lease to be the
+Attempt's current unexpired one and that incarnation the environment's
+current one. It needs nothing else but an Attempt with no Submission: no
+Participation, Session, membership, deadline, native interaction gate or
+correction acknowledgement, so the owner can harvest the guest's last
+changes while the Attempt is frozen, Kicked or past its deadline, until the
+seal. A stale lease or incarnation conflicts with
+`attempt_environment_owner`; a sealed Attempt with `exam_attempt_state`. Its
+changes carry the `environment`
 author; its outcome is keyed under the candidate with the same operation, and
 its fingerprint includes the author kind (never the reference) so it never
 replays as an editor command, while an editor retry through a new Connection
 still matches. A replay keeps the original batch's author. Audit names the
 candidate as actor without a Principal, and the aggregate data adds the author
-and the binding ID. The environment reads
-the manifest, files and journal through the same binding, under the
-candidate read guard's Attempt, Participation, Sitting and account gates. The
-candidate receives the usual refetch hint.
+and the lease fence. The environment reads the manifest, files and journal
+under the same owner check. The candidate receives the usual refetch hint, and
+a candidate batch wakes the environment's owner.
+
+A voluntary seal's expected Workspace cursor fences only candidate changes:
+the seal is accepted when every journaled change after it was made by the
+environment, and seals them; a candidate change after it, or a change no
+longer journaled, conflicts with `attempt_workspace_cursor`.
 
 Each Attempt may change its Workspace only so fast: a token bucket on each
 node bounds mutations and bytes per second for each author kind, with a burst

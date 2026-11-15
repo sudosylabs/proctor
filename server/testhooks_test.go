@@ -49,10 +49,12 @@ type hookStore struct {
 	closeErr       error
 }
 
-func (s *hookStore) Institution() store.InstitutionStore               { return hookInstitutionStore{} }
-func (s *hookStore) AccessPolicy() store.AccessPolicyStore             { return hookAccessPolicyStore{} }
-func (s *hookStore) PluginSettings() store.PluginSettingsStore         { return s.pluginSettings }
-func (s *hookStore) EnvironmentProfile() store.EnvironmentProfileStore { return nil }
+func (s *hookStore) Institution() store.InstitutionStore                 { return hookInstitutionStore{} }
+func (s *hookStore) AccessPolicy() store.AccessPolicyStore               { return hookAccessPolicyStore{} }
+func (s *hookStore) PluginSettings() store.PluginSettingsStore           { return s.pluginSettings }
+func (s *hookStore) EnvironmentProfile() store.EnvironmentProfileStore   { return nil }
+func (s *hookStore) AttemptEnvironment() store.AttemptEnvironmentStore   { return nil }
+func (s *hookStore) AttemptRuntimeLease() store.AttemptRuntimeLeaseStore { return nil }
 func (s *hookStore) DesktopCompatibilityPolicy() store.DesktopCompatibilityPolicyStore {
 	return hookDesktopCompatibilityPolicyStore{}
 }

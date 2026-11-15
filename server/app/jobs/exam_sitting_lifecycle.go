@@ -132,12 +132,22 @@ func examSittingLifecycleDescriptor(handler job.Handler) job.Descriptor {
 type ExamSittingLifecycleJobFactory struct {
 	now   func() time.Time
 	newID func() model.JobID
+	// settle delays the sealing Job so the Sitting's execution
+	// environments can settle before it seals their Attempts.
+	settle time.Duration
 }
 
 // NewExamSittingLifecycleJobFactory returns a factory that stamps Jobs with
 // now and identifies them with newID.
 func NewExamSittingLifecycleJobFactory(now func() time.Time, newID func() model.JobID) ExamSittingLifecycleJobFactory {
 	return ExamSittingLifecycleJobFactory{now: now, newID: newID}
+}
+
+// WithSettleBudget returns a factory whose sealing Jobs wait budget past
+// the moment a Sitting closes, so execution environments settle first.
+func (f ExamSittingLifecycleJobFactory) WithSettleBudget(budget time.Duration) ExamSittingLifecycleJobFactory {
+	f.settle = max(budget, 0)
+	return f
 }
 
 // BoundaryJobs returns the Sitting's open Job, available at startAt, and its
@@ -173,14 +183,15 @@ func (f ExamSittingLifecycleJobFactory) DeadlineJob(
 }
 
 // FinalizeJob returns the Sitting sealing Job that finalizes a closing
-// Sitting, available at availableAt and deduplicated by Sitting and
-// resultingRevision.
+// Sitting, available at availableAt plus the settle budget and deduplicated
+// by Sitting and resultingRevision.
 func (f ExamSittingLifecycleJobFactory) FinalizeJob(
 	sittingID model.ExamSittingID,
 	resultingRevision int64,
 	availableAt time.Time,
 ) (*model.Job, error) {
-	return f.jobOfType(sittingID, model.ExamSittingLifecycleJobFinalize, resultingRevision, availableAt, model.JobTypeExamSittingSealing)
+	return f.jobOfType(sittingID, model.ExamSittingLifecycleJobFinalize, resultingRevision, availableAt.Add(f.settle),
+		model.JobTypeExamSittingSealing)
 }
 
 func (f ExamSittingLifecycleJobFactory) job(

@@ -178,6 +178,7 @@ func runLayerConformance(
 		{"AccessPolicy", func(t *testing.T, decorated store.Store) {
 			storetest.TestAccessPolicyStore(t, decorated)
 		}},
+		{"AttemptEnvironment", storetest.TestAttemptEnvironmentStore},
 		{"AccessPolicyRoleHolderMFA", storetest.TestAccessPolicyRoleHolderMFAStore},
 		{"AccessPolicySessionLength", func(t *testing.T, decorated store.Store) {
 			storetest.TestAccessPolicySessionLengthStore(t, decorated)

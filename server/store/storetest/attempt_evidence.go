@@ -27,7 +27,7 @@ type AttemptEvidenceExportProbe func(t *testing.T, ctx context.Context, submissi
 	attemptID model.ExamAttemptID) map[string][]json.RawMessage
 
 // TestAttemptEvidence verifies the environment evidence append, its
-// binding check, its author's streams, repeat and conflict handling and
+// owner check, its author's streams, repeat and conflict handling and
 // bounds, and that the seal fixes the inventory that review reads, lists and
 // exports.
 func TestAttemptEvidence(t *testing.T, ss store.Store, export AttemptEvidenceExportProbe) {
@@ -35,10 +35,9 @@ func TestAttemptEvidence(t *testing.T, ss store.Store, export AttemptEvidenceExp
 	ctx := context.Background()
 	workspaces := ss.ExamAttemptWorkspace()
 
-	fixture := newExamAttemptFixture(t, ctx, ss)
+	fixture := newExecutionAttemptFixture(t, ctx, ss)
 	connected, focusAccess := connectFocusLossFixture(t, ctx, ss, fixture, "attempt-evidence-connect")
-	_, access := bindTestEnvironment(t, ctx, ss, connected.Attempt.ID, connected.Participation.Generation,
-		environmentIdentity("grant-evidence", "epoch-1", 0))
+	owner, access := ownTestEnvironment(t, ctx, ss, connected.Attempt.ID, fixture.sitting.ID, connected.Participation.Generation)
 	appendInput := func(sequence int64, kind model.AttemptEvidenceKind, detail string) *store.ExamAttemptEvidenceAppend {
 		return &store.ExamAttemptEvidenceAppend{Access: access, EvidenceID: model.NewIntegrityEvidenceID(),
 			Kind: kind, Sequence: sequence, Detail: json.RawMessage(detail),
@@ -93,14 +92,13 @@ func TestAttemptEvidence(t *testing.T, ss store.Store, export AttemptEvidenceExp
 		require.ErrorAs(t, err, &invalid, name)
 	}
 
-	wrongEpoch := appendInput(3, model.AttemptEvidenceProcess, `{}`)
-	wrongEpoch.Access.Identity.Epoch = "epoch-2"
-	_, err = workspaces.AppendAttemptEvidence(ctx, wrongEpoch)
-	require.True(t, store.IsNotFound(err), "a binding that does not match accepts nothing: %v", err)
+	wrongFence := appendInput(3, model.AttemptEvidenceProcess, `{}`)
+	wrongFence.Access.Fence++
+	_, err = workspaces.AppendAttemptEvidence(ctx, wrongFence)
+	requireConflictConstraint(t, err, "attempt_environment_owner")
 
 	// A newer incarnation is another author, with streams of its own.
-	_, replacement := bindTestEnvironment(t, ctx, ss, connected.Attempt.ID, connected.Participation.Generation,
-		environmentIdentity("grant-evidence-2", "epoch-1", 1))
+	replacement := owner.incarnate(t, ctx, 1)
 	restarted := appendInput(1, model.AttemptEvidenceProcess, `{"argv":["make"],"exit":0}`)
 	restarted.Access = replacement
 	next := appendOne(t, restarted)
@@ -108,7 +106,7 @@ func TestAttemptEvidence(t *testing.T, ss store.Store, export AttemptEvidenceExp
 	require.Equal(t, model.NewEnvironmentWorkspaceAuthor(1, ""), next.Evidence.Author)
 	stale := appendInput(2, model.AttemptEvidenceProcess, `{}`)
 	_, err = workspaces.AppendAttemptEvidence(ctx, stale)
-	require.True(t, store.IsNotFound(err), "the replaced incarnation's binding accepts nothing: %v", err)
+	requireConflictConstraint(t, err, "attempt_environment_owner")
 	access = replacement
 
 	expected := model.NewAttemptEvidenceInventory()
@@ -119,8 +117,7 @@ func TestAttemptEvidence(t *testing.T, ss store.Store, export AttemptEvidenceExp
 		require.NoError(t, err)
 	}
 
-	// The seal ends the generation, and with it the binding, and fixes the
-	// inventory.
+	// The seal fixes the inventory.
 	sealAccess := submissionAccess(focusAccess, fixture.sitting.ExamRevisionID, connected.Workspace.Cursor, 0)
 	seal := &store.ExamSubmissionSeal{SubmissionID: model.NewSubmissionID(), ReceiptCode: model.NewSubmissionReceiptCode(),
 		Access: sealAccess, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC(),
@@ -132,7 +129,7 @@ func TestAttemptEvidence(t *testing.T, ss store.Store, export AttemptEvidenceExp
 	submissionID := sealed.Receipt.SubmissionID
 
 	_, err = workspaces.AppendAttemptEvidence(ctx, appendInput(3, model.AttemptEvidenceProcess, `{"late":true}`))
-	require.True(t, store.IsNotFound(err), "nothing is accepted after the seal: %v", err)
+	requireConflictConstraint(t, err, "exam_attempt_state")
 
 	snapshot, err := ss.ExamIntegrityReview().Get(ctx, submissionID)
 	require.NoError(t, err)
@@ -173,10 +170,10 @@ func TestAttemptEvidence(t *testing.T, ss store.Store, export AttemptEvidenceExp
 	}
 
 	t.Run("Bounds", func(t *testing.T) {
-		bounded := newExamAttemptFixture(t, ctx, ss)
+		bounded := newExecutionAttemptFixture(t, ctx, ss)
 		boundedConnected, _ := connectFocusLossFixture(t, ctx, ss, bounded, "attempt-evidence-bounds")
-		_, boundedAccess := bindTestEnvironment(t, ctx, ss, boundedConnected.Attempt.ID,
-			boundedConnected.Participation.Generation, environmentIdentity("grant-bounds", "epoch-1", 0))
+		_, boundedAccess := ownTestEnvironment(t, ctx, ss, boundedConnected.Attempt.ID, bounded.sitting.ID,
+			boundedConnected.Participation.Generation)
 		large := `{"chunk":"` + strings.Repeat("x", model.IntegrityEvidenceDetailMaxBytes-16) + `"}`
 		var refused *store.ExamAttemptEvidenceAppendResult
 		kept := 0

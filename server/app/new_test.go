@@ -181,6 +181,9 @@ func (c constructionCatalogWithJobs) Job() store.JobStore { return c.jobs }
 // DomainEvent has no store in this catalog; the dispatch handler is constructed without one.
 func (constructionCatalogWithJobs) DomainEvent() store.DomainEventStore { return nil }
 
+// AttemptEnvironment is absent, so no environment facts are subscribed.
+func (constructionCatalogWithJobs) AttemptEnvironment() store.AttemptEnvironmentStore { return nil }
+
 // MFA has no store in this catalog; the MFA rekey handler is constructed without one.
 func (c constructionCatalogWithJobs) MFA() store.MFAStore       { return nil }
 func (constructionCatalogWithJobs) Mail() store.MailStore       { return nil }

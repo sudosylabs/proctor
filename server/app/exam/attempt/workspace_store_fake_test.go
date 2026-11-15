@@ -41,32 +41,7 @@ type attemptWorkspaceStoreFake struct {
 	journalPage     *store.CandidateWorkspaceJournalPage
 	proposedEntryID model.AttemptWorkspaceEntryID
 	proposedVersion model.WorkspaceContentVersion
-	bind            *store.ExamAttemptEnvironmentBind
-	bindResult      *store.ExamAttemptEnvironmentBindResult
-	bindErr         error
-	end             *store.ExamAttemptEnvironmentBindingEnd
-	endResult       *store.ExamAttemptEnvironmentBindingEndResult
 	readAccess      store.ExamAttemptWorkspaceReadAccess
-}
-
-func (f *attemptWorkspaceStoreFake) BindEnvironment(_ context.Context, input *store.ExamAttemptEnvironmentBind) (*store.ExamAttemptEnvironmentBindResult, error) {
-	f.f.order = append(f.f.order, "workspace.bind")
-	f.bind = input
-	if f.bindErr != nil {
-		return nil, f.bindErr
-	}
-	if f.bindResult != nil {
-		return f.bindResult, nil
-	}
-	return &store.ExamAttemptEnvironmentBindResult{Binding: model.AttemptEnvironmentBinding{ID: input.BindingID,
-		AttemptID: input.AttemptID, ParticipationID: model.NewAttemptParticipationID(), Generation: input.Generation,
-		Identity: input.Identity, CreatedAt: f.f.at}}, nil
-}
-
-func (f *attemptWorkspaceStoreFake) EndEnvironmentBinding(_ context.Context, input *store.ExamAttemptEnvironmentBindingEnd) (*store.ExamAttemptEnvironmentBindingEndResult, error) {
-	f.f.order = append(f.f.order, "workspace.unbind")
-	f.end = input
-	return f.endResult, nil
 }
 
 func (*attemptWorkspaceStoreFake) AppendAttemptEvidence(context.Context, *store.ExamAttemptEvidenceAppend) (*store.ExamAttemptEvidenceAppendResult, error) {

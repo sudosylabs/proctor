@@ -100,6 +100,12 @@ func (s *Service) SealForSittingClose(
 	if preparation == nil || preparation.SealAt.IsZero() {
 		return AutomaticSubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("invalid automatic Submission preparation"))
 	}
+	// The closing Sitting woke every environment to settle and its sealing
+	// Job waited the settle budget, so this normally finds it settled; an
+	// environment that is not yet gets its gap recorded before the seal.
+	if !preparation.Replayed && s.settler != nil {
+		s.settler.Settle(ctx, target.AttemptID)
+	}
 
 	auditID, err := s.systemAuditor.Begin(
 		ctx,

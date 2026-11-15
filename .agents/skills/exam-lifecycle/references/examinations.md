@@ -361,13 +361,12 @@ generation, so an absent candidate receives no unused credential and stale
 credentials, renewals, and mutations cannot revive prior access. Individual
 Attempt Connections remain durable children of their Participation and every
 committed open/close emits a bounded manager notification after commit.
-An execution environment binding is likewise bound to one generation: every
+An Attempt's execution environment outlives its generations: every
 transition that ends a Participation (lease expiry, Kick, policy suspension,
-Session revocation, voluntary Submission, manager end, automatic seal) ends
-that generation's live binding in the same transaction, through a trigger on
-the Participation row, so a path added later cannot forget it. Re-allow
-creates no generation, so nothing can be bound until the candidate reconnects,
-and then only to the new generation.
+Session revocation) freezes it through the
+`exam.attempt.participation.ended` event, and the next generation thaws the
+same environment. Only the Submission ends it. Its owner writes under its
+runtime lease, not under a generation.
 
 The same triggers write the identifier-only domain events plugins receive
 after commit. Inserting a generation writes
@@ -523,9 +522,10 @@ outcome protection; published or submitted content pins survive.
 Every Workspace write rechecks the Open Sitting, active Attempt, current Class
 membership, exact active Participation generation and credential, and the
 owning Session-bound open Connection. An execution environment write is the
-candidate's own work made on their behalf: it rechecks the same gates with its
-live environment binding in place of the credential, Session and Connection,
-records the `environment` journal author, and is audited as the candidate. Command idempotency is Attempt-scoped so
+candidate's own work made on their behalf: it requires only its owner's
+current runtime lease and environment incarnation and an Attempt with no
+Submission, records the `environment` journal author, and is audited as the
+candidate. Command idempotency is Attempt-scoped so
 an exact retry can recover its retained outcome after reconnect or re-allow;
 the current access selector is reauthorized separately and is not part of the
 semantic fingerprint. Stable losing stages become reclaimable, while an
@@ -949,7 +949,7 @@ environment incarnation today), and is stamped with PostgreSQL time and
 stored as canonical JSON. The kind, author and the author's stream sequence
 identify a record: the same claim repeats it, a different one conflicts. A
 new incarnation is a new author with streams of its own. Today the append is
-authorized by the live environment binding's read guard. It never raises a
+authorized by the environment owner's lease and incarnation. It never raises a
 Flag; missing coverage is a record of kind `execution.gap` whose detail names
 the gap. One Attempt keeps at most 4,096 records
 and 8 MiB; a refused append is counted. A per-Attempt inventory (records,

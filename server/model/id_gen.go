@@ -74,11 +74,6 @@ func NewAttemptParticipationID() AttemptParticipationID { return AttemptParticip
 // NewAttemptConnectionID returns a freshly generated attempt-connection identifier.
 func NewAttemptConnectionID() AttemptConnectionID { return AttemptConnectionID(NewID()) }
 
-// NewAttemptEnvironmentBindingID returns a freshly generated attempt-environment-binding identifier.
-func NewAttemptEnvironmentBindingID() AttemptEnvironmentBindingID {
-	return AttemptEnvironmentBindingID(NewID())
-}
-
 // NewEnvironmentProfileID returns a freshly generated environment-profile identifier.
 func NewEnvironmentProfileID() EnvironmentProfileID { return EnvironmentProfileID(NewID()) }
 
@@ -313,11 +308,6 @@ func ParseAttemptParticipationID(value string) (AttemptParticipationID, error) {
 // ParseAttemptConnectionID validates and converts the shared identifier representation.
 func ParseAttemptConnectionID(value string) (AttemptConnectionID, error) {
 	return parseID[AttemptConnectionID](value, "attempt_connection_id")
-}
-
-// ParseAttemptEnvironmentBindingID validates and converts the shared identifier representation.
-func ParseAttemptEnvironmentBindingID(value string) (AttemptEnvironmentBindingID, error) {
-	return parseID[AttemptEnvironmentBindingID](value, "attempt_environment_binding_id")
 }
 
 // ParseEnvironmentProfileID validates and converts the shared identifier representation.
@@ -588,9 +578,6 @@ func (id AttemptParticipationID) IsZero() bool { return id == "" }
 // IsZero reports whether the attempt-connection is the empty zero value.
 func (id AttemptConnectionID) IsZero() bool { return id == "" }
 
-// IsZero reports whether the attempt-environment-binding is the empty zero value.
-func (id AttemptEnvironmentBindingID) IsZero() bool { return id == "" }
-
 // IsZero reports whether the environment-profile is the empty zero value.
 func (id EnvironmentProfileID) IsZero() bool { return id == "" }
 
@@ -776,9 +763,6 @@ func (id AttemptParticipationID) IsValid() bool { return IsValidOpaqueID(string(
 
 // IsValid reports whether the attempt-connection is a canonical non-zero ID.
 func (id AttemptConnectionID) IsValid() bool { return IsValidOpaqueID(string(id)) }
-
-// IsValid reports whether the attempt-environment-binding is a canonical non-zero ID.
-func (id AttemptEnvironmentBindingID) IsValid() bool { return IsValidOpaqueID(string(id)) }
 
 // IsValid reports whether the environment-profile is a canonical non-zero ID.
 func (id EnvironmentProfileID) IsValid() bool { return IsValidOpaqueID(string(id)) }
@@ -966,9 +950,6 @@ func (id AttemptParticipationID) String() string { return string(id) }
 // String returns the attempt-connection wire/database representation.
 func (id AttemptConnectionID) String() string { return string(id) }
 
-// String returns the attempt-environment-binding wire/database representation.
-func (id AttemptEnvironmentBindingID) String() string { return string(id) }
-
 // String returns the environment-profile wire/database representation.
 func (id EnvironmentProfileID) String() string { return string(id) }
 
@@ -1154,9 +1135,6 @@ func (id AttemptParticipationID) MarshalText() ([]byte, error) { return marshalI
 
 // MarshalText encodes the attempt-connection as its canonical string.
 func (id AttemptConnectionID) MarshalText() ([]byte, error) { return marshalID(id) }
-
-// MarshalText encodes the attempt-environment-binding as its canonical string.
-func (id AttemptEnvironmentBindingID) MarshalText() ([]byte, error) { return marshalID(id) }
 
 // MarshalText encodes the environment-profile as its canonical string.
 func (id EnvironmentProfileID) MarshalText() ([]byte, error) { return marshalID(id) }
@@ -1384,11 +1362,6 @@ func (id *AttemptParticipationID) UnmarshalText(data []byte) error {
 // UnmarshalText decodes and validates the attempt-connection when non-empty.
 func (id *AttemptConnectionID) UnmarshalText(data []byte) error {
 	return unmarshalID(id, data, ParseAttemptConnectionID)
-}
-
-// UnmarshalText decodes and validates the attempt-environment-binding when non-empty.
-func (id *AttemptEnvironmentBindingID) UnmarshalText(data []byte) error {
-	return unmarshalID(id, data, ParseAttemptEnvironmentBindingID)
 }
 
 // UnmarshalText decodes and validates the environment-profile when non-empty.
@@ -1659,9 +1632,6 @@ func (id AttemptParticipationID) MarshalJSON() ([]byte, error) { return marshalI
 // MarshalJSON encodes the attempt-connection as a JSON string.
 func (id AttemptConnectionID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
 
-// MarshalJSON encodes the attempt-environment-binding as a JSON string.
-func (id AttemptEnvironmentBindingID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
-
 // MarshalJSON encodes the environment-profile as a JSON string.
 func (id EnvironmentProfileID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
 
@@ -1888,11 +1858,6 @@ func (id *AttemptParticipationID) UnmarshalJSON(data []byte) error {
 // UnmarshalJSON decodes a JSON string into the attempt-connection.
 func (id *AttemptConnectionID) UnmarshalJSON(data []byte) error {
 	return unmarshalIDJSON(id, data, ParseAttemptConnectionID)
-}
-
-// UnmarshalJSON decodes a JSON string into the attempt-environment-binding.
-func (id *AttemptEnvironmentBindingID) UnmarshalJSON(data []byte) error {
-	return unmarshalIDJSON(id, data, ParseAttemptEnvironmentBindingID)
 }
 
 // UnmarshalJSON decodes a JSON string into the environment-profile.

@@ -7,7 +7,6 @@ import {designTokens} from './tokens.mjs';
 const moduleRoot = dirname(fileURLToPath(import.meta.url));
 const defaultRepoRoot = resolve(moduleRoot, '../../..');
 
-export const CURRENT_ILLUSTRATION_SYSTEM = designTokens.illustration.system;
 
 function cssVariables(values, prefix = '--proctor-') {
   return Object.entries(values)
@@ -240,11 +239,4 @@ export async function auditDesignSystem({repoRoot = defaultRepoRoot} = {}) {
     }
   }
   return failures;
-}
-
-export function illustrationPalette(system, assetId) {
-  if (system === designTokens.illustration.system) {
-    return new Set(designTokens.illustration.palette);
-  }
-  throw new Error(`unknown illustration system ${system}`);
 }

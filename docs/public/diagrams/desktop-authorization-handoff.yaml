@@ -1,0 +1,23 @@
+blocks:
+  - row:
+      - card: Desktop prepares
+        text: Creates a one-time request and a key pair. The private key stays here.
+      - card: Browser opens
+        text: Takes the request and clears it from browser history.
+      - card: You approve
+        text: Sign in, check the account and device, then allow or cancel.
+      - card: Desktop exchanges
+        text: Checks the returned state, then trades the code once.
+        via: Code only
+  - row:
+      - group: Desktop receives
+        text: tied to this computer’s key
+        accent: true
+        columns: 2
+        items:
+          - card: Desktop Registration
+            text: Your account, Institution and this computer’s public key
+          - card: Desktop session
+            text: Works only with the registered private key
+    from:
+      - {from: 4, to: 1, accent: true}

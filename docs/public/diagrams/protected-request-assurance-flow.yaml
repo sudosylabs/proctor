@@ -1,0 +1,23 @@
+blocks:
+  - row:
+      - card: One credential
+        text: A browser Session, a Desktop session or an access token. Never a mix.
+      - card: Proof checks
+        numbered: true
+        items:
+          - The credential is valid
+          - Its CSRF or DPoP proof matches
+          - It is strong and recent enough
+      - card: Caller
+        text: Who is asking and how they proved it. No permissions attached.
+  - row:
+      - card: Permission check
+        text: Current roles and scope are read again for this exact resource.
+        accent: true
+      - branch: true
+        items:
+          - title: Allow
+          - title: Deny
+        footer: The audit record is saved before the reply.
+    from:
+      - {from: 3, to: 1, accent: true}

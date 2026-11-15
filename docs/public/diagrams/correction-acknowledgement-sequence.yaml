@@ -1,0 +1,35 @@
+blocks:
+  - row:
+      - card: Stage files
+        text: New or replacement Resources. Candidates can’t see them.
+      - card: Apply
+        text: One complete change to instructions, Resources and Browser Policy.
+      - card: New Revision
+        text: Only this Sitting moves to it. Attempts stay the same.
+        accent: true
+      - card: Notice
+        text: Candidates see each change in order, oldest first.
+  - row:
+      - group: Waiting to acknowledge
+        text: the candidate can still work safely
+        span: 2
+        columns: 2
+        items:
+          - card: Blocked
+            items:
+              - Workspace changes
+              - Exam browser
+              - Submitting
+          - card: Still works
+            items:
+              - Reading content
+              - Renewing Participation
+              - Activity records
+              - Acknowledging
+      - card: Back to normal
+        text: What’s allowed is worked out again from the current state.
+        via: Acknowledge
+    gap: wide
+    from:
+      - {from: 4, to: 1, label: If required}
+  - note: "**The acknowledgement belongs to the Attempt.** Reconnecting or being let back in doesn’t clear it."

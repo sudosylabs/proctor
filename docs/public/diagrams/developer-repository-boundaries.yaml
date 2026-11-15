@@ -1,0 +1,20 @@
+blocks:
+  - row:
+      - card: Server module
+        text: HTTP, WebSocket and Jobs over use cases, domain rules and Store contracts
+        accent: true
+        span: 2
+      - group: Portable packages
+        text: no Proctor types
+        span: 3
+        columns: 3
+        via: uses
+        items:
+          - card: Cache
+            text: Memory and Redis. Saves nothing that must last.
+          - card: Mail
+            text: Composes and sends over SMTP. No templates or retries.
+          - card: VFS
+            text: Memory, local and S3 files. No metadata or access checks.
+  - note: "**The root `go.work` only joins the modules for local work.** Releases don’t use it, and each module still passes test, race, vet and build with `GOWORK=off`."
+    rule: dashed

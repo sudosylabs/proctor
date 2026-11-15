@@ -69,8 +69,9 @@ Error-code pages at `/problems/<code>` show the code as the title, the
 catalog meaning as the lead, then causes, fixes, an example response and
 related codes, with generated details (status, retry, endpoints) beside them.
 
-Illustrations remain light evidence plates in both site themes so their print,
-contrast, and review result does not change with the surrounding page.
+Diagrams are drawn on the page in the site's own type and colour tokens, so
+they follow the light and dark themes and print like the surrounding text.
+Screenshots keep a light plate because they show the light product.
 
 ## Core palette
 
@@ -81,7 +82,7 @@ derived tokens, not new meanings.
 | --- | --- | --- |
 | Proctor purple | `#5C00AA` | Proctor-controlled, authoritative, selected, or primary path |
 | Ink | `#161616` | Content and neutral structure |
-| Paper | `#FFFFFF` | Reading canvas and print-stable evidence plate |
+| Paper | `#FFFFFF` | Reading canvas and screenshot plate |
 | Teal | `#0B766E` | Reconstructible/transient effects or a successfully completed outcome |
 | Amber | `#95520D` | Human intervention, caution, paused, or incomplete state |
 | Coral | `#B4233C` | Denied, invalid, destructive, unavailable, or fail-closed outcome |
@@ -122,9 +123,8 @@ The site's neutral values are tuned for long reading. They live in
 
 ## Typography
 
-The site uses locally bundled Geist Sans and Geist Mono. Illustrations keep
-their IBM Plex lettering, which matches the outlined Proctor wordmark, so a
-figure renders the same wherever it is viewed.
+The site, including its diagrams, uses locally bundled Geist Sans and Geist
+Mono.
 
 | Role | Family | Allowed weights |
 | --- | --- | --- |
@@ -148,10 +148,9 @@ page stylesheet. Use the generated `--ifm-font-family-base` and
 Headings tighten their tracking as they grow. Body copy stays within a `45rem`
 column; a wide viewport is not permission to lengthen a line.
 
-Illustrations use only three intrinsic text sizes: `18px` object names, `14px`
-short supporting labels, and `12px` IBM Plex Mono utility annotations. Do not
-place smaller text in a 1200×720 figure. If the content does not fit, delete
-detail or split the illustration.
+Diagrams use `15px` card titles, `13px` supporting text and `12px` arrow
+labels at the real column width, never text scaled down from a larger canvas.
+If the content does not fit, delete detail or split the diagram.
 
 ## Spacing and geometry
 
@@ -174,12 +173,12 @@ Use three radii consistently:
 
 - controls and small tags: `6px`;
 - cards: `12px`;
-- evidence plates and large diagram objects: `16px`;
+- screenshot plates: `16px`;
 - pills: fully rounded only for a real status, token, or compact action.
 
 A card is not a pill, and adjacent objects do not receive different radii for
 visual variety. Shadows are limited to genuinely elevated surfaces such as a
-search dialog. Ordinary cards and illustrations use borders and spacing.
+search dialog. Ordinary cards and diagrams use borders and spacing.
 
 ## Icons
 
@@ -218,81 +217,56 @@ technology. A standalone icon supplies a short accessible title. Adding a name
 requires a recurring use, an entry in this table, a geometry review at all
 three sizes, and an update to the icon contract test.
 
-## Illustration grammar
+## Diagram grammar
 
-Every current-system diagram declares `visual_system` as
-`proctor-assurance-v1` in the governed asset registry.
+A diagram is a YAML layout in `docs/public/diagrams/<id>.yaml`, registered in
+the asset registry with `visual_system: proctor-diagrams-v2`. The grammar and
+its validator live in
+[`diagrams/index.mjs`](../../../../docs/site/diagrams/index.mjs); the
+`Diagram` component draws it. Authors choose structure and words, never
+coordinates or colours.
 
-### Canvas and density
+- **Rows** place up to four cards, groups or branches side by side, joined by
+  arrows that may carry a short label and a step number. Below 600px of
+  available width every row stacks top to bottom and the arrows turn down.
+- **Connectors** join items of one row to items of the row below, to fan out
+  or to continue a sequence.
+- **Cards** carry a title of one to three words and one short sentence, or a
+  few short lines.
+- **Groups** frame related cards under a title and a short subtitle.
+- **Branches** fan one spine out to final outcomes.
+- **Notes** close a diagram with its main point when the drawing needs one.
 
-- Canvas: `1200×720` with a matching view box.
-- Safe inset: `56px` on every side.
-- Drafting grid: `8px`, using the plate-grid token at one-pixel width.
-- Primary objects: normally four to seven.
-- Focal elements: one, or at most two when a comparison is the point.
-- One illustration communicates one claim. Split state, ownership, and
-  transport behavior when combining them would require explanatory prose.
+### Visual rules
 
-The page heading names the subject. The figure contains only object names,
-short state labels, and necessary relationship labels. The visible caption
-states the invariant. Do not repeat a poster title, subtitle, paragraph,
-footnote, or prose-heavy legend inside the SVG.
-
-### Objects and strokes
-
-- Large objects use a `16px` radius and `2px` border.
-- Small controls use a `6px` radius.
-- Passive context uses ink or gray borders on paper.
-- The authoritative or selected object uses purple fill or border, not both on
-  every object in the path.
-- Semantic surfaces use their corresponding soft token and retain a textual or
-  geometric cue.
-- All shapes align to the 8-pixel grid; use a 4-pixel optical offset only when
-  stroke centering otherwise appears uneven.
-
-### Connectors and arrows
-
-- Primary connectors are `3px`; secondary relationships are `2px`; the
-  drafting grid and annotation brackets are `1px`.
-- Arrowheads are `12×12px`. Use one marker geometry across the complete asset
-  set.
-- Solid purple: authoritative ownership, commit, or primary transition.
-- Dashed purple: explicit reference that is not ownership.
-- Dashed teal: reconstructible or best-effort effect after a durable outcome.
-- Amber: a human intervention or deliberately incomplete transition.
-- Coral: rejection or fail-closed termination.
-- Gray: passive context or a neutral alternative.
-
-Every connector begins at a visible source boundary and ends with its arrow tip
-on a meaningful target boundary. Orthogonal branches share an actual path
-segment or junction dot. A branch may not stop near a spine, and an arrow may
-not terminate in whitespace. Labels sit at least `8px` away from a connector
-and never cover a bend or junction.
-
-### Annotation rail
-
-An evidence plate may end with one short bracket or rail stating the invariant
-made visible by the drawing. The rail uses a one-pixel neutral stroke and no
-more than two lines of 14px text. It must not become a second caption or a place
-to rescue an unclear illustration.
+- One accent per diagram, on the element or path that matters most. Everything
+  else is ink, grey text and hairline borders on the page background.
+- Dashed borders and lines mean separate, optional, or safe to lose.
+- No fills, tints, shadows, grids, frames, eyebrow labels, uppercase tags, or
+  numbered badges. Order comes from layout and arrow labels.
+- The diagram has no title; the page heading names the subject and the
+  caption states the point once.
+- Labels are plain language. Keep canonical Proctor terms, but drop slogans and
+  internal jargon; the page prose carries exact technical detail.
+- One diagram makes one claim. Split it rather than squeeze it.
 
 ## Vocabulary in visual design
 
 Use canonical Proctor terms from the repository
-[`glossary` skill](../../glossary/SKILL.md). An
-illustration label is not a place to create a shorter synonym such as “session”
+[`glossary` skill](../../glossary/SKILL.md). A
+diagram label is not a place to create a shorter synonym such as “session”
 for Exam Sitting or “group” for Class. If a canonical term makes the drawing
 too dense, simplify the drawing rather than rename the concept.
 
 The glossary and tooltip slice will make selected first occurrences
-explainable. Tooltips do not appear inside illustrations, headings, code, or
+explainable. Tooltips do not appear inside diagrams, headings, code, or
 API paths.
 
 ## Interaction and motion
 
 Movement must explain a state change or preserve orientation. Hover movement is
 limited to a small translation on a real interactive target. Do not animate
-illustration paths, add ambient particles, or scatter unrelated transitions.
+diagram paths, add ambient particles, or scatter unrelated transitions.
 All motion honors `prefers-reduced-motion` and leaves the complete meaning
 available without animation.
 
@@ -319,11 +293,11 @@ Authored stylesheets may use semantic custom properties and `color-mix()`, but
 they may not introduce literal colors, the retired `cobalt`/`aqua` token names,
 or unbundled font weights. The design-system audit rejects those forms.
 
-## Retired illustration systems
+## Retired diagram systems
 
-The four original diagrams were simplified and redrawn under
-`proctor-assurance-v1`. The former `legacy-cobalt-v0` palette is not an
-alternative theme and is no longer accepted by the registry validator.
+Diagrams were once fixed 1200×720 SVG plates (`proctor-assurance-v1`, and
+before that `legacy-cobalt-v0`). Both were replaced by `proctor-diagrams-v2`
+and are no longer accepted by the registry validator.
 
 ## Acceptance checklist
 
@@ -334,9 +308,9 @@ Before a visible slice is complete, inspect it in a browser:
 - keyboard order, focus visibility, and reduced motion;
 - text contrast, line length, zoom, and narrow-width wrapping;
 - no unintended horizontal overflow;
-- figures at page width and full size;
+- diagrams at desktop width and stacked at phone width; screenshots at page width and full size;
 - connector continuity, text containment, and print contrast;
-- locally served Geist (site) and IBM Plex (illustrations) with no third-party font request; and
+- locally served Geist with no third-party font request; and
 - no semantic color used merely for visual variety.
 
 Screenshots are evidence for the review, not a substitute for exercising the

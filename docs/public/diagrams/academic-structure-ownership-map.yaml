@@ -1,0 +1,26 @@
+blocks:
+  - row:
+      - card: Institution
+        text: One per installation.
+      - card: Academic Unit
+        text: Can own child Units, as deep as you need.
+        via: owns
+      - card: Programme
+        text: Belongs to exactly one Unit.
+        via: owns
+      - card: Programme Level
+        text: One stage of the Programme.
+        via: owns
+  - row:
+      - card: Academic Period
+        text: Owned by the Institution or a Unit. Applies there and below.
+        span: 2
+      - card: Class
+        text: The actual list of students. Names exactly one Period.
+        span: 2
+        accent: true
+    links: none
+    from:
+      - {from: 1, to: 1, label: owns}
+      - {from: 2, to: 1}
+      - {from: 4, to: 2, label: owns}

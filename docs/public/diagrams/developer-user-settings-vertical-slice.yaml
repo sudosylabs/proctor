@@ -1,0 +1,24 @@
+blocks:
+  - row:
+      - card: HTTP resource
+        text: "`PUT` with a Session and CSRF. Strict JSON within size limits."
+      - card: Use case
+        text: Replaces only your own settings, and prepares audit and idempotency
+      - card: Store contract
+        text: One named replace, fenced by the expected revision
+      - card: PostgreSQL
+        text: Locks the row, then saves source, audit and replay result together
+        accent: true
+  - row:
+      - card: Domain model
+        text: Checks the source, format and revision are valid on their own
+        span: 2
+      - card: Realtime hint
+        text: Tells clients to refetch. Never carries the settings source.
+        dashed: true
+        span: 2
+    links: none
+    from:
+      - {from: 2, to: 1, label: checks with}
+      - {from: 4, to: 2, label: after commit, dashed: true}
+  - note: "**Only PostgreSQL decides.** A retry with the same key gets back the same saved revision, and a failed hint can’t undo or repeat it."

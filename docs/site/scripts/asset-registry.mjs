@@ -3,17 +3,14 @@ import {lstat, readFile, readdir} from 'node:fs/promises';
 import {dirname, extname, isAbsolute, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-import {
-  CURRENT_ILLUSTRATION_SYSTEM,
-  illustrationPalette,
-} from '../design-system/index.mjs';
+import {parseDiagram} from '../diagrams/index.mjs';
 
 const scriptRoot = dirname(fileURLToPath(import.meta.url));
 const defaultRepoRoot = resolve(scriptRoot, '../../..');
+// Every asset records ownership, provenance, privacy, accessible text, and an
+// approved review of its exact source bytes.
 const requiredEntryFields = [
   'id',
-  'path',
-  'public_path',
   'kind',
   'owner',
   'license',
@@ -21,20 +18,19 @@ const requiredEntryFields = [
   'privacy_review',
   'alt',
   'caption',
-  'width',
-  'height',
-  'max_bytes',
   'theme',
   'last_reviewed',
   'review_triggers',
   'visual_review',
 ];
-const allowedExtensions = new Set(['.png', '.svg']);
-const allowedKinds = new Set(['diagram', 'illustration', 'screenshot']);
-const maximumBytesByExtension = new Map([
-  ['.png', 2_000_000],
-  ['.svg', 250_000],
-]);
+// A diagram is a YAML layout drawn by the site in its own type and colours.
+const diagramFields = ['source', 'visual_system'];
+export const DIAGRAM_SYSTEM = 'proctor-diagrams-v2';
+export const DIAGRAM_THEME = 'site';
+// A screenshot is a PNG served from the governed static root.
+const screenshotFields = ['path', 'public_path', 'width', 'height', 'max_bytes'];
+const allowedKinds = new Set(['diagram', 'screenshot']);
+const maximumScreenshotBytes = 2_000_000;
 const documentationExtensions = new Set(['.md', '.mdx']);
 const requiredVisualChecks = new Set([
   'text_containment',
@@ -82,114 +78,6 @@ async function walk(directory, {extensions, skip = new Set()} = {}) {
     }
   }
   return files;
-}
-
-function validateCurrentIllustrationGrammar(source, name, failures) {
-  for (const match of source.matchAll(/\bfont-size\s*=\s*["']([^"']+)["']/gi)) {
-    if (![12, 14, 18].includes(Number(match[1]))) {
-      failures.push(`${name}: illustration font size ${match[1]} is outside 12, 14, or 18`);
-    }
-  }
-  for (const match of source.matchAll(/\bfont-family\s*=\s*["']([^"']+)["']/gi)) {
-    if (!match[1].startsWith('IBM Plex Sans') && !match[1].startsWith('IBM Plex Mono')) {
-      failures.push(`${name}: illustration text must begin with an IBM Plex family`);
-    }
-  }
-  for (const match of source.matchAll(/\bstroke-width\s*=\s*["']([^"']+)["']/gi)) {
-    if (![1, 2, 3].includes(Number(match[1]))) {
-      failures.push(`${name}: illustration stroke width ${match[1]} is outside 1, 2, or 3`);
-    }
-  }
-  for (const marker of source.matchAll(/<marker\b([^>]*)>/gi)) {
-    const attributes = marker[1];
-    const values = Object.fromEntries(
-      [...attributes.matchAll(/\b(markerWidth|markerHeight|refX|refY)\s*=\s*["']([^"']+)["']/gi)].map(
-        (match) => [match[1].toLowerCase(), Number(match[2])],
-      ),
-    );
-    if (
-      values.markerwidth !== 12 ||
-      values.markerheight !== 12 ||
-      values.refx !== 12 ||
-      values.refy !== 6
-    ) {
-      failures.push(`${name}: arrow markers must be 12x12 with refX 12 and refY 6`);
-    }
-  }
-}
-
-function parseSVGDimensions(source, name, failures, approvedPalette, visualSystem) {
-  if (/<!DOCTYPE|<!ENTITY/i.test(source)) {
-    failures.push(`${name}: SVG doctypes and entities are forbidden`);
-  }
-  const forbiddenElement =
-    /<(?:a|animate|animateMotion|animateTransform|feImage|foreignObject|image|script|set|style)\b/i;
-  if (forbiddenElement.test(source)) {
-    failures.push(`${name}: SVG contains a forbidden active or linking element`);
-  }
-  if (/\son[a-z]+\s*=|\bxml:base\s*=/i.test(source)) {
-    failures.push(`${name}: SVG event-handler and xml:base attributes are forbidden`);
-  }
-
-  for (const match of source.matchAll(
-    /(?:href|xlink:href)\s*=\s*["']([^"']+)["']/gi,
-  )) {
-    if (!match[1].startsWith('#')) {
-      failures.push(`${name}: SVG references an external resource through ${match[1]}`);
-    }
-  }
-  for (const match of source.matchAll(/url\(\s*["']?([^)'"\s]+)["']?\s*\)/gi)) {
-    if (!match[1].startsWith('#')) {
-      failures.push(`${name}: SVG references an external resource through ${match[1]}`);
-    }
-  }
-  const localIds = new Set(
-    [...source.matchAll(/\bid\s*=\s*["']([^"']+)["']/gi)].map((match) =>
-      match[1].toLowerCase(),
-    ),
-  );
-  for (const match of source.matchAll(/\b(?:fill|stroke)\s*=\s*["']([^"']+)["']/gi)) {
-    const color = match[1].toLowerCase();
-    const localPaint = color.match(/^url\(\s*#([^\s)]+)\s*\)$/);
-    if (localPaint) {
-      if (!localIds.has(localPaint[1])) {
-        failures.push(`${name}: SVG paint references missing local id ${localPaint[1]}`);
-      }
-      continue;
-    }
-    if (color !== 'none' && !approvedPalette.has(color)) {
-      failures.push(`${name}: SVG paint ${match[1]} is outside the approved palette`);
-    }
-  }
-  if (visualSystem === CURRENT_ILLUSTRATION_SYSTEM) {
-    validateCurrentIllustrationGrammar(source, name, failures);
-  }
-
-  const root = source.match(/<svg\b([^>]*)>/i)?.[1] ?? '';
-  const width = root.match(
-    /\bwidth\s*=\s*["']([0-9]+(?:\.[0-9]+)?)["']/i,
-  )?.[1];
-  const height = root.match(
-    /\bheight\s*=\s*["']([0-9]+(?:\.[0-9]+)?)["']/i,
-  )?.[1];
-  const viewBox = root.match(/\bviewBox\s*=\s*["']([^"']+)["']/i)?.[1];
-  if (!width || !height || !viewBox) {
-    failures.push(`${name}: SVG requires numeric width, height, and viewBox attributes`);
-    return null;
-  }
-
-  const viewBoxParts = viewBox.trim().split(/[\s,]+/).map(Number);
-  if (
-    viewBoxParts.length !== 4 ||
-    viewBoxParts.some((part) => !Number.isFinite(part)) ||
-    viewBoxParts[0] !== 0 ||
-    viewBoxParts[1] !== 0 ||
-    viewBoxParts[2] !== Number(width) ||
-    viewBoxParts[3] !== Number(height)
-  ) {
-    failures.push(`${name}: SVG viewBox must be 0 0 width height`);
-  }
-  return {width: Number(width), height: Number(height)};
 }
 
 function parsePNGDimensions(buffer, name, failures) {
@@ -315,19 +203,37 @@ function validateEntryMetadata(entry, index, failures, today) {
     failures.push(`${label}: id must be lowercase kebab-case`);
   }
   if (!allowedKinds.has(entry.kind)) {
-    failures.push(`${label}: kind must be diagram, illustration, or screenshot`);
+    failures.push(`${label}: kind must be diagram or screenshot`);
   }
-  if (entry.kind !== 'screenshot' && !nonemptyString(entry.visual_system)) {
-    failures.push(`${label}: diagrams and illustrations require visual_system`);
+  const kindFields = entry.kind === 'diagram' ? diagramFields : screenshotFields;
+  const otherFields = entry.kind === 'diagram' ? screenshotFields : diagramFields;
+  for (const field of kindFields) {
+    if (!(field in entry)) {
+      failures.push(`${label}: ${field} is required for a ${entry.kind}`);
+    }
+  }
+  for (const field of otherFields) {
+    if (field in entry) {
+      failures.push(`${label}: ${field} does not apply to a ${entry.kind}`);
+    }
   }
   for (const field of ['owner', 'provenance', 'alt', 'caption', 'theme']) {
     if (!nonemptyString(entry[field])) {
       failures.push(`${label}: ${field} must be a nonempty string`);
     }
   }
-  for (const field of ['width', 'height', 'max_bytes']) {
-    if (!Number.isSafeInteger(entry[field]) || entry[field] <= 0) {
-      failures.push(`${label}: ${field} must be a positive integer`);
+  if (entry.kind === 'diagram') {
+    if (entry.visual_system !== DIAGRAM_SYSTEM) {
+      failures.push(`${label}: visual_system must be ${DIAGRAM_SYSTEM}`);
+    }
+    if (entry.theme !== DIAGRAM_THEME) {
+      failures.push(`${label}: a diagram follows the site theme, so theme must be ${DIAGRAM_THEME}`);
+    }
+  } else {
+    for (const field of ['width', 'height', 'max_bytes']) {
+      if (!Number.isSafeInteger(entry[field]) || entry[field] <= 0) {
+        failures.push(`${label}: ${field} must be a positive integer`);
+      }
     }
   }
 
@@ -366,6 +272,28 @@ function validateEntryMetadata(entry, index, failures, today) {
   validateVisualReview(entry.visual_review, label, failures, today);
 }
 
+async function validateReviewTriggers(entry, label, repoRoot, failures) {
+  for (const trigger of Array.isArray(entry?.review_triggers) ? entry.review_triggers : []) {
+    if (isAbsolute(trigger) || trigger.includes('\\')) {
+      failures.push(`${label}: review trigger ${trigger} must be repository-relative`);
+      continue;
+    }
+    const triggerPath = resolve(repoRoot, trigger);
+    if (!isInside(repoRoot, triggerPath)) {
+      failures.push(`${label}: review trigger ${trigger} escapes the repository`);
+      continue;
+    }
+    try {
+      const triggerInfo = await lstat(triggerPath);
+      if (!triggerInfo.isFile() || triggerInfo.isSymbolicLink()) {
+        failures.push(`${label}: review trigger ${trigger} must be a regular file`);
+      }
+    } catch {
+      failures.push(`${label}: review trigger ${trigger} does not exist`);
+    }
+  }
+}
+
 export async function auditAssetRegistry({
   repoRoot = defaultRepoRoot,
   today = new Date().toISOString().slice(0, 10),
@@ -374,6 +302,7 @@ export async function auditAssetRegistry({
   const apiRoot = resolve(repoRoot, 'docs/api');
   const publicStaticRoot = resolve(publicRoot, 'static');
   const assetRoot = resolve(publicStaticRoot, 'assets');
+  const diagramRoot = resolve(publicRoot, 'diagrams');
   const registryPath = resolve(publicRoot, 'assets.json');
   const generatedReferenceRoot = resolve(apiRoot, 'reference');
   const failures = [];
@@ -388,8 +317,8 @@ export async function auditAssetRegistry({
     };
   }
 
-  if (registry.schema_version !== 3) {
-    failures.push('docs/public/assets.json: schema_version must be 3');
+  if (registry.schema_version !== 4) {
+    failures.push('docs/public/assets.json: schema_version must be 4');
   }
   if (!Array.isArray(registry.assets)) {
     failures.push('docs/public/assets.json: assets must be an array');
@@ -407,39 +336,43 @@ export async function auditAssetRegistry({
       failures.push(`${label}: duplicate id`);
     }
     ids.add(entry?.id);
+    await validateReviewTriggers(entry, label, repoRoot, failures);
 
+    const isDiagram = entry?.kind === 'diagram';
+    const relativePath = isDiagram ? entry.source : entry?.path;
+    const field = isDiagram ? 'source' : 'path';
+    const root = isDiagram ? diagramRoot : assetRoot;
+    const prefix = isDiagram ? 'diagrams/' : 'static/assets/';
     if (
-      !nonemptyString(entry?.path) ||
-      entry.path.includes('\\') ||
-      isAbsolute(entry.path)
+      !nonemptyString(relativePath) ||
+      relativePath.includes('\\') ||
+      isAbsolute(relativePath)
     ) {
-      failures.push(`${label}: path must be a portable repository-relative path`);
+      failures.push(`${label}: ${field} must be a portable docs/public-relative path`);
       continue;
     }
-    const filePath = resolve(publicRoot, entry.path);
-    if (!entry.path.startsWith('static/assets/') || !isInside(assetRoot, filePath)) {
-      failures.push(`${label}: path must remain under docs/public/static/assets`);
+    const filePath = resolve(publicRoot, relativePath);
+    if (!relativePath.startsWith(prefix) || !isInside(root, filePath)) {
+      failures.push(`${label}: ${field} must remain under docs/public/${prefix.slice(0, -1)}`);
       continue;
     }
-    const extension = extname(filePath).toLowerCase();
-    if (!allowedExtensions.has(extension)) {
-      failures.push(`${label}: only SVG and PNG assets are allowed`);
+    if (isDiagram && relativePath !== `diagrams/${entry.id}.yaml`) {
+      failures.push(`${label}: source must be diagrams/${entry.id}.yaml`);
     }
-    if (entry.kind === 'screenshot' && extension !== '.png') {
-      failures.push(`${label}: screenshots must use PNG`);
-    }
-    const absoluteMaximum = maximumBytesByExtension.get(extension);
-    if (absoluteMaximum && entry.max_bytes > absoluteMaximum) {
-      failures.push(
-        `${label}: max_bytes exceeds the ${absoluteMaximum}-byte ${extension} ceiling`,
-      );
-    }
-    const expectedPublicPath = `/${entry.path.slice('static/'.length)}`;
-    if (entry.public_path !== expectedPublicPath) {
-      failures.push(`${label}: public_path must be ${expectedPublicPath}`);
+    if (!isDiagram) {
+      if (extname(filePath).toLowerCase() !== '.png') {
+        failures.push(`${label}: screenshots must use PNG`);
+      }
+      if (entry.max_bytes > maximumScreenshotBytes) {
+        failures.push(`${label}: max_bytes exceeds the ${maximumScreenshotBytes}-byte PNG ceiling`);
+      }
+      const expectedPublicPath = `/${relativePath.slice('static/'.length)}`;
+      if (entry.public_path !== expectedPublicPath) {
+        failures.push(`${label}: public_path must be ${expectedPublicPath}`);
+      }
     }
     if (registeredPaths.has(filePath)) {
-      failures.push(`${label}: path is already owned by ${registeredPaths.get(filePath)}`);
+      failures.push(`${label}: ${field} is already owned by ${registeredPaths.get(filePath)}`);
     }
     registeredPaths.set(filePath, entry.id);
 
@@ -456,33 +389,20 @@ export async function auditAssetRegistry({
       failures.push(`${label}: registered asset must be a regular file, not a symlink`);
       continue;
     }
-    if (data.byteLength > entry.max_bytes) {
-      failures.push(`${label}: ${data.byteLength} bytes exceeds max_bytes ${entry.max_bytes}`);
-    }
     const sourceSHA256 = createHash('sha256').update(data).digest('hex');
     if (entry.visual_review?.source_sha256 !== sourceSHA256) {
       failures.push(
         `${label}: file SHA-256 ${sourceSHA256} does not match its approved visual review`,
       );
     }
-    let dimensions;
-    if (extension === '.svg') {
-      let approvedPalette = new Set();
-      try {
-        approvedPalette = illustrationPalette(entry.visual_system, entry.id);
-      } catch (error) {
-        failures.push(`${label}: ${error.message}`);
-      }
-      dimensions = parseSVGDimensions(
-        data.toString('utf8'),
-        label,
-        failures,
-        approvedPalette,
-        entry.visual_system,
-      );
-    } else {
-      dimensions = parsePNGDimensions(data, label, failures);
+    if (isDiagram) {
+      failures.push(...parseDiagram(data.toString('utf8'), relative(repoRoot, filePath)).failures);
+      continue;
     }
+    if (data.byteLength > entry.max_bytes) {
+      failures.push(`${label}: ${data.byteLength} bytes exceeds max_bytes ${entry.max_bytes}`);
+    }
+    const dimensions = parsePNGDimensions(data, label, failures);
     if (
       dimensions &&
       (dimensions.width !== entry.width || dimensions.height !== entry.height)
@@ -490,26 +410,6 @@ export async function auditAssetRegistry({
       failures.push(
         `${label}: registered ${entry.width}x${entry.height} dimensions do not match file ${dimensions.width}x${dimensions.height}`,
       );
-    }
-
-    for (const trigger of Array.isArray(entry.review_triggers) ? entry.review_triggers : []) {
-      if (isAbsolute(trigger) || trigger.includes('\\')) {
-        failures.push(`${label}: review trigger ${trigger} must be repository-relative`);
-        continue;
-      }
-      const triggerPath = resolve(repoRoot, trigger);
-      if (!isInside(repoRoot, triggerPath)) {
-        failures.push(`${label}: review trigger ${trigger} escapes the repository`);
-        continue;
-      }
-      try {
-        const triggerInfo = await lstat(triggerPath);
-        if (!triggerInfo.isFile() || triggerInfo.isSymbolicLink()) {
-          failures.push(`${label}: review trigger ${trigger} must be a regular file`);
-        }
-      } catch {
-        failures.push(`${label}: review trigger ${trigger} does not exist`);
-      }
     }
   }
 
@@ -520,7 +420,8 @@ export async function auditAssetRegistry({
       failures.push(`ungoverned public static file: ${relative(repoRoot, file)}`);
     }
   }
-  for (const file of assetFiles) {
+  const diagramFiles = await walk(diagramRoot);
+  for (const file of [...assetFiles, ...diagramFiles]) {
     if (!registeredPaths.has(file)) {
       failures.push(`unregistered asset file: ${relative(repoRoot, file)}`);
     }
@@ -564,7 +465,7 @@ export async function auditAssetRegistry({
     failures,
     counts: {
       assets: registry.assets.length,
-      files: assetFiles.length,
+      files: assetFiles.length + diagramFiles.length,
       references: referenceCount,
     },
   };

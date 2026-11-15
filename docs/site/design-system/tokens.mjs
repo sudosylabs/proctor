@@ -2,8 +2,8 @@
 //
 // Change values here, explain durable meaning in
 // .agents/skills/docs-site/references/design-system.md, then run `npm run generate:design-system`.
-// Site CSS and illustration validation are adapters of this module; they are
-// not independent token authorities.
+// Site CSS is an adapter of this module, not an independent token
+// authority.
 
 export const designTokens = {
   id: 'proctor-assurance-v1',
@@ -68,7 +68,6 @@ export const designTokens = {
     'syntax-comment': '#6e6e78',
     'line-number': '#a6a6ae',
     plate: '#ffffff',
-    'plate-grid': '#f4f1f6',
     'on-action': '#ffffff',
     footer: '#ffffff',
     'footer-border': '#e8e8eb',
@@ -118,7 +117,6 @@ export const designTokens = {
     'syntax-comment': '#8d8d97',
     'line-number': '#55555e',
     plate: '#ffffff',
-    'plate-grid': '#f4f1f6',
     'on-action': '#ffffff',
     footer: '#0d0d0f',
     'footer-border': '#25252a',
@@ -194,38 +192,4 @@ export const designTokens = {
     component: '2px',
     flow: '3px',
   },
-
-  illustration: {
-    system: 'proctor-assurance-v1',
-    canvas: {width: 1200, height: 720, grid: 8, inset: 56},
-    typography: {objectTitle: 18, body: 14, utility: 12},
-    geometry: {
-      objectRadius: 16,
-      controlRadius: 6,
-      componentStroke: 2,
-      connectorStroke: 3,
-      arrowLength: 12,
-      arrowWidth: 12,
-    },
-    palette: [
-      '#ffffff',
-      '#f7f5f9',
-      '#f4f1f6',
-      '#f3eafb',
-      '#e7f5f1',
-      '#fff3e5',
-      '#fff0f1',
-      '#161616',
-      '#49434f',
-      '#655f69',
-      '#e1dce5',
-      '#c8c0ce',
-      '#5c00aa',
-      '#470082',
-      '#0b766e',
-      '#95520d',
-      '#b4233c',
-    ],
-  },
-
 };

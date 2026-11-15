@@ -1,0 +1,13 @@
+blocks:
+  - row:
+      - card: Desktop registration
+        text: This computer’s key, registered to the person
+      - card: Desktop session
+        text: Every request is signed with that key
+      - card: Participation
+        text: Admission to the Attempt on this session. Only the newest counts.
+        accent: true
+      - card: Connection
+        text: The live link for the Attempt. It closes when the Attempt ends.
+  - note: "**Every exam request shows all four**, and each must still be current. The Sitting and the Attempt then decide whether the request is allowed."
+    rule: bracket

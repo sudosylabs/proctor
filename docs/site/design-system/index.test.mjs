@@ -6,9 +6,7 @@ import test from 'node:test';
 import {fileURLToPath} from 'node:url';
 
 import {
-  CURRENT_ILLUSTRATION_SYSTEM,
   auditDesignSystem,
-  illustrationPalette,
   renderDesignTokenCSS,
 } from './index.mjs';
 
@@ -24,19 +22,6 @@ test('generated CSS self-hosts Geist and exposes canonical purple', () => {
   assert.match(source, /@fontsource\/geist-mono\/latin-500\.css/);
   assert.match(source, /--proctor-primary: #5c00aa/);
   assert.match(source, /--ifm-font-family-base: "Geist Sans"/);
-});
-
-test('current illustrations use the purple semantic palette', () => {
-  const palette = illustrationPalette(CURRENT_ILLUSTRATION_SYSTEM, 'new-diagram');
-  assert(palette.has('#5c00aa'));
-  assert(!palette.has('#3657d6'));
-});
-
-test('retired illustration systems are no longer accepted', () => {
-  assert.throws(
-    () => illustrationPalette('legacy-cobalt-v0', 'installation-authority-topology'),
-    /unknown illustration system/,
-  );
 });
 
 test('documentation ships only the reviewed local brand assets', async () => {

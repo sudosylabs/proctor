@@ -41,12 +41,6 @@
 // assurance it checks; auth_requirement.go holds the table. Deciding whether
 // the Principal may act on a resource stays in the use case.
 //
-// The one exception to the sealed catalog is LiveRoutes: a set of routes
-// under a fixed prefix that composition replaces while the API serves, each
-// group behind an availability check, for routes that exist only while a
-// plugin is on. Live routes are declared and compiled like catalog routes,
-// may not overlap one, and may upgrade to their own protocol.
-//
 // Every request passes, outermost first, request identity, security headers,
 // tracing, request logging and panic recovery. The matched route then runs
 // span naming, request metrics, the body limit, the browser-origin check,

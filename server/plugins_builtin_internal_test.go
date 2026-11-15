@@ -24,11 +24,12 @@ func (idPlugin) Activate(context.Context, plugin.Host) error { return nil }
 func (idPlugin) Deactivate(context.Context) error            { return nil }
 
 func TestTestPluginsReplaceTheBuiltInWithTheirID(t *testing.T) {
-	builtin := []plugin.Plugin{idPlugin{id: "cas"}, idPlugin{id: "execution"}}
-	replacement, added := idPlugin{id: "execution"}, idPlugin{id: "display"}
+	builtin := []plugin.Plugin{idPlugin{id: "cas"}, idPlugin{id: "export.zip"}}
+	replacement, added := idPlugin{id: "export.zip"}, idPlugin{id: "display"}
 	require.Equal(t, []plugin.Plugin{idPlugin{id: "cas"}, replacement, added},
 		withTestPlugins(builtin, []plugin.Plugin{added, replacement}))
 
 	ids := pluginIDSet(builtinPlugins(), func(p plugin.Plugin) string { return p.Manifest().ID })
-	require.Contains(t, ids, "execution", "the execution plugin is compiled in")
+	require.Equal(t, map[string]struct{}{"cas": {}, "oidc": {}, "export.zip": {}}, ids,
+		"only edge adapters are plugins; execution is core")
 }

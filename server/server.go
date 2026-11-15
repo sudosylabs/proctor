@@ -304,10 +304,7 @@ type runtimeComponents struct {
 	// pluginReconciler keeps the plugins in step with saved settings; nil
 	// without persistence.
 	pluginReconciler *pluginReconciler
-	// pluginWorkers starts the plugins' workers; they stop when plugins
-	// closes.
-	pluginWorkers interface{ StartWorkers(context.Context) error }
-	metrics       runtimeMetrics
+	metrics          runtimeMetrics
 	// tracing flushes and stops span export; nil when tracing was never built.
 	tracing   runtimeTracing
 	transport runtimeTransport
@@ -542,13 +539,6 @@ func (s *Server) startupStages() []startupStage {
 		stages = append(stages, startupStage{
 			name:  "start plugin reconciler",
 			start: reconciler.Start,
-		})
-	}
-
-	if workers := s.components.pluginWorkers; workers != nil {
-		stages = append(stages, startupStage{
-			name:  "start plugin workers",
-			start: workers.StartWorkers,
 		})
 	}
 

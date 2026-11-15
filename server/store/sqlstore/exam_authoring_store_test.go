@@ -31,7 +31,6 @@ func TestExamAuthoringRowFailsClosed(t *testing.T) {
 		{name: "owner id", mutate: func(row *examAuthoringRow) { row.OwnerUserID = "bad" }, entity: "exam", field: "owner_user_id"},
 		{name: "policy", mutate: func(row *examAuthoringRow) { row.Policy = jsonValue(`{"schema_version":2}`) }, entity: "exam_draft", field: "policy"},
 		{name: "zero managers", mutate: func(row *examAuthoringRow) { row.ManagerCount = 0 }, entity: "exam", field: "aggregate"},
-		{name: "plugin sections", mutate: func(row *examAuthoringRow) { row.PluginSections = jsonValue(`{"execution":[]}`) }, entity: "exam_draft", field: "plugin_sections"},
 	}
 	for _, test := range tests {
 		test := test
@@ -91,7 +90,7 @@ func validExamAuthoringRow(t *testing.T) examAuthoringRow {
 	return examAuthoringRow{
 		ID: model.NewID(), AcademicUnitID: model.NewID(), CreatorUserID: model.NewID(), OwnerUserID: model.NewID(),
 		DefaultRevisionID: sql.NullString{}, CreatedAt: at, UpdatedAt: at, ExamRevision: 1,
-		DraftTitle: "Test", Policy: jsonValue(policy), BrowserPolicy: jsonValue(browserPolicy), PluginSections: jsonValue(`{}`),
+		DraftTitle: "Test", Policy: jsonValue(policy), BrowserPolicy: jsonValue(browserPolicy),
 		BaseRevisionID: sql.NullString{}, DraftUpdatedAt: at,
 		DraftRevision: 1, ManagerCount: 1, ActorIsManager: true,
 		OwnerIsManager: true,

@@ -31,7 +31,6 @@ type Publication struct {
 	newID             func() model.ExamRevisionID
 	institutionOrigin string
 	operational       OperationalRecorder
-	pluginSections    PluginSections
 }
 
 // PublicationDependencies are the collaborators NewPublication validates once
@@ -47,9 +46,6 @@ type PublicationDependencies struct {
 	NewID             func() model.ExamRevisionID
 	InstitutionOrigin string
 	Operational       OperationalRecorder
-	// PluginSections asks plugins about the sections an author sets. Nil
-	// treats every plugin as offering none.
-	PluginSections PluginSections
 }
 
 // NewPublication returns a Publication service, or an error when a required
@@ -77,6 +73,5 @@ func NewPublication(deps PublicationDependencies) (*Publication, error) {
 		newID:               deps.NewID,
 		institutionOrigin:   deps.InstitutionOrigin,
 		operational:         deps.Operational,
-		pluginSections:      deps.PluginSections,
 	}, nil
 }

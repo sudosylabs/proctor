@@ -20,7 +20,6 @@ import (
 	"github.com/sudosylabs/proctor/server/app/events"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/model"
-	"github.com/sudosylabs/proctor/server/plugin"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
@@ -54,10 +53,10 @@ type eventHandlerFake struct {
 	name     string
 	err      error
 	calls    *[]string
-	received *[]plugin.Event
+	received *[]model.DomainEvent
 }
 
-func (h eventHandlerFake) HandleEvent(_ context.Context, event plugin.Event) error {
+func (h eventHandlerFake) HandleEvent(_ context.Context, event model.DomainEvent) error {
 	*h.calls = append(*h.calls, "handle:"+h.name)
 	*h.received = append(*h.received, event)
 	return h.err
@@ -68,7 +67,7 @@ type domainEventDispatchFixture struct {
 	record        *model.Job
 	outbox        *domainEventOutboxFake
 	calls         []string
-	received      []plugin.Event
+	received      []model.DomainEvent
 	checkpoints   []json.RawMessage
 	checkpointErr error
 }
@@ -91,10 +90,11 @@ func (f *domainEventDispatchFixture) run(t *testing.T, handlerErrors ...error) j
 	subscriptions := make([]events.Subscription, 0, len(handlerErrors))
 	for index, handlerErr := range handlerErrors {
 		name := fmt.Sprint(index)
-		subscriptions = append(subscriptions, events.Subscription{Key: name, Topic: plugin.TopicExamAttemptSubmitted,
+		subscriptions = append(subscriptions, events.Subscription{Key: name, Topic: model.DomainEventTopicExamAttemptSubmitted,
 			Handler: eventHandlerFake{name: name, err: handlerErr, calls: &f.calls, received: &f.received}})
 	}
-	dispatcher := events.NewDispatcher(func() []events.Subscription { return subscriptions })
+	dispatcher, err := events.NewDispatcher(subscriptions)
+	require.NoError(t, err)
 	descriptor := NewDomainEventDispatch(f.outbox, dispatcher).Descriptor
 	checkpoint := func(_ context.Context, value job.CheckpointValue) error {
 		f.calls = append(f.calls, "checkpoint")
@@ -120,8 +120,7 @@ func TestDomainEventDispatchDeliversInOrderThenDeletes(t *testing.T) {
 	// The row is loaded, every handler runs in registration order, and only
 	// then is the delivered row deleted.
 	require.Equal(t, []string{"get:" + id, "handle:0", "handle:1", "delete:" + id}, f.calls)
-	want := plugin.Event{ID: id, Topic: plugin.TopicExamAttemptSubmitted, OccurredAt: f.event.OccurredAt, Data: f.event.Data}
-	require.Equal(t, []plugin.Event{want, want}, f.received)
+	require.Equal(t, []model.DomainEvent{*f.event, *f.event}, f.received)
 }
 
 func TestDomainEventDispatchWithoutHandlersDeletes(t *testing.T) {

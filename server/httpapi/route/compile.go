@@ -51,13 +51,6 @@ func (a *API) compileRoutes(apiPrefix string, maxBodyBytes int64, resources ...R
 	if err := validateResourceCatalog(apiPrefix, resources); err != nil {
 		return err
 	}
-	for _, resource := range resources {
-		for _, definition := range resource.Endpoints {
-			if _, shape, err := definition.CompilePath(apiPrefix); err == nil {
-				a.staticShapes = append(a.staticShapes, shape)
-			}
-		}
-	}
 
 	a.maxBodyBytes = maxBodyBytes
 	compiled, err := a.compileCatalog(apiPrefix, nil, resources...)

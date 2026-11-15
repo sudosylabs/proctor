@@ -1,6 +1,6 @@
 ---
 title: Build Plugins
-description: How Proctor's first-party plugins add capabilities the core works without, which seams they plug into, and which guarantees the core keeps.
+description: How Proctor's first-party plugins add edge adapters, such as sign-in protocols and export formats, which seams they use, and which guarantees the core keeps.
 audience: developer
 maturity: preview
 slug: /developers/server/plugins/
@@ -8,40 +8,26 @@ slug: /developers/server/plugins/
 
 # Build Plugins
 
-A plugin adds a capability that Proctor works without and that not every
-institution wants. Examples are a display-topology check, a virtualization
-gate, or a recording of the last minutes of a session. Plugins are
-first-party: they are compiled into the server, and into Proctor Desktop when
-they need it, and stay dormant until an administrator turns them on. Proctor
-never loads code from outside its own binaries.
+A plugin is an edge adapter: a sign-in protocol, an export encoding, or later
+a sync with a learning management system. It connects Proctor to something
+outside it, and an installation can turn it on or off. Plugins are
+first-party: they are compiled into the server and stay dormant until they
+are enabled. Proctor never loads code from outside its own binaries.
 
-The aim is the Mattermost experience: a plugin can do nearly anything a
-built-in feature can, from one folder, without editing the core. The core
-gets there by offering seams, the points where a plugin can join core logic.
-A new capability should then touch only its plugin folders.
-
-## Two kinds of capability
-
-**Core policies** are built in, because every exam needs them. Connection
-loss and focus loss are core policies. They can flag and suspend an Attempt
-on their own.
-
-**Capability plugins** are everything else. Each one is compiled in on both
-sides but does nothing until it is enabled. While it is disabled, Desktop
-never activates the capability and no event for it ever flows.
+A plugin never acts on an Attempt. Anything that touches admission, the
+Attempt Workspace, Submission, integrity evidence or review is part of the
+core, even when most institutions leave it off. Code execution is one such
+feature; [Design the Execution Environment](execution-environment.mdx)
+describes it.
 
 ## Where a plugin lives
 
-Each plugin has one folder, `server/plugin/<name>/`, holding its code and,
-as the seams grow, its migrations, API fragments, translations and docs. The
-contracts it implements are in `server/plugin`. A plugin may import the
-contracts, `model`, `config`, its own dependencies, and the support packages
-named for it, such as `platform/externalauth` for sign-in protocols. Only the
+Each plugin has one folder, `server/plugin/<name>/`. The contracts it
+implements are in `server/plugin`. A plugin may import the contracts,
+`model`, `config`, its own dependencies, and the support packages named for
+it, such as `platform/externalauth` for sign-in protocols. Only the
 module-root `server` package imports a plugin, and `builtinPlugins()` lists
 them all. The architecture gate enforces both rules.
-
-A plugin that needs Desktop has a matching folder there, built against the
-same contract.
 
 A sign-in protocol owns everything about its providers except their identity.
 Proctor keeps each configured provider's ID, type, name, whether it is on and
@@ -52,237 +38,25 @@ documents only its plugin decodes and validates, handed over in
 
 ## Seams
 
-| Seam | Status | What it lets a plugin do |
-| --- | --- | --- |
-| Lifecycle | built | Activate and deactivate, with deadlines, containment and metrics |
-| Sign-in protocols, export formats | built | Offer an identity provider type or export encoding |
-| Domain events | built | React after commit to `exam.attempt.submitted`, `exam.attempt.participation.started`, `exam.attempt.participation.ended`, `exam.sitting.paused`, `exam.sitting.resumed` and `exam.sitting.closing`, each carrying identifiers only |
-| Installation settings | built | Have settings an administrator changes at runtime, applied on every node |
-| Integrity outcomes | built for core policies and native capabilities | Reach a decision that the core applies as flag, warn or suspend |
-| Capability registry | built in the core | Declare a native capability, its fields, reasons and fact schemas; today only the Desktop release registers them |
-| Plugin sections | built | Offer a section of Exam policy the author sets on the Draft, validated by the plugin on save and at publication, then frozen into the Exam Revision and its digest |
-| Admission gates | built for native rules | Decide admit or deny before an Attempt starts, from the facts Desktop reports |
-| Signal verdicts | built for native capabilities | Evaluate rules on the facts Desktop reports during an Attempt and flag what an enforce rule finds |
-| Evidence kinds | built for the execution plugin | Append bounded evidence of the plugin's own kinds through an environment binding, which the Submission seals, the Exam export carries and reviewers see |
-| Records | built | Keep JSON documents of at most 64 KiB by kind and key, with compare-and-swap on a revision |
-| Workers | built | Run long-lived work on every node and own keys under fenced leases that another node takes over when one dies |
-| Plugin routes | built | Serve HTTP routes and binary WebSocket routes under the API's `plugins/<id>/` prefix, each behind one guard from a closed core list |
-| Attempt Workspace access | built for the execution plugin | Bind an execution environment to an Attempt and read and write its Workspace on the candidate's behalf |
+| Seam | What it lets a plugin do |
+| --- | --- |
+| Lifecycle | Activate and deactivate, with deadlines, containment and metrics |
+| Sign-in protocols | Offer an identity provider type that builds configured providers |
+| Export formats | Offer an encoding for Exam exports, whose files the core chooses, bounds and verifies |
+| Installation settings | Have settings an administrator changes at runtime, applied on every node |
 
-The execution environment, `server/plugin/execution`, is the first plugin to
-use most of these seams; [it is described below](#the-execution-environment).
-Execution is moving into the core, and
-[Design the Execution Environment](execution-environment.mdx) records that
-design. The plugin and the seams only it uses are deleted when the core
-version lands.
-
-Native capabilities live in the core's registry, which the signed Desktop
-release supplies: each capability's fields, reasons, stability time and fact
-schemas, and the baseline rules every policy carries. The server compiles a
-policy's activations and rules, decides admission from the facts Desktop
-reports at Start, and evaluates the same rules again on the facts it streams
-during the Attempt. Desktop must reach the same status on every published
-conformance vector. A plugin cannot register a capability yet; when it can, it
-will register into the same registry.
-
-Connection loss, focus loss, browser navigation and native capabilities write
-their flags, evidence and suspensions through the code a plugin's decision will
-use, and publish what they caused the same way. A plugin cannot reach that code
-yet: it cannot raise a flag.
-
-## Evidence a plugin records
-
-A plugin that holds an execution environment binding records evidence with
-`Host.Evidence().Append`, such as the process log or, later, terminal input.
-
-- **Accepted only through the binding.** The core stores a record only while
-  the binding is current: its generation is the Attempt's active
-  Participation with an unexpired lease, the Attempt is Active, and the
-  Sitting is Open or Paused before its deadline. Otherwise the call fails
-  with `ErrBindingNotCurrent` and nothing is stored.
-- **One of the core's kinds.** The plugin names a kind such as `process`,
-  and the core stores it as `<plugin-id>.process`, which must be one of the
-  core's Attempt evidence kinds. The record names the binding's environment
-  incarnation as its author. A sequence numbers that author's stream of the
-  kind, so a retried append is stored once and a different record under the
-  same sequence is refused.
-- **Bounded.** A record's detail is one JSON object of at most 64 KiB. One
-  Attempt keeps at most 4,096 records and 8 MiB. Past that, an append is
-  refused and only counted, and reviewers see the count.
-- **Never a flag.** A record raises no flag, warning or suspension. Missing
-  coverage, such as an environment restart, is a record of kind `gap`.
-- **Sealed with the Submission.** The Attempt's records, counts and a digest
-  chained over them in order are fixed when the Submission is sealed, and
-  nothing is accepted after that. Review finalization binds the digest.
-- **Seen by reviewers only.** Managers who may view the Submission's
-  integrity review list the records beside its flags, at
-  `GET /api/v1/submissions/{submission_id}/attempt-evidence`. The integrity
-  part of an Exam export carries the records and the sealed counts. The
-  candidate never sees them.
-
-Today a record carries only its bounded detail. Large payloads, such as a
-whole terminal input recording, will be stored as chunks in VFS that a
-record references.
-
-## How a capability decides
-
-Every integrity capability, built in or plugin, follows one template:
-
-1. A signal arrives over a core transport.
-2. The core stores it as evidence before anything interprets it.
-3. A rule decides, from the policy frozen into the Exam Revision.
-4. The rule returns no outcome, which leaves the evidence recorded, or one
-   from a closed list: flag, flag and warn, or flag and suspend.
-5. The core applies the outcome through the same audited code a manager's
-   action uses, attributed to the policy or plugin that decided.
-
-A capability's flags and evidence carry a policy kind named
-`<plugin-id>.<kind>`, such as `display.second_screen`, so they never collide
-with the core's `connection_loss`, `focus_loss` and `browser_navigation`. The
-core owns `native.<capability>`, such as `native.display_topology`, for
-Desktop's native capabilities, so no plugin may take the ID `native` or one
-under it. Its
-evidence is one JSON object of at most 64 KiB that the core stores as given.
-
-Each capability also declares what happens when it cannot run during an
-Attempt. `contain` keeps the Attempt from continuing until the capability
-recovers or a manager decides. `record_gap` records the missing coverage and
-lets the Attempt go on.
+A plugin registers what it offers on the `plugin.Host` it is given during
+`Activate`. The Host grows one typed method per capability, added only when
+a plugin needs it. There is no broad API, store contract or database access.
 
 ## Guarantees the core keeps
 
-- **The core owns the trusted path.** Transport, ordering, storage, sealing,
-  digests and audit stay in the core. A plugin cannot lose or rewrite
-  evidence.
-- **Plugins decide, the core acts.** Outcomes come from a closed list, and
-  each one is audited with the policy that produced it.
-- **Nothing is enabled by surprise.** Desktop activates only what the
-  agreement it signed names, and candidates see which capabilities are on
-  before an Attempt starts.
-- **A broken plugin never takes exams down.** Panics are contained, calls are
-  bounded, and a failed plugin is reported in readiness and metrics while the
-  node keeps serving. The capability's declared fail mode decides what that
-  means for an Attempt in progress.
-
-## State and background work
-
-A plugin keeps its state in its record store, `Host.Records()`. Every plugin
-has its own namespace in one core table; the core adds the plugin's ID to
-each call, so a plugin cannot read or write another's records. A record is a
-JSON object of at most 64 KiB, named by a kind such as `grant` and a key such
-as `attempt/01hx7k2`. `Put` and `Delete` take the revision the plugin last
-read, and expected revision 0 means the record must not exist yet, so two
-nodes never overwrite each other unnoticed. Writes are not audited: records
-are the plugin's operational state, and anything an auditor must see goes
-through a core capability that audits it. Records are kept while the plugin
-is turned off and are there again when it is turned on; nothing deletes them
-on the plugin's behalf. There is no plugin SQL and there are no plugin
-migrations.
-
-Long-lived work is a worker, registered with `Host.AddWorker` during
-`Activate`. The core runs one of each worker on every node once the node has
-started. It ends the worker's context when the plugin is turned off,
-restarted with new settings, or the node stops, and waits for the worker
-before it calls `Deactivate`. A worker that returns an error or panics starts
-again after a growing delay; its panics count toward the plugin's panic
-limit, and a failed plugin's workers stop. A worker never changes readiness
-except through its plugin failing.
-
-Work only one node may do, such as owning one external resource, is claimed
-under a lease. The `Leases` a worker receives claims keys for this node in a
-core table where PostgreSQL's clock decides expiry, so a dead node's leases
-lapse and another node claims them. Every claim takes a new, larger fence,
-which the holder carries on each action it takes as the owner. `Hold` claims
-a key, renews it, and ends a derived context as soon as the lease is lost or
-can no longer be proven. A plugin that owns many keys keeps the set it wants
-owned in its records and offers it to `ClaimAvailable` from every node.
-
-## Routes
-
-A plugin serves HTTP with `Host.AddRoute` during `Activate`. A route names a
-method, a path relative to its guard, one guard, and either a handler or a
-socket handler. The core mounts it at
-`plugins/<id>/<guard prefix>/<path>` under the API root and nowhere else. A plugin whose
-ID is not one path segment, such as `export.zip`, cannot serve routes.
-
-The guard comes from a closed core list. Today there is one,
-`candidate_attempt_access`, under the prefix
-`exam-attempts/{exam_attempt_id}`. It runs exactly the checks of the
-candidate's own Attempt routes: a Desktop Session with its DPoP proof, the
-Attempt credential and Connection headers, an active Attempt, and the current
-Participation. The handler then gets the Attempt, Participation, generation
-and candidate IDs, never the credentials.
-
-Before the handler runs, the core authenticates the request, spends a rate
-budget per Session and plugin, bounds the body (64 KiB by default, at most
-1 MiB), and runs the guard. Every refusal is Problem Details.
-
-Every call the guard admits is audited as the candidate's, against the
-Attempt's Sitting and Class. The record names the plugin, the method and the
-mounted route template, never the body, the query or a socket's messages. The
-audit opens before any plugin code runs, and a call whose audit cannot open
-is refused with `audit.unavailable`. A plain call's audit closes with its
-status or error code, and a call whose audit cannot close does not report
-success. A socket has one record, which closes with how the socket ended. A
-request the guard refuses is not a call, so it leaves no record. A handler
-answers 200, 201, 202 or 204 with at most 1 MiB of JSON. It returns
-`plugin.ErrBadRequest` for a 400 or `plugin.ErrRouteConflict` for a 409. Any
-other error, a panic or an invalid answer is `plugin.route.unavailable`, and
-panics count toward the plugin's panic limit.
-
-A socket route upgrades to a binary WebSocket, through the same origin rules
-as the realtime socket. Messages are at most 64 KiB. The core runs the guard
-again every 15 seconds and closes the socket with code 4003 once it fails.
-
-Routes appear when the plugin is turned on and disappear when it is turned
-off. A failed plugin's routes answer 404 at once, and its open sockets close.
-A plugin documents its routes in OpenAPI fragments in its folder's `openapi/`
-directory. The build adds them to the contract and marks each operation with
-`x-proctor-plugin: <id>`, so clients treat it as optional.
-
-## Attempt Workspace access
-
-`Host.AttemptWorkspaces` is how the execution environment reaches Attempt
-Workspaces. The core grants it only to the plugins it lists by ID; today that
-list is `execution`. For any other plugin every call answers
-`plugin.ErrUnavailable`.
-
-The plugin binds an environment to an Attempt's current Participation
-generation and then acts only through that binding. It can list the
-manifest, read the journal, open files, and apply batches of harvested
-changes. The core runs each call as the system task `plugin.<id>` through the
-same use cases the candidate's editor uses. A batch is written with origin
-`environment` and audited as the candidate. A refusal reaches the plugin as
-a `plugin.CapabilityError` carrying the public error code.
-
-## Plugin sections
-
-A plugin that an Exam can ask something of, such as a terminal, offers a
-section of Exam policy with `Host.AddExamSection` during `Activate`. A
-`plugin.ExamSection` has a `Schema`, a JSON Schema the core serves unchanged
-for the authoring form, and `ValidateSection`, which decides what is
-accepted. A plugin offers at most one section, keyed by its ID.
-
-The author sets the section on the Exam Draft through
-`PUT /api/v1/exams/{exam_id}/draft/plugin-sections/{plugin_id}`, with the
-same management authority, revision fence and idempotency as the other Draft
-edits. A section is one JSON object of at most 64 KiB, kept in canonical
-form: keys sorted, no insignificant whitespace, and integer numbers only. The
-core saves it only while the plugin is active, offers a section and accepts
-it; otherwise the save fails with `exam.plugin_section.plugin_inactive` or
-`exam.plugin_section.invalid`, and the plugin's reason is never shown.
-Removing a section never asks the plugin. `ValidateSection` runs under the
-same guard, panic containment and time bound as `ValidateSettings`.
-
-Publication asks every section's plugin again and refuses with the same codes
-while one is off, failed or refuses. The Revision then freezes the sections,
-with their own digest and inside the content digest, and a live correction
-keeps them unchanged. From then on nothing asks the plugin: admission and
-everything after it read the frozen section. A plugin reads its own frozen
-sections back by Revision ID with `Host.ExamSections().Get`, which never
-reaches another plugin's section or the Draft. The Participation events name
-the Revision the Attempt was admitted to as `exam_revision_id`, so a handler
-can read the section that applies.
+- **The core keeps the decisions it owns.** It resolves accounts and opens
+  Sessions for an identity provider's assertion, and it chooses, bounds and
+  verifies every file an export format writes.
+- **A broken plugin never takes the server down.** Panics are contained,
+  calls are bounded, and a failed plugin is reported in readiness and metrics
+  while the node keeps serving.
 
 ## Settings
 
@@ -290,46 +64,13 @@ An administrator turns a plugin on or off and edits its settings through the
 plugin administration API. Each plugin publishes a settings schema that a UI
 draws its form from, and validates a document before it is saved. A change
 is audited and applied live: every node converges within a few seconds. A
-required plugin, such as the zip export, cannot be turned off. Nor can a
-plugin while any Sitting that is not Closed or Canceled delivers an Exam
-Revision with its section: the change fails with `plugin.in_use`, a rule the
-core decides from its own data without calling the plugin. A save
-records the on or off choice and the settings together, so a saved plugin
-always has both; a plugin nobody has saved keeps its manifest default.
+required plugin, such as the zip export, cannot be turned off. A save records
+the on or off choice and the settings together, so a saved plugin always has
+both; a plugin nobody has saved keeps its manifest default.
 
 A plugin publishes its schema in `Manifest.SettingsSchema`, checks a
 document by implementing `plugin.SettingsValidator`, and can take new
 settings in place by implementing `plugin.Reconfigurer`; otherwise the host
-restarts it with them. Secrets never go through the API. They stay in the configuration file under
-`Plugins.<id>.Secrets`, which is always redacted. See
-[Plugins configuration](../../reference/configuration/plugins.mdx).
-
-## The execution environment
-
-The `execution` plugin gives a candidate a shell beside the editor, on
-execenv hosts listed in its secrets (see
-[Plugins configuration](../../reference/configuration/plugins.mdx)). It is
-off by default and uses only the seams above:
-
-- **Section.** `{"image": "...", "record_input": false}`. The network is
-  always none. The section is accepted only while a usable host offers the
-  image.
-- **Events.** A Participation that starts on a Revision with the section
-  creates the grant's record, kind `grant`, key `attempt/<attempt_id>`. Its
-  end freezes the grant for a reconnect, and a Submission, a manager ending
-  the Attempt or the Sitting closing revokes it. A Sitting's pause and resume
-  freeze and thaw its grants.
-- **Worker.** Every node runs the `grants` worker, which holds the lease of
-  each live grant nobody holds. The owner places the grant, binds it to the
-  current generation, projects the Attempt Workspace journal into it,
-  harvests guest changes in batches through the binding, and stores the
-  process log as `execution.process` evidence before it acknowledges it.
-  Every execenv control carries a fence revision the owner takes from the
-  record, so a stale owner is refused. A lost grant, or one whose guest the
-  Workspace cannot bring back in line, is replaced by a new incarnation and
-  recorded as an `execution.environment_restarted` gap.
-- **Routes.** `GET .../terminal` is the binary terminal socket, served by any
-  node attaching to the host itself, and `POST .../flush` freezes the grant
-  after a last harvest and answers with the Workspace cursor to submit with.
-  Both run behind `candidate_attempt_access`; the plugin documents them in
-  `server/plugin/execution/openapi/`.
+restarts it with them. Secrets never go through the API. They stay in the
+configuration file under `Plugins.<id>.Secrets`, which is always redacted.
+See [Plugins configuration](../../reference/configuration/plugins.mdx).

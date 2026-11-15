@@ -74,58 +74,6 @@ The exact route, authentication, DTO, error, and OpenAPI agreement rules live
 in the component-owned
 [HTTP API contract](../../../../server/httpapi/CONTRACT.md).
 
-### Plugin routes
-
-Plugin routes are the one part of the API that changes while it serves.
-`route.LiveRoutes` holds them under the `/plugins` prefix. `httpapi`
-replaces the whole set from the plugin host's routes after every plugin
-change. Each live route is an ordinary `route.Endpoint` compiled by the
-same path as the catalog, with its authentication, body limit, error policy
-and middleware. Three things differ:
-
-- each plugin's group has an availability check, so a failed plugin's routes
-  answer `route.not_found` at once;
-- a live route may be an `Upgrade` to its own protocol;
-- a live route may not overlap a catalog route's shape. The catalog still
-  owns `/plugins` and `/plugins/{plugin_id}/settings`.
-
-`httpapi/plugin_routes.go` holds the closed guard table: for each
-`plugin.Guard`, its path prefix, credential requirement, error codes, check
-and rate key. A route is mounted at `/plugins/<id><guard prefix>/<path>`.
-The handler runs after the rate limit (a node-local token bucket per plugin
-and guard subject; `plugin.route.rate_limited`) and the guard. Each guard
-returns an admission that knows how to open the call's audit, because only the
-guard knows its subject. Operation `plugin.route.call` records the plugin,
-method and route template, never the body, query or socket messages. The
-audit opens before the handler, and a refusal to open it is
-`audit.unavailable`. It closes with the status or error code; a socket's single
-record closes when the socket ends. A plain call whose audit cannot close
-reports the audit failure, not success. Its answer is validated before anything
-is written. The transport mints
-`plugin.route.unavailable` and `plugin.route.conflict` itself; they are
-`transport` codes in the catalog.
-
-A socket route is upgraded by the WebSocket hub's `ServeBinary`, which applies
-the realtime origin rule and closes the socket when the hub stops. It is not a
-Hub connection: there are no subscriptions, events or replay, and no AsyncAPI
-message. The guard runs again on a timer, and a definitive refusal closes the
-socket with 4003.
-
-To add a guard:
-
-1. Add its access type and constant in `server/plugin`.
-2. Add its entry in `pluginGuards`.
-3. Extend `TestEveryGuardHasACoreEntry`.
-
-A plugin's OpenAPI fragments live in `server/plugin/<id>/openapi/`.
-`ptool openapi build` compiles them after the core fragments, requires every
-path to be under `/api/v1/plugins/<id>/`, and marks each operation
-`x-proctor-plugin: <id>`. `TestOpenAPIAgreesWithRuntime` holds plugin
-operations to their responses and security only.
-`TestPluginOpenAPIAgreesWithMountedRoutes` holds a mounted plugin's routes to
-its fragment through `requireOpenAPIAgreement`. When a compiled plugin ships
-routes, add its fragment and routes to that check.
-
 ## WebSocket
 
 The sibling `websocket` package owns the hub, connection state, upgrade handler, wire DTOs, versioned errors, sequencing, replay, liveness, and backpressure. HTTP mounts its handler but does not own its protocol.

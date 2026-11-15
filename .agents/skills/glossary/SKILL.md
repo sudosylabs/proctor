@@ -123,13 +123,6 @@ The typed examination and integrity rules authored in an exam draft and frozen
 in an exam revision.
 _Avoid_: Deployment configuration, executable policy
 
-**Plugin Section**:
-One plugin's part of an exam's policy, set on the exam draft as a bounded
-JSON object that only its plugin interprets and validates, and frozen into
-each exam revision. After publication the core reads the frozen section and
-no longer asks the plugin.
-_Avoid_: Plugin settings, Exam Policy Set, executable policy
-
 **Exam Capacity Policy**:
 The institution-owned limits on Exam Resources and Starter or Attempt
 Workspace growth; publication freezes the applicable policy in an exam

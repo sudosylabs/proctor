@@ -120,8 +120,6 @@ var baselineTables = []string{
 	"password_history_entries",
 	"personal_access_token_mutation_preparations",
 	"personal_access_tokens",
-	"plugin_leases",
-	"plugin_records",
 	"plugin_settings",
 	"programme_levels",
 	"programmes",

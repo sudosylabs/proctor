@@ -99,36 +99,17 @@ listed.
   application use case can read them first. Changing them goes through
   `app/administration`, audited, like any other mutation.
 - Hand what plugins registered to its consumer from the root, as plain
-  contracts: identity provider types to `externalauth`, the export format to
-  `filecontent`, event subscriptions to `app/events`. The host wraps each one
+  contracts: identity provider types to `externalauth` and the export format
+  to `filecontent`. The host wraps each one
   so that a panic is contained and a failed plugin answers
   `plugin.ErrUnavailable`. Consumers never see the host.
 - Add a capability as one typed `Host` method with a contained wrapper, and
   only when a plugin needs it. Plugins get no broad API, store contract or
-  `platform.Service`. A capability backed by a Store, such as the record
-  store and the worker leases, is a port in `pluginhost` that the root
-  adapts from the Store contract (`plugin_records.go`, `plugin_leases.go`);
-  the host adds the plugin's ID, and the node ID for leases, to every call.
-- A capability that needs the application, such as the Attempt Workspace
-  access the execution plugin gets (`plugin_attempt_workspaces.go`), is
-  handed to the host as a root adapter before plugins activate and attached
-  to its service once `app.New` has built it. Until then it answers
-  `plugin.ErrUnavailable`. The adapter runs every call as the system task
-  `plugin.<id>`. The host grants it only to the plugin IDs in its closed table
-  (`pluginhost.AttemptWorkspaceGranted`).
-- Hand plugin routes to `httpapi` as `httpapi.PluginRoutes`
-  (`plugin_routes.go`), which follows the host's change listener. Plugin
-  sockets go to `httpapi.PluginSockets`, backed by the WebSocket hub's
-  `ServeBinary`. `httpapi` mounts the routes as live routes behind its guard
-  table; the host's wrappers contain panics and end handler contexts with the
-  activation.
-- Start plugin workers in their own `Server.Run` stage after durable Jobs and
-  the plugin reconciler, never during construction. A plugin activated later
-  starts its workers at once. Workers never affect readiness except through a
-  failed plugin.
+  `platform.Service`. Plugins are edge adapters that never act on an
+  Attempt; a feature that touches admission, the Attempt Workspace,
+  Submission or evidence, such as code execution, is part of the core.
 - Deactivate plugins once nothing can call them: after Jobs and transports
-  stop, or when a failed construction is released. Each plugin's workers are
-  stopped, and waited for under the host's timeout, before its `Deactivate`.
+  stop, or when a failed construction is released.
 
 ## Module placement
 

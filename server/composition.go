@@ -136,16 +136,11 @@ func composeConsumers(
 		return nil, err
 	}
 	applicationDeps.Plugins = pluginCatalog{host: capabilities.plugins, reconciler: reconciler}
-	applicationDeps.PluginSections = pluginSections{host: capabilities.plugins}
 
 	application, err := app.New(applicationDeps)
 	if err != nil {
 		return nil, fmt.Errorf("construct application: %w", err)
 	}
-	if application.Attempts != nil {
-		capabilities.pluginWorkspaces.attach(application.Attempts)
-	}
-
 	clusterFanout, err := newRealtimeClusterAdapter(capabilities.cluster)
 	if err != nil {
 		return nil, fmt.Errorf("construct realtime cluster adapter: %w", err)
@@ -228,7 +223,6 @@ func composeConsumers(
 		websocket:             webSocketHub,
 		plugins:               capabilities.plugins,
 		pluginReconciler:      reconciler,
-		pluginWorkers:         capabilities.plugins,
 		metrics:               capabilities.metrics,
 		tracing:               capabilities.tracing,
 		readiness:             readiness,
@@ -420,8 +414,6 @@ func httpAPISettings(
 		RecentAuthenticationTTL: snapshot.Authentication.RecentAuthenticationTTL.Duration,
 		NodeID:                  capabilities.nodeID,
 		WebSocket:               webSocketHub,
-		PluginRoutes:            pluginRouteSource{host: capabilities.plugins},
-		PluginSockets:           pluginSocketTransport{hub: webSocketHub},
 	}, nil
 }
 

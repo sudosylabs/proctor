@@ -36,19 +36,6 @@ func (*recordingHost) AddExportFormat(plugin.ExportFormat) error {
 	return errors.New("not offered")
 }
 
-func (*recordingHost) AddEventHandler(plugin.EventTopic, plugin.EventHandler) error {
-	return errors.New("not offered")
-}
-
-func (*recordingHost) Records() plugin.Records                     { return nil }
-func (*recordingHost) AddRoute(plugin.Route) error                 { return errors.New("not offered") }
-func (*recordingHost) AttemptWorkspaces() plugin.AttemptWorkspaces { return nil }
-func (*recordingHost) Evidence() plugin.Evidence                   { return nil }
-func (*recordingHost) AddExamSection(plugin.ExamSection) error     { return errors.New("not offered") }
-func (*recordingHost) ExamSections() plugin.ExamSections           { return nil }
-
-func (*recordingHost) AddWorker(string, plugin.Worker) error { return errors.New("not offered") }
-
 func TestPluginOffersTheProviderTypeThatBuildsConfiguredProviders(t *testing.T) {
 	t.Parallel()
 

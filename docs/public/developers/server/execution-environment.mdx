@@ -19,10 +19,9 @@ the last actor to do so: an AI assistant that edits files and runs commands, or
 tests a grader runs, would use the same paths. Each of those must be a new
 *author*, never a new write path.
 
-This page records the design the owner settled. None of it is built yet. The
-`execution` plugin in `server/plugin/execution` is the earlier form; it is
-deleted when the core environment lands, not kept beside it. Where this design
-changes a contract, the old form is removed.
+This page records the design the owner settled and is being built in the
+order below. The earlier `execution` plugin and the plugin seams only it used
+are deleted. Where this design changes a contract, the old form is removed.
 
 ## Goals
 
@@ -409,10 +408,10 @@ New core tables, in the baseline migration:
 - `environment_profiles`;
 - `author_kind` and `author_ref` on the Workspace journal, replacing `origin`.
 
-Removed with the plugin: the environment bindings, the plugin's records and
-leases, and the plugin capabilities for Workspace access
-and evidence. Plugin records, leases and Exam sections stay only if another
-plugin uses them.
+Removed with the plugin: its records and leases, Exam plugin sections, plugin
+routes, workers, event subscriptions, and the plugin capabilities for
+Workspace access and evidence. The environment bindings go when the fenced
+environment access replaces them.
 
 ## Build order
 

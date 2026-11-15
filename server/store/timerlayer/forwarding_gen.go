@@ -121,10 +121,6 @@ type timedStores struct {
 	desktopCompatibilityPolicyOnce sync.Once
 	pluginSettings                 store.PluginSettingsStore
 	pluginSettingsOnce             sync.Once
-	pluginRecord                   store.PluginRecordStore
-	pluginRecordOnce               sync.Once
-	pluginLease                    store.PluginLeaseStore
-	pluginLeaseOnce                sync.Once
 	retentionPolicy                store.RetentionPolicyStore
 	retentionPolicyOnce            sync.Once
 	retention                      store.RetentionStore
@@ -390,16 +386,6 @@ type timedDesktopCompatibilityPolicyStore struct {
 type timedPluginSettingsStore struct {
 	layer *Layer
 	next  store.PluginSettingsStore
-}
-
-type timedPluginRecordStore struct {
-	layer *Layer
-	next  store.PluginRecordStore
-}
-
-type timedPluginLeaseStore struct {
-	layer *Layer
-	next  store.PluginLeaseStore
 }
 
 type timedRetentionPolicyStore struct {
@@ -937,26 +923,6 @@ func (l *Layer) PluginSettings() store.PluginSettingsStore {
 	return l.stores.pluginSettings
 }
 
-func (l *Layer) PluginRecord() store.PluginRecordStore {
-	l.stores.pluginRecordOnce.Do(func() {
-		next := l.next.PluginRecord()
-		if next != nil {
-			l.stores.pluginRecord = &timedPluginRecordStore{layer: l, next: next}
-		}
-	})
-	return l.stores.pluginRecord
-}
-
-func (l *Layer) PluginLease() store.PluginLeaseStore {
-	l.stores.pluginLeaseOnce.Do(func() {
-		next := l.next.PluginLease()
-		if next != nil {
-			l.stores.pluginLease = &timedPluginLeaseStore{layer: l, next: next}
-		}
-	})
-	return l.stores.pluginLease
-}
-
 func (l *Layer) RetentionPolicy() store.RetentionPolicyStore {
 	l.stores.retentionPolicyOnce.Do(func() {
 		next := l.next.RetentionPolicy()
@@ -1301,12 +1267,6 @@ func (s *timedExamAuthoringStore) UpdateDraftBrowserPolicy(arg0 context.Context,
 	})
 }
 
-func (s *timedExamAuthoringStore) UpdateDraftPluginSection(arg0 context.Context, arg1 *store.ExamDraftPluginSectionUpdate, arg2 *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodUpdateDraftPluginSection), func(callCtx context.Context) (*store.ExamAuthoringCommandResult, error) {
-		return s.next.UpdateDraftPluginSection(callCtx, arg1, arg2)
-	})
-}
-
 func (s *timedExamAuthoringStore) List(arg0 context.Context, arg1 store.ExamListOptions) ([]store.ExamSummary, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodList), func(callCtx context.Context) ([]store.ExamSummary, error) {
 		return s.next.List(callCtx, arg1)
@@ -1382,12 +1342,6 @@ func (s *timedExamRevisionStore) List(arg0 context.Context, arg1 store.ExamRevis
 func (s *timedExamRevisionStore) GetSnapshot(arg0 context.Context, arg1 model.ExamID, arg2 model.ExamRevisionID) (*model.ExamRevision, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamRevision, methodGetSnapshot), func(callCtx context.Context) (*model.ExamRevision, error) {
 		return s.next.GetSnapshot(callCtx, arg1, arg2)
-	})
-}
-
-func (s *timedExamRevisionStore) FindPluginSections(ctx context.Context, revisionID model.ExamRevisionID) (model.ExamPluginSections, bool, error) {
-	return timeStoreCall2(ctx, s.layer, storeOperation(aggregateExamRevision, methodFindPluginSections), func(callCtx context.Context) (model.ExamPluginSections, bool, error) {
-		return s.next.FindPluginSections(callCtx, revisionID)
 	})
 }
 
@@ -4079,54 +4033,6 @@ func (s *timedPluginSettingsStore) Replace(arg0 context.Context, arg1 *store.Plu
 	})
 }
 
-func (s *timedPluginRecordStore) Get(ctx context.Context, pluginID model.PluginID, kind string, key string) (*store.PluginRecord, error) {
-	return timeStoreCall1(ctx, s.layer, storeOperation(aggregatePluginRecord, methodGet), func(callCtx context.Context) (*store.PluginRecord, error) {
-		return s.next.Get(callCtx, pluginID, kind, key)
-	})
-}
-
-func (s *timedPluginRecordStore) Put(ctx context.Context, put *store.PluginRecordPut) (*store.PluginRecord, error) {
-	return timeStoreCall1(ctx, s.layer, storeOperation(aggregatePluginRecord, methodPut), func(callCtx context.Context) (*store.PluginRecord, error) {
-		return s.next.Put(callCtx, put)
-	})
-}
-
-func (s *timedPluginRecordStore) Delete(ctx context.Context, deletion *store.PluginRecordDeletion) error {
-	return timeStoreCall0(ctx, s.layer, storeOperation(aggregatePluginRecord, methodDelete), func(callCtx context.Context) error {
-		return s.next.Delete(callCtx, deletion)
-	})
-}
-
-func (s *timedPluginRecordStore) List(ctx context.Context, options store.PluginRecordListOptions) ([]*store.PluginRecord, error) {
-	return timeStoreCall1(ctx, s.layer, storeOperation(aggregatePluginRecord, methodList), func(callCtx context.Context) ([]*store.PluginRecord, error) {
-		return s.next.List(callCtx, options)
-	})
-}
-
-func (s *timedPluginLeaseStore) Claim(ctx context.Context, claim *store.PluginLeaseClaim) (*store.PluginLease, error) {
-	return timeStoreCall1(ctx, s.layer, storeOperation(aggregatePluginLease, methodClaim), func(callCtx context.Context) (*store.PluginLease, error) {
-		return s.next.Claim(callCtx, claim)
-	})
-}
-
-func (s *timedPluginLeaseStore) ClaimAvailable(ctx context.Context, claim *store.PluginLeaseAvailableClaim) ([]*store.PluginLease, error) {
-	return timeStoreCall1(ctx, s.layer, storeOperation(aggregatePluginLease, methodClaimAvailable), func(callCtx context.Context) ([]*store.PluginLease, error) {
-		return s.next.ClaimAvailable(callCtx, claim)
-	})
-}
-
-func (s *timedPluginLeaseStore) Renew(ctx context.Context, renewal *store.PluginLeaseRenewal) (*store.PluginLease, error) {
-	return timeStoreCall1(ctx, s.layer, storeOperation(aggregatePluginLease, methodRenew), func(callCtx context.Context) (*store.PluginLease, error) {
-		return s.next.Renew(callCtx, renewal)
-	})
-}
-
-func (s *timedPluginLeaseStore) Release(ctx context.Context, release *store.PluginLeaseRelease) error {
-	return timeStoreCall0(ctx, s.layer, storeOperation(aggregatePluginLease, methodRelease), func(callCtx context.Context) error {
-		return s.next.Release(callCtx, release)
-	})
-}
-
 func (s *timedRetentionPolicyStore) Get(arg0 context.Context) (*model.RetentionPolicy, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRetentionPolicy, methodGet), func(callCtx context.Context) (*model.RetentionPolicy, error) {
 		return s.next.Get(callCtx)
@@ -4324,8 +4230,6 @@ var (
 	_ store.AccessPolicyStore               = (*timedAccessPolicyStore)(nil)
 	_ store.DesktopCompatibilityPolicyStore = (*timedDesktopCompatibilityPolicyStore)(nil)
 	_ store.PluginSettingsStore             = (*timedPluginSettingsStore)(nil)
-	_ store.PluginRecordStore               = (*timedPluginRecordStore)(nil)
-	_ store.PluginLeaseStore                = (*timedPluginLeaseStore)(nil)
 	_ store.RetentionPolicyStore            = (*timedRetentionPolicyStore)(nil)
 	_ store.RetentionStore                  = (*timedRetentionStore)(nil)
 	_ store.ClusterDiscoveryStore           = (*timedClusterDiscoveryStore)(nil)

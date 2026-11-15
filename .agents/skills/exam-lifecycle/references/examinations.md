@@ -64,24 +64,6 @@ freezes title, instructions, policy, resource snapshots, Starter Workspace,
 publisher, publication time, optional base revision, and
 whether it is a standard publication or live correction.
 
-The Draft also carries Plugin Sections: at most 32, keyed by plugin ID, each
-one JSON object of at most 64 KiB that only its plugin interprets. The model
-keeps a section in canonical form (sorted keys, no insignificant whitespace,
-integer numbers only), so spelling cannot manufacture a Draft change or a
-digest difference. Saving a section requires the same management authority as
-the Draft policy and the same revision, idempotency, and audit fences; the
-plugin must be active, offer a section, and accept it, and its refusal reason
-is never shown. Removing a section never asks the plugin. Publication asks
-each section's plugin again before the audit begins, against the Draft at the
-expected revision only, and refuses with `exam.plugin_section.plugin_inactive`
-while one is off, failed, or offers none, or `exam.plugin_section.invalid`
-when one refuses. The Revision freezes the sections with their own digest and
-inside the content digest; a live correction copies them unchanged.
-Admission and everything after publication read the frozen sections and call
-no plugin code. Turning a plugin off is refused with `plugin.in_use` while any
-Sitting that is not Closed or Canceled delivers a Revision with its section;
-the Store decides from core rows in the settings transaction.
-
 Manager-facing Revision discovery is a separate bounded metadata projection.
 It exposes immutable identity, ordering, provenance, digests and aggregate
 counts needed to select and compare Revisions, but not instructions, canonical

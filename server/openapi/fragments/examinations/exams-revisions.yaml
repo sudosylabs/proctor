@@ -73,7 +73,7 @@ paths:
       tags:
         - Examinations
       description: >-
-        Validates the complete current Draft and publishes it as a new immutable Exam Revision. The expected Draft revision prevents publishing concurrent edits, and the Idempotency-Key makes an exact lost-response retry safe. Publication captures content, policy, capacity, resources, and starter Workspace facts as one revision. Each plugin with a section on the Draft is asked to accept it again first; publication fails with exam.plugin_section.plugin_inactive while that plugin is off, has failed, or offers no section, and with exam.plugin_section.invalid when it refuses. The frozen sections are never sent to a plugin again.
+        Validates the complete current Draft and publishes it as a new immutable Exam Revision. The expected Draft revision prevents publishing concurrent edits, and the Idempotency-Key makes an exact lost-response retry safe. Publication captures content, policy, capacity, resources, and starter Workspace facts as one revision.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -98,8 +98,6 @@ paths:
         - exam.draft.revision_conflict
         - exam.revision.no_changes
         - exam.revision.capacity_exceeded
-        - exam.plugin_section.invalid
-        - exam.plugin_section.plugin_inactive
         - exam.unavailable
         - idempotency.key_required
         - idempotency.key_invalid
@@ -147,7 +145,7 @@ paths:
       operationId: getExamRevision
       summary: Get bounded immutable Exam Revision metadata
       description: >-
-        Returns one immutable Revision only after verifying its Exam ownership path and the caller's current management authority. The response exposes publication metadata, digests, and the frozen plugin sections, not mutable Draft state or protected content bytes.
+        Returns one immutable Revision only after verifying its Exam ownership path and the caller's current management authority. The response exposes publication metadata and digests, not mutable Draft state or protected content bytes.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -256,8 +254,6 @@ components:
         - title
         - policy_schema_version
         - policy_digest
-        - plugin_sections
-        - plugin_sections_digest
         - capacity
         - starter_workspace_digest
         - content_digest
@@ -288,10 +284,6 @@ components:
           type: integer
           const: 1
         policy_digest:
-          $ref: '#/components/schemas/SHA256'
-        plugin_sections:
-          $ref: '#/components/schemas/ExamPluginSections'
-        plugin_sections_digest:
           $ref: '#/components/schemas/SHA256'
         capacity:
           $ref: '#/components/schemas/ExamCapacityPolicy'

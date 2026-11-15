@@ -37,9 +37,7 @@ type ExamRevisionPublicationResult struct {
 
 // ExamRevisionSummary is the bounded public-authoring projection. It excludes
 // instructions, canonical policy bytes, resource metadata, Starter Workspace
-// paths and every opaque content identity. It carries the frozen plugin
-// sections, which an author reads back to see what a Revision asks of each
-// plugin.
+// paths and every opaque content identity.
 type ExamRevisionSummary struct {
 	ID                      model.ExamRevisionID
 	ExamID                  model.ExamID
@@ -49,8 +47,6 @@ type ExamRevisionSummary struct {
 	PolicySchemaVersion     int
 	PolicyDigest            string
 	BrowserPolicyDigest     string
-	PluginSections          model.ExamPluginSections
-	PluginSectionsDigest    string
 	Capacity                model.ExamCapacityPolicy
 	StarterWorkspaceDigest  string
 	ContentDigest           string
@@ -88,20 +84,11 @@ type ExamRevisionListOptions struct {
 // materializes and validates all active resources and Starter Workspace state,
 // canonically freezes them, writes immutable history, selects the new default,
 // rebases and advances the Draft, advances Exam revision, completes audit and
-// records the small idempotent outcome. The Draft's plugin sections are frozen
-// exactly as the locked Draft holds them: the application asks their plugins
-// before it calls Publish, and the Draft revision fence makes that answer
-// cover what is frozen. GetSnapshot is an internal exact read; public callers
-// use GetSummary/List and receive no authored content beyond the plugin
-// sections.
+// records the small idempotent outcome. GetSnapshot is an internal exact
+// read; public callers use GetSummary/List and receive no authored content.
 type ExamRevisionStore interface {
 	Publish(context.Context, *ExamRevisionPublication, *CommandIdempotency) (*ExamRevisionPublicationResult, error)
 	GetSummary(context.Context, model.ExamID, model.ExamRevisionID) (*ExamRevisionSummary, error)
 	List(context.Context, ExamRevisionListOptions) ([]ExamRevisionSummary, error)
 	GetSnapshot(context.Context, model.ExamID, model.ExamRevisionID) (*model.ExamRevision, error)
-	// FindPluginSections returns the plugin sections frozen into an Exam
-	// Revision, or found false when no sealed Revision has the ID. It backs
-	// the plugins' read of their own sections, which names the Revision
-	// alone.
-	FindPluginSections(ctx context.Context, revisionID model.ExamRevisionID) (sections model.ExamPluginSections, found bool, err error)
 }

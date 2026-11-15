@@ -1195,7 +1195,7 @@ service, but never `Settings`, `*app.App`, `*route.API`, a router,
 
 The unexported `compileAPI` validates the settings and passes the kernel's
 share of them, the authenticator, and the resources it is given to
-`route.New`, which compiles them, then mounts the plugin routes. `New` passes the production inventory, and handler tests
+`route.New`, which compiles them. `New` passes the production inventory, and handler tests
 pass resources built over their fakes, so there is one compile path.
 
 The production route trace is intentionally linear and searchable:
@@ -1254,11 +1254,8 @@ envelope of one.
 
 Package initialization, mutable router access, late registration, arbitrary
 path regular expressions, and direct persistence or platform access are not
-extension mechanisms. The one set of routes that changes while the API serves
-is the plugin routes under `/plugins/<id>/`: `route.LiveRoutes` replaces them
-as a whole after each plugin change, compiles each like a catalog route
-behind a guard from the closed table in `plugin_routes.go`, and refuses any
-that could match a catalog route. `route.API.Routes` is a defensive manifest projection for
+extension mechanisms; the route catalog never changes while the API serves.
+`route.API.Routes` is a defensive manifest projection for
 agreement and diagnostics; callers cannot mutate dispatch through it.
 
 These reviewed v1 shapes are frozen compatibility exceptions, not target

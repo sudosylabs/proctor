@@ -10,9 +10,8 @@ This file holds only the rules that must not drift.
 ## Ownership
 
 - Execution is an optional core feature, not a plugin. Do not route it
-  through plugin records, leases, sections, routes or capabilities, and do
-  not add seams to the plugin host for it. `server/plugin/execution` is
-  deleted when the core environment lands.
+  through the plugin host or add plugin seams for it; plugins are edge
+  adapters that never act on an Attempt.
 - Design every seam for several actors. A new actor (an assistant, a grader)
   is a new author kind and a new process tag, never a new write path, a new
   terminal model or actor-specific code in the Workspace.

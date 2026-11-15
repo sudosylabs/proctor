@@ -137,8 +137,6 @@ type SQLStoreStores struct {
 	accessPolicy               store.AccessPolicyStore
 	desktopCompatibilityPolicy store.DesktopCompatibilityPolicyStore
 	pluginSettings             store.PluginSettingsStore
-	pluginRecord               store.PluginRecordStore
-	pluginLease                store.PluginLeaseStore
 	retentionPolicy            store.RetentionPolicyStore
 	retention                  store.RetentionStore
 	clusterDiscovery           store.ClusterDiscoveryStore
@@ -272,8 +270,6 @@ func New(ctx context.Context, settings Settings) (*SQLStore, error) {
 	sqlStore.stores.accessPolicy = newSQLAccessPolicyStore(sqlStore)
 	sqlStore.stores.desktopCompatibilityPolicy = newSQLDesktopCompatibilityPolicyStore(sqlStore)
 	sqlStore.stores.pluginSettings = newSQLPluginSettingsStore(sqlStore)
-	sqlStore.stores.pluginRecord = newSQLPluginRecordStore(sqlStore)
-	sqlStore.stores.pluginLease = newSQLPluginLeaseStore(sqlStore)
 	sqlStore.stores.retentionPolicy = newSQLRetentionPolicyStore(sqlStore)
 	sqlStore.stores.retention = newSQLRetentionStore(sqlStore)
 	sqlStore.stores.examRecords = newSQLExamRecordsStore(sqlStore)
@@ -489,10 +485,6 @@ func (ss *SQLStore) DesktopCompatibilityPolicy() store.DesktopCompatibilityPolic
 }
 
 func (ss *SQLStore) PluginSettings() store.PluginSettingsStore { return ss.stores.pluginSettings }
-
-func (ss *SQLStore) PluginRecord() store.PluginRecordStore { return ss.stores.pluginRecord }
-
-func (ss *SQLStore) PluginLease() store.PluginLeaseStore { return ss.stores.pluginLease }
 
 func (ss *SQLStore) ClusterDiscovery() store.ClusterDiscoveryStore {
 	return ss.stores.clusterDiscovery

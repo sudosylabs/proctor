@@ -149,8 +149,6 @@ type layerOrderStore struct {
 func (s layerOrderStore) AcademicPeriod() store.AcademicPeriodStore           { return s.periods }
 func (layerOrderStore) ClusterDiscovery() store.ClusterDiscoveryStore         { return nil }
 func (layerOrderStore) PluginSettings() store.PluginSettingsStore             { return nil }
-func (layerOrderStore) PluginRecord() store.PluginRecordStore                 { return nil }
-func (layerOrderStore) PluginLease() store.PluginLeaseStore                   { return nil }
 func (layerOrderStore) ExamRevision() store.ExamRevisionStore                 { return nil }
 func (layerOrderStore) ExamAttemptWorkspace() store.ExamAttemptWorkspaceStore { return nil }
 func (layerOrderStore) Close() error                                          { return nil }
@@ -237,7 +235,7 @@ func TestRootSelectsLocalDevelopmentInfrastructure(t *testing.T) {
 	t.Cleanup(func() { _ = cluster.Stop(context.Background()) })
 	require.Equal(t, settings.Cluster.NodeID, cluster.NodeID(), "cluster node ID")
 
-	plugins, _, err := activatePlugins(context.Background(), settings, nil, pluginRuntime{}, logger, nil, nil)
+	plugins, _, err := activatePlugins(context.Background(), settings, nil, logger, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
 	providers, err := newExternalAuthenticationRegistry(plugins)
@@ -265,7 +263,7 @@ func TestRootSelectsConfiguredSMTPVFSAndIdentityAdapters(t *testing.T) {
 	logger, err := logging.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = logger.Shutdown() })
-	plugins, _, err := activatePlugins(context.Background(), settings, nil, pluginRuntime{}, logger, nil, nil)
+	plugins, _, err := activatePlugins(context.Background(), settings, nil, logger, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
 	providers, err := newExternalAuthenticationRegistry(plugins)
@@ -295,7 +293,7 @@ func TestActivePluginSummariesListOnlyActivePlugins(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = logger.Shutdown() })
 	saved := savedPluginSettings{rows: []*model.PluginSettings{pluginSettingsRow(t, "cas", false)}}
-	plugins, _, err := activatePlugins(context.Background(), config.Default(), saved, pluginRuntime{}, logger, nil, nil)
+	plugins, _, err := activatePlugins(context.Background(), config.Default(), saved, logger, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
 
@@ -306,48 +304,28 @@ func TestActivePluginSummariesListOnlyActivePlugins(t *testing.T) {
 	require.False(t, pluginDirectory{host: plugins}.Degraded(), "a disabled plugin does not degrade readiness")
 }
 
-// eventPlugin subscribes to one topic, or fails to activate.
-type eventPlugin struct {
-	id          string
-	activateErr error
+// failingPlugin fails to activate.
+type failingPlugin struct{ id string }
+
+func (p failingPlugin) Manifest() plugin.Manifest {
+	return plugin.Manifest{ID: p.id, Name: "Failing " + p.id, EnabledByDefault: true}
 }
 
-func (p eventPlugin) Manifest() plugin.Manifest {
-	return plugin.Manifest{ID: p.id, Name: "Event " + p.id, EnabledByDefault: true}
-}
+func (failingPlugin) Activate(context.Context, plugin.Host) error { return errors.New("unreachable") }
 
-func (p eventPlugin) Activate(_ context.Context, host plugin.Host) error {
-	if p.activateErr != nil {
-		return p.activateErr
-	}
-	return host.AddEventHandler(plugin.TopicExamAttemptSubmitted, eventHandlerFunc(func(context.Context, plugin.Event) error { return nil }))
-}
+func (failingPlugin) Deactivate(context.Context) error { return nil }
 
-func (eventPlugin) Deactivate(context.Context) error { return nil }
-
-type eventHandlerFunc func(context.Context, plugin.Event) error
-
-func (f eventHandlerFunc) HandleEvent(ctx context.Context, event plugin.Event) error {
-	return f(ctx, event)
-}
-
-func TestPluginEventSubscriptionsAndDegradedReadiness(t *testing.T) {
+func TestAFailedPluginDegradesReadiness(t *testing.T) {
 	t.Parallel()
 
 	logger, err := logging.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = logger.Shutdown() })
-	plugins, _, err := activatePlugins(context.Background(), config.Default(), nil, pluginRuntime{}, logger, nil, []plugin.Plugin{
-		eventPlugin{id: "mirror"},
-		eventPlugin{id: "broken", activateErr: errors.New("unreachable")},
+	plugins, _, err := activatePlugins(context.Background(), config.Default(), nil, logger, nil, []plugin.Plugin{
+		failingPlugin{id: "broken"},
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
-
-	subscriptions := eventSubscriptions(plugins)
-	require.Len(t, subscriptions, 1, "only the active plugin subscribes")
-	require.Equal(t, "mirror:exam.attempt.submitted", subscriptions[0].Key, "the key names the plugin and topic")
-	require.Equal(t, plugin.TopicExamAttemptSubmitted, subscriptions[0].Topic)
 	require.True(t, pluginDirectory{host: plugins}.Degraded(), "a failed plugin degrades readiness")
 }
 

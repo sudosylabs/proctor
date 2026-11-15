@@ -88,7 +88,6 @@ func pluginAdministrationResource(app PluginAdministrationApplication) route.Res
 				"idempotency.key_invalid",
 				"idempotency.conflict",
 				"idempotency.in_progress",
-				"plugin.in_use",
 				"plugin.invalid",
 				"plugin.not_found",
 				"plugin.required",

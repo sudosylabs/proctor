@@ -9,7 +9,6 @@ package pluginhost_test
 
 import (
 	"context"
-	"errors"
 	"io"
 	"testing"
 
@@ -47,20 +46,6 @@ func (f fakeFormat) Write(_ context.Context, archive plugin.ExportArchive, w io.
 	}
 	_, err := io.WriteString(w, archive.ExportID)
 	return err
-}
-
-type countingHandler struct {
-	calls  *int
-	panics bool
-	err    error
-}
-
-func (h countingHandler) HandleEvent(context.Context, plugin.Event) error {
-	*h.calls++
-	if h.panics {
-		panic("handler exploded")
-	}
-	return h.err
 }
 
 func TestExportFormatsAreLookedUpByMediaTypeAndGuarded(t *testing.T) {
@@ -107,40 +92,4 @@ type stringWriter struct{ value string }
 func (w *stringWriter) Write(p []byte) (int, error) {
 	w.value += string(p)
 	return len(p), nil
-}
-
-func TestEventSubscriptionsNameTheirPluginAndTopicAndAreGuarded(t *testing.T) {
-	t.Parallel()
-
-	var auditCalls, brokenCalls int
-	failure := errors.New("try later")
-	host := activateIdentityPlugins(t,
-		offeringPlugin{id: "audit-mirror", activate: func(h plugin.Host) error {
-			return h.AddEventHandler(plugin.TopicExamAttemptSubmitted, countingHandler{calls: &auditCalls, err: failure})
-		}},
-		offeringPlugin{id: "twice", activate: func(h plugin.Host) error {
-			if err := h.AddEventHandler(plugin.TopicExamAttemptSubmitted, countingHandler{calls: new(int)}); err != nil {
-				return err
-			}
-			return h.AddEventHandler(plugin.TopicExamAttemptSubmitted, countingHandler{calls: new(int)})
-		}},
-		offeringPlugin{id: "broken", activate: func(h plugin.Host) error {
-			return h.AddEventHandler(plugin.TopicExamAttemptSubmitted, countingHandler{calls: &brokenCalls, panics: true})
-		}},
-	)
-	require.Equal(t, pluginhost.StateFailed, host.Statuses()[1].State, "a second handler for one topic fails the plugin")
-
-	subscriptions := host.EventSubscriptions()
-	require.Len(t, subscriptions, 2, "what the failed plugin registered is discarded")
-	require.Equal(t, "audit-mirror", subscriptions[0].Plugin)
-	require.Equal(t, plugin.TopicExamAttemptSubmitted, subscriptions[0].Topic)
-	require.Equal(t, "broken", subscriptions[1].Plugin)
-
-	require.ErrorIs(t, subscriptions[0].Handler.HandleEvent(context.Background(), plugin.Event{}), failure)
-	for range pluginhost.PanicLimit {
-		require.ErrorIs(t, subscriptions[1].Handler.HandleEvent(context.Background(), plugin.Event{}), plugin.ErrUnavailable)
-	}
-	require.ErrorIs(t, subscriptions[1].Handler.HandleEvent(context.Background(), plugin.Event{}), plugin.ErrUnavailable)
-	require.Equal(t, pluginhost.PanicLimit, brokenCalls, "a failed plugin's handler is not called again")
-	require.Equal(t, 1, auditCalls)
 }

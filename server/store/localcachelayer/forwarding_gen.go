@@ -118,10 +118,6 @@ type localCacheStores struct {
 	desktopCompatibilityPolicyOnce sync.Once
 	pluginSettings                 store.PluginSettingsStore
 	pluginSettingsOnce             sync.Once
-	pluginRecord                   store.PluginRecordStore
-	pluginRecordOnce               sync.Once
-	pluginLease                    store.PluginLeaseStore
-	pluginLeaseOnce                sync.Once
 	retentionPolicy                store.RetentionPolicyStore
 	retentionPolicyOnce            sync.Once
 	retention                      store.RetentionStore
@@ -386,16 +382,6 @@ type desktopCompatibilityPolicyStore struct {
 
 type pluginSettingsStore struct {
 	store.PluginSettingsStore
-	layer *Layer
-}
-
-type pluginRecordStore struct {
-	store.PluginRecordStore
-	layer *Layer
-}
-
-type pluginLeaseStore struct {
-	store.PluginLeaseStore
 	layer *Layer
 }
 
@@ -934,26 +920,6 @@ func (l *Layer) PluginSettings() store.PluginSettingsStore {
 	return l.stores.pluginSettings
 }
 
-func (l *Layer) PluginRecord() store.PluginRecordStore {
-	l.stores.pluginRecordOnce.Do(func() {
-		next := l.Store.PluginRecord()
-		if next != nil {
-			l.stores.pluginRecord = &pluginRecordStore{PluginRecordStore: next, layer: l}
-		}
-	})
-	return l.stores.pluginRecord
-}
-
-func (l *Layer) PluginLease() store.PluginLeaseStore {
-	l.stores.pluginLeaseOnce.Do(func() {
-		next := l.Store.PluginLease()
-		if next != nil {
-			l.stores.pluginLease = &pluginLeaseStore{PluginLeaseStore: next, layer: l}
-		}
-	})
-	return l.stores.pluginLease
-}
-
 func (l *Layer) RetentionPolicy() store.RetentionPolicyStore {
 	l.stores.retentionPolicyOnce.Do(func() {
 		next := l.Store.RetentionPolicy()
@@ -1057,8 +1023,6 @@ var (
 	_ store.AccessPolicyStore               = (*accessPolicyStore)(nil)
 	_ store.DesktopCompatibilityPolicyStore = (*desktopCompatibilityPolicyStore)(nil)
 	_ store.PluginSettingsStore             = (*pluginSettingsStore)(nil)
-	_ store.PluginRecordStore               = (*pluginRecordStore)(nil)
-	_ store.PluginLeaseStore                = (*pluginLeaseStore)(nil)
 	_ store.RetentionPolicyStore            = (*retentionPolicyStore)(nil)
 	_ store.RetentionStore                  = (*retentionStore)(nil)
 	_ store.ClusterDiscoveryStore           = (*clusterDiscoveryStore)(nil)

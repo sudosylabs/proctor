@@ -1012,9 +1012,6 @@ CREATE TABLE exam_drafts (
     instructions_markdown text NOT NULL DEFAULT '',
     policy jsonb NOT NULL,
     browser_policy jsonb NOT NULL DEFAULT '{"enabled":false}'::jsonb,
-    -- One member per plugin with a section, keyed by plugin ID; the model
-    -- bounds each section to 64 KiB and the count to 32.
-    plugin_sections jsonb NOT NULL DEFAULT '{}'::jsonb,
     base_revision_id varchar(26),
     updated_at timestamptz NOT NULL,
     revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
@@ -1022,10 +1019,7 @@ CREATE TABLE exam_drafts (
     CONSTRAINT exam_drafts_instructions_markdown_check
         CHECK (octet_length(instructions_markdown) <= 65536),
     CONSTRAINT exam_drafts_policy_size_check CHECK (octet_length(policy::text) <= 65536),
-    CONSTRAINT exam_drafts_browser_policy_size_check CHECK (octet_length(browser_policy::text) <= 65536),
-    CONSTRAINT exam_drafts_plugin_sections_check CHECK (
-        jsonb_typeof(plugin_sections) = 'object' AND octet_length(plugin_sections::text) <= 4194304
-    )
+    CONSTRAINT exam_drafts_browser_policy_size_check CHECK (octet_length(browser_policy::text) <= 65536)
 );
 
 CREATE INDEX exam_drafts_title_search_idx
@@ -1214,11 +1208,6 @@ CREATE TABLE exam_revisions (
     browser_policy_document jsonb NOT NULL CHECK (octet_length(browser_policy_document::text) <= 65536),
     browser_policy_canonical bytea NOT NULL CHECK (octet_length(browser_policy_canonical) BETWEEN 1 AND 32768),
     browser_policy_digest varchar(71) NOT NULL CHECK (browser_policy_digest ~ '^sha256:[0-9a-f]{64}$'),
-    plugin_sections_document jsonb NOT NULL CHECK (
-        jsonb_typeof(plugin_sections_document) = 'object' AND octet_length(plugin_sections_document::text) <= 4194304
-    ),
-    plugin_sections_canonical bytea NOT NULL CHECK (octet_length(plugin_sections_canonical) BETWEEN 2 AND 4194304),
-    plugin_sections_digest char(64) NOT NULL CHECK (plugin_sections_digest ~ '^[0-9a-f]{64}$'),
     candidate_correction_summary text,
     candidate_correction_changed_areas text[],
     candidate_correction_affected_capabilities text[],
@@ -4136,47 +4125,6 @@ CREATE TABLE plugin_settings (
     ),
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL CHECK (updated_at >= created_at)
-);
-
--- Each plugin's own documents, named by kind and key within the plugin and
--- fenced by their revision. They are operational state, not audited, and
--- outlive the plugin being turned off. Keys compare bytewise, so a key
--- prefix bounds an index range. The store bounds a document at 64 KiB in
--- compact form; PostgreSQL's text form adds spacing, so the check here is a
--- looser backstop.
-CREATE TABLE plugin_records (
-    plugin_id varchar(64) NOT NULL CHECK (plugin_id ~ '^[a-z][a-z0-9.-]{0,63}$'),
-    kind varchar(64) NOT NULL CHECK (kind ~ '^[a-z][a-z0-9_.-]{0,63}$'),
-    key varchar(256) COLLATE "C" NOT NULL
-        CHECK (key ~ '^[A-Za-z0-9._~:@=+-]+(/[A-Za-z0-9._~:@=+-]+)*$'),
-    revision bigint NOT NULL CHECK (revision > 0),
-    document jsonb NOT NULL CHECK (
-        jsonb_typeof(document) = 'object' AND
-        octet_length(document::text) <= 196608
-    ),
-    created_at timestamptz NOT NULL,
-    updated_at timestamptz NOT NULL CHECK (updated_at >= created_at),
-    PRIMARY KEY (plugin_id, kind, key)
-);
-
--- Fences for plugin_leases. One sequence for every key keeps a key's fences
--- growing after its row is released and deleted.
-CREATE SEQUENCE plugin_lease_fences AS bigint;
-
--- One node's fenced, PostgreSQL-clocked claim on one of a plugin's keys.
--- Disposable runtime state: an expired row is free to claim.
-CREATE TABLE plugin_leases (
-    plugin_id varchar(64) NOT NULL CHECK (plugin_id ~ '^[a-z][a-z0-9.-]{0,63}$'),
-    key varchar(256) COLLATE "C" NOT NULL
-        CHECK (key ~ '^[A-Za-z0-9._~:@=+-]+(/[A-Za-z0-9._~:@=+-]+)*$'),
-    node_id varchar(128) NOT NULL CHECK (char_length(node_id) > 0),
-    fence bigint NOT NULL CHECK (fence > 0),
-    acquired_at timestamptz NOT NULL,
-    renewed_at timestamptz NOT NULL,
-    expires_at timestamptz NOT NULL,
-    PRIMARY KEY (plugin_id, key),
-    CONSTRAINT plugin_leases_lifetime_check
-        CHECK (renewed_at >= acquired_at AND expires_at > renewed_at)
 );
 
 CREATE TABLE access_policy_transitions (

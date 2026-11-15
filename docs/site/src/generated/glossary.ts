@@ -136,13 +136,6 @@ export const glossaryTerms = [
     "avoid": "Deployment configuration, executable policy"
   },
   {
-    "id": "plugin-section",
-    "term": "Plugin Section",
-    "section": "Examinations",
-    "definition": "One plugin's part of an exam's policy, set on the exam draft as a bounded JSON object that only its plugin interprets and validates, and frozen into each exam revision. After publication the core reads the frozen section and no longer asks the plugin.",
-    "avoid": "Plugin settings, Exam Policy Set, executable policy"
-  },
-  {
     "id": "exam-capacity-policy",
     "term": "Exam Capacity Policy",
     "section": "Examinations",

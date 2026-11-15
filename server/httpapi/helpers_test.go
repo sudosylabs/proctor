@@ -97,7 +97,7 @@ func newProductionCatalogAPI(t *testing.T) *route.API {
 // newAPI compiles resources built over a test's fakes through the
 // constructor New uses, without plugin routes.
 func newAPI(settings Settings, authenticator route.Authenticator, resources ...route.Resource) (*route.API, error) {
-	return compileAPI(settings, authenticator, nil, resources...)
+	return compileAPI(settings, authenticator, resources...)
 }
 
 // newResourceAPI compiles resources built over a test's fakes through the

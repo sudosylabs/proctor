@@ -188,20 +188,6 @@ func (h *formatRecordingHost) AddExportFormat(format plugin.ExportFormat) error 
 	h.formats = append(h.formats, format)
 	return nil
 }
-func (*formatRecordingHost) AddEventHandler(plugin.EventTopic, plugin.EventHandler) error {
-	return errors.New("not offered")
-}
-func (*formatRecordingHost) Records() plugin.Records                     { return nil }
-func (*formatRecordingHost) AddRoute(plugin.Route) error                 { return errors.New("not offered") }
-func (*formatRecordingHost) AttemptWorkspaces() plugin.AttemptWorkspaces { return nil }
-func (*formatRecordingHost) Evidence() plugin.Evidence                   { return nil }
-func (*formatRecordingHost) AddExamSection(plugin.ExamSection) error {
-	return errors.New("not offered")
-}
-func (*formatRecordingHost) ExamSections() plugin.ExamSections { return nil }
-func (*formatRecordingHost) AddWorker(string, plugin.Worker) error {
-	return errors.New("not offered")
-}
 
 // zipFormat activates the built-in zip export plugin, as the server does, and
 // returns the format it offers.

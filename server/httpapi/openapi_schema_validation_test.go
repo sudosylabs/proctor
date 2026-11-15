@@ -25,27 +25,11 @@ func TestOpenAPISchemaIsValid(t *testing.T) {
 	_, currentFile, _, ok := runtime.Caller(0)
 	require.True(t, ok, "locate schema validation test")
 	serverDirectory := filepath.Join(filepath.Dir(currentFile), "..")
-	compiled, err := openapidoc.Compile(os.DirFS(filepath.Join(serverDirectory, "openapi")), compiledPluginOpenAPI(t, serverDirectory)...)
+	compiled, err := openapidoc.Compile(os.DirFS(filepath.Join(serverDirectory, "openapi")))
 	require.NoError(t, err)
 	artifact, err := os.ReadFile(filepath.Join(serverDirectory, "openapi.json"))
 	require.NoError(t, err)
 	require.True(t, bytes.Equal(artifact, compiled), "openapi.json is stale; run `make -C server openapi-build`")
-}
-
-// compiledPluginOpenAPI is the fragments of every compiled plugin, which the
-// build adds to the contract as it does: plugin/<id>/openapi/.
-func compiledPluginOpenAPI(t *testing.T, serverDirectory string) []openapidoc.PluginSource {
-	t.Helper()
-	entries, err := os.ReadDir(filepath.Join(serverDirectory, "plugin"))
-	require.NoError(t, err)
-	var sources []openapidoc.PluginSource
-	for _, entry := range entries {
-		fragments := filepath.Join(serverDirectory, "plugin", entry.Name(), "openapi")
-		if info, statErr := os.Stat(fragments); entry.IsDir() && statErr == nil && info.IsDir() {
-			sources = append(sources, openapidoc.PluginSource{ID: entry.Name(), Files: os.DirFS(fragments)})
-		}
-	}
-	return sources
 }
 
 func openAPIDocumentPath(t *testing.T) string {

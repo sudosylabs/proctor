@@ -343,7 +343,6 @@ type examDraftResponse struct {
 	InstructionsMarkdown string                     `json:"instructions_markdown"`
 	Policy               examPolicyResponse         `json:"policy"`
 	BrowserPolicy        browserPolicyDocument      `json:"browser_policy"`
-	PluginSections       map[string]json.RawMessage `json:"plugin_sections"`
 	Capacity             examCapacityPolicyResponse `json:"capacity"`
 	BaseRevisionID       string                     `json:"base_revision_id,omitempty"`
 	UpdatedAt            string                     `json:"updated_at"`
@@ -380,7 +379,6 @@ func examResource(app ExamApplication) route.Resource {
 	nativePolicy := "/exams/{exam_id}/draft/policies/native"
 	focusLossPolicy := "/exams/{exam_id}/draft/policies/focus-loss"
 	browserPolicy := "/exams/{exam_id}/draft/browser-policy"
-	pluginSection := "/exams/{exam_id}/draft/plugin-sections/{plugin_id:plugin}"
 	archive := "/exams/{exam_id}/archive"
 	managers := "/exams/{exam_id}/managers"
 	manager := "/exams/{exam_id}/managers/{user_id}"
@@ -640,45 +638,6 @@ func examResource(app ExamApplication) route.Resource {
 				"idempotency.in_progress",
 			},
 			Handle: h.transferOwner,
-		},
-		route.Endpoint{
-			Method: http.MethodGet,
-			Path:   pluginSection,
-			Auth:   route.AuthPrincipalRequired,
-			Errors: []string{
-				"authorization.request.invalid",
-				"authorization.unavailable",
-				"request.invalid",
-				"resource.not_found",
-				"exam.unavailable",
-				"exam.invalid",
-			},
-			Handle: h.getDraftPluginSection,
-		},
-		route.Endpoint{
-			Method:      http.MethodPut,
-			Path:        pluginSection,
-			Auth:        route.AuthPrincipalRequired,
-			Idempotency: route.IdempotencyRequired,
-			Errors: []string{
-				"authorization.request.invalid",
-				"authorization.unavailable",
-				"audit.unavailable",
-				"request.invalid",
-				"resource.not_found",
-				"exam.invalid",
-				"exam.archived",
-				"exam.draft.revision_conflict",
-				"exam.draft.no_changes",
-				"exam.plugin_section.invalid",
-				"exam.plugin_section.plugin_inactive",
-				"exam.unavailable",
-				"idempotency.key_required",
-				"idempotency.key_invalid",
-				"idempotency.conflict",
-				"idempotency.in_progress",
-			},
-			Handle: h.replaceDraftPluginSection,
 		},
 	)
 }
@@ -1316,7 +1275,6 @@ func examResponseFromView(view exam.View) examResponse {
 				},
 			},
 			BrowserPolicy:       browserPolicyDocumentFromModel(browserPolicy),
-			PluginSections:      pluginSectionsResponse(view.Draft.PluginSections),
 			Capacity:            examCapacityPolicyResponseFromModel(view.Capacity),
 			BaseRevisionID:      view.Draft.BaseRevisionID.String(),
 			UpdatedAt:           model.FormatRFC3339(view.Draft.UpdatedAt),
@@ -1365,8 +1323,6 @@ type ExamApplication interface {
 	ConfigureExamDraftNativePolicy(context.Context, invocation.Invocation, exam.ConfigureDraftNativePolicyCommand) (exam.View, error)
 	ConfigureExamDraftFocusLoss(context.Context, invocation.Invocation, exam.ConfigureDraftFocusLossCommand) (exam.View, error)
 	ConfigureExamDraftBrowserPolicy(context.Context, invocation.Invocation, exam.ConfigureDraftBrowserPolicyCommand) (exam.View, error)
-	GetExamDraftPluginSection(context.Context, invocation.Invocation, model.ExamID, model.PluginID) (exam.DraftPluginSectionView, error)
-	ReplaceExamDraftPluginSection(context.Context, invocation.Invocation, exam.ReplaceDraftPluginSectionCommand) (exam.View, error)
 	ListExams(context.Context, invocation.Invocation, exam.ListQuery) (exam.CatalogPage, error)
 	ArchiveExam(context.Context, invocation.Invocation, exam.ArchiveCommand) (model.Exam, error)
 	ListExamManagers(context.Context, invocation.Invocation, exam.ListManagersQuery) (exam.ManagerPage, error)

@@ -52,8 +52,6 @@ type hookStore struct {
 func (s *hookStore) Institution() store.InstitutionStore       { return hookInstitutionStore{} }
 func (s *hookStore) AccessPolicy() store.AccessPolicyStore     { return hookAccessPolicyStore{} }
 func (s *hookStore) PluginSettings() store.PluginSettingsStore { return s.pluginSettings }
-func (s *hookStore) PluginRecord() store.PluginRecordStore     { return nil }
-func (s *hookStore) PluginLease() store.PluginLeaseStore       { return nil }
 func (s *hookStore) DesktopCompatibilityPolicy() store.DesktopCompatibilityPolicyStore {
 	return hookDesktopCompatibilityPolicyStore{}
 }

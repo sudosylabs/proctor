@@ -1991,25 +1991,6 @@
         "description": "Complete revision-fenced replacement. Every policy setting is required, including empty values.",
         "required": true
       },
-      "ReplaceExamDraftPluginSection": {
-        "content": {
-          "application/json": {
-            "example": {
-              "expected_revision": 4,
-              "section": {
-                "image": "go-1.25",
-                "network": "none",
-                "record_input": true
-              }
-            },
-            "schema": {
-              "$ref": "#/components/schemas/ReplaceExamDraftPluginSectionRequest"
-            }
-          }
-        },
-        "description": "Supplies the expected Draft revision and the plugin's complete section, or null to remove it.",
-        "required": true
-      },
       "ReplaceInvitation": {
         "content": {
           "application/json": {
@@ -3776,16 +3757,6 @@
           }
         },
         "description": "Exam and initial Draft created"
-      },
-      "ExamDraftPluginSectionOK": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ExamDraftPluginSectionResponse"
-            }
-          }
-        },
-        "description": "One plugin's section on the Exam Draft and the plugin's schema for it"
       },
       "ExamExportAccepted": {
         "content": {
@@ -15116,8 +15087,6 @@
           "exam.manager.owner_protected",
           "exam.not_found",
           "exam.owner.no_changes",
-          "exam.plugin_section.invalid",
-          "exam.plugin_section.plugin_inactive",
           "exam.resource.conflict",
           "exam.resource.content_invalid",
           "exam.resource.invalid",
@@ -15225,14 +15194,10 @@
           "personal_access_token.invalid",
           "personal_access_token.maximum_reached",
           "personal_access_token.unavailable",
-          "plugin.in_use",
           "plugin.invalid",
           "plugin.not_found",
           "plugin.required",
           "plugin.revision_conflict",
-          "plugin.route.conflict",
-          "plugin.route.rate_limited",
-          "plugin.route.unavailable",
           "plugin.unavailable",
           "profile_picture.invalid",
           "profile_picture.unavailable",
@@ -15703,37 +15668,6 @@
         ],
         "type": "object"
       },
-      "ExamDraftPluginSectionResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "draft_revision": {
-            "format": "int64",
-            "minimum": 1,
-            "type": "integer"
-          },
-          "exam_id": {
-            "$ref": "#/components/schemas/ID"
-          },
-          "plugin_id": {
-            "pattern": "^[a-z][a-z0-9.-]{0,63}$",
-            "type": "string"
-          },
-          "schema": {
-            "description": "The plugin's JSON Schema for the section, as the JSON text it published. Absent while the plugin is off, has failed, or offers no section.",
-            "maxLength": 65536,
-            "type": "string"
-          },
-          "section": {
-            "$ref": "#/components/schemas/ExamPluginSection"
-          }
-        },
-        "required": [
-          "exam_id",
-          "plugin_id",
-          "draft_revision"
-        ],
-        "type": "object"
-      },
       "ExamDraftResponse": {
         "additionalProperties": false,
         "properties": {
@@ -15755,9 +15689,6 @@
           "instructions_markdown": {
             "description": "Authored Markdown encoded as UTF-8 and limited to 65536 bytes.",
             "type": "string"
-          },
-          "plugin_sections": {
-            "$ref": "#/components/schemas/ExamPluginSections"
           },
           "policy": {
             "$ref": "#/components/schemas/ExamPolicySet"
@@ -15785,7 +15716,6 @@
           "instructions_markdown",
           "policy",
           "browser_policy",
-          "plugin_sections",
           "capacity",
           "updated_at",
           "revision",
@@ -16505,22 +16435,6 @@
         ],
         "type": "object"
       },
-      "ExamPluginSection": {
-        "additionalProperties": true,
-        "description": "One plugin's section of Exam policy. Its plugin publishes the schema for it and decides what it accepts; the server keeps it as given, in canonical form.",
-        "type": "object"
-      },
-      "ExamPluginSections": {
-        "additionalProperties": {
-          "$ref": "#/components/schemas/ExamPluginSection"
-        },
-        "description": "The sections an author set for plugins that offer one, keyed by plugin ID. Each section is the plugin's own JSON object of at most 64 KiB in canonical form: members sorted, no insignificant whitespace, and integer numbers only. Publication freezes the sections into the Exam Revision and its digests; no sections is an empty object.",
-        "maxProperties": 32,
-        "propertyNames": {
-          "pattern": "^[a-z][a-z0-9.-]{0,63}$"
-        },
-        "type": "object"
-      },
       "ExamPolicySet": {
         "additionalProperties": false,
         "properties": {
@@ -16888,12 +16802,6 @@
             "minimum": 1,
             "type": "integer"
           },
-          "plugin_sections": {
-            "$ref": "#/components/schemas/ExamPluginSections"
-          },
-          "plugin_sections_digest": {
-            "$ref": "#/components/schemas/SHA256"
-          },
           "policy_digest": {
             "$ref": "#/components/schemas/SHA256"
           },
@@ -16953,8 +16861,6 @@
           "title",
           "policy_schema_version",
           "policy_digest",
-          "plugin_sections",
-          "plugin_sections_digest",
           "capacity",
           "starter_workspace_digest",
           "content_digest",
@@ -24365,24 +24271,6 @@
         ],
         "type": "object"
       },
-      "ReplaceExamDraftPluginSectionRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "expected_revision": {
-            "format": "int64",
-            "minimum": 1,
-            "type": "integer"
-          },
-          "section": {
-            "$ref": "#/components/schemas/ReplacementExamPluginSection"
-          }
-        },
-        "required": [
-          "expected_revision",
-          "section"
-        ],
-        "type": "object"
-      },
       "ReplaceInvitationRequest": {
         "additionalProperties": false,
         "properties": {
@@ -24464,14 +24352,6 @@
           "email"
         ],
         "type": "object"
-      },
-      "ReplacementExamPluginSection": {
-        "additionalProperties": true,
-        "description": "The plugin's complete section, or null to remove it.",
-        "type": [
-          "object",
-          "null"
-        ]
       },
       "RequestExamAttemptScreenClipRequest": {
         "additionalProperties": false,
@@ -38535,157 +38415,6 @@
         "x-proctor-idempotency": "required"
       }
     },
-    "/api/v1/exams/{exam_id}/draft/plugin-sections/{plugin_id}": {
-      "get": {
-        "description": "Returns the section the Draft holds for the plugin, if any, and the JSON Schema the plugin publishes for its authoring form, if the plugin is active and offers a section. The schema is served as the plugin published it; the plugin, not the schema, decides what a save accepts. Reading never asks the plugin to validate anything.",
-        "operationId": "getExamDraftPluginSection",
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/ExamDraftPluginSectionOK"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "dpopAuth": []
-          },
-          {
-            "sessionCookie": []
-          }
-        ],
-        "summary": "Get one plugin's section on the active Exam Draft",
-        "tags": [
-          "Examinations"
-        ],
-        "x-proctor-auth": "principal_required",
-        "x-proctor-error-codes": [
-          "authorization.request.invalid",
-          "authorization.unavailable",
-          "request.invalid",
-          "resource.not_found",
-          "exam.unavailable",
-          "exam.invalid",
-          "authentication.required",
-          "authentication.token_invalid",
-          "authentication.credential_ambiguous",
-          "authentication.dpop.invalid",
-          "authentication.dpop.replayed",
-          "authentication.dpop.use_nonce",
-          "authentication.dpop.unavailable"
-        ],
-        "x-proctor-idempotency": "none"
-      },
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/ExamID"
-        },
-        {
-          "$ref": "#/components/parameters/PluginID"
-        }
-      ],
-      "put": {
-        "description": "Sets the plugin's section on the mutable Draft at the expected revision, or removes it when section is null. A section is a JSON object of at most 64 KiB that the server keeps in canonical form, so a different spelling of the current section is exam.draft.no_changes. It is saved only while the plugin is active and offers a section (otherwise exam.plugin_section.plugin_inactive) and only if the plugin accepts it (otherwise exam.plugin_section.invalid; the plugin's reason is not shown). Removing a section never asks the plugin. Publication asks the plugin again and freezes the section into the Revision.",
-        "operationId": "replaceExamDraftPluginSection",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/RequiredIdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "$ref": "#/components/requestBodies/ReplaceExamDraftPluginSection"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/ExamOK"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "dpopAuth": []
-          },
-          {
-            "csrfToken": [],
-            "sessionCookie": []
-          }
-        ],
-        "summary": "Replace one plugin's section on the active Exam Draft",
-        "tags": [
-          "Examinations"
-        ],
-        "x-proctor-auth": "principal_required",
-        "x-proctor-error-codes": [
-          "authorization.request.invalid",
-          "authorization.unavailable",
-          "audit.unavailable",
-          "request.invalid",
-          "resource.not_found",
-          "exam.invalid",
-          "exam.archived",
-          "exam.draft.revision_conflict",
-          "exam.draft.no_changes",
-          "exam.plugin_section.invalid",
-          "exam.plugin_section.plugin_inactive",
-          "exam.unavailable",
-          "idempotency.key_required",
-          "idempotency.key_invalid",
-          "idempotency.conflict",
-          "idempotency.in_progress",
-          "authentication.required",
-          "authentication.token_invalid",
-          "authentication.credential_ambiguous",
-          "authentication.dpop.invalid",
-          "authentication.dpop.replayed",
-          "authentication.dpop.use_nonce",
-          "authentication.dpop.unavailable",
-          "authentication.csrf.invalid"
-        ],
-        "x-proctor-idempotency": "required"
-      }
-    },
     "/api/v1/exams/{exam_id}/draft/policies/focus-loss": {
       "parameters": [
         {
@@ -40867,7 +40596,7 @@
         }
       ],
       "post": {
-        "description": "Validates the complete current Draft and publishes it as a new immutable Exam Revision. The expected Draft revision prevents publishing concurrent edits, and the Idempotency-Key makes an exact lost-response retry safe. Publication captures content, policy, capacity, resources, and starter Workspace facts as one revision. Each plugin with a section on the Draft is asked to accept it again first; publication fails with exam.plugin_section.plugin_inactive while that plugin is off, has failed, or offers no section, and with exam.plugin_section.invalid when it refuses. The frozen sections are never sent to a plugin again.",
+        "description": "Validates the complete current Draft and publishes it as a new immutable Exam Revision. The expected Draft revision prevents publishing concurrent edits, and the Idempotency-Key makes an exact lost-response retry safe. Publication captures content, policy, capacity, resources, and starter Workspace facts as one revision.",
         "operationId": "publishExamRevision",
         "parameters": [
           {
@@ -40938,8 +40667,6 @@
           "exam.draft.revision_conflict",
           "exam.revision.no_changes",
           "exam.revision.capacity_exceeded",
-          "exam.plugin_section.invalid",
-          "exam.plugin_section.plugin_inactive",
           "exam.unavailable",
           "idempotency.key_required",
           "idempotency.key_invalid",
@@ -40959,7 +40686,7 @@
     },
     "/api/v1/exams/{exam_id}/revisions/{exam_revision_id}": {
       "get": {
-        "description": "Returns one immutable Revision only after verifying its Exam ownership path and the caller's current management authority. The response exposes publication metadata, digests, and the frozen plugin sections, not mutable Draft state or protected content bytes.",
+        "description": "Returns one immutable Revision only after verifying its Exam ownership path and the caller's current management authority. The response exposes publication metadata and digests, not mutable Draft state or protected content bytes.",
         "operationId": "getExamRevision",
         "responses": {
           "200": {
@@ -47377,206 +47104,6 @@
         "x-proctor-idempotency": "none"
       }
     },
-    "/api/v1/plugins/execution/exam-attempts/{exam_attempt_id}/flush": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/ExamAttemptID"
-        }
-      ],
-      "post": {
-        "description": "Freezes the candidate's execution environment after saving its last file changes to the Attempt Workspace, and answers with the Workspace cursor that holds them, which the candidate then submits with. It waits up to 20 seconds. The environment thaws again 30 seconds later unless the Attempt ends first. 409 means no environment is live for the Attempt; 503 means the flush could not finish, and the candidate can still submit what was saved. The request has no body.",
-        "operationId": "flushExecutionEnvironment",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/CandidateAttemptCredential"
-          },
-          {
-            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "workspace_cursor": 42
-                },
-                "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "workspace_cursor": {
-                      "description": "The Attempt Workspace cursor that holds every change the environment had written. Submit with it.",
-                      "format": "int64",
-                      "minimum": 0,
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "workspace_cursor"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "The environment is frozen and its changes are in the Attempt Workspace",
-            "headers": {
-              "Cache-Control": {
-                "$ref": "#/components/headers/NoStore"
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "dpopAuth": []
-          },
-          {
-            "csrfToken": [],
-            "sessionCookie": []
-          }
-        ],
-        "summary": "Flush the execution environment before submitting",
-        "tags": [
-          "Attempts and workspaces"
-        ],
-        "x-codeSamples": [
-          {
-            "lang": "Shell",
-            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/plugins/execution/exam-attempts/\u003cexam-attempt-id\u003e/flush' \\\n  --header 'Authorization: DPoP \u003cdesktop-session-access-credential\u003e' \\\n  --header 'DPoP: \u003cfresh-proof-for-this-post-target-and-current-nonce\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003cattempt-credential\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e'"
-          }
-        ],
-        "x-proctor-auth": "session_required",
-        "x-proctor-error-codes": [
-          "request.invalid",
-          "resource.not_found",
-          "exam.attempt.invalid",
-          "exam.attempt.unavailable",
-          "exam.attempt.registered_desktop_required",
-          "audit.unavailable",
-          "plugin.route.rate_limited",
-          "plugin.route.unavailable",
-          "plugin.route.conflict",
-          "authentication.required",
-          "authentication.token_invalid",
-          "authentication.credential_ambiguous",
-          "authentication.dpop.invalid",
-          "authentication.dpop.replayed",
-          "authentication.dpop.use_nonce",
-          "authentication.dpop.unavailable",
-          "authentication.csrf.invalid"
-        ],
-        "x-proctor-idempotency": "none",
-        "x-proctor-plugin": "execution"
-      }
-    },
-    "/api/v1/plugins/execution/exam-attempts/{exam_attempt_id}/terminal": {
-      "get": {
-        "description": "Upgrades to a binary WebSocket that carries the candidate's terminal in their execution environment. Any node serves it by attaching to the environment's host itself. The first message is JSON, {\"op\":\"attach\",\"cols\":80,\"rows\":24,\"resume\":null,\"takeover\":false}; resume names a terminal and the offset of the next output byte the client has not seen, and takeover replaces another attached client. Every later message starts with one type byte: 0x00 carries terminal bytes and 0x01 a JSON control. The client sends input as 0x00 and {\"op\":\"resize\",\"cols\",\"rows\"} or {\"op\":\"hangup\"} as 0x01. The server sends output as 0x00 and, as 0x01, {\"op\":\"attached\",\"terminal\",\"start\"} once attached, {\"op\":\"waiting\"} while no environment is live, and {\"op\":\"ended\",\"reason\"} when the terminal ends, for example exited, superseded, busy or environment_restarted. When the Exam records terminal input, the server records what the client sends, with its timing and window changes, as sealed evidence before forwarding it; output is never recorded. Messages are at most 64 KiB, and the core closes the socket with code 4003 once the candidate's Attempt access no longer holds.",
-        "operationId": "connectExecutionTerminal",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/CandidateAttemptCredential"
-          },
-          {
-            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
-          }
-        ],
-        "responses": {
-          "101": {
-            "description": "Switching Protocols"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "dpopAuth": []
-          },
-          {
-            "sessionCookie": []
-          }
-        ],
-        "summary": "Open the candidate's terminal",
-        "tags": [
-          "Attempts and workspaces"
-        ],
-        "x-codeSamples": [
-          {
-            "lang": "Shell",
-            "source": "websocat --binary \\\n  --header='Authorization: DPoP \u003cdesktop-session-access-credential\u003e' \\\n  --header='DPoP: \u003cfresh-proof-for-this-get-target-and-current-nonce\u003e' \\\n  --header='X-Proctor-Attempt-Credential: \u003cattempt-credential\u003e' \\\n  --header='X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e' \\\n  'wss://proctor.example.edu/api/v1/plugins/execution/exam-attempts/\u003cexam-attempt-id\u003e/terminal'"
-          }
-        ],
-        "x-proctor-auth": "session_required",
-        "x-proctor-error-codes": [
-          "request.invalid",
-          "resource.not_found",
-          "exam.attempt.invalid",
-          "exam.attempt.unavailable",
-          "exam.attempt.registered_desktop_required",
-          "audit.unavailable",
-          "plugin.route.rate_limited",
-          "websocket.origin.invalid",
-          "websocket.unavailable",
-          "authentication.required",
-          "authentication.token_invalid",
-          "authentication.credential_ambiguous",
-          "authentication.dpop.invalid",
-          "authentication.dpop.replayed",
-          "authentication.dpop.use_nonce",
-          "authentication.dpop.unavailable"
-        ],
-        "x-proctor-idempotency": "none",
-        "x-proctor-plugin": "execution"
-      },
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/ExamAttemptID"
-        }
-      ]
-    },
     "/api/v1/plugins/{plugin_id}/settings": {
       "parameters": [
         {
@@ -47584,7 +47111,7 @@
         }
       ],
       "put": {
-        "description": "Turns one plugin on or off and replaces its settings document, under an optimistic revision fence. Requires a strong recent interactive system-administrator Session, an Idempotency-Key, and durable audit; the audit records the plugin and whether it is enabled, never setting values. Use expected_revision 0 for a plugin nobody has configured. The plugin checks the settings before they are saved and may refuse them with plugin.invalid. A required plugin cannot be turned off, and no plugin can be turned off with plugin.in_use while a Sitting that is not Closed or Canceled delivers an Exam Revision with its section. A saved change applies on every node within about five seconds, without a restart, and plugin_settings_changed tells administrators' clients to refetch. A no-op keeps the revision.",
+        "description": "Turns one plugin on or off and replaces its settings document, under an optimistic revision fence. Requires a strong recent interactive system-administrator Session, an Idempotency-Key, and durable audit; the audit records the plugin and whether it is enabled, never setting values. Use expected_revision 0 for a plugin nobody has configured. The plugin checks the settings before they are saved and may refuse them with plugin.invalid. A required plugin cannot be turned off. A saved change applies on every node within about five seconds, without a restart, and plugin_settings_changed tells administrators' clients to refetch. A no-op keeps the revision.",
         "operationId": "replacePluginSettings",
         "parameters": [
           {
@@ -47646,7 +47173,6 @@
           "idempotency.key_invalid",
           "idempotency.conflict",
           "idempotency.in_progress",
-          "plugin.in_use",
           "plugin.invalid",
           "plugin.not_found",
           "plugin.required",

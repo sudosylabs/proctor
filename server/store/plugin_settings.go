@@ -46,10 +46,6 @@ type PluginSettingsStore interface {
 	// notice a change cheaply and reload the list.
 	ChangeCount(context.Context) (int64, error)
 	// Replace saves the change behind the revision and idempotency fences.
-	// A change that turns the plugin off fails with the conflict
-	// "plugin_in_use" while any Sitting that is not Closed or Canceled
-	// delivers a Revision with a section of the plugin; the check reads
-	// committed core rows in the same transaction.
 	Replace(context.Context, *PluginSettingsReplacement, *CommandIdempotency) (*PluginSettingsReplacementResult, error)
 }
 

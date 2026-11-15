@@ -201,8 +201,6 @@ type authoringStoreFake struct {
 	textUpdate         *store.ExamDraftTextUpdate
 	focusLossUpdate    *store.ExamDraftFocusLossUpdate
 	nativePolicyUpdate *store.ExamDraftNativePolicyUpdate
-	sectionUpdate      *store.ExamDraftPluginSectionUpdate
-	pluginSections     model.ExamPluginSections
 	draftRevision      int64
 	archive            *store.ExamArchive
 	listOptions        store.ExamListOptions
@@ -382,7 +380,6 @@ func (f *authoringStoreFake) Get(_ context.Context, examID model.ExamID, _ model
 		exam.ArchivedAt = model.OptionalTimeFrom(at)
 	}
 	draft, _ := model.NewExamDraft(examID, "Test", "", model.DefaultExamPolicySet(), at)
-	draft.PluginSections = f.pluginSections.Clone()
 	if f.draftRevision > 0 {
 		draft.Revision = f.draftRevision
 	}

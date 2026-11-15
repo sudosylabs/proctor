@@ -9,7 +9,6 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -41,8 +40,6 @@ type examRevisionResponse struct {
 	Title                      string                     `json:"title"`
 	PolicySchemaVersion        int                        `json:"policy_schema_version"`
 	PolicyDigest               string                     `json:"policy_digest"`
-	PluginSections             map[string]json.RawMessage `json:"plugin_sections"`
-	PluginSectionsDigest       string                     `json:"plugin_sections_digest"`
 	Capacity                   examCapacityPolicyResponse `json:"capacity"`
 	StarterWorkspaceDigest     string                     `json:"starter_workspace_digest"`
 	ContentDigest              string                     `json:"content_digest"`
@@ -90,8 +87,6 @@ func examRevisionResource(app ExamRevisionApplication) route.Resource {
 				"exam.draft.revision_conflict",
 				"exam.revision.no_changes",
 				"exam.revision.capacity_exceeded",
-				"exam.plugin_section.invalid",
-				"exam.plugin_section.plugin_inactive",
 				"exam.unavailable",
 				"idempotency.key_required",
 				"idempotency.key_invalid",
@@ -250,8 +245,6 @@ func examRevisionResponseFromSummary(summary store.ExamRevisionSummary) examRevi
 		Title:                      summary.Title,
 		PolicySchemaVersion:        summary.PolicySchemaVersion,
 		PolicyDigest:               summary.PolicyDigest,
-		PluginSections:             pluginSectionsResponse(summary.PluginSections),
-		PluginSectionsDigest:       summary.PluginSectionsDigest,
 		Capacity:                   examCapacityPolicyResponseFromModel(summary.Capacity),
 		StarterWorkspaceDigest:     summary.StarterWorkspaceDigest,
 		ContentDigest:              summary.ContentDigest,

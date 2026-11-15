@@ -22,18 +22,12 @@ import (
 type contributions struct {
 	identityTypes []*guardedIdentityProviderType
 	exportFormats []*guardedExportFormat
-	eventHandlers []EventSubscription
-	routes        []*registeredRoute
-	examSections  []*guardedExamSection
 }
 
 // discard forgets what e registered.
 func (c *contributions) discard(e *entry) {
-	c.routes = slices.DeleteFunc(c.routes, func(r *registeredRoute) bool { return r.entry == e })
-	c.examSections = slices.DeleteFunc(c.examSections, func(s *guardedExamSection) bool { return s.entry == e })
 	c.identityTypes = slices.DeleteFunc(c.identityTypes, func(t *guardedIdentityProviderType) bool { return t.entry == e })
 	c.exportFormats = slices.DeleteFunc(c.exportFormats, func(f *guardedExportFormat) bool { return f.entry == e })
-	c.eventHandlers = slices.DeleteFunc(c.eventHandlers, func(s EventSubscription) bool { return s.Plugin == e.manifest.ID })
 }
 
 // register runs add for the plugin being activated while its Activate is
@@ -102,56 +96,4 @@ func (f *guardedExportFormat) FileExtension() string { return f.extension }
 
 func (f *guardedExportFormat) Write(ctx context.Context, archive plugin.ExportArchive, w io.Writer) error {
 	return f.entry.serve("write export", func() error { return f.inner.Write(ctx, archive, w) })
-}
-
-// EventSubscription is one plugin's handler for one topic. A plugin has at
-// most one per topic, so the plugin and topic identify it.
-type EventSubscription struct {
-	Plugin  string
-	Topic   plugin.EventTopic
-	Handler plugin.EventHandler
-}
-
-// AddEventHandler subscribes handler to topic for the plugin being
-// activated.
-func (r *registrar) AddEventHandler(topic plugin.EventTopic, handler plugin.EventHandler) error {
-	if handler == nil {
-		return errors.New("event handler is nil")
-	}
-	if !topic.IsValid() {
-		return fmt.Errorf("event topic %q is unknown", topic)
-	}
-	subscription := EventSubscription{
-		Plugin:  r.entry.manifest.ID,
-		Topic:   topic,
-		Handler: guardedEventHandler{entry: r.entry, inner: handler},
-	}
-	return r.register("event handlers", func(c *contributions) error {
-		for _, existing := range c.eventHandlers {
-			if existing.Plugin == subscription.Plugin && existing.Topic == topic {
-				return fmt.Errorf("plugin %q already handles topic %q", r.entry.manifest.ID, topic)
-			}
-		}
-		c.eventHandlers = append(c.eventHandlers, subscription)
-		return nil
-	})
-}
-
-// EventSubscriptions returns every active plugin's event handlers, in
-// activation order. Each handler contains its plugin's panics and answers
-// plugin.ErrUnavailable once the plugin has failed, so the event is offered
-// again later.
-func (h *Host) EventSubscriptions() []EventSubscription {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return slices.Clone(h.contributions.eventHandlers)
-}
-
-type guardedEventHandler struct {
-	entry *entry
-	inner plugin.EventHandler
-}
-
-func (g guardedEventHandler) HandleEvent(ctx context.Context, event plugin.Event) error {
-	return g.entry.serve("handle event", func() error { return g.inner.HandleEvent(ctx, event) })
 }

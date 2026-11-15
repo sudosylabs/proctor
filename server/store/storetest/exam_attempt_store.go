@@ -1216,7 +1216,6 @@ func newExamAttemptFixtureWithOptions(t *testing.T, ctx context.Context, ss stor
 		examCommand(manager.ID, "exam.starter_workspace.file.create", "attempt-file", "attempt-file"))
 	require.NoError(t, err)
 	draftRevision++
-	draftRevision = setFixturePluginSections(t, ctx, ss, created.Value.Exam.ID, manager.ID, draftRevision, now.Add(2*time.Millisecond))
 	publication := examRevisionPublication(t, ctx, ss, created.Value.Exam.ID, manager.ID, programme.AcademicUnitID, draftRevision, now.Add(3*time.Millisecond))
 	published, err := ss.ExamRevision().Publish(ctx, publication, examCommand(manager.ID, "exam.revision.publish", "attempt-revision", "attempt-revision"))
 	require.NoError(t, err)

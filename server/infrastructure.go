@@ -104,9 +104,6 @@ type ownedInfrastructure struct {
 	// pluginSettingsCount is the saved-settings change count the plugins
 	// were activated with; the reconciler continues from it.
 	pluginSettingsCount int64
-	// pluginWorkspaces is the plugins' Attempt Workspace capability, which
-	// composition attaches to the Attempt service once it exists.
-	pluginWorkspaces *pluginAttemptWorkspaces
 }
 
 // constructionCapabilities is a short-lived, non-owning projection used only
@@ -129,7 +126,6 @@ type constructionCapabilities struct {
 	// then to the Server, which deactivates it.
 	plugins             *pluginhost.Host
 	pluginSettingsCount int64
-	pluginWorkspaces    *pluginAttemptWorkspaces
 }
 
 type borrowedCache interface {
@@ -199,11 +195,9 @@ func openRuntimeInfrastructure(
 		return result, err
 	}
 	// Plugins activate once metrics exist, so their first calls are
-	// recorded, over the fully decorated store and with this node's cluster
-	// ID for their leases, and before anything that consumes what they
-	// register.
+	// recorded, and before anything that consumes what they register.
 	result.plugins, result.pluginSettingsCount, err = activatePlugins(
-		ctx, cfg, result.resources.Persistence.PluginSettings(), result.pluginRuntime(), result.resources.Logger,
+		ctx, cfg, result.resources.Persistence.PluginSettings(), result.resources.Logger,
 		pluginRecorder(metricsModule), overrides.Plugins,
 	)
 	if err != nil {
@@ -545,7 +539,6 @@ func (i *ownedInfrastructure) acceptPlatform(
 		tracing:                i.tracing,
 		plugins:                i.plugins,
 		pluginSettingsCount:    i.pluginSettingsCount,
-		pluginWorkspaces:       i.pluginWorkspaces,
 	}
 	if resources.Cluster != nil {
 		capabilities.nodeID = resources.Cluster.NodeID()

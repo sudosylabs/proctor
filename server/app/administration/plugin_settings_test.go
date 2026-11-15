@@ -205,19 +205,6 @@ func TestReplacePluginSettingsReportsTheCurrentRevisionOnConflict(t *testing.T) 
 	require.Equal(t, 0, fixture.catalog.changes)
 }
 
-func TestReplacePluginSettingsRefusesTurningOffAPluginInUse(t *testing.T) {
-	t.Parallel()
-
-	fixture := newPluginFixture(t)
-	fixture.saved.replaceErr = store.NewErrConflict("plugin_settings", "plugin_in_use", nil)
-	command := pluginCommand()
-	command.Enabled = false
-	_, err := fixture.service.ReplacePluginSettings(t.Context(), fixture.inv, command)
-	require.True(t, apperror.Is(err, "plugin.in_use"), "err = %v", err)
-	require.Equal(t, 0, fixture.catalog.changes, "a refused change is not applied")
-	require.Empty(t, fixture.publisher.Calls())
-}
-
 func TestPluginAdministrationIsUnavailableWithoutPlugins(t *testing.T) {
 	t.Parallel()
 

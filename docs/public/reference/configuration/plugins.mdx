@@ -34,7 +34,6 @@ plugin's secrets, such as a service token. Changing them needs a restart.
 | The CAS sign-in protocol for [external authentication providers](./authentication.mdx) | `cas` | On |
 | The OpenID Connect sign-in protocol for [external authentication providers](./authentication.mdx) | `oidc` | On |
 | The zip encoding of Exam exports | `export.zip` | Always on |
-| The [execution environment](#execution-environment), a terminal beside the editor | `execution` | Off |
 
 `export.zip` is required and cannot be turned off. If it fails to start,
 Exam exports are unavailable and the server logs a warning.
@@ -56,53 +55,6 @@ A plugin that needs a secret reads it from the file:
   }
 }
 ```
-
-## Execution environment
-
-The `execution` plugin gives candidates a shell in an isolated execenv
-environment beside the editor, for Exams whose authors ask for one. It runs
-on separate Linux hosts that Proctor dials over TLS; its secrets list them.
-
-```json
-{
-  "Plugins": {
-    "execution": {
-      "Secrets": {
-        "hosts": [
-          {
-            "name": "exec-1",
-            "address": "exec-1.internal.example.edu:7443",
-            "server_name": "exec-1.internal.example.edu",
-            "ca_pem": "-----BEGIN CERTIFICATE-----\n<the CA that issued the host certificate>\n-----END CERTIFICATE-----\n",
-            "token": "<from your secret store>"
-          }
-        ]
-      }
-    }
-  }
-}
-```
-
-Each host names:
-
-- `name`, its name in grant records and logs: a lowercase letter, then up to
-  62 lowercase letters, digits or hyphens, unique among the hosts;
-- `address`, its `host:port`;
-- `server_name`, the name its TLS certificate must carry;
-- `ca_pem`, the PEM certificate authority that issued that certificate;
-- `token`, the token Proctor authenticates with, which is never logged.
-
-At most 64 hosts. Proctor dials a host only when it first needs it. A host
-that does not dial, or reports that it cannot take new environments, is
-skipped and tried again a few seconds later. The plugin's settings, which an
-administrator changes at runtime, set how quickly terminal file changes are
-saved: `harvest_quiet_ms` (250–10000, default 2000) is how long files must
-stop changing, and `harvest_max_ms` (1000–60000, default 10000, at least the
-quiet window) is the longest a change waits.
-
-The plugin cannot be turned off while a Sitting that is not Closed or
-Canceled uses an Exam with its section, and an Exam with its section cannot
-be published while it is off or no host offers the Exam's image.
 
 ## When a plugin fails
 

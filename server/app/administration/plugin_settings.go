@@ -248,9 +248,6 @@ func pluginSettingsError(err error) error {
 var pluginSettingsStoreErrors = apperror.StoreTable{
 	Constraints: map[string]apperror.Code{
 		"actor_not_system_administrator": "authorization.denied",
-		// A Sitting that is not Closed or Canceled delivers a Revision with
-		// the plugin's section; the Store decides from core rows alone.
-		"plugin_in_use": "plugin.in_use",
 	},
 	Unavailable: "plugin.unavailable",
 }

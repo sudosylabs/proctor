@@ -17,7 +17,6 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/plugin"
 	"github.com/sudosylabs/proctor/server/plugin/cas"
-	"github.com/sudosylabs/proctor/server/plugin/execution"
 	"github.com/sudosylabs/proctor/server/plugin/oidc"
 	"github.com/sudosylabs/proctor/server/plugin/zipexport"
 	"github.com/sudosylabs/proctor/server/pluginhost"
@@ -31,7 +30,6 @@ func builtinPlugins() []plugin.Plugin {
 		cas.NewPlugin(),
 		oidc.NewPlugin(),
 		zipexport.NewPlugin(),
-		execution.NewPlugin(execution.Options{}),
 	}
 }
 
@@ -53,41 +51,9 @@ func withTestPlugins(builtin, extra []plugin.Plugin) []plugin.Plugin {
 	return plugins
 }
 
-// pluginRuntime is what the plugins' record store, workers' leases and
-// reads of frozen Exam sections run on. Its zero value gives plugins none.
-type pluginRuntime struct {
-	records      pluginhost.RecordStore
-	leases       pluginhost.LeaseStore
-	examSections pluginhost.ExamSectionStore
-	evidence     pluginhost.EvidenceStore
-	nodeID       string
-	// attemptWorkspaces reaches the Attempt service once it is built.
-	attemptWorkspaces *pluginAttemptWorkspaces
-}
-
-// pluginRuntime is the plugin runtime over the acquired store and cluster
-// transport.
-func (i *ownedInfrastructure) pluginRuntime() pluginRuntime {
-	var runtime pluginRuntime
-	if i.resources.Persistence != nil {
-		runtime.records = newStorePluginRecords(i.resources.Persistence.PluginRecord())
-		runtime.leases = newStorePluginLeases(i.resources.Persistence.PluginLease())
-		runtime.examSections = newStoreExamSections(i.resources.Persistence.ExamRevision())
-		runtime.evidence = newStorePluginEvidence(i.resources.Persistence.ExamAttemptWorkspace())
-	}
-	if i.resources.Cluster != nil {
-		runtime.nodeID = i.resources.Cluster.NodeID()
-	}
-	if i.pluginWorkspaces == nil {
-		i.pluginWorkspaces = &pluginAttemptWorkspaces{}
-	}
-	runtime.attemptWorkspaces = i.pluginWorkspaces
-	return runtime
-}
-
 // activatePlugins activates the built-in plugins, then any a test adds,
 // with the settings an administrator saved and the secrets in the Plugins
-// configuration section, over runtime. It returns the host and the settings change count
+// configuration section. It returns the host and the settings change count
 // it read, from which the reconciler continues. A plugin that fails to
 // activate is logged and left out; a configuration mistake, such as secrets
 // for a plugin that is not compiled in, or unreadable saved settings, fails
@@ -96,7 +62,6 @@ func activatePlugins(
 	ctx context.Context,
 	cfg config.Config,
 	saved store.PluginSettingsStore,
-	runtime pluginRuntime,
 	logger *logging.Logger,
 	recorder pluginhost.Recorder,
 	extra []plugin.Plugin,
@@ -113,17 +78,10 @@ func activatePlugins(
 		return nil, 0, fmt.Errorf("activate plugins: %w", err)
 	}
 	host, err := pluginhost.Activate(ctx, pluginhost.Dependencies{
-		Plugins:      plugins,
-		Settings:     desiredPlugins(known, rows, cfg, logger),
-		Logger:       logger.Slog(),
-		Recorder:     recorder,
-		Records:      runtime.records,
-		Leases:       runtime.leases,
-		NodeID:       runtime.nodeID,
-		ExamSections: runtime.examSections,
-		Evidence:     runtime.evidence,
-
-		AttemptWorkspaces: runtime.attemptWorkspaces,
+		Plugins:  plugins,
+		Settings: desiredPlugins(known, rows, cfg, logger),
+		Logger:   logger.Slog(),
+		Recorder: recorder,
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("activate plugins: %w", err)

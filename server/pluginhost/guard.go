@@ -91,7 +91,6 @@ func (e *entry) recordPanic() {
 	e.panics++
 	if e.state == StateActive && e.panics >= PanicLimit {
 		e.setState(StateFailed)
-		e.current.halt()
 		e.logger.Error("plugin failed after repeated panics", slog.Int("panics", e.panics))
 	}
 }

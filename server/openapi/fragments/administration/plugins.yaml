@@ -61,7 +61,7 @@ paths:
       tags:
         - Administration
       description: >-
-        Turns one plugin on or off and replaces its settings document, under an optimistic revision fence. Requires a strong recent interactive system-administrator Session, an Idempotency-Key, and durable audit; the audit records the plugin and whether it is enabled, never setting values. Use expected_revision 0 for a plugin nobody has configured. The plugin checks the settings before they are saved and may refuse them with plugin.invalid. A required plugin cannot be turned off, and no plugin can be turned off with plugin.in_use while a Sitting that is not Closed or Canceled delivers an Exam Revision with its section. A saved change applies on every node within about five seconds, without a restart, and plugin_settings_changed tells administrators' clients to refetch. A no-op keeps the revision.
+        Turns one plugin on or off and replaces its settings document, under an optimistic revision fence. Requires a strong recent interactive system-administrator Session, an Idempotency-Key, and durable audit; the audit records the plugin and whether it is enabled, never setting values. Use expected_revision 0 for a plugin nobody has configured. The plugin checks the settings before they are saved and may refuse them with plugin.invalid. A required plugin cannot be turned off. A saved change applies on every node within about five seconds, without a restart, and plugin_settings_changed tells administrators' clients to refetch. A no-op keeps the revision.
       x-proctor-auth: strong_recent_session_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -73,7 +73,6 @@ paths:
         - idempotency.key_invalid
         - idempotency.conflict
         - idempotency.in_progress
-        - plugin.in_use
         - plugin.invalid
         - plugin.not_found
         - plugin.required

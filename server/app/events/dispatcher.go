@@ -5,16 +5,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package events delivers committed domain events to plugin event handlers.
+// Package events delivers committed domain events to the core's handlers.
 //
 // A domain event is written to the outbox in the same transaction as the fact
 // it describes; the domain-event dispatch Job then loads it and hands it to a
-// Dispatcher, which offers it to every plugin subscribed to its topic. Each
-// subscription accepts or fails on its own, so a failing plugin delays only
+// Dispatcher, which offers it to every subscription to its topic. Each
+// subscription accepts or fails on its own, so a failing handler delays only
 // its own delivery: the Job remembers which subscriptions accepted the event
-// and offers it again only to the others.
+// and offers it again only to the others. Delivery is at least once and may
+// reorder events, so a handler is idempotent and tolerates an older fact
+// arriving after a newer one.
 //
-// The package is a leaf: it imports only model and the plugin contracts.
+// The package is a leaf: it imports only model.
 package events
 
 import (
@@ -24,30 +26,43 @@ import (
 	"slices"
 
 	"github.com/sudosylabs/proctor/server/model"
-	"github.com/sudosylabs/proctor/server/plugin"
 )
 
-// Subscription is one plugin's handler for one topic.
+// Handler handles one committed domain event. It runs after the fact has
+// committed, never inside it.
+type Handler interface {
+	HandleEvent(ctx context.Context, event model.DomainEvent) error
+}
+
+// Subscription is one handler for one topic.
 type Subscription struct {
 	// Key identifies the subscription across deliveries, so a retry can skip
 	// the subscriptions that already accepted an event.
 	Key     string
-	Topic   plugin.EventTopic
-	Handler plugin.EventHandler
+	Topic   model.DomainEventTopic
+	Handler Handler
 }
 
-// Dispatcher offers domain events to the subscriptions its source reports,
-// read again for every event so it follows plugins being turned on and off.
+// Dispatcher offers domain events to a fixed list of subscriptions.
 type Dispatcher struct {
-	source func() []Subscription
+	subscriptions []Subscription
 }
 
-// NewDispatcher returns a Dispatcher that offers each event to the
-// subscriptions source returns at that moment, in order. A nil source means
-// no subscriptions. The plugin host already refuses a missing handler and a
-// repeated topic per plugin, so the source's keys are complete and distinct.
-func NewDispatcher(source func() []Subscription) *Dispatcher {
-	return &Dispatcher{source: source}
+// NewDispatcher returns a Dispatcher that offers each event to subscriptions,
+// in order. It refuses a subscription without a key or handler, an unknown
+// topic, or a repeated key.
+func NewDispatcher(subscriptions []Subscription) (*Dispatcher, error) {
+	keys := make(map[string]struct{}, len(subscriptions))
+	for _, subscription := range subscriptions {
+		if subscription.Key == "" || subscription.Handler == nil || !subscription.Topic.IsValid() {
+			return nil, fmt.Errorf("domain event subscription %q is incomplete", subscription.Key)
+		}
+		if _, repeated := keys[subscription.Key]; repeated {
+			return nil, fmt.Errorf("domain event subscription %q is repeated", subscription.Key)
+		}
+		keys[subscription.Key] = struct{}{}
+	}
+	return &Dispatcher{subscriptions: slices.Clone(subscriptions)}, nil
 }
 
 // Dispatch offers event to every subscription to its topic whose key is not
@@ -56,22 +71,17 @@ func NewDispatcher(source func() []Subscription) *Dispatcher {
 // keys that accepted it, together with every failure. A subscription that
 // failed sees the same event ID again when it is offered next.
 func (d *Dispatcher) Dispatch(ctx context.Context, event *model.DomainEvent, delivered []string) ([]string, error) {
-	offered, err := pluginEvent(event)
-	if err != nil {
-		return delivered, err
-	}
-	var subscriptions []Subscription
-	if d.source != nil {
-		subscriptions = d.source()
+	if event == nil || !event.Topic.IsValid() {
+		return delivered, errors.New("domain event is invalid")
 	}
 	accepted := slices.Clone(delivered)
 	var failures error
-	for _, subscription := range subscriptions {
-		if subscription.Topic != offered.Topic || slices.Contains(accepted, subscription.Key) {
+	for _, subscription := range d.subscriptions {
+		if subscription.Topic != event.Topic || slices.Contains(accepted, subscription.Key) {
 			continue
 		}
-		copied := offered
-		copied.Data = slices.Clone(offered.Data)
+		copied := *event
+		copied.Data = slices.Clone(event.Data)
 		if handleErr := subscription.Handler.HandleEvent(ctx, copied); handleErr != nil {
 			failures = errors.Join(failures, fmt.Errorf("domain event subscription %q: %w", subscription.Key, handleErr))
 			continue
@@ -79,24 +89,4 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event *model.DomainEvent, del
 		accepted = append(accepted, subscription.Key)
 	}
 	return accepted, failures
-}
-
-// pluginTopics names the plugin topic of every domain event topic. The two
-// vocabularies are closed and equal; a test holds them so.
-var pluginTopics = map[model.DomainEventTopic]plugin.EventTopic{
-	model.DomainEventTopicExamAttemptSubmitted:            plugin.TopicExamAttemptSubmitted,
-	model.DomainEventTopicExamAttemptParticipationStarted: plugin.TopicExamAttemptParticipationStarted,
-	model.DomainEventTopicExamAttemptParticipationEnded:   plugin.TopicExamAttemptParticipationEnded,
-	model.DomainEventTopicExamSittingPaused:               plugin.TopicExamSittingPaused,
-	model.DomainEventTopicExamSittingResumed:              plugin.TopicExamSittingResumed,
-	model.DomainEventTopicExamSittingClosing:              plugin.TopicExamSittingClosing,
-}
-
-func pluginEvent(event *model.DomainEvent) (plugin.Event, error) {
-	topic, ok := pluginTopics[event.Topic]
-	if !ok {
-		return plugin.Event{}, fmt.Errorf("domain event topic %q has no plugin topic", event.Topic)
-	}
-	return plugin.Event{ID: event.ID.String(), Topic: topic, OccurredAt: event.OccurredAt,
-		Data: slices.Clone(event.Data)}, nil
 }

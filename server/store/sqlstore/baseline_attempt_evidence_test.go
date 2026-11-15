@@ -17,17 +17,17 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// TestBaselineSealsTheModelsEmptyCapabilityEvidenceInventory keeps the seed
-// the seal trigger digests for an Attempt without capability evidence equal
+// TestBaselineSealsTheModelsEmptyAttemptEvidenceInventory keeps the seed
+// the seal trigger digests for an Attempt without Attempt evidence equal
 // to the model's empty inventory, and the Go adapter's copy of it.
-func TestBaselineSealsTheModelsEmptyCapabilityEvidenceInventory(t *testing.T) {
+func TestBaselineSealsTheModelsEmptyAttemptEvidenceInventory(t *testing.T) {
 	t.Parallel()
 	source, err := migrations.Assets.ReadFile("postgres/000001_baseline.up.sql")
 	require.NoError(t, err)
 	match := regexp.MustCompile(`'sha256:' \|\| encode\(sha256\(convert_to\('([^']+)', 'UTF8'\)\), 'hex'\), NEW\.id`).FindSubmatch(source)
-	require.Len(t, match, 2, "baseline seals no empty capability evidence inventory")
-	require.Equal(t, model.NewCapabilityEvidenceInventory().Digest, model.SHA256Fingerprint(match[1]))
-	require.Equal(t, model.NewCapabilityEvidenceInventory().Digest, emptyCapabilityEvidenceDigest)
+	require.Len(t, match, 2, "baseline seals no empty Attempt evidence inventory")
+	require.Equal(t, model.NewAttemptEvidenceInventory().Digest, model.SHA256Fingerprint(match[1]))
+	require.Equal(t, model.NewAttemptEvidenceInventory().Digest, emptyAttemptEvidenceDigest)
 }
 
 // TestBaselineDispatchJobIsTheModels keeps the dispatch Job the schema's

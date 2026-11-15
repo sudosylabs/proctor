@@ -6,22 +6,22 @@
 # ---------------------------------------------------------------------------------------------
 
 paths:
-  /api/v1/submissions/{submission_id}/capability-evidence:
+  /api/v1/submissions/{submission_id}/attempt-evidence:
     parameters:
       - $ref: '#/components/parameters/SubmissionID'
     get:
-      operationId: listCapabilityEvidence
-      summary: Inspect the capability evidence sealed with a Submission
+      operationId: listAttemptEvidence
+      summary: Inspect the Attempt evidence sealed with a Submission
       tags:
         - Integrity review
       description: >-
-        Requires the same current Submission integrity-view authorization as detailed evidence. Returns the records
-        capability plugins appended for the Attempt through its execution environment binding, such as the process
-        log, in identity order. They raise no Flag and carry no decision: a record with gap set says coverage was
-        missing. Each item names the binding, Participation and generation it was accepted under, the plugin's kind
-        and stream sequence, and its bounded detail object, which the server stores as given. The Submission seal
-        fixed the set, whose inventory the Review response carries. Pages contain at most 100 records. Integrity
-        retirement removes them. No-store; cursors are purpose-specific opaque keysets.
+        Requires the same current Submission integrity-view authorization as detailed evidence. Returns the
+        append-only records the core kept for the Attempt, such as the execution environment's command log, in
+        identity order. They raise no Flag and carry no decision: a record of kind `execution.gap` says coverage
+        was missing. Each item names its kind, the author that produced it, the author's stream sequence, and its
+        bounded detail object, which the server stores as given. The Submission seal fixed the set, whose inventory
+        the Review response carries. Pages contain at most 100 records. Integrity retirement removes them.
+        No-store; cursors are purpose-specific opaque keysets.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -52,16 +52,16 @@ paths:
             minimum: 1
             maximum: 100
             default: 50
-          description: Maximum number of capability evidence records to return.
+          description: Maximum number of Attempt evidence records to return.
         - name: cursor
           in: query
           schema:
             type: string
-            description: Opaque capability evidence identity cursor.
-          description: Opaque continuation from the preceding capability evidence page.
+            description: Opaque Attempt evidence identity cursor.
+          description: Opaque continuation from the preceding Attempt evidence page.
       responses:
         '200':
-          $ref: '#/components/responses/CapabilityEvidenceListOK'
+          $ref: '#/components/responses/AttemptEvidenceListOK'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -76,18 +76,15 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
 components:
   schemas:
-    CapabilityEvidence:
+    AttemptEvidence:
       type: object
       additionalProperties: false
       required:
         - id
         - attempt_id
-        - participation_id
-        - generation
-        - environment_binding_id
-        - policy_kind
+        - kind
+        - author
         - sequence
-        - gap
         - detail
         - observed_at
         - recorded_at
@@ -100,44 +97,38 @@ components:
           type: string
           minLength: 26
           maxLength: 26
-        participation_id:
+        kind:
           type: string
-          minLength: 26
-          maxLength: 26
-        generation:
-          type: integer
-          format: int64
-          minimum: 1
-          maximum: 9007199254740991
-        environment_binding_id:
-          type: string
-          minLength: 26
-          maxLength: 26
-        policy_kind:
-          type: string
-          maxLength: 97
-          pattern: ^[a-z][a-z0-9.-]{0,63}\.[a-z][a-z0-9_]{0,31}$
-          description: The plugin's "<plugin-id>.<kind>"; never a native kind. Treat an unknown kind as opaque.
+          enum:
+            - execution.process
+            - execution.input
+            - execution.gap
+            - execution.overwritten
+            - execution.refused
+          description: >-
+            `execution.process` is a slice of the command log, `execution.input` recorded terminal input,
+            `execution.gap` missing coverage, `execution.overwritten` a guest change lost to a newer Workspace
+            version, and `execution.refused` a guest change the Workspace refused.
+        author:
+          $ref: '#/components/schemas/WorkspaceAuthor'
         sequence:
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
-        gap:
-          type: boolean
-          description: True when the record says coverage was missing rather than what was observed.
+          description: The position of the record in its author's stream of this kind.
         detail:
           type: object
           additionalProperties: true
-          description: The plugin's own evidence object of at most 64 KiB, stored as given.
+          description: The author's own evidence object of at most 64 KiB, stored as given.
         observed_at:
           type: string
           format: date-time
-          description: The plugin's observation time, never later than recorded_at.
+          description: The author's observation time, never later than recorded_at.
         recorded_at:
           type: string
           format: date-time
-    CapabilityEvidenceListResponse:
+    AttemptEvidenceListResponse:
       type: object
       additionalProperties: false
       required:
@@ -147,12 +138,12 @@ components:
           type: array
           maxItems: 100
           items:
-            $ref: '#/components/schemas/CapabilityEvidence'
+            $ref: '#/components/schemas/AttemptEvidence'
         next_cursor:
           type: string
   responses:
-    CapabilityEvidenceListOK:
-      description: Bounded private capability evidence, never a Flag or a guilt finding.
+    AttemptEvidenceListOK:
+      description: Bounded private Attempt evidence, never a Flag or a guilt finding.
       headers:
         Cache-Control:
           schema:
@@ -161,6 +152,6 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/CapabilityEvidenceListResponse'
+            $ref: '#/components/schemas/AttemptEvidenceListResponse'
           example:
             items: []

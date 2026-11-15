@@ -337,7 +337,7 @@ func (r *inputRecorder) flush(ctx context.Context) {
 	if !ok {
 		return
 	}
-	sequence, err := r.plugin.nextInputSequence(ctx, grant.AttemptID, grant.BindingID)
+	sequence, err := r.plugin.nextInputSequence(ctx, grant.AttemptID, grant.Incarnation)
 	if err != nil {
 		r.plugin.logger.Warn("terminal input was not numbered", "error", errorClass(err))
 		return
@@ -352,8 +352,9 @@ func (r *inputRecorder) flush(ctx context.Context) {
 	}
 }
 
-// nextInputSequence takes the next terminal input sequence of a binding.
-func (p *Plugin) nextInputSequence(ctx context.Context, attemptID, bindingID string) (int64, error) {
+// nextInputSequence takes the next terminal input sequence of an
+// environment incarnation.
+func (p *Plugin) nextInputSequence(ctx context.Context, attemptID string, incarnation int64) (int64, error) {
 	records := p.store()
 	key := attemptKey(attemptID)
 	for range maxUpdateAttempts {
@@ -362,8 +363,8 @@ func (p *Plugin) nextInputSequence(ctx context.Context, attemptID, bindingID str
 		if err != nil {
 			return 0, err
 		}
-		if record.BindingID != bindingID {
-			record = inputRecord{BindingID: bindingID}
+		if record.Incarnation != incarnation {
+			record = inputRecord{Incarnation: incarnation}
 		}
 		record.Next++
 		if _, err = records.put(ctx, kindInput, key, record, revision); err == nil {

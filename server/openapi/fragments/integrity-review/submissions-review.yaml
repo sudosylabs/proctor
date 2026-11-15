@@ -590,7 +590,7 @@ components:
         - browser_activity
         - delivery_inventory_revision
         - native_conditions
-        - capability_evidence
+        - attempt_evidence
       properties:
         submission_id:
           $ref: '#/components/schemas/ID'
@@ -633,8 +633,8 @@ components:
             Review.
         native_conditions:
           $ref: '#/components/schemas/NativeConditionInventory'
-        capability_evidence:
-          $ref: '#/components/schemas/CapabilityEvidenceInventory'
+        attempt_evidence:
+          $ref: '#/components/schemas/AttemptEvidenceInventory'
     ExamIntegrityReviewMutationResponse:
       description: Committed Review state and optional decision returned by a mutation or exact replay.
       type: object

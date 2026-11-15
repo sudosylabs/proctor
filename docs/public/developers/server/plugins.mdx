@@ -100,23 +100,23 @@ A plugin that holds an execution environment binding records evidence with
   Participation with an unexpired lease, the Attempt is Active, and the
   Sitting is Open or Paused before its deadline. Otherwise the call fails
   with `ErrBindingNotCurrent` and nothing is stored.
-- **Attributed to the plugin.** The plugin names a kind such as
-  `process_log`, and the core stores it as `<plugin-id>.process_log`. A
-  sequence numbers the plugin's stream of that kind within the binding, so a
-  retried append is stored once and a different record under the same
-  sequence is refused.
+- **One of the core's kinds.** The plugin names a kind such as `process`,
+  and the core stores it as `<plugin-id>.process`, which must be one of the
+  core's Attempt evidence kinds. The record names the binding's environment
+  incarnation as its author. A sequence numbers that author's stream of the
+  kind, so a retried append is stored once and a different record under the
+  same sequence is refused.
 - **Bounded.** A record's detail is one JSON object of at most 64 KiB. One
   Attempt keeps at most 4,096 records and 8 MiB. Past that, an append is
   refused and only counted, and reviewers see the count.
 - **Never a flag.** A record raises no flag, warning or suspension. Missing
-  coverage, such as an environment restart or a broken process log, is a
-  record marked as a gap.
+  coverage, such as an environment restart, is a record of kind `gap`.
 - **Sealed with the Submission.** The Attempt's records, counts and a digest
   chained over them in order are fixed when the Submission is sealed, and
   nothing is accepted after that. Review finalization binds the digest.
 - **Seen by reviewers only.** Managers who may view the Submission's
   integrity review list the records beside its flags, at
-  `GET /api/v1/submissions/{submission_id}/capability-evidence`. The integrity
+  `GET /api/v1/submissions/{submission_id}/attempt-evidence`. The integrity
   part of an Exam export carries the records and the sealed counts. The
   candidate never sees them.
 

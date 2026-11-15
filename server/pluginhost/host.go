@@ -105,7 +105,7 @@ type Dependencies struct {
 	// each plugin's Host.ExamSections is it, scoped to that plugin. Nil
 	// leaves plugins without it: every call answers plugin.ErrUnavailable.
 	ExamSections ExamSectionStore
-	// Evidence stores capability evidence for the plugins granted
+	// Evidence stores Attempt evidence for the plugins granted
 	// environment bindings. Nil leaves every plugin without it: every call
 	// answers plugin.ErrUnavailable.
 	Evidence EvidenceStore

@@ -52,21 +52,21 @@ func (e storePluginEvidence) Append(
 			Incarnation: environment.Identity.Incarnation},
 		Generation: environment.Generation,
 	}
-	input := &store.ExamAttemptEnvironmentEvidenceAppend{
-		Access: access, EvidenceID: model.NewIntegrityEvidenceID(), Kind: model.IntegrityPolicyKind(policyKind),
-		Sequence: record.Sequence, Gap: record.Gap, Detail: record.Detail, ObservedAt: record.ObservedAt,
+	input := &store.ExamAttemptEvidenceAppend{
+		Access: access, EvidenceID: model.NewIntegrityEvidenceID(), Kind: model.AttemptEvidenceKind(policyKind),
+		Sequence: record.Sequence, Detail: record.Detail, ObservedAt: record.ObservedAt,
 	}
 	if !access.Valid() || record.ObservedAt.IsZero() ||
-		!model.ValidCapabilityEvidenceClaim(input.Kind, record.Sequence, record.Detail) {
+		!model.ValidAttemptEvidenceClaim(input.Kind, access.WorkspaceAuthor(), record.Sequence, record.Detail) {
 		return plugin.EvidenceReceipt{}, plugin.ErrEvidenceInvalid
 	}
 
-	result, err := e.store.AppendEnvironmentEvidence(ctx, input)
+	result, err := e.store.AppendAttemptEvidence(ctx, input)
 	if err != nil {
 		return plugin.EvidenceReceipt{}, pluginEvidenceError(err)
 	}
 	if !result.Consistent(input) {
-		return plugin.EvidenceReceipt{}, errors.New("store returned capability evidence inconsistent with the append")
+		return plugin.EvidenceReceipt{}, errors.New("store returned Attempt evidence inconsistent with the append")
 	}
 	if result.Refused {
 		return plugin.EvidenceReceipt{}, plugin.ErrEvidenceBudgetExhausted
@@ -83,11 +83,11 @@ func pluginEvidenceError(err error) error {
 	switch {
 	case store.IsNotFound(err):
 		return plugin.ErrBindingNotCurrent
-	case errors.As(err, &conflict) && conflict.Constraint == "capability_evidence_sequence":
+	case errors.As(err, &conflict) && conflict.Constraint == "attempt_evidence_sequence":
 		return plugin.ErrEvidenceSequenceConflict
 	case errors.As(err, new(*store.ErrInvalidInput)):
 		return plugin.ErrEvidenceInvalid
 	default:
-		return fmt.Errorf("append capability evidence: %w", err)
+		return fmt.Errorf("append Attempt evidence: %w", err)
 	}
 }

@@ -958,14 +958,18 @@ preserving separately retained integrity material. Native evidence rows remain
 bounded by admitted native record quotas; SQL physical copies are not
 additional client receipt or quota allocations.
 
-Capability evidence is what a capability plugin appends for an Attempt
-through its live execution environment binding, such as the process log. The
-binding check is the environment's read guard; the record is attributed to the
-binding's Participation and generation, stamped with PostgreSQL time, and
-stored as canonical JSON under the plugin's `<plugin-id>.<kind>` (never
-`native.`). The binding, kind and stream sequence identify a record: the same
-claim repeats it, a different one conflicts. It never raises a Flag; missing
-coverage is a record marked as a gap. One Attempt keeps at most 4,096 records
+Attempt evidence is the core's append-only record of an Attempt's execution
+environment, such as the command log. Its kinds are a closed set in `model`:
+`execution.process`, `execution.input`, `execution.gap`,
+`execution.overwritten` and `execution.refused`. A record belongs to the
+Attempt, not to a Participation, names the author that produced it (an
+environment incarnation today), and is stamped with PostgreSQL time and
+stored as canonical JSON. The kind, author and the author's stream sequence
+identify a record: the same claim repeats it, a different one conflicts. A
+new incarnation is a new author with streams of its own. Today the append is
+authorized by the live environment binding's read guard. It never raises a
+Flag; missing coverage is a record of kind `execution.gap` whose detail names
+the gap. One Attempt keeps at most 4,096 records
 and 8 MiB; a refused append is counted. A per-Attempt inventory (records,
 bytes, gaps, refusals and a digest chained in append order) extends in the
 append's transaction. Inserting the Submission binds the inventory to it,

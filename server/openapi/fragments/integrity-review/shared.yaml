@@ -106,11 +106,11 @@ components:
         digest:
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
-    CapabilityEvidenceInventory:
+    AttemptEvidenceInventory:
       type: object
       additionalProperties: false
       description: >-
-        The capability evidence the Submission seal fixed: kept records and their canonical bytes, how many are
+        The Attempt evidence the Submission seal fixed: kept records and their canonical bytes, how many are
         gaps, how many appends were refused over the per-Attempt bounds, and a digest chained over the kept
         records in order. Review finalization binds it.
       required:

@@ -30,7 +30,7 @@ import (
 // results to students.
 type ExamIntegrityReviewApplication interface {
 	ListNativeConditions(context.Context, invocation.Invocation, store.NativeConditionListOptions) (*store.NativeConditionPage, error)
-	ListCapabilityEvidence(context.Context, invocation.Invocation, store.CapabilityEvidenceListOptions) (*store.CapabilityEvidencePage, error)
+	ListAttemptEvidence(context.Context, invocation.Invocation, store.AttemptEvidenceListOptions) (*store.AttemptEvidencePage, error)
 	GetExamIntegrityReview(context.Context, invocation.Invocation, model.SubmissionID) (*store.ExamSubmissionReviewSnapshot, error)
 	ListExamIntegrityFlags(context.Context, invocation.Invocation, review.ListFlagsQuery) (*store.ExamIntegrityFlagPage, error)
 	ListExamIntegrityEvidence(context.Context, invocation.Invocation, review.ListEvidenceQuery) (*store.ExamIntegrityEvidencePage, error)
@@ -210,7 +210,7 @@ type examSubmissionReviewResponse struct {
 
 type examIntegrityReviewResponse struct {
 	NativeConditions          model.NativeConditionInventory        `json:"native_conditions"`
-	CapabilityEvidence        model.CapabilityEvidenceInventory     `json:"capability_evidence"`
+	AttemptEvidence           model.AttemptEvidenceInventory        `json:"attempt_evidence"`
 	DeliveryInventoryRevision int64                                 `json:"delivery_inventory_revision"`
 	BrowserEvidenceOverflow   *browserIntegrityOverflowResponse     `json:"browser_evidence_overflow,omitempty"`
 	BrowserActivity           model.BrowserSubmissionSettlement     `json:"browser_activity"`
@@ -419,7 +419,7 @@ func examIntegrityReviewResource(app ExamIntegrityReviewApplication) route.Resou
 		},
 		route.Endpoint{
 			Method: http.MethodGet,
-			Path:   "/submissions/{submission_id}/capability-evidence",
+			Path:   "/submissions/{submission_id}/attempt-evidence",
 			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.request.invalid",
@@ -431,7 +431,7 @@ func examIntegrityReviewResource(app ExamIntegrityReviewApplication) route.Resou
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			Handle: h.listCapabilityEvidence,
+			Handle: h.listAttemptEvidence,
 		},
 		route.Endpoint{
 			Method: http.MethodGet,
@@ -944,7 +944,7 @@ func examIntegrityReviewSnapshotResponse(snapshot *store.ExamSubmissionReviewSna
 
 	response := examIntegrityReviewResponse{
 		NativeConditions:          snapshot.NativeConditions,
-		CapabilityEvidence:        snapshot.CapabilityEvidence,
+		AttemptEvidence:           snapshot.AttemptEvidence,
 		DeliveryInventoryRevision: snapshot.DeliveryInventoryRevision,
 		BrowserEvidenceOverflow:   browserIntegrityOverflowFrom(snapshot.BrowserEvidenceOverflow),
 		BrowserActivity:           snapshot.Submission.BrowserActivity,
@@ -1061,30 +1061,30 @@ type nativeConditionListResponse struct {
 	NextCursor string                          `json:"next_cursor,omitempty"`
 }
 
-type capabilityEvidenceListResponse struct {
-	Items      []model.CapabilityEvidence `json:"items"`
-	NextCursor string                     `json:"next_cursor,omitempty"`
+type attemptEvidenceListResponse struct {
+	Items      []model.AttemptEvidence `json:"items"`
+	NextCursor string                  `json:"next_cursor,omitempty"`
 }
 
-// listCapabilityEvidence pages the capability evidence sealed with the
+// listAttemptEvidence pages the Attempt evidence sealed with the
 // Submission. Each item is the stored record, Detail included.
-func (h examIntegrityReviewHandlers) listCapabilityEvidence(request route.Request) (route.Result, error) {
+func (h examIntegrityReviewHandlers) listAttemptEvidence(request route.Request) (route.Result, error) {
 	submissionID, err := reviewSubmissionID(request)
 	if err != nil {
 		return route.Result{}, err
 	}
 
-	query := store.CapabilityEvidenceListOptions{SubmissionID: submissionID, Limit: 50}
+	query := store.AttemptEvidenceListOptions{SubmissionID: submissionID, Limit: 50}
 	if err = applyReviewPageQuery(
 		request,
-		"capability_evidence",
+		"attempt_evidence",
 		&query.Limit,
 		func(id string) error { query.AfterID, err = model.ParseIntegrityEvidenceID(id); return err },
 	); err != nil {
 		return route.Result{}, err
 	}
 
-	page, err := h.app.ListCapabilityEvidence(request.Context, request.Invocation(), query)
+	page, err := h.app.ListAttemptEvidence(request.Context, request.Invocation(), query)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -1097,9 +1097,9 @@ func (h examIntegrityReviewHandlers) listCapabilityEvidence(request route.Reques
 		}
 	}
 
-	response := capabilityEvidenceListResponse{Items: page.Items}
+	response := attemptEvidenceListResponse{Items: page.Items}
 	if page.HasMore {
-		response.NextCursor, err = encodeExamIntegrityReviewCursor("capability_evidence", page.Items[len(page.Items)-1].ID.String())
+		response.NextCursor, err = encodeExamIntegrityReviewCursor("attempt_evidence", page.Items[len(page.Items)-1].ID.String())
 		if err != nil {
 			return route.Result{}, err
 		}

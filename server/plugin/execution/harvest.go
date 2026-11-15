@@ -171,7 +171,7 @@ func (o *owner) harvest(ctx context.Context, environment plugin.BoundEnvironment
 	o.grant, o.pending = grant, nil
 	if h.stats.refused > 0 {
 		detail := map[string]any{"refused": h.stats.refused, "codes": h.stats.codes}
-		if err := o.gap(ctx, gapHarvestRefused, time.Now().UTC(), mustJSON(detail)); err != nil && !errors.Is(err, errWait) {
+		if err := o.evidence(ctx, evidenceRefused, time.Now().UTC(), mustJSON(detail), 0); err != nil && !errors.Is(err, errWait) {
 			return err
 		}
 	}

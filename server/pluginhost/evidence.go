@@ -16,7 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/plugin"
 )
 
-// EvidenceStore stores capability evidence for the plugins. The host names
+// EvidenceStore stores Attempt evidence for the plugins. The host names
 // the plugin's policy kind, "<plugin-id>.<kind>", on each call, so a plugin
 // can never record under another's kind; the store answers with the plugin
 // package's types and errors.
@@ -28,7 +28,7 @@ type EvidenceStore interface {
 // kind, as the integrity schema spells it.
 var evidenceKind = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 
-// Evidence returns the plugin's capability evidence, scoped to its policy
+// Evidence returns the plugin's Attempt evidence, scoped to its policy
 // kinds and usable while this activation lasts. Only a plugin the core
 // grants environment bindings can name a binding, so only it may append.
 func (r *registrar) Evidence() plugin.Evidence {

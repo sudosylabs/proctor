@@ -2864,6 +2864,27 @@
         },
         "description": "Affiliation collection"
       },
+      "AttemptEvidenceListOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "items": []
+            },
+            "schema": {
+              "$ref": "#/components/schemas/AttemptEvidenceListResponse"
+            }
+          }
+        },
+        "description": "Bounded private Attempt evidence, never a Flag or a guilt finding.",
+        "headers": {
+          "Cache-Control": {
+            "schema": {
+              "const": "no-store",
+              "type": "string"
+            }
+          }
+        }
+      },
       "AuditListOK": {
         "content": {
           "application/json": {
@@ -3241,27 +3262,6 @@
         "headers": {
           "Cache-Control": {
             "$ref": "#/components/headers/NoStore"
-          }
-        }
-      },
-      "CapabilityEvidenceListOK": {
-        "content": {
-          "application/json": {
-            "example": {
-              "items": []
-            },
-            "schema": {
-              "$ref": "#/components/schemas/CapabilityEvidenceListResponse"
-            }
-          }
-        },
-        "description": "Bounded private capability evidence, never a Flag or a guilt finding.",
-        "headers": {
-          "Cache-Control": {
-            "schema": {
-              "const": "no-store",
-              "type": "string"
-            }
           }
         }
       },
@@ -8444,6 +8444,128 @@
         ],
         "type": "string"
       },
+      "AttemptEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "attempt_id": {
+            "maxLength": 26,
+            "minLength": 26,
+            "type": "string"
+          },
+          "author": {
+            "$ref": "#/components/schemas/WorkspaceAuthor"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "description": "The author's own evidence object of at most 64 KiB, stored as given.",
+            "type": "object"
+          },
+          "id": {
+            "maxLength": 26,
+            "minLength": 26,
+            "type": "string"
+          },
+          "kind": {
+            "description": "`execution.process` is a slice of the command log, `execution.input` recorded terminal input, `execution.gap` missing coverage, `execution.overwritten` a guest change lost to a newer Workspace version, and `execution.refused` a guest change the Workspace refused.",
+            "enum": [
+              "execution.process",
+              "execution.input",
+              "execution.gap",
+              "execution.overwritten",
+              "execution.refused"
+            ],
+            "type": "string"
+          },
+          "observed_at": {
+            "description": "The author's observation time, never later than recorded_at.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "sequence": {
+            "description": "The position of the record in its author's stream of this kind.",
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "attempt_id",
+          "kind",
+          "author",
+          "sequence",
+          "detail",
+          "observed_at",
+          "recorded_at"
+        ],
+        "type": "object"
+      },
+      "AttemptEvidenceInventory": {
+        "additionalProperties": false,
+        "description": "The Attempt evidence the Submission seal fixed: kept records and their canonical bytes, how many are gaps, how many appends were refused over the per-Attempt bounds, and a digest chained over the kept records in order. Review finalization binds it.",
+        "properties": {
+          "bytes": {
+            "format": "int64",
+            "maximum": 8388608,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "gaps": {
+            "format": "int64",
+            "maximum": 4096,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "overflow": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "records": {
+            "format": "int64",
+            "maximum": 4096,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "records",
+          "bytes",
+          "gaps",
+          "overflow",
+          "digest"
+        ],
+        "type": "object"
+      },
+      "AttemptEvidenceListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AttemptEvidence"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "AttemptParticipationEndReason": {
         "enum": [
           "interrupted",
@@ -11359,142 +11481,6 @@
           "current_cursor",
           "items",
           "refresh_required"
-        ],
-        "type": "object"
-      },
-      "CapabilityEvidence": {
-        "additionalProperties": false,
-        "properties": {
-          "attempt_id": {
-            "maxLength": 26,
-            "minLength": 26,
-            "type": "string"
-          },
-          "detail": {
-            "additionalProperties": true,
-            "description": "The plugin's own evidence object of at most 64 KiB, stored as given.",
-            "type": "object"
-          },
-          "environment_binding_id": {
-            "maxLength": 26,
-            "minLength": 26,
-            "type": "string"
-          },
-          "gap": {
-            "description": "True when the record says coverage was missing rather than what was observed.",
-            "type": "boolean"
-          },
-          "generation": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "minimum": 1,
-            "type": "integer"
-          },
-          "id": {
-            "maxLength": 26,
-            "minLength": 26,
-            "type": "string"
-          },
-          "observed_at": {
-            "description": "The plugin's observation time, never later than recorded_at.",
-            "format": "date-time",
-            "type": "string"
-          },
-          "participation_id": {
-            "maxLength": 26,
-            "minLength": 26,
-            "type": "string"
-          },
-          "policy_kind": {
-            "description": "The plugin's \"\u003cplugin-id\u003e.\u003ckind\u003e\"; never a native kind. Treat an unknown kind as opaque.",
-            "maxLength": 97,
-            "pattern": "^[a-z][a-z0-9.-]{0,63}\\.[a-z][a-z0-9_]{0,31}$",
-            "type": "string"
-          },
-          "recorded_at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "sequence": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "minimum": 1,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "attempt_id",
-          "participation_id",
-          "generation",
-          "environment_binding_id",
-          "policy_kind",
-          "sequence",
-          "gap",
-          "detail",
-          "observed_at",
-          "recorded_at"
-        ],
-        "type": "object"
-      },
-      "CapabilityEvidenceInventory": {
-        "additionalProperties": false,
-        "description": "The capability evidence the Submission seal fixed: kept records and their canonical bytes, how many are gaps, how many appends were refused over the per-Attempt bounds, and a digest chained over the kept records in order. Review finalization binds it.",
-        "properties": {
-          "bytes": {
-            "format": "int64",
-            "maximum": 8388608,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "digest": {
-            "pattern": "^sha256:[0-9a-f]{64}$",
-            "type": "string"
-          },
-          "gaps": {
-            "format": "int64",
-            "maximum": 4096,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "overflow": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "records": {
-            "format": "int64",
-            "maximum": 4096,
-            "minimum": 0,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "records",
-          "bytes",
-          "gaps",
-          "overflow",
-          "digest"
-        ],
-        "type": "object"
-      },
-      "CapabilityEvidenceListResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/CapabilityEvidence"
-            },
-            "maxItems": 100,
-            "type": "array"
-          },
-          "next_cursor": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "items"
         ],
         "type": "object"
       },
@@ -16364,6 +16350,9 @@
         "additionalProperties": false,
         "description": "Manager-authorized Submission integrity snapshot and current decision set.",
         "properties": {
+          "attempt_evidence": {
+            "$ref": "#/components/schemas/AttemptEvidenceInventory"
+          },
           "browser_activity": {
             "$ref": "#/components/schemas/BrowserSubmissionSettlement"
           },
@@ -16372,9 +16361,6 @@
           },
           "candidate_user_id": {
             "$ref": "#/components/schemas/ID"
-          },
-          "capability_evidence": {
-            "$ref": "#/components/schemas/CapabilityEvidenceInventory"
           },
           "decisions": {
             "items": {
@@ -16434,7 +16420,7 @@
           "browser_activity",
           "delivery_inventory_revision",
           "native_conditions",
-          "capability_evidence"
+          "attempt_evidence"
         ],
         "type": "object"
       },
@@ -50350,13 +50336,13 @@
         }
       ]
     },
-    "/api/v1/submissions/{submission_id}/capability-evidence": {
+    "/api/v1/submissions/{submission_id}/attempt-evidence": {
       "get": {
-        "description": "Requires the same current Submission integrity-view authorization as detailed evidence. Returns the records capability plugins appended for the Attempt through its execution environment binding, such as the process log, in identity order. They raise no Flag and carry no decision: a record with gap set says coverage was missing. Each item names the binding, Participation and generation it was accepted under, the plugin's kind and stream sequence, and its bounded detail object, which the server stores as given. The Submission seal fixed the set, whose inventory the Review response carries. Pages contain at most 100 records. Integrity retirement removes them. No-store; cursors are purpose-specific opaque keysets.",
-        "operationId": "listCapabilityEvidence",
+        "description": "Requires the same current Submission integrity-view authorization as detailed evidence. Returns the append-only records the core kept for the Attempt, such as the execution environment's command log, in identity order. They raise no Flag and carry no decision: a record of kind `execution.gap` says coverage was missing. Each item names its kind, the author that produced it, the author's stream sequence, and its bounded detail object, which the server stores as given. The Submission seal fixed the set, whose inventory the Review response carries. Pages contain at most 100 records. Integrity retirement removes them. No-store; cursors are purpose-specific opaque keysets.",
+        "operationId": "listAttemptEvidence",
         "parameters": [
           {
-            "description": "Maximum number of capability evidence records to return.",
+            "description": "Maximum number of Attempt evidence records to return.",
             "in": "query",
             "name": "limit",
             "schema": {
@@ -50367,18 +50353,18 @@
             }
           },
           {
-            "description": "Opaque continuation from the preceding capability evidence page.",
+            "description": "Opaque continuation from the preceding Attempt evidence page.",
             "in": "query",
             "name": "cursor",
             "schema": {
-              "description": "Opaque capability evidence identity cursor.",
+              "description": "Opaque Attempt evidence identity cursor.",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CapabilityEvidenceListOK"
+            "$ref": "#/components/responses/AttemptEvidenceListOK"
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -50410,7 +50396,7 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Inspect the capability evidence sealed with a Submission",
+        "summary": "Inspect the Attempt evidence sealed with a Submission",
         "tags": [
           "Integrity review"
         ],

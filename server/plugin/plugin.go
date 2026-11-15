@@ -175,7 +175,7 @@ type Host interface {
 	// plugin, and once the plugin is deactivated or failed, every call
 	// returns ErrUnavailable.
 	AttemptWorkspaces() AttemptWorkspaces
-	// Evidence appends the plugin's capability evidence for an Attempt
+	// Evidence appends the plugin's Attempt evidence for an Attempt
 	// through a live environment binding, under the plugin's own policy
 	// kinds. Once the plugin is deactivated or failed, every call returns
 	// ErrUnavailable.

@@ -100,7 +100,7 @@ type grantRecord struct {
 	WorkspaceCursor   int64  `json:"workspace_cursor"`
 	ObservationCursor uint64 `json:"observation_cursor"`
 	ProcessCursor     uint64 `json:"process_cursor"`
-	// Sequences numbers the evidence of each kind within the binding.
+	// Sequences numbers the evidence of each kind within the incarnation.
 	Sequences map[string]int64 `json:"sequences,omitempty"`
 	// PendingGaps are gaps that happened while no binding could take them.
 	PendingGaps []gapNote `json:"pending_gaps,omitempty"`
@@ -167,9 +167,9 @@ type flushRecord struct {
 
 // inputRecord numbers terminal input evidence within a binding.
 type inputRecord struct {
-	BindingID string `json:"binding_id"`
-	Next      int64  `json:"next"`
-	Bytes     int64  `json:"bytes"`
+	Incarnation int64 `json:"incarnation"`
+	Next        int64 `json:"next"`
+	Bytes       int64 `json:"bytes"`
 }
 
 // recordStore is the typed view of the plugin's records.

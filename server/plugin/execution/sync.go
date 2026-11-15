@@ -260,13 +260,11 @@ func (o *owner) processes(ctx context.Context) error {
 	if len(page.Events) == 0 {
 		return nil
 	}
+	// A dropped event stays in the chunk, so reviewers see where the log broke
+	// off.
 	for _, chunk := range processChunks(page.Events) {
-		gap := false
-		for _, event := range chunk {
-			gap = gap || event.Kind == execenv.ProcessDropped
-		}
 		detail := mustJSON(map[string]any{"events": chunk})
-		if err := o.evidence(ctx, evidenceProcess, gap, chunk[0].At, detail, int64(chunk[0].Sequence)); err != nil {
+		if err := o.evidence(ctx, evidenceProcess, chunk[0].At, detail, int64(chunk[0].Sequence)); err != nil {
 			return err
 		}
 	}

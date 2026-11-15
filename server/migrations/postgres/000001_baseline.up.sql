@@ -5706,42 +5706,35 @@ BEGIN
 END $$;
 CREATE TRIGGER native_condition_evidence_guard BEFORE UPDATE OR DELETE ON native_condition_evidence FOR EACH ROW EXECUTE FUNCTION guard_native_condition_evidence();
 
--- Capability evidence is what a capability plugin appends for an Attempt
--- through its live execution environment binding: bounded canonical records
--- of kind "<plugin-id>.<kind>", never a Flag. A gap record marks missing
--- coverage. The binding, kind and stream sequence identify a record, so a
--- repeated append finds the stored one. Records are append-only, accepted
--- only before the Attempt's Submission exists, and leave only with integrity
--- retirement.
-CREATE TABLE capability_evidence (
+-- Attempt evidence is the core's append-only record of what happened in an
+-- Attempt's execution environment: bounded canonical records of one closed
+-- kind, never a Flag. A gap record marks missing coverage. A record belongs
+-- to the Attempt, not to a Participation, and names the author that produced
+-- it. The kind, author and sequence identify a record, so a repeated append
+-- finds the stored one. Records are accepted only before the Attempt's
+-- Submission exists and leave only with integrity retirement.
+CREATE TABLE exam_attempt_evidence (
     id varchar(26) PRIMARY KEY,
     exam_attempt_id varchar(26) NOT NULL REFERENCES exam_attempts(id),
-    participation_id varchar(26) NOT NULL,
-    generation bigint NOT NULL CHECK (generation > 0),
-    environment_binding_id varchar(26) NOT NULL REFERENCES exam_attempt_environment_bindings(id),
-    policy_kind varchar(97) NOT NULL CHECK (
-        policy_kind ~ '^[a-z][a-z0-9.-]{0,63}\.[a-z][a-z0-9_]{0,31}$' AND policy_kind NOT LIKE 'native.%'
-    ),
+    kind varchar(32) NOT NULL CHECK (kind IN (
+        'execution.process', 'execution.input', 'execution.gap', 'execution.overwritten', 'execution.refused'
+    )),
+    author_kind varchar(16) NOT NULL CHECK (author_kind IN ('candidate', 'environment')),
+    author_ref varchar(96) NOT NULL CHECK (octet_length(author_ref) BETWEEN 1 AND 96),
     sequence bigint NOT NULL CHECK (sequence BETWEEN 1 AND 9007199254740991),
-    gap boolean NOT NULL,
     canonical bytea NOT NULL CHECK (octet_length(canonical) BETWEEN 1 AND 67584),
     recorded_at timestamptz NOT NULL,
-    UNIQUE (environment_binding_id, policy_kind, sequence),
-    CONSTRAINT capability_evidence_id_canonical_check CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
-    CONSTRAINT capability_evidence_participation_fkey
-        FOREIGN KEY (participation_id, exam_attempt_id, generation)
-        REFERENCES exam_attempt_participations(id, exam_attempt_id, generation)
+    UNIQUE (exam_attempt_id, kind, author_kind, author_ref, sequence),
+    CONSTRAINT exam_attempt_evidence_id_canonical_check CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$')
 );
-CREATE INDEX capability_evidence_attempt_idx ON capability_evidence (exam_attempt_id, id);
-CREATE INDEX capability_evidence_participation_idx
-    ON capability_evidence (participation_id, exam_attempt_id, generation);
+CREATE INDEX exam_attempt_evidence_attempt_idx ON exam_attempt_evidence (exam_attempt_id, id);
 
--- The running inventory of an Attempt's capability evidence: counts, bytes,
--- gaps, refused appends and a digest chained over the kept records. The
--- Submission seal fixes it: inserting the Submission binds the inventory to
--- it, creating an empty one when the Attempt has none, and from then on it
--- never changes. It leaves only with integrity retirement.
-CREATE TABLE exam_attempt_capability_evidence_inventories (
+-- The running inventory of an Attempt's evidence: counts, bytes, gaps,
+-- refused appends and a digest chained over the kept records. The Submission
+-- seal fixes it: inserting the Submission binds the inventory to it, creating
+-- an empty one when the Attempt has none, and from then on it never changes.
+-- It leaves only with integrity retirement.
+CREATE TABLE exam_attempt_evidence_inventories (
     exam_attempt_id varchar(26) PRIMARY KEY REFERENCES exam_attempts(id),
     records bigint NOT NULL CHECK (records BETWEEN 0 AND 4096),
     bytes bigint NOT NULL CHECK (bytes BETWEEN 0 AND 8388608),
@@ -5751,7 +5744,7 @@ CREATE TABLE exam_attempt_capability_evidence_inventories (
     submission_id varchar(26) UNIQUE REFERENCES exam_submissions(id)
 );
 
-CREATE FUNCTION capability_evidence_retired(attempt_id varchar) RETURNS boolean
+CREATE FUNCTION attempt_evidence_retired(attempt_id varchar) RETURNS boolean
 LANGUAGE sql STABLE AS $$
     SELECT EXISTS (
         SELECT 1
@@ -5761,29 +5754,29 @@ LANGUAGE sql STABLE AS $$
     )
 $$;
 
-CREATE FUNCTION guard_capability_evidence() RETURNS trigger
+CREATE FUNCTION guard_attempt_evidence() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'INSERT' THEN
         IF EXISTS (SELECT 1 FROM exam_submissions WHERE exam_attempt_id = NEW.exam_attempt_id) THEN
-            RAISE EXCEPTION 'capability evidence is sealed with the Submission' USING ERRCODE = '55000';
+            RAISE EXCEPTION 'Attempt evidence is sealed with the Submission' USING ERRCODE = '55000';
         END IF;
         RETURN NEW;
     END IF;
-    IF TG_OP = 'DELETE' AND capability_evidence_retired(OLD.exam_attempt_id) THEN
+    IF TG_OP = 'DELETE' AND attempt_evidence_retired(OLD.exam_attempt_id) THEN
         RETURN OLD;
     END IF;
-    RAISE EXCEPTION 'capability evidence is immutable' USING ERRCODE = '55000';
+    RAISE EXCEPTION 'Attempt evidence is immutable' USING ERRCODE = '55000';
 END;
 $$;
-CREATE TRIGGER capability_evidence_guard BEFORE INSERT OR UPDATE OR DELETE ON capability_evidence
-    FOR EACH ROW EXECUTE FUNCTION guard_capability_evidence();
+CREATE TRIGGER exam_attempt_evidence_guard BEFORE INSERT OR UPDATE OR DELETE ON exam_attempt_evidence
+    FOR EACH ROW EXECUTE FUNCTION guard_attempt_evidence();
 
-CREATE FUNCTION guard_capability_evidence_inventory() RETURNS trigger
+CREATE FUNCTION guard_attempt_evidence_inventory() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN
-        IF capability_evidence_retired(OLD.exam_attempt_id) THEN
+        IF attempt_evidence_retired(OLD.exam_attempt_id) THEN
             RETURN OLD;
         END IF;
     ELSIF OLD.submission_id IS NULL AND
@@ -5792,32 +5785,32 @@ BEGIN
            ROW(OLD.records, OLD.bytes, OLD.gaps, OLD.overflow, OLD.digest)) THEN
         RETURN NEW;
     END IF;
-    RAISE EXCEPTION 'sealed capability evidence inventory is immutable' USING ERRCODE = '55000';
+    RAISE EXCEPTION 'sealed Attempt evidence inventory is immutable' USING ERRCODE = '55000';
 END;
 $$;
-CREATE TRIGGER exam_attempt_capability_evidence_inventories_guard
-    BEFORE UPDATE OR DELETE ON exam_attempt_capability_evidence_inventories
-    FOR EACH ROW EXECUTE FUNCTION guard_capability_evidence_inventory();
+CREATE TRIGGER exam_attempt_evidence_inventories_guard
+    BEFORE UPDATE OR DELETE ON exam_attempt_evidence_inventories
+    FOR EACH ROW EXECUTE FUNCTION guard_attempt_evidence_inventory();
 
 -- Every seal path (voluntary, manager end, automatic) inserts the Submission;
--- this binds the Attempt's capability evidence inventory to it in the same
--- transaction. The empty digest is model.NewCapabilityEvidenceInventory's.
-CREATE FUNCTION seal_capability_evidence_inventory() RETURNS trigger
+-- this binds the Attempt's evidence inventory to it in the same transaction.
+-- The empty digest is model.NewAttemptEvidenceInventory's.
+CREATE FUNCTION seal_attempt_evidence_inventory() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-    INSERT INTO exam_attempt_capability_evidence_inventories (
+    INSERT INTO exam_attempt_evidence_inventories (
         exam_attempt_id, records, bytes, gaps, overflow, digest, submission_id
     ) VALUES (
         NEW.exam_attempt_id, 0, 0, 0, 0,
-        'sha256:' || encode(sha256(convert_to('proctor.capability_evidence', 'UTF8')), 'hex'), NEW.id
+        'sha256:' || encode(sha256(convert_to('proctor.attempt_evidence', 'UTF8')), 'hex'), NEW.id
     )
     ON CONFLICT (exam_attempt_id) DO UPDATE SET submission_id = EXCLUDED.submission_id;
     RETURN NEW;
 END;
 $$;
-CREATE TRIGGER exam_submissions_seal_capability_evidence
+CREATE TRIGGER exam_submissions_seal_attempt_evidence
     AFTER INSERT ON exam_submissions
-    FOR EACH ROW EXECUTE FUNCTION seal_capability_evidence_inventory();
+    FOR EACH ROW EXECUTE FUNCTION seal_attempt_evidence_inventory();
 
 -- Canonical domain identifiers remain constrained independently of foreign keys.
 ALTER TABLE exam_security_preflights

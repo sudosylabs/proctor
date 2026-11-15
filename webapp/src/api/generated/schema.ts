@@ -4455,6 +4455,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plugins/execution/exam-attempts/{exam_attempt_id}/flush": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Flush the execution environment before submitting
+         * @description Freezes the candidate's execution environment after saving its last file changes to the Attempt Workspace, and answers with the Workspace cursor that holds them, which the candidate then submits with. It waits up to 20 seconds. The environment thaws again 30 seconds later unless the Attempt ends first. 409 means no environment is live for the Attempt; 503 means the flush could not finish, and the candidate can still submit what was saved. The request has no body.
+         */
+        post: operations["flushExecutionEnvironment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/execution/exam-attempts/{exam_attempt_id}/terminal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Open the candidate's terminal
+         * @description Upgrades to a binary WebSocket that carries the candidate's terminal in their execution environment. Any node serves it by attaching to the environment's host itself. The first message is JSON, {"op":"attach","cols":80,"rows":24,"resume":null,"takeover":false}; resume names a terminal and the offset of the next output byte the client has not seen, and takeover replaces another attached client. Every later message starts with one type byte: 0x00 carries terminal bytes and 0x01 a JSON control. The client sends input as 0x00 and {"op":"resize","cols","rows"} or {"op":"hangup"} as 0x01. The server sends output as 0x00 and, as 0x01, {"op":"attached","terminal","start"} once attached, {"op":"waiting"} while no environment is live, and {"op":"ended","reason"} when the terminal ends, for example exited, superseded, busy or environment_restarted. When the Exam records terminal input, the server records what the client sends, with its timing and window changes, as sealed evidence before forwarding it; output is never recorded. Messages are at most 64 KiB, and the core closes the socket with code 4003 once the candidate's Attempt access no longer holds.
+         */
+        get: operations["connectExecutionTerminal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/plugins/{plugin_id}/settings": {
         parameters: {
             query?: never;
@@ -4963,7 +5009,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/submissions/{submission_id}/capability-evidence": {
+    "/api/v1/submissions/{submission_id}/attempt-evidence": {
         parameters: {
             query?: never;
             header?: never;
@@ -4974,10 +5020,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Inspect the capability evidence sealed with a Submission
-         * @description Requires the same current Submission integrity-view authorization as detailed evidence. Returns the records capability plugins appended for the Attempt through its execution environment binding, such as the process log, in identity order. They raise no Flag and carry no decision: a record with gap set says coverage was missing. Each item names the binding, Participation and generation it was accepted under, the plugin's kind and stream sequence, and its bounded detail object, which the server stores as given. The Submission seal fixed the set, whose inventory the Review response carries. Pages contain at most 100 records. Integrity retirement removes them. No-store; cursors are purpose-specific opaque keysets.
+         * Inspect the Attempt evidence sealed with a Submission
+         * @description Requires the same current Submission integrity-view authorization as detailed evidence. Returns the append-only records the core kept for the Attempt, such as the execution environment's command log, in identity order. They raise no Flag and carry no decision: a record of kind `execution.gap` says coverage was missing. Each item names its kind, the author that produced it, the author's stream sequence, and its bounded detail object, which the server stores as given. The Submission seal fixed the set, whose inventory the Review response carries. Pages contain at most 100 records. Integrity retirement removes them. No-store; cursors are purpose-specific opaque keysets.
          */
-        get: operations["listCapabilityEvidence"];
+        get: operations["listAttemptEvidence"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6649,6 +6695,48 @@ export interface components {
         AttemptConnectionCloseReason: "transport_closed" | "interrupted" | "lease_expired" | "kicked" | "submitted" | "sitting_closed";
         /** @enum {string} */
         AttemptConnectionState: "open" | "closed";
+        AttemptEvidence: {
+            attempt_id: string;
+            author: components["schemas"]["WorkspaceAuthor"];
+            /** @description The author's own evidence object of at most 64 KiB, stored as given. */
+            detail: {
+                [key: string]: unknown;
+            };
+            id: string;
+            /**
+             * @description `execution.process` is a slice of the command log, `execution.input` recorded terminal input, `execution.gap` missing coverage, `execution.overwritten` a guest change lost to a newer Workspace version, and `execution.refused` a guest change the Workspace refused.
+             * @enum {string}
+             */
+            kind: "execution.process" | "execution.input" | "execution.gap" | "execution.overwritten" | "execution.refused";
+            /**
+             * Format: date-time
+             * @description The author's observation time, never later than recorded_at.
+             */
+            observed_at: string;
+            /** Format: date-time */
+            recorded_at: string;
+            /**
+             * Format: int64
+             * @description The position of the record in its author's stream of this kind.
+             */
+            sequence: number;
+        };
+        /** @description The Attempt evidence the Submission seal fixed: kept records and their canonical bytes, how many are gaps, how many appends were refused over the per-Attempt bounds, and a digest chained over the kept records in order. Review finalization binds it. */
+        AttemptEvidenceInventory: {
+            /** Format: int64 */
+            bytes: number;
+            digest: string;
+            /** Format: int64 */
+            gaps: number;
+            /** Format: int64 */
+            overflow: number;
+            /** Format: int64 */
+            records: number;
+        };
+        AttemptEvidenceListResponse: {
+            items: components["schemas"]["AttemptEvidence"][];
+            next_cursor?: string;
+        };
         /** @enum {string} */
         AttemptParticipationEndReason: "interrupted" | "lease_expired" | "kicked" | "submitted" | "sitting_closed";
         /** @enum {string} */
@@ -7368,6 +7456,7 @@ export interface components {
             workspace_id: components["schemas"]["ID"];
         };
         CandidateWorkspaceJournalEntryResponse: {
+            author: components["schemas"]["WorkspaceAuthor"];
             /** Format: date-time */
             changed_at: string;
             content_version?: components["schemas"]["WorkspaceContentVersion"];
@@ -7380,11 +7469,6 @@ export interface components {
             old_path?: components["schemas"]["StarterWorkspacePath"];
             /** @enum {string} */
             operation: "create_file" | "create_directory" | "replace_file" | "move_entry" | "delete_entry";
-            /**
-             * @description Which writer made the change. Both write as the candidate; `editor` is the candidate's Desktop editor and `environment` is the Exam's execution environment, writing the candidate's work back on their behalf.
-             * @enum {string}
-             */
-            origin: "editor" | "environment";
             /** @description When true, this directory deletion removes old_path and all descendants whose paths start with old_path followed by a slash. Clients apply the entire subtree removal at this one cursor. */
             recursive?: boolean;
         };
@@ -7395,47 +7479,6 @@ export interface components {
             next_cursor?: components["schemas"]["NextCursor"];
             refresh_required: boolean;
             workspace_id: components["schemas"]["ID"];
-        };
-        CapabilityEvidence: {
-            attempt_id: string;
-            /** @description The plugin's own evidence object of at most 64 KiB, stored as given. */
-            detail: {
-                [key: string]: unknown;
-            };
-            environment_binding_id: string;
-            /** @description True when the record says coverage was missing rather than what was observed. */
-            gap: boolean;
-            /** Format: int64 */
-            generation: number;
-            id: string;
-            /**
-             * Format: date-time
-             * @description The plugin's observation time, never later than recorded_at.
-             */
-            observed_at: string;
-            participation_id: string;
-            /** @description The plugin's "<plugin-id>.<kind>"; never a native kind. Treat an unknown kind as opaque. */
-            policy_kind: string;
-            /** Format: date-time */
-            recorded_at: string;
-            /** Format: int64 */
-            sequence: number;
-        };
-        /** @description The capability evidence the Submission seal fixed: kept records and their canonical bytes, how many are gaps, how many appends were refused over the per-Attempt bounds, and a digest chained over the kept records in order. Review finalization binds it. */
-        CapabilityEvidenceInventory: {
-            /** Format: int64 */
-            bytes: number;
-            digest: string;
-            /** Format: int64 */
-            gaps: number;
-            /** Format: int64 */
-            overflow: number;
-            /** Format: int64 */
-            records: number;
-        };
-        CapabilityEvidenceListResponse: {
-            items: components["schemas"]["CapabilityEvidence"][];
-            next_cursor?: string;
         };
         ChangePasswordRequest: {
             password: string;
@@ -8570,10 +8613,10 @@ export interface components {
         };
         /** @description Manager-authorized Submission integrity snapshot and current decision set. */
         ExamIntegrityReviewResponse: {
+            attempt_evidence: components["schemas"]["AttemptEvidenceInventory"];
             browser_activity: components["schemas"]["BrowserSubmissionSettlement"];
             browser_evidence_overflow?: components["schemas"]["BrowserIntegrityOverflow"];
             candidate_user_id: components["schemas"]["ID"];
-            capability_evidence: components["schemas"]["CapabilityEvidenceInventory"];
             decisions: components["schemas"]["ExamIntegrityReviewDecisionResponse"][];
             /**
              * Format: int64
@@ -12158,6 +12201,16 @@ export interface components {
              */
             reason_code: "institution_request" | "integrity_review" | "records_review" | "review_not_required" | "case_closed" | "mistake" | "other";
         };
+        /** @description Who made a Workspace change. Every author writes on behalf of the candidate; the kind says which actor it was. */
+        WorkspaceAuthor: {
+            /**
+             * @description `candidate` is the candidate's own editor. `environment` is the Attempt's execution environment, writing back what its programs changed.
+             * @enum {string}
+             */
+            kind: "candidate" | "environment";
+            /** @description The reference within the kind. For `candidate`, the Attempt Connection the editor wrote through. For `environment`, the environment incarnation in decimal, followed by a slash and the tag of the writing process, such as `terminal:1`, when it is known. */
+            ref: string;
+        };
         /** @description Opaque comparison token for one acknowledged Workspace file content state. It is not an entity identifier and must be returned unchanged. */
         WorkspaceContentVersion: string;
     };
@@ -12408,6 +12461,21 @@ export interface components {
                  *     }
                  */
                 "application/json": components["schemas"]["AffiliationListResponse"];
+            };
+        };
+        /** @description Bounded private Attempt evidence, never a Flag or a guilt finding. */
+        AttemptEvidenceListOK: {
+            headers: {
+                "Cache-Control"?: "no-store";
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "items": []
+                 *     }
+                 */
+                "application/json": components["schemas"]["AttemptEvidenceListResponse"];
             };
         };
         /** @description Audit Event collection */
@@ -12666,21 +12734,6 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["CandidateWorkspaceJournalResponse"];
-            };
-        };
-        /** @description Bounded private capability evidence, never a Flag or a guilt finding. */
-        CapabilityEvidenceListOK: {
-            headers: {
-                "Cache-Control"?: "no-store";
-                [name: string]: unknown;
-            };
-            content: {
-                /**
-                 * @example {
-                 *       "items": []
-                 *     }
-                 */
-                "application/json": components["schemas"]["CapabilityEvidenceListResponse"];
             };
         };
         /** @description Class archived */
@@ -22727,6 +22780,85 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    flushExecutionEnvironment: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. */
+                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
+                /** @description The durable open Attempt Connection bound to the current authenticated Session. */
+                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
+            };
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The environment is frozen and its changes are in the Attempt Workspace */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "workspace_cursor": 42
+                     *     }
+                     */
+                    "application/json": {
+                        /**
+                         * Format: int64
+                         * @description The Attempt Workspace cursor that holds every change the environment had written. Submit with it.
+                         */
+                        workspace_cursor: number;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    connectExecutionTerminal: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. */
+                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
+                /** @description The durable open Attempt Connection bound to the current authenticated Session. */
+                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
+            };
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Switching Protocols */
+            101: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     replacePluginSettings: {
         parameters: {
             query?: never;
@@ -23509,12 +23641,12 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
-    listCapabilityEvidence: {
+    listAttemptEvidence: {
         parameters: {
             query?: {
-                /** @description Maximum number of capability evidence records to return. */
+                /** @description Maximum number of Attempt evidence records to return. */
                 limit?: number;
-                /** @description Opaque continuation from the preceding capability evidence page. */
+                /** @description Opaque continuation from the preceding Attempt evidence page. */
                 cursor?: string;
             };
             header?: never;
@@ -23526,7 +23658,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            200: components["responses"]["CapabilityEvidenceListOK"];
+            200: components["responses"]["AttemptEvidenceListOK"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

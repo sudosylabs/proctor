@@ -385,7 +385,7 @@ func TestExecutionPluginEndToEnd(t *testing.T) {
 		return report.Grants == 0
 	}, "the Submission revokes the grant")
 
-	evidence, err := persistence.ExamIntegrityReview().ListCapabilityEvidence(ctx, store.CapabilityEvidenceListOptions{
+	evidence, err := persistence.ExamIntegrityReview().ListAttemptEvidence(ctx, store.AttemptEvidenceListOptions{
 		SubmissionID: submitted.SubmissionID, Limit: 100,
 	})
 	require.NoError(t, err)
@@ -396,6 +396,12 @@ func TestExecutionPluginEndToEnd(t *testing.T) {
 		commands = commands || strings.Contains(string(item.Detail), `"echo"`)
 	}
 	require.True(t, commands, "the command is sealed process evidence: %v", kinds)
-	require.Equal(t, 1, kinds["execution.environment_restarted"], "the restart is one gap: %v", kinds)
+	require.Equal(t, 1, kinds["execution.gap"], "the restart is one gap: %v", kinds)
+	for _, item := range evidence.Items {
+		if item.Gap() {
+			require.Contains(t, string(item.Detail), `"gap":"environment_restarted"`, "the gap names the restart")
+			require.Equal(t, model.NewEnvironmentWorkspaceAuthor(1, ""), item.Author, "the new incarnation records its restart")
+		}
+	}
 
 }

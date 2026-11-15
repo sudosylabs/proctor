@@ -313,9 +313,11 @@ scratch home and ignored paths never do.
 
 ## Evidence
 
-Evidence from execution goes into Attempt-owned, append-only *evidence
-streams*. Because they belong to the Attempt, a settle gap is recordable after
-the Participation has ended.
+Evidence from execution goes into Attempt-owned, append-only *Attempt
+evidence*. Each record names its author, and the kind, author and sequence
+identify it, so every author keeps its own streams. Because the records
+belong to the Attempt, a settle gap is recordable after the Participation has
+ended.
 
 | Kind | What it holds |
 | --- | --- |
@@ -325,9 +327,11 @@ the Participation has ended.
 | `execution.overwritten` | A guest change lost to a newer Workspace version |
 | `execution.refused` | A guest change the Workspace refused, with the reason |
 
-- **Storage.** Chunks in the VFS, with an index in PostgreSQL that carries a
-  digest chain and refuses updates. Each Attempt's streams are bounded by the
-  policy. Appends after the Submission are refused, except the settle's.
+- **Storage.** Bounded records in PostgreSQL, with an inventory that carries a
+  digest chain and refuses updates once sealed. Each Attempt keeps at most
+  4,096 records and 8 MiB. Large payloads, such as long terminal input
+  recordings, become chunks in the VFS that a record references. Appends after
+  the Submission are refused, except the settle's.
 - **The command log** comes from execenv's guest agent, which runs outside the
   candidate's workload. The workload cannot read or change it, and a gap in its
   sequence is itself recorded. Candidates are told that commands are logged.
@@ -400,12 +404,13 @@ New core tables, in the baseline migration:
 - `exam_attempt_environments`, one row per Attempt that uses execution;
 - `exam_attempt_environment_processes`;
 - `attempt_runtime_leases`, the owners' fenced leases;
-- `attempt_evidence_streams` and `attempt_evidence_chunks`;
+- `exam_attempt_evidence` and `exam_attempt_evidence_inventories`, which
+  replace capability evidence;
 - `environment_profiles`;
 - `author_kind` and `author_ref` on the Workspace journal, replacing `origin`.
 
-Removed with the plugin: the environment bindings, capability evidence, the
-plugin's records and leases, and the plugin capabilities for Workspace access
+Removed with the plugin: the environment bindings, the plugin's records and
+leases, and the plugin capabilities for Workspace access
 and evidence. Plugin records, leases and Exam sections stay only if another
 plugin uses them.
 
@@ -417,15 +422,19 @@ Each step is a vertical slice with its own tests.
    outcomes, the last author of every entry sealed in the Submission, and
    budgets per author kind. The Workspace already refuses a stale version
    per mutation.
-2. **Runtime foundation:** fenced runtime leases with wakeups, and evidence
-   streams.
+2. **Evidence foundation:** Attempt evidence of the core's closed kinds,
+   owned by the Attempt and named by its author, in place of capability
+   evidence, with the seal, review, export and retention moved over.
 3. **Attempt Environment:** the model, lifecycle, placement, templates and
-   seeds, sync and the settle. The three Workspace changes whose only reader
-   is the environment's owner land here with it: change notifications in the
-   core, retention by cursor, and grouped harvest batches.
-   `server/plugin/execution` and its seams are deleted in this step.
+   seeds, sync and the settle, under the owner's fenced runtime lease with
+   wakeups. The three Workspace changes whose only reader is the owner land
+   here with it: change notifications in the core, retention by cursor, and
+   grouped harvest batches. `server/plugin/execution` and its seams are
+   deleted in this step, and evidence is appended under the owner's fence
+   instead of a binding.
 4. **Processes and terminals:** tags, the terminal socket with offsets and
-   screens, and the command log as evidence.
+   screens, the command log as evidence, and VFS chunks for terminal input
+   recordings.
 5. **Policy, profiles and API:** the execution policy, environment profiles,
    the candidate, manager and reviewer routes, and sync status.
 6. **The execenv additions,** alongside steps 3 and 4.

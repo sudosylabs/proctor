@@ -101,8 +101,8 @@ type ExamIntegrityDiscrepancyPage struct {
 // projection.
 type ExamSubmissionReviewSnapshot struct {
 	NativeConditions model.NativeConditionInventory
-	// CapabilityEvidence is the inventory the Submission seal fixed.
-	CapabilityEvidence        model.CapabilityEvidenceInventory
+	// AttemptEvidence is the inventory the Submission seal fixed.
+	AttemptEvidence           model.AttemptEvidenceInventory
 	DeliveryInventoryRevision int64
 	BrowserEvidenceOverflow   *model.BrowserIntegrityOverflow
 	Authorization             ExamIntegrityReviewAuthorization
@@ -207,10 +207,10 @@ func (r *ExamIntegrityReviewMutationResult) ConsistentWith(submissionID model.Su
 // Review, and decisions; requires one decision per Flag; rejects any missing,
 // changed, or over-limit inventory; snapshots immutable inventory rows and a
 // canonical digest, which also binds the native-condition inventory and the
-// capability evidence inventory the seal fixed; freezes the Review; and
-// commits audit/outcome atomically. ListCapabilityEvidence pages the sealed
-// Submission's capability evidence in ID order, at most
-// CapabilityEvidenceReviewMaximum per page, and conceals it once integrity
+// Attempt evidence inventory the seal fixed; freezes the Review; and
+// commits audit/outcome atomically. ListAttemptEvidence pages the sealed
+// Submission's Attempt evidence in ID order, at most
+// AttemptEvidenceReviewMaximum per page, and conceals it once integrity
 // has retired. PrepareRelease locks the exact finalized Review, distinguishes its retained
 // one-way release, and durably reserves a millisecond PostgreSQL release time
 // without changing Review state. Release is a distinct one-way authorized
@@ -226,7 +226,7 @@ func (r *ExamIntegrityReviewMutationResult) ConsistentWith(submissionID model.Su
 // candidate-owned released projection and conceals all pre-release state.
 type ExamIntegrityReviewStore interface {
 	ListNativeConditions(context.Context, NativeConditionListOptions) (*NativeConditionPage, error)
-	ListCapabilityEvidence(context.Context, CapabilityEvidenceListOptions) (*CapabilityEvidencePage, error)
+	ListAttemptEvidence(context.Context, AttemptEvidenceListOptions) (*AttemptEvidencePage, error)
 	Resolve(context.Context, model.SubmissionID) (*ExamIntegrityReviewAuthorization, error)
 	Get(context.Context, model.SubmissionID) (*ExamSubmissionReviewSnapshot, error)
 	ListFlags(context.Context, ExamIntegrityFlagListOptions) (*ExamIntegrityFlagPage, error)

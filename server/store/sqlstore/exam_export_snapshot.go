@@ -263,16 +263,16 @@ func captureExamExportIntegrity(
 			FROM integrity_evidence
 			WHERE exam_attempt_id = ?
 			ORDER BY id`, a.AttemptID.String()},
-		// Capability evidence raises no Flag. Its records and the inventory
+		// Attempt evidence raises no Flag. Its records and the inventory
 		// the seal fixed travel together, so a reader can check the counts
 		// and see refused appends. The model's per-Attempt bounds (4,096
 		// records, 8 MiB) keep one Submission within the export's limits.
-		{"capability_evidence", `SELECT convert_from(canonical, 'UTF8')::jsonb AS record
-			FROM capability_evidence
+		{"attempt_evidence", `SELECT convert_from(canonical, 'UTF8')::jsonb AS record
+			FROM exam_attempt_evidence
 			WHERE exam_attempt_id = ?
 			ORDER BY id`, a.AttemptID.String()},
-		{"capability_evidence_inventory", `SELECT records, bytes, gaps, overflow, digest
-			FROM exam_attempt_capability_evidence_inventories
+		{"attempt_evidence_inventory", `SELECT records, bytes, gaps, overflow, digest
+			FROM exam_attempt_evidence_inventories
 			WHERE submission_id = ?`, a.SubmissionID.String()},
 		{"discrepancies", `SELECT id, generation, kind, focus_loss_signal_id, sequence,
 				duration_milliseconds, source, missing_before, correction_revision_id,

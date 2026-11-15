@@ -22,7 +22,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store/storetest"
 )
 
-func TestCapabilityEvidence(t *testing.T) {
+func TestAttemptEvidence(t *testing.T) {
 	persistence := openTestStore(t)
 	for _, test := range []struct {
 		name     string
@@ -33,14 +33,14 @@ func TestCapabilityEvidence(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			resetTestStore(t, persistence)
-			storetest.TestCapabilityEvidence(t, test.decorate(t, persistence), capabilityEvidenceExportProbe(persistence))
+			storetest.TestAttemptEvidence(t, test.decorate(t, persistence), attemptEvidenceExportProbe(persistence))
 		})
 	}
 }
 
-// capabilityEvidenceExportProbe captures a Submission's integrity records as
+// attemptEvidenceExportProbe captures a Submission's integrity records as
 // an Examination Export does.
-func capabilityEvidenceExportProbe(persistence *SQLStore) storetest.CapabilityEvidenceExportProbe {
+func attemptEvidenceExportProbe(persistence *SQLStore) storetest.AttemptEvidenceExportProbe {
 	return func(t *testing.T, ctx context.Context, submissionID model.SubmissionID, attemptID model.ExamAttemptID) map[string][]json.RawMessage {
 		t.Helper()
 		captured, err := runSQLTransaction(ctx, persistence.GetMaster().Begin, "capture export integrity", func(
@@ -58,22 +58,22 @@ func capabilityEvidenceExportProbe(persistence *SQLStore) storetest.CapabilityEv
 	}
 }
 
-// TestCapabilityEvidenceSchemaKeepsRecordsSealed holds the schema's own
+// TestAttemptEvidenceSchemaKeepsRecordsSealed holds the schema's own
 // guarantees, which no Store path should ever need: records and a sealed
 // inventory are immutable, and nothing is inserted once the Submission
 // exists.
-func TestCapabilityEvidenceSchemaKeepsRecordsSealed(t *testing.T) {
+func TestAttemptEvidenceSchemaKeepsRecordsSealed(t *testing.T) {
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	ctx := context.Background()
-	storetest.TestCapabilityEvidence(t, persistence, nil)
+	storetest.TestAttemptEvidence(t, persistence, nil)
 
 	var row struct {
 		ID        string `db:"id"`
 		AttemptID string `db:"exam_attempt_id"`
 	}
 	require.NoError(t, persistence.GetMaster().Get(ctx, &row, `SELECT e.id, e.exam_attempt_id
-		FROM capability_evidence e
+		FROM exam_attempt_evidence e
 		JOIN exam_submissions s ON s.exam_attempt_id = e.exam_attempt_id
 		ORDER BY e.id LIMIT 1`))
 	requireObjectState := func(t *testing.T, err error) {
@@ -82,17 +82,16 @@ func TestCapabilityEvidenceSchemaKeepsRecordsSealed(t *testing.T) {
 		require.ErrorAs(t, err, &postgresErr)
 		require.Equal(t, "55000", string(postgresErr.Code), "%v", err)
 	}
-	_, err := persistence.GetMaster().Exec(ctx, `UPDATE capability_evidence SET gap = NOT gap WHERE id = ?`, row.ID)
+	_, err := persistence.GetMaster().Exec(ctx, `UPDATE exam_attempt_evidence SET sequence = sequence + 1 WHERE id = ?`, row.ID)
 	requireObjectState(t, err)
-	_, err = persistence.GetMaster().Exec(ctx, `DELETE FROM capability_evidence WHERE id = ?`, row.ID)
+	_, err = persistence.GetMaster().Exec(ctx, `DELETE FROM exam_attempt_evidence WHERE id = ?`, row.ID)
 	requireObjectState(t, err)
-	_, err = persistence.GetMaster().Exec(ctx, `UPDATE exam_attempt_capability_evidence_inventories SET overflow = overflow + 1
+	_, err = persistence.GetMaster().Exec(ctx, `UPDATE exam_attempt_evidence_inventories SET overflow = overflow + 1
 		WHERE exam_attempt_id = ?`, row.AttemptID)
 	requireObjectState(t, err)
-	_, err = persistence.GetMaster().Exec(ctx, `INSERT INTO capability_evidence (id, exam_attempt_id, participation_id, generation,
-			environment_binding_id, policy_kind, sequence, gap, canonical, recorded_at)
-		SELECT ?, exam_attempt_id, participation_id, generation, environment_binding_id, policy_kind, sequence + 1000, gap,
-			canonical, recorded_at
-		FROM capability_evidence WHERE id = ?`, model.NewIntegrityEvidenceID().String(), row.ID)
+	_, err = persistence.GetMaster().Exec(ctx, `INSERT INTO exam_attempt_evidence (id, exam_attempt_id, kind, author_kind,
+			author_ref, sequence, canonical, recorded_at)
+		SELECT ?, exam_attempt_id, kind, author_kind, author_ref, sequence + 1000, canonical, recorded_at
+		FROM exam_attempt_evidence WHERE id = ?`, model.NewIntegrityEvidenceID().String(), row.ID)
 	requireObjectState(t, err)
 }

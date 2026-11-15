@@ -272,8 +272,7 @@ func TestGrantLifecycleOnAMemoryHost(t *testing.T) {
 	// records the restart once it is bound again.
 	require.True(t, h.guest.Lose(id))
 	h.eventually(func() bool { g := h.grant(); return g.Incarnation == 1 && g.State == stateLive }, "a new incarnation is live")
-	h.eventually(func() bool { return len(h.host.evidence.records(gapRestarted)) == 1 }, "the restart is a gap")
-	require.True(t, h.host.evidence.records(gapRestarted)[0].Gap)
+	h.eventually(func() bool { return len(h.host.evidence.gaps(gapRestarted)) == 1 }, "the restart is a gap")
 	h.eventually(func() bool { body, _ := h.guestFile("notes.txt"); return body == "still synced\n" },
 		"the new grant is projected from the Attempt Workspace")
 
@@ -338,7 +337,7 @@ func TestOwnerTakeoverContinuesTheEpoch(t *testing.T) {
 	after := h.grant()
 	require.Equal(t, before.Epoch, after.Epoch, "the shell's grant survives the owner change")
 	require.Greater(t, after.FenceRevision, before.FenceRevision, "the new owner fences out the old one")
-	require.Empty(t, h.host.evidence.records(gapRestarted))
+	require.Empty(t, h.host.evidence.gaps(gapRestarted))
 }
 
 // TestCapacityWaitIsAGap waits for a slot and records the wait once the
@@ -359,7 +358,7 @@ func TestCapacityWaitIsAGap(t *testing.T) {
 	h.eventually(func() bool { return h.grant().State == stateWaitingCapacity }, "the grant waits for capacity")
 	require.NoError(t, full.Revoke(context.Background(), "someone-else"))
 	h.eventually(func() bool { return h.grant().State == stateLive }, "the grant is placed once a slot frees")
-	h.eventually(func() bool { return len(h.host.evidence.records(gapWaitingCapacity)) == 1 }, "the wait is a gap")
+	h.eventually(func() bool { return len(h.host.evidence.gaps(gapWaitingCapacity)) == 1 }, "the wait is a gap")
 }
 
 func TestEventsAreIdempotentAndOrdered(t *testing.T) {

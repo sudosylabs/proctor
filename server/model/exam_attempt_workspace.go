@@ -473,8 +473,8 @@ const AttemptWorkspaceAuthorRefMaximumBytes = 96
 // followed by a slash and the tag of the process that wrote the path when
 // that is known.
 type AttemptWorkspaceAuthor struct {
-	Kind AttemptWorkspaceAuthorKind
-	Ref  string
+	Kind AttemptWorkspaceAuthorKind `json:"kind"`
+	Ref  string                     `json:"ref"`
 }
 
 // NewCandidateWorkspaceAuthor names the candidate's editor on one Connection.

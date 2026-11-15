@@ -8,13 +8,13 @@
 -- Rolls back the pre-release schema baseline. Development databases should
 -- normally be dropped and recreated rather than rolled back.
 
-DROP TRIGGER IF EXISTS exam_submissions_seal_capability_evidence ON exam_submissions;
-DROP FUNCTION IF EXISTS seal_capability_evidence_inventory();
-DROP TABLE IF EXISTS exam_attempt_capability_evidence_inventories;
-DROP TABLE IF EXISTS capability_evidence;
-DROP FUNCTION IF EXISTS guard_capability_evidence_inventory();
-DROP FUNCTION IF EXISTS guard_capability_evidence();
-DROP FUNCTION IF EXISTS capability_evidence_retired(varchar);
+DROP TRIGGER IF EXISTS exam_submissions_seal_attempt_evidence ON exam_submissions;
+DROP FUNCTION IF EXISTS seal_attempt_evidence_inventory();
+DROP TABLE IF EXISTS exam_attempt_evidence_inventories;
+DROP TABLE IF EXISTS exam_attempt_evidence;
+DROP FUNCTION IF EXISTS guard_attempt_evidence_inventory();
+DROP FUNCTION IF EXISTS guard_attempt_evidence();
+DROP FUNCTION IF EXISTS attempt_evidence_retired(varchar);
 DROP TABLE IF EXISTS native_condition_evidence;
 DROP TABLE IF EXISTS submission_review_finalizations;
 DROP TABLE IF EXISTS browser_integrity_overflow;

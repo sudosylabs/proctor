@@ -23,12 +23,12 @@ import (
 
 type evidenceWorkspaceStore struct {
 	store.ExamAttemptWorkspaceStore
-	input  *store.ExamAttemptEnvironmentEvidenceAppend
-	result func(*store.ExamAttemptEnvironmentEvidenceAppend) *store.ExamAttemptEnvironmentEvidenceAppendResult
+	input  *store.ExamAttemptEvidenceAppend
+	result func(*store.ExamAttemptEvidenceAppend) *store.ExamAttemptEvidenceAppendResult
 	err    error
 }
 
-func (s *evidenceWorkspaceStore) AppendEnvironmentEvidence(_ context.Context, input *store.ExamAttemptEnvironmentEvidenceAppend) (*store.ExamAttemptEnvironmentEvidenceAppendResult, error) {
+func (s *evidenceWorkspaceStore) AppendAttemptEvidence(_ context.Context, input *store.ExamAttemptEvidenceAppend) (*store.ExamAttemptEvidenceAppendResult, error) {
 	s.input = input
 	if s.err != nil {
 		return nil, s.err
@@ -36,12 +36,11 @@ func (s *evidenceWorkspaceStore) AppendEnvironmentEvidence(_ context.Context, in
 	return s.result(input), nil
 }
 
-func storedEvidence(input *store.ExamAttemptEnvironmentEvidenceAppend) *store.ExamAttemptEnvironmentEvidenceAppendResult {
+func storedEvidence(input *store.ExamAttemptEvidenceAppend) *store.ExamAttemptEvidenceAppendResult {
 	at := input.ObservedAt.UTC().Truncate(time.Millisecond)
-	return &store.ExamAttemptEnvironmentEvidenceAppendResult{Evidence: model.CapabilityEvidence{ID: input.EvidenceID,
-		AttemptID: input.Access.AttemptID, ParticipationID: model.NewAttemptParticipationID(), Generation: input.Access.Generation,
-		BindingID: input.Access.BindingID, Kind: input.Kind, Sequence: input.Sequence, Gap: input.Gap, Detail: input.Detail,
-		ObservedAt: at, RecordedAt: at}}
+	return &store.ExamAttemptEvidenceAppendResult{Evidence: model.AttemptEvidence{ID: input.EvidenceID,
+		AttemptID: input.Access.AttemptID, Kind: input.Kind, Author: input.Access.WorkspaceAuthor(), Sequence: input.Sequence,
+		Detail: input.Detail, ObservedAt: at, RecordedAt: at}}
 }
 
 func testBoundEnvironment() plugin.BoundEnvironment {
@@ -61,16 +60,15 @@ func TestPluginEvidenceAppendsThroughTheEnvironmentAccess(t *testing.T) {
 	workspaces := &evidenceWorkspaceStore{result: storedEvidence}
 	adapter := newStorePluginEvidence(workspaces)
 	environment := testBoundEnvironment()
-	record := plugin.EvidenceRecord{Sequence: 4, Gap: true, ObservedAt: time.Now(), Detail: json.RawMessage(`{"reason":"restarted"}`)}
-	receipt, err := adapter.Append(context.Background(), "execution.process_log", environment, record)
+	record := plugin.EvidenceRecord{Sequence: 4, ObservedAt: time.Now(), Detail: json.RawMessage(`{"gap":"environment_restarted"}`)}
+	receipt, err := adapter.Append(context.Background(), "execution.gap", environment, record)
 	require.NoError(t, err)
 	require.Equal(t, workspaces.input.EvidenceID.String(), receipt.ID, "the core proposes the record's identity")
 	require.False(t, receipt.Repeated)
 	require.Equal(t, store.ExamAttemptWorkspaceEnvironmentAccess{AttemptID: model.ExamAttemptID(environment.AttemptID),
 		BindingID: model.AttemptEnvironmentBindingID(environment.BindingID),
 		Identity:  model.AttemptEnvironmentIdentity{GrantID: "grant-1", Epoch: "epoch-1"}, Generation: 2}, workspaces.input.Access)
-	require.Equal(t, model.IntegrityPolicyKind("execution.process_log"), workspaces.input.Kind)
-	require.True(t, workspaces.input.Gap)
+	require.Equal(t, model.AttemptEvidenceGap, workspaces.input.Kind)
 
 	require.Nil(t, newStorePluginEvidence(nil), "no persistence, no evidence")
 }
@@ -89,7 +87,7 @@ func TestPluginEvidenceRefusesBeforeTheStore(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			workspaces := &evidenceWorkspaceStore{result: storedEvidence}
-			environment, kind := testBoundEnvironment(), "execution.process_log"
+			environment, kind := testBoundEnvironment(), "execution.process"
 			record := plugin.EvidenceRecord{Sequence: 1, ObservedAt: time.Now(), Detail: json.RawMessage(`{}`)}
 			mutate(&environment, &record, &kind)
 			_, err := newStorePluginEvidence(workspaces).Append(context.Background(), kind, environment, record)
@@ -106,32 +104,32 @@ func TestPluginEvidenceStoreOutcomesReachPluginsAsPluginErrors(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		err    error
-		result func(*store.ExamAttemptEnvironmentEvidenceAppend) *store.ExamAttemptEnvironmentEvidenceAppendResult
+		result func(*store.ExamAttemptEvidenceAppend) *store.ExamAttemptEvidenceAppendResult
 		want   error
 	}{
 		{name: "binding not current", err: store.NewErrNotFound("exam_attempt_access", "a"), want: plugin.ErrBindingNotCurrent},
-		{name: "sequence conflict", err: store.NewErrConflict("capability_evidence", "capability_evidence_sequence", nil),
+		{name: "sequence conflict", err: store.NewErrConflict("attempt_evidence", "attempt_evidence_sequence", nil),
 			want: plugin.ErrEvidenceSequenceConflict},
-		{name: "invalid", err: store.NewErrInvalidInput("capability_evidence", "append", nil), want: plugin.ErrEvidenceInvalid},
+		{name: "invalid", err: store.NewErrInvalidInput("attempt_evidence", "append", nil), want: plugin.ErrEvidenceInvalid},
 		{name: "transient", err: transient, want: transient},
-		{name: "refused", result: func(*store.ExamAttemptEnvironmentEvidenceAppend) *store.ExamAttemptEnvironmentEvidenceAppendResult {
-			return &store.ExamAttemptEnvironmentEvidenceAppendResult{Refused: true}
+		{name: "refused", result: func(*store.ExamAttemptEvidenceAppend) *store.ExamAttemptEvidenceAppendResult {
+			return &store.ExamAttemptEvidenceAppendResult{Refused: true}
 		}, want: plugin.ErrEvidenceBudgetExhausted},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			workspaces := &evidenceWorkspaceStore{err: test.err, result: test.result}
-			_, err := newStorePluginEvidence(workspaces).Append(context.Background(), "execution.process_log", testBoundEnvironment(),
+			_, err := newStorePluginEvidence(workspaces).Append(context.Background(), "execution.process", testBoundEnvironment(),
 				plugin.EvidenceRecord{Sequence: 1, ObservedAt: time.Now(), Detail: json.RawMessage(`{}`)})
 			require.ErrorIs(t, err, test.want)
 		})
 	}
 
-	inconsistent := &evidenceWorkspaceStore{result: func(input *store.ExamAttemptEnvironmentEvidenceAppend) *store.ExamAttemptEnvironmentEvidenceAppendResult {
+	inconsistent := &evidenceWorkspaceStore{result: func(input *store.ExamAttemptEvidenceAppend) *store.ExamAttemptEvidenceAppendResult {
 		result := storedEvidence(input)
 		result.Evidence.Sequence++
 		return result
 	}}
-	_, err := newStorePluginEvidence(inconsistent).Append(context.Background(), "execution.process_log", testBoundEnvironment(),
+	_, err := newStorePluginEvidence(inconsistent).Append(context.Background(), "execution.process", testBoundEnvironment(),
 		plugin.EvidenceRecord{Sequence: 1, ObservedAt: time.Now(), Detail: json.RawMessage(`{}`)})
 	require.Error(t, err, "the core verifies what the Store answered")
 }

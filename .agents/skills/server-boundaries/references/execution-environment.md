@@ -1,7 +1,7 @@
 # Execution environment rules
 
 Read this before building core execution: the Attempt Environment, its owner
-and processes, terminals, execution evidence streams, Apply Workspace Batch,
+and processes, terminals, Attempt evidence, Apply Workspace Batch,
 Workspace authors, or any execenv change they need. The design and its reasons
 are in
 [`docs/public/developers/server/execution-environment.mdx`](../../../../docs/public/developers/server/execution-environment.mdx).
@@ -64,7 +64,7 @@ This file holds only the rules that must not drift.
 - PTY bytes never travel over cluster peer delivery. Any node serves a
   terminal by attaching to the grant itself. Input is written by offset and
   accepted only from the process's author.
-- Execution evidence goes into Attempt-owned, append-only evidence streams of
+- Execution evidence goes into Attempt-owned, append-only Attempt evidence of
   typed kinds. Appends after the Submission are refused, except the settle's.
 - The process log comes from the guest agent outside the workload. Terminal
   input is recorded only when the policy opts in, is captured at the serving

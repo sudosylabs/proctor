@@ -298,7 +298,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"MoveExamStarterWorkspaceEntryRequest":           reflect.TypeOf(moveExamStarterWorkspaceEntryRequest{}),
 	"NativeBatchReceipt":                             reflect.TypeOf(model.NativeBatchReceipt{}),
 	"NativeConditionListResponse":                    reflect.TypeOf(nativeConditionListResponse{}),
-	"CapabilityEvidenceListResponse":                 reflect.TypeOf(capabilityEvidenceListResponse{}),
+	"AttemptEvidenceListResponse":                    reflect.TypeOf(attemptEvidenceListResponse{}),
 	"NativeCapabilityFact":                           reflect.TypeOf(model.NativeCapabilityFact{}),
 	"NativeParticipationConfirmed":                   reflect.TypeOf(model.NativeParticipationConfirmed{}),
 	"NativeRuleStatusReport":                         reflect.TypeOf(model.NativeRuleStatusReport{}),

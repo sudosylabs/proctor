@@ -221,6 +221,6 @@ func (f *reviewStoreFake) ListNativeConditions(context.Context, store.NativeCond
 	return &store.NativeConditionPage{Items: []model.NativeConditionEvidence{}}, nil
 }
 
-func (f *reviewStoreFake) ListCapabilityEvidence(context.Context, store.CapabilityEvidenceListOptions) (*store.CapabilityEvidencePage, error) {
-	return &store.CapabilityEvidencePage{Items: []model.CapabilityEvidence{}}, nil
+func (f *reviewStoreFake) ListAttemptEvidence(context.Context, store.AttemptEvidenceListOptions) (*store.AttemptEvidencePage, error) {
+	return &store.AttemptEvidencePage{Items: []model.AttemptEvidence{}}, nil
 }

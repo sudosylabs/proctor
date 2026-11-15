@@ -174,7 +174,7 @@ func (s *Service) ListExamIntegrityDiscrepancies(
 func validSnapshot(snapshot *store.ExamSubmissionReviewSnapshot, submissionID model.SubmissionID) bool {
 	if snapshot == nil ||
 		snapshot.NativeConditions.Validate() != nil ||
-		snapshot.CapabilityEvidence.Validate() != nil ||
+		snapshot.AttemptEvidence.Validate() != nil ||
 		snapshot.DeliveryInventoryRevision < 0 ||
 		snapshot.Submission == nil ||
 		snapshot.Submission.Validate() != nil ||

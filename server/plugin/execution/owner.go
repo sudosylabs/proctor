@@ -46,13 +46,16 @@ const (
 	echoBodyBudget = 32 << 20
 )
 
-// The gap kinds the plugin records. They are evidence, never Flags.
+// The Attempt evidence kinds the plugin records, under its ID, and the gaps
+// a gap record names. They are evidence, never Flags.
 const (
+	evidenceProcess = "process"
+	evidenceInput   = "input"
+	evidenceGap     = "gap"
+	evidenceRefused = "refused"
+
 	gapRestarted       = "environment_restarted"
 	gapWaitingCapacity = "environment_waiting_capacity"
-	gapHarvestRefused  = "harvest_refused"
-	evidenceProcess    = "process"
-	evidenceInput      = "terminal_input"
 )
 
 // errRestart asks the owner to replace the grant with a new incarnation.
@@ -436,9 +439,6 @@ func (o *owner) bind(ctx context.Context) error {
 		return err
 	}
 	grant, err := o.records.updateGrant(ctx, o.attemptID, func(grant *grantRecord, _ bool) (bool, error) {
-		if grant.BindingID != result.Binding.ID {
-			grant.Sequences = nil
-		}
 		grant.BindingID, grant.BoundGeneration = result.Binding.ID, result.Binding.Generation
 		return true, nil
 	})
@@ -471,13 +471,19 @@ func (o *owner) writePendingGaps(ctx context.Context) error {
 	return nil
 }
 
-// gap appends one gap record through the current binding.
-func (o *owner) gap(ctx context.Context, kind string, at time.Time, detail json.RawMessage) error {
-	return o.evidence(ctx, kind, true, at, detail, 0)
+// gap appends one gap record through the current binding; its Detail names
+// which gap under "gap".
+func (o *owner) gap(ctx context.Context, gap string, at time.Time, detail json.RawMessage) error {
+	fields := map[string]any{}
+	_ = json.Unmarshal(detail, &fields)
+	fields["gap"] = gap
+	return o.evidence(ctx, evidenceGap, at, mustJSON(fields), 0)
 }
 
-// evidence appends one record; sequence 0 takes the kind's next number.
-func (o *owner) evidence(ctx context.Context, kind string, gap bool, at time.Time, detail json.RawMessage, sequence int64) error {
+// evidence appends one record; sequence 0 takes the kind's next number. The
+// numbers belong to the environment incarnation, so they continue across
+// bindings of the same grant.
+func (o *owner) evidence(ctx context.Context, kind string, at time.Time, detail json.RawMessage, sequence int64) error {
 	environment, ok := o.currentBinding()
 	if !ok {
 		return errWait
@@ -496,7 +502,7 @@ func (o *owner) evidence(ctx context.Context, kind string, gap bool, at time.Tim
 		o.grant, sequence = grant, grant.Sequences[kind]
 	}
 	_, err := o.plugin.host.Evidence().Append(ctx, environment, plugin.EvidenceRecord{
-		Kind: kind, Sequence: sequence, Gap: gap, ObservedAt: at, Detail: detail,
+		Kind: kind, Sequence: sequence, ObservedAt: at, Detail: detail,
 	})
 	switch {
 	case err == nil, errors.Is(err, plugin.ErrEvidenceBudgetExhausted), errors.Is(err, plugin.ErrEvidenceSequenceConflict):

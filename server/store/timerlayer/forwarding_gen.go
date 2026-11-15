@@ -1907,9 +1907,9 @@ func (s *timedExamAttemptWorkspaceStore) EndEnvironmentBinding(arg0 context.Cont
 	})
 }
 
-func (s *timedExamAttemptWorkspaceStore) AppendEnvironmentEvidence(arg0 context.Context, arg1 *store.ExamAttemptEnvironmentEvidenceAppend) (*store.ExamAttemptEnvironmentEvidenceAppendResult, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodAppendEnvironmentEvidence), func(callCtx context.Context) (*store.ExamAttemptEnvironmentEvidenceAppendResult, error) {
-		return s.next.AppendEnvironmentEvidence(callCtx, arg1)
+func (s *timedExamAttemptWorkspaceStore) AppendAttemptEvidence(arg0 context.Context, arg1 *store.ExamAttemptEvidenceAppend) (*store.ExamAttemptEvidenceAppendResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodAppendAttemptEvidence), func(callCtx context.Context) (*store.ExamAttemptEvidenceAppendResult, error) {
+		return s.next.AppendAttemptEvidence(callCtx, arg1)
 	})
 }
 
@@ -2051,9 +2051,9 @@ func (s *timedExamIntegrityReviewStore) ListNativeConditions(arg0 context.Contex
 	})
 }
 
-func (s *timedExamIntegrityReviewStore) ListCapabilityEvidence(arg0 context.Context, arg1 store.CapabilityEvidenceListOptions) (*store.CapabilityEvidencePage, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamIntegrityReview, methodListCapabilityEvidence), func(callCtx context.Context) (*store.CapabilityEvidencePage, error) {
-		return s.next.ListCapabilityEvidence(callCtx, arg1)
+func (s *timedExamIntegrityReviewStore) ListAttemptEvidence(arg0 context.Context, arg1 store.AttemptEvidenceListOptions) (*store.AttemptEvidencePage, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamIntegrityReview, methodListAttemptEvidence), func(callCtx context.Context) (*store.AttemptEvidencePage, error) {
+		return s.next.ListAttemptEvidence(callCtx, arg1)
 	})
 }
 

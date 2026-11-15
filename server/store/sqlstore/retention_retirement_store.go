@@ -515,8 +515,8 @@ func retireSubmissionIntegrity(ctx context.Context, tx *sqlxTxWrapper, id model.
 		)`,
 		`DELETE FROM exam_attempt_screen_clips WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
 		`DELETE FROM native_condition_evidence WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
-		`DELETE FROM capability_evidence WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
-		`DELETE FROM exam_attempt_capability_evidence_inventories WHERE submission_id = ?`,
+		`DELETE FROM exam_attempt_evidence WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
+		`DELETE FROM exam_attempt_evidence_inventories WHERE submission_id = ?`,
 		`UPDATE exam_attempt_security_owners SET native_interpretation_canonical = NULL
 		WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
 		`DELETE FROM exam_native_delivery_records

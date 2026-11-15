@@ -263,6 +263,20 @@ func (e *fakeEvidence) records(kind string) []plugin.EvidenceRecord {
 	return result
 }
 
+// gaps returns the gap records that name gap.
+func (e *fakeEvidence) gaps(gap string) []plugin.EvidenceRecord {
+	var result []plugin.EvidenceRecord
+	for _, record := range e.records(evidenceGap) {
+		var detail struct {
+			Gap string `json:"gap"`
+		}
+		if json.Unmarshal(record.Detail, &detail) == nil && detail.Gap == gap {
+			result = append(result, record)
+		}
+	}
+	return result
+}
+
 // fakeWorkspaces is one Attempt Workspace per Attempt, with the batch
 // fences and journal of the core's use case.
 type fakeWorkspaces struct {

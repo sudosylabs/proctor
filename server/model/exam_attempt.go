@@ -563,7 +563,7 @@ func (e *IntegrityEvidence) validateCapability() error {
 		e.DurationMilliseconds != 0 ||
 		e.Source != "" ||
 		e.MissingBefore != 0 ||
-		!validCapabilityEvidenceDetail(e.Detail) {
+		!validEvidenceDetail(e.Detail) {
 		return invalidModelError("IntegrityEvidence.Validate", "integrity_evidence", "", "invalid capability Integrity Evidence", "")
 	}
 

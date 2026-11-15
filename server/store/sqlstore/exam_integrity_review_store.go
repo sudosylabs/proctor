@@ -252,7 +252,7 @@ func (s *SQLExamIntegrityReviewStore) Get(
 		if err != nil {
 			return nil, err
 		}
-		snapshot.CapabilityEvidence, err = sealedCapabilityEvidenceInventory(ctx, tx, authorization.AttemptID)
+		snapshot.AttemptEvidence, err = sealedAttemptEvidenceInventory(ctx, tx, authorization.AttemptID)
 		if err != nil {
 			return nil, err
 		}

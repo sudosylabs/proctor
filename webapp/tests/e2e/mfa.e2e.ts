@@ -12,7 +12,7 @@ test("MFA enrollment protects the next login with an authenticator challenge", a
   await page.goto("/account/security");
   await expect(page.getByText("Off", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Set up two-step verification", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Scan this code", level: 1 })).toBeFocused();
+  await expect(page.getByRole("heading", { name: "Turn on two-step verification", level: 1 })).toBeFocused();
   await expect(page.getByRole("img", { name: "QR code for two-step verification setup" })).toBeVisible();
   const secret = ((await page.locator("#authenticator-secret").textContent()) ?? "").replace(/\s+/g, "");
   expect(secret).toMatch(/^[A-Z2-7]+=*$/);

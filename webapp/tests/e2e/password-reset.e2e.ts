@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { cliSession, invitedAccount } from "./support/api";
-import { currentUser, expectSignedIn, submitCredentials } from "./support/browser";
+import { currentUser, expectCredentialsRejected, expectSignedIn, submitCredentials } from "./support/browser";
 import { randomPassword } from "./support/environment";
 import { mailedLink } from "./support/mailpit";
 
@@ -32,7 +32,7 @@ test("a mailed password-reset link replaces the password and revokes Sessions", 
   expect((await existing.get("/api/v1/users/me")).status()).toBe(401);
   await existing.dispose();
   await submitCredentials(page, account.username, account.password);
-  await expect(page.locator("#password-error")).toHaveText("That email or password isn’t right. Check both and try again.");
+  await expectCredentialsRejected(page);
   await submitCredentials(page, account.username, replacement);
   await expectSignedIn(page);
   expect(await currentUser(page)).toEqual({ status: 200, username: account.username });

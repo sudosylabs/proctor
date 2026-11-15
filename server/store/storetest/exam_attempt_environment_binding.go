@@ -182,10 +182,11 @@ func testAttemptEnvironmentBindingLifecycle(t *testing.T, ctx context.Context, s
 	require.NoError(t, err)
 	require.Equal(t, candidatePage, page)
 
-	// A harvested file is the candidate's change with origin environment.
+	// A harvested file is the candidate's change by the environment author.
 	content := model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: 6, SHA256: strings.Repeat("e", 64)}
 	object, harvested := createAttemptWorkspaceTestFile(t, ctx, ss, fixture, access, "harvest.txt", content, "environment-file")
-	require.Equal(t, model.AttemptWorkspaceOriginEnvironment, harvested.Changes[0].Origin)
+	require.Equal(t, access.WorkspaceAuthor(), harvested.Changes[0].Author)
+	require.Equal(t, model.AttemptWorkspaceAuthorEnvironment, harvested.Changes[0].Author.Kind)
 	resolved, err := workspace.ResolveFile(ctx, access, harvested.Changes[0].EntryID)
 	require.NoError(t, err)
 	require.Equal(t, object.ObjectID, resolved.AttemptObjectID)
@@ -197,15 +198,15 @@ func testAttemptEnvironmentBindingLifecycle(t *testing.T, ctx context.Context, s
 	command := attemptWorkspaceBatchCommand(fixture.candidate.ID, "environment-directory")
 	applied, err := workspace.ApplyBatch(ctx, batch, command)
 	require.NoError(t, err)
-	require.True(t, applied.ConsistentWith(target, model.AttemptWorkspaceOriginEnvironment, batch.Mutations),
+	require.True(t, applied.ConsistentWith(target, access.WorkspaceAuthor(), batch.Mutations),
 		"ApplyBatch returned a result inconsistent with its environment request")
-	require.False(t, applied.ConsistentWith(target, model.AttemptWorkspaceOriginEditor, batch.Mutations))
+	require.False(t, applied.ConsistentWith(target, editor.WorkspaceAuthor(), batch.Mutations))
 	audit, err := ss.Audit().Get(ctx, batch.AuditEventID)
 	require.NoError(t, err)
 	require.Equal(t, model.AuditStatusSuccess, audit.Status)
 	require.Equal(t, fixture.candidate.ID, audit.ActorID, "the candidate is the actor of an environment batch")
 	recorded := requireAttemptWorkspaceBatchAudit(t, audit, 1, applied)
-	require.Equal(t, model.AttemptWorkspaceOriginEnvironment, recorded.Origin)
+	require.Equal(t, access.WorkspaceAuthor(), recorded.Author)
 	require.Equal(t, access.BindingID.String(), recorded.BindingID)
 	for _, secret := range []string{"harvested", access.Identity.GrantID, access.Identity.Epoch} {
 		require.NotContains(t, string(audit.Result), secret, "environment batch audit exposed %q", secret)
@@ -227,16 +228,16 @@ func testAttemptEnvironmentBindingLifecycle(t *testing.T, ctx context.Context, s
 		Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "edited"}),
 		attemptWorkspaceBatchCommand(fixture.candidate.ID, "environment-editor"))
 	require.NoError(t, err)
-	require.Equal(t, model.AttemptWorkspaceOriginEditor, edited.Changes[0].Origin)
+	require.Equal(t, editor.WorkspaceAuthor(), edited.Changes[0].Author)
 	journal, err := workspace.ListJournal(ctx, store.CandidateWorkspaceJournalOptions{Access: journalAccess(editor),
 		AfterCursor: harvested.Changes[0].Cursor - 1, Limit: 200})
 	require.NoError(t, err)
-	origins := make([]model.AttemptWorkspaceOrigin, len(journal.Entries))
+	authors := make([]model.AttemptWorkspaceAuthor, len(journal.Entries))
 	for index, entry := range journal.Entries {
-		origins[index] = entry.Origin
+		authors[index] = entry.Author
 	}
-	require.Equal(t, []model.AttemptWorkspaceOrigin{model.AttemptWorkspaceOriginEnvironment,
-		model.AttemptWorkspaceOriginEnvironment, model.AttemptWorkspaceOriginEditor}, origins)
+	require.Equal(t, []model.AttemptWorkspaceAuthor{access.WorkspaceAuthor(),
+		access.WorkspaceAuthor(), editor.WorkspaceAuthor()}, authors)
 	environmentJournal, err := workspace.ListJournal(ctx, store.CandidateWorkspaceJournalOptions{Access: access,
 		AfterCursor: harvested.Changes[0].Cursor - 1, Limit: 200})
 	require.NoError(t, err)

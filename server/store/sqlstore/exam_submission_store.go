@@ -613,6 +613,8 @@ type examSubmissionManifestPersistenceRow struct {
 	StorageOrigin     sql.NullString `db:"storage_origin"`
 	StarterObjectID   sql.NullString `db:"starter_object_id"`
 	AttemptObjectID   sql.NullString `db:"attempt_object_id"`
+	AuthorKind        sql.NullString `db:"author_kind"`
+	AuthorRef         sql.NullString `db:"author_ref"`
 }
 
 func sealExamSubmission(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamSubmissionSeal) (examSubmissionSealOutcome, error) {
@@ -865,11 +867,11 @@ func insertVoluntaryExamSubmissionManifest(
 			`INSERT INTO exam_submission_manifest_entries (
 				submission_id, workspace_id, entry_id, kind, path, content_version, media_type,
 				size_bytes, sha256, storage_origin, starter_object_id, attempt_object_id,
-				workspace_object_id
+				workspace_object_id, author_kind, author_ref
 			)
 			VALUES (
 				?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, NULLIF(?, ''), NULLIF(?, ''),
-				NULLIF(?, ''), NULLIF(?, ''), ?
+				NULLIF(?, ''), NULLIF(?, ''), ?, NULLIF(?, ''), NULLIF(?, '')
 			)`,
 			submission.ID.String(),
 			submission.WorkspaceID.String(),
@@ -884,6 +886,8 @@ func insertVoluntaryExamSubmissionManifest(
 			entry.StarterObjectID.String(),
 			entry.AttemptObjectID.String(),
 			persisted.WorkspaceObjectID,
+			string(entry.Author.Kind),
+			entry.Author.Ref,
 		); err != nil {
 			return fmt.Errorf(
 				"insert Exam Submission manifest Entry: %w",
@@ -1018,7 +1022,8 @@ func loadAuthoritativeExamSubmissionManifest(
 	if err := tx.Select(ctx, &rows, `SELECT e.id AS entry_id, e.kind, e.path,
 			e.current_object_id AS workspace_object_id, o.content_version, o.media_type,
 			o.size_bytes, o.sha256, o.storage_origin, o.starter_object_id,
-			CASE WHEN o.storage_origin = 'attempt' THEN o.id END AS attempt_object_id
+			CASE WHEN o.storage_origin = 'attempt' THEN o.id END AS attempt_object_id,
+			e.last_author_kind AS author_kind, e.last_author_ref AS author_ref
 		FROM exam_attempt_workspace_entries e
 		LEFT JOIN exam_attempt_workspace_objects o ON o.workspace_id = e.workspace_id
 			AND o.id = e.current_object_id
@@ -1055,6 +1060,10 @@ func (row examSubmissionManifestPersistenceRow) model() (model.ExamSubmissionMan
 		SizeBytes:     row.SizeBytes.Int64,
 		SHA256:        row.SHA256.String,
 		StorageOrigin: model.AttemptWorkspaceObjectStorage(row.StorageOrigin.String),
+		Author: model.AttemptWorkspaceAuthor{
+			Kind: model.AttemptWorkspaceAuthorKind(row.AuthorKind.String),
+			Ref:  row.AuthorRef.String,
+		},
 	}
 	if row.ContentVersion.Valid {
 		entry.ContentVersion, err = model.ParseWorkspaceContentVersion(row.ContentVersion.String)
@@ -1581,7 +1590,7 @@ func loadStoredExamSubmissionManifest(
 	var rows []examSubmissionManifestPersistenceRow
 	if err := executor.Select(ctx, &rows, `SELECT entry_id, kind, path, workspace_object_id,
 			content_version, media_type, size_bytes, sha256, storage_origin, starter_object_id,
-			attempt_object_id
+			attempt_object_id, author_kind, author_ref
 		FROM exam_submission_manifest_entries
 		WHERE submission_id = ?
 		ORDER BY entry_id`, submissionID.String()); err != nil {
@@ -1618,7 +1627,8 @@ func (s *SQLExamSubmissionStore) ListManifest(
 	}
 
 	query := `SELECT entry_id, kind, path, workspace_object_id, content_version, media_type,
-			size_bytes, sha256, storage_origin, starter_object_id, attempt_object_id
+			size_bytes, sha256, storage_origin, starter_object_id, attempt_object_id,
+			author_kind, author_ref
 		FROM exam_submission_manifest_entries
 		WHERE submission_id = ?`
 	args := []any{options.SubmissionID.String()}
@@ -1672,7 +1682,7 @@ func (s *SQLExamSubmissionStore) ResolveFile(
 	var row examSubmissionManifestPersistenceRow
 	if err := s.GetMaster().Get(ctx, &row, `SELECT entry_id, kind, path, workspace_object_id,
 			content_version, media_type, size_bytes, sha256, storage_origin, starter_object_id,
-			attempt_object_id
+			attempt_object_id, author_kind, author_ref
 		FROM exam_submission_manifest_entries
 		WHERE submission_id = ?
 			AND entry_id = ?`, submissionID.String(), entryID.String()); err != nil {
@@ -1705,6 +1715,7 @@ func submissionManifestItem(entry model.ExamSubmissionManifestEntry) store.ExamS
 		MediaType:      entry.MediaType,
 		SizeBytes:      entry.SizeBytes,
 		SHA256:         entry.SHA256,
+		Author:         entry.Author,
 	}
 }
 

@@ -64,7 +64,8 @@ func (s *Service) applyWorkspaceBatch(
 	value := map[string]any{
 		"exam_attempt_id": batch.Access.WorkspaceAttemptID().String(),
 		"mutation_count":  len(batch.Mutations),
-		"origin":          string(batch.Access.WorkspaceOrigin()),
+		"author_kind":     string(batch.Access.WorkspaceAuthor().Kind),
+		"author_ref":      batch.Access.WorkspaceAuthor().Ref,
 	}
 	if environment, ok := batch.Access.(store.ExamAttemptWorkspaceEnvironmentAccess); ok {
 		value["environment_binding_id"] = environment.BindingID.String()
@@ -79,7 +80,7 @@ func (s *Service) applyWorkspaceBatch(
 	if err != nil {
 		return WorkspaceBatchResult{}, s.failAudit(ctx, auditID, workspaceBatchStoreError(err))
 	}
-	if !stored.ConsistentWith(target, batch.Access.WorkspaceOrigin(), batch.Mutations) {
+	if !stored.ConsistentWith(target, batch.Access.WorkspaceAuthor(), batch.Mutations) {
 		return WorkspaceBatchResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt Workspace batch result"))
 	}
 

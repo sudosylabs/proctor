@@ -781,7 +781,7 @@ func testAttemptWorkspaceBatches(t *testing.T, ss store.Store, workspace store.E
 	replayed, err := workspace.ApplyBatch(ctx, replayBatch, command)
 	require.NoError(t, err)
 	require.True(t, replayed.Replayed)
-	require.True(t, replayed.ConsistentWith(target, model.AttemptWorkspaceOriginEditor, replayMutations))
+	require.True(t, replayed.ConsistentWith(target, access.WorkspaceAuthor(), replayMutations))
 	require.Equal(t, applied.Changes, replayed.Changes)
 	require.Equal(t, afterMixed.cursor, state().cursor, "replay advanced the Workspace Cursor")
 	replayAudit, err := ss.Audit().Get(ctx, replayBatch.AuditEventID)
@@ -966,7 +966,9 @@ func requireWorkspaceBatchEcho(
 ) {
 	t.Helper()
 	require.NotNil(t, result)
-	require.True(t, result.ConsistentWith(target, model.AttemptWorkspaceOriginEditor, mutations), "ApplyBatch returned a result inconsistent with its request")
+	require.NotEmpty(t, result.Changes)
+	require.True(t, result.ConsistentWith(target, result.Changes[0].Author, mutations), "ApplyBatch returned a result inconsistent with its request")
+	require.Equal(t, model.AttemptWorkspaceAuthorCandidate, result.Changes[0].Author.Kind)
 	require.Len(t, result.Changes, len(mutations))
 	for index, change := range result.Changes {
 		mutation := mutations[index]
@@ -1021,13 +1023,13 @@ type attemptWorkspaceBatchAudit struct {
 	OperationCounts      map[string]int
 	Replayed             bool
 	OriginalAuditEventID string
-	Origin               model.AttemptWorkspaceOrigin
+	Author               model.AttemptWorkspaceAuthor
 	BindingID            string
 }
 
 // requireAttemptWorkspaceBatchAudit asserts that a batch audit carries only
 // safe scope, counts by operation, the cursor range of result and the
-// writer's origin, plus the binding of an environment writer.
+// writer's author, plus the binding of an environment writer.
 func requireAttemptWorkspaceBatchAudit(t *testing.T, audit *model.AuditEvent, mutationCount int,
 	result *store.ExamAttemptWorkspaceBatchResult,
 ) attemptWorkspaceBatchAudit {
@@ -1035,11 +1037,12 @@ func requireAttemptWorkspaceBatchAudit(t *testing.T, audit *model.AuditEvent, mu
 	var data map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(audit.Result, &data))
 	keys := []string{"exam_sitting_id", "candidate_user_id", "workspace_id", "mutation_count", "operation_counts",
-		"first_workspace_cursor", "last_workspace_cursor", "origin"}
+		"first_workspace_cursor", "last_workspace_cursor", "author_kind", "author_ref"}
 	var decoded attemptWorkspaceBatchAudit
-	require.NoError(t, json.Unmarshal(data["origin"], &decoded.Origin))
-	require.Equal(t, result.Changes[0].Origin, decoded.Origin, "batch audit origin = %s", audit.Result)
-	if decoded.Origin == model.AttemptWorkspaceOriginEnvironment {
+	require.NoError(t, json.Unmarshal(data["author_kind"], &decoded.Author.Kind))
+	require.NoError(t, json.Unmarshal(data["author_ref"], &decoded.Author.Ref))
+	require.Equal(t, result.Changes[0].Author, decoded.Author, "batch audit author = %s", audit.Result)
+	if decoded.Author.Kind == model.AttemptWorkspaceAuthorEnvironment {
 		keys = append(keys, "environment_binding_id")
 		require.NoError(t, json.Unmarshal(data["environment_binding_id"], &decoded.BindingID))
 	}

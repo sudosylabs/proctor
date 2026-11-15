@@ -19,6 +19,9 @@ import (
 // consistencyAt is the instant the consistency fixtures are built around.
 var consistencyAt = time.Date(2026, time.August, 18, 9, 0, 0, 0, time.UTC)
 
+// consistencyAuthor is the author of the Workspace consistency fixtures.
+var consistencyAuthor = model.NewCandidateWorkspaceAuthor(model.NewAttemptConnectionID())
+
 // inconsistency breaks exactly one clause of a consistency check on an
 // otherwise consistent value.
 type inconsistency[T any] struct {

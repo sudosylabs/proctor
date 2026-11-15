@@ -543,7 +543,7 @@ membership, exact active Participation generation and credential, and the
 owning Session-bound open Connection. An execution environment write is the
 candidate's own work made on their behalf: it rechecks the same gates with its
 live environment binding in place of the credential, Session and Connection,
-records journal origin `environment`, and is audited as the candidate. Command idempotency is Attempt-scoped so
+records the `environment` journal author, and is audited as the candidate. Command idempotency is Attempt-scoped so
 an exact retry can recover its retained outcome after reconnect or re-allow;
 the current access selector is reauthorized separately and is not part of the
 semantic fingerprint. Stable losing stages become reclaimable, while an

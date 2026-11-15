@@ -427,8 +427,14 @@ eligible for idempotent purge.
 Each accepted mutation has one idempotency key and explicit expected entry,
 path, content version, and destination conditions. An Attempt-scoped ordered
 journal records identities, old/new paths, resulting content versions,
-mutation keys, Workspace Cursors and each change's origin, `editor` or
-`environment`, without retaining the complete body of every prior save. Reconnect applies ordered changes after the last acknowledged
+mutation keys, Workspace Cursors and each change's author, without retaining
+the complete body of every prior save. An author is a kind, `candidate` (the
+editor, with its Attempt Connection as reference) or `environment` (its
+incarnation, and the writing process's tag when known), plus that reference.
+A new actor is a new author kind, never a new write path. Every changed entry
+keeps the author of its last change, and a Submission seals it per entry,
+inside the manifest digest; an entry unchanged since the Starter Workspace has
+none. Reconnect applies ordered changes after the last acknowledged
 cursor or refreshes a complete manifest after a gap. Conflicted, rejected, or
 outcome-unknown client work remains protected until acknowledged replacement
 or explicit discard.
@@ -476,18 +482,21 @@ Session, key, Connection and credential: current Class membership, Open
 Sitting before its deadline, Active Attempt, active unexpired generation, and
 no pending Workspace correction acknowledgement. A binding that ended,
 was replaced, or does not match conflicts with
-`attempt_environment_binding_current`. Its changes carry origin
-`environment`; its outcome is keyed under the candidate with the same
-operation, and its fingerprint includes the origin so it never replays as an
-editor command. Audit names the candidate as actor without a Principal, and
-the aggregate data adds the origin and the binding ID. The environment reads
+`attempt_environment_binding_current`. Its changes carry the `environment`
+author; its outcome is keyed under the candidate with the same operation, and
+its fingerprint includes the author kind (never the reference) so it never
+replays as an editor command, while an editor retry through a new Connection
+still matches. A replay keeps the original batch's author. Audit names the
+candidate as actor without a Principal, and the aggregate data adds the author
+and the binding ID. The environment reads
 the manifest, files and journal through the same binding, under the
 candidate read guard's Attempt, Participation, Sitting and account gates. The
 candidate receives the usual refetch hint.
 
-Each Attempt may change its Workspace only so fast, whoever writes: a
-token bucket on each node bounds mutations and bytes per second, with a burst
-that always fits one maximum batch. A faster writer gets
+Each Attempt may change its Workspace only so fast: a token bucket on each
+node bounds mutations and bytes per second for each author kind, with a burst
+that always fits one maximum batch. The environment's bucket is larger than
+the editor's, and a busy build never spends the candidate's own budget. A faster writer gets
 `exam.attempt.workspace.rate_limited` (429 with Retry-After) before anything
 is reserved or staged. The bucket is per node, so it protects storage traffic
 rather than enforcing an exact cluster-wide quota.
@@ -495,7 +504,7 @@ rather than enforcing an exact cluster-wide quota.
 A batch checks access once, reserves all its objects in one transaction,
 stages every body, records them ready in one transaction, and applies every
 mutation in one transaction. That transaction holds one idempotency outcome and
-one audit pair, with counts, the cursor range and the origin but never paths. It writes one
+one audit pair, with counts, the cursor range and the author but never paths. It writes one
 journal record per mutation at consecutive cursors. A mutation that refuses the
 batch is named by its position in the problem's `item` field. After commit,
 WebSocket publishes one targeted `exam_attempt_workspace_changed` refetch hint

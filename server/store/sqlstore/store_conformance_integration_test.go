@@ -716,9 +716,9 @@ func examAttemptWorkspaceSQLProbe(t *testing.T, persistence *SQLStore) storetest
 					return struct{}{}, getErr
 				}
 				if _, execErr := tx.Exec(ctx, `INSERT INTO exam_attempt_workspace_journal
-				(workspace_id,cursor,entry_id,entry_kind,operation,old_path,new_path,mutation_key_digest,changed_at,origin)
-				VALUES (?,?,?,?,'move_entry','gap-old','gap-new',?,statement_timestamp(),'editor')`, workspaceID.String(), cursor,
-					entry.ID, entry.Kind, bytes.Repeat([]byte{1}, 32)); execErr != nil {
+				(workspace_id,cursor,entry_id,entry_kind,operation,old_path,new_path,mutation_key_digest,changed_at,author_kind,author_ref)
+				VALUES (?,?,?,?,'move_entry','gap-old','gap-new',?,statement_timestamp(),'candidate',?)`, workspaceID.String(), cursor,
+					entry.ID, entry.Kind, bytes.Repeat([]byte{1}, 32), model.NewAttemptConnectionID().String()); execErr != nil {
 					return struct{}{}, execErr
 				}
 				return struct{}{}, nil

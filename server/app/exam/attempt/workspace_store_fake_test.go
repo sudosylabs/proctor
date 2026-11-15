@@ -152,7 +152,7 @@ func (f *attemptWorkspaceStoreFake) acknowledge(batch *store.ExamAttemptWorkspac
 	changes := make([]model.AttemptWorkspaceJournalEntry, len(batch.Mutations))
 	for index, mutation := range batch.Mutations {
 		change := model.AttemptWorkspaceJournalEntry{WorkspaceID: f.target.WorkspaceID, Cursor: f.cursor + int64(index) + 1,
-			EntryID: mutation.EntryID, Operation: mutation.Operation, ChangedAt: f.f.at, Origin: batch.Access.WorkspaceOrigin()}
+			EntryID: mutation.EntryID, Operation: mutation.Operation, ChangedAt: f.f.at, Author: batch.Access.WorkspaceAuthor()}
 		if f.replayed {
 			change.EntryID = model.NewAttemptWorkspaceEntryID()
 		}

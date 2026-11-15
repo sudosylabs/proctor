@@ -457,12 +457,12 @@ func (w *fakeWorkspaces) edit(t *testing.T, attemptID string, mutations []plugin
 			mutations[index].SHA256, mutations[index].Size, mutations[index].MediaType = hex.EncodeToString(sum[:]), int64(len(body)), "text/plain"
 		}
 	}
-	result, err := w.apply(context.Background(), attemptID, mutations, &byteContents{bodies: contents}, w.newID("k"), "editor")
+	result, err := w.apply(context.Background(), attemptID, mutations, &byteContents{bodies: contents}, w.newID("k"), "candidate")
 	require.NoError(t, err)
 	return result.Changes
 }
 
-func (w *fakeWorkspaces) apply(ctx context.Context, attemptID string, mutations []plugin.WorkspaceMutation, content plugin.WorkspaceContent, key, origin string) (plugin.WorkspaceBatchResult, error) {
+func (w *fakeWorkspaces) apply(ctx context.Context, attemptID string, mutations []plugin.WorkspaceMutation, content plugin.WorkspaceContent, key, authorKind string) (plugin.WorkspaceBatchResult, error) {
 	workspace := w.attempts[attemptID]
 	if stored, ok := workspace.keys[key]; ok {
 		stored.Replayed = true
@@ -488,7 +488,7 @@ func (w *fakeWorkspaces) apply(ctx context.Context, attemptID string, mutations 
 			return plugin.WorkspaceBatchResult{}, &plugin.CapabilityError{Code: code, Fields: map[string]string{"item": fmt.Sprint(index)}}
 		}
 		cursor++
-		change := plugin.WorkspaceChange{Cursor: cursor, Operation: mutation.Operation, ChangedAt: time.Now(), Origin: origin}
+		change := plugin.WorkspaceChange{Cursor: cursor, Operation: mutation.Operation, ChangedAt: time.Now(), AuthorKind: authorKind}
 		switch mutation.Operation {
 		case plugin.WorkspaceCreateFile, plugin.WorkspaceReplaceFile:
 			reader, err := content.Next(ctx)
@@ -578,16 +578,16 @@ func (w *fakeWorkspaces) entryAt(attemptID, name string) fakeEntry {
 	return fakeEntry{}
 }
 
-func (w *fakeWorkspaces) origin(attemptID, name string) string {
+func (w *fakeWorkspaces) authorKind(attemptID, name string) string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	origin := ""
+	kind := ""
 	for _, change := range w.attempts[attemptID].journal {
 		if change.NewPath == name {
-			origin = change.Origin
+			kind = change.AuthorKind
 		}
 	}
-	return origin
+	return kind
 }
 
 // testLogger discards unless EXECUTION_TEST_LOG is set.

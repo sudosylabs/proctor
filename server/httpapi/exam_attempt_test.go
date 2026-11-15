@@ -789,19 +789,21 @@ func TestCandidateWorkspaceJournalPagesExactProtectedQueries(t *testing.T) {
 	require.Equal(t, int64(3), fake.journalQuery.AfterCursor, "journal=%d %s query=%#v", journalResponse.Code, journalResponse.Body.String(), fake.journalQuery)
 	require.Equal(t, 20, fake.journalQuery.Limit, "journal=%d %s query=%#v", journalResponse.Code, journalResponse.Body.String(), fake.journalQuery)
 	require.Contains(t, journalResponse.Body.String(), `"current_cursor":5`, "journal=%d %s query=%#v", journalResponse.Code, journalResponse.Body.String(), fake.journalQuery)
-	require.Contains(t, journalResponse.Body.String(), `"origin":"editor"`, "every change names its writer")
+	require.Contains(t, journalResponse.Body.String(), `"author":{"kind":"candidate","ref":"`+fake.connection.ID.String()+`"}`,
+		"every change names its author")
 	require.Contains(t, journalResponse.Header().Get("Cache-Control"), "no-store", "journal=%d %s query=%#v", journalResponse.Code, journalResponse.Body.String(), fake.journalQuery)
 	fake.journalPage.Entries[0].Operation = model.AttemptWorkspaceMutationDeleteEntry
 	fake.journalPage.Entries[0].EntryKind = model.StarterWorkspaceEntryDirectory
 	fake.journalPage.Entries[0].OldPath = "src"
 	fake.journalPage.Entries[0].NewPath, fake.journalPage.Entries[0].ContentVersion = "", ""
 	fake.journalPage.Entries[0].Recursive = true
-	fake.journalPage.Entries[0].Origin = model.AttemptWorkspaceOriginEnvironment
+	fake.journalPage.Entries[0].Author = model.NewEnvironmentWorkspaceAuthor(2, "terminal:1")
 	journalResponse = httptest.NewRecorder()
 	httpAPI.ServeHTTP(journalResponse, fake.candidateRequest(t, http.MethodGet, base+"/changes?workspace_cursor=3&limit=20"))
 	require.Equal(t, http.StatusOK, journalResponse.Code, "recursive journal")
 	require.Contains(t, journalResponse.Body.String(), `"recursive":true`, "recursive journal")
-	require.Contains(t, journalResponse.Body.String(), `"origin":"environment"`, "an environment change names its writer")
+	require.Contains(t, journalResponse.Body.String(), `"author":{"kind":"environment","ref":"2/terminal:1"}`,
+		"an environment change names its author and the process that wrote it")
 	require.Contains(t, journalResponse.Body.String(), `"old_path":"src"`, "recursive journal")
 	fake.journalPage.HasMore = true
 	journalResponse = httptest.NewRecorder()
@@ -1363,7 +1365,7 @@ func newExamAttemptHTTPFake(t *testing.T) *examAttemptHTTPFake {
 	change := model.AttemptWorkspaceJournalEntry{WorkspaceID: workspace.ID, Cursor: 5, EntryID: workspaceItem.EntryID,
 		EntryKind: workspaceItem.Kind, Operation: model.AttemptWorkspaceMutationReplaceFile, OldPath: workspaceItem.Path,
 		NewPath: workspaceItem.Path, ContentVersion: workspaceItem.ContentVersion, ChangedAt: at,
-		Origin: model.AttemptWorkspaceOriginEditor}
+		Author: model.NewCandidateWorkspaceAuthor(fake.connection.ID)}
 	fake.workspaceChangedAt = at
 	fake.journalPage = attempt.WorkspaceJournalPage{WorkspaceID: workspace.ID, CurrentCursor: 5,
 		Entries: []model.AttemptWorkspaceJournalEntry{change}}
@@ -1647,7 +1649,7 @@ func (f *examAttemptHTTPFake) ApplyCandidateExamWorkspaceBatch(ctx context.Conte
 		change := model.AttemptWorkspaceJournalEntry{WorkspaceID: f.workspace.ID, Cursor: int64(5 + index), EntryID: mutation.EntryID,
 			EntryKind: model.StarterWorkspaceEntryFile, Operation: mutation.Operation, OldPath: mutation.ExpectedPath,
 			NewPath: mutation.DestinationPath, ChangedAt: f.workspaceChangedAt, Recursive: mutation.Recursive,
-			Origin: model.AttemptWorkspaceOriginEditor}
+			Author: model.NewCandidateWorkspaceAuthor(f.connection.ID)}
 		switch mutation.Operation {
 		case model.AttemptWorkspaceMutationCreateDirectory, model.AttemptWorkspaceMutationCreateFile:
 			change.EntryID = model.NewAttemptWorkspaceEntryID()

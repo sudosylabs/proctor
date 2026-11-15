@@ -269,6 +269,9 @@ func TestExamSubmissionStore(t *testing.T, ss store.Store, submissions store.Exa
 	require.Equal(t, object.ContentVersion, attemptSelector.ContentVersion)
 	_, err = submissions.ResolveFile(ctx, header.ID, directory.EntryID)
 	require.True(t, store.IsNotFound(err), "ResolveFile(directory) error")
+	require.Equal(t, workspaceAccess.WorkspaceAuthor(), attemptFile.Author, "the Submission seals who made the entry's last change")
+	require.Equal(t, model.AttemptWorkspaceAuthor{}, starterFile.Author, "an unchanged Starter entry has no author")
+	require.Equal(t, model.AttemptWorkspaceAuthor{}, directory.Author, "an unchanged Starter directory has no author")
 
 	_, err = ss.ExamAttemptWorkspace().List(ctx, store.CandidateWorkspaceListOptions{Access: store.CandidateAttemptAccess{
 		AttemptID: access.AttemptID, CandidateUserID: access.CandidateUserID, SessionID: access.SessionID,

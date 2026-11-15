@@ -686,13 +686,14 @@ func listAttemptWorkspaceJournalSnapshot(
 		ContentVersion sql.NullString `db:"content_version"`
 		ChangedAt      time.Time      `db:"changed_at"`
 		Recursive      bool           `db:"recursive"`
-		Origin         string         `db:"origin"`
+		AuthorKind     string         `db:"author_kind"`
+		AuthorRef      string         `db:"author_ref"`
 	}
 	if err = tx.Select(
 		ctx,
 		&rows,
 		`SELECT cursor, entry_id, entry_kind, operation, old_path, new_path, content_version,
-			changed_at, recursive, origin
+			changed_at, recursive, author_kind, author_ref
 		FROM exam_attempt_workspace_journal
 		WHERE workspace_id = ?
 			AND cursor > ?
@@ -737,7 +738,10 @@ func listAttemptWorkspaceJournalSnapshot(
 			ContentVersion: version,
 			ChangedAt:      model.TimeUTC(row.ChangedAt),
 			Recursive:      row.Recursive,
-			Origin:         model.AttemptWorkspaceOrigin(row.Origin),
+			Author: model.AttemptWorkspaceAuthor{
+				Kind: model.AttemptWorkspaceAuthorKind(row.AuthorKind),
+				Ref:  row.AuthorRef,
+			},
 		}
 		if parseErr = entry.Validate(); parseErr != nil {
 			return nil, invalidPersistedState("attempt_workspace_journal", "value", parseErr)
@@ -1379,7 +1383,7 @@ func appendAttemptWorkspaceJournal(
 	oldPath, newPath string,
 	version model.WorkspaceContentVersion,
 	recursive bool,
-	origin model.AttemptWorkspaceOrigin,
+	author model.AttemptWorkspaceAuthor,
 	keyDigest []byte,
 	databaseNow time.Time,
 ) (*model.AttemptWorkspaceJournalEntry, error) {
@@ -1408,7 +1412,7 @@ func appendAttemptWorkspaceJournal(
 		ContentVersion: version,
 		ChangedAt:      databaseNow,
 		Recursive:      recursive,
-		Origin:         origin,
+		Author:         author,
 	}
 	if err := change.Validate(); err != nil {
 		return nil, store.NewErrInvalidInput("attempt_workspace_journal", "change", nil).Wrap(err)
@@ -1418,9 +1422,9 @@ func appendAttemptWorkspaceJournal(
 		ctx,
 		`INSERT INTO exam_attempt_workspace_journal (
 			workspace_id, cursor, entry_id, entry_kind, operation, old_path, new_path,
-				content_version, mutation_key_digest, changed_at, recursive, origin
+				content_version, mutation_key_digest, changed_at, recursive, author_kind, author_ref
 		)
-		VALUES (?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?, ?, ?)`,
 		workspaceID.String(),
 		cursor,
 		entryID.String(),
@@ -1432,9 +1436,27 @@ func appendAttemptWorkspaceJournal(
 		keyDigest,
 		databaseNow,
 		recursive,
-		string(origin),
+		string(author.Kind),
+		author.Ref,
 	); err != nil {
 		return nil, fmt.Errorf("append Attempt Workspace journal: %w", err)
+	}
+
+	// The entry keeps the author of its last change, which a Submission seals.
+	// A deleted entry has no row left to update.
+	if operation != model.AttemptWorkspaceMutationDeleteEntry {
+		if _, err := tx.Exec(
+			ctx,
+			`UPDATE exam_attempt_workspace_entries
+			SET last_author_kind = ?, last_author_ref = ?
+			WHERE workspace_id = ? AND id = ?`,
+			string(author.Kind),
+			author.Ref,
+			workspaceID.String(),
+			entryID.String(),
+		); err != nil {
+			return nil, fmt.Errorf("record Attempt Workspace entry author: %w", err)
+		}
 	}
 
 	if _, err := tx.Exec(

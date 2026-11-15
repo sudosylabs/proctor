@@ -22,7 +22,7 @@ import (
 // invocation.System naming its runtime task or Job; there is no plugin
 // principal and no HTTP request. An environment acts only through a live
 // binding to the Attempt's current Participation generation, and what it
-// writes is the candidate's own work: journal origin environment, outcome and
+// writes is the candidate's own work: journal author environment, outcome and
 // audit under the candidate.
 
 func validEnvironmentCaller(system invocation.System) error {
@@ -166,9 +166,9 @@ type EnvironmentWorkspaceBatchCommand struct {
 // Workspace on the candidate's behalf. It is the editor's batch with another
 // writer: the same validation, budget, staging, all-or-nothing apply and
 // realtime hint. The Store proves the writer by its live binding instead of
-// Session, key, Connection and credential, and records origin environment.
+// Session, key, Connection and credential, and records author environment.
 // The outcome is keyed under the candidate, and audit names the candidate as
-// actor with the origin and binding.
+// actor with the author and binding.
 func (s *Service) ApplyEnvironmentWorkspaceBatch(
 	ctx context.Context,
 	system invocation.System,
@@ -248,7 +248,7 @@ type EnvironmentWorkspaceJournalQuery struct {
 }
 
 // ListEnvironmentWorkspaceJournal returns the journal entries after
-// AfterCursor to the bound environment, each with its origin, so the
+// AfterCursor to the bound environment, each with its author, so the
 // environment can tell the editor's changes from its own.
 func (s *Service) ListEnvironmentWorkspaceJournal(
 	ctx context.Context,

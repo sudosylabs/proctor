@@ -254,7 +254,8 @@ func markAttemptWorkspaceObjectReady(
 // which an exact replay repeats, so they are not stored again. Short keys
 // keep a full batch well inside the outcome bound.
 type attemptWorkspaceBatchOutcome struct {
-	Origin             string                             `json:"r"`
+	AuthorKind         string                             `json:"r"`
+	AuthorRef          string                             `json:"a"`
 	SittingID          string                             `json:"s"`
 	ClassID            string                             `json:"c"`
 	CandidateID        string                             `json:"u"`
@@ -319,7 +320,7 @@ func (s *SQLExamAttemptWorkspaceStore) ApplyBatch(
 					return lockErr
 				}
 
-				if outcome.Origin != string(prepared.Access.WorkspaceOrigin()) ||
+				if outcome.AuthorKind != string(prepared.Access.WorkspaceAuthor().Kind) ||
 					target.SittingID.String() != outcome.SittingID ||
 					target.ClassID.String() != outcome.ClassID ||
 					target.CandidateUserID.String() != outcome.CandidateID ||
@@ -500,9 +501,10 @@ func applyAttemptWorkspaceBatch(
 		databaseNow:  databaseNow,
 		auditEventID: input.AuditEventID,
 	}
-	origin := input.Access.WorkspaceOrigin()
+	author := input.Access.WorkspaceAuthor()
 	outcome := attemptWorkspaceBatchOutcome{
-		Origin:      string(origin),
+		AuthorKind:  string(author.Kind),
+		AuthorRef:   author.Ref,
 		SittingID:   target.SittingID.String(),
 		ClassID:     target.ClassID.String(),
 		CandidateID: target.CandidateUserID.String(),
@@ -540,7 +542,7 @@ func applyAttemptWorkspaceBatch(
 			effect.newPath,
 			effect.version,
 			mutation.Recursive,
-			origin,
+			author,
 			command.KeyDigest[:],
 			databaseNow,
 		)
@@ -568,7 +570,7 @@ func applyAttemptWorkspaceBatch(
 }
 
 // completeAttemptWorkspaceBatchAudit records what the batch did in aggregate:
-// counts by operation, the cursor range and the writer's origin, never paths
+// counts by operation, the cursor range and the writer's author, never paths
 // or content. An environment batch also names its binding.
 func completeAttemptWorkspaceBatchAudit(
 	ctx context.Context,
@@ -591,7 +593,8 @@ func completeAttemptWorkspaceBatchAudit(
 		"operation_counts":       counts,
 		"first_workspace_cursor": outcome.Items[0].Cursor,
 		"last_workspace_cursor":  outcome.Items[len(outcome.Items)-1].Cursor,
-		"origin":                 outcome.Origin,
+		"author_kind":            outcome.AuthorKind,
+		"author_ref":             outcome.AuthorRef,
 	}
 	if environment, ok := batch.Access.(store.ExamAttemptWorkspaceEnvironmentAccess); ok {
 		data["environment_binding_id"] = environment.BindingID.String()
@@ -638,8 +641,8 @@ func attemptWorkspaceBatchResult(
 		return nil, err
 	}
 
-	origin := model.AttemptWorkspaceOrigin(outcome.Origin)
-	if len(outcome.Items) != len(mutations) || outcome.ChangedAt.IsZero() || !origin.IsValid() {
+	author := model.AttemptWorkspaceAuthor{Kind: model.AttemptWorkspaceAuthorKind(outcome.AuthorKind), Ref: outcome.AuthorRef}
+	if len(outcome.Items) != len(mutations) || outcome.ChangedAt.IsZero() || !author.IsValid() {
 		return nil, errors.New("invalid Attempt Workspace batch result")
 	}
 
@@ -667,7 +670,7 @@ func attemptWorkspaceBatchResult(
 			ContentVersion: version,
 			ChangedAt:      model.TimeUTC(outcome.ChangedAt),
 			Recursive:      mutation.Recursive,
-			Origin:         origin,
+			Author:         author,
 		}
 		switch mutation.Operation {
 		case model.AttemptWorkspaceMutationCreateFile, model.AttemptWorkspaceMutationCreateDirectory:

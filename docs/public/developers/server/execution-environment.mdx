@@ -413,14 +413,17 @@ plugin uses them.
 
 Each step is a vertical slice with its own tests.
 
-1. **Workspace foundation:** authors, per-path conflicts and grouped batches,
-   change notifications in the core, retention by cursor, and budgets per
-   author kind.
+1. **Workspace foundation:** authors on the journal, audit and idempotency
+   outcomes, the last author of every entry sealed in the Submission, and
+   budgets per author kind. The Workspace already refuses a stale version
+   per mutation.
 2. **Runtime foundation:** fenced runtime leases with wakeups, and evidence
    streams.
 3. **Attempt Environment:** the model, lifecycle, placement, templates and
-   seeds, sync and the settle. `server/plugin/execution` and its seams are
-   deleted in this step.
+   seeds, sync and the settle. The three Workspace changes whose only reader
+   is the environment's owner land here with it: change notifications in the
+   core, retention by cursor, and grouped harvest batches.
+   `server/plugin/execution` and its seams are deleted in this step.
 4. **Processes and terminals:** tags, the terminal socket with offsets and
    screens, and the command log as evidence.
 5. **Policy, profiles and API:** the execution policy, environment profiles,

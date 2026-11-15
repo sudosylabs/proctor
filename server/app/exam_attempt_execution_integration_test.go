@@ -308,12 +308,12 @@ func TestExecutionPluginEndToEnd(t *testing.T) {
 	grantID := execenv.ID(connected.Attempt.ID.String() + ".0")
 	eventually(func() bool { return readGuest(grantID, "main.py") == string(starter) }, "the starter file reaches the guest")
 
-	// The guest writes a file: the core stores it as the candidate's, with
-	// origin environment.
+	// The guest writes a file: the core stores it as the candidate's, by the
+	// environment author.
 	require.NoError(t, guests.WriteGuest(ctx, grantID, "answer.py", []byte("print(42)\n")))
 	eventually(func() bool { _, ok := harvested("answer.py"); return ok }, "the guest file is harvested")
 	entry, _ := harvested("answer.py")
-	require.Equal(t, model.AttemptWorkspaceOrigin("environment"), entry.Origin)
+	require.Equal(t, model.AttemptWorkspaceAuthorEnvironment, entry.Author.Kind)
 
 	// The editor saves a file: it reaches the guest.
 	mutation := attempt.WorkspaceMutationAccess{CandidateAccess: access,

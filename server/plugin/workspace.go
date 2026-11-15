@@ -158,8 +158,8 @@ type WorkspaceBatchResult struct {
 	Replayed    bool
 }
 
-// WorkspaceChange is one journal entry. Origin is "editor" or
-// "environment".
+// WorkspaceChange is one journal entry. AuthorKind is "candidate" or
+// "environment"; AuthorRef is the reference within that kind.
 type WorkspaceChange struct {
 	Cursor         int64
 	EntryID        string
@@ -170,7 +170,8 @@ type WorkspaceChange struct {
 	ContentVersion string
 	ChangedAt      time.Time
 	Recursive      bool
-	Origin         string
+	AuthorKind     string
+	AuthorRef      string
 }
 
 // WorkspaceListRequest selects one manifest page. ExpectedCursor -1 starts

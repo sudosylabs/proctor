@@ -49,8 +49,8 @@ func IsValidWorkspaceSHA256(value string) bool {
 type ExamAttemptWorkspaceWriteAccess interface {
 	// WorkspaceAttemptID is the Attempt whose Workspace is written.
 	WorkspaceAttemptID() model.ExamAttemptID
-	// WorkspaceOrigin is the journal origin of the writer's changes.
-	WorkspaceOrigin() model.AttemptWorkspaceOrigin
+	// WorkspaceAuthor is the author the writer's changes are journaled under.
+	WorkspaceAuthor() model.AttemptWorkspaceAuthor
 	examAttemptWorkspaceWriteAccess()
 }
 
@@ -82,8 +82,8 @@ func (a ExamAttemptWorkspaceEditorAccess) WorkspaceAttemptID() model.ExamAttempt
 	return a.AttemptID
 }
 
-func (ExamAttemptWorkspaceEditorAccess) WorkspaceOrigin() model.AttemptWorkspaceOrigin {
-	return model.AttemptWorkspaceOriginEditor
+func (a ExamAttemptWorkspaceEditorAccess) WorkspaceAuthor() model.AttemptWorkspaceAuthor {
+	return model.NewCandidateWorkspaceAuthor(a.ConnectionID)
 }
 
 func (ExamAttemptWorkspaceEditorAccess) examAttemptWorkspaceWriteAccess() {}
@@ -107,8 +107,8 @@ func (a ExamAttemptWorkspaceEnvironmentAccess) WorkspaceAttemptID() model.ExamAt
 	return a.AttemptID
 }
 
-func (ExamAttemptWorkspaceEnvironmentAccess) WorkspaceOrigin() model.AttemptWorkspaceOrigin {
-	return model.AttemptWorkspaceOriginEnvironment
+func (a ExamAttemptWorkspaceEnvironmentAccess) WorkspaceAuthor() model.AttemptWorkspaceAuthor {
+	return model.NewEnvironmentWorkspaceAuthor(a.Identity.Incarnation, "")
 }
 
 // Valid reports whether every selector field is well formed.
@@ -232,7 +232,7 @@ type ExamAttemptWorkspaceBatch struct {
 
 // ExamAttemptWorkspaceBatchResult is the safe acknowledged state. Changes has
 // one journal entry per mutation, in order, at consecutive cursors, each with
-// the batch's origin. It carries no mutation-key digest, object selector,
+// the batch's author. A replay carries the author of the original batch. It carries no mutation-key digest, object selector,
 // credential, Session, binding, or content body.
 type ExamAttemptWorkspaceBatchResult struct {
 	SittingID       model.ExamSittingID
@@ -245,16 +245,16 @@ type ExamAttemptWorkspaceBatchResult struct {
 
 // ConsistentWith reports whether the result names the resolved target's
 // Sitting, Class, candidate and Attempt Workspace, and carries one valid
-// change per mutation, of the requested operation and the writer's origin,
-// in that workspace, at
-// consecutive positive cursors, for the proposed entry unless it replays an
-// earlier batch. It reads target, which the caller has already checked.
+// change per mutation, of the requested operation, in that workspace, at
+// consecutive positive cursors, by the writer's author kind. Unless it
+// replays an earlier batch, each change is for the proposed entry and by the
+// writer's exact author; a replay keeps the original batch's reference. It reads target, which the caller has already checked.
 //
 // It is part of the Store contract: the conformance suite asserts it on
 // every real result.
 func (r *ExamAttemptWorkspaceBatchResult) ConsistentWith(
 	target *ExamAttemptWorkspaceMutationTarget,
-	origin model.AttemptWorkspaceOrigin,
+	author model.AttemptWorkspaceAuthor,
 	mutations []ExamAttemptWorkspaceMutation,
 ) bool {
 	if r == nil ||
@@ -269,10 +269,10 @@ func (r *ExamAttemptWorkspaceBatchResult) ConsistentWith(
 		if change.Validate() != nil ||
 			change.WorkspaceID != r.WorkspaceID ||
 			change.Operation != mutations[index].Operation ||
-			change.Origin != origin ||
+			change.Author.Kind != author.Kind ||
 			change.Cursor < 1 ||
 			(index > 0 && change.Cursor != r.Changes[index-1].Cursor+1) ||
-			(!r.Replayed && change.EntryID != mutations[index].EntryID) {
+			(!r.Replayed && (change.EntryID != mutations[index].EntryID || change.Author != author)) {
 			return false
 		}
 	}
@@ -339,9 +339,11 @@ func (p *CandidateWorkspaceJournalPage) NotBehind(afterCursor int64) bool {
 // Every write is one batch: ReserveObjects, then VFS staging, then
 // MarkObjectsReady, then ApplyBatch. Each checks access once for the whole
 // batch. The editor and the execution environment both write this way; the
-// access kind decides only how the writer is proved and the journal origin.
+// access kind decides only how the writer is proved and the journal author.
 // The command outcome is keyed under the candidate either way, and audit adds
-// the origin, and for the environment its binding, to the aggregate data.
+// the author, and for the environment its binding, to the aggregate data.
+// Every changed entry records the author of its last change, which a
+// Submission seals.
 //
 // The reads take either the candidate's Desktop access or an environment
 // access and return the same manifest, file and journal projections.

@@ -11273,6 +11273,9 @@
       "CandidateWorkspaceJournalEntryResponse": {
         "additionalProperties": false,
         "properties": {
+          "author": {
+            "$ref": "#/components/schemas/WorkspaceAuthor"
+          },
           "changed_at": {
             "format": "date-time",
             "type": "string"
@@ -11311,14 +11314,6 @@
             ],
             "type": "string"
           },
-          "origin": {
-            "description": "Which writer made the change. Both write as the candidate; `editor` is the candidate's Desktop editor and `environment` is the Exam's execution environment, writing the candidate's work back on their behalf.",
-            "enum": [
-              "editor",
-              "environment"
-            ],
-            "type": "string"
-          },
           "recursive": {
             "description": "When true, this directory deletion removes old_path and all descendants whose paths start with old_path followed by a slash. Clients apply the entire subtree removal at this one cursor.",
             "type": "boolean"
@@ -11330,7 +11325,7 @@
           "kind",
           "operation",
           "changed_at",
-          "origin"
+          "author"
         ],
         "type": "object"
       },
@@ -28644,6 +28639,31 @@
           "expected_discrepancy_count",
           "reason_code",
           "private_reason"
+        ],
+        "type": "object"
+      },
+      "WorkspaceAuthor": {
+        "additionalProperties": false,
+        "description": "Who made a Workspace change. Every author writes on behalf of the candidate; the kind says which actor it was.",
+        "properties": {
+          "kind": {
+            "description": "`candidate` is the candidate's own editor. `environment` is the Attempt's execution environment, writing back what its programs changed.",
+            "enum": [
+              "candidate",
+              "environment"
+            ],
+            "type": "string"
+          },
+          "ref": {
+            "description": "The reference within the kind. For `candidate`, the Attempt Connection the editor wrote through. For `environment`, the environment incarnation in decimal, followed by a slash and the tag of the writing process, such as `terminal:1`, when it is known.",
+            "maxLength": 96,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "ref"
         ],
         "type": "object"
       },

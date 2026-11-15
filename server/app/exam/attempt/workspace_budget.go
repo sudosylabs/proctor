@@ -14,21 +14,31 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// workspaceWriteRates bound how fast one Attempt may change its Workspace,
-// whoever writes: the candidate's editor or the execution environment. A
-// bucket refills at the rate and holds at most the burst, so ordinary saving
-// never meets it and a runaway writer is slowed instead of flooding storage.
+// workspaceWriteRates bound how fast each kind of author may change one
+// Attempt's Workspace. A bucket refills at the rate and holds at most the
+// burst, so ordinary work never meets it and a runaway writer is slowed
+// instead of flooding storage. Each kind has its own bucket: an editor's
+// budget suits a person, while a build in the environment can write hundreds
+// of files in a second without starving the candidate's own saves.
 //
-// The byte burst exceeds one maximum batch request, so a single large file
+// Every byte burst exceeds one maximum batch request, so a single large file
 // always fits from a full bucket.
-var workspaceWriteRates = workspaceWriteRate{
-	mutationsPerSecond: 32,
-	mutationBurst:      512,
-	bytesPerSecond:     4 << 20,
-	byteBurst:          128 << 20,
+var workspaceWriteRates = map[model.AttemptWorkspaceAuthorKind]workspaceWriteRate{
+	model.AttemptWorkspaceAuthorCandidate: {
+		mutationsPerSecond: 32,
+		mutationBurst:      512,
+		bytesPerSecond:     4 << 20,
+		byteBurst:          128 << 20,
+	},
+	model.AttemptWorkspaceAuthorEnvironment: {
+		mutationsPerSecond: 256,
+		mutationBurst:      4096,
+		bytesPerSecond:     32 << 20,
+		byteBurst:          512 << 20,
+	},
 }
 
-// workspaceBudgetSweepSize is the number of tracked Attempts past which full,
+// workspaceBudgetSweepSize is the number of tracked buckets past which full,
 // idle buckets are forgotten; a forgotten bucket is the same as a full one.
 const workspaceBudgetSweepSize = 4096
 
@@ -39,13 +49,18 @@ type workspaceWriteRate struct {
 	byteBurst          float64
 }
 
-// workspaceWriteBudget holds one bucket per Attempt on this node. Nodes do not
-// share buckets: the limit protects each node's storage traffic and is not an
-// exact cluster-wide quota.
+// workspaceWriteBudget holds one bucket per Attempt and author kind on this
+// node. Nodes do not share buckets: the limit protects each node's storage
+// traffic and is not an exact cluster-wide quota.
 type workspaceWriteBudget struct {
-	rate     workspaceWriteRate
-	mu       sync.Mutex
-	attempts map[model.ExamAttemptID]*workspaceWriteBucket
+	rates   map[model.AttemptWorkspaceAuthorKind]workspaceWriteRate
+	mu      sync.Mutex
+	buckets map[workspaceBudgetKey]*workspaceWriteBucket
+}
+
+type workspaceBudgetKey struct {
+	attemptID model.ExamAttemptID
+	kind      model.AttemptWorkspaceAuthorKind
 }
 
 type workspaceWriteBucket struct {
@@ -54,26 +69,39 @@ type workspaceWriteBucket struct {
 	at        time.Time
 }
 
-func newWorkspaceWriteBudget(rate workspaceWriteRate) *workspaceWriteBudget {
-	return &workspaceWriteBudget{rate: rate, attempts: make(map[model.ExamAttemptID]*workspaceWriteBucket)}
+func newWorkspaceWriteBudget(rates map[model.AttemptWorkspaceAuthorKind]workspaceWriteRate) *workspaceWriteBudget {
+	return &workspaceWriteBudget{rates: rates, buckets: make(map[workspaceBudgetKey]*workspaceWriteBucket)}
 }
 
-// spend takes mutations and bytes from the Attempt's bucket. It takes nothing
-// and reports false when either would go below zero.
-func (b *workspaceWriteBudget) spend(attemptID model.ExamAttemptID, mutations int, bytes int64, now time.Time) bool {
+// spend takes mutations and bytes from the bucket of the Attempt and author
+// kind. It takes nothing and reports false when either would go below zero,
+// or when the kind has no rate.
+func (b *workspaceWriteBudget) spend(
+	attemptID model.ExamAttemptID,
+	kind model.AttemptWorkspaceAuthorKind,
+	mutations int,
+	bytes int64,
+	now time.Time,
+) bool {
+	rate, ok := b.rates[kind]
+	if !ok {
+		return false
+	}
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	bucket := b.attempts[attemptID]
+	key := workspaceBudgetKey{attemptID: attemptID, kind: kind}
+	bucket := b.buckets[key]
 	if bucket == nil {
-		if len(b.attempts) >= workspaceBudgetSweepSize {
+		if len(b.buckets) >= workspaceBudgetSweepSize {
 			b.sweep(now)
 		}
-		bucket = &workspaceWriteBucket{mutations: b.rate.mutationBurst, bytes: b.rate.byteBurst, at: now}
-		b.attempts[attemptID] = bucket
+		bucket = &workspaceWriteBucket{mutations: rate.mutationBurst, bytes: rate.byteBurst, at: now}
+		b.buckets[key] = bucket
 	}
 
-	b.refill(bucket, now)
+	refill(bucket, rate, now)
 	if bucket.mutations < float64(mutations) || bucket.bytes < float64(bytes) {
 		return false
 	}
@@ -83,22 +111,23 @@ func (b *workspaceWriteBudget) spend(attemptID model.ExamAttemptID, mutations in
 	return true
 }
 
-func (b *workspaceWriteBudget) refill(bucket *workspaceWriteBucket, now time.Time) {
+func refill(bucket *workspaceWriteBucket, rate workspaceWriteRate, now time.Time) {
 	elapsed := now.Sub(bucket.at).Seconds()
 	if elapsed <= 0 {
 		return
 	}
-	bucket.mutations = min(b.rate.mutationBurst, bucket.mutations+elapsed*b.rate.mutationsPerSecond)
-	bucket.bytes = min(b.rate.byteBurst, bucket.bytes+elapsed*b.rate.bytesPerSecond)
+	bucket.mutations = min(rate.mutationBurst, bucket.mutations+elapsed*rate.mutationsPerSecond)
+	bucket.bytes = min(rate.byteBurst, bucket.bytes+elapsed*rate.bytesPerSecond)
 	bucket.at = now
 }
 
 // sweep forgets every bucket that has refilled completely.
 func (b *workspaceWriteBudget) sweep(now time.Time) {
-	for id, bucket := range b.attempts {
-		b.refill(bucket, now)
-		if bucket.mutations >= b.rate.mutationBurst && bucket.bytes >= b.rate.byteBurst {
-			delete(b.attempts, id)
+	for key, bucket := range b.buckets {
+		rate := b.rates[key.kind]
+		refill(bucket, rate, now)
+		if bucket.mutations >= rate.mutationBurst && bucket.bytes >= rate.byteBurst {
+			delete(b.buckets, key)
 		}
 	}
 }

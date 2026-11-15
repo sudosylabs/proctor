@@ -202,7 +202,7 @@ func TestGrantLifecycleOnAMemoryHost(t *testing.T) {
 		return ok && body == "from the shell\n"
 	},
 		"the guest file is harvested")
-	require.Equal(t, "environment", h.host.work.origin(testAttempt, "notes.txt"))
+	require.Equal(t, "environment", h.host.work.authorKind(testAttempt, "notes.txt"))
 
 	// The guest rewrites a projected file.
 	require.NoError(t, h.guest.WriteGuest(ctx, id, "src/main.py", []byte("print('guest')\n")))

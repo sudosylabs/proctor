@@ -53,6 +53,8 @@ func (p ExamSubmissionProvenance) IsValid() bool {
 // File content remains in its original opaque VFS object; directories have no
 // content selector. Path is retained as immutable protected Submission data,
 // never as an object key, authorization selector, cursor, or audit field.
+// Author is who made the entry's last change; it is zero for an entry
+// unchanged since the Starter Workspace.
 type ExamSubmissionManifestEntry struct {
 	EntryID         AttemptWorkspaceEntryID
 	Kind            StarterWorkspaceEntryKind
@@ -64,10 +66,11 @@ type ExamSubmissionManifestEntry struct {
 	StorageOrigin   AttemptWorkspaceObjectStorage
 	StarterObjectID StarterWorkspaceObjectID
 	AttemptObjectID AttemptWorkspaceObjectID
+	Author          AttemptWorkspaceAuthor
 }
 
 func (e ExamSubmissionManifestEntry) Validate() error {
-	if !e.EntryID.IsValid() {
+	if !e.EntryID.IsValid() || (e.Author != AttemptWorkspaceAuthor{} && !e.Author.IsValid()) {
 		return invalidModelError(
 			"ExamSubmissionManifestEntry.Validate",
 			"exam_submission_manifest_entry",
@@ -597,6 +600,8 @@ func computeExamSubmissionManifestDigest(manifest ExamSubmissionManifest) string
 		writeSubmissionDigestFrame(digest, []byte(entry.StorageOrigin))
 		writeSubmissionDigestFrame(digest, []byte(entry.StarterObjectID))
 		writeSubmissionDigestFrame(digest, []byte(entry.AttemptObjectID))
+		writeSubmissionDigestFrame(digest, []byte(entry.Author.Kind))
+		writeSubmissionDigestFrame(digest, []byte(entry.Author.Ref))
 	}
 	return hex.EncodeToString(digest.Sum(nil))
 }

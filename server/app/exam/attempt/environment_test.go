@@ -51,7 +51,7 @@ func TestEnvironmentBatchWritesAsTheCandidateThroughTheSameBatch(t *testing.T) {
 	require.Equal(t, want, f.workspace.batch().Access)
 
 	// The outcome and the audit belong to the candidate the Store resolved.
-	wantIdempotency, err := prepareWorkspaceBatchIdempotency(f.userID, model.AttemptWorkspaceOriginEnvironment, "harvest-1",
+	wantIdempotency, err := prepareWorkspaceBatchIdempotency(f.userID, model.AttemptWorkspaceAuthorEnvironment, "harvest-1",
 		f.attemptID, mutations, nil)
 	require.NoError(t, err)
 	require.Equal(t, wantIdempotency, f.workspace.idempotency)
@@ -63,7 +63,8 @@ func TestEnvironmentBatchWritesAsTheCandidateThroughTheSameBatch(t *testing.T) {
 	require.Equal(t, model.RoleScopeClass, f.systemAudit.scopeType)
 	require.Equal(t, f.sitting.ClassID.String(), f.systemAudit.scopeID)
 	require.Equal(t, store.ExamAttemptWorkspaceBatchOperation, f.systemAudit.operation)
-	require.Equal(t, map[string]any{"exam_attempt_id": f.attemptID.String(), "mutation_count": 1, "origin": "environment",
+	require.Equal(t, map[string]any{"exam_attempt_id": f.attemptID.String(), "mutation_count": 1, "author_kind": "environment",
+		"author_ref":             model.NewEnvironmentWorkspaceAuthor(binding.Identity.Incarnation, "").Ref,
 		"environment_binding_id": binding.BindingID.String(), "system_task": "plugin.execenv.harvest"}, f.systemAudit.values)
 	require.Nil(t, f.audit.values, "no Principal-bearing audit is begun for an environment")
 	require.Equal(t, []string{"workspace.reserve", "content.next", "content.stage", "workspace.ready",
@@ -72,7 +73,7 @@ func TestEnvironmentBatchWritesAsTheCandidateThroughTheSameBatch(t *testing.T) {
 	require.Equal(t, workspaceID, result.WorkspaceID)
 	require.Equal(t, f.userID, result.CandidateUserID)
 	require.Len(t, result.Changes, 1)
-	require.Equal(t, model.AttemptWorkspaceOriginEnvironment, result.Changes[0].Origin)
+	require.Equal(t, model.NewEnvironmentWorkspaceAuthor(binding.Identity.Incarnation, ""), result.Changes[0].Author)
 	require.Equal(t, int64(5), result.Changes[0].Cursor)
 	require.Equal(t, workspaceChangedCalls(t, result), f.publisher.Calls(), "the candidate gets the usual refetch hint")
 }

@@ -90,7 +90,7 @@ components:
         - kind
         - operation
         - changed_at
-        - origin
+        - author
       properties:
         cursor:
           type: integer
@@ -123,12 +123,27 @@ components:
         recursive:
           type: boolean
           description: When true, this directory deletion removes old_path and all descendants whose paths start with old_path followed by a slash. Clients apply the entire subtree removal at this one cursor.
-        origin:
+        author:
+          $ref: '#/components/schemas/WorkspaceAuthor'
+    WorkspaceAuthor:
+      type: object
+      additionalProperties: false
+      description: Who made a Workspace change. Every author writes on behalf of the candidate; the kind says which actor it was.
+      required:
+        - kind
+        - ref
+      properties:
+        kind:
           type: string
           enum:
-            - editor
+            - candidate
             - environment
-          description: Which writer made the change. Both write as the candidate; `editor` is the candidate's Desktop editor and `environment` is the Exam's execution environment, writing the candidate's work back on their behalf.
+          description: '`candidate` is the candidate''s own editor. `environment` is the Attempt''s execution environment, writing back what its programs changed.'
+        ref:
+          type: string
+          minLength: 1
+          maxLength: 96
+          description: The reference within the kind. For `candidate`, the Attempt Connection the editor wrote through. For `environment`, the environment incarnation in decimal, followed by a slash and the tag of the writing process, such as `terminal:1`, when it is known.
     CandidateWorkspaceJournalResponse:
       type: object
       additionalProperties: false

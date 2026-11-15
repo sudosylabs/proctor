@@ -537,7 +537,7 @@ func journalEntryFixture(t *testing.T, workspaceID model.ExamAttemptWorkspaceID,
 		NewPath:        "main.go",
 		ContentVersion: model.NewWorkspaceContentVersion(),
 		ChangedAt:      consistencyAt,
-		Origin:         model.AttemptWorkspaceOriginEditor,
+		Author:         consistencyAuthor,
 	}
 	require.NoError(t, entry.Validate())
 	return entry
@@ -597,7 +597,7 @@ func TestExamAttemptWorkspaceBatchResultConsistentWithRejectsEachInconsistency(t
 		directory := model.AttemptWorkspaceJournalEntry{WorkspaceID: target.WorkspaceID, Cursor: file.Cursor + 1,
 			EntryID: directoryID, EntryKind: model.StarterWorkspaceEntryDirectory,
 			Operation: model.AttemptWorkspaceMutationCreateDirectory, NewPath: "cmd", ChangedAt: file.ChangedAt,
-			Origin: model.AttemptWorkspaceOriginEditor}
+			Author: consistencyAuthor}
 		require.NoError(t, directory.Validate())
 		return &result{
 			SittingID:       target.SittingID,
@@ -608,10 +608,10 @@ func TestExamAttemptWorkspaceBatchResultConsistentWithRejectsEachInconsistency(t
 		}
 	}
 	check := func(r *result) bool {
-		return r.ConsistentWith(target, model.AttemptWorkspaceOriginEditor, mutations)
+		return r.ConsistentWith(target, consistencyAuthor, mutations)
 	}
 
-	require.False(t, (*result)(nil).ConsistentWith(target, model.AttemptWorkspaceOriginEditor, mutations))
+	require.False(t, (*result)(nil).ConsistentWith(target, consistencyAuthor, mutations))
 	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[result]{
 		{"another Sitting", func(r *result) { r.SittingID = model.NewExamSittingID() }},
 		{"another Class", func(r *result) { r.ClassID = model.NewClassID() }},
@@ -631,17 +631,23 @@ func TestExamAttemptWorkspaceBatchResultConsistentWithRejectsEachInconsistency(t
 		{"non-consecutive cursors", func(r *result) { r.Changes[1].Cursor++ }},
 		{"repeated cursor", func(r *result) { r.Changes[1].Cursor = r.Changes[0].Cursor }},
 		{"changes out of order", func(r *result) { r.Changes[0], r.Changes[1] = r.Changes[1], r.Changes[0] }},
-		{"change of another origin", func(r *result) { r.Changes[1].Origin = model.AttemptWorkspaceOriginEnvironment }},
+		{"change of another author kind", func(r *result) { r.Changes[1].Author = model.NewEnvironmentWorkspaceAuthor(1, "") }},
+		{"fresh change by another Connection", func(r *result) {
+			r.Changes[1].Author = model.NewCandidateWorkspaceAuthor(model.NewAttemptConnectionID())
+		}},
 	})
 	swapped := []ExamAttemptWorkspaceMutation{mutations[0], mutations[1]}
 	swapped[1].Operation = model.AttemptWorkspaceMutationDeleteEntry
-	require.False(t, consistent(t).ConsistentWith(target, model.AttemptWorkspaceOriginEditor, swapped), "change of another operation")
-	require.False(t, consistent(t).ConsistentWith(target, model.AttemptWorkspaceOriginEditor, mutations[:1]), "fewer mutations than changes")
-
+	require.False(t, consistent(t).ConsistentWith(target, consistencyAuthor, swapped), "change of another operation")
+	require.False(t, consistent(t).ConsistentWith(target, consistencyAuthor, mutations[:1]), "fewer mutations than changes")
 	replayed := consistent(t)
 	replayed.Replayed = true
 	replayed.Changes[0].EntryID, replayed.Changes[1].EntryID = model.NewAttemptWorkspaceEntryID(), model.NewAttemptWorkspaceEntryID()
 	require.True(t, check(replayed), "a replay keeps the entries of the earlier batch")
+	require.True(t, replayed.ConsistentWith(target, model.NewCandidateWorkspaceAuthor(model.NewAttemptConnectionID()), mutations),
+		"a replay through a new Connection keeps the original batch's author")
+	require.False(t, replayed.ConsistentWith(target, model.NewEnvironmentWorkspaceAuthor(1, ""), mutations),
+		"a replay is never by another author kind")
 }
 
 func TestIsValidWorkspaceSHA256AcceptsOnlyLowercaseHexDigests(t *testing.T) {

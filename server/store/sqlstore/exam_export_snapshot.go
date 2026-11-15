@@ -418,7 +418,7 @@ func loadExamExportEntries(
 	var rows []examSubmissionManifestPersistenceRow
 	if err := tx.Select(ctx, &rows, `SELECT entry_id, kind, path, workspace_object_id,
 			content_version, media_type, size_bytes, sha256, storage_origin, starter_object_id,
-			attempt_object_id
+			attempt_object_id, author_kind, author_ref
 		FROM exam_submission_manifest_entries
 		WHERE submission_id = ?
 		ORDER BY entry_id

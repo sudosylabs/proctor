@@ -178,7 +178,7 @@ func (s *Service) applyWorkspaceWrite(ctx context.Context, writer workspaceWrite
 
 	// The budget is spent before anything is reserved or staged, so a writer
 	// that outruns it costs storage nothing. An exact retry spends again.
-	if !s.workspaceBudget.spend(attemptID, len(write.Mutations), bytes, s.now()) {
+	if !s.workspaceBudget.spend(attemptID, writer.access.WorkspaceAuthor().Kind, len(write.Mutations), bytes, s.now()) {
 		return WorkspaceBatchResult{}, apperror.New("exam.attempt.workspace.rate_limited")
 	}
 
@@ -206,7 +206,7 @@ func (s *Service) applyWorkspaceWrite(ctx context.Context, writer workspaceWrite
 	// The outcome is the candidate's, whoever writes on their behalf.
 	commandIdempotency, err := prepareWorkspaceBatchIdempotency(
 		target.CandidateUserID,
-		writer.access.WorkspaceOrigin(),
+		writer.access.WorkspaceAuthor().Kind,
 		write.IdempotencyKey,
 		attemptID,
 		write.Mutations,

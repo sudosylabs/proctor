@@ -245,7 +245,7 @@ func TestExecutionPluginBindsAnEnvironmentAndWritesTheWorkspace(t *testing.T) {
 	})
 	require.NoError(t, err, "refusal %#v", err)
 	require.Len(t, result.Changes, 1)
-	require.Equal(t, "environment", result.Changes[0].Origin)
+	require.Equal(t, "environment", result.Changes[0].AuthorKind)
 
 	journal, err := execution.workspaces.ListJournal(ctx, plugin.WorkspaceJournalRequest{
 		Environment: environment, AfterCursor: cursor, Limit: 10,
@@ -253,7 +253,7 @@ func TestExecutionPluginBindsAnEnvironmentAndWritesTheWorkspace(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, journal.Entries, 1)
 	require.Equal(t, "harvested.py", journal.Entries[0].NewPath)
-	require.Equal(t, "environment", journal.Entries[0].Origin, "the environment can tell its own change from the editor's")
+	require.Equal(t, "environment", journal.Entries[0].AuthorKind, "the environment can tell its own change from the editor's")
 
 	opened, err := execution.workspaces.OpenFile(ctx, environment, result.Changes[0].EntryID)
 	require.NoError(t, err)

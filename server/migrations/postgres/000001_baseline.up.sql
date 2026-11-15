@@ -1988,10 +1988,17 @@ CREATE TABLE exam_attempt_workspace_entries (
     kind varchar(16) NOT NULL CHECK (kind IN ('file', 'directory')),
     path text NOT NULL CHECK (octet_length(path) BETWEEN 1 AND 1024),
     current_object_id varchar(26),
+    -- The author of the entry's last change; both are null for an entry
+    -- seeded from the Starter Workspace and never changed since.
+    last_author_kind varchar(16) CHECK (last_author_kind IN ('candidate', 'environment')),
+    last_author_ref varchar(96) CHECK (octet_length(last_author_ref) BETWEEN 1 AND 96),
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
     UNIQUE (workspace_id, source_starter_entry_id),
     UNIQUE (workspace_id, id),
+    CONSTRAINT exam_attempt_workspace_entries_last_author_check CHECK (
+        (last_author_kind IS NULL) = (last_author_ref IS NULL)
+    ),
     CONSTRAINT exam_attempt_workspace_entries_workspace_fkey
         FOREIGN KEY (workspace_id, admission_revision_id)
         REFERENCES exam_attempt_workspaces(id, admission_revision_id),
@@ -2028,7 +2035,11 @@ CREATE TABLE exam_attempt_workspace_journal (
     mutation_key_digest bytea NOT NULL CHECK (octet_length(mutation_key_digest) = 32),
     changed_at timestamptz NOT NULL,
     recursive boolean NOT NULL DEFAULT false,
-    origin varchar(16) NOT NULL CHECK (origin IN ('editor', 'environment')),
+    -- Who made the change: the kind of author and a reference within it (the
+    -- candidate's Attempt Connection, or the environment incarnation and the
+    -- writing process's tag).
+    author_kind varchar(16) NOT NULL CHECK (author_kind IN ('candidate', 'environment')),
+    author_ref varchar(96) NOT NULL CHECK (octet_length(author_ref) BETWEEN 1 AND 96),
     CONSTRAINT exam_attempt_workspace_journal_recursive_check CHECK (
         NOT recursive OR (operation = 'delete_entry' AND entry_kind = 'directory')
     ),
@@ -2924,8 +2935,15 @@ CREATE TABLE exam_submission_manifest_entries (
     starter_object_id varchar(26),
     attempt_object_id varchar(26),
     workspace_object_id varchar(26),
+    -- The author of the entry's last change when it was sealed; both are null
+    -- for an entry unchanged since the Starter Workspace.
+    author_kind varchar(16) CHECK (author_kind IN ('candidate', 'environment')),
+    author_ref varchar(96) CHECK (octet_length(author_ref) BETWEEN 1 AND 96),
     PRIMARY KEY (submission_id, entry_id),
     UNIQUE (submission_id, path),
+    CONSTRAINT exam_submission_manifest_entries_author_check CHECK (
+        (author_kind IS NULL) = (author_ref IS NULL)
+    ),
     CONSTRAINT exam_submission_manifest_entries_submission_fkey
         FOREIGN KEY (submission_id, workspace_id)
         REFERENCES exam_submissions(id, workspace_id),

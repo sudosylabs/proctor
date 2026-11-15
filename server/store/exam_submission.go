@@ -359,6 +359,8 @@ func (a *ExamSubmissionAuthorization) ConsistentWith(submissionID model.Submissi
 
 // ExamSubmissionManifestItem is manager-visible protected metadata for one
 // sealed logical Entry. It deliberately omits opaque VFS object selectors.
+// Author is who made the entry's last change, zero when it is unchanged since
+// the Starter Workspace.
 type ExamSubmissionManifestItem struct {
 	EntryID        model.AttemptWorkspaceEntryID
 	Kind           model.StarterWorkspaceEntryKind
@@ -367,6 +369,7 @@ type ExamSubmissionManifestItem struct {
 	MediaType      string
 	SizeBytes      int64
 	SHA256         string
+	Author         model.AttemptWorkspaceAuthor
 }
 
 // ExamSubmissionManifestListOptions requests one immutable Entry-ID-keyset

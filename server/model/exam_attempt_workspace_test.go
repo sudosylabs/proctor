@@ -85,13 +85,13 @@ func TestAttemptWorkspaceJournalDescribesSafeOrderedAcknowledgements(t *testing.
 	entry := AttemptWorkspaceJournalEntry{WorkspaceID: workspaceID, Cursor: 3, EntryID: entryID,
 		EntryKind: StarterWorkspaceEntryFile, Operation: AttemptWorkspaceMutationReplaceFile,
 		OldPath: "cmd/main.go", NewPath: "cmd/main.go", ContentVersion: version, ChangedAt: at,
-		Origin: AttemptWorkspaceOriginEditor}
+		Author: NewCandidateWorkspaceAuthor(NewAttemptConnectionID())}
 	require.NoError(t, entry.Validate())
 	environment := entry
-	environment.Origin = AttemptWorkspaceOriginEnvironment
+	environment.Author = NewEnvironmentWorkspaceAuthor(2, "terminal:1")
 	require.NoError(t, environment.Validate())
-	environment.Origin = ""
-	require.Error(t, environment.Validate(), "journal accepted a change without an origin")
+	environment.Author = AttemptWorkspaceAuthor{}
+	require.Error(t, environment.Validate(), "journal accepted a change without an author")
 	move := entry
 	move.Cursor, move.Operation, move.NewPath = 4, AttemptWorkspaceMutationMoveEntry, "internal/main.go"
 	require.NoError(t, move.Validate())
@@ -144,4 +144,30 @@ func TestAttemptWorkspaceObjectLifecycleFencesVisibilityAndCleanup(t *testing.T)
 	err = object.ReleaseCleanup("node-1/claim-1", claimAt.Add(time.Second))
 	require.NoError(t, err, "ReleaseCleanup() = %#v", object)
 	require.Equal(t, AttemptWorkspaceObjectReclaimable, object.State, "ReleaseCleanup() = %#v", object)
+}
+
+func TestAttemptWorkspaceAuthorNamesOneActorOfAKnownKind(t *testing.T) {
+	t.Parallel()
+	connection := NewAttemptConnectionID()
+	require.True(t, NewCandidateWorkspaceAuthor(connection).IsValid())
+	require.Equal(t, connection.String(), NewCandidateWorkspaceAuthor(connection).Ref)
+	require.Equal(t, "0", NewEnvironmentWorkspaceAuthor(0, "").Ref)
+	require.Equal(t, "3/terminal:2", NewEnvironmentWorkspaceAuthor(3, "terminal:2").Ref)
+	require.True(t, NewEnvironmentWorkspaceAuthor(3, "terminal:2").IsValid())
+
+	for name, author := range map[string]AttemptWorkspaceAuthor{
+		"no kind":                    {Ref: connection.String()},
+		"unknown kind":               {Kind: "grader", Ref: "1"},
+		"candidate without a ref":    {Kind: AttemptWorkspaceAuthorCandidate},
+		"candidate with a free ref":  {Kind: AttemptWorkspaceAuthorCandidate, Ref: "terminal:1"},
+		"environment without a ref":  {Kind: AttemptWorkspaceAuthorEnvironment},
+		"negative incarnation":       {Kind: AttemptWorkspaceAuthorEnvironment, Ref: "-1"},
+		"padded incarnation":         {Kind: AttemptWorkspaceAuthorEnvironment, Ref: "01"},
+		"empty process tag":          {Kind: AttemptWorkspaceAuthorEnvironment, Ref: "1/"},
+		"uppercase process tag":      {Kind: AttemptWorkspaceAuthorEnvironment, Ref: "1/Terminal"},
+		"process tag with a slash":   {Kind: AttemptWorkspaceAuthorEnvironment, Ref: "1/a/b"},
+		"process tag over the bound": {Kind: AttemptWorkspaceAuthorEnvironment, Ref: "1/a" + strings.Repeat("b", 64)},
+	} {
+		require.False(t, author.IsValid(), name)
+	}
 }

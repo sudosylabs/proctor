@@ -20,11 +20,12 @@ import (
 // prepareWorkspaceBatchIdempotency fingerprints a batch by everything the
 // writer asked for, in order. Server-chosen identities are not part of it, so
 // an exact retry matches. The outcome is keyed under the candidate for every
-// writer; an environment batch also fingerprints its origin, so it can never
-// replay as, or collide with, the editor's command under the same key.
+// writer, and fingerprints the author kind, so one kind's batch can never
+// replay as, or collide with, another's under the same key. The author's
+// reference is left out, so a retry through a new Connection still matches.
 func prepareWorkspaceBatchIdempotency(
 	candidateID model.UserID,
-	origin model.AttemptWorkspaceOrigin,
+	authorKind model.AttemptWorkspaceAuthorKind,
 	key string,
 	attemptID model.ExamAttemptID,
 	mutations []WorkspaceBatchMutation,
@@ -56,16 +57,12 @@ func prepareWorkspaceBatchIdempotency(
 		}
 	}
 
-	var environment string
-	if origin != model.AttemptWorkspaceOriginEditor {
-		environment = string(origin)
-	}
 	return idempotency.RequireFor(candidateID, store.ExamAttemptWorkspaceBatchOperation, key, struct {
 		AttemptID               string             `json:"exam_attempt_id"`
 		Mutations               []semanticMutation `json:"mutations"`
 		ExpectedWorkspaceCursor *int64             `json:"expected_workspace_cursor,omitempty"`
-		Origin                  string             `json:"origin,omitempty"`
-	}{attemptID.String(), semantic, expectedWorkspaceCursor, environment})
+		AuthorKind              string             `json:"author_kind"`
+	}{attemptID.String(), semantic, expectedWorkspaceCursor, string(authorKind)})
 }
 
 func prepareConnectIdempotency(inv invocation.Invocation, command ConnectCommand) (*store.CommandIdempotency, error) {

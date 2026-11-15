@@ -80,7 +80,7 @@ func (u *environmentUseCases) ApplyEnvironmentWorkspaceBatch(
 		Changes: []model.AttemptWorkspaceJournalEntry{{
 			Cursor: 7, EntryID: model.NewAttemptWorkspaceEntryID(), EntryKind: model.StarterWorkspaceEntryFile,
 			Operation: model.AttemptWorkspaceMutationCreateFile, NewPath: command.Mutations[0].DestinationPath,
-			Origin: model.AttemptWorkspaceOriginEnvironment,
+			Author: model.NewEnvironmentWorkspaceAuthor(command.Binding.Identity.Incarnation, ""),
 		}},
 	}, nil
 }
@@ -179,7 +179,7 @@ func TestAFakeExecutionPluginBindsAnEnvironmentAndAppliesABatch(t *testing.T) {
 	require.Equal(t, "harvest-1", useCases.batch.IdempotencyKey)
 	require.Equal(t, []plugin.WorkspaceChange{{
 		Cursor: 7, EntryID: result.Changes[0].EntryID, EntryKind: "file", Operation: plugin.WorkspaceCreateFile,
-		NewPath: "main.py", Origin: "environment",
+		NewPath: "main.py", AuthorKind: "environment", AuthorRef: result.Changes[0].AuthorRef,
 	}}, result.Changes)
 
 	ended, err := execution.workspaces.EndEnvironmentBinding(ctx, attemptID.String(), bound.Binding.ID)

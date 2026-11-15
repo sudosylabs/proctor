@@ -9,6 +9,7 @@ package model
 
 import (
 	"math"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -445,18 +446,88 @@ func (k AttemptWorkspaceMutationKind) IsValid() bool {
 	}
 }
 
-// AttemptWorkspaceOrigin names which writer made a journaled change. Both
-// write as the candidate: the editor through their Desktop Connection, the
-// execution environment on their behalf through its environment binding.
-type AttemptWorkspaceOrigin string
+// AttemptWorkspaceAuthorKind names the kind of actor that made a Workspace
+// change. Every kind writes on behalf of the candidate; the kind decides only
+// how the writer is proved. A new actor is a new kind, never a new write path.
+type AttemptWorkspaceAuthorKind string
 
 const (
-	AttemptWorkspaceOriginEditor      AttemptWorkspaceOrigin = "editor"
-	AttemptWorkspaceOriginEnvironment AttemptWorkspaceOrigin = "environment"
+	// AttemptWorkspaceAuthorCandidate is the candidate's own editor, writing
+	// through one Attempt Connection.
+	AttemptWorkspaceAuthorCandidate AttemptWorkspaceAuthorKind = "candidate"
+	// AttemptWorkspaceAuthorEnvironment is the Attempt's execution
+	// environment, writing back what its programs changed.
+	AttemptWorkspaceAuthorEnvironment AttemptWorkspaceAuthorKind = "environment"
 )
 
-func (o AttemptWorkspaceOrigin) IsValid() bool {
-	return o == AttemptWorkspaceOriginEditor || o == AttemptWorkspaceOriginEnvironment
+func (k AttemptWorkspaceAuthorKind) IsValid() bool {
+	return k == AttemptWorkspaceAuthorCandidate || k == AttemptWorkspaceAuthorEnvironment
+}
+
+// AttemptWorkspaceAuthorRefMaximumBytes bounds an author reference.
+const AttemptWorkspaceAuthorRefMaximumBytes = 96
+
+// AttemptWorkspaceAuthor is who made one Workspace change: a kind and a
+// reference within it. A candidate's reference is the Attempt Connection the
+// editor wrote through. An environment's is its incarnation, in decimal,
+// followed by a slash and the tag of the process that wrote the path when
+// that is known.
+type AttemptWorkspaceAuthor struct {
+	Kind AttemptWorkspaceAuthorKind
+	Ref  string
+}
+
+// NewCandidateWorkspaceAuthor names the candidate's editor on one Connection.
+func NewCandidateWorkspaceAuthor(connectionID AttemptConnectionID) AttemptWorkspaceAuthor {
+	return AttemptWorkspaceAuthor{Kind: AttemptWorkspaceAuthorCandidate, Ref: connectionID.String()}
+}
+
+// NewEnvironmentWorkspaceAuthor names one environment incarnation and, when
+// processTag is not empty, the process that wrote the change.
+func NewEnvironmentWorkspaceAuthor(incarnation int64, processTag string) AttemptWorkspaceAuthor {
+	ref := strconv.FormatInt(incarnation, 10)
+	if processTag != "" {
+		ref += "/" + processTag
+	}
+	return AttemptWorkspaceAuthor{Kind: AttemptWorkspaceAuthorEnvironment, Ref: ref}
+}
+
+// IsValid reports whether the reference is well formed for the kind.
+func (a AttemptWorkspaceAuthor) IsValid() bool {
+	switch a.Kind {
+	case AttemptWorkspaceAuthorCandidate:
+		id, err := ParseAttemptConnectionID(a.Ref)
+		return err == nil && id.String() == a.Ref
+	case AttemptWorkspaceAuthorEnvironment:
+		if len(a.Ref) > AttemptWorkspaceAuthorRefMaximumBytes {
+			return false
+		}
+		incarnation, tag, tagged := strings.Cut(a.Ref, "/")
+		value, err := strconv.ParseInt(incarnation, 10, 64)
+		if err != nil || value < 0 || strconv.FormatInt(value, 10) != incarnation {
+			return false
+		}
+		return !tagged || IsValidAttemptEnvironmentProcessTag(tag)
+	default:
+		return false
+	}
+}
+
+// IsValidAttemptEnvironmentProcessTag reports whether tag names one process
+// the core started in an environment, such as terminal:1: a lowercase letter,
+// then up to 63 lowercase letters, digits, colons, hyphens or underscores.
+func IsValidAttemptEnvironmentProcessTag(tag string) bool {
+	if tag == "" || len(tag) > 64 || tag[0] < 'a' || tag[0] > 'z' {
+		return false
+	}
+	for index := 1; index < len(tag); index++ {
+		character := tag[index]
+		if (character < 'a' || character > 'z') && (character < '0' || character > '9') &&
+			character != ':' && character != '-' && character != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 // AttemptWorkspaceJournalEntry is one safe acknowledged change in the
@@ -474,7 +545,7 @@ type AttemptWorkspaceJournalEntry struct {
 	ChangedAt      time.Time
 	// Recursive deletes OldPath and every descendant separated by a slash.
 	Recursive bool
-	Origin    AttemptWorkspaceOrigin
+	Author    AttemptWorkspaceAuthor
 }
 
 func (e AttemptWorkspaceJournalEntry) Validate() error {
@@ -482,7 +553,7 @@ func (e AttemptWorkspaceJournalEntry) Validate() error {
 		e.Cursor < 1 ||
 		!e.EntryID.IsValid() ||
 		!e.Operation.IsValid() ||
-		!e.Origin.IsValid() ||
+		!e.Author.IsValid() ||
 		e.ChangedAt.IsZero() {
 		return invalidModelError(
 			"AttemptWorkspaceJournalEntry.Validate",

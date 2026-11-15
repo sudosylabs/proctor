@@ -119,16 +119,23 @@ type candidateWorkspaceBatchResponse struct {
 }
 
 type candidateWorkspaceJournalEntryResponse struct {
-	Cursor         int64  `json:"cursor"`
-	EntryID        string `json:"entry_id"`
-	Kind           string `json:"kind"`
-	Operation      string `json:"operation"`
-	OldPath        string `json:"old_path,omitempty"`
-	NewPath        string `json:"new_path,omitempty"`
-	ContentVersion string `json:"content_version,omitempty"`
-	ChangedAt      string `json:"changed_at"`
-	Recursive      bool   `json:"recursive,omitempty"`
-	Origin         string `json:"origin"`
+	Cursor         int64                   `json:"cursor"`
+	EntryID        string                  `json:"entry_id"`
+	Kind           string                  `json:"kind"`
+	Operation      string                  `json:"operation"`
+	OldPath        string                  `json:"old_path,omitempty"`
+	NewPath        string                  `json:"new_path,omitempty"`
+	ContentVersion string                  `json:"content_version,omitempty"`
+	ChangedAt      string                  `json:"changed_at"`
+	Recursive      bool                    `json:"recursive,omitempty"`
+	Author         workspaceAuthorResponse `json:"author"`
+}
+
+// workspaceAuthorResponse is who made a Workspace change: its kind and a
+// reference within it.
+type workspaceAuthorResponse struct {
+	Kind string `json:"kind"`
+	Ref  string `json:"ref"`
 }
 
 type candidateWorkspaceJournalResponse struct {
@@ -299,7 +306,7 @@ func candidateWorkspaceJournalEntry(entry model.AttemptWorkspaceJournalEntry) ca
 		ContentVersion: entry.ContentVersion.String(),
 		ChangedAt:      model.FormatRFC3339(entry.ChangedAt),
 		Recursive:      entry.Recursive,
-		Origin:         string(entry.Origin),
+		Author:         workspaceAuthorResponse{Kind: string(entry.Author.Kind), Ref: entry.Author.Ref},
 	}
 }
 

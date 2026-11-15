@@ -362,7 +362,8 @@ func pluginWorkspaceChanges(entries []model.AttemptWorkspaceJournalEntry) []plug
 			ContentVersion: string(entry.ContentVersion),
 			ChangedAt:      entry.ChangedAt,
 			Recursive:      entry.Recursive,
-			Origin:         string(entry.Origin),
+			AuthorKind:     string(entry.Author.Kind),
+			AuthorRef:      entry.Author.Ref,
 		}
 	}
 	return changes

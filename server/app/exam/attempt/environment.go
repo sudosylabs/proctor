@@ -32,15 +32,19 @@ func validEnvironmentCaller(system invocation.System) error {
 
 // EnvironmentOwner names the owner an environment acts through: the
 // runtime lease fence it holds and the environment incarnation it acts for.
-// The Store requires both to be current.
+// The Store requires both to be current. Tag, when set, names the started
+// process whose changes a batch carries: the journal's author is then the
+// incarnation and that tag.
 type EnvironmentOwner struct {
 	AttemptID   model.ExamAttemptID
 	Incarnation int64
 	Fence       int64
+	Tag         string
 }
 
 func (o EnvironmentOwner) access() (store.ExamAttemptWorkspaceEnvironmentAccess, error) {
-	access := store.ExamAttemptWorkspaceEnvironmentAccess{AttemptID: o.AttemptID, Incarnation: o.Incarnation, Fence: o.Fence}
+	access := store.ExamAttemptWorkspaceEnvironmentAccess{AttemptID: o.AttemptID, Incarnation: o.Incarnation, Fence: o.Fence,
+		Tag: o.Tag}
 	if !access.Valid() {
 		return store.ExamAttemptWorkspaceEnvironmentAccess{}, apperror.Invalid("exam.attempt.invalid", "environment_owner")
 	}

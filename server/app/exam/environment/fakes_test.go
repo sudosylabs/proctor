@@ -357,7 +357,7 @@ func (w *workspaceFake) Apply(ctx context.Context, access environment.WorkspaceA
 		}
 		w.journal = w.journal[:journal]
 	}
-	author := model.NewEnvironmentWorkspaceAuthor(access.Incarnation, "")
+	author := model.NewEnvironmentWorkspaceAuthor(access.Incarnation, access.Tag)
 	var changes []model.AttemptWorkspaceJournalEntry
 	for index, mutation := range batch.Mutations {
 		parentHeld := func(name string) bool {

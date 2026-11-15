@@ -251,16 +251,19 @@ func (o *owner) sync(ctx context.Context, settling bool) error {
 	return nil
 }
 
-// diverging handles a projection the guest's own changes refuse. When the
-// guest has changed something since, the next round harvests it first.
-// When it has not, the guest holds changes the Workspace refused, and after
-// divergedLimit such rounds the machine is replaced.
+// diverging handles a projection the guest's own changes refuse. The next
+// round harvests what the guest changed, so each change is stored or kept
+// as lost, and then projects the journal again with Overwrite: the
+// journal's version replaces the guest's in place. When even that is
+// refused without new guest activity (the guest moved a path across the
+// overwritten one's boundary, or removed its parent), the machine is
+// replaced after divergedLimit such rounds.
 func (o *owner) diverging(ctx context.Context) error {
 	before := o.hostCursor
 	if err := o.observe(ctx, true); err != nil {
 		return err
 	}
-	o.drainNext = true
+	o.drainNext, o.overwriteNext = true, true
 	if o.hostCursor != before || len(o.pending) > 0 {
 		return nil
 	}
@@ -346,7 +349,7 @@ func (o *owner) observe(ctx context.Context, all bool) error {
 		pages = 4096 / MaxProjectionMutations
 	}
 	for range pages {
-		page, err := o.machine.Observe(ctx, o.fence, o.observed, MaxProjectionMutations)
+		page, err := o.machine.Observe(ctx, ObserveRequest{Fence: o.fence, After: o.observed, Limit: MaxProjectionMutations})
 		if errors.Is(err, ErrMachineConflict) {
 			// The machine no longer holds the projection this owner made.
 			return restartError{reason: "unrecorded_projection"}
@@ -374,8 +377,12 @@ func (o *owner) observe(ctx context.Context, all bool) error {
 
 // project applies the journal changes the machine does not hold yet, in
 // order. A change the owner harvested itself is applied as the exact
-// mutation it confirmed, which the machine recognizes as its echo.
+// mutation it confirmed, which the machine recognizes as its echo. After a
+// refused projection every other create, write and delete overwrites what
+// the guest left in its way; each guest change that discards is harvested
+// as lost to the journal.
 func (o *owner) project(ctx context.Context, changes []model.AttemptWorkspaceJournalEntry) error {
+	overwrite := o.overwriteNext
 	for len(changes) > 0 {
 		batch := changes[:min(len(changes), MaxProjectionMutations)]
 		changes = changes[len(batch):]
@@ -394,6 +401,8 @@ func (o *owner) project(ctx context.Context, changes []model.AttemptWorkspaceJou
 			if known, ok := o.echoes[change.Cursor]; ok {
 				mutation = known.mutation
 				mutation.Content = content
+			} else if overwrite && mutation.Operation != ProjectionMove {
+				mutation.Overwrite = true
 			}
 			mutations = append(mutations, mutation)
 			switch change.Operation {
@@ -416,12 +425,34 @@ func (o *owner) project(ctx context.Context, changes []model.AttemptWorkspaceJou
 			return o.machineError(err)
 		}
 		o.diverged, o.hostCursor = 0, receipt.HostCursor
+		o.discarded(receipt.Discarded, through)
 		for _, change := range batch {
 			o.proj.advance(change)
 			delete(o.echoes, change.Cursor)
 		}
 	}
+	o.overwriteNext = false
 	return nil
+}
+
+// discarded marks the pending guest changes an overwrite through cursor
+// discarded, so the harvest keeps each as lost to the journal. One the
+// harvest already went through was recorded then, and one not read yet
+// carries DiscardedBy on its page.
+func (o *owner) discarded(sequences []uint64, through int64) {
+	if len(sequences) == 0 {
+		return
+	}
+	gone := make(map[uint64]bool, len(sequences))
+	for _, sequence := range sequences {
+		gone[sequence] = true
+	}
+	for index := range o.pending {
+		if gone[o.pending[index].HostSequence] && o.pending[index].DiscardedBy == 0 {
+			o.pending[index].DiscardedBy = through
+		}
+	}
+	o.drainNext = o.drainNext || len(o.pending) > 0
 }
 
 // projectionMutationID names one apply uniquely within the machine's epoch.
@@ -499,11 +530,33 @@ func (o *owner) policy(ctx context.Context) (IgnorePolicy, error) {
 // evidence bound.
 const maxProcessChunkBytes = 48 << 10
 
+// processPages bounds the command log pages one round stores. The owner is
+// woken by guest file changes, not by programs that write none, so a round
+// reads what gathered since the last.
+const processPages = 16
+
 // processes stores the command log as evidence and returns the position to
 // acknowledge once the owner's cursors are saved, or 0.
 func (o *owner) processes(ctx context.Context) (uint64, error) {
+	var acknowledge uint64
+	for range processPages {
+		next, full, err := o.processPage(ctx)
+		if err != nil {
+			return acknowledge, err
+		}
+		acknowledge = max(acknowledge, next)
+		if !full {
+			break
+		}
+	}
+	return acknowledge, nil
+}
+
+// processPage stores one command log page and returns the position after
+// it, or 0, and whether the page was full.
+func (o *owner) processPage(ctx context.Context) (uint64, bool, error) {
 	if o.processLag {
-		return 0, nil
+		return 0, false, nil
 	}
 	after := uint64(o.row.ProcessCursor) //nolint:gosec // G115: cursors are never negative.
 	page, err := o.machine.ObserveProcesses(ctx, o.fence, after, MaxProcessPage)
@@ -512,13 +565,13 @@ func (o *owner) processes(ctx context.Context) (uint64, error) {
 		// cursor was saved behind an acknowledgement. Nothing more can be
 		// read from this machine.
 		o.processLag = true
-		return 0, o.gap(ctx, gapProcessDropped, o.deps.Now(), map[string]any{"reason": "lagged"})
+		return 0, false, o.gap(ctx, gapProcessDropped, o.deps.Now(), map[string]any{"reason": "lagged"})
 	}
 	if err != nil {
-		return 0, o.machineError(err)
+		return 0, false, o.machineError(err)
 	}
 	if len(page.Events) == 0 || page.Next <= after {
-		return 0, nil
+		return 0, false, nil
 	}
 	o.origins.attribute(o.row.Epoch, page.Events)
 	for _, chunk := range processChunks(page.Events) {
@@ -528,7 +581,7 @@ func (o *owner) processes(ctx context.Context) (uint64, error) {
 		}
 		if err := o.evidence(ctx, model.AttemptEvidenceProcess, int64(chunk[0].Sequence), at, //nolint:gosec // G115: sequences stay below 2^53.
 			map[string]any{"events": chunk}); err != nil {
-			return 0, err
+			return 0, false, err
 		}
 	}
 	for _, event := range page.Events {
@@ -538,12 +591,12 @@ func (o *owner) processes(ctx context.Context) (uint64, error) {
 				at = o.deps.Now()
 			}
 			if err := o.gap(ctx, gapProcessDropped, at, map[string]any{"dropped": event.Dropped, "sequence": event.Sequence}); err != nil {
-				return 0, err
+				return 0, false, err
 			}
 		}
 	}
 	o.row.ProcessCursor = int64(page.Next) //nolint:gosec // G115: sequences stay below 2^53.
-	return page.Next, nil
+	return page.Next, len(page.Events) >= MaxProcessPage, nil
 }
 
 // The kinds of command log event the attribution reads.

@@ -24,8 +24,9 @@ import (
 
 // The owner's default timing.
 const (
-	// DefaultPoll is how often a running owner observes its guest.
-	DefaultPoll = 200 * time.Millisecond
+	// DefaultObserveWait is how long one long-polled observation of a
+	// running guest waits for a change before it is asked again.
+	DefaultObserveWait = 25 * time.Second
 	// DefaultHarvestQuiet is how long the guest stays quiet before its
 	// changes are harvested, and DefaultHarvestMax the longest a change
 	// waits.
@@ -49,10 +50,12 @@ const (
 	journalPage  = model.AttemptWorkspaceJournalReadMaximum
 	// journalRound bounds the journal entries one round projects.
 	journalRound = 4 * MaxProjectionMutations
-	// divergedLimit is how many rounds the projection may stay refused by
-	// guest changes nobody confirmed before the machine is replaced: the
-	// machine cannot bring such a path back in line with the Workspace in
-	// place.
+	// divergedLimit is how many rounds the projection may stay refused,
+	// overwriting included, without new guest activity before the machine
+	// is replaced. A refused projection is retried with Overwrite, which
+	// replaces a lost guest change in place; execenv still refuses one where
+	// the guest moved a path into or out of the overwritten subtree, or
+	// removed its parent directory, and only such a machine is replaced.
 	divergedLimit = 3
 )
 
@@ -77,7 +80,7 @@ const (
 
 // OwnerTiming tunes an owner. Zero fields take the defaults.
 type OwnerTiming struct {
-	Poll          time.Duration
+	ObserveWait   time.Duration
 	HarvestQuiet  time.Duration
 	HarvestMax    time.Duration
 	Idle          time.Duration
@@ -94,7 +97,7 @@ func (t OwnerTiming) withDefaults() OwnerTiming {
 		return value
 	}
 	return OwnerTiming{
-		Poll: or(t.Poll, DefaultPoll), HarvestQuiet: or(t.HarvestQuiet, DefaultHarvestQuiet),
+		ObserveWait: min(or(t.ObserveWait, DefaultObserveWait), MaxObserveWait), HarvestQuiet: or(t.HarvestQuiet, DefaultHarvestQuiet),
 		HarvestMax: or(t.HarvestMax, DefaultHarvestMax), Idle: or(t.Idle, DefaultIdle), Retry: or(t.Retry, DefaultRetry),
 		RetryMax: or(t.RetryMax, DefaultRetryMax), HostLossLimit: or(t.HostLossLimit, DefaultHostLossLimit),
 	}
@@ -175,6 +178,8 @@ type owner struct {
 	control ControlState
 	ready   bool // the projection is initialized and the owner knows it
 	watch   *grantFollower
+	// observer long-polls the guest while the machine runs.
+	observer *guestObserver
 
 	unreachableSince time.Time
 
@@ -187,6 +192,9 @@ type owner struct {
 	echoes        map[int64]echo
 	diverged      int
 	drainNext     bool
+	// overwriteNext has the next projection replace the guest's changes in
+	// its way: a plain one was refused.
+	overwriteNext bool
 	applies       int
 
 	pending      []Observation
@@ -265,9 +273,12 @@ func (o *owner) Run(ctx context.Context, lease store.AttemptRuntimeLease, wake <
 func (o *owner) wait(ctx context.Context, wake <-chan struct{}, delay time.Duration) bool {
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
-	var changed <-chan struct{}
+	var changed, observed <-chan struct{}
 	if o.watch != nil {
 		changed = o.watch.changed
+	}
+	if o.observer != nil {
+		observed = o.observer.ready
 	}
 	select {
 	case <-ctx.Done():
@@ -283,6 +294,7 @@ func (o *owner) wait(ctx context.Context, wake <-chan struct{}, delay time.Durat
 			o.report(err)
 		}
 	case <-changed:
+	case <-observed:
 	case <-timer.C:
 	}
 	return ctx.Err() == nil
@@ -349,7 +361,45 @@ func (o *owner) step(ctx context.Context) (time.Duration, error) {
 	if err := o.sync(ctx, false); err != nil {
 		return 0, err
 	}
-	return o.deps.Timing.Poll, nil
+	o.followGuest(ctx)
+	return o.nextRound(), nil
+}
+
+// nextRound is how long a running owner waits before its next round
+// unless something wakes it: a change the guest made, a Workspace commit,
+// a fact or the machine's state. Only work already in hand shortens it.
+func (o *owner) nextRound() time.Duration {
+	switch {
+	case o.drainNext:
+		// A refused projection: the guest's changes are harvested and the
+		// journal projected again, over them.
+		return o.deps.Timing.HarvestQuiet
+	case o.journalDue:
+		return 0
+	case len(o.pending) > 0:
+		now := o.deps.Now()
+		quiet := o.lastObserved.Add(o.deps.Timing.HarvestQuiet).Sub(now)
+		longest := o.firstPending.Add(o.deps.Timing.HarvestMax).Sub(now)
+		return max(min(quiet, longest), time.Millisecond)
+	default:
+		return o.deps.Timing.Idle
+	}
+}
+
+// followGuest has the observer long-poll the guest after what the owner
+// has read, starting it for a running machine.
+func (o *owner) followGuest(ctx context.Context) {
+	if o.observer == nil {
+		o.observer = observeGuest(ctx, o.machine, o.deps.Timing.ObserveWait)
+	}
+	o.observer.moveTo(o.fence, o.observed)
+}
+
+func (o *owner) stopObserving() {
+	if o.observer != nil {
+		o.observer.stop()
+		o.observer = nil
+	}
 }
 
 // settle brings everything the guest wrote into the Workspace and freezes
@@ -449,6 +499,7 @@ func (o *owner) useMachine(ctx context.Context, machine Machine) {
 }
 
 func (o *owner) dropMachine() {
+	o.stopObserving()
 	if o.watch != nil {
 		o.watch.stop()
 	}
@@ -457,7 +508,7 @@ func (o *owner) dropMachine() {
 
 func (o *owner) resetSync() {
 	o.proj = projected{Versions: map[model.AttemptWorkspaceEntryID]model.WorkspaceContentVersion{}}
-	o.ahead, o.hostCursor, o.echoes, o.diverged, o.drainNext = nil, 0, map[int64]echo{}, 0, false
+	o.ahead, o.hostCursor, o.echoes, o.diverged, o.drainNext, o.overwriteNext = nil, 0, map[int64]echo{}, 0, false, false
 	o.journalDue = true
 	o.pending, o.observed, o.harvested, o.firstPending, o.lastObserved = nil, 0, 0, time.Time{}, time.Time{}
 	o.ignore, o.processLag = ignoreCache{}, false
@@ -535,6 +586,10 @@ func (o *owner) place(ctx context.Context) error {
 
 // setControl takes the next fence revision and moves the machine to state.
 func (o *owner) setControl(ctx context.Context, state ControlState) error {
+	if state != ControlRunning {
+		// A frozen or revoked machine serves no observation.
+		o.stopObserving()
+	}
 	o.row.ControlFence++
 	if err := o.save(ctx); err != nil {
 		return err
@@ -565,6 +620,7 @@ func (o *owner) machineError(err error) error {
 		return o.unreachable(err)
 	case errors.Is(err, ErrMachineFrozen):
 		// The machine froze on its own; the next round thaws it.
+		o.stopObserving()
 		o.control = ""
 		return err
 	default:
@@ -794,4 +850,78 @@ func (f *grantFollower) state() GrantState {
 func (f *grantFollower) stop() {
 	f.cancel()
 	<-f.done
+}
+
+// guestObserver long-polls one machine's observation and signals the owner
+// when the guest has a change after the owner's position. It only wakes the
+// owner: the owner reads the page itself, so the cursors stay its own. Once
+// it has signaled, or a call failed, it waits for the owner to move it on,
+// so a lasting failure never spins.
+type guestObserver struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+	// ready signals the owner; resume says the owner moved the position.
+	ready  chan struct{}
+	resume chan struct{}
+
+	mu    sync.Mutex
+	fence Fence
+	after uint64
+}
+
+func observeGuest(parent context.Context, machine Machine, wait time.Duration) *guestObserver {
+	ctx, cancel := context.WithCancel(parent)
+	g := &guestObserver{cancel: cancel, done: make(chan struct{}), ready: make(chan struct{}, 1),
+		resume: make(chan struct{}, 1)}
+	go func() {
+		defer close(g.done)
+		// The first position comes from the owner.
+		select {
+		case <-ctx.Done():
+			return
+		case <-g.resume:
+		}
+		for {
+			fence, after := g.position()
+			page, err := machine.Observe(ctx, ObserveRequest{Fence: fence, After: after, Limit: 1, Wait: wait})
+			if ctx.Err() != nil {
+				return
+			}
+			if err == nil && len(page.Observations) == 0 {
+				continue
+			}
+			select {
+			case g.ready <- struct{}{}:
+			default:
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-g.resume:
+			}
+		}
+	}()
+	return g
+}
+
+func (g *guestObserver) position() (Fence, uint64) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.fence, g.after
+}
+
+// moveTo has the next wait start after the owner's position.
+func (g *guestObserver) moveTo(fence Fence, after uint64) {
+	g.mu.Lock()
+	g.fence, g.after = fence, after
+	g.mu.Unlock()
+	select {
+	case g.resume <- struct{}{}:
+	default:
+	}
+}
+
+func (g *guestObserver) stop() {
+	g.cancel()
+	<-g.done
 }

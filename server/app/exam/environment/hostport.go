@@ -204,6 +204,12 @@ type ProjectionMutation struct {
 	ResultingVersion string
 	Recursive        *bool
 	Content          *ContentRef
+	// Overwrite has a create, write or delete replace what the guest left
+	// at Path and under it, unconfirmed changes included, instead of being
+	// refused: the journal wins in place. The receipt lists the guest
+	// changes it discarded. It is still refused when the guest moved a path
+	// across Path's boundary or Path's parent is no longer a directory.
+	Overwrite bool
 }
 
 // ProjectionEntry is one Workspace entry a projection starts with.
@@ -237,10 +243,13 @@ type ProjectionApply struct {
 	Mutations          []ProjectionMutation
 }
 
-// ProjectionReceipt is what an initialization or apply left.
+// ProjectionReceipt is what an initialization or apply left. Discarded
+// lists, in order, the host sequences of the guest changes an Overwrite
+// replaced; later pages report them with DiscardedBy.
 type ProjectionReceipt struct {
 	Cursor     int64
 	HostCursor uint64
+	Discarded  []uint64
 }
 
 // ObservationOperation is one kind of guest change.
@@ -267,7 +276,29 @@ type Observation struct {
 	ExpectedVersion string
 	Recursive       *bool
 	Content         *ContentRef
+	// ProcessTag is the tag of the started process the writer descends
+	// from, such as terminal:1, or empty when the host cannot say.
+	ProcessTag string
+	// DiscardedBy is the journal cursor of the Overwrite that replaced this
+	// change before it was confirmed, or 0. A discarded change is gone from
+	// the machine: it cannot be confirmed and its content is stale.
+	DiscardedBy int64
 }
+
+// ObserveRequest asks for the guest changes after a host sequence. With a
+// Wait, at most MaxObserveWait, the call holds until the guest has a change
+// after After or the wait passes, and then returns what there is: an empty
+// page is not an error. A freeze, revoke or loss ends the wait with that
+// error.
+type ObserveRequest struct {
+	Fence Fence
+	After uint64
+	Limit int
+	Wait  time.Duration
+}
+
+// MaxObserveWait bounds ObserveRequest.Wait.
+const MaxObserveWait = time.Minute
 
 // ObservationPage is one page of guest changes after a position.
 type ObservationPage struct {
@@ -328,7 +359,7 @@ type Machine interface {
 	UploadContent(ctx context.Context, fence Fence, body io.Reader) (ContentRef, error)
 	InitializeProjection(ctx context.Context, request ProjectionInit) (ProjectionReceipt, error)
 	ApplyProjection(ctx context.Context, request ProjectionApply) (ProjectionReceipt, error)
-	Observe(ctx context.Context, fence Fence, after uint64, limit int) (ObservationPage, error)
+	Observe(ctx context.Context, request ObserveRequest) (ObservationPage, error)
 	OpenObservedContent(ctx context.Context, fence Fence, content ContentRef) (io.ReadCloser, error)
 	// ConfirmObservation binds an accepted guest change to the journal
 	// mutation that stored it, so its projection is known as an echo.

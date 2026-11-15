@@ -48,7 +48,7 @@ type rig struct {
 	reports []error
 }
 
-func newRig(t *testing.T, timing environment.OwnerTiming) *rig {
+func newRig(t *testing.T, timing environment.OwnerTiming, wrap ...func(environment.Hosts) environment.Hosts) *rig {
 	t.Helper()
 	host, err := memory.New(memory.Config{Images: []execenv.Image{"python"}, WorkDir: t.TempDir()})
 	require.NoError(t, err)
@@ -72,11 +72,15 @@ func newRig(t *testing.T, timing environment.OwnerTiming) *rig {
 		Revision: 1, CreatedAt: now, UpdatedAt: now,
 	}}
 	if timing == (environment.OwnerTiming{}) {
-		timing = environment.OwnerTiming{Poll: tick, HarvestQuiet: 10 * time.Millisecond, HarvestMax: 40 * time.Millisecond,
+		timing = environment.OwnerTiming{ObserveWait: time.Second, HarvestQuiet: 10 * time.Millisecond, HarvestMax: 40 * time.Millisecond,
 			Idle: 50 * time.Millisecond, Retry: 10 * time.Millisecond, RetryMax: 50 * time.Millisecond}
 	}
+	var ported environment.Hosts = hosts
+	for _, wrapped := range wrap {
+		ported = wrapped(ported)
+	}
 	factory, err := environment.NewOwners(environment.OwnerDependencies{
-		Environments: r.environments, Evidence: r.evidence, Workspace: r.workspace, Hosts: hosts, Timing: timing,
+		Environments: r.environments, Evidence: r.evidence, Workspace: r.workspace, Hosts: ported, Timing: timing,
 		Report: func(_ model.ExamAttemptID, err error) {
 			r.mu.Lock()
 			defer r.mu.Unlock()
@@ -241,7 +245,7 @@ func TestOwnerWaitsForCapacityAndRecordsTheWait(t *testing.T) {
 
 func TestOwnerLetsTheJournalWinAConflict(t *testing.T) {
 	t.Parallel()
-	r := newRig(t, environment.OwnerTiming{Poll: tick, HarvestQuiet: 300 * time.Millisecond, HarvestMax: time.Second,
+	r := newRig(t, environment.OwnerTiming{ObserveWait: time.Second, HarvestQuiet: 300 * time.Millisecond, HarvestMax: time.Second,
 		Idle: 50 * time.Millisecond, Retry: 10 * time.Millisecond, RetryMax: 50 * time.Millisecond})
 	r.running()
 	// The guest and the editor change the same file; the editor's change
@@ -254,14 +258,44 @@ func TestOwnerLetsTheJournalWinAConflict(t *testing.T) {
 	require.EqualValues(t, 1, overwritten["overwritten"])
 	held, _ := r.workspace.file("src/main.py")
 	require.Equal(t, "editor\n", held, "journal order wins")
-	// The machine cannot take the journal's version over its own in place,
-	// so it is replaced from the Workspace.
-	require.Eventually(t, func() bool {
-		row := r.environments.snapshot()
-		return row.Incarnation == 1 && row.State == model.AttemptEnvironmentRunning
-	}, eventually, tick)
+	// The journal's version replaces the guest's in place: the machine is
+	// kept.
 	require.Eventually(t, func() bool { return r.guest("src/main.py") == "editor\n" }, eventually, tick)
-	require.Equal(t, 1, r.evidence.gaps("environment_restarted"))
+	r.running()
+	require.Zero(t, r.environments.snapshot().Incarnation)
+	require.Zero(t, r.evidence.gaps("environment_restarted"))
+	require.Len(t, r.evidence.details(model.AttemptEvidenceOverwritten), 1, "the lost change is recorded once")
+
+	// The machine goes on syncing both ways.
+	require.NoError(t, r.host.WriteGuest(t.Context(), r.grant(), "src/main.py", []byte("guest again\n")))
+	require.Eventually(t, r.workspaceHolds("src/main.py", "guest again\n"), eventually, tick)
+}
+
+func TestOwnerJournalsAChangeByTheProcessThatWroteIt(t *testing.T) {
+	t.Parallel()
+	r := newRig(t, environment.OwnerTiming{})
+	ctx := t.Context()
+	r.running()
+	grant := r.grant()
+	env, err := r.host.Ensure(ctx, execenv.Spec{ID: grant, Image: "python", Network: execenv.NetworkNone,
+		Resources:   execenv.Resources{CPUMillis: 1000, MemoryBytes: 512 << 20, DiskBytes: 1 << 30},
+		IdleTimeout: 10 * time.Minute, IdleAction: execenv.IdleSuspend})
+	require.NoError(t, err)
+	row := r.environments.snapshot()
+	fence := execenv.ProjectionFence{ExecutionGrantID: grant, EnvironmentEpoch: row.Epoch,
+		FenceRevision: uint64(row.ControlFence)} //nolint:gosec // G115: fences are never negative.
+	_, err = env.Start(ctx, fence, execenv.ProcessSpec{Tag: "terminal:1", PTY: &execenv.Window{Cols: 80, Rows: 24}})
+	require.NoError(t, err)
+	_, err = env.WriteInput(ctx, fence, "terminal:1", 0, []byte("echo hi > src/tagged.txt\n"))
+	require.NoError(t, err)
+	// A change by no started process is the incarnation's alone, and never
+	// shares a batch with the terminal's.
+	require.NoError(t, r.host.WriteGuest(ctx, grant, "src/plain.txt", []byte("plain")))
+	require.Eventually(t, r.workspaceHolds("src/tagged.txt", "hi\n"), eventually, tick)
+	require.Eventually(t, r.workspaceHolds("src/plain.txt", "plain"), eventually, tick)
+	require.Equal(t, []model.AttemptWorkspaceAuthor{model.NewEnvironmentWorkspaceAuthor(0, "terminal:1")},
+		r.workspace.authors("src/tagged.txt"))
+	require.Equal(t, []model.AttemptWorkspaceAuthor{model.NewEnvironmentWorkspaceAuthor(0, "")}, r.workspace.authors("src/plain.txt"))
 }
 
 func TestNewOwnersRefusesMissingDependencies(t *testing.T) {
@@ -288,4 +322,73 @@ func TestOwnerReplacesTheMachineAManagerNamed(t *testing.T) {
 	require.NotEqual(t, old, r.grant())
 	require.Equal(t, "print(1)\n", r.guest("src/main.py"))
 	require.Equal(t, 1, r.evidence.gaps("environment_restarted"), "the replacement is recorded as a restart")
+}
+
+func TestOwnerWakesOnGuestChangesWithoutPolling(t *testing.T) {
+	t.Parallel()
+	// No backstop fires within the test: only the long-polled observation
+	// can bring the guest's change in.
+	r := newRig(t, environment.OwnerTiming{HarvestQuiet: 10 * time.Millisecond, HarvestMax: 40 * time.Millisecond,
+		Idle: time.Hour, Retry: 10 * time.Millisecond, RetryMax: 50 * time.Millisecond})
+	r.running()
+	require.NoError(t, r.host.WriteGuest(t.Context(), r.grant(), "src/woke.txt", []byte("woke")))
+	require.Eventually(t, r.workspaceHolds("src/woke.txt", "woke"), eventually, tick)
+	r.workspace.edit("src/main.py", "print(4)\n")
+	r.poke()
+	require.Eventually(t, func() bool { return r.guest("src/main.py") == "print(4)\n" }, eventually, tick)
+}
+
+// toldHosts reports the machine states a test tells it in place of the
+// host's own watch: the in-memory host suspends only after an idle window
+// longer than a test.
+type toldHosts struct {
+	environment.Hosts
+	states chan environment.GrantState
+}
+
+func (h toldHosts) WatchGrant(context.Context, string, string) (environment.GrantWatch, error) {
+	return toldWatch(h.states), nil
+}
+
+type toldWatch chan environment.GrantState
+
+func (w toldWatch) Next(ctx context.Context) (environment.GrantState, error) {
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case state := <-w:
+		return state, nil
+	}
+}
+
+func (toldWatch) Close() error { return nil }
+
+func TestOwnerRecordsASuspendedMachineAndThawsIt(t *testing.T) {
+	t.Parallel()
+	states := make(chan environment.GrantState)
+	r := newRig(t, environment.OwnerTiming{}, func(hosts environment.Hosts) environment.Hosts {
+		return toldHosts{Hosts: hosts, states: states}
+	})
+	ctx := t.Context()
+	r.running()
+	r.environments.desire(model.AttemptEnvironmentDesiredFrozen)
+	r.poke()
+	require.Eventually(t, func() bool { return r.environments.snapshot().State == model.AttemptEnvironmentFrozen }, eventually, tick)
+
+	// The host saves the frozen machine once it has been idle.
+	states <- environment.GrantSuspended
+	require.Eventually(t, func() bool { return r.environments.snapshot().State == model.AttemptEnvironmentSuspended }, eventually, tick)
+
+	// A thaw resumes the same machine where it was.
+	r.environments.desire(model.AttemptEnvironmentDesiredRunning)
+	r.poke()
+	states <- environment.GrantRunning
+	r.running()
+	grants, err := r.host.ListGrants(ctx)
+	require.NoError(t, err)
+	require.Len(t, grants, 1)
+	require.Equal(t, execenv.GrantRunning, grants[0].State)
+	require.Zero(t, r.environments.snapshot().Incarnation)
+	require.NoError(t, r.host.WriteGuest(ctx, r.grant(), "src/after.txt", []byte("after")))
+	require.Eventually(t, r.workspaceHolds("src/after.txt", "after"), eventually, tick)
 }

@@ -43,12 +43,21 @@ This file holds only the rules that must not drift.
   and reference. Every author acts on behalf of the candidate; the kind only
   adds checks (a live Connection, a live environment fence).
 - A stale expected version is refused, never merged. A losing guest change is
-  re-projected from the Workspace and kept as `execution.overwritten`
-  evidence. Harvest batches group only dependent changes.
+  kept as `execution.overwritten` evidence, recorded once, and the journal's
+  version is projected over it in place with execenv's overwrite. Replace
+  the machine only for an overwrite execenv still refuses (a guest move
+  across the overwritten subtree, or a removed parent). Harvest batches group
+  only dependent changes and never mix writers.
+- A harvested change is journaled by author `environment` with ref
+  `<incarnation>/<process tag>` when execenv names the writing process, and
+  `<incarnation>` otherwise. The tag rides on the environment access; it is
+  never part of the owner check and never on the owner's own evidence.
 - The harvest plans against the core's Workspace state; never keep a private
   manifest copy or a second implementation of Workspace rules.
 - Owners wake on post-commit notifications, execenv watches and long-polled
   observation. Do not add polling loops; a slow backstop is the only timer.
+  The long poll runs beside the owner loop and only signals it, so it never
+  delays a reaction to a journal wake or a fact.
 - Write budgets are per Attempt and author kind; quotas stay per Workspace and
   bind every author.
 - `.proctorignore`:

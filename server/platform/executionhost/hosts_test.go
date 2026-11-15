@@ -12,6 +12,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/sudosylabs/execenv"
@@ -77,14 +78,16 @@ func TestHostsReportPlaceAndTranslate(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, receipt.Confirmed)
 	require.Equal(t, fence, receipt.Fence)
-	_, err = machine.Observe(ctx, environment.Fence{GrantID: machine.GrantID(), Epoch: machine.Epoch(), Revision: 0}, 0, 1)
+	_, err = machine.Observe(ctx, environment.ObserveRequest{
+		Fence: environment.Fence{GrantID: machine.GrantID(), Epoch: machine.Epoch(), Revision: 0}, Limit: 1})
 	require.Error(t, err, "a call outside the fence is refused")
 
 	content, err := machine.UploadContent(ctx, fence, strings.NewReader("print(1)\n"))
 	require.NoError(t, err)
+	mainID := model.NewAttemptWorkspaceEntryID()
 	_, err = machine.InitializeProjection(ctx, environment.ProjectionInit{
 		Fence: fence, MutationID: "init", Cursor: 1, IgnoreFile: ".proctorignore", IgnoreFallback: []string{"build/"},
-		Entries: []environment.ProjectionEntry{{EntryID: model.NewAttemptWorkspaceEntryID(), Kind: model.StarterWorkspaceEntryFile, Path: "main.py",
+		Entries: []environment.ProjectionEntry{{EntryID: mainID, Kind: model.StarterWorkspaceEntryFile, Path: "main.py",
 			Version: "v1", Content: &content}},
 	})
 	require.NoError(t, err)
@@ -93,7 +96,7 @@ func TestHostsReportPlaceAndTranslate(t *testing.T) {
 	require.Equal(t, "print(1)\n", string(body))
 
 	require.NoError(t, host.WriteGuest(ctx, "attempt.0", "out.txt", []byte("hello")))
-	page, err := machine.Observe(ctx, fence, 0, 16)
+	page, err := machine.Observe(ctx, environment.ObserveRequest{Fence: fence, Limit: 16, Wait: time.Second})
 	require.NoError(t, err)
 	require.Len(t, page.Observations, 1)
 	observed := page.Observations[0]
@@ -106,6 +109,38 @@ func TestHostsReportPlaceAndTranslate(t *testing.T) {
 	require.NoError(t, reader.Close())
 	require.Equal(t, "hello", string(read))
 	require.NoError(t, machine.AcknowledgeObservations(ctx, fence, observed.HostSequence))
+	page, err = machine.Observe(ctx, environment.ObserveRequest{Fence: fence, After: observed.HostSequence, Limit: 16,
+		Wait: 20 * time.Millisecond})
+	require.NoError(t, err, "a wait that passes is not an error")
+	require.Empty(t, page.Observations)
+
+	// The journal overwrites a guest change nobody confirmed, in place.
+	require.NoError(t, host.WriteGuest(ctx, "attempt.0", "main.py", []byte("guest\n")))
+	page, err = machine.Observe(ctx, environment.ObserveRequest{Fence: fence, After: observed.HostSequence, Limit: 16})
+	require.NoError(t, err)
+	require.Len(t, page.Observations, 1)
+	lost := page.Observations[0]
+	require.Empty(t, lost.ProcessTag, "a test hook writes under no process")
+	journal, err := machine.UploadContent(ctx, fence, strings.NewReader("journal\n"))
+	require.NoError(t, err)
+	mutation := environment.ProjectionMutation{Cursor: 2, EntryID: mainID, Operation: environment.ProjectionWrite,
+		Kind: model.StarterWorkspaceEntryFile, Path: "main.py", ExpectedVersion: "v1", ResultingVersion: "v2", Content: &journal}
+	_, err = machine.ApplyProjection(ctx, environment.ProjectionApply{Fence: fence, MutationID: "j1", From: 1, Through: 2,
+		ExpectedHostCursor: page.HostCursor, Mutations: []environment.ProjectionMutation{mutation}})
+	require.ErrorIs(t, err, environment.ErrMachineConflict, "a plain projection is refused over the guest's change")
+	mutation.Overwrite = true
+	applied, err := machine.ApplyProjection(ctx, environment.ProjectionApply{Fence: fence, MutationID: "j2", From: 1, Through: 2,
+		ExpectedHostCursor: page.HostCursor, Mutations: []environment.ProjectionMutation{mutation}})
+	require.NoError(t, err)
+	require.Equal(t, []uint64{lost.HostSequence}, applied.Discarded)
+	body, err = host.ReadGuest(ctx, "attempt.0", "main.py")
+	require.NoError(t, err)
+	require.Equal(t, "journal\n", string(body))
+	page, err = machine.Observe(ctx, environment.ObserveRequest{Fence: fence, After: observed.HostSequence, Limit: 16})
+	require.NoError(t, err)
+	require.Len(t, page.Observations, 1)
+	require.EqualValues(t, 2, page.Observations[0].DiscardedBy)
+	require.NoError(t, machine.AcknowledgeObservations(ctx, fence, lost.HostSequence))
 
 	processes, err := machine.ObserveProcesses(ctx, fence, 0, environment.MaxProcessPage)
 	require.NoError(t, err)
@@ -118,7 +153,7 @@ func TestHostsReportPlaceAndTranslate(t *testing.T) {
 	require.Equal(t, environment.GrantRunning, state)
 
 	require.True(t, host.Lose("attempt.0"))
-	_, err = machine.Observe(ctx, fence, 0, 16)
+	_, err = machine.Observe(ctx, environment.ObserveRequest{Fence: fence, After: lost.HostSequence, Limit: 16})
 	require.ErrorIs(t, err, environment.ErrMachineLost)
 	for {
 		state, err = watch.Next(ctx)

@@ -18,11 +18,14 @@ import (
 
 // WorkspaceAccess is how the owner proves itself to the Attempt Workspace:
 // its runtime lease fence and the incarnation it acts for. Both must be
-// current, and the Attempt must have no Submission.
+// current, and the Attempt must have no Submission. Tag, when set, names
+// the started process whose changes a batch carries, so the journal's
+// author is the incarnation and that tag; it is no part of the proof.
 type WorkspaceAccess struct {
 	AttemptID   model.ExamAttemptID
 	Incarnation int64
 	Fence       int64
+	Tag         string
 }
 
 // The failures a Workspace port reports beside a WorkspaceRefusal.

@@ -341,8 +341,15 @@ func TestAttemptEnvironmentEndToEnd(t *testing.T) {
 		require.NoError(t, nextErr)
 		shown = append(shown, event.Data...)
 	}
+	// A file a terminal command writes is journaled by that terminal.
+	redirect := []byte("echo hi > tagged.txt\n")
+	_, err = session.Write(ctx, next, redirect)
+	require.NoError(t, err)
 	require.NoError(t, output.Close())
 	session.Close(ctx)
+	eventually(func() bool { _, ok := harvested("tagged.txt"); return ok }, "the terminal's file is harvested")
+	tagged, _ := harvested("tagged.txt")
+	require.Equal(t, model.NewEnvironmentWorkspaceAuthor(0, "terminal:1"), tagged.Author, "the first incarnation's terminal wrote it")
 	eventually(func() bool {
 		row, getErr := persistence.AttemptEnvironment().Get(ctx, connected.Attempt.ID)
 		return getErr == nil && row.ProcessCursor >= 3

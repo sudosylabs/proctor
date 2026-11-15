@@ -93,6 +93,11 @@ func coalesce(observations []Observation) []Observation {
 	return result
 }
 
+// discardedCode is the code an overwritten record names for a guest change
+// the journal's projection replaced in place before it was harvested: it
+// lost to a newer Workspace version, as a refused stale write does.
+const discardedCode = "exam.attempt.workspace.content_conflict"
+
 // plannedChange is one mutation of a harvest batch and the guest change it
 // comes from. confirm is set when the mutation is that change's exact
 // outcome, which the owner then confirms to the machine.
@@ -101,6 +106,15 @@ type plannedChange struct {
 	source   Observation
 	confirm  bool
 	content  *ContentRef
+}
+
+// writerTag is the process tag a guest change is journaled under, or empty
+// when the machine named none or one the journal cannot carry.
+func writerTag(observation Observation) string {
+	if model.IsValidAttemptEnvironmentProcessTag(observation.ProcessTag) {
+		return observation.ProcessTag
+	}
+	return ""
 }
 
 // harvestNotes is what one harvest could not store.
@@ -180,12 +194,18 @@ func (o *owner) harvest(ctx context.Context) error {
 
 // planBatch plans the next batch from observations and says how many it
 // went through. A batch ends before a change that needs an entry the batch
-// is still creating, so the Workspace gives that entry its ID first.
+// is still creating, so the Workspace gives that entry its ID first, and
+// before a change by another writer: one batch has one author.
 func (h *harvester) planBatch(observations []Observation) ([]plannedChange, int) {
 	var batch []plannedChange
 	size := 0
 	for index, observation := range observations {
 		if h.dropped[observation.HostSequence] {
+			continue
+		}
+		if observation.DiscardedBy != 0 {
+			// The journal's projection replaced it in place.
+			h.lose(observation, discardedCode)
 			continue
 		}
 		planned, skip, needsID := h.plan(observation)
@@ -199,7 +219,8 @@ func (h *harvester) planBatch(observations []Observation) ([]plannedChange, int)
 			continue
 		}
 		encoded, _ := json.Marshal(planned.mutation)
-		if len(batch) >= h.limit || size+len(encoded) > maxHarvestPlanBytes {
+		if len(batch) >= h.limit || size+len(encoded) > maxHarvestPlanBytes ||
+			len(batch) > 0 && writerTag(batch[0].source) != writerTag(observation) {
 			return batch, index
 		}
 		batch, size = append(batch, planned), size+len(encoded)
@@ -388,9 +409,12 @@ func (h *harvester) commit(ctx context.Context, batch []plannedChange) (batchOut
 		opened = append(opened, body)
 		return &staleReader{reader: body, stale: func() { stale = index }}, nil
 	}
-	entries, err := o.deps.Workspace.Apply(ctx, o.access(), WorkspaceBatch{
+	// The batch is journaled by the process that wrote it, when known.
+	access := o.access()
+	access.Tag = writerTag(batch[0].source)
+	entries, err := o.deps.Workspace.Apply(ctx, access, WorkspaceBatch{
 		Mutations: mutations, ExpectedCursor: expected, Content: content,
-		IdempotencyKey: harvestKey(o.row.GrantID, o.row.Epoch, mutations, expected),
+		IdempotencyKey: harvestKey(o.row.GrantID, o.row.Epoch, access.Tag, mutations, expected),
 	})
 	for _, body := range opened {
 		_ = body.Close()
@@ -449,13 +473,14 @@ func (h *harvester) commit(ctx context.Context, batch []plannedChange) (batchOut
 
 // harvestKey is the batch's idempotency key: the same batch on the same
 // machine is the same command.
-func harvestKey(grantID, epoch string, mutations []WorkspaceMutation, expected *int64) string {
+func harvestKey(grantID, epoch, tag string, mutations []WorkspaceMutation, expected *int64) string {
 	encoded, _ := json.Marshal(struct {
 		Grant     string              `json:"grant"`
 		Epoch     string              `json:"epoch"`
+		Tag       string              `json:"tag,omitempty"`
 		Mutations []WorkspaceMutation `json:"mutations"`
 		Expected  *int64              `json:"expected,omitempty"`
-	}{grantID, epoch, mutations, expected})
+	}{grantID, epoch, tag, mutations, expected})
 	sum := sha256.Sum256(encoded)
 	return "execution.harvest:" + hex.EncodeToString(sum[:])
 }

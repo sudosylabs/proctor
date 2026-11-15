@@ -97,11 +97,14 @@ func (ExamAttemptWorkspaceEditorAccess) examAttemptWorkspaceWriteAccess() {}
 // that lease to be the Attempt's current unexpired one, the incarnation to
 // be the environment's current one, and the Attempt to have no Submission.
 // No Session, Connection or Participation is involved. The candidate is
-// resolved from the Attempt.
+// resolved from the Attempt. Tag, when set, is the process tag the write's
+// author names beside the incarnation, such as terminal:1 for a change a
+// terminal's program made; it takes no part in the owner check.
 type ExamAttemptWorkspaceEnvironmentAccess struct {
 	AttemptID   model.ExamAttemptID
 	Incarnation int64
 	Fence       int64
+	Tag         string
 }
 
 func (a ExamAttemptWorkspaceEnvironmentAccess) WorkspaceAttemptID() model.ExamAttemptID {
@@ -109,12 +112,13 @@ func (a ExamAttemptWorkspaceEnvironmentAccess) WorkspaceAttemptID() model.ExamAt
 }
 
 func (a ExamAttemptWorkspaceEnvironmentAccess) WorkspaceAuthor() model.AttemptWorkspaceAuthor {
-	return model.NewEnvironmentWorkspaceAuthor(a.Incarnation, "")
+	return model.NewEnvironmentWorkspaceAuthor(a.Incarnation, a.Tag)
 }
 
-// Valid reports whether every selector field is well formed.
+// Valid reports whether every selector field is well formed, the author it
+// names included.
 func (a ExamAttemptWorkspaceEnvironmentAccess) Valid() bool {
-	return a.AttemptID.IsValid() && a.Incarnation >= 0 && a.Fence > 0
+	return a.AttemptID.IsValid() && a.Incarnation >= 0 && a.Fence > 0 && a.WorkspaceAuthor().IsValid()
 }
 
 func (ExamAttemptWorkspaceEnvironmentAccess) examAttemptWorkspaceWriteAccess() {}

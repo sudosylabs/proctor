@@ -169,6 +169,7 @@ func testAttemptEnvironmentWriterLifecycle(t *testing.T, ctx context.Context, ss
 		"no Attempt":           {Fence: 1},
 		"no fence":             {AttemptID: attemptID},
 		"negative incarnation": {AttemptID: attemptID, Fence: 1, Incarnation: -1},
+		"invalid process tag":  {AttemptID: attemptID, Fence: 1, Tag: "Terminal 1"},
 	} {
 		_, err := workspace.ReserveObjects(ctx, &store.ExamAttemptWorkspaceObjectReservation{Access: access})
 		requireInvalidInput(t, err, "ReserveObjects(%s)", name)
@@ -250,6 +251,19 @@ func testAttemptEnvironmentWriterLifecycle(t *testing.T, ctx context.Context, ss
 		AfterCursor: harvested.Changes[0].Cursor - 1, Limit: 200})
 	require.NoError(t, err)
 	require.Equal(t, journal, environmentJournal, "the environment reads the same journal")
+
+	// A change a started process made names its tag beside the incarnation,
+	// in the journal and the batch audit; the owner check is the same.
+	tagged := access
+	tagged.Tag = "terminal:1"
+	taggedBatch := newAttemptWorkspaceBatch(t, ctx, ss, fixture, tagged, store.ExamAttemptWorkspaceMutation{
+		Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "tagged"})
+	taggedApplied, err := workspace.ApplyBatch(ctx, taggedBatch, attemptWorkspaceBatchCommand(fixture.candidate.ID, "environment-tagged"))
+	require.NoError(t, err)
+	require.Equal(t, model.NewEnvironmentWorkspaceAuthor(1, "terminal:1"), taggedApplied.Changes[0].Author)
+	taggedAudit, err := ss.Audit().Get(ctx, taggedBatch.AuditEventID)
+	require.NoError(t, err)
+	require.Equal(t, tagged.WorkspaceAuthor(), requireAttemptWorkspaceBatchAudit(t, taggedAudit, 1, taggedApplied).Author)
 
 	// Only the current incarnation under the current lease is the owner.
 	for name, change := range map[string]func(*store.ExamAttemptWorkspaceEnvironmentAccess){

@@ -42,7 +42,8 @@ func NewEnvironmentWorkspace(attempts *attempt.Service) (environment.Workspace, 
 }
 
 func environmentOwner(access environment.WorkspaceAccess) attempt.EnvironmentOwner {
-	return attempt.EnvironmentOwner{AttemptID: access.AttemptID, Incarnation: access.Incarnation, Fence: access.Fence}
+	return attempt.EnvironmentOwner{AttemptID: access.AttemptID, Incarnation: access.Incarnation, Fence: access.Fence,
+		Tag: access.Tag}
 }
 
 func (w environmentWorkspace) List(

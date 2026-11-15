@@ -125,6 +125,7 @@ func fromProjectionReceipt(receipt execenv.ProjectionReceipt) environment.Projec
 	return environment.ProjectionReceipt{
 		Cursor:     int64(receipt.AppliedWorkspaceCursor), //nolint:gosec // G115: cursors stay below 2^53.
 		HostCursor: receipt.HostCursor,
+		Discarded:  receipt.Discarded,
 	}
 }
 
@@ -136,6 +137,7 @@ func toMutation(mutation environment.ProjectionMutation) execenv.ProjectionMutat
 		ExpectedContentVersion:  execenv.Version(mutation.ExpectedVersion),
 		ResultingContentVersion: execenv.Version(mutation.ResultingVersion),
 		Recursive:               mutation.Recursive, Content: toContent(mutation.Content),
+		Overwrite: mutation.Overwrite,
 	}
 }
 
@@ -157,8 +159,9 @@ func (m *machine) ApplyProjection(ctx context.Context, request environment.Proje
 	return fromProjectionReceipt(receipt), nil
 }
 
-func (m *machine) Observe(ctx context.Context, fence environment.Fence, after uint64, limit int) (environment.ObservationPage, error) {
-	page, err := m.env.Observe(ctx, toFence(fence), after, limit)
+func (m *machine) Observe(ctx context.Context, request environment.ObserveRequest) (environment.ObservationPage, error) {
+	page, err := m.env.Observe(ctx, execenv.ObserveRequest{Fence: toFence(request.Fence), After: request.After,
+		Limit: request.Limit, Wait: request.Wait})
 	if err != nil {
 		return environment.ObservationPage{}, m.fail("observe", err)
 	}
@@ -170,6 +173,8 @@ func (m *machine) Observe(ctx context.Context, fence environment.Fence, after ui
 			NodeIdentity: observation.NodeIdentity, Kind: fromKind(observation.Kind), Path: observation.Path,
 			DestinationPath: observation.DestinationPath, ExpectedVersion: string(observation.ExpectedContentVersion),
 			Recursive: observation.Recursive, Content: fromContent(observation.Content),
+			ProcessTag:  observation.ProcessTag,
+			DiscardedBy: int64(observation.DiscardedBy), //nolint:gosec // G115: cursors stay below 2^53.
 		}
 	}
 	return result, nil

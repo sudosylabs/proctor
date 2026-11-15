@@ -35,13 +35,16 @@ func TestEnvironmentBatchWritesAsTheCandidateThroughTheSameBatch(t *testing.T) {
 	checksum := strings.Repeat("c", 64)
 	f.content.attemptContent = &model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: 4, SHA256: checksum}
 	owner := environmentOwnerFixture(f)
+	// A change a terminal's program made is journaled under its tag.
+	owner.Tag = "terminal:1"
 	mutations := []WorkspaceBatchMutation{createFile("main.go", checksum, 4)}
 
 	result, err := f.service.ApplyEnvironmentWorkspaceBatch(context.Background(), environmentCaller, EnvironmentWorkspaceBatchCommand{
 		Owner: owner, Mutations: mutations, Content: batchContent(f, "main"), IdempotencyKey: "harvest-1"})
 	require.NoError(t, err)
 
-	want := store.ExamAttemptWorkspaceEnvironmentAccess{AttemptID: owner.AttemptID, Incarnation: owner.Incarnation, Fence: owner.Fence}
+	want := store.ExamAttemptWorkspaceEnvironmentAccess{AttemptID: owner.AttemptID, Incarnation: owner.Incarnation, Fence: owner.Fence,
+		Tag: owner.Tag}
 	require.Len(t, f.workspace.reservations, 1)
 	require.Equal(t, want, f.workspace.reservations[0].Access, "the Store proves the writer by its owner")
 	require.Len(t, f.workspace.readied, 1)
@@ -62,7 +65,7 @@ func TestEnvironmentBatchWritesAsTheCandidateThroughTheSameBatch(t *testing.T) {
 	require.Equal(t, f.sitting.ClassID.String(), f.systemAudit.scopeID)
 	require.Equal(t, store.ExamAttemptWorkspaceBatchOperation, f.systemAudit.operation)
 	require.Equal(t, map[string]any{"exam_attempt_id": f.attemptID.String(), "mutation_count": 1, "author_kind": "environment",
-		"author_ref":              model.NewEnvironmentWorkspaceAuthor(owner.Incarnation, "").Ref,
+		"author_ref":              model.NewEnvironmentWorkspaceAuthor(owner.Incarnation, "terminal:1").Ref,
 		"environment_lease_fence": owner.Fence, "system_task": "execution"}, f.systemAudit.values)
 	require.Nil(t, f.audit.values, "no Principal-bearing audit is begun for an environment")
 	require.Equal(t, []string{"workspace.reserve", "content.next", "content.stage", "workspace.ready",
@@ -71,7 +74,7 @@ func TestEnvironmentBatchWritesAsTheCandidateThroughTheSameBatch(t *testing.T) {
 	require.Equal(t, workspaceID, result.WorkspaceID)
 	require.Equal(t, f.userID, result.CandidateUserID)
 	require.Len(t, result.Changes, 1)
-	require.Equal(t, model.NewEnvironmentWorkspaceAuthor(owner.Incarnation, ""), result.Changes[0].Author)
+	require.Equal(t, model.NewEnvironmentWorkspaceAuthor(owner.Incarnation, "terminal:1"), result.Changes[0].Author)
 	require.Equal(t, int64(5), result.Changes[0].Cursor)
 	require.Equal(t, workspaceChangedCalls(t, result), f.publisher.Calls(), "the candidate gets the usual refetch hint")
 }
@@ -82,6 +85,7 @@ func TestEnvironmentBatchRefusesAnIncompleteOwnerBeforeTheStore(t *testing.T) {
 		"no Attempt":           func(o *EnvironmentOwner) { o.AttemptID = "" },
 		"no fence":             func(o *EnvironmentOwner) { o.Fence = 0 },
 		"negative incarnation": func(o *EnvironmentOwner) { o.Incarnation = -1 },
+		"invalid process tag":  func(o *EnvironmentOwner) { o.Tag = "Terminal 1" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

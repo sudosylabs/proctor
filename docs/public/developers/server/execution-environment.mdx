@@ -100,12 +100,17 @@ whose expected version is stale is refused. Each author reacts in its own way:
 
 - **The editor** shows the candidate a conflict on that file, with the current
   content, as an editor does when a file changed on disk.
-- **The environment** does not retry. The core projects the current Workspace
-  version back into the guest and keeps the lost guest version as an
-  *overwritten* evidence record. Until execenv can discard an unconfirmed
-  guest change, a projection onto it is refused; when the refusal outlasts
-  three rounds without new guest activity, the owner replaces the machine
-  from the Workspace and records a gap.
+- **The environment** does not retry. The core keeps the lost guest version
+  as an *overwritten* evidence record and projects the current Workspace
+  version back into the guest in place: once a plain projection is refused
+  over a guest change nobody confirmed, the owner harvests what the guest
+  changed and projects again with execenv's overwrite, which discards the
+  guest change. Each discarded change is recorded once, as overwritten, and
+  acknowledged. execenv still refuses an overwrite when the guest moved a
+  path into or out of the overwritten subtree, or removed its parent
+  directory; only when such a refusal outlasts three rounds without new
+  guest activity does the owner replace the machine from the Workspace and
+  record a gap.
 - **A later actor** is told its change was superseded.
 
 A guest's changes are separate system calls, not a transaction. The harvest
@@ -258,13 +263,17 @@ lacks.
 **Guest to Workspace.**
 
 1. The owner waits on a long-polled observation, so it blocks instead of
-   polling each grant.
+   polling each grant. A goroutine per running machine holds the wait
+   (about 25 s at a time) and only wakes the owner, which still reacts at
+   once to journal wakes, facts and the grant watch; a freeze, restart or
+   teardown cancels it. The command log is read on the same rounds.
 2. A path is harvested once it has been quiet for about 200 ms, and after 1 s
    at the latest. A burst of writes to one file becomes one change, and a
    change whose SHA-256 matches the current content is dropped.
 3. The owner plans against the core's own Workspace state, groups dependent
    changes, and commits each group with author `environment` and the writing
-   process's tag when execenv reports it.
+   process's tag when execenv reports it (`0/terminal:1`), or the
+   incarnation alone (`0`) when it does not. One batch never mixes writers.
 4. Bodies are read live. An `ErrStale` read is skipped, because a later
    observation carries the newer content.
 5. Only after the commit does the owner confirm the echo and acknowledge the
@@ -431,16 +440,23 @@ The Workspace routes are unchanged, apart from the per-path sync status.
 
 ### Clients
 
-- **Desktop** shows the terminal pane with several tabs, live editor updates
+Desktop is the only client for execution; the webapp serves only sign-in and
+account pages.
+
+- **Candidates** get the terminal pane with several tabs, live editor updates
   from the journal, and conflict and "not saved" markers.
-- **The webapp** shows the manager and reviewer views.
+- **Managers and reviewers** get, in Desktop, each candidate's environment on
+  the Sitting board with the replace action, and the command log, recorded
+  input, gaps, overwritten and refused changes and per-entry authorship in
+  the Submission review.
 
 ## What execenv adds
 
-Two small additions, neither of which changes an existing contract:
+Four additions, built in execenv v0.5.0 and adopted by the core:
 
 1. **Long-polled observation.** An observation request waits until there is
-   something to report or a timeout passes.
+   something to report or a timeout passes. A wait is not idle activity, so
+   it never keeps an idle machine awake.
 2. **The writing process.** The guest agent maps the process that wrote a path
    to the tagged process it descends from, and the observation carries that
    tag. A path written by several processes names the last.
@@ -449,7 +465,8 @@ Two small additions, neither of which changes an existing contract:
    is overwritten in place instead of replacing the machine.
 4. **Suspending a frozen machine.** Idle suspend applies to a machine the
    owner froze, not only to a running one, so a long absence frees its
-   memory.
+   memory. The owner records `suspended` from the grant watch and thaws the
+   same machine on the next running fact.
 
 ## Data model
 
@@ -469,7 +486,7 @@ fenced lease is the environment's Workspace access.
 
 ## Build order
 
-Each step is a vertical slice with its own tests. Steps 1 to 5 are built. The execenv additions of step 6 are built in execenv and wait for its next release before Proctor adopts them.
+Each step is a vertical slice with its own tests. Steps 1 to 6 are built; the execenv additions of step 6 are adopted from execenv v0.5.0.
 
 1. **Workspace foundation:** authors on the journal, audit and idempotency
    outcomes, the last author of every entry sealed in the Submission, and
@@ -494,9 +511,12 @@ Each step is a vertical slice with its own tests. Steps 1 to 5 are built. The ex
    step first named. Processes are read from the machine; no process rows
    are kept.
 5. **API:** the candidate, manager and reviewer routes, and sync status.
-6. **The execenv additions,** alongside steps 3 and 4.
-7. **Clients:** the Desktop terminal pane and editor updates, and the webapp
-   views.
+6. **The execenv additions,** alongside steps 3 and 4: long-polled
+   observation, writer tags as journal authors, overwriting a lost guest
+   change in place, and suspending a frozen machine. Adopted.
+7. **Clients:** in Desktop, the terminal pane and editor updates for
+   candidates, and the environment board and review views for managers and
+   reviewers.
 
 ## Rejected alternatives
 

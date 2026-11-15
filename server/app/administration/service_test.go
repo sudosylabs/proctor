@@ -33,15 +33,16 @@ type catalogFake struct {
 	pluginSettings    store.PluginSettingsStore
 }
 
-func (c *catalogFake) Role() store.RoleStore                       { return c.roles }
-func (c *catalogFake) RoleBinding() store.RoleBindingStore         { return c.roleBindings }
-func (c *catalogFake) User() store.UserStore                       { return c.users }
-func (c *catalogFake) Institution() store.InstitutionStore         { return c.institutions }
-func (c *catalogFake) Audit() store.AuditStore                     { return c.audits }
-func (c *catalogFake) AccessPolicy() store.AccessPolicyStore       { return c.accessPolicies }
-func (c *catalogFake) RetentionPolicy() store.RetentionPolicyStore { return c.retentionPolicies }
-func (c *catalogFake) Retention() store.RetentionStore             { return c.retention }
-func (c *catalogFake) PluginSettings() store.PluginSettingsStore   { return c.pluginSettings }
+func (c *catalogFake) Role() store.RoleStore                             { return c.roles }
+func (c *catalogFake) RoleBinding() store.RoleBindingStore               { return c.roleBindings }
+func (c *catalogFake) User() store.UserStore                             { return c.users }
+func (c *catalogFake) Institution() store.InstitutionStore               { return c.institutions }
+func (c *catalogFake) Audit() store.AuditStore                           { return c.audits }
+func (c *catalogFake) AccessPolicy() store.AccessPolicyStore             { return c.accessPolicies }
+func (c *catalogFake) RetentionPolicy() store.RetentionPolicyStore       { return c.retentionPolicies }
+func (c *catalogFake) Retention() store.RetentionStore                   { return c.retention }
+func (c *catalogFake) PluginSettings() store.PluginSettingsStore         { return c.pluginSettings }
+func (c *catalogFake) EnvironmentProfile() store.EnvironmentProfileStore { return nil }
 
 // dependenciesOf rebuilds the Dependencies a Service was built from, so a
 // construction test can omit one collaborator at a time.

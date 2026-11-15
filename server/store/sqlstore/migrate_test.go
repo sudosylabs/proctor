@@ -42,6 +42,7 @@ var baselineTables = []string{
 	"desktop_compatibility_policies",
 	"desktop_registrations",
 	"domain_events",
+	"environment_profiles",
 	"exam_attempt_connections",
 	"exam_attempt_correction_acknowledgements",
 	"exam_attempt_delivery_budgets",

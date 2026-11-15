@@ -1,0 +1,351 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/environment-profiles:
+    get:
+      operationId: listEnvironmentProfiles
+      summary: List the environment profiles
+      tags:
+        - Administration
+      description: >-
+        Lists the environment profiles that are not retired, and with include_retired=true the retired ones too,
+        ordered by name. An environment profile is the recipe an Exam's execution
+        environments are created from: the execution image, resources, network, idle window and the most terminals
+        one Attempt may open. A Session with environment_profile.manage is required; Personal Access Tokens cannot
+        read it.
+      parameters:
+        - name: include_retired
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Whether retired profiles are listed too.
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - environment_profile.unavailable
+        - request.invalid
+        - resource.not_found
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      responses:
+        "200":
+          $ref: '#/components/responses/EnvironmentProfileListOK'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+    post:
+      operationId: createEnvironmentProfile
+      summary: Create an environment profile
+      tags:
+        - Administration
+      description: >-
+        Saves a new environment profile. Requires a strong recent interactive system-administrator Session, an
+        Idempotency-Key, and durable audit. A profile is never edited: to change one, create a new profile and
+        retire the old. Its name is unique among the profiles that are not retired.
+      x-proctor-auth: strong_recent_session_required
+      x-proctor-idempotency: required
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - idempotency.key_required
+        - idempotency.key_invalid
+        - idempotency.conflict
+        - idempotency.in_progress
+        - environment_profile.invalid
+        - environment_profile.unavailable
+        - request.invalid
+        - resource.not_found
+        - environment_profile.name_in_use
+        - environment_profile.limit_reached
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+        - authentication.strong_required
+        - authentication.reauthentication_required
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        description: The complete profile. Every member is required.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvironmentProfileRequest'
+            example:
+              name: python-small
+              image: python-3.12
+              cpu_millis: 1000
+              memory_bytes: 1073741824
+              disk_bytes: 2147483648
+              network: none
+              idle_window_seconds: 600
+              max_terminals: 4
+      responses:
+        "201":
+          $ref: '#/components/responses/EnvironmentProfileOK'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/environment-profiles/{environment_profile_id}/retire:
+    parameters:
+      - name: environment_profile_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/ID'
+        description: The environment profile to retire.
+    post:
+      operationId: retireEnvironmentProfile
+      summary: Retire an environment profile
+      tags:
+        - Administration
+      description: >-
+        Retires one environment profile so that new Exam Revisions can no longer name it. Revisions already
+        published keep using it. Retiring a retired profile changes nothing. Requires a strong recent interactive
+        system-administrator Session, an Idempotency-Key, and durable audit.
+      x-codeSamples:
+        - lang: Shell
+          source: |-
+            curl --fail-with-body \
+              --request POST \
+              --url 'https://proctor.example.edu/api/v1/environment-profiles/ybndrfg8ejkmcpqxot1uwisza3/retire' \
+              --header 'Authorization: Bearer <interactive-system-administrator-session>' \
+              --header 'Idempotency-Key: docs-environment-profile-retire-001'
+      x-proctor-auth: strong_recent_session_required
+      x-proctor-idempotency: required
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - idempotency.key_required
+        - idempotency.key_invalid
+        - idempotency.conflict
+        - idempotency.in_progress
+        - environment_profile.invalid
+        - environment_profile.unavailable
+        - request.invalid
+        - resource.not_found
+        - environment_profile.not_found
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+        - authentication.strong_required
+        - authentication.reauthentication_required
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      responses:
+        "200":
+          $ref: '#/components/responses/EnvironmentProfileOK'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  responses:
+    EnvironmentProfileListOK:
+      description: The environment profiles.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/EnvironmentProfileListResponse'
+    EnvironmentProfileOK:
+      description: The environment profile.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/EnvironmentProfileResponse'
+  schemas:
+    EnvironmentProfileRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - image
+        - cpu_millis
+        - memory_bytes
+        - disk_bytes
+        - network
+        - idle_window_seconds
+        - max_terminals
+      properties:
+        name:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,62}$
+        image:
+          type: string
+          pattern: ^[A-Za-z0-9._:-]{1,64}$
+          description: The execution image the hosts offer, by name.
+        cpu_millis:
+          type: integer
+          format: int64
+          minimum: 100
+          maximum: 64000
+          description: CPU time per second; 1000 is one full CPU.
+        memory_bytes:
+          type: integer
+          format: int64
+          minimum: 134217728
+          maximum: 68719476736
+        disk_bytes:
+          type: integer
+          format: int64
+          minimum: 67108864
+          maximum: 274877906944
+        network:
+          type: string
+          enum:
+            - none
+            - allowlist
+          description: '`none` gives the environment no network; `allowlist` gives it only the execution host''s configured allowlist.'
+        idle_window_seconds:
+          type: integer
+          format: int64
+          minimum: 60
+          maximum: 86400
+          description: How long an environment may stay frozen before it is suspended to disk.
+        max_terminals:
+          type: integer
+          minimum: 1
+          maximum: 8
+          description: The most terminals one Attempt may open.
+    EnvironmentProfileResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - image
+        - cpu_millis
+        - memory_bytes
+        - disk_bytes
+        - network
+        - idle_window_seconds
+        - max_terminals
+        - created_at
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        name:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,62}$
+        image:
+          type: string
+          pattern: ^[A-Za-z0-9._:-]{1,64}$
+        cpu_millis:
+          type: integer
+          format: int64
+        memory_bytes:
+          type: integer
+          format: int64
+        disk_bytes:
+          type: integer
+          format: int64
+        network:
+          type: string
+          enum:
+            - none
+            - allowlist
+        idle_window_seconds:
+          type: integer
+          format: int64
+        max_terminals:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        retired_at:
+          type: string
+          format: date-time
+          description: Present once the profile is retired.
+    EnvironmentProfileListResponse:
+      description: One page of the collection in its stable order.
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EnvironmentProfileResponse'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'

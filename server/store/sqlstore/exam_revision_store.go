@@ -222,6 +222,16 @@ func publishExamRevision(
 	if err != nil {
 		return examRevisionPublicationOutcomeRow{}, invalidPersistedState("exam_draft", "policy", err)
 	}
+	decodedPolicy, err := model.DecodeExamPolicySet(policy.Bytes)
+	if err != nil {
+		return examRevisionPublicationOutcomeRow{}, invalidPersistedState("exam_draft", "policy", err)
+	}
+	if decodedPolicy.Execution.Enabled && !input.ExecutionEnabled {
+		return examRevisionPublicationOutcomeRow{}, store.NewErrConflict("exam_revision", "execution_disabled", nil)
+	}
+	if err = requireUsableEnvironmentProfile(ctx, tx, decodedPolicy.Execution); err != nil {
+		return examRevisionPublicationOutcomeRow{}, err
+	}
 
 	browserPolicy, err := model.ParseBrowserPolicyDocument([]byte(draft.BrowserPolicy))
 	if err != nil {

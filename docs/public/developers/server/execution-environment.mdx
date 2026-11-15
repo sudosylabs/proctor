@@ -424,8 +424,10 @@ Each step is a vertical slice with its own tests.
 2. **Evidence foundation:** Attempt evidence of the core's closed kinds,
    owned by the Attempt and named by its author, in place of capability
    evidence, with the seal, review, export and retention moved over.
-3. **Attempt Environment:** the model, lifecycle, placement, templates and
-   seeds, sync and the settle, under the owner's fenced runtime lease with
+3. **Attempt Environment:** the execution policy, environment profiles and
+   the execution configuration first, since nothing can create an
+   environment without them; then the model, lifecycle, placement, templates
+   and seeds, sync and the settle, under the owner's fenced runtime lease with
    wakeups. The three Workspace changes whose only reader is the owner land
    here with it: change notifications in the core, retention by cursor, and
    grouped harvest batches. `server/plugin/execution` and its seams are
@@ -434,8 +436,7 @@ Each step is a vertical slice with its own tests.
 4. **Processes and terminals:** tags, the terminal socket with offsets and
    screens, the command log as evidence, and VFS chunks for terminal input
    recordings.
-5. **Policy, profiles and API:** the execution policy, environment profiles,
-   the candidate, manager and reviewer routes, and sync status.
+5. **API:** the candidate, manager and reviewer routes, and sync status.
 6. **The execenv additions,** alongside steps 3 and 4.
 7. **Clients:** the Desktop terminal pane and editor updates, and the webapp
    views.

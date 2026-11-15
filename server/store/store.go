@@ -119,6 +119,7 @@ type Catalog interface {
 	AccessPolicy() AccessPolicyStore
 	DesktopCompatibilityPolicy() DesktopCompatibilityPolicyStore
 	PluginSettings() PluginSettingsStore
+	EnvironmentProfile() EnvironmentProfileStore
 	RetentionPolicy() RetentionPolicyStore
 	Retention() RetentionStore
 	ClusterDiscovery() ClusterDiscoveryStore

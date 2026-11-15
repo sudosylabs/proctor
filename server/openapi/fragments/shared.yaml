@@ -1086,6 +1086,11 @@ components:
         - desktop_registration.invalid
         - desktop_registration.revoked
         - desktop_registration.unavailable
+        - environment_profile.invalid
+        - environment_profile.limit_reached
+        - environment_profile.name_in_use
+        - environment_profile.not_found
+        - environment_profile.unavailable
         - exam.archived
         - exam.attempt.already_connected
         - exam.attempt.browser_activity_conflict
@@ -1138,6 +1143,8 @@ components:
         - exam.delivery.upload_expired
         - exam.draft.no_changes
         - exam.draft.revision_conflict
+        - exam.execution.disabled
+        - exam.execution.profile_unusable
         - exam.export.claim_lost
         - exam.export.conflict
         - exam.export.expired
@@ -1365,6 +1372,7 @@ components:
         - desktop_compatibility_policy.manage
         - desktop_registration.rename
         - desktop_registration.revoke
+        - environment_profile.manage
         - exam.attempt.browser_activity.view
         - exam.create
         - exam.create.override

@@ -184,13 +184,14 @@ func runLayerConformance(
 		}},
 		{"DesktopCompatibilityPolicy", storetest.TestDesktopCompatibilityPolicyStore},
 		{"PluginSettings", storetest.TestPluginSettingsStore},
+		{"EnvironmentProfile", storetest.TestEnvironmentProfileStore},
 		{"RetentionPolicy", storetest.TestRetentionPolicyStore},
 		{"CommandOutcome", storetest.TestCommandOutcomeStore},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			switch test.name {
-			case "Installation", "AdministratorMFAReset", "AdministratorMFAResetExternal", "AccessPolicy", "AccessPolicyRoleHolderMFA", "AccessPolicySessionLength", "DesktopCompatibilityPolicy", "PluginSettings", "RetentionPolicy", "RetentionExpiry", "RetentionCleanupAuditExpiry":
+			case "Installation", "AdministratorMFAReset", "AdministratorMFAResetExternal", "AccessPolicy", "AccessPolicyRoleHolderMFA", "AccessPolicySessionLength", "DesktopCompatibilityPolicy", "PluginSettings", "EnvironmentProfile", "RetentionPolicy", "RetentionExpiry", "RetentionCleanupAuditExpiry":
 				resetPristineTestStore(t, sqlStore)
 			case "PasswordCredential":
 				resetPristineTestStore(t, sqlStore)
@@ -1429,6 +1430,10 @@ func TestDesktopCompatibilityPolicyStore(t *testing.T) {
 
 func TestPluginSettingsStore(t *testing.T) {
 	PristineStoreTest(t, storetest.TestPluginSettingsStore)
+}
+
+func TestEnvironmentProfileStore(t *testing.T) {
+	PristineStoreTest(t, storetest.TestEnvironmentProfileStore)
 }
 
 func TestRetentionPolicyStore(t *testing.T) {

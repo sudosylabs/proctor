@@ -118,6 +118,8 @@ type retryStores struct {
 	desktopCompatibilityPolicyOnce sync.Once
 	pluginSettings                 store.PluginSettingsStore
 	pluginSettingsOnce             sync.Once
+	environmentProfile             store.EnvironmentProfileStore
+	environmentProfileOnce         sync.Once
 	retentionPolicy                store.RetentionPolicyStore
 	retentionPolicyOnce            sync.Once
 	retention                      store.RetentionStore
@@ -382,6 +384,11 @@ type desktopCompatibilityPolicyStore struct {
 
 type pluginSettingsStore struct {
 	store.PluginSettingsStore
+	layer *Layer
+}
+
+type environmentProfileStore struct {
+	store.EnvironmentProfileStore
 	layer *Layer
 }
 
@@ -920,6 +927,16 @@ func (l *Layer) PluginSettings() store.PluginSettingsStore {
 	return l.stores.pluginSettings
 }
 
+func (l *Layer) EnvironmentProfile() store.EnvironmentProfileStore {
+	l.stores.environmentProfileOnce.Do(func() {
+		next := l.Store.EnvironmentProfile()
+		if next != nil {
+			l.stores.environmentProfile = &environmentProfileStore{EnvironmentProfileStore: next, layer: l}
+		}
+	})
+	return l.stores.environmentProfile
+}
+
 func (l *Layer) RetentionPolicy() store.RetentionPolicyStore {
 	l.stores.retentionPolicyOnce.Do(func() {
 		next := l.Store.RetentionPolicy()
@@ -1023,6 +1040,7 @@ var (
 	_ store.AccessPolicyStore               = (*accessPolicyStore)(nil)
 	_ store.DesktopCompatibilityPolicyStore = (*desktopCompatibilityPolicyStore)(nil)
 	_ store.PluginSettingsStore             = (*pluginSettingsStore)(nil)
+	_ store.EnvironmentProfileStore         = (*environmentProfileStore)(nil)
 	_ store.RetentionPolicyStore            = (*retentionPolicyStore)(nil)
 	_ store.RetentionStore                  = (*retentionStore)(nil)
 	_ store.ClusterDiscoveryStore           = (*clusterDiscoveryStore)(nil)

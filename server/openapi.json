@@ -3655,6 +3655,36 @@
           }
         }
       },
+      "EnvironmentProfileListOK": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/EnvironmentProfileListResponse"
+            }
+          }
+        },
+        "description": "The environment profiles.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
+      "EnvironmentProfileOK": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/EnvironmentProfileResponse"
+            }
+          }
+        },
+        "description": "The environment profile.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
       "ExamAttemptManagerListOK": {
         "content": {
           "application/json": {
@@ -8589,6 +8619,7 @@
           "desktop_compatibility_policy.manage",
           "desktop_registration.rename",
           "desktop_registration.revoke",
+          "environment_profile.manage",
           "exam.attempt.browser_activity.view",
           "exam.create",
           "exam.create.override",
@@ -11777,6 +11808,24 @@
         ],
         "type": "object"
       },
+      "ConfigureExamDraftExecutionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "execution": {
+            "$ref": "#/components/schemas/ExecutionPolicy"
+          },
+          "expected_revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "execution"
+        ],
+        "type": "object"
+      },
       "ConfigureExamDraftFocusLossRequest": {
         "additionalProperties": false,
         "properties": {
@@ -14906,6 +14955,154 @@
         ],
         "type": "object"
       },
+      "EnvironmentProfileListResponse": {
+        "additionalProperties": false,
+        "description": "One page of the collection in its stable order.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EnvironmentProfileResponse"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "EnvironmentProfileRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "cpu_millis": {
+            "description": "CPU time per second; 1000 is one full CPU.",
+            "format": "int64",
+            "maximum": 64000,
+            "minimum": 100,
+            "type": "integer"
+          },
+          "disk_bytes": {
+            "format": "int64",
+            "maximum": 274877906944,
+            "minimum": 67108864,
+            "type": "integer"
+          },
+          "idle_window_seconds": {
+            "description": "How long an environment may stay frozen before it is suspended to disk.",
+            "format": "int64",
+            "maximum": 86400,
+            "minimum": 60,
+            "type": "integer"
+          },
+          "image": {
+            "description": "The execution image the hosts offer, by name.",
+            "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+            "type": "string"
+          },
+          "max_terminals": {
+            "description": "The most terminals one Attempt may open.",
+            "maximum": 8,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "memory_bytes": {
+            "format": "int64",
+            "maximum": 68719476736,
+            "minimum": 134217728,
+            "type": "integer"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "type": "string"
+          },
+          "network": {
+            "description": "`none` gives the environment no network; `allowlist` gives it only the execution host's configured allowlist.",
+            "enum": [
+              "none",
+              "allowlist"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "image",
+          "cpu_millis",
+          "memory_bytes",
+          "disk_bytes",
+          "network",
+          "idle_window_seconds",
+          "max_terminals"
+        ],
+        "type": "object"
+      },
+      "EnvironmentProfileResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "cpu_millis": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "disk_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "idle_window_seconds": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "image": {
+            "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+            "type": "string"
+          },
+          "max_terminals": {
+            "type": "integer"
+          },
+          "memory_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "type": "string"
+          },
+          "network": {
+            "enum": [
+              "none",
+              "allowlist"
+            ],
+            "type": "string"
+          },
+          "retired_at": {
+            "description": "Present once the profile is retired.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "image",
+          "cpu_millis",
+          "memory_bytes",
+          "disk_bytes",
+          "network",
+          "idle_window_seconds",
+          "max_terminals",
+          "created_at"
+        ],
+        "type": "object"
+      },
       "ErrorCode": {
         "description": "Stable public problem code. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
         "enum": [
@@ -15010,6 +15207,11 @@
           "desktop_registration.invalid",
           "desktop_registration.revoked",
           "desktop_registration.unavailable",
+          "environment_profile.invalid",
+          "environment_profile.limit_reached",
+          "environment_profile.name_in_use",
+          "environment_profile.not_found",
+          "environment_profile.unavailable",
           "exam.archived",
           "exam.attempt.already_connected",
           "exam.attempt.browser_activity_conflict",
@@ -15062,6 +15264,8 @@
           "exam.delivery.upload_expired",
           "exam.draft.no_changes",
           "exam.draft.revision_conflict",
+          "exam.execution.disabled",
+          "exam.execution.profile_unusable",
           "exam.export.claim_lost",
           "exam.export.conflict",
           "exam.export.expired",
@@ -16441,6 +16645,9 @@
           "connection_loss": {
             "$ref": "#/components/schemas/ConnectionLossPolicy"
           },
+          "execution": {
+            "$ref": "#/components/schemas/ExecutionPolicy"
+          },
           "focus_loss": {
             "$ref": "#/components/schemas/FocusLossPolicy"
           },
@@ -16451,7 +16658,8 @@
         "required": [
           "native",
           "connection_loss",
-          "focus_loss"
+          "focus_loss",
+          "execution"
         ],
         "type": "object"
       },
@@ -18098,6 +18306,34 @@
           "sitting_count",
           "matching_sitting_count",
           "sitting_summary"
+        ],
+        "type": "object"
+      },
+      "ExecutionPolicy": {
+        "additionalProperties": false,
+        "description": "Whether the Exam's Attempts get an execution environment and which. A disabled policy names no profile, records nothing and opens no terminal. Terminal output is never recorded.",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "profile_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "record_input": {
+            "description": "Whether terminal input is recorded as evidence.",
+            "type": "boolean"
+          },
+          "terminals": {
+            "description": "How many terminals a candidate may open, from 1 to the profile's maximum; 0 when disabled.",
+            "maximum": 8,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "record_input",
+          "terminals"
         ],
         "type": "object"
       },
@@ -34560,6 +34796,281 @@
         "x-proctor-idempotency": "none"
       }
     },
+    "/api/v1/environment-profiles": {
+      "get": {
+        "description": "Lists the environment profiles that are not retired, and with include_retired=true the retired ones too, ordered by name. An environment profile is the recipe an Exam's execution environments are created from: the execution image, resources, network, idle window and the most terminals one Attempt may open. A Session with environment_profile.manage is required; Personal Access Tokens cannot read it.",
+        "operationId": "listEnvironmentProfiles",
+        "parameters": [
+          {
+            "description": "Whether retired profiles are listed too.",
+            "in": "query",
+            "name": "include_retired",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/EnvironmentProfileListOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List the environment profiles",
+        "tags": [
+          "Administration"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "environment_profile.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "post": {
+        "description": "Saves a new environment profile. Requires a strong recent interactive system-administrator Session, an Idempotency-Key, and durable audit. A profile is never edited: to change one, create a new profile and retire the old. Its name is unique among the profiles that are not retired.",
+        "operationId": "createEnvironmentProfile",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "cpu_millis": 1000,
+                "disk_bytes": 2147483648,
+                "idle_window_seconds": 600,
+                "image": "python-3.12",
+                "max_terminals": 4,
+                "memory_bytes": 1073741824,
+                "name": "python-small",
+                "network": "none"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/EnvironmentProfileRequest"
+              }
+            }
+          },
+          "description": "The complete profile. Every member is required.",
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/EnvironmentProfileOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Create an environment profile",
+        "tags": [
+          "Administration"
+        ],
+        "x-proctor-auth": "strong_recent_session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "environment_profile.invalid",
+          "environment_profile.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "environment_profile.name_in_use",
+          "environment_profile.limit_reached",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid",
+          "authentication.strong_required",
+          "authentication.reauthentication_required"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
+    "/api/v1/environment-profiles/{environment_profile_id}/retire": {
+      "parameters": [
+        {
+          "description": "The environment profile to retire.",
+          "in": "path",
+          "name": "environment_profile_id",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/ID"
+          }
+        }
+      ],
+      "post": {
+        "description": "Retires one environment profile so that new Exam Revisions can no longer name it. Revisions already published keep using it. Retiring a retired profile changes nothing. Requires a strong recent interactive system-administrator Session, an Idempotency-Key, and durable audit.",
+        "operationId": "retireEnvironmentProfile",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/EnvironmentProfileOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Retire an environment profile",
+        "tags": [
+          "Administration"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/environment-profiles/ybndrfg8ejkmcpqxot1uwisza3/retire' \\\n  --header 'Authorization: Bearer \u003cinteractive-system-administrator-session\u003e' \\\n  --header 'Idempotency-Key: docs-environment-profile-retire-001'"
+          }
+        ],
+        "x-proctor-auth": "strong_recent_session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "environment_profile.invalid",
+          "environment_profile.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "environment_profile.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid",
+          "authentication.strong_required",
+          "authentication.reauthentication_required"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
     "/api/v1/exam-attempts/{exam_attempt_id}/browser-activity/sources": {
       "get": {
         "description": "Return at most 49 source statuses in successful start order, bounded at 1 MiB, for one owned Participation. Current registered-key ownership is required; any live source also requires current Connection continuity. This is source recovery, not Browser Activity history access.",
@@ -38415,6 +38926,111 @@
         "x-proctor-idempotency": "required"
       }
     },
+    "/api/v1/exams/{exam_id}/draft/policies/execution": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamID"
+        }
+      ],
+      "put": {
+        "description": "Replaces the execution policy on the mutable Draft at the expected revision: whether Attempts get an execution environment, the environment profile they are created from, whether terminal input is recorded, and how many terminals a candidate may open. An enabled policy must name a profile that exists, is not retired and allows that many terminals, or the change fails with exam.execution.profile_unusable. A disabled policy names no profile, records nothing and opens no terminal. Publication checks the profile again and requires the installation to allow execution.",
+        "operationId": "configureExamDraftExecution",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "execution": {
+                  "enabled": true,
+                  "profile_id": "ybndrfg8ejkmcpqxot1uwisza3",
+                  "record_input": false,
+                  "terminals": 2
+                },
+                "expected_revision": 4
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ConfigureExamDraftExecutionRequest"
+              }
+            }
+          },
+          "description": "Supplies the expected Draft revision and the complete replacement execution policy.",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ExamOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Replace the execution policy on the active Exam Draft",
+        "tags": [
+          "Examinations"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.invalid",
+          "exam.archived",
+          "exam.draft.revision_conflict",
+          "exam.draft.no_changes",
+          "exam.execution.profile_unusable",
+          "exam.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
     "/api/v1/exams/{exam_id}/draft/policies/focus-loss": {
       "parameters": [
         {
@@ -40667,6 +41283,8 @@
           "exam.draft.revision_conflict",
           "exam.revision.no_changes",
           "exam.revision.capacity_exceeded",
+          "exam.execution.disabled",
+          "exam.execution.profile_unusable",
           "exam.unavailable",
           "idempotency.key_required",
           "idempotency.key_invalid",

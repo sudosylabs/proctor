@@ -4127,6 +4127,47 @@ CREATE TABLE plugin_settings (
     updated_at timestamptz NOT NULL CHECK (updated_at >= created_at)
 );
 
+-- The administrator-managed recipes Attempt Environments are created from.
+-- A profile is never edited or deleted: a change is a new profile and the old
+-- one is retired, so a published Exam Revision always names a profile that
+-- still exists. The name is unique among the profiles that are not retired.
+CREATE TABLE environment_profiles (
+    id varchar(26) PRIMARY KEY CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    name varchar(63) NOT NULL CHECK (name ~ '^[a-z][a-z0-9-]{0,62}$'),
+    image varchar(64) NOT NULL CHECK (image ~ '^[A-Za-z0-9._:-]{1,64}$'),
+    cpu_millis bigint NOT NULL CHECK (cpu_millis BETWEEN 100 AND 64000),
+    memory_bytes bigint NOT NULL CHECK (memory_bytes BETWEEN 134217728 AND 68719476736),
+    disk_bytes bigint NOT NULL CHECK (disk_bytes BETWEEN 67108864 AND 274877906944),
+    network varchar(16) NOT NULL CHECK (network IN ('none', 'allowlist')),
+    idle_window_seconds integer NOT NULL CHECK (idle_window_seconds BETWEEN 60 AND 86400),
+    max_terminals smallint NOT NULL CHECK (max_terminals BETWEEN 1 AND 8),
+    created_by_user_id varchar(26) NOT NULL REFERENCES users(id),
+    created_at timestamptz NOT NULL,
+    retired_at timestamptz CHECK (retired_at IS NULL OR retired_at >= created_at)
+);
+CREATE UNIQUE INDEX environment_profiles_live_name_key
+    ON environment_profiles (name) WHERE retired_at IS NULL;
+CREATE INDEX environment_profiles_created_by_user_id_idx ON environment_profiles (created_by_user_id);
+
+CREATE FUNCTION guard_environment_profile_mutation() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'environment profiles are never deleted' USING ERRCODE = '55000';
+    END IF;
+    IF OLD.retired_at IS NOT NULL OR NEW.retired_at IS NULL OR
+       ROW(NEW.id, NEW.name, NEW.image, NEW.cpu_millis, NEW.memory_bytes, NEW.disk_bytes, NEW.network,
+           NEW.idle_window_seconds, NEW.max_terminals, NEW.created_by_user_id, NEW.created_at) IS DISTINCT FROM
+       ROW(OLD.id, OLD.name, OLD.image, OLD.cpu_millis, OLD.memory_bytes, OLD.disk_bytes, OLD.network,
+           OLD.idle_window_seconds, OLD.max_terminals, OLD.created_by_user_id, OLD.created_at) THEN
+        RAISE EXCEPTION 'an environment profile only retires' USING ERRCODE = '55000';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER environment_profiles_guard BEFORE UPDATE OR DELETE ON environment_profiles
+    FOR EACH ROW EXECUTE FUNCTION guard_environment_profile_mutation();
+
 CREATE TABLE access_policy_transitions (
     access_policy_id varchar(26) NOT NULL REFERENCES access_policies(id) ON DELETE CASCADE,
     from_revision bigint NOT NULL CHECK (from_revision > 0),

@@ -88,6 +88,10 @@ type AttemptConnectionID string
 // environment to an Attempt Participation generation.
 type AttemptEnvironmentBindingID string
 
+// EnvironmentProfileID identifies one immutable environment profile: the
+// image, resources and limits an Attempt Environment is created with.
+type EnvironmentProfileID string
+
 // FocusLossSignalID identifies one durably accepted Focus Loss claim and its outcome.
 type FocusLossSignalID string
 

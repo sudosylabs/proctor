@@ -397,6 +397,11 @@ const sidebars: SidebarsConfig = {
             },
             {
               type: 'doc',
+              id: 'reference/configuration/execution',
+              label: 'Execution',
+            },
+            {
+              type: 'doc',
               id: 'reference/configuration/plugins',
               label: 'Plugins',
             },

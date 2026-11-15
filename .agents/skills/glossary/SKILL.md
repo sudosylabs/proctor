@@ -123,6 +123,14 @@ The typed examination and integrity rules authored in an exam draft and frozen
 in an exam revision.
 _Avoid_: Deployment configuration, executable policy
 
+**Environment Profile**:
+An installation-level, administrator-managed recipe for the execution
+environments of an exam's attempts: the execution image, resources, network,
+idle window and most terminals per attempt. A profile is never edited; a
+change is a new profile and the old one is retired, and an exam's execution
+policy names one profile.
+_Avoid_: Execution host, container image, deployment configuration
+
 **Exam Capacity Policy**:
 The institution-owned limits on Exam Resources and Starter or Attempt
 Workspace growth; publication freezes the applicable policy in an exam

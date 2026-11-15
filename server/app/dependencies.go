@@ -82,6 +82,9 @@ type Dependencies struct {
 
 	NodeID    string
 	PublicURL string
+	// ExecutionEnabled is whether Exams may publish with an execution
+	// environment.
+	ExecutionEnabled bool
 	// SupportAddress is the operator-configured help mailbox that public
 	// discovery publishes for hosted pages; empty publishes none.
 	SupportAddress string

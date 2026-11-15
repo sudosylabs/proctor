@@ -121,6 +121,8 @@ type timedStores struct {
 	desktopCompatibilityPolicyOnce sync.Once
 	pluginSettings                 store.PluginSettingsStore
 	pluginSettingsOnce             sync.Once
+	environmentProfile             store.EnvironmentProfileStore
+	environmentProfileOnce         sync.Once
 	retentionPolicy                store.RetentionPolicyStore
 	retentionPolicyOnce            sync.Once
 	retention                      store.RetentionStore
@@ -386,6 +388,11 @@ type timedDesktopCompatibilityPolicyStore struct {
 type timedPluginSettingsStore struct {
 	layer *Layer
 	next  store.PluginSettingsStore
+}
+
+type timedEnvironmentProfileStore struct {
+	layer *Layer
+	next  store.EnvironmentProfileStore
 }
 
 type timedRetentionPolicyStore struct {
@@ -923,6 +930,16 @@ func (l *Layer) PluginSettings() store.PluginSettingsStore {
 	return l.stores.pluginSettings
 }
 
+func (l *Layer) EnvironmentProfile() store.EnvironmentProfileStore {
+	l.stores.environmentProfileOnce.Do(func() {
+		next := l.next.EnvironmentProfile()
+		if next != nil {
+			l.stores.environmentProfile = &timedEnvironmentProfileStore{layer: l, next: next}
+		}
+	})
+	return l.stores.environmentProfile
+}
+
 func (l *Layer) RetentionPolicy() store.RetentionPolicyStore {
 	l.stores.retentionPolicyOnce.Do(func() {
 		next := l.next.RetentionPolicy()
@@ -1252,6 +1269,12 @@ func (s *timedExamAuthoringStore) UpdateDraftText(arg0 context.Context, arg1 *st
 func (s *timedExamAuthoringStore) UpdateDraftFocusLoss(arg0 context.Context, arg1 *store.ExamDraftFocusLossUpdate, arg2 *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodUpdateDraftFocusLoss), func(callCtx context.Context) (*store.ExamAuthoringCommandResult, error) {
 		return s.next.UpdateDraftFocusLoss(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedExamAuthoringStore) UpdateDraftExecution(arg0 context.Context, arg1 *store.ExamDraftExecutionUpdate, arg2 *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodUpdateDraftExecution), func(callCtx context.Context) (*store.ExamAuthoringCommandResult, error) {
+		return s.next.UpdateDraftExecution(callCtx, arg1, arg2)
 	})
 }
 
@@ -4033,6 +4056,30 @@ func (s *timedPluginSettingsStore) Replace(arg0 context.Context, arg1 *store.Plu
 	})
 }
 
+func (s *timedEnvironmentProfileStore) Create(arg0 context.Context, arg1 *store.EnvironmentProfileCreation, arg2 *store.CommandIdempotency) (*store.EnvironmentProfileCommandResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateEnvironmentProfile, methodCreate), func(callCtx context.Context) (*store.EnvironmentProfileCommandResult, error) {
+		return s.next.Create(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedEnvironmentProfileStore) Retire(arg0 context.Context, arg1 *store.EnvironmentProfileRetirement, arg2 *store.CommandIdempotency) (*store.EnvironmentProfileCommandResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateEnvironmentProfile, methodRetire), func(callCtx context.Context) (*store.EnvironmentProfileCommandResult, error) {
+		return s.next.Retire(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedEnvironmentProfileStore) Get(arg0 context.Context, arg1 model.EnvironmentProfileID) (*model.EnvironmentProfile, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateEnvironmentProfile, methodGet), func(callCtx context.Context) (*model.EnvironmentProfile, error) {
+		return s.next.Get(callCtx, arg1)
+	})
+}
+
+func (s *timedEnvironmentProfileStore) List(ctx context.Context, includeRetired bool) ([]*model.EnvironmentProfile, error) {
+	return timeStoreCall1(ctx, s.layer, storeOperation(aggregateEnvironmentProfile, methodList), func(callCtx context.Context) ([]*model.EnvironmentProfile, error) {
+		return s.next.List(callCtx, includeRetired)
+	})
+}
+
 func (s *timedRetentionPolicyStore) Get(arg0 context.Context) (*model.RetentionPolicy, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRetentionPolicy, methodGet), func(callCtx context.Context) (*model.RetentionPolicy, error) {
 		return s.next.Get(callCtx)
@@ -4230,6 +4277,7 @@ var (
 	_ store.AccessPolicyStore               = (*timedAccessPolicyStore)(nil)
 	_ store.DesktopCompatibilityPolicyStore = (*timedDesktopCompatibilityPolicyStore)(nil)
 	_ store.PluginSettingsStore             = (*timedPluginSettingsStore)(nil)
+	_ store.EnvironmentProfileStore         = (*timedEnvironmentProfileStore)(nil)
 	_ store.RetentionPolicyStore            = (*timedRetentionPolicyStore)(nil)
 	_ store.RetentionStore                  = (*timedRetentionStore)(nil)
 	_ store.ClusterDiscoveryStore           = (*timedClusterDiscoveryStore)(nil)

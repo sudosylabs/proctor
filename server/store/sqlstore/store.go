@@ -137,6 +137,7 @@ type SQLStoreStores struct {
 	accessPolicy               store.AccessPolicyStore
 	desktopCompatibilityPolicy store.DesktopCompatibilityPolicyStore
 	pluginSettings             store.PluginSettingsStore
+	environmentProfile         store.EnvironmentProfileStore
 	retentionPolicy            store.RetentionPolicyStore
 	retention                  store.RetentionStore
 	clusterDiscovery           store.ClusterDiscoveryStore
@@ -270,6 +271,7 @@ func New(ctx context.Context, settings Settings) (*SQLStore, error) {
 	sqlStore.stores.accessPolicy = newSQLAccessPolicyStore(sqlStore)
 	sqlStore.stores.desktopCompatibilityPolicy = newSQLDesktopCompatibilityPolicyStore(sqlStore)
 	sqlStore.stores.pluginSettings = newSQLPluginSettingsStore(sqlStore)
+	sqlStore.stores.environmentProfile = newSQLEnvironmentProfileStore(sqlStore)
 	sqlStore.stores.retentionPolicy = newSQLRetentionPolicyStore(sqlStore)
 	sqlStore.stores.retention = newSQLRetentionStore(sqlStore)
 	sqlStore.stores.examRecords = newSQLExamRecordsStore(sqlStore)
@@ -485,6 +487,10 @@ func (ss *SQLStore) DesktopCompatibilityPolicy() store.DesktopCompatibilityPolic
 }
 
 func (ss *SQLStore) PluginSettings() store.PluginSettingsStore { return ss.stores.pluginSettings }
+
+func (ss *SQLStore) EnvironmentProfile() store.EnvironmentProfileStore {
+	return ss.stores.environmentProfile
+}
 
 func (ss *SQLStore) ClusterDiscovery() store.ClusterDiscoveryStore {
 	return ss.stores.clusterDiscovery

@@ -169,6 +169,7 @@ func newExamPublication(
 		Now:               time.Now,
 		NewID:             model.NewExamRevisionID,
 		InstitutionOrigin: deps.PublicURL,
+		ExecutionEnabled:  deps.ExecutionEnabled,
 		Operational:       operationalRecorderAdapter{recorder: deps.OperationalRecorder},
 	})
 }

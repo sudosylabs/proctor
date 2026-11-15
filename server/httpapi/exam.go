@@ -49,6 +49,11 @@ type configureExamDraftFocusLossRequest struct {
 	Outcome                     string `json:"outcome"`
 }
 
+type configureExamDraftExecutionRequest struct {
+	ExpectedDraftRevision int64                       `json:"expected_revision"`
+	Execution             examExecutionPolicyDocument `json:"execution"`
+}
+
 type configureExamDraftBrowserPolicyRequest struct {
 	ExpectedDraftRevision int64                 `json:"expected_revision"`
 	BrowserPolicy         browserPolicyDocument `json:"browser_policy"`
@@ -355,6 +360,16 @@ type examPolicyResponse struct {
 	Native         model.NativeSecurityPolicy   `json:"native"`
 	ConnectionLoss examConnectionPolicyResponse `json:"connection_loss"`
 	FocusLoss      examFocusPolicyResponse      `json:"focus_loss"`
+	Execution      examExecutionPolicyDocument  `json:"execution"`
+}
+
+// examExecutionPolicyDocument is the execution policy, as requested and as
+// returned.
+type examExecutionPolicyDocument struct {
+	Enabled     bool   `json:"enabled"`
+	ProfileID   string `json:"profile_id,omitempty"`
+	RecordInput bool   `json:"record_input"`
+	Terminals   int    `json:"terminals"`
 }
 
 type examConnectionPolicyResponse struct {
@@ -378,6 +393,7 @@ func examResource(app ExamApplication) route.Resource {
 	draft := "/exams/{exam_id}/draft"
 	nativePolicy := "/exams/{exam_id}/draft/policies/native"
 	focusLossPolicy := "/exams/{exam_id}/draft/policies/focus-loss"
+	executionPolicy := "/exams/{exam_id}/draft/policies/execution"
 	browserPolicy := "/exams/{exam_id}/draft/browser-policy"
 	archive := "/exams/{exam_id}/archive"
 	managers := "/exams/{exam_id}/managers"
@@ -481,6 +497,30 @@ func examResource(app ExamApplication) route.Resource {
 				"idempotency.in_progress",
 			},
 			Handle: h.configureDraftFocusLoss,
+		},
+		route.Endpoint{
+			Method:      http.MethodPut,
+			Path:        executionPolicy,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.invalid",
+				"exam.archived",
+				"exam.draft.revision_conflict",
+				"exam.draft.no_changes",
+				"exam.execution.profile_unusable",
+				"exam.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+			},
+			Handle: h.configureDraftExecution,
 		},
 		route.Endpoint{
 			Method:      http.MethodPut,
@@ -790,6 +830,37 @@ func (h examHandlers) configureDraftFocusLoss(request route.Request) (route.Resu
 		return route.Result{}, err
 	}
 
+	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
+}
+
+func (h examHandlers) configureDraftExecution(request route.Request) (route.Result, error) {
+	examID, err := route.PathID[model.ExamID](request, "exam_id")
+	if err != nil {
+		return route.Result{}, err
+	}
+	var body configureExamDraftExecutionRequest
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
+	}
+	if body.ExpectedDraftRevision < 1 {
+		return route.Result{}, route.InvalidRequest(errors.New("must be positive"))
+	}
+	var profile model.EnvironmentProfileID
+	if body.Execution.ProfileID != "" {
+		if profile, err = model.ParseEnvironmentProfileID(body.Execution.ProfileID); err != nil {
+			return route.Result{}, route.InvalidRequest(err)
+		}
+	}
+	view, err := h.app.ConfigureExamDraftExecution(request.Context, request.Invocation(), exam.ConfigureDraftExecutionCommand{
+		ExamID:                examID,
+		ExpectedDraftRevision: body.ExpectedDraftRevision,
+		Execution: model.ExecutionPolicy{Enabled: body.Execution.Enabled, Profile: profile,
+			RecordInput: body.Execution.RecordInput, Terminals: body.Execution.Terminals},
+		IdempotencyKey: request.IdempotencyKey,
+	})
+	if err != nil {
+		return route.Result{}, err
+	}
 	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
 }
 
@@ -1273,6 +1344,12 @@ func examResponseFromView(view exam.View) examResponse {
 					WindowMilliseconds:          policy.FocusLoss.Window.Milliseconds(),
 					Outcome:                     string(policy.FocusLoss.Outcome),
 				},
+				Execution: examExecutionPolicyDocument{
+					Enabled:     policy.Execution.Enabled,
+					ProfileID:   policy.Execution.Profile.String(),
+					RecordInput: policy.Execution.RecordInput,
+					Terminals:   policy.Execution.Terminals,
+				},
 			},
 			BrowserPolicy:       browserPolicyDocumentFromModel(browserPolicy),
 			Capacity:            examCapacityPolicyResponseFromModel(view.Capacity),
@@ -1322,6 +1399,7 @@ type ExamApplication interface {
 	EditExamDraftText(context.Context, invocation.Invocation, exam.EditDraftTextCommand) (exam.View, error)
 	ConfigureExamDraftNativePolicy(context.Context, invocation.Invocation, exam.ConfigureDraftNativePolicyCommand) (exam.View, error)
 	ConfigureExamDraftFocusLoss(context.Context, invocation.Invocation, exam.ConfigureDraftFocusLossCommand) (exam.View, error)
+	ConfigureExamDraftExecution(context.Context, invocation.Invocation, exam.ConfigureDraftExecutionCommand) (exam.View, error)
 	ConfigureExamDraftBrowserPolicy(context.Context, invocation.Invocation, exam.ConfigureDraftBrowserPolicyCommand) (exam.View, error)
 	ListExams(context.Context, invocation.Invocation, exam.ListQuery) (exam.CatalogPage, error)
 	ArchiveExam(context.Context, invocation.Invocation, exam.ArchiveCommand) (model.Exam, error)

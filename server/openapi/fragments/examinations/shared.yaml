@@ -250,6 +250,7 @@ components:
         - native
         - connection_loss
         - focus_loss
+        - execution
       properties:
         native:
           $ref: '#/components/schemas/NativeSecurityPolicy'
@@ -257,6 +258,31 @@ components:
           $ref: '#/components/schemas/ConnectionLossPolicy'
         focus_loss:
           $ref: '#/components/schemas/FocusLossPolicy'
+        execution:
+          $ref: '#/components/schemas/ExecutionPolicy'
+    ExecutionPolicy:
+      type: object
+      additionalProperties: false
+      description: >-
+        Whether the Exam's Attempts get an execution environment and which. A disabled policy names no profile,
+        records nothing and opens no terminal. Terminal output is never recorded.
+      required:
+        - enabled
+        - record_input
+        - terminals
+      properties:
+        enabled:
+          type: boolean
+        profile_id:
+          $ref: '#/components/schemas/ID'
+        record_input:
+          type: boolean
+          description: Whether terminal input is recorded as evidence.
+        terminals:
+          type: integer
+          minimum: 0
+          maximum: 8
+          description: How many terminals a candidate may open, from 1 to the profile's maximum; 0 when disabled.
     ConnectionLossPolicy:
       type: object
       additionalProperties: false

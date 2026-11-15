@@ -30,6 +30,7 @@ type Publication struct {
 	now               func() time.Time
 	newID             func() model.ExamRevisionID
 	institutionOrigin string
+	executionEnabled  bool
 	operational       OperationalRecorder
 }
 
@@ -45,7 +46,10 @@ type PublicationDependencies struct {
 	Now               func() time.Time
 	NewID             func() model.ExamRevisionID
 	InstitutionOrigin string
-	Operational       OperationalRecorder
+	// ExecutionEnabled is whether Exams may publish with an execution
+	// environment.
+	ExecutionEnabled bool
+	Operational      OperationalRecorder
 }
 
 // NewPublication returns a Publication service, or an error when a required
@@ -72,6 +76,7 @@ func NewPublication(deps PublicationDependencies) (*Publication, error) {
 		now:                 deps.Now,
 		newID:               deps.NewID,
 		institutionOrigin:   deps.InstitutionOrigin,
+		executionEnabled:    deps.ExecutionEnabled,
 		operational:         deps.Operational,
 	}, nil
 }

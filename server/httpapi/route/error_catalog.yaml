@@ -299,6 +299,16 @@ codes:
     description: "The Desktop Registration is revoked; it stays as security history and cannot be renamed."
   - code: desktop_registration.unavailable
     description: "The Desktop Registration change failed; retry later."
+  - code: environment_profile.invalid
+    description: "The environment profile is outside its bounds; `fields.field` names the part."
+  - code: environment_profile.limit_reached
+    description: "The installation already keeps the most environment profiles that are not retired."
+  - code: environment_profile.name_in_use
+    description: "Another environment profile that is not retired has that name."
+  - code: environment_profile.not_found
+    description: "No environment profile has that ID."
+  - code: environment_profile.unavailable
+    description: "Environment profiles cannot be read or changed now; retry later."
   - code: exam.archived
     description: "The Exam is archived and cannot change."
   - code: exam.attempt.already_connected
@@ -431,6 +441,10 @@ codes:
     description: "The Draft update would not change the Draft."
   - code: exam.draft.revision_conflict
     description: "The supplied Draft revision is stale."
+  - code: exam.execution.disabled
+    description: "The installation does not allow execution, so an Exam whose execution policy is enabled cannot be published."
+  - code: exam.execution.profile_unusable
+    description: "The execution policy names an environment profile that does not exist, is retired, or allows fewer terminals."
   - code: exam.export.claim_lost
     description: "The export build lost its claim to another worker."
   - code: exam.export.conflict

@@ -1,0 +1,51 @@
+---
+title: Execution Configuration
+description: Turn code execution on for the installation and list the execution hosts Proctor places candidates' environments on.
+audience: operator
+maturity: preview
+slug: /reference/configuration/execution/
+---
+
+# Execution Configuration
+
+Code execution gives a candidate an isolated machine, with their Attempt
+Workspace synced into it, for Exams that ask for one. The machines run on
+separate Linux execution hosts that Proctor dials over TLS. This section turns
+execution on and lists those hosts. Changing it needs a restart.
+
+What each Exam's environment looks like is not configuration. A System
+Administrator manages environment profiles, each naming an execution image,
+its CPU, memory and disk, its network, how long it may stay frozen before it
+is suspended, and the most terminals one Attempt may open, with
+`GET /api/v1/environment-profiles`,
+`POST /api/v1/environment-profiles` and
+`POST /api/v1/environment-profiles/{environment_profile_id}/retire`. An
+Exam's execution policy names one profile.
+
+| Path and default | Meaning and accepted value |
+| --- | --- |
+| `Execution.Enabled`<br />Default: `false` | Whether Exams may be published with execution. While it is off, no environment is created and publishing an Exam whose execution policy is enabled is refused with `exam.execution.disabled`. Turning it on needs at least one host. |
+| `Execution.Hosts[].Name`<br />Default: no hosts | One execution host per entry, at most 64. The host's name in environment records and logs: a lowercase letter, then up to 62 lowercase letters, digits or hyphens, unique among the hosts. |
+| `Execution.Hosts[].Address` | The host's `host:port`. |
+| `Execution.Hosts[].ServerName` | The name the host's TLS certificate must carry. |
+| `Execution.Hosts[].CAPEM` | The PEM certificate authority that issued that certificate. |
+| `Execution.Hosts[].Token` | The token Proctor authenticates with. It is never logged, and `proctor config show` always redacts it. |
+| `Execution.Owners`<br />Default: `512` | How many environments one node owns at once, from 1 to 100000. Another node takes the rest. |
+
+```json
+{
+  "Execution": {
+    "Enabled": true,
+    "Hosts": [
+      {
+        "Name": "exec-1",
+        "Address": "exec-1.internal.example.edu:7443",
+        "ServerName": "exec-1.internal.example.edu",
+        "CAPEM": "-----BEGIN CERTIFICATE-----\n<the CA that issued the host certificate>\n-----END CERTIFICATE-----\n",
+        "Token": "<from your secret store>"
+      }
+    ],
+    "Owners": 512
+  }
+}
+```

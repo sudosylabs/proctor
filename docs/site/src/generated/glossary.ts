@@ -136,6 +136,13 @@ export const glossaryTerms = [
     "avoid": "Deployment configuration, executable policy"
   },
   {
+    "id": "environment-profile",
+    "term": "Environment Profile",
+    "section": "Examinations",
+    "definition": "An installation-level, administrator-managed recipe for the execution environments of an exam's attempts: the execution image, resources, network, idle window and most terminals per attempt. A profile is never edited; a change is a new profile and the old one is retired, and an exam's execution policy names one profile.",
+    "avoid": "Execution host, container image, deployment configuration"
+  },
+  {
     "id": "exam-capacity-policy",
     "term": "Exam Capacity Policy",
     "section": "Examinations",

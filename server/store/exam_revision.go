@@ -16,7 +16,13 @@ import (
 
 type ExamRevisionPublication struct {
 	// InstitutionOrigin is installation configuration supplied by the application, never request data.
-	InstitutionOrigin     string
+	InstitutionOrigin string
+	// ExecutionEnabled is installation configuration: whether Exams may
+	// publish with an execution environment. Publishing a Draft whose
+	// execution policy is enabled while it is false conflicts with
+	// execution_disabled; an enabled policy must also name a usable
+	// environment profile (environment_profile_unusable).
+	ExecutionEnabled      bool
 	RevisionID            model.ExamRevisionID
 	ExamID                model.ExamID
 	ActorUserID           model.UserID

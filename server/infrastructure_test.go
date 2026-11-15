@@ -149,6 +149,7 @@ type layerOrderStore struct {
 func (s layerOrderStore) AcademicPeriod() store.AcademicPeriodStore           { return s.periods }
 func (layerOrderStore) ClusterDiscovery() store.ClusterDiscoveryStore         { return nil }
 func (layerOrderStore) PluginSettings() store.PluginSettingsStore             { return nil }
+func (layerOrderStore) EnvironmentProfile() store.EnvironmentProfileStore     { return nil }
 func (layerOrderStore) ExamRevision() store.ExamRevisionStore                 { return nil }
 func (layerOrderStore) ExamAttemptWorkspace() store.ExamAttemptWorkspaceStore { return nil }
 func (layerOrderStore) Close() error                                          { return nil }

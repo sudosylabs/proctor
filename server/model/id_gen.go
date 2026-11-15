@@ -79,6 +79,9 @@ func NewAttemptEnvironmentBindingID() AttemptEnvironmentBindingID {
 	return AttemptEnvironmentBindingID(NewID())
 }
 
+// NewEnvironmentProfileID returns a freshly generated environment-profile identifier.
+func NewEnvironmentProfileID() EnvironmentProfileID { return EnvironmentProfileID(NewID()) }
+
 // NewFocusLossSignalID returns a freshly generated focus-loss-signal identifier.
 func NewFocusLossSignalID() FocusLossSignalID { return FocusLossSignalID(NewID()) }
 
@@ -315,6 +318,11 @@ func ParseAttemptConnectionID(value string) (AttemptConnectionID, error) {
 // ParseAttemptEnvironmentBindingID validates and converts the shared identifier representation.
 func ParseAttemptEnvironmentBindingID(value string) (AttemptEnvironmentBindingID, error) {
 	return parseID[AttemptEnvironmentBindingID](value, "attempt_environment_binding_id")
+}
+
+// ParseEnvironmentProfileID validates and converts the shared identifier representation.
+func ParseEnvironmentProfileID(value string) (EnvironmentProfileID, error) {
+	return parseID[EnvironmentProfileID](value, "environment_profile_id")
 }
 
 // ParseFocusLossSignalID validates and converts the shared identifier representation.
@@ -583,6 +591,9 @@ func (id AttemptConnectionID) IsZero() bool { return id == "" }
 // IsZero reports whether the attempt-environment-binding is the empty zero value.
 func (id AttemptEnvironmentBindingID) IsZero() bool { return id == "" }
 
+// IsZero reports whether the environment-profile is the empty zero value.
+func (id EnvironmentProfileID) IsZero() bool { return id == "" }
+
 // IsZero reports whether the focus-loss-signal is the empty zero value.
 func (id FocusLossSignalID) IsZero() bool { return id == "" }
 
@@ -768,6 +779,9 @@ func (id AttemptConnectionID) IsValid() bool { return IsValidOpaqueID(string(id)
 
 // IsValid reports whether the attempt-environment-binding is a canonical non-zero ID.
 func (id AttemptEnvironmentBindingID) IsValid() bool { return IsValidOpaqueID(string(id)) }
+
+// IsValid reports whether the environment-profile is a canonical non-zero ID.
+func (id EnvironmentProfileID) IsValid() bool { return IsValidOpaqueID(string(id)) }
 
 // IsValid reports whether the focus-loss-signal is a canonical non-zero ID.
 func (id FocusLossSignalID) IsValid() bool { return IsValidOpaqueID(string(id)) }
@@ -955,6 +969,9 @@ func (id AttemptConnectionID) String() string { return string(id) }
 // String returns the attempt-environment-binding wire/database representation.
 func (id AttemptEnvironmentBindingID) String() string { return string(id) }
 
+// String returns the environment-profile wire/database representation.
+func (id EnvironmentProfileID) String() string { return string(id) }
+
 // String returns the focus-loss-signal wire/database representation.
 func (id FocusLossSignalID) String() string { return string(id) }
 
@@ -1140,6 +1157,9 @@ func (id AttemptConnectionID) MarshalText() ([]byte, error) { return marshalID(i
 
 // MarshalText encodes the attempt-environment-binding as its canonical string.
 func (id AttemptEnvironmentBindingID) MarshalText() ([]byte, error) { return marshalID(id) }
+
+// MarshalText encodes the environment-profile as its canonical string.
+func (id EnvironmentProfileID) MarshalText() ([]byte, error) { return marshalID(id) }
 
 // MarshalText encodes the focus-loss-signal as its canonical string.
 func (id FocusLossSignalID) MarshalText() ([]byte, error) { return marshalID(id) }
@@ -1369,6 +1389,11 @@ func (id *AttemptConnectionID) UnmarshalText(data []byte) error {
 // UnmarshalText decodes and validates the attempt-environment-binding when non-empty.
 func (id *AttemptEnvironmentBindingID) UnmarshalText(data []byte) error {
 	return unmarshalID(id, data, ParseAttemptEnvironmentBindingID)
+}
+
+// UnmarshalText decodes and validates the environment-profile when non-empty.
+func (id *EnvironmentProfileID) UnmarshalText(data []byte) error {
+	return unmarshalID(id, data, ParseEnvironmentProfileID)
 }
 
 // UnmarshalText decodes and validates the focus-loss-signal when non-empty.
@@ -1637,6 +1662,9 @@ func (id AttemptConnectionID) MarshalJSON() ([]byte, error) { return marshalIDJS
 // MarshalJSON encodes the attempt-environment-binding as a JSON string.
 func (id AttemptEnvironmentBindingID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
 
+// MarshalJSON encodes the environment-profile as a JSON string.
+func (id EnvironmentProfileID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
+
 // MarshalJSON encodes the focus-loss-signal as a JSON string.
 func (id FocusLossSignalID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
 
@@ -1865,6 +1893,11 @@ func (id *AttemptConnectionID) UnmarshalJSON(data []byte) error {
 // UnmarshalJSON decodes a JSON string into the attempt-environment-binding.
 func (id *AttemptEnvironmentBindingID) UnmarshalJSON(data []byte) error {
 	return unmarshalIDJSON(id, data, ParseAttemptEnvironmentBindingID)
+}
+
+// UnmarshalJSON decodes a JSON string into the environment-profile.
+func (id *EnvironmentProfileID) UnmarshalJSON(data []byte) error {
+	return unmarshalIDJSON(id, data, ParseEnvironmentProfileID)
 }
 
 // UnmarshalJSON decodes a JSON string into the focus-loss-signal.

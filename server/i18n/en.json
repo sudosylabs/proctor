@@ -552,6 +552,10 @@
     "translation": "{{.Actor}} removed a desktop device of {{.Resource}}"
   },
   {
+    "id": "audit.action.environment_profile.manage",
+    "translation": "{{.Actor}} changed an environment profile"
+  },
+  {
     "id": "audit.action.exam.attempt.browser_activity.view",
     "translation": "{{.Actor}} viewed browser activity in {{.Resource}}"
   },

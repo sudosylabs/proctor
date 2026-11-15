@@ -45,7 +45,7 @@ func TestProblemTypeFollowsTheDocumentationURL(t *testing.T) {
 			require.NoError(t, err)
 
 			recorder := httptest.NewRecorder()
-			api.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/missing", nil))
+			api.ServeHTTP(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/missing", nil))
 			require.Equal(t, http.StatusNotFound, recorder.Code)
 			var problem Problem
 			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &problem))

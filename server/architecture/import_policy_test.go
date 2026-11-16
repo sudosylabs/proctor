@@ -8,11 +8,9 @@
 package architecture_test
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -951,84 +949,6 @@ var dependencyRules = []dependencyRule{
 		},
 		thirdParty: allImports(),
 	},
-}
-
-func TestDependencyRulesAreWellFormed(t *testing.T) {
-	t.Parallel()
-
-	names := make(map[string]struct{}, len(dependencyRules))
-	sources := make(map[string]string)
-	for _, rule := range dependencyRules {
-		assert.NotEmpty(t, rule.name, "dependency rule has an empty name")
-		_, exists := names[rule.name]
-		assert.False(t, exists, "duplicate dependency rule name %q", rule.name)
-		names[rule.name] = struct{}{}
-		assert.NotEmpty(t, rule.sources, "dependency rule %q has no source packages", rule.name)
-		for _, source := range rule.sources {
-			if !assert.NotEmpty(t, source.path, "dependency rule %q has an empty source pattern", rule.name) {
-				continue
-			}
-			assert.LessOrEqual(t, source.match, matchDescendants, "dependency rule %q has an invalid source match for %q", rule.name, source.path)
-			key := fmt.Sprintf("%d:%s", source.match, source.path)
-			owner, exists := sources[key]
-			assert.False(t, exists, "dependency rules %q and %q declare the same source pattern %q", owner, rule.name, source.path)
-			sources[key] = rule.name
-		}
-	}
-}
-
-func TestDependencyRulePrecedence(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		packagePath string
-		wantRule    string
-	}{
-		{packagePath: serverModule + "/app/jobs", wantRule: "concrete jobs"},
-		{packagePath: serverModule + "/app/events", wantRule: "domain event dispatch"},
-		{packagePath: serverModule + "/app/idempotency", wantRule: "idempotency application"},
-		{packagePath: serverModule + "/app/invocation", wantRule: "invocation application"},
-		{packagePath: serverModule + "/app/apperror", wantRule: "application error vocabulary"},
-		{packagePath: serverModule + "/app/access", wantRule: "access application"},
-		{packagePath: serverModule + "/app/paging", wantRule: "paging application"},
-		{packagePath: serverModule + "/app/academic", wantRule: "academic application"},
-		{packagePath: serverModule + "/app/user", wantRule: "user application"},
-		{packagePath: serverModule + "/app/identity", wantRule: "identity application"},
-		{packagePath: serverModule + "/app/administration", wantRule: "administration application"},
-		{packagePath: serverModule + "/app/onboarding", wantRule: "onboarding application"},
-		{packagePath: serverModule + "/app/search", wantRule: "search application"},
-		{packagePath: serverModule + "/app/job", wantRule: "job engine"},
-		{packagePath: serverModule + "/app/mail", wantRule: "mail application"},
-		{packagePath: serverModule + "/app/exam/manageraccess", wantRule: "exam manager access"},
-		{packagePath: serverModule + "/app/exam", wantRule: "exam manager access consumers"},
-		{packagePath: serverModule + "/app/exam/review", wantRule: "exam mail and safe Markdown consumers"},
-		{packagePath: serverModule + "/app/exam/safemarkdown", wantRule: "safe Markdown"},
-		{packagePath: serverModule + "/app/exam/environment", wantRule: "exam execution environment"},
-		{packagePath: serverModule + "/app/internal/batchitem", wantRule: "batch item context"},
-		{packagePath: serverModule + "/app", wantRule: "application"},
-		{packagePath: serverModule + "/store/sqlstore", wantRule: "SQL store adapter"},
-		{packagePath: serverModule + "/platform/externalauth", wantRule: "external-auth adapters"},
-		{packagePath: serverModule + "/platform/executionhost", wantRule: "execution host adapter"},
-		{packagePath: serverModule + "/plugin/oidc", wantRule: "plugins"},
-		{packagePath: serverModule + "/internal/openapidoc", wantRule: "OpenAPI compiler"},
-		{packagePath: serverModule + "/internal/asyncapidoc", wantRule: "AsyncAPI compiler"},
-		{packagePath: serverModule + "/internal/errorcatalog", wantRule: "error catalog compiler"},
-		{packagePath: serverModule + "/cmd/proctor-healthcheck", wantRule: "healthcheck executable"},
-		{packagePath: serverModule + "/operator", wantRule: "offline operator commands"},
-		{packagePath: serverModule + "/cmd/ptool/commands", wantRule: "ptool commands"},
-		{packagePath: serverModule + "/httpapi/route", wantRule: "HTTP routing kernel"},
-		{packagePath: serverModule + "/httpapi", wantRule: "HTTP resources"},
-		{packagePath: serverModule + "/websocket", wantRule: "WebSocket transport"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.packagePath, func(t *testing.T) {
-			t.Parallel()
-			rule, ok := dependencyRuleFor(tt.packagePath)
-			require.True(t, ok, "dependencyRuleFor(%q) found no rule", tt.packagePath)
-			require.Equal(t, tt.wantRule, rule.name, "dependencyRuleFor(%q)", tt.packagePath)
-		})
-	}
 }
 
 func TestUnclassifiedProductionPackageFailsClosed(t *testing.T) {

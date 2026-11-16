@@ -206,16 +206,6 @@ func serverModuleRoot(t *testing.T) string {
 
 func serverModuleCandidates(t *testing.T, moduleRoot string) []string {
 	t.Helper()
-	if repositoryRoot, ok := documentationRepositoryRoot(t); ok {
-		var names []string
-		for name := range documentationCandidates(t, repositoryRoot) {
-			if strings.HasPrefix(name, "server/") {
-				names = append(names, strings.TrimPrefix(name, "server/"))
-			}
-		}
-		sort.Strings(names)
-		return names
-	}
 
 	var names []string
 	err := filepath.WalkDir(moduleRoot, func(path string, entry fs.DirEntry, err error) error {

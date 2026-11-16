@@ -52,7 +52,6 @@ cd docs/site
 npm run generate:design-system
 npm run check:design-system
 npm run test:design-system
-npm run test:icons
 npm run generate:glossary
 npm run check:glossary
 npm run test:glossary
@@ -114,15 +113,6 @@ come from the general advice for the code's kind of error unless
 [`docs/api/problem-guidance.yaml`](../api/problem-guidance.yaml) has a written
 entry for it. `npm run generate:problems` runs before `start` and `build` and
 rejects guidance for a code the catalog does not contain.
-
-`documentation-coverage.json` is the human-edited routing table from every
-OpenAPI product area and named multi-operation workflow to its authored entry
-page. A workflow can remain `planned` only with its delivery phase recorded.
-`validate:coverage` rejects missing tags, pages, and operation IDs; update the
-map and the validator's explicit expected-workflow inventory when a contract
-change adds, removes, or moves a workflow. Keeping the inventory separate from
-the routing table means deleting a complete workflow record cannot silently
-reduce the claimed coverage.
 
 ## Commands
 

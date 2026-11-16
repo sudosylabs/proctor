@@ -26,7 +26,7 @@ import (
 //   - immutable final snapshots and Hub-owned replay retention
 //   - stable close codes below
 //
-// Covered in //go:build integration app/websocket_integration_test.go:
+// Covered in //go:build integration integration/websocket_integration_test.go:
 //   - authenticated upgrade and unauthenticated 401
 //   - subscription success, sequence monotonicity, local replay, resync_required
 //   - session revocation and authorization-change connection close

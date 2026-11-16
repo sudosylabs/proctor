@@ -160,7 +160,7 @@ integration-all:
 # PostgreSQL-backed packages, so a new test runs without editing this file.
 # Only tests owned by a target with another service are skipped here; the S3
 # variants in the module-root package skip themselves without VFS_S3_*.
-INTEGRATION_POSTGRES_PACKAGES := . ./app ./cmd/proctor/commands ./store/sqlstore
+INTEGRATION_POSTGRES_PACKAGES := . ./app ./integration ./cmd/proctor/commands ./store/sqlstore
 INTEGRATION_POSTGRES_SKIP := ^(TestWebSocket(Integration|TwoNodeConformance)|TestTransactionalMailPhaseCertification)$$
 
 integration-postgres:
@@ -217,7 +217,7 @@ phase-access-onboarding: check
 	trap cleanup EXIT INT TERM; \
 	$(COMPOSE) up --detach --wait postgres; \
 	PROCTOR_TEST_DATABASE_URL='$(PROCTOR_TEST_DATABASE_URL)' \
-		$(GO_TEST) -tags=integration ./app -run '^TestAccessAndOnboardingServerPhaseCertification$$' -count=1; \
+		$(GO_TEST) -tags=integration ./integration -run '^TestAccessAndOnboardingServerPhaseCertification$$' -count=1; \
 	PROCTOR_TEST_DATABASE_URL='$(PROCTOR_TEST_DATABASE_URL)' \
 		$(GO_TEST) -tags=integration ./app -run '^TestJobRunnerRecoversNodeLossAroundADurableDomainCommit$$' -count=1; \
 	PROCTOR_TEST_DATABASE_URL='$(PROCTOR_TEST_DATABASE_URL)' \
@@ -247,7 +247,7 @@ phase-transactional-mail: check integration-postgres independent-modules mail-te
 	PROCTOR_TEST_DATABASE_URL='$(PROCTOR_TEST_DATABASE_URL)' \
 	PROCTOR_TEST_MAIL_SMTP_ADDRESS='$(PROCTOR_TEST_MAIL_SMTP_ADDRESS)' \
 	PROCTOR_TEST_MAILPIT_HTTP_URL='$(PROCTOR_TEST_MAILPIT_HTTP_URL)' \
-		$(GO_TEST) -tags=integration ./app -run '^TestTransactionalMailPhaseCertification$$' -count=1
+		$(GO_TEST) -tags=integration ./integration -run '^TestTransactionalMailPhaseCertification$$' -count=1
 
 integration-providers:
 	@set -eu; \
@@ -255,7 +255,7 @@ integration-providers:
 	trap cleanup EXIT INT TERM; \
 	$(COMPOSE) up --detach --wait postgres; \
 	PROCTOR_TEST_DATABASE_URL='$(PROCTOR_TEST_DATABASE_URL)' \
-		$(GO_TEST) -tags=integration ./app -run '^Test(CAS|OIDC)ExternalAuthenticationIntegration$$' -count=1
+		$(GO_TEST) -tags=integration ./integration -run '^Test(CAS|OIDC)ExternalAuthenticationIntegration$$' -count=1
 
 integration-realtime:
 	@set -eu; \
@@ -265,7 +265,7 @@ integration-realtime:
 	$(GO_TEST) -tags=integration ./cluster/memberlist -run '^(TestAdmissionFailureWithdrawsBeforeRetryAndJoinFailureRemainsNonfatal|TestLateIncompatiblePeerIsRejectedByContinuousAdmission|TestAbruptStableIDRestartReclaimsDeadAddress|TestMemberlistKeyringSupportsRollingPrimaryRotation|TestMemberlistPeriodicallyDiscoversAndJoinsPeersAfterStartup)$$' -count=1; \
 	PROCTOR_TEST_DATABASE_URL='$(PROCTOR_TEST_DATABASE_URL)' \
 	PROCTOR_TEST_REDIS_ADDRESS='$(PROCTOR_TEST_REDIS_ADDRESS)' \
-		$(GO_TEST) -tags=integration ./app -run '^TestWebSocket(Integration|TwoNodeConformance)$$' -count=1
+		$(GO_TEST) -tags=integration ./integration -run '^TestWebSocket(Integration|TwoNodeConformance)$$' -count=1
 
 conformance-postgres: integration-postgres
 

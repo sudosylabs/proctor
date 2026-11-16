@@ -15,9 +15,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// The methods in this file are the complete handwritten retry allowlist.
-// Methods absent here remain promoted from the generated embedded store and
-// are forwarded exactly once, including every mutation and transaction.
+// This file is the whole retry allowlist. Any method not here is forwarded
+// exactly once.
 
 func (s *institutionStore) Get(ctx context.Context, id model.InstitutionID) (*model.Institution, error) {
 	return retryCall1(ctx, s.layer, func() (*model.Institution, error) {
@@ -528,9 +527,8 @@ func (s *examFocusLossStore) RecordFocusLoss(
 	ctx context.Context,
 	input *store.ExamAttemptFocusLossSignal,
 ) (*store.ExamAttemptFocusLossResult, error) {
-	// The sequence makes a later client request replayable, but an in-process
-	// retry would reuse the already-completed Audit Event after an unknown commit.
-	// Let the durable client retry begin a fresh audited decision instead.
+	// Not retried: after an unknown commit an in-process retry would reuse
+	// the completed audit event. The client's retry starts a fresh audit.
 	return s.ExamFocusLossStore.RecordFocusLoss(ctx, input)
 }
 
@@ -1256,8 +1254,6 @@ func (s *servingNodeLeaseStore) Upsert(ctx context.Context, claim *store.Serving
 	return retryCall1(ctx, s.layer, func() (*store.ServingNodeLease, error) { return s.ServingNodeLeaseStore.Upsert(ctx, claim) })
 }
 
-// Delete withdraws only the exact incarnation, so replay is idempotent.
-// Get is a read.
 func (s *attemptEnvironmentStore) Get(ctx context.Context, attemptID model.ExamAttemptID) (*model.AttemptEnvironment, error) {
 	return retryCall1(ctx, s.layer, func() (*model.AttemptEnvironment, error) { return s.AttemptEnvironmentStore.Get(ctx, attemptID) })
 }
@@ -1278,6 +1274,7 @@ func (s *attemptRuntimeLeaseStore) Release(ctx context.Context, release *store.A
 	return retryCall0(ctx, s.layer, func() error { return s.AttemptRuntimeLeaseStore.Release(ctx, release) })
 }
 
+// Delete withdraws only the exact incarnation, so replay is idempotent.
 func (s *servingNodeLeaseStore) Delete(ctx context.Context, input *store.ServingNodeLeaseDeletion) error {
 	nodeID := input.NodeID
 	leaseID := input.LeaseID

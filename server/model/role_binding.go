@@ -11,9 +11,9 @@ import (
 	"time"
 )
 
-// RoleScopeType identifies the resource at which a role begins to apply.
-// Programme and ProgrammeLevel scopes are intentionally absent until their
-// authorization requirements are confirmed.
+// RoleScopeType is the resource at which a role starts to apply. Programme and
+// programme level scopes are left out until their authorization needs are
+// settled.
 type RoleScopeType string
 
 const (
@@ -22,13 +22,10 @@ const (
 	RoleScopeClass        RoleScopeType = "class"
 )
 
-// RoleBinding assigns one Role to one User at one scope for a time range.
-// Permission inheritance is evaluated by the authorization service from the
-// resource hierarchy and action rules; it is not copied into sessions.
-//
-// ScopeID remains a plain string because the target table depends on
-// ScopeType (polymorphic scope reference). Effective dates use StartsAt and
-// EndsAt OptionalTime like Affiliation.
+// RoleBinding assigns one role to one user at one scope for a time range.
+// Inheritance is evaluated by authorization from the resource hierarchy, never
+// copied into sessions. ScopeID is a plain string because its table depends
+// on ScopeType.
 type RoleBinding struct {
 	ID         RoleBindingID
 	CreatedAt  time.Time
@@ -36,9 +33,9 @@ type RoleBinding struct {
 	ArchivedAt OptionalTime
 	UserID     UserID
 	RoleID     RoleID
-	// OriginInvitationID identifies the Invitation package that first created
-	// this binding. Teacher packages also identify their owning Academic Unit
-	// membership so ending that membership can end only package bindings.
+	// OriginInvitationID is the invitation package that first created the
+	// binding. Teacher packages also name their academic unit membership, so
+	// ending that membership ends only package bindings.
 	OriginInvitationID         InvitationID
 	OriginAcademicUnitMemberID AcademicUnitMemberID
 	ScopeType                  RoleScopeType
@@ -47,7 +44,8 @@ type RoleBinding struct {
 	EndsAt                     OptionalTime // absent means open-ended
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
+// PrepareCreate stamps the ID and creation time and defaults StartsAt to it;
+// it does nothing on nil.
 func (rb *RoleBinding) PrepareCreate(id RoleBindingID, at time.Time) {
 	if rb == nil {
 		return
@@ -64,7 +62,7 @@ func (rb *RoleBinding) PrepareCreate(id RoleBindingID, at time.Time) {
 	}
 }
 
-// PrepareUpdate applies the application-selected transition time.
+// PrepareUpdate stamps the update time; bindings have no revision.
 func (rb *RoleBinding) PrepareUpdate(at time.Time) {
 	if rb == nil {
 		return
@@ -72,7 +70,7 @@ func (rb *RoleBinding) PrepareUpdate(at time.Time) {
 	rb.UpdatedAt = TimeUTC(at)
 }
 
-// Validate checks rehydrated role-binding state.
+// Validate checks the binding's fields, for new and stored values alike.
 func (rb *RoleBinding) Validate() error {
 	const where = "RoleBinding.Validate"
 	if rb == nil {
@@ -132,7 +130,7 @@ func (rb *RoleBinding) Validate() error {
 	return validateEffectiveInterval(where, "role_binding", details, rb.StartsAt, rb.EndsAt)
 }
 
-// IsValid reports whether the scope type is recognized.
+// IsValid reports whether the scope type is one this model knows.
 func (st RoleScopeType) IsValid() bool {
 	switch st {
 	case RoleScopeInstitution, RoleScopeAcademicUnit, RoleScopeClass:
@@ -142,7 +140,8 @@ func (st RoleScopeType) IsValid() bool {
 	}
 }
 
-// IsActiveAt reports whether the binding covers the given instant.
+// IsActiveAt reports whether now falls in [StartsAt, EndsAt) of an unarchived
+// binding.
 func (rb *RoleBinding) IsActiveAt(now time.Time) bool {
 	if rb == nil || rb.IsArchived() {
 		return false
@@ -157,12 +156,13 @@ func (rb *RoleBinding) IsActiveAt(now time.Time) bool {
 	return true
 }
 
-// IsArchived reports soft archive state.
+// IsArchived reports whether ArchivedAt is set; a nil binding is not archived.
 func (rb *RoleBinding) IsArchived() bool {
 	return rb != nil && rb.ArchivedAt.Valid
 }
 
-// End closes an open-ended binding at the given exclusive end time.
+// End sets the exclusive end time of an open-ended binding; ending it twice
+// fails.
 func (rb *RoleBinding) End(at time.Time) error {
 	if rb == nil {
 		return invalidModelError("RoleBinding.End", "role_binding", "", "role binding is nil", "")
@@ -176,7 +176,7 @@ func (rb *RoleBinding) End(at time.Time) error {
 	return rb.Validate()
 }
 
-// Auditable returns a deliberately safe audit projection.
+// Auditable returns the fields that are safe to record in the audit log.
 func (rb *RoleBinding) Auditable() map[string]any {
 	if rb == nil {
 		return map[string]any{}

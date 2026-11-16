@@ -14,10 +14,9 @@ import (
 	"io"
 )
 
-// DefaultProfilePictureCommand is the stable intent carried by a
-// profile_picture.generate_default Job. It lives beside Job so aggregate
-// persistence boundaries can verify that the immutable target agrees with the
-// User they are creating without depending on the application package.
+// DefaultProfilePictureCommand is the payload of a
+// profile_picture.generate_default job. It lives in model so persistence can
+// check that the target matches the user being created without importing app.
 type DefaultProfilePictureCommand struct {
 	UserID UserID `json:"user_id"`
 }

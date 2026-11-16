@@ -19,9 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Engine runs the registered Job types on one node: it claims Jobs from the
-// store, runs their handlers under a renewed lease, proposes recurrences and
-// runs periodic tasks. It does nothing until Start and stops at Close.
+// Engine runs the registered job types on one node. It does nothing until
+// Start and stops at Close.
 type Engine struct {
 	deps     Dependencies
 	registry *Registry
@@ -38,9 +37,8 @@ type Engine struct {
 	wg      sync.WaitGroup
 }
 
-// Dependencies are the collaborators and policy of the Job engine; New
-// validates them once, fills policy defaults, and the Engine keeps them in
-// deps.
+// Dependencies are the collaborators and policy of the engine, validated once
+// by New.
 type Dependencies struct {
 	Store       store.JobStore
 	Descriptors []Descriptor
@@ -66,8 +64,7 @@ type Policy struct {
 	ProposalRetryDelay time.Duration
 }
 
-// New validates deps once and constructs an idle Job engine; Start begins
-// claiming work.
+// New validates deps and returns an idle engine; Start begins claiming work.
 func New(deps Dependencies) (*Engine, error) {
 	registry, err := NewRegistry(deps.Descriptors)
 	if err != nil {
@@ -99,7 +96,8 @@ func New(deps Dependencies) (*Engine, error) {
 	}, nil
 }
 
-// Descriptor returns the immutable execution contract for a registered type.
+// Descriptor returns the descriptor of a registered type, or an error for an
+// unregistered one.
 func (r *Engine) Descriptor(jobType model.JobType) (Descriptor, error) {
 	if r == nil {
 		return Descriptor{}, errors.New("job engine is nil")
@@ -109,7 +107,7 @@ func (r *Engine) Descriptor(jobType model.JobType) (Descriptor, error) {
 	return descriptor, err
 }
 
-// Types returns the registered Job types in stable order.
+// Types returns the registered job types in stable order.
 func (r *Engine) Types() []model.JobType {
 	if r == nil {
 		return nil
@@ -117,9 +115,9 @@ func (r *Engine) Types() []model.JobType {
 	return r.registry.Types()
 }
 
-// Start launches, under ctx, as many claim loops per registered type as its
-// Concurrency, one proposal loop per recurrence and one loop per periodic
-// task. It fails when the engine was already started or closed.
+// Start launches as many claim loops per type as its Concurrency, one
+// proposal loop per recurrence and one loop per periodic task. It fails when
+// the engine was already started or closed.
 func (r *Engine) Start(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -166,9 +164,8 @@ func (r *Engine) Start(ctx context.Context) error {
 }
 
 // Close cancels claiming and every running execution, then waits for the
-// workers to return until ctx, the caller's shutdown budget, ends or the
-// longest registered Job timeout passes, whichever comes first. No execution
-// may legitimately outlive its own timeout, so the wait never exceeds it. An
+// workers until ctx ends or the longest registered job timeout passes,
+// whichever is first. No execution may legitimately outlive its timeout. An
 // ended wait returns an error while workers may still be returning.
 func (r *Engine) Close(ctx context.Context) error {
 	r.mu.Lock()

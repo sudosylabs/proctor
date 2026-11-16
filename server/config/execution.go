@@ -20,20 +20,15 @@ const MaximumExecutionHosts = 64
 
 var executionHostNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
 
-// Execution configures code execution: whether Exams may give candidates an
-// execution environment, the execution hosts Proctor dials, and how many
-// environments one node owns at once. The hosts and their tokens are
-// deployment secrets; the environment profiles an Exam names are managed by
-// administrators in the application. Changes take effect on restart.
+// Execution configures the execution hosts and per-node capacity. Environment
+// profiles are application data, not configuration. Changes need a restart.
 type Execution struct {
-	// Enabled lets Exams publish with execution. While it is off, no
-	// environment is created and publishing an Exam that asks for one is
-	// refused.
-	Enabled bool `json:"Enabled"`
-	// Hosts are the execution hosts environments are placed on.
-	Hosts []ExecutionHost `json:"Hosts"`
-	// Owners bounds how many environments this node owns at once; another
-	// node takes the rest.
+	// Enabled, when false, creates no environment and refuses to publish an
+	// exam that asks for one.
+	Enabled bool            `json:"Enabled"`
+	Hosts   []ExecutionHost `json:"Hosts"`
+	// Owners bounds the environments this node owns at once; other nodes take
+	// the rest.
 	Owners int `json:"Owners"`
 }
 

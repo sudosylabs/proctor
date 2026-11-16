@@ -32,7 +32,7 @@ func validMembershipPageKeyset(keyset store.MembershipPageKeyset, continued bool
 
 // orderMembershipPage orders a membership selection from table by the
 // keyset and continues it past afterID. The name order joins the member's
-// User and resumes from that User's current sort name.
+// user and resumes from that user's current sort name.
 func orderMembershipPage(query sq.SelectBuilder, table string, keyset store.MembershipPageKeyset, afterID string) sq.SelectBuilder {
 	direction, comparison := "ASC", ">"
 	if keyset.Descending {

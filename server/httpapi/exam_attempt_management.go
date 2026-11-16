@@ -124,7 +124,7 @@ type sittingCandidateStatusListResponse struct {
 	ExamSittingID   string                 `json:"exam_sitting_id"`
 	SittingState    model.ExamSittingState `json:"sitting_state"`
 	SittingRevision int64                  `json:"sitting_revision"`
-	// EnvironmentsWaitingCapacity counts the Sitting's execution
+	// EnvironmentsWaitingCapacity counts the sitting's execution
 	// environments waiting for a host with room, across every page.
 	EnvironmentsWaitingCapacity int64                                `json:"environments_waiting_capacity"`
 	Items                       []sittingCandidateStatusItemResponse `json:"items"`
@@ -140,8 +140,8 @@ type sittingCandidateEnvironmentResponse struct {
 	WaitingSince *string                         `json:"waiting_since,omitempty"`
 }
 
-// nativeSecuritySummaryResponse presents a Candidate's live native standing
-// to the Sitting manager without facts or application identities.
+// nativeSecuritySummaryResponse presents a candidate's live native standing
+// to the sitting manager without facts or application identities.
 type nativeSecuritySummaryResponse struct {
 	RetainedConditionRecords int64                        `json:"retained_condition_records"`
 	LiveCoverageAvailable    bool                         `json:"live_coverage_available"`
@@ -620,7 +620,6 @@ type replaceEnvironmentRequest struct {
 	ExpectedIncarnation int64 `json:"expected_incarnation"`
 }
 
-// replaceEnvironmentResponse is the environment after the request.
 type replaceEnvironmentResponse struct {
 	ExamAttemptID string                          `json:"exam_attempt_id"`
 	State         model.AttemptEnvironmentState   `json:"state"`

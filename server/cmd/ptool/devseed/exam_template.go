@@ -22,8 +22,8 @@ func examinationTemplate(index int) examTemplate {
 			Instructions: "Design a regression-testing exercise for a small library. The teaching team is still preparing the starter material.\n",
 		}
 	}
-	// Skip the bare drafts when rotating populated scenarios, ensuring that
-	// every template has published examples in the development profiles.
+	// Skip the bare drafts when rotating so every populated template gets
+	// published examples.
 	switch (index - (index+1)/3) % 3 {
 	case 0:
 		return programmingTemplate()

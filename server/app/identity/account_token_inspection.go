@@ -17,34 +17,31 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// InspectAccountTokenCommand names one fragment credential a hosted page
-// holds so it can say which address is involved before the person acts.
+// InspectAccountTokenCommand carries the fragment token a hosted page holds,
+// so the page can show which address is involved before the person acts.
 type InspectAccountTokenCommand struct {
 	Token  string
 	Source string
 }
 
 // EmailVerificationInspection is the address an active verification token
-// would confirm. It is the mailbox the link was delivered to.
+// would confirm, which is the mailbox the link was sent to.
 type EmailVerificationInspection struct {
 	Email string
 }
 
 // EmailChangeUndoInspection describes the change an active undo token would
-// reverse: the previous address it restores, the current address masked as
-// in the warning mail, and when the change was applied.
+// reverse; the current address is masked as in the warning mail.
 type EmailChangeUndoInspection struct {
 	RestoredEmail      string
 	MaskedCurrentEmail string
 	ChangedAt          time.Time
 }
 
-// InspectEmailVerification reads, without consuming, extending, or auditing,
-// the address an active verification token names. It is rate-limited by token
-// and source with the completion policy and conceals unknown, expired,
-// superseded, consumed, and mismatched tokens behind the completion's generic
-// invalid-credential outcome. The result is presentation only; completion
-// rechecks everything against authoritative PostgreSQL time.
+// InspectEmailVerification reads, without consuming or auditing, the address
+// an active verification token names. It is rate-limited like completion and
+// returns the same generic invalid-credential error for every bad token, so
+// it can't be used to probe token state. Completion rechecks everything.
 func (s *Service) InspectEmailVerification(
 	ctx context.Context,
 	_ invocation.Invocation,

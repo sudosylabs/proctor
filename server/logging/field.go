@@ -16,9 +16,8 @@ import (
 	logr "github.com/mattermost/logr/v2"
 )
 
-// Field can only be constructed through the bounded helpers in this package.
-// The backend representation remains hidden so callers cannot smuggle maps,
-// structs, or lazy serializers into operational logs.
+// Field is built only by this package's helpers, so callers cannot log maps,
+// structs or lazy serializers.
 type Field struct{ value logr.Field }
 
 func String(key, value string) Field      { return Field{value: logr.String(key, value)} }
@@ -30,9 +29,9 @@ func Duration(key string, value time.Duration) Field {
 }
 func Time(key string, value time.Time) Field { return Field{value: logr.Time(key, value)} }
 
-// Any deliberately accepts only bounded scalar values. Arbitrary maps and
-// structs are represented by type, preventing reflective serialization of
-// secrets or unbounded user-controlled graphs.
+// Any logs scalars, times and errors as themselves and anything else as its
+// type name, so a secret or an unbounded user-controlled value is never
+// serialized.
 func Any(key string, value any) Field {
 	switch typed := value.(type) {
 	case nil:

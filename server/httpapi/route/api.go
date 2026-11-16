@@ -28,10 +28,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// API is the compiled, sealed route catalog, served as one http.Handler. New
-// builds it and nothing can be registered afterwards. Around every matched
-// route it runs the request-wide middleware: request identity, security
-// headers, tracing, request logging and panic recovery.
+// API is the sealed route catalog served as one http.Handler; nothing can be
+// registered after New.
 type API struct {
 	handler                 http.Handler
 	router                  *mux.Router
@@ -51,8 +49,7 @@ type API struct {
 	middleware              middlewarePolicy
 }
 
-// Settings holds what the kernel needs from composition: the logging,
-// observation and localization ports and the server's request limits.
+// Settings configures New. Ports left nil are not used.
 type Settings struct {
 	Logger    *logging.Logger
 	Metrics   Metrics
@@ -69,23 +66,21 @@ type Settings struct {
 	// none.
 	MaxBodyBytes int64
 	// ReadTimeout and WriteTimeout repeat the server-wide connection
-	// deadlines. Streaming upload and binary download routes extend them by
-	// the time their declared size takes at the minimum admitted throughput.
-	// Zero leaves the corresponding deadline unchanged.
+	// deadlines, which streaming transfer routes extend by their declared
+	// size. Zero leaves the deadline unchanged.
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	// TrustedProxies lists reverse-proxy peers whose X-Forwarded-For and
 	// X-Request-ID headers are accepted. Empty trusts no peer.
 	TrustedProxies []netip.Prefix
-	// RecentAuthenticationTTL is how long ago a Principal may have
+	// RecentAuthenticationTTL is how long ago a principal may have
 	// authenticated and still satisfy a "recent" requirement.
 	RecentAuthenticationTTL time.Duration
 }
 
-// New validates the settings and compiles the resources into the sealed route
-// catalog. The authenticator resolves the credential of every route that
-// requires a Principal. It fails on an invalid setting, an untranslatable
-// kernel message, or a catalog the validation in validate.go refuses.
+// New compiles the resources into the sealed catalog. It fails on an invalid
+// setting, an untranslatable kernel message, or an invalid or ambiguous route
+// declaration.
 func New(settings Settings, authenticator Authenticator, resources ...Resource) (*API, error) {
 	if settings.Logger == nil {
 		return nil, errors.New("logger is required")
@@ -137,15 +132,13 @@ func New(settings Settings, authenticator Authenticator, resources ...Resource) 
 	return api, nil
 }
 
-// ServeHTTP negotiates the request's locale from Accept-Language and dispatches
-// it through the request-wide middleware to its route.
+// ServeHTTP negotiates the locale from Accept-Language, then dispatches.
 func (a *API) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	a.handler.ServeHTTP(writer, a.prepare(request))
 }
 
-// NotFoundHandler answers a path that a sibling browser module owns but
-// cannot serve with the API's not_found Problem Details, request correlation,
-// security headers, and request logging.
+// NotFoundHandler answers not_found for a path a sibling browser module owns
+// but cannot serve, with the API's security headers and request logging.
 func (a *API) NotFoundHandler() http.Handler {
 	handler := withMiddleware(http.HandlerFunc(a.handleNotFound), a.logger, a.middleware)
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -167,9 +160,8 @@ func (a *API) MethodNotAllowedHandler(allowed ...string) http.Handler {
 	})
 }
 
-// Routes returns a copy of the compiled catalog, sorted by path and then
-// method, for agreement checks and diagnostics. Changing the copy does not
-// change dispatch.
+// Routes returns a copy of the catalog sorted by path then method; changing
+// it does not change dispatch.
 func (a *API) Routes() []Entry {
 	routes := make([]Entry, len(a.routes))
 	for index, route := range a.routes {
@@ -215,11 +207,10 @@ func boundedHTTPMethod(method string) string {
 	}
 }
 
-// Close releases nothing, because the API owns no connection or goroutine. It
-// exists so composition can release every transport the same way.
+// Close is a no-op; the API owns no connection or goroutine.
 func (a *API) Close() error {
-	// The HTTP transport borrows the sibling WebSocket transport for upgrade
-	// dispatch. Node Runtime owns and closes that sibling explicitly.
+	// The WebSocket transport used for upgrades is borrowed; the runtime
+	// closes it.
 	return nil
 }
 
@@ -280,8 +271,6 @@ func writeJSON(writer http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(writer).Encode(value)
 }
 
-// Authenticator returns the authenticator the API resolves credentials with. It
-// exists for the tests of package httpapi, which prove that the production
-// constructor passes the application's Identity service; no production code
-// calls it.
+// Authenticator returns the authenticator New was given. Only the httpapi
+// tests call it.
 func (a *API) Authenticator() Authenticator { return a.authenticator }

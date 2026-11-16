@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-// AffiliationKind describes a person's institution-wide relationship. It does
-// not grant permissions and is deliberately non-exclusive.
+// AffiliationKind is a person's institution-wide relationship. It grants no
+// permission, and one person may hold several kinds at once.
 type AffiliationKind string
 
 const (
@@ -22,9 +22,8 @@ const (
 	AffiliationExternal AffiliationKind = "external"
 )
 
-// Affiliation records a time-bounded relationship between a User and the
-// institution. A person may simultaneously be both a student and a teacher, or
-// retain historical affiliations after either relationship ends.
+// Affiliation records a time-bounded relationship between a user and the
+// institution. Past affiliations are kept after they end.
 type Affiliation struct {
 	ID         AffiliationID
 	CreatedAt  time.Time
@@ -37,7 +36,8 @@ type Affiliation struct {
 	EndsAt     OptionalTime // absent means open-ended
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
+// PrepareCreate stamps the ID and creation time and defaults StartsAt to it;
+// it does nothing on nil.
 func (a *Affiliation) PrepareCreate(id AffiliationID, at time.Time) {
 	if a == nil {
 		return
@@ -57,7 +57,7 @@ func (a *Affiliation) PrepareCreate(id AffiliationID, at time.Time) {
 	}
 }
 
-// PrepareUpdate applies the application-selected transition time.
+// PrepareUpdate stamps the update time and bumps the revision.
 func (a *Affiliation) PrepareUpdate(at time.Time) {
 	if a == nil {
 		return
@@ -69,7 +69,7 @@ func (a *Affiliation) PrepareUpdate(at time.Time) {
 	a.Revision++
 }
 
-// Validate checks rehydrated affiliation state.
+// Validate checks the affiliation's fields, for new and stored values alike.
 func (a *Affiliation) Validate() error {
 	const where = "Affiliation.Validate"
 	if a == nil {
@@ -106,7 +106,8 @@ func (k AffiliationKind) IsValid() bool {
 	}
 }
 
-// IsActiveAt reports whether the affiliation covers the given instant.
+// IsActiveAt reports whether now falls in [StartsAt, EndsAt) of an unarchived
+// affiliation.
 func (a *Affiliation) IsActiveAt(now time.Time) bool {
 	if a == nil || a.IsArchived() {
 		return false
@@ -121,12 +122,13 @@ func (a *Affiliation) IsActiveAt(now time.Time) bool {
 	return true
 }
 
-// IsArchived reports soft archive state.
+// IsArchived reports whether ArchivedAt is set; a nil affiliation is not
+// archived.
 func (a *Affiliation) IsArchived() bool {
 	return a != nil && a.ArchivedAt.Valid
 }
 
-// Auditable returns a deliberately safe audit projection.
+// Auditable returns the fields that are safe to record in the audit log.
 func (a *Affiliation) Auditable() map[string]any {
 	if a == nil {
 		return map[string]any{}
@@ -156,7 +158,8 @@ func validateEffectiveInterval(where, modelName, details string, startsAt time.T
 
 var _ Auditable = (*Affiliation)(nil)
 
-// End closes an open-ended affiliation at the given exclusive end time.
+// End sets the exclusive end time of an open-ended affiliation; ending it twice
+// fails.
 func (a *Affiliation) End(at time.Time) error {
 	if a == nil {
 		return invalidModelError("Affiliation.End", "affiliation", "", "affiliation is nil", "")

@@ -19,22 +19,22 @@ import (
 )
 
 // sessionLengthTestLimits mirror the deployment defaults the fixtures use: a
-// seven-day idle and thirty-day absolute Session.
+// seven-day idle and thirty-day absolute session.
 var sessionLengthTestLimits = model.SessionLengthLimits{
 	IdleMinimumMinutes: 16, IdleDefaultMinutes: 10080, IdleMaximumMinutes: 10080,
 	AbsoluteMinimumMinutes: 16, AbsoluteDefaultMinutes: 43200, AbsoluteMaximumMinutes: 43200,
 }
 
-// SessionLengthSQLProbe ages one Session and its credentials by moving every
-// instant back, as a Session signed in long ago would be.
+// SessionLengthSQLProbe ages one session and its credentials by moving every
+// instant back, as a session signed in long ago would be.
 type SessionLengthSQLProbe struct {
 	AgeSession func(*testing.T, context.Context, model.SessionID, time.Duration)
 }
 
-// TestAccessPolicySessionLengthStore proves that the policy's Session lengths
+// TestAccessPolicySessionLengthStore proves that the policy's session lengths
 // persist, are refused outside the deployment bounds, pull the deadlines of
-// live Sessions and their credentials in when shortened in the same
-// replacement, and never extend a running Session. It needs a pristine
+// live sessions and their credentials in when shortened in the same
+// replacement, and never extend a running session. It needs a pristine
 // installation.
 func TestAccessPolicySessionLengthStore(t *testing.T, ss store.Store, probes ...SessionLengthSQLProbe) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -72,8 +72,8 @@ func TestAccessPolicySessionLengthStore(t *testing.T, ss store.Store, probes ...
 	require.Equal(t, administrator, result.SessionDeadlineChanges[0].UserID)
 	require.True(t, containsSessionID(result.SessionDeadlineChanges[0].SessionIDs, live.ID))
 	if aged != nil {
-		// A Session older than the new absolute length has ended, yet it
-		// still reads back as a valid Session.
+		// A session older than the new absolute length has ended, yet it
+		// still reads back as a valid session.
 		require.True(t, containsSessionID(result.SessionDeadlineChanges[0].SessionIDs, aged.ID))
 		ended, getErr := ss.Session().Get(ctx, aged.ID)
 		require.NoError(t, getErr)

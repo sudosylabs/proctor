@@ -35,7 +35,6 @@ type Log struct {
 	Targets         []LogTarget `json:"Targets"`
 }
 
-// validateLog checks the logging queue, timeouts, and every target.
 func validateLog(log Log, add func(string, string)) {
 	if log.MaxFieldBytes < 256 || log.MaxFieldBytes > 1<<20 {
 		add("log.max_field_bytes", "must be between 256 and 1048576")

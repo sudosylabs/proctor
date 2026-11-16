@@ -24,9 +24,9 @@ type MFADisableResult struct {
 	AccessTokenHashes []string
 }
 
-// MFASecurityNotice is the complete durable ordinary-mail intent coupled to
-// one successful MFA security transition. It deliberately carries no MFA
-// secret, encrypted credential state, recovery code, or recovery-code hash.
+// MFASecurityNotice is the mail sent with a successful MFA change. It
+// deliberately carries no secret, encrypted credential, recovery code or
+// recovery-code hash.
 type MFASecurityNotice struct {
 	Occurrence *model.MailOccurrence
 	Delivery   *model.MailDelivery
@@ -75,10 +75,10 @@ type MFASecretKeyUsage struct {
 	Credentials int64
 }
 
-// MFAStore owns the encrypted TOTP credential, hashed recovery codes, replay
-// prevention, and the session-strength changes coupled to MFA lifecycle.
-// Activation and Session upgrade use UTC microsecond decision instants and
-// reject a pending credential or Session exactly at its expiry.
+// MFAStore persists the encrypted TOTP credential, hashed recovery codes and
+// used time steps, and changes session strength with them. Activation and
+// session upgrade compare at UTC microsecond precision and reject a pending
+// credential or session exactly at its expiry.
 type MFAStore interface {
 	GetRecoveryState(context.Context, model.UserID) (*model.UserMFARecovery, error)
 	SavePending(context.Context, *MFAPendingEnrollment) (*model.MFACredential, error)
@@ -90,28 +90,27 @@ type MFAStore interface {
 	UpgradeSession(context.Context, *MFASessionUpgrade) ([]string, error)
 	ReplaceRecoveryCodes(context.Context, *MFARecoveryCodesRegeneration) error
 	CountRecoveryCodes(context.Context, model.UserID) (int, error)
-	// SummarizeRecoveryCodes describes the User's live recovery-code set.
 	SummarizeRecoveryCodes(context.Context, model.UserID) (*MFARecoveryCodeSummary, error)
-	// InspectKeyState reads the durable primary-key fence with, per sealing
-	// key, how many unarchived credentials hold a secret sealed with it,
-	// ordered by key ID. Startup uses it to prove the configured key ring can
-	// open every secret and write under the fence.
+	// InspectKeyState returns the primary-key fence and, per key in ID order,
+	// how many unarchived credentials it seals. Startup uses it to prove the
+	// configured key ring can open every secret and write under the fence.
 	InspectKeyState(context.Context) (*MFAKeyState, error)
 	// StartRekey refuses while another rekey is queued or running, advances
 	// the primary-key fence, queues the Job, and completes its audit.
 	StartRekey(context.Context, *MFARekeyStart) (*MFARekeyOperation, error)
-	// ListRekeyTargets pages the live credentials sealed with another key
-	// than the fenced primary; a stale fence is a conflict.
+	// ListRekeyTargets pages live credentials sealed with a key other than the
+	// fenced primary; a stale fence is a conflict.
 	ListRekeyTargets(context.Context, *MFARekeyTargetPageRequest) (*MFARekeyTargetPage, error)
 	// ReplaceRekeyTarget reports whether it re-sealed the credential; a
 	// credential archived or re-sealed meanwhile is skipped, and a stale
 	// fence is a conflict.
 	ReplaceRekeyTarget(context.Context, *MFARekeyReplacement) (bool, error)
-	// ProveRekey counts the live credentials still sealed with another key
-	// than the fenced primary, and with the retiring key.
+	// ProveRekey counts live credentials still sealed with a non-primary key,
+	// and with the retiring key.
 	ProveRekey(context.Context, *MFARekeyProofRequest) (*MFARekeyProof, error)
 	Disable(context.Context, *MFADisablement) (*MFADisableResult, error)
-	// SeedPending is an unaudited fixture write; production code never calls it.
+	// SeedPending is an unaudited test fixture write; production code never
+	// calls it.
 	SeedPending(context.Context, *model.MFACredential) (*model.MFACredential, error)
 }
 
@@ -130,11 +129,9 @@ type MFASessionUpgrade struct {
 	Now       time.Time
 }
 
-// MFARecoveryCodeSummary describes one User's live recovery-code set: the
-// codes that regeneration, disablement, or reset has not archived. Issued
-// counts consumed and unconsumed codes alike, so it stays the size of the set
-// the User was given even if the configured count later changes. GeneratedAt
-// is the newest code's creation time and zero for an empty set.
+// MFARecoveryCodeSummary describes a user's unarchived recovery codes. Issued
+// counts used codes too, so it stays the size of the set the user was given
+// even if the configured count changes. GeneratedAt is zero for an empty set.
 type MFARecoveryCodeSummary struct {
 	Remaining   int
 	Issued      int

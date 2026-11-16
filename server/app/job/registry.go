@@ -17,8 +17,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// Registry is the closed set of Job types an Engine runs. It is fixed when
-// built and hands out copies, so nothing can change a registered Descriptor.
+// Registry is the closed set of job types an engine runs. It hands out
+// copies, so nothing can change a registered Descriptor.
 type Registry struct {
 	descriptors map[model.JobType]Descriptor
 	types       []model.JobType
@@ -78,8 +78,8 @@ func NewRegistry(values []Descriptor) (*Registry, error) {
 	return registry, nil
 }
 
-// Descriptor returns a copy of the Descriptor registered for jobType,
-// including its Handler, or an error when the type is not registered.
+// Descriptor returns a copy of the Descriptor registered for jobType, or an
+// error when it is not registered.
 func (r *Registry) Descriptor(jobType model.JobType) (Descriptor, error) {
 	descriptor, ok := r.descriptors[jobType]
 	if !ok {
@@ -91,13 +91,13 @@ func (r *Registry) Descriptor(jobType model.JobType) (Descriptor, error) {
 	return descriptor, nil
 }
 
-// Types returns the registered Job types in sorted order.
+// Types returns the registered job types in sorted order.
 func (r *Registry) Types() []model.JobType {
 	return append([]model.JobType(nil), r.types...)
 }
 
-// MaximumTimeout returns the longest Timeout of any registered type, the
-// longest an Engine waits for its workers when it closes.
+// MaximumTimeout returns the longest registered Timeout, which bounds how
+// long an engine waits for its workers at Close.
 func (r *Registry) MaximumTimeout() time.Duration {
 	var maximum time.Duration
 	for _, descriptor := range r.descriptors {

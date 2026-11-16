@@ -36,10 +36,8 @@ type managerExamIntegrityDiscrepancyData struct {
 	RecordedAt    string `json:"recorded_at"`
 }
 
-// NewExamIntegrityDiscrepancyRecordedEvent tells viewers of a Submission that
-// an Integrity Discrepancy was recorded against it: a Focus Loss claim that
-// arrived after the Attempt or Sitting had ended. The payload carries
-// identities and the receipt time only, not the claim's duration or source.
+// NewExamIntegrityDiscrepancyRecordedEvent carries identities and the receipt
+// time only, not the claim's duration or source.
 func NewExamIntegrityDiscrepancyRecordedEvent(
 	submissionID model.SubmissionID,
 	sittingID model.ExamSittingID,
@@ -87,9 +85,9 @@ type candidateStudentResultReleasedData struct {
 	ChangedAt     string `json:"changed_at"`
 }
 
-// ExamIntegrityReviewEventFact is the complete bounded lifecycle fact shared
-// by manager Review events and the candidate release notification. It excludes
-// decisions, rationale, evidence, private notes, and student remarks.
+// ExamIntegrityReviewEventFact is shared by the manager review events and the
+// candidate release event. It excludes decisions, rationale, evidence, private
+// notes and student remarks.
 type ExamIntegrityReviewEventFact struct {
 	SubmissionID model.SubmissionID
 	AttemptID    model.ExamAttemptID
@@ -101,15 +99,14 @@ type ExamIntegrityReviewEventFact struct {
 	ChangedAt    time.Time
 }
 
-// NewExamIntegrityReviewChangedEvent tells those who may view the Submission
-// that its Integrity Review changed, in any state.
+// NewExamIntegrityReviewChangedEvent is published for a change in any review
+// state.
 func NewExamIntegrityReviewChangedEvent(fact ExamIntegrityReviewEventFact) (Event, error) {
 	return newManagerExamIntegrityReviewEvent(examIntegrityReviewChangedMessage.name, fact)
 }
 
-// NewExamIntegrityReviewFinalizedEvent tells those who may view the
-// Submission that its Integrity Review was finalized. It refuses a Review
-// that is not finalized and still withheld.
+// NewExamIntegrityReviewFinalizedEvent refuses a review that is not finalized
+// and still withheld.
 func NewExamIntegrityReviewFinalizedEvent(fact ExamIntegrityReviewEventFact) (Event, error) {
 	if fact.State != model.SubmissionReviewFinalized || fact.ReleaseState != model.SubmissionReviewWithheld {
 		return Event{}, errors.New("finalized Integrity Review event requires a withheld finalized Review")
@@ -117,9 +114,8 @@ func NewExamIntegrityReviewFinalizedEvent(fact ExamIntegrityReviewEventFact) (Ev
 	return newManagerExamIntegrityReviewEvent(examIntegrityReviewFinalizedMessage.name, fact)
 }
 
-// NewExamStudentResultReleasedEvent tells those who may view the Submission
-// that its Student Result was released. It refuses a Review that is not
-// finalized and released.
+// NewExamStudentResultReleasedEvent refuses a review that is not finalized
+// and released.
 func NewExamStudentResultReleasedEvent(fact ExamIntegrityReviewEventFact) (Event, error) {
 	if fact.State != model.SubmissionReviewFinalized || fact.ReleaseState != model.SubmissionReviewReleased {
 		return Event{}, errors.New("released Student Result event requires a released finalized Review")
@@ -127,8 +123,7 @@ func NewExamStudentResultReleasedEvent(fact ExamIntegrityReviewEventFact) (Event
 	return newManagerExamIntegrityReviewEvent(examStudentResultReleasedMessage.name, fact)
 }
 
-// NewCandidateStudentResultReleasedEvent tells the candidate alone that
-// their Student Result was released. It carries the Review's identity and
+// NewCandidateStudentResultReleasedEvent carries the review's identity and
 // state, never its content.
 func NewCandidateStudentResultReleasedEvent(fact ExamIntegrityReviewEventFact) (Event, error) {
 	if !fact.SubmissionID.IsValid() ||

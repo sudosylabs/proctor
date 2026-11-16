@@ -14,13 +14,12 @@ import (
 	"slices"
 )
 
-// NativeRegistryDigest identifies the reviewed capability registry: the
-// registry document Desktop generates from its Rust types, proctor-desktop
-// native/crates/prctr-capabilities/registry/registry.json. The digest names
-// the exact version, so no Desktop commit is recorded here. It does not
-// certify any Desktop release or native implementation; a release's own
-// registry must have exactly this digest. New registry meaning requires
-// coordinated server and Desktop admission.
+// NativeRegistryDigest pins the reviewed capability registry, the document
+// Desktop generates at proctor-desktop
+// native/crates/prctr-capabilities/registry/registry.json. A release's own
+// registry must have exactly this digest; it certifies no release or native
+// implementation. New registry meaning needs a coordinated server and Desktop
+// change.
 const NativeRegistryDigest = "sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d"
 
 type NativeMode string
@@ -44,9 +43,9 @@ func NativeFamilies() []NativeFamilyID {
 	return ids
 }
 
-// NativeFamilyPolicy is a closed immutable union. Typed fields are private so
-// callers cannot retain aliases or attach fields owned by another family.
-// Decode the complete authored value; changes create a new value.
+// NativeFamilyPolicy is a closed immutable union. Its fields are private so
+// callers cannot keep aliases or attach another family's fields; decode the
+// whole authored value, and make a new value to change it.
 type NativeFamilyPolicy struct{ fields nativeFamilyFields }
 
 type nativeFamilyFields struct {
@@ -61,8 +60,8 @@ type nativeFamilyFields struct {
 	Rule                      NativeVirtualizationRule `json:"rule"`
 	RequireReady              bool                     `json:"require_ready"`
 	ConcurrentUseCheck        NativeConcurrentUseCheck `json:"concurrent_use_check"`
-	// Outcome is what an enforce occurrence of the family leads to: a Flag,
-	// or a Flag and a Suspension. It is flag unless the family enforces.
+	// Outcome is what an enforce occurrence of the family leads to: a flag, or
+	// a flag and a suspension. It is flag unless the family enforces.
 	Outcome IntegrityOutcome `json:"outcome"`
 }
 
@@ -123,8 +122,8 @@ func (p NativeFamilyPolicy) MarshalJSON() ([]byte, error) {
 	}
 
 	f := p.fields
-	// This closed encoding map is constructed only from the typed family value;
-	// it is never populated with arbitrary client members.
+	// The map is built only from the typed family value, never from client
+	// members.
 	result := map[string]any{"id": f.ID, "mode": f.Mode, "outcome": f.Outcome}
 	definition, _ := nativeFamilyDefinitionOf(f.ID)
 	definition.members(f, result)
@@ -147,7 +146,8 @@ func (p *NativeFamilyPolicy) UnmarshalJSON(document []byte) error {
 		return errNativePolicy
 	}
 	// A complete family has exactly its own members. Re-encoding rejects null,
-	// omitted boolean/default fields, foreign-family members and case aliases.
+	// omitted boolean or default fields, other families' members and case
+	// aliases.
 	var supplied any
 	if json.Unmarshal(document, &supplied) != nil {
 		return errNativePolicy
@@ -164,9 +164,9 @@ func (p *NativeFamilyPolicy) UnmarshalJSON(document []byte) error {
 	return nil
 }
 
-// NativeSecurityPolicy is the exact authored optional-family selection plus
-// an immutable mandatory baseline. Catalog resolution is a separate admission
-// operation; structurally valid IDs are not thereby registered or authorized.
+// NativeSecurityPolicy is the authored optional-family selection plus the
+// immutable mandatory baseline. Catalog resolution happens at admission; a
+// well-formed ID is not thereby registered or authorized.
 type NativeSecurityPolicy struct {
 	RegistryDigest  string                      `json:"registry_digest"`
 	BaselineID      string                      `json:"baseline_id"`
@@ -175,10 +175,10 @@ type NativeSecurityPolicy struct {
 }
 
 // NativeScreenRecordingPolicy turns on Desktop's screen evidence recorder for
-// an Exam. Desktop then records the whole session on the device, from the
-// moment the candidate window opens until submission, and uploads only the
-// ranges the server requests. It is off by default, because a clip can show
-// anything on the candidate's screen.
+// an exam. Desktop records the whole session on the device, from when the
+// candidate window opens until submission, and uploads only the ranges the
+// server requests. It is off by default because a clip can show anything on
+// the candidate's screen.
 type NativeScreenRecordingPolicy struct {
 	Enabled bool `json:"enabled"`
 }
@@ -207,8 +207,8 @@ func (p NativeSecurityPolicy) Validate() error {
 
 func (p NativeSecurityPolicy) Clone() NativeSecurityPolicy {
 	p.Families = slices.Clone(p.Families)
-	// Family fields are private immutable values. Only decoders construct lists;
-	// no accessor exposes their backing arrays, so the values can be shared.
+	// The family values are private and immutable and no accessor exposes
+	// their backing arrays, so sharing them is safe.
 	return p
 }
 

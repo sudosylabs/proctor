@@ -18,12 +18,11 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ResolveBootstrapProtection decides the proof the one-time bootstrap
-// command requires. The operator's configured secret wins. Otherwise an
-// installation that has bootstrapped needs none, a development installation
-// gets a fresh secret written to output, and any other uninitialized
-// installation refuses to start, because it would be claimable by whoever
-// reaches it first.
+// ResolveBootstrapProtection decides the secret the bootstrap command needs.
+// A configured secret wins; a bootstrapped installation needs none; a
+// development one gets a fresh secret written to output. Any other
+// uninitialized installation refuses to start, since whoever reached it first
+// could claim it.
 func ResolveBootstrapProtection(
 	ctx context.Context,
 	secret string,

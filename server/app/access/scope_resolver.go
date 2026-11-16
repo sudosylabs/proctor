@@ -16,8 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ScopeResolverDependencies are the collaborators of ScopeResolver;
-// NewScopeResolver validates them once and ScopeResolver keeps them in deps.
+// ScopeResolverDependencies configures NewScopeResolver.
 type ScopeResolverDependencies struct {
 	Institutions    store.InstitutionStore
 	AcademicUnits   store.AcademicUnitStore
@@ -28,19 +27,20 @@ type ScopeResolverDependencies struct {
 	Sittings        store.ExamSittingStore
 	Submissions     store.ExamSubmissionStore
 	AcademicPeriods store.AcademicPeriodStore
-	// Programmes and ProgrammeLevels are optional; without them Programme and
-	// Programme Level resources do not resolve.
+	// Programmes and ProgrammeLevels are optional; without them programme and
+	// programme level resources do not resolve.
 	Programmes      store.ProgrammeStore
 	ProgrammeLevels store.ProgrammeLevelStore
 }
 
-// ScopeResolver loads the current Institution, Academic Unit ancestry and
-// Class of a Resource for an authorization decision.
+// ScopeResolver loads a resource's institution, academic unit ancestry and
+// class for an authorization decision. Anything archived along the way reads
+// as resource.not_found.
 type ScopeResolver struct {
 	deps ScopeResolverDependencies
 }
 
-// NewScopeResolver validates its dependencies and returns the ScopeResolver.
+// NewScopeResolver fails when a required store is missing.
 func NewScopeResolver(deps ScopeResolverDependencies) (*ScopeResolver, error) {
 	if deps.Institutions == nil ||
 		deps.AcademicUnits == nil ||
@@ -96,7 +96,6 @@ func (r *ScopeResolver) resolve(
 	return resolved, nil
 }
 
-// listScopeAncestors loads the Academic Unit ancestry of a scoped resource and rejects an empty chain.
 func (r *ScopeResolver) listScopeAncestors(
 	ctx context.Context,
 	academicUnitID model.AcademicUnitID,
@@ -113,7 +112,6 @@ func (r *ScopeResolver) listScopeAncestors(
 	return units, nil
 }
 
-// applyScopeAncestors records the Institution, target unit and live ancestry, rejecting an archived ancestor.
 func applyScopeAncestors(
 	resolved *resolvedAuthorizationResource,
 	units []*model.AcademicUnit,
@@ -131,7 +129,6 @@ func applyScopeAncestors(
 	return nil
 }
 
-// resolveAcademicUnitScope loads and applies the ancestry of a resource owned by one Academic Unit.
 func (r *ScopeResolver) resolveAcademicUnitScope(
 	ctx context.Context,
 	resolved *resolvedAuthorizationResource,
@@ -147,7 +144,6 @@ func (r *ScopeResolver) resolveAcademicUnitScope(
 	return applyScopeAncestors(resolved, units, academicUnitID, notFoundResource)
 }
 
-// resolveInstitution resolves a live Institution scope.
 func (r *ScopeResolver) resolveInstitution(ctx context.Context, resource model.Resource, resolved *resolvedAuthorizationResource) error {
 	institution, err := r.deps.Institutions.Get(ctx, model.InstitutionID(resource.ID))
 	if err != nil {
@@ -160,7 +156,6 @@ func (r *ScopeResolver) resolveInstitution(ctx context.Context, resource model.R
 	return nil
 }
 
-// resolveAcademicUnit resolves a live Academic Unit and its ancestry.
 func (r *ScopeResolver) resolveAcademicUnit(ctx context.Context, resource model.Resource, resolved *resolvedAuthorizationResource) error {
 	units, err := r.deps.AcademicUnits.ListAncestors(ctx, model.AcademicUnitID(resource.ID))
 	if err != nil {
@@ -172,7 +167,6 @@ func (r *ScopeResolver) resolveAcademicUnit(ctx context.Context, resource model.
 	return applyScopeAncestors(resolved, units, model.AcademicUnitID(resource.ID), "academic_unit")
 }
 
-// resolveAcademicPeriod resolves a live Academic Period through its owning Institution or Academic Unit.
 func (r *ScopeResolver) resolveAcademicPeriod(ctx context.Context, resource model.Resource, resolved *resolvedAuthorizationResource) error {
 	period, err := r.deps.AcademicPeriods.Get(ctx, model.AcademicPeriodID(resource.ID))
 	if err != nil {
@@ -205,7 +199,6 @@ func (r *ScopeResolver) resolveAcademicPeriod(ctx context.Context, resource mode
 	)
 }
 
-// resolveProgramme resolves a live Programme through its owning Academic Unit.
 func (r *ScopeResolver) resolveProgramme(ctx context.Context, resource model.Resource, resolved *resolvedAuthorizationResource) error {
 	if r.deps.Programmes == nil {
 		return UnavailableError(errors.New("Programme persistence is required"))
@@ -220,7 +213,6 @@ func (r *ScopeResolver) resolveProgramme(ctx context.Context, resource model.Res
 	return r.resolveAcademicUnitScope(ctx, resolved, programme.AcademicUnitID, "programme_academic_unit", "programme")
 }
 
-// resolveProgrammeLevel resolves a live Programme Level through its Programme's owning Academic Unit.
 func (r *ScopeResolver) resolveProgrammeLevel(ctx context.Context, resource model.Resource, resolved *resolvedAuthorizationResource) error {
 	if r.deps.ProgrammeLevels == nil || r.deps.Programmes == nil {
 		return UnavailableError(errors.New("Programme Level persistence is required"))
@@ -251,7 +243,8 @@ func (r *ScopeResolver) resolveProgrammeLevel(ctx context.Context, resource mode
 	)
 }
 
-// resolveClass resolves a live Class, its ancestry and the applicability of its Academic Period.
+// resolveClass also refuses a class whose academic period does not apply to
+// the class's unit.
 func (r *ScopeResolver) resolveClass(ctx context.Context, resource model.Resource, resolved *resolvedAuthorizationResource) error {
 	class, err := r.deps.Classes.Get(ctx, model.ClassID(resource.ID))
 	if err != nil {
@@ -297,7 +290,6 @@ func (r *ScopeResolver) resolveClass(ctx context.Context, resource model.Resourc
 	return nil
 }
 
-// resolveExam resolves an Exam through its owning Academic Unit.
 func (r *ScopeResolver) resolveExam(ctx context.Context, resource model.Resource, resolved *resolvedAuthorizationResource) error {
 	if r.deps.Exams == nil {
 		return UnavailableError(errors.New("exam persistence is required"))
@@ -309,7 +301,6 @@ func (r *ScopeResolver) resolveExam(ctx context.Context, resource model.Resource
 	return r.resolveAcademicUnitScope(ctx, resolved, exam.AcademicUnitID, "exam_academic_unit", "exam")
 }
 
-// resolveExamSitting resolves an Exam Sitting through its Exam's owning Academic Unit.
 func (r *ScopeResolver) resolveExamSitting(ctx context.Context, resource model.Resource, resolved *resolvedAuthorizationResource) error {
 	snapshot, err := r.deps.Sittings.Resolve(ctx, model.ExamSittingID(resource.ID))
 	if err != nil {
@@ -325,7 +316,6 @@ func (r *ScopeResolver) resolveExamSitting(ctx context.Context, resource model.R
 	return r.resolveAcademicUnitScope(ctx, resolved, exam.AcademicUnitID, "exam_sitting_academic_unit", "exam_sitting")
 }
 
-// resolveSubmission resolves a Submission through its ownership projection's Academic Unit.
 func (r *ScopeResolver) resolveSubmission(ctx context.Context, resource model.Resource, resolved *resolvedAuthorizationResource) error {
 	submissionID, err := model.ParseSubmissionID(resource.ID)
 	if err != nil {
@@ -349,7 +339,7 @@ func (r *ScopeResolver) resolveSubmission(ctx context.Context, resource model.Re
 	return r.resolveAcademicUnitScope(ctx, resolved, ownership.AcademicUnitID, "submission_academic_unit", "submission")
 }
 
-// resolveUser resolves an active User within the singleton Institution.
+// resolveUser reports a disabled user as resource.not_found.
 func (r *ScopeResolver) resolveUser(ctx context.Context, resource model.Resource, resolved *resolvedAuthorizationResource) error {
 	user, err := r.deps.Users.Get(ctx, model.UserID(resource.ID))
 	if err != nil {

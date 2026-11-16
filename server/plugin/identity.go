@@ -34,7 +34,7 @@ var ErrInvalidCallback = errors.New("external authentication callback is invalid
 
 // IdentityProvider authenticates a person with one external protocol and
 // returns only a normalized Assertion. Account resolution, provisioning,
-// audit and Sessions stay in Proctor.
+// audit and sessions stay in Proctor.
 //
 // Begin returns the redirect that starts authentication. State extracts the
 // state value from a callback so Proctor can find and consume the matching
@@ -62,7 +62,6 @@ type IdentityProviderType interface {
 // owns its identity and whether it may create accounts; everything else is
 // the protocol's own, in two documents only the plugin reads.
 type IdentityProviderDefinition struct {
-	// ID is the provider's configured identifier.
 	ID string
 	// AutoProvision is whether Proctor may create an account for a person
 	// this provider authenticates, so the protocol must release enough to
@@ -80,7 +79,6 @@ type IdentityProviderDefinition struct {
 
 // BeginRequest asks a provider to start authentication.
 type BeginRequest struct {
-	// CallbackURL is where the provider sends the browser back.
 	CallbackURL string
 	// State is the opaque value the provider must return in the callback.
 	State string

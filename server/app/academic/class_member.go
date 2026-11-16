@@ -43,8 +43,8 @@ type EndClassMemberCommand struct {
 	Batch          batchitem.Item
 }
 
-// publishMembershipChanged publishes a committed Class Membership change of
-// the candidate and reports a failed publication; the use case still succeeds.
+// publishMembershipChanged reports a failed publication without failing the
+// use case.
 func (s *Service) publishMembershipChanged(
 	ctx context.Context,
 	candidateID model.UserID,
@@ -58,7 +58,8 @@ func (s *Service) publishMembershipChanged(
 	}
 }
 
-// EnrollClassMember enrolls a User in a Class after authorizing the caller.
+// EnrollClassMember enrolls a user in a class, transferring them from another
+// class in the same period when needed; it needs class.members.manage.
 func (s *Service) EnrollClassMember(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -118,7 +119,6 @@ func (s *Service) EnrollClassMember(
 	return s.runClassEnrollment(ctx, inv, command, resource, plan, recipient, prepared, commandIdempotency, at)
 }
 
-// classEnrollmentPlan is the validated candidate membership and any membership it transfers from.
 type classEnrollmentPlan struct {
 	class         *model.Class
 	candidate     *model.ClassMember
@@ -126,7 +126,6 @@ type classEnrollmentPlan struct {
 	previousClass *model.Class
 }
 
-// prepareClassEnrollmentIdempotency prepares the enrollment command idempotency from its semantic fields.
 func prepareClassEnrollmentIdempotency(
 	inv invocation.Invocation,
 	command EnrollClassMemberCommand,
@@ -156,7 +155,8 @@ func prepareClassEnrollmentIdempotency(
 	)
 }
 
-// enrollClassMember runs one Store enrollment, mirrors replay to the batch, and reports whether it freshly mutated.
+// enrollClassMember mirrors replay to the batch and reports whether it
+// freshly mutated.
 func (s *Service) enrollClassMember(
 	ctx context.Context,
 	command EnrollClassMemberCommand,
@@ -170,7 +170,6 @@ func (s *Service) enrollClassMember(
 	return value, freshMutation, storeErr
 }
 
-// enrollRetainedClassMember replays a batch enrollment whose outcome the batch already retained.
 func (s *Service) enrollRetainedClassMember(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -288,7 +287,8 @@ func (s *Service) enrollRetainedClassMember(
 	return &model.ClassEnrollment{Membership: result.Membership, Previous: result.Previous}, nil
 }
 
-// planClassEnrollment validates the candidate membership and authorizes any active membership it transfers from.
+// planClassEnrollment also authorizes any membership the enrollment
+// transfers from.
 func (s *Service) planClassEnrollment(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -337,7 +337,6 @@ func (s *Service) planClassEnrollment(
 	return classEnrollmentPlan{class: class, candidate: candidate, previous: previous, previousClass: previousClass}, nil
 }
 
-// findTransferSource finds the User's active membership in the candidate's Academic Period, if the enrollment transfers.
 func (s *Service) findTransferSource(
 	ctx context.Context,
 	command EnrollClassMemberCommand,
@@ -382,7 +381,6 @@ func (s *Service) findTransferSource(
 	return previous, nil
 }
 
-// prepareEnrollmentNotice prepares the enrollment or transfer mail for the recipient.
 func (s *Service) prepareEnrollmentNotice(
 	command EnrollClassMemberCommand,
 	plan classEnrollmentPlan,
@@ -419,7 +417,8 @@ func (s *Service) prepareEnrollmentNotice(
 	return prepared, nil
 }
 
-// runClassEnrollment audits and stores the enrollment, nesting the source audit when it transfers a membership.
+// runClassEnrollment nests the source membership's audit when the
+// enrollment transfers.
 func (s *Service) runClassEnrollment(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -527,7 +526,7 @@ func (s *Service) runClassEnrollment(
 	return &model.ClassEnrollment{Membership: result.Membership, Previous: result.Previous}, nil
 }
 
-// EndClassMember ends a Class Membership after authorizing the caller.
+// EndClassMember needs class.members.manage.
 func (s *Service) EndClassMember(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -635,7 +634,6 @@ func (s *Service) EndClassMember(
 	return ended, nil
 }
 
-// prepareClassMemberEndIdempotency prepares the end command idempotency and binds its batch provenance.
 func prepareClassMemberEndIdempotency(inv invocation.Invocation, command EndClassMemberCommand) (*store.CommandIdempotency, error) {
 	commandIdempotency, err := idempotency.Prepare(inv, "class_member.end", command.IdempotencyKey, struct {
 		ID      string `json:"id"`
@@ -650,7 +648,8 @@ func prepareClassMemberEndIdempotency(inv invocation.Invocation, command EndClas
 	return commandIdempotency, nil
 }
 
-// endClassMember runs one Store end, mirrors replay to the batch, and reports whether it freshly mutated.
+// endClassMember mirrors replay to the batch and reports whether it freshly
+// mutated.
 func (s *Service) endClassMember(
 	ctx context.Context,
 	command EndClassMemberCommand,
@@ -664,7 +663,6 @@ func (s *Service) endClassMember(
 	return value, freshMutation, storeErr
 }
 
-// endRetainedClassMember replays a batch end whose outcome the batch already retained.
 func (s *Service) endRetainedClassMember(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -743,8 +741,8 @@ func (s *Service) authorizeClass(
 	return resource, nil
 }
 
-// ClassMemberStoreErrors translates Class Membership Store failures;
-// onboarding imports present them the same way.
+// ClassMemberStoreErrors maps class membership store failures; onboarding
+// imports use it too.
 var ClassMemberStoreErrors = apperror.AdministrationStoreTable(
 	"class_member",
 	"class.enrollment_conflict",
@@ -755,8 +753,8 @@ var ClassMemberStoreErrors = apperror.AdministrationStoreTable(
 	},
 )
 
-// ListClassMembersPageQuery opts into bounded membership enumeration. Each page is
-// authorized independently and explicit selectors preserve its effective filter.
+// ListClassMembersPageQuery selects one page of a class's memberships. Each
+// page is authorized on its own.
 type ListClassMembersPageQuery struct {
 	AfterStartAt time.Time
 	AfterUserID  model.UserID
@@ -765,8 +763,8 @@ type ListClassMembersPageQuery struct {
 	MembershipPageQuery
 }
 
-// ClassMemberPage is one page of a Class's memberships. The first page also
-// counts every membership the page's filters match.
+// ClassMemberPage is one page of a class's memberships; only the first page
+// is counted.
 type ClassMemberPage struct {
 	Members  []*model.ClassMember
 	HasMore  bool
@@ -774,7 +772,7 @@ type ClassMemberPage struct {
 	paging.Total
 }
 
-// ListClassMembersPage lists a page of Class Memberships after authorizing the caller.
+// ListClassMembersPage needs class.members.view.
 func (s *Service) ListClassMembersPage(
 	ctx context.Context,
 	inv invocation.Invocation,

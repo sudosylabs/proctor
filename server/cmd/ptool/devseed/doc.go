@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package devseed creates bounded synthetic development fixtures through the
-// public HTTP API. It owns scenario data, a private recovery journal, and a
-// loopback-only client; it never constructs a server or accesses its stores.
+// Package devseed seeds a development installation through the public HTTP
+// API of a loopback server. It never constructs a server or touches its
+// stores.
 package devseed

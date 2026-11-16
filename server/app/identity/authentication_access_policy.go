@@ -19,15 +19,13 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// sessionLifetimes are the effective idle and absolute lengths a Session gets
-// now.
 type sessionLifetimes struct {
 	Idle     time.Duration
 	Absolute time.Duration
 }
 
-// effectiveSessionLifetimes shortens the deployment defaults to the policy's
-// set lengths; the idle length never exceeds the absolute one.
+// effectiveSessionLifetimes lets the policy shorten, never lengthen, the
+// deployment defaults; idle never exceeds absolute.
 func effectiveSessionLifetimes(settings model.AccessPolicySettings, defaults SessionPolicy) sessionLifetimes {
 	result := sessionLifetimes{Idle: defaults.IdleTTL, Absolute: defaults.AbsoluteTTL}
 	if minutes := time.Duration(settings.SessionAbsoluteMinutes) * time.Minute; minutes > 0 && minutes < result.Absolute {
@@ -45,26 +43,22 @@ type externalProviderAdmissionPolicy struct {
 	InvitationAdmissionEnabled bool
 }
 
-// currentAuthenticationAccessPolicyDependencies are the collaborators of currentAuthenticationAccessPolicy;
-// newCurrentAuthenticationAccessPolicy validates them once and currentAuthenticationAccessPolicy keeps them in deps.
 type currentAuthenticationAccessPolicyDependencies struct {
 	Policies store.AccessPolicyStore
-	// MFAEnabled reports whether the deployment configuration enables
-	// two-step verification. While it is false the role holder requirement
-	// pauses instead of restricting everyone it covers.
+	// While MFAEnabled is false the role holder requirement pauses instead of
+	// restricting everyone it covers.
 	MFAEnabled  bool
 	Diagnostics *logging.Logger
 	Now         func() time.Time
 }
 
-// currentAuthenticationAccessPolicy answers the authentication entry points
-// from the current Access Policy. The answers only gate the entry point: each
-// terminal persistence operation rechecks the authoritative policy in its own
-// transaction.
+// currentAuthenticationAccessPolicy answers the sign-in entry points from the
+// current access policy. Its answers only gate entry: each terminal store
+// operation rechecks the policy in its own transaction.
 type currentAuthenticationAccessPolicy struct {
 	deps currentAuthenticationAccessPolicyDependencies
-	// pausedWarning reports the paused role holder requirement once per
-	// process rather than on every sign-in.
+	// pausedWarning logs the paused requirement once per process, not per
+	// sign-in.
 	pausedWarning sync.Once
 }
 
@@ -109,8 +103,6 @@ func (p *currentAuthenticationAccessPolicy) ExternalProviderAdmission(
 	}, nil
 }
 
-// AllowsDesktopAuthorization reports whether Desktop authorization may use
-// the password, or the provider protocol type and identifier.
 func (p *currentAuthenticationAccessPolicy) AllowsDesktopAuthorization(ctx context.Context, method, providerID string) (bool, error) {
 	policy, err := p.current(ctx)
 	if err != nil || !policy.DesktopAuthorizationEnabled {
@@ -143,15 +135,11 @@ func (p *currentAuthenticationAccessPolicy) AvailableExternalProviders(
 	return available, nil
 }
 
-// RequiresMFA reports whether the policy requires the User to use two-step
-// verification because they hold a current Role Binding at any scope. Every
-// sign-in, refresh and Desktop handoff that would otherwise grant
-// single-factor authority asks it. It reads the authoritative policy and Role
-// Bindings on every call; nothing is cached, so a newly granted role or a
-// policy change applies to the next sign-in or refresh. While the deployment
-// disables two-step verification the requirement pauses: nobody could satisfy
-// it, and restricting every role holder would leave no administrator able to
-// change the policy.
+// RequiresMFA reports whether the user holds a role binding that the policy
+// says needs two-step verification. Nothing is cached, so a new role or policy
+// change applies to the next sign-in or refresh. While the deployment disables
+// MFA the requirement pauses: nobody could satisfy it, and enforcing it would
+// leave no administrator able to change the policy.
 func (p *currentAuthenticationAccessPolicy) RequiresMFA(ctx context.Context, userID model.UserID) (bool, error) {
 	if !p.deps.MFAEnabled {
 		policy, err := p.current(ctx)
@@ -177,10 +165,8 @@ func (p *currentAuthenticationAccessPolicy) RequiresMFA(ctx context.Context, use
 	return p.deps.Policies.HasRoleHolderMFARequirement(ctx, userID, model.TimeUTC(p.deps.Now()))
 }
 
-// SessionLifetimes applies the policy's Session lengths to the deployment
-// lifetimes: a set length shortens its default, never lengthens it. It reads
-// the current policy on every call. Activity reaches
-// it only after the activity debounce, so the read stays bounded.
+// SessionLifetimes reads the policy on every call; activity updates reach it
+// only after the debounce, which keeps that read bounded.
 func (p *currentAuthenticationAccessPolicy) SessionLifetimes(ctx context.Context, defaults SessionPolicy) (sessionLifetimes, error) {
 	policy, err := p.current(ctx)
 	if err != nil {
@@ -201,24 +187,22 @@ func (p *currentAuthenticationAccessPolicy) current(ctx context.Context) (*model
 }
 
 // AccessPolicyProviderCapability is one configured external provider and
-// whether it may provision new Users.
+// whether it may provision new users.
 type AccessPolicyProviderCapability struct {
 	Descriptor    model.ExternalAuthenticationProvider
 	AutoProvision bool
 }
 
-// AccessPolicyCapabilitySnapshot is what this deployment can offer the Access
-// Policy: its external providers, durable mail and two-step verification.
+// AccessPolicyCapabilitySnapshot is what this deployment can offer the access
+// policy.
 type AccessPolicyCapabilitySnapshot struct {
 	Providers   []AccessPolicyProviderCapability
 	DurableMail bool
-	// MFA reports whether the server configuration enables two-step
-	// verification, so role holders could enroll a second factor.
-	MFA bool
+	MFA         bool
 }
 
-// AccessDeploymentCapabilities projects a capability snapshot into the form
-// the Store rechecks inside the transaction that relies on it.
+// AccessDeploymentCapabilities converts a snapshot into the form the store
+// rechecks inside the transaction that relies on it.
 func AccessDeploymentCapabilities(snapshot AccessPolicyCapabilitySnapshot) store.AccessDeploymentCapabilities {
 	providers := make(map[string]store.AccessProviderCapability, len(snapshot.Providers))
 	for _, provider := range snapshot.Providers {

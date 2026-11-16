@@ -5,22 +5,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package sitting schedules Exam Sittings and moves them through their
-// lifecycle: reschedule, cancel, pause, resume, extend and close. Managers
-// drive it through commands, and lifecycle Jobs drive it when a scheduled
-// time arrives. It also offers the Sitting authorization checks (such as
-// AuthorizeSittingView) that other use cases reuse.
-//
-// Ordinary actions need a current Exam Manager who belongs to the Exam's
-// Academic Unit and holds the role permission; administrators use separate,
-// audited override actions. The Store has the final say on revision,
-// lifecycle and Academic Period checks. The events that announce a committed
-// change are built in effects.go and published only after it commits.
-//
-// The package builds lifecycle Job requests and the Store saves each one with
-// its Sitting change, but it does not run Jobs. Attempts and Submission
-// sealing belong to attempt. It imports only model, store, app/access,
-// app/apperror, app/invocation, app/idempotency, app/realtime, app/mail and
-// app/exam/manageraccess. Start with Service in sitting.go; schedule_mail.go
-// prepares the schedule notices.
+// Package sitting schedules exam sittings and moves them through their
+// lifecycle, on manager commands and on lifecycle jobs. It also holds the
+// manager authorization checks that review and realtime reuse. Administrators
+// act through separate, audited override actions. The store has the final say
+// on revision, lifecycle and academic period checks, and saves each lifecycle
+// job with its sitting change; this package never runs jobs.
 package sitting

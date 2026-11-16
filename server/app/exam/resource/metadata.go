@@ -28,9 +28,8 @@ type EditMetadataCommand struct {
 	IdempotencyKey        string
 }
 
-// EditExamResourceMetadata idempotently changes an Exam Resource's display
-// name, description, or both, fenced by ExpectedDraftRevision. A nil field is
-// left unchanged, but at least one must be set.
+// EditExamResourceMetadata leaves a nil field unchanged; at least one must be
+// set. It is fenced by ExpectedDraftRevision.
 func (s *Service) EditExamResourceMetadata(
 	ctx context.Context,
 	inv invocation.Invocation,

@@ -15,10 +15,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store/sqlstore"
 )
 
-// openReadOnlyDatabase opens the configured database for operator
-// inspection. Every session it opens refuses writes at the PostgreSQL level,
-// and it never migrates, takes the migration lock, or creates a table. The
-// returned closer releases the database and the configuration.
+// openReadOnlyDatabase opens sessions that refuse writes at the PostgreSQL
+// level; it never migrates, takes the migration lock, or creates a table.
 func openReadOnlyDatabase(ctx context.Context, configPath string) (*sqlstore.SQLStore, func() error, error) {
 	configuration, err := config.Open(ctx, configPath)
 	if err != nil {
@@ -35,7 +33,6 @@ func openReadOnlyDatabase(ctx context.Context, configPath string) (*sqlstore.SQL
 	}, nil
 }
 
-// readMigrationStatus reads the schema state through an already-open store.
 func readMigrationStatus(ctx context.Context, database *sqlstore.SQLStore) (MigrationStatus, error) {
 	current, err := database.GetDBSchemaVersion(ctx)
 	if err != nil {

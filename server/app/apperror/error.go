@@ -5,15 +5,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package apperror is the one error type the application returns for a failure
-// a caller is allowed to see. An Error has a stable Code such as
-// "exam.sitting.not_found", a few safe fields, and a wrapped cause kept for
-// operators and never shown to the caller. Build one with New or Invalid.
-//
-// StoreTable turns typed Store errors into codes, and Concealment reports a
-// resource the caller may not see as resource.not_found, so areas do not write
-// their own translation. The package knows nothing about HTTP: httpapi maps
-// each code to a status from httpapi/route/error_catalog.yaml.
+// Package apperror is the error type the application returns for a failure a
+// caller may see: a stable code, a few safe fields, and a wrapped cause that is
+// for operators only and never reaches the caller. It knows nothing about HTTP;
+// httpapi maps each code to a status from httpapi/route/error_catalog.yaml.
 package apperror
 
 import (
@@ -21,21 +16,20 @@ import (
 	"strings"
 )
 
-// Code is a stable machine-readable application failure code. Codes are
-// lowercase dotted `<domain>[.<subdomain>].<condition>` names whose segments
-// are snake_case, such as "exam.sitting.not_found". Every code is listed in
-// the HTTP error catalog; constant codes are verified against it.
+// Code is a dotted snake_case `<domain>[.<subdomain>].<condition>` name such
+// as "exam.sitting.not_found". Every code must be listed in the HTTP error
+// catalog; constant codes are checked against it.
 type Code string
 
-// Error is a transport-neutral application failure. It carries a stable code,
-// explicitly safe public fields, and an optional wrapped cause.
+// Error is a transport-neutral application failure; only its code and fields
+// are safe to show a caller.
 type Error struct {
 	code   Code
 	fields map[string]string
 	cause  error
 }
 
-// New constructs an application failure with the given stable code.
+// New panics if code is empty.
 func New(code Code) *Error {
 	if code == "" {
 		panic("apperror: error code is empty")
@@ -43,13 +37,12 @@ func New(code Code) *Error {
 	return &Error{code: code}
 }
 
-// Invalid constructs a failure for one rejected input and records the safe
-// input name in the conventional "field" public field.
+// Invalid records the rejected input's name in the "field" public field.
 func Invalid(code Code, field string) *Error {
 	return New(code).WithField("field", field)
 }
 
-// Code returns the stable machine-readable failure code.
+// Code returns "" for a nil receiver.
 func (e *Error) Code() string {
 	if e == nil {
 		return ""
@@ -57,7 +50,7 @@ func (e *Error) Code() string {
 	return string(e.code)
 }
 
-// Fields returns a copy of the explicitly safe public fields.
+// Fields returns a copy, so callers cannot mutate the error.
 func (e *Error) Fields() map[string]string {
 	if e == nil {
 		return nil
@@ -65,8 +58,7 @@ func (e *Error) Fields() map[string]string {
 	return cloneFields(e.fields)
 }
 
-// WithField attaches one explicitly safe public field and returns the
-// receiver for fluent construction.
+// WithField attaches a public field; value must be safe to show a caller.
 func (e *Error) WithField(key, value string) *Error {
 	if e == nil {
 		return nil
@@ -78,8 +70,8 @@ func (e *Error) WithField(key, value string) *Error {
 	return e
 }
 
-// WithFields attaches explicitly safe public fields and returns the receiver
-// for fluent construction. Values are copied.
+// WithFields copies fields into the error; values must be safe to show a
+// caller.
 func (e *Error) WithFields(fields map[string]string) *Error {
 	if e == nil {
 		return nil
@@ -96,9 +88,8 @@ func (e *Error) WithFields(fields map[string]string) *Error {
 	return e
 }
 
-// Wrap attaches an internal cause and returns the receiver for fluent
-// construction. Causes are operator-only and must never be serialized to an
-// untrusted client.
+// Wrap attaches a cause that is for operators only and must never be
+// serialized to a client.
 func (e *Error) Wrap(err error) *Error {
 	if e != nil {
 		e.cause = err
@@ -106,7 +97,7 @@ func (e *Error) Wrap(err error) *Error {
 	return e
 }
 
-// Error implements the error interface for operator-facing diagnostics.
+// Error includes the cause, so it is for operator logs, not callers.
 func (e *Error) Error() string {
 	if e == nil {
 		return "<nil>"
@@ -120,7 +111,7 @@ func (e *Error) Error() string {
 	return builder.String()
 }
 
-// Unwrap returns the wrapped cause, if any.
+// Unwrap returns nil when there is no cause.
 func (e *Error) Unwrap() error {
 	if e == nil {
 		return nil
@@ -128,8 +119,8 @@ func (e *Error) Unwrap() error {
 	return e.cause
 }
 
-// Is reports whether err is or wraps an application error with the given code.
-// Matching never mints a code, so it accepts any string-typed code value.
+// Is reports whether err wraps an *Error with code. Matching never mints a
+// code, so it accepts any string-typed value.
 func Is[C ~string](err error, code C) bool {
 	got, ok := As(err)
 	return ok && string(got.code) == string(code)
@@ -144,8 +135,7 @@ func As(err error) (*Error, bool) {
 	return nil, false
 }
 
-// CodeOf returns the code of the first *Error in err's chain, or fallback
-// when err carries no application error.
+// CodeOf returns the first *Error's code in err's chain, or fallback.
 func CodeOf(err error, fallback Code) string {
 	if got, ok := As(err); ok {
 		return got.Code()
@@ -153,10 +143,8 @@ func CodeOf(err error, fallback Code) string {
 	return string(fallback)
 }
 
-// Classify returns the Code of the first *Error in err's chain, or fallback
-// when err carries no application error. A presenter that keeps the code
-// typed passes its fallback as a constant, so the error catalog check sees
-// every code it can present.
+// Classify is CodeOf with a typed result. A presenter passes its fallback as
+// a constant so the error catalog check sees every code it can present.
 func Classify(err error, fallback Code) Code {
 	if got, ok := As(err); ok {
 		return got.code

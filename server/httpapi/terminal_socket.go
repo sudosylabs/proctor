@@ -48,7 +48,7 @@ import (
 // Input bytes the terminal already took are dropped, so a client resends
 // everything after the last INPUT offset it saw and nothing types twice.
 // The socket closes normally after EXIT or a protocol error, with 4003 once
-// the Attempt is sealed, its Participation ends or its machine ends or is
+// the attempt is sealed, its participation ends or its machine ends or is
 // replaced, and with 1011 on a server failure.
 const (
 	terminalFrameAttach byte = 0x01
@@ -263,7 +263,6 @@ func terminalRefusal(err error) (websocket.BinarySocketOutcome, bool) {
 	return websocket.BinarySocketDone, false
 }
 
-// terminalSender writes the server's frames.
 type terminalSender struct{ socket BinarySocket }
 
 // fail reports why the socket could not start and how it closes.

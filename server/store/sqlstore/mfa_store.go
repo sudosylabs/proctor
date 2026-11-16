@@ -25,7 +25,7 @@ import (
 )
 
 // SQLMFAStore implements store.MFAStore over mfa_credentials and
-// mfa_recovery_codes, upgrading or revoking Sessions in the same transaction.
+// mfa_recovery_codes, upgrading or revoking sessions in the same transaction.
 type SQLMFAStore struct {
 	*SQLStore
 }
@@ -54,7 +54,7 @@ func newSQLMFAStore(sqlStore *SQLStore) store.MFAStore {
 	return &SQLMFAStore{SQLStore: sqlStore}
 }
 
-// GetByUser returns the User's unarchived MFA credential, pending or active, or
+// GetByUser returns the user's unarchived MFA credential, pending or active, or
 // a not-found error.
 func (s SQLMFAStore) GetByUser(ctx context.Context, userID model.UserID) (*model.MFACredential, error) {
 	if !userID.IsValid() {
@@ -77,9 +77,9 @@ func (s SQLMFAStore) GetByUser(ctx context.Context, userID model.UserID) (*model
 	return credential, nil
 }
 
-// Activate activates the User's pending MFA credential for the current
-// Session, replaces the recovery codes, upgrades the Session, enqueues the
-// Notice mail and completes the audit.
+// Activate activates the user's pending MFA credential for the current
+// session, replaces the recovery codes, upgrades the session, enqueues the
+// notice mail and completes the audit.
 func (s SQLMFAStore) Activate(
 	ctx context.Context,
 	input *store.MFAActivationMutation,
@@ -134,7 +134,6 @@ func (s SQLMFAStore) Activate(
 	}, nil
 }
 
-// activateMFACredential activates the pending MFA credential for the current Session inside the activation transaction.
 func activateMFACredential(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -179,7 +178,7 @@ func activateMFACredential(
 	}
 
 	// Only activation of a new local factor clears assisted recovery. Other
-	// restricted Sessions stay invalid after this transition.
+	// restricted sessions stay invalid after this transition.
 	if current.MFARecoveryRequired {
 		if _, err = tx.Exec(
 			ctx,
@@ -265,7 +264,6 @@ func activatePendingMFACredential(
 	return row.model()
 }
 
-// replaceMFARecoveryCodes archives the User's live recovery codes and inserts the prepared replacements.
 func replaceMFARecoveryCodes(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -369,7 +367,7 @@ func (s SQLMFAStore) ConsumeSecondFactor(ctx context.Context, input *store.MFASe
 	return err
 }
 
-// UpgradeSession marks the unexpired Session as multi-factor authenticated at
+// UpgradeSession marks the unexpired session as multi-factor authenticated at
 // now and returns the hashes of its active access tokens.
 func (s SQLMFAStore) UpgradeSession(ctx context.Context, input *store.MFASessionUpgrade) ([]string, error) {
 	sessionID := input.SessionID
@@ -488,7 +486,7 @@ func (s SQLMFAStore) ReplaceRecoveryCodes(
 	return err
 }
 
-// CountRecoveryCodes returns how many unconsumed recovery codes the User has.
+// CountRecoveryCodes returns how many unconsumed recovery codes the user has.
 func (s SQLMFAStore) CountRecoveryCodes(ctx context.Context, userID model.UserID) (int, error) {
 	if !userID.IsValid() {
 		return 0, store.NewErrInvalidInput("mfa_recovery_code", "user_id", userID)
@@ -507,7 +505,7 @@ func (s SQLMFAStore) CountRecoveryCodes(ctx context.Context, userID model.UserID
 	return count, nil
 }
 
-// SummarizeRecoveryCodes counts the User's live recovery codes, consumed or
+// SummarizeRecoveryCodes counts the user's live recovery codes, consumed or
 // not, and reports the newest one's creation time.
 func (s SQLMFAStore) SummarizeRecoveryCodes(ctx context.Context, userID model.UserID) (*store.MFARecoveryCodeSummary, error) {
 	if !userID.IsValid() {
@@ -762,8 +760,8 @@ func insertMFARecoveryCode(
 	return nil
 }
 
-// upgradeSessionAuthentication makes the live Session multi-factor. A proved
-// second factor satisfies the Access Policy, so it also lifts that Session's
+// upgradeSessionAuthentication makes the live session multi-factor. A proved
+// second factor satisfies the access policy, so it also lifts that session's
 // MFA enrollment restriction; activation and challenge both reach it.
 func upgradeSessionAuthentication(
 	ctx context.Context,

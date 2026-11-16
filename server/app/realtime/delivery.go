@@ -33,8 +33,9 @@ const (
 	clusterEventExamAttemptUnbound = "exam_attempt.connection_unbound"
 )
 
-// Sink delivers already-authorized events and connection closes to the local
-// socket boundary. It deliberately contains no WebSocket wire types.
+// Sink delivers already-authorized events and connection closes to this
+// node's sockets. It uses no WebSocket wire types, so this package stays
+// transport-neutral.
 type Sink interface {
 	PublishLocal(context.Context, Event)
 	UnbindExamAttemptConnection(model.AttemptConnectionID)
@@ -43,15 +44,15 @@ type Sink interface {
 	CloseAll(ConnectionCloseReason)
 }
 
-// AuthenticationInvalidator applies the local, disposable authentication
-// cache effects that accompany session and credential invalidation.
+// AuthenticationInvalidator drops this node's cached authentication when
+// sessions or credentials are invalidated.
 type AuthenticationInvalidator interface {
 	InvalidateAccessCredentials(context.Context, []string)
 	InvalidateSessionActivity(context.Context, []model.SessionID)
 }
 
-// InvalidPublicationError reports a transport-neutral event validation
-// failure. Callers decide how to expose the failure at their boundary.
+// InvalidPublicationError reports an event that failed validation; nothing
+// was delivered.
 type InvalidPublicationError struct {
 	err error
 }
@@ -59,8 +60,8 @@ type InvalidPublicationError struct {
 func (e *InvalidPublicationError) Error() string { return e.err.Error() }
 func (e *InvalidPublicationError) Unwrap() error { return e.err }
 
-// DeliveryError reports a transport-neutral peer encoding or fan-out failure.
-// Local delivery has already been attempted when Publish returns this error.
+// DeliveryError reports a peer encoding or fan-out failure. Local delivery
+// has already been attempted when Publish returns it.
 type DeliveryError struct {
 	err error
 }
@@ -68,18 +69,16 @@ type DeliveryError struct {
 func (e *DeliveryError) Error() string { return e.err.Error() }
 func (e *DeliveryError) Unwrap() error { return e.err }
 
-// DeliveryDependencies are the collaborators of Delivery;
-// NewDelivery validates them once and Delivery keeps them in deps.
+// DeliveryDependencies are the collaborators NewDelivery requires.
 type DeliveryDependencies struct {
 	AuthenticationInvalidator AuthenticationInvalidator
-	// Diagnostics records bounded, non-fatal security propagation failures. It
-	// must not be enriched with complete payloads or security-sensitive
-	// identifiers.
+	// Diagnostics records non-fatal propagation failures. Never log payloads
+	// or security-sensitive identifiers to it.
 	Diagnostics *logging.Logger
 }
 
-// Delivery owns ordinary realtime event delivery. It is inert after
-// construction and borrows its attached collaborators.
+// Delivery is inert until its sink and cluster fan-out are attached, and
+// does not own either.
 type Delivery struct {
 	deps DeliveryDependencies
 
@@ -88,9 +87,8 @@ type Delivery struct {
 	fanout cluster.Transport
 }
 
-// NewDelivery constructs an inert Realtime module with its required security
-// collaborators. Sink and peer fanout remain staged because composition builds
-// those adapters after the application graph.
+// NewDelivery returns an inert Delivery. The sink and fan-out are attached
+// later because composition builds them after the application graph.
 func NewDelivery(deps DeliveryDependencies) (*Delivery, error) {
 	if deps.AuthenticationInvalidator == nil {
 		return nil, errors.New("realtime authentication invalidator is nil")
@@ -115,10 +113,9 @@ func (s *Delivery) SetSink(sink Sink) error {
 	return nil
 }
 
-// SetClusterFanout attaches the cluster exactly once and registers the peer
-// handlers. Registration failure is terminal for the instance: composition
-// must unwind node construction rather than retry it. Composition owns the
-// cluster's lifecycle.
+// SetClusterFanout attaches the cluster once and registers the peer handlers.
+// A registration failure is terminal: unwind node construction rather than
+// retry.
 func (s *Delivery) SetClusterFanout(fanout cluster.Transport) error {
 	if fanout == nil {
 		return errors.New("realtime cluster fan-out is nil")
@@ -148,9 +145,8 @@ func (s *Delivery) SetClusterFanout(fanout cluster.Transport) error {
 	return nil
 }
 
-// UnbindExamAttemptConnection clears only the runtime binding for one durable
-// Attempt Connection, locally first and then on peers. It deliberately leaves
-// the generic WebSocket open for unrelated application use.
+// UnbindExamAttemptConnection clears one attempt connection's binding,
+// locally first and then on peers. The socket stays open for other uses.
 func (s *Delivery) UnbindExamAttemptConnection(ctx context.Context, connectionID model.AttemptConnectionID) error {
 	if !connectionID.IsValid() {
 		return &InvalidPublicationError{err: errors.New("Exam Attempt Connection identity is invalid")}
@@ -211,8 +207,8 @@ func decodeStrictPayload(data []byte, target any) error {
 	return nil
 }
 
-// Publish delivers a clone locally first and then fans out the stable peer
-// payload. Callers must invoke it only after durable commit.
+// Publish delivers a clone locally first, then to peers. Call it only after
+// the change has committed.
 func (s *Delivery) Publish(ctx context.Context, event Event) error {
 	candidate := event.Clone()
 	if candidate.ID == "" {
@@ -227,8 +223,8 @@ func (s *Delivery) Publish(ctx context.Context, event Event) error {
 		return &InvalidPublicationError{err: fmt.Errorf("realtime event %q is not a declared message", candidate.Name)}
 	}
 
-	// Same loop-prevention shape as Mattermost: publish locally once, then
-	// send to peers. Peer handlers call only publishLocal.
+	// Peer handlers call only publishLocal, so a forwarded event never
+	// loops.
 	s.publishLocal(ctx, candidate)
 	message := realtimeEventMessageFromModel(candidate)
 	payload, err := json.Marshal(realtimePublication{Event: &message})
@@ -294,9 +290,8 @@ type realtimePublication struct {
 	Event *realtimeEventMessage `json:"event"`
 }
 
-// realtimeEventMessage is the explicit cluster-wire projection of a
-// transport-neutral Event. It preserves the established snake_case
-// payload independently of domain-model field names.
+// realtimeEventMessage is a separate type so domain field renames cannot
+// change the snake_case cluster wire format.
 type realtimeEventMessage struct {
 	ID       string                  `json:"id"`
 	Name     string                  `json:"event"`
@@ -340,11 +335,11 @@ func decodePayload(data []byte, target any) error {
 	return json.Unmarshal(data, target)
 }
 
-// ConnectionCloseReason is a transport-neutral reason the local connection
-// boundary maps to protocol close codes and text.
+// ConnectionCloseReason is mapped by the socket layer to its close codes and
+// text.
 type ConnectionCloseReason string
 
-// SessionRevoked closes the connections of a revoked Session or user;
+// SessionRevoked closes the connections of a revoked session or user;
 // AuthorizationChanged closes connections whose subscriptions may no longer be
 // authorized.
 const (

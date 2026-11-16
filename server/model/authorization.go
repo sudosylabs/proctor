@@ -18,8 +18,8 @@ import (
 	"sort"
 )
 
-// Action is a stable authorization contract. Actions describe domain
-// capabilities, never HTTP methods or route names.
+// Action is a stable authorization identifier for a domain capability, never
+// an HTTP method or route name.
 type Action string
 
 const (
@@ -92,8 +92,8 @@ const (
 	// ActionPluginManage views and changes the plugins compiled into the
 	// server: whether each one runs, and its settings.
 	ActionPluginManage Action = "plugin.manage"
-	// ActionEnvironmentProfileManage views, creates and retires the
-	// environment profiles Exams' execution environments are created from.
+	// ActionEnvironmentProfileManage views, creates and retires the profiles
+	// exams' execution environments are created from.
 	ActionEnvironmentProfileManage Action = "environment_profile.manage"
 	ActionRetentionPolicyView      Action = "retention_policy.view"
 	ActionRetentionPolicyManage    Action = "retention_policy.manage"
@@ -132,8 +132,7 @@ func ResourceTypes() []ResourceType {
 	return slices.Clone(resourceTypes)
 }
 
-// resourceTypes is the closed resource catalogue in lexical order; the
-// contract's ResourceType enum is kept equal to it.
+// The contract's ResourceType enum is kept equal to resourceTypes.
 var resourceTypes = []ResourceType{
 	ResourceAcademicPeriod,
 	ResourceAcademicUnit,
@@ -148,48 +147,46 @@ var resourceTypes = []ResourceType{
 	ResourceUser,
 }
 
-// Resource identifies the concrete object against which an action is checked.
+// Resource is the concrete object an action is checked against.
 type Resource struct {
 	Type ResourceType
 	ID   string
 }
 
-// ActionDefinition controls which resource an action accepts and which parent
-// role scopes may grant it. It is deliberately closed and code-reviewed:
-// syntactically valid unknown role permissions may survive a downgrade, but
-// they never authorize an operation until this registry recognizes them.
+// ActionDefinition says which resources an action accepts and which role
+// scopes may grant it. The registry is closed on purpose: an unknown
+// permission stored on a role may survive a downgrade, but it authorizes
+// nothing until the registry knows it.
 type ActionDefinition struct {
 	Action                    Action
 	ResourceType              ResourceType
 	CompatibleResourceTypes   []ResourceType
 	InheritInstitutionScope   bool
 	InheritAcademicUnitScopes bool
-	// RelationshipOnly marks a recognized application/realtime capability that
-	// must be established from current domain state and can never be granted by
-	// a reusable Role or Personal Access Token scope.
+	// RelationshipOnly marks a capability established from current domain
+	// state; no role or personal access token scope can ever grant it.
 	RelationshipOnly bool
 	// PersonalAccessTokenForbidden keeps sensitive administration behind an
-	// interactive Session even though the action remains grantable to Roles.
+	// interactive session, though roles may still grant it.
 	PersonalAccessTokenForbidden bool
-	// SystemAdministratorOnly keeps an action exclusively in the protected
-	// built-in Role. It cannot be delegated through custom Roles or PAT scopes.
+	// SystemAdministratorOnly keeps the action in the protected built-in role;
+	// custom roles and token scopes cannot delegate it.
 	SystemAdministratorOnly bool
-	// AcademicAudit admits the action's audit events to academic audit
-	// visibility (academic_audit.view), whose closed catalog is
-	// AcademicAuditActions.
+	// AcademicAudit admits the action's events to academic_audit.view.
 	AcademicAudit bool
 }
 
-// AcceptsResource reports whether the action may authorize the actual target
-// resource or an owning scope used for a create or bounded collection.
+// AcceptsResource reports whether the action may authorize resourceType,
+// either its own target or an owning scope used for a create or a bounded
+// collection.
 func (d ActionDefinition) AcceptsResource(resourceType ResourceType) bool {
 	return d.ResourceType == resourceType || slices.Contains(d.CompatibleResourceTypes, resourceType)
 }
 
-// SupportsRoleScope reports whether a Role Binding at scopeType can grant the
-// action. This is deliberately distinct from AcceptsResource: a binding at an
-// Academic Unit may grant an action whose concrete resource is a descendant
-// Exam, Sitting, Submission, Programme, or Class.
+// SupportsRoleScope reports whether a role binding at scopeType can grant the
+// action. It differs from AcceptsResource: a binding at an academic unit may
+// grant an action on a descendant exam, sitting, submission, programme or
+// class.
 func (d ActionDefinition) SupportsRoleScope(scopeType RoleScopeType) bool {
 	switch scopeType {
 	case RoleScopeInstitution:
@@ -731,9 +728,9 @@ func DefinitionForAction(action Action) (ActionDefinition, bool) {
 	return definition, ok
 }
 
-// AllActions returns every action carried by the protected system-administrator
-// Role in stable order. Relationship-only capabilities are deliberately
-// excluded; system-administrator-only actions are deliberately included.
+// AllActions returns, in stable order, every action of the protected system
+// administrator role: system-administrator-only actions included,
+// relationship-only ones excluded.
 func AllActions() []string {
 	actions := make([]string, 0, len(actionDefinitions))
 	for action, definition := range actionDefinitions {
@@ -746,9 +743,8 @@ func AllActions() []string {
 	return actions
 }
 
-// IsSystemAdministratorAction reports whether an action belongs to the
-// protected built-in Role. This includes non-delegable system-administrator-
-// only actions and excludes relationship-only capabilities.
+// IsSystemAdministratorAction reports whether action belongs to the protected
+// built-in role, which excludes relationship-only capabilities.
 func IsSystemAdministratorAction(action string) bool {
 	definition, ok := actionDefinitions[Action(action)]
 	return ok && !definition.RelationshipOnly
@@ -759,16 +755,15 @@ func IsKnownAction(action string) bool {
 	return ok
 }
 
-// IsGrantableAction reports whether an action may appear in reusable Roles or
-// Personal Access Token scopes. Relationship-only capabilities remain known to
-// strict protocol registries while never becoming transferable permission.
+// IsGrantableAction reports whether action may appear in a role or token
+// scope. Relationship-only capabilities are known but never transferable.
 func IsGrantableAction(action string) bool {
 	definition, ok := actionDefinitions[Action(action)]
 	return ok && !definition.RelationshipOnly && !definition.SystemAdministratorOnly
 }
 
-// IsPersonalAccessTokenAction reports whether a registered role-grantable
-// action may also appear in a PAT credential ceiling.
+// IsPersonalAccessTokenAction reports whether a role-grantable action may also
+// appear in a personal access token's ceiling.
 func IsPersonalAccessTokenAction(action string) bool {
 	definition, ok := actionDefinitions[Action(action)]
 	return ok &&
@@ -777,8 +772,8 @@ func IsPersonalAccessTokenAction(action string) bool {
 		!definition.PersonalAccessTokenForbidden
 }
 
-// PersonalAccessTokenActions returns, in stable order, every registered action
-// that may appear in a Personal Access Token scope.
+// PersonalAccessTokenActions returns, in stable order, every action a personal
+// access token scope may hold.
 func PersonalAccessTokenActions() []string {
 	actions := make([]string, 0, len(actionDefinitions))
 	for action := range actionDefinitions {
@@ -790,15 +785,15 @@ func PersonalAccessTokenActions() []string {
 	return actions
 }
 
-// ResourceTypes returns, in stable order, every resource type the action may
-// authorize: its own resource type and each compatible owning scope.
+// ResourceTypes returns, in stable order, the action's own resource type and
+// each compatible owning scope.
 func (d ActionDefinition) ResourceTypes() []ResourceType {
 	types := append([]ResourceType{d.ResourceType}, d.CompatibleResourceTypes...)
 	slices.Sort(types)
 	return slices.Compact(types)
 }
 
-// Validate checks that the resource identifies a supported authorization target.
+// Validate checks that the resource has a known type and a valid opaque ID.
 func (r Resource) Validate() error {
 	const where = "Resource.Validate"
 	if !IsValidOpaqueID(r.ID) {

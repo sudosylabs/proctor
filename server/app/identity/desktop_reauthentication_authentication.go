@@ -20,18 +20,17 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// AuthenticateDesktopReauthenticationPasswordCommand proves the password of
-// the Desktop Session's User. It has no selectable login identifier.
+// AuthenticateDesktopReauthenticationPasswordCommand deliberately has no login
+// identifier: the account is always the desktop session's own.
 type AuthenticateDesktopReauthenticationPasswordCommand struct {
 	Binding  string
 	Password string
 	Source   string
 }
 
-// AuthenticateDesktopReauthenticationPassword checks the password of the
-// Desktop Session's own User. It creates no Web Session and asks for no second
-// factor: the Desktop Session's MFA history is unchanged and only primary
-// proof is refreshed.
+// AuthenticateDesktopReauthenticationPassword checks the desktop session
+// user's password. It creates no web session and asks for no second factor:
+// only the primary proof is refreshed, and MFA history is unchanged.
 func (s *Service) AuthenticateDesktopReauthenticationPassword(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -110,8 +109,8 @@ func (s *Service) AuthenticateDesktopReauthenticationPassword(
 	return s.DesktopReauthenticationContext(ctx, inv, command.Binding)
 }
 
-// authenticate records a fresh proof and audits a refusal that proved another
-// account than the Desktop Session's.
+// recordDesktopReauthenticationProof audits a refusal when the proof was for
+// a different account than the desktop session's.
 func (s *Service) recordDesktopReauthenticationProof(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -147,8 +146,8 @@ func (s *Service) recordDesktopReauthenticationProof(
 	return nil, failure
 }
 
-// resolveExternalReauthentication returns the bound reauthentication a
-// provider login may continue, only for the Desktop Session's own provider.
+// resolveExternalReauthentication only continues with the desktop session's
+// own provider.
 func (s *Service) resolveExternalReauthentication(
 	ctx context.Context,
 	binding, state, providerID string,
@@ -172,8 +171,6 @@ func (s *Service) resolveExternalReauthentication(
 		returnTo: "/reauthenticate/desktop?state=" + url.QueryEscape(state)}, nil
 }
 
-// authenticateExternalReauthentication records fresh provider proof of the
-// exact External Identity on the reauthentication bound to the login state.
 func (s *Service) authenticateExternalReauthentication(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -204,9 +201,8 @@ func (s *Service) authenticateExternalReauthentication(
 	return err
 }
 
-// completeDesktopReauthentication hands verified provider proof of an
-// already linked External Identity to its Desktop reauthentication. It never
-// provisions a User, links an identity or issues a Session.
+// completeDesktopReauthentication accepts only an already linked external
+// identity. It never provisions a user, links an identity or issues a session.
 func (s *Service) completeDesktopReauthentication(
 	ctx context.Context,
 	attempt externalCompletionAttempt,

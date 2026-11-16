@@ -45,7 +45,6 @@ func (s *Service) CompleteExternalAuthentication(
 	return result, appErr
 }
 
-// externalCompletionAttempt carries the consumed-state facts shared by the completion steps.
 type externalCompletionAttempt struct {
 	providerID  string
 	method      string
@@ -94,8 +93,8 @@ func (s *Service) completeExternalCallback(
 			completionErr = nil
 		}
 
-		// The hosted Desktop reauthentication page reloads its own state;
-		// the closed fragment only says this provider attempt did not count.
+		// The hosted desktop reauthentication page reloads its own state;
+		// the fixed fragment only says this provider attempt did not count.
 		if completionErr != nil &&
 			state.Purpose == model.ExternalAuthenticationPurposeDesktopReauthentication &&
 			model.IsSafeRelativeURL(state.ReturnTo) {
@@ -204,7 +203,6 @@ func (s *Service) completeExternalCallback(
 	return s.issueExternalSession(ctx, attempt, assertion, resolution, recovery)
 }
 
-// consumeCallbackLoginState validates the callback credentials and consumes the matching browser-bound login state.
 func (s *Service) consumeCallbackLoginState(
 	ctx context.Context,
 	provider ExternalIdentityProvider,
@@ -253,7 +251,6 @@ func (s *Service) consumeCallbackLoginState(
 	return state, stateToken, callbackURL, nil
 }
 
-// completeProviderAssertion exchanges the callback with the provider and audits a rejected or mismatched assertion.
 func (s *Service) completeProviderAssertion(
 	ctx context.Context,
 	provider ExternalIdentityProvider,
@@ -294,7 +291,6 @@ func (s *Service) completeProviderAssertion(
 	return assertion, nil
 }
 
-// completeInvitationAdmission accepts the Invitation bound to the login state with the verified external identity.
 func (s *Service) completeInvitationAdmission(
 	ctx context.Context,
 	attempt externalCompletionAttempt,
@@ -355,7 +351,6 @@ func (s *Service) completeInvitationAdmission(
 	return &model.ExternalAuthenticationCompletion{User: result.User, ReturnTo: state.ReturnTo}, nil
 }
 
-// issueExternalSession audits the authentication and issues the browser Session for the resolved User.
 func (s *Service) issueExternalSession(
 	ctx context.Context,
 	attempt externalCompletionAttempt,
@@ -419,10 +414,7 @@ func (s *Service) issueExternalSession(
 	}, nil
 }
 
-// beginExternalAuthenticationAudit, completeExternalAuthenticationAudit and
-// recordExternalCompletionFailure durably record external sign-in: the
-// attempt before its Session is issued, that attempt's failed completion, and
-// a callback that failed after its login state was consumed.
+// The attempt is audited before its session is issued.
 func (s *Service) beginExternalAuthenticationAudit(
 	ctx context.Context,
 	attempt externalCompletionAttempt,

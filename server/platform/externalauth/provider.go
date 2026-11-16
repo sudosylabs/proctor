@@ -5,17 +5,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package externalauth holds the configured external sign-in providers.
-// Provider is one of them: its descriptor and auto-provisioning from
-// configuration, and the plugin protocol that signs the person in. Registry
-// holds the enabled providers and is rebuilt from configuration on reload.
-// The protocol's requests and failures are the plugin contract's own; the
-// composition root presents them to app/identity.
-//
-// Finding or creating the User, audit and the Session stay in app/identity.
-// The protocols themselves are the built-in plugins plugin/cas and
-// plugin/oidc; this package also holds what they share, ProtocolPlugin, the
-// settings helpers and the profile mapping, which only they call.
+// Package externalauth holds the configured external sign-in providers and
+// the helpers the built-in protocol plugins (plugin/cas, plugin/oidc) share.
+// Finding or creating the user, audit and the session stay in app/identity.
 package externalauth
 
 import (
@@ -31,10 +23,8 @@ import (
 	"github.com/sudosylabs/proctor/server/plugin"
 )
 
-// Registry holds the configured providers, built from the sign-in protocols
-// the plugins offer. Configure rebuilds them from configuration, including on
-// reload, and Reload also takes a new set of protocols when plugins change;
-// there is no process-wide provider map or init-time side effect.
+// Registry holds the enabled providers, built from the sign-in protocols the
+// plugins offer. Reload also swaps the protocols when plugins change.
 type Registry struct {
 	// rebuild serializes Configure and Reload, so a slower rebuild cannot
 	// overwrite a newer one.
@@ -106,8 +96,7 @@ func (r *Registry) Configure(
 	return r.configure(settings, types)
 }
 
-// configure builds the providers with types and installs both; r.rebuild is
-// held.
+// configure must be called with r.rebuild held.
 func (r *Registry) configure(
 	settings config.ExternalAuthentication,
 	types map[string]plugin.IdentityProviderType,

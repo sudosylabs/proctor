@@ -18,9 +18,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Result is the entry a committed Starter Workspace command left, the object
-// behind it when the entry is a file, and the Draft revision the change
-// produced. Replayed reports a retained idempotent outcome.
+// Result is the entry a committed command left. Object is nil for a
+// directory, and Replayed reports a retained idempotent outcome.
 type Result struct {
 	Entry         model.StarterWorkspaceEntry
 	Object        *model.StarterWorkspaceObject

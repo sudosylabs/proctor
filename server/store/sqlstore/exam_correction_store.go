@@ -23,7 +23,7 @@ import (
 
 // SQLExamCorrectionStore implements store.ExamCorrectionStore: staged
 // correction resources, their uploads, and the live correction applied to one
-// Sitting.
+// sitting.
 type SQLExamCorrectionStore struct{ *SQLStore }
 
 func newSQLExamCorrectionStore(sqlStore *SQLStore) store.ExamCorrectionStore {
@@ -380,7 +380,7 @@ func reserveExamCorrectionResourceStage(ctx context.Context, tx *sqlxTxWrapper, 
 }
 
 // MarkResourceStageReady records the uploaded rendition of the actor's pending
-// correction Resource stage and marks the stage ready. Repeating it with the
+// correction resource stage and marks the stage ready. Repeating it with the
 // same rendition returns the stage unchanged; a different rendition, or an
 // upload lease that is no longer eligible, is a conflict.
 func (s SQLExamCorrectionStore) MarkResourceStageReady(
@@ -846,7 +846,7 @@ func applyExamCorrection(
 }
 
 // lockExamCorrectionSitting authorizes the manager, locks the open or paused
-// Sitting on the expected revision, and reads the database instant before
+// sitting on the expected revision, and reads the database instant before
 // its deadline.
 func lockExamCorrectionSitting(
 	ctx context.Context,
@@ -924,7 +924,7 @@ func lockExamCorrectionBase(ctx context.Context, tx *sqlxTxWrapper, input *store
 	return getExamRevisionSnapshot(ctx, tx, input.ExamID, input.CurrentRevisionID)
 }
 
-// lockExamCorrectionStages locks the referenced ready Resource stages in
+// lockExamCorrectionStages locks the referenced ready resource stages in
 // identifier order and checks that each belongs to this correction.
 func lockExamCorrectionStages(
 	ctx context.Context,
@@ -968,8 +968,8 @@ func lockExamCorrectionStages(
 	return stageIDs, stages, nil
 }
 
-// examCorrectionResources builds the corrected Resource manifest from the
-// base revision's Resources and the staged additions and replacements.
+// examCorrectionResources builds the corrected resource manifest from the
+// base revision's resources and the staged additions and replacements.
 func examCorrectionResources(
 	base *model.ExamRevision,
 	input *store.ExamCorrectionApplication,
@@ -1082,7 +1082,7 @@ func consumeExamCorrectionStages(
 	return nil
 }
 
-// retargetExamCorrectionSitting moves the Sitting to the correction revision,
+// retargetExamCorrectionSitting moves the sitting to the correction revision,
 // closes browser sources the policy no longer allows, and records the
 // correction provenance, returning the revision it replaced.
 func retargetExamCorrectionSitting(
@@ -1178,7 +1178,7 @@ func examCorrectionRevisionSummary(revision *model.ExamRevision) *store.ExamRevi
 }
 
 // examCorrectionOutcome is the persisted outcome of a live correction: the
-// sealed Revision summary and the retargeted Sitting.
+// sealed Revision summary and the retargeted sitting.
 type examCorrectionOutcome struct {
 	Revision           examRevisionSummaryDocument `json:"revision"`
 	Sitting            examSittingDocument         `json:"sitting"`

@@ -2166,8 +2166,8 @@ func studentClassInvitationAcceptanceFixture(t *testing.T, invitation *model.Inv
 	}
 }
 
-// testInvitationSchemaBoundsLifetime proves that the stored Invitation
-// lifetime is bounded by the schema, not only by Store validation: one and
+// testInvitationSchemaBoundsLifetime proves that the stored invitation
+// lifetime is bounded by the schema, not only by store validation: one and
 // thirty days are accepted, anything outside is refused.
 func testInvitationSchemaBoundsLifetime(t *testing.T, ss store.Store, probe InvitationSQLProbe) {
 	if probe.SetInvitationLifetime == nil {

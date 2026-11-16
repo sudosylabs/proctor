@@ -11,11 +11,13 @@ import (
 	"time"
 )
 
-// BrowserIntegrityEvidenceMaxBytes allows a full request record plus frozen provenance.
+// BrowserIntegrityEvidenceMaxBytes fits a full request record plus its frozen
+// provenance.
 const BrowserIntegrityEvidenceMaxBytes = BrowserActivityAppendMaximumBytes + 512
 
-// BrowserIntegrityEvidence is an immutable minimized copy. Ordinary Browser
-// Activity retirement cannot erase it or become an authorization prerequisite.
+// BrowserIntegrityEvidence is an immutable minimized copy. Retiring ordinary
+// browser activity cannot erase it, and it is never required for
+// authorization.
 type BrowserIntegrityEvidence struct {
 	SourceSessionID  BrowserSourceSessionID `json:"source_session_id"`
 	PolicyRevisionID ExamRevisionID         `json:"policy_revision_id"`
@@ -44,8 +46,10 @@ func (v BrowserIntegrityEvidence) Validate() error {
 	return nil
 }
 
-// Qualification follows full frozen-policy and redirect provenance validation.
-// A rule-less block has no invented attribution and cannot create a Flag.
+// BrowserIntegrityRule returns the frozen-policy rule that makes a blocked
+// navigation integrity evidence, or nil. Call it only after the policy and
+// redirect provenance are validated; a block with no matched rule is never
+// attributed and cannot raise a flag.
 func BrowserIntegrityRule(event BrowserActivityEvent, policy BrowserPolicy) *BrowserPolicyRule {
 	if event.Kind != BrowserActivityBlockedNavigation || event.MatchedRuleID == nil {
 		return nil

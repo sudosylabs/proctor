@@ -17,8 +17,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// nativeFlagRaiser raises the native Flags of one interpretation pass. Each
-// rule has one Flag per Participation generation; every enforce
+// nativeFlagRaiser raises the native flags of one interpretation pass. Each
+// rule has one flag per participation generation; every enforce
 // occurrence that opens adds one piece of evidence to it, up to
 // model.NativeFlagEvidenceLimit. Observe rules, unknown stretches and closed
 // occurrences raise nothing.
@@ -26,7 +26,7 @@ type nativeFlagRaiser struct {
 	owner   nativeDeliveryOwner
 	binding admittedSecurityBinding
 	flagged []store.NativeIntegrityFlagged
-	// suspended is set once this pass suspended the Attempt.
+	// suspended is set once this pass suspended the attempt.
 	suspended bool
 }
 
@@ -36,7 +36,7 @@ func (r *nativeFlagRaiser) raise(ctx context.Context, tx *sqlxTxWrapper, transit
 	if !slices.ContainsFunc(transitions, func(t model.NativeRuleTransition) bool { return t.RaisesFlag() }) {
 		return nil
 	}
-	// A Submission whose integrity records were retired takes no new Flag.
+	// A submission whose integrity records were retired takes no new flag.
 	var retired bool
 	if err := tx.Get(
 		ctx,
@@ -114,7 +114,7 @@ func (r *nativeFlagRaiser) raise(ctx context.Context, tx *sqlxTxWrapper, transit
 	return nil
 }
 
-// note keeps the latest notice of each Flag.
+// note keeps the latest notice of each flag.
 func (r *nativeFlagRaiser) note(flagged store.NativeIntegrityFlagged) {
 	if i := slices.IndexFunc(r.flagged, func(f store.NativeIntegrityFlagged) bool { return f.FlagID == flagged.FlagID }); i >= 0 {
 		flagged.ScreenClipRequested = flagged.ScreenClipRequested || r.flagged[i].ScreenClipRequested
@@ -127,12 +127,9 @@ func (r *nativeFlagRaiser) note(flagged store.NativeIntegrityFlagged) {
 	r.flagged = append(r.flagged, flagged)
 }
 
-// suspendForNativeRule suspends the Attempt for an enforce occurrence whose
-// family's outcome is flag_and_suspend, the same way Focus Loss does: it
-// ends the live Participation, closes its Connection and native delivery,
-// and opens the policy Suspension linked to the Flag. An Attempt that is not
-// active, or a Participation with no open Connection, is left as it is; its
-// Flag stands.
+// suspendForNativeRule suspends the attempt for a flag_and_suspend occurrence
+// the same way focus loss does. An attempt that is not active, or a
+// participation with no open connection, is left alone; its flag stands.
 func suspendForNativeRule(
 	ctx context.Context,
 	tx *sqlxTxWrapper,

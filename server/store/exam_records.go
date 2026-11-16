@@ -29,13 +29,9 @@ type ExamRecordsScope struct {
 	AttemptID       model.ExamAttemptID
 }
 
-// ConsistentWith reports whether the resolved records scope is the scope that
-// was asked for, names the Institution and Academic Unit that own it, and, for
-// a scope narrowed to one Submission, names that Submission's candidate and
-// Attempt.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the scope is the one asked for, names its
+// owning institution and academic unit, and, when narrowed to one submission,
+// names its candidate and attempt.
 func (s *ExamRecordsScope) ConsistentWith(scope model.RetentionHoldScope) bool {
 	return !(s == nil ||
 		s.Scope != scope ||
@@ -44,9 +40,9 @@ func (s *ExamRecordsScope) ConsistentWith(scope model.RetentionHoldScope) bool {
 		scope.SubmissionID.IsValid() && (!s.CandidateUserID.IsValid() || !s.AttemptID.IsValid()))
 }
 
-// ExamRecordsCompletionSnapshot exposes bounded counts, not student work.
-// PendingReviews counts Submissions with neither a finalized Review nor a
-// current waiver. Counts and state belong to the same database snapshot.
+// ExamRecordsCompletionSnapshot holds counts, never student work, all read in
+// one database snapshot. PendingReviews counts submissions with neither a
+// finalized review nor a current waiver.
 type ExamRecordsCompletionSnapshot struct {
 	Completion      model.ExamSittingRecordsCompletion
 	SittingState    model.ExamSittingState
@@ -54,12 +50,9 @@ type ExamRecordsCompletionSnapshot struct {
 	PendingReviews  int64
 }
 
-// ConsistentWith reports whether the snapshot carries a valid records
-// completion for the given Sitting and its counts are possible: neither is
-// negative and no more Reviews are pending than there are Submissions.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the completion is valid for the sitting and
+// the counts are possible: non-negative, with no more pending reviews than
+// submissions.
 func (s *ExamRecordsCompletionSnapshot) ConsistentWith(sittingID model.ExamSittingID) bool {
 	return !(s == nil ||
 		s.Completion.Validate() != nil ||
@@ -136,12 +129,8 @@ type ExamRecordsHoldResult struct {
 	Replayed bool
 }
 
-// ConsistentWithRelease reports whether the outcome carries the valid
-// Retention Hold that was asked to be released, on the given scope, and that
-// Hold now records its release.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWithRelease reports whether the result is the valid hold asked
+// for, on the given scope, and satisfies Released.
 func (r *ExamRecordsHoldResult) ConsistentWithRelease(holdID model.RetentionHoldID, scope model.RetentionHoldScope) bool {
 	return !(r == nil ||
 		r.Hold.Validate() != nil ||
@@ -150,23 +139,21 @@ func (r *ExamRecordsHoldResult) ConsistentWithRelease(holdID model.RetentionHold
 		!r.Released())
 }
 
-// Released is the application's postcondition on a Retention Hold release:
-// the Hold now records its release.
+// Released is the application's postcondition on a hold release.
 func (r *ExamRecordsHoldResult) Released() bool {
 	return r.Hold.ReleasedAt.Valid
 }
 
-// ExamRecordsStore owns records completion and preservation. App preflights
-// authorization before reads. Mutations reauthorize the current credential,
-// Role, scope, Manager relationship and exact membership in the transaction,
-// including idempotent replay. Completion locks the Closed Sitting and checks
-// every Submission has a finalized Review or inventory-current waiver. Waivers
-// exclude the candidate actor and all undecided Flags. New accepted integrity
-// data stales completion atomically; exact retries do not. Holds are durable,
-// bounded, manually released and apply to existing and later descendants.
-// Hold release requires a current strong recent protected administrator Session.
-// The transition, critical audit completion and retry outcome commit together.
-// No operation here retires content, schedules cleanup or creates an export.
+// ExamRecordsStore persists records completion, review waivers and retention
+// holds. Reads trust the application's authorization; mutations, replays
+// included, reauthorize the credential, role, scope, manager relationship and
+// membership in the transaction. CompleteRecords locks the closed sitting and
+// requires every submission to have a finalized review or a waiver current
+// with the inventory. A waiver cannot be granted by the candidate or with
+// undecided flags. New integrity data marks completion stale atomically. Holds
+// last until released by hand and cover later descendants too; releasing one
+// requires a strong, recent protected administrator session. Nothing here
+// retires content, schedules cleanup or creates an export.
 type ExamRecordsStore interface {
 	Resolve(context.Context, model.RetentionHoldScope) (*ExamRecordsScope, error)
 	GetCompletion(context.Context, model.ExamID, model.ExamSittingID) (*ExamRecordsCompletionSnapshot, error)

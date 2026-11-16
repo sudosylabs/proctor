@@ -19,7 +19,7 @@ import (
 )
 
 // SQLExamAuthoringStore implements store.ExamAuthoringStore over exams,
-// exam_drafts and exam_managers, locking the Exam and its Draft rows before any
+// exam_drafts and exam_managers, locking the exam and its draft rows before any
 // change.
 type SQLExamAuthoringStore struct {
 	*SQLStore
@@ -51,7 +51,7 @@ type examAuthoringRow struct {
 	HasStarterWorkspace bool `db:"has_starter_workspace"`
 }
 
-// examAuthoringOutcome is the persisted outcome of an idempotent Exam
+// examAuthoringOutcome is the persisted outcome of an idempotent exam
 // authoring command: the authoring snapshot as committed.
 type examAuthoringOutcome struct {
 	ID                   string             `json:"id"`

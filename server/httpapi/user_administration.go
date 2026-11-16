@@ -199,7 +199,7 @@ func (h userAdministrationHandlers) listSessions(request route.Request) (route.R
 	return route.JSON(http.StatusOK, response), nil
 }
 
-// sessionAdministrationListResponse is one page of a User's Sessions, newest
+// sessionAdministrationListResponse is one page of a user's sessions, newest
 // first.
 type sessionAdministrationListResponse struct {
 	Items      []sessionResponse `json:"items"`

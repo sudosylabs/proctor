@@ -22,7 +22,7 @@ import (
 )
 
 // ExamSubmissionSQLProbe exposes only PostgreSQL-only fault, retention, and
-// concurrency fixtures which the public Submission contract cannot create.
+// concurrency fixtures which the public submission contract cannot create.
 type ExamSubmissionSQLProbe struct {
 	ConcurrentPeer       store.ExamSubmissionStore
 	AssertSchema         func(*testing.T, context.Context)
@@ -96,7 +96,7 @@ func submissionReceiptNotice(t *testing.T, candidate *model.User, submissionID m
 }
 
 // TestExamSubmissionStore verifies voluntary terminal sealing and protected
-// manager inspection through the public Submission Store contract.
+// manager inspection through the public submission store contract.
 func TestExamSubmissionStore(t *testing.T, ss store.Store, submissions store.ExamSubmissionStore, probes ...ExamSubmissionSQLProbe) {
 	t.Helper()
 	ctx := context.Background()
@@ -998,9 +998,9 @@ func validStoretestDigest(value string) bool {
 	return true
 }
 
-// testExamSubmissionReceiptCodeIsUnique proves that a second Submission cannot
-// reuse a receipt code already held by a sealed Submission, and that the
-// failed seal leaves the Attempt unsealed.
+// testExamSubmissionReceiptCodeIsUnique proves that a second submission cannot
+// reuse a receipt code already held by a sealed submission, and that the
+// failed seal leaves the attempt unsealed.
 func testExamSubmissionReceiptCodeIsUnique(t *testing.T, ctx context.Context, ss store.Store,
 	submissions store.ExamSubmissionStore, existing model.SubmissionReceiptCode,
 ) {

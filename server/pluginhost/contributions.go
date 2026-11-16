@@ -24,7 +24,6 @@ type contributions struct {
 	exportFormats []*guardedExportFormat
 }
 
-// discard forgets what e registered.
 func (c *contributions) discard(e *entry) {
 	c.identityTypes = slices.DeleteFunc(c.identityTypes, func(t *guardedIdentityProviderType) bool { return t.entry == e })
 	c.exportFormats = slices.DeleteFunc(c.exportFormats, func(f *guardedExportFormat) bool { return f.entry == e })
@@ -43,7 +42,6 @@ func (r *registrar) register(kind string, add func(*contributions) error) error 
 	return add(&r.host.contributions)
 }
 
-// AddExportFormat records format for the plugin being activated.
 func (r *registrar) AddExportFormat(format plugin.ExportFormat) error {
 	if format == nil {
 		return errors.New("export format is nil")

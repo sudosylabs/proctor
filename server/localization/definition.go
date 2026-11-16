@@ -14,9 +14,8 @@ import (
 	"strings"
 )
 
-// Definition declares one message owned by a localization consumer. Origin is
-// a stable package or subsystem label used by tooling; Variables are the exact
-// template data names accepted by every locale.
+// Definition declares one message. Origin is a stable package label for
+// tooling; Variables are the exact template names every locale must use.
 type Definition struct {
 	ID             string
 	Origin         string
@@ -24,9 +23,8 @@ type Definition struct {
 	PluralVariable string
 }
 
-// MergeDefinitions validates, copies, and lexically orders consumer-owned
-// definitions. Duplicate IDs are rejected even when their declarations are
-// identical so that every message has one unambiguous owner.
+// MergeDefinitions returns a sorted copy. A duplicate ID is rejected even when
+// both declarations match, so every message has one owner.
 func MergeDefinitions(groups ...[]Definition) ([]Definition, error) {
 	count := 0
 	for _, group := range groups {
@@ -96,16 +94,15 @@ func unicodeLetter(character rune) bool {
 	return character >= 'A' && character <= 'Z' || character >= 'a' && character <= 'z'
 }
 
-// ValidateDefinitions proves that English contains exactly the declared IDs
-// and that each declaration describes the template variables in the catalog.
+// ValidateDefinitions checks that English has exactly the declared IDs, each
+// with the declared template variables.
 func (l *Localizer) ValidateDefinitions(definitions []Definition) error {
 	return l.validateDefinitions(definitions, nil)
 }
 
-// ValidateDefinitionsWithDelegatedPrefixes proves the same contract while
-// leaving the named catalog namespaces to another consumer-owned checker. A
-// delegated prefix must end at a localization namespace boundary and may not
-// contain a definition supplied to this validation pass.
+// ValidateDefinitionsWithDelegatedPrefixes skips IDs under prefixes, which
+// another checker owns. A prefix must end at a namespace boundary and must not
+// cover any of definitions.
 func (l *Localizer) ValidateDefinitionsWithDelegatedPrefixes(definitions []Definition, prefixes ...string) error {
 	delegated, err := normalizeDelegatedPrefixes(prefixes)
 	if err != nil {
@@ -185,9 +182,8 @@ func matchingPrefix(id string, prefixes []string) string {
 	return ""
 }
 
-// MissingDefinitions returns declared IDs absent from a specific locale. A
-// partial non-English catalog is valid at runtime because resolution falls
-// back, while tooling can use this report to measure translation coverage.
+// MissingDefinitions lists definitions absent from locale, for measuring
+// coverage. A partial catalog is valid at runtime because resolution falls back.
 func (l *Localizer) MissingDefinitions(locale string, definitions []Definition) ([]Definition, error) {
 	if l == nil {
 		return nil, errors.New("localizer is nil")

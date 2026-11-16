@@ -203,7 +203,7 @@ func testBrowserActivityLifecycle(t *testing.T, ss store.Store) {
 		browserActivityEvent(1, model.BrowserActivityOpened, fixture.revisionID),
 		browserActivityEvent(2, model.BrowserActivityClosed, fixture.revisionID),
 	}
-	// Eight appends drained the Attempt's burst allowance; one append refills in
+	// Eight appends drained the attempt's burst allowance; one append refills in
 	// 500ms of PostgreSQL time, so a fast host would otherwise be rate limited.
 	time.Sleep(600 * time.Millisecond)
 	_, err = appendBrowserActivityFixture(t, ctx, ss, &store.BrowserActivityAppend{

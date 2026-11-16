@@ -26,8 +26,8 @@ type replayState struct {
 	expiresAt     time.Time
 }
 
-// connectionSnapshot is the immutable handoff from a stopped connection
-// runtime to the Hub's replay catalog. The Hub decides whether to retain it.
+// connectionSnapshot is immutable once a stopped connection hands it to the
+// hub's replay catalog.
 type connectionSnapshot struct {
 	id            string
 	principal     model.Principal

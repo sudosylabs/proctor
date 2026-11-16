@@ -20,7 +20,7 @@ import (
 )
 
 // SQLBrowserDeliveryStore is the PostgreSQL store.BrowserDeliveryStore, which
-// owns Browser Activity sources, their live and historical appends, and their
+// owns browser activity sources, their live and historical appends, and their
 // delivery declarations.
 type SQLBrowserDeliveryStore struct{ *SQLStore }
 
@@ -272,7 +272,7 @@ type browserDeclarationRequest struct {
 	record        deliveryDeclarationRecord
 }
 
-// browserDeclarationBudget is the Attempt and Participation budget a browser
+// browserDeclarationBudget is the attempt and participation budget a browser
 // declaration charges.
 type browserDeclarationBudget struct {
 	Metadata      int64 `db:"control_metadata_bytes"`
@@ -696,8 +696,8 @@ func browserDeliveryRanges(
 	return received, mergeNativeDeliveryRanges(gaps), nil
 }
 
-// ResolveBrowserDeliveryTarget returns the Sitting and Class that own the
-// Browser delivery's Attempt, after verifying the caller's delivery access.
+// ResolveBrowserDeliveryTarget returns the sitting and class that own the
+// Browser delivery's attempt, after verifying the caller's delivery access.
 func (s *SQLBrowserDeliveryStore) ResolveBrowserDeliveryTarget(
 	ctx context.Context,
 	access store.BrowserDeliveryAccess,

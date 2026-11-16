@@ -12,10 +12,9 @@ import (
 	"io"
 )
 
-// Match encoding/json's accepted nesting depth without retaining authored
-// values. Decode constructs the document tree; Decoder.Token still allocates
-// decoded strings and numbers. Neither meets this syntax-only pass's bound:
-// memory must not grow with value length or the number of document members.
+// maximumExamResourceJSONDepth matches encoding/json's nesting limit. The pass
+// below avoids Decode and Decoder.Token because both allocate per value, and
+// its memory must not grow with value length or member count.
 const maximumExamResourceJSONDepth = 10000
 
 type examResourceJSONState uint8
@@ -43,12 +42,10 @@ func validateExamResourceJSON(file io.ReadSeeker) error {
 	return validateExamResourceJSONSyntax(file)
 }
 
-// The preceding UTF-8 pass rejects raw invalid encoding and NUL. This pass
-// validates one JSON value without interpreting its contents: duplicate names,
-// arbitrary numeric precision, and escaped unpaired surrogates remain valid.
-// Parent states record what follows the current value, so nesting requires no
-// recursion or per-container allocation. Reader errors stay content-safe; the
-// owning resource pipeline preserves cancellation from its context.
+// validateExamResourceJSONSyntax checks syntax only, after the UTF-8 pass has
+// rejected invalid encoding and NUL: duplicate names, any numeric precision and
+// escaped unpaired surrogates stay valid. Nesting uses a state stack, not
+// recursion, so it allocates nothing per container.
 //
 //nolint:errorlint // Reader EOF is an exact sentinel; a wrapped EOF remains a read failure.
 func validateExamResourceJSONSyntax(source io.Reader) error {

@@ -21,8 +21,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// IssueAcademicUnitRoleInvitation invites a holder of a delegable Role at an Academic
-// Unit and mails the claim.
+// IssueAcademicUnitRoleInvitation invites someone to a role the caller may
+// delegate at an academic unit, and mails the claim.
 func (s *Service) IssueAcademicUnitRoleInvitation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -93,8 +93,8 @@ func (s *Service) IssueAcademicUnitRoleInvitation(
 	})
 }
 
-// IssueInstitutionRoleInvitation invites a holder of a delegable Role at the Institution
-// and mails the claim.
+// IssueInstitutionRoleInvitation invites someone to a role the caller may
+// delegate at the institution, and mails the claim.
 func (s *Service) IssueInstitutionRoleInvitation(
 	ctx context.Context,
 	inv invocation.Invocation,

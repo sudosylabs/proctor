@@ -21,7 +21,7 @@ import (
 )
 
 // SQLExamFocusLossStore is the PostgreSQL store.ExamFocusLossStore, which
-// evaluates live Focus Loss reports and retains reports that arrive after
+// evaluates live focus loss reports and retains reports that arrive after
 // sealing.
 type SQLExamFocusLossStore struct{ *SQLStore }
 
@@ -145,14 +145,9 @@ func validateFocusLossSignal(input *store.ExamAttemptFocusLossSignal) error {
 	return nil
 }
 
-// ResolveFocusLossTarget implements store.ExamFocusLossStore: it resolves the
-// audit scope of a live Focus Loss report without evaluating or mutating
-// anything.
-//
-// It resolves safe audit and effect scope after checking the established
-// access selector. It also resolves the exact retained policy_suspended causal
-// selector for duplicate-audit preflight only; it grants no new-claim
-// authority.
+// ResolveFocusLossTarget resolves the audit scope of a live report without
+// evaluating or mutating anything. The retained policy_suspended selector it
+// may resolve serves duplicate-audit preflight only and grants no new claim.
 func (s *SQLExamFocusLossStore) ResolveFocusLossTarget(
 	ctx context.Context,
 	access store.ExamAttemptFocusLossAccess,
@@ -180,24 +175,14 @@ func (s *SQLExamFocusLossStore) ResolveFocusLossTarget(
 	})
 }
 
-// RecordFocusLoss implements store.ExamFocusLossStore: it evaluates the next
-// Focus Loss sequence against the Exam policy using database time and applies
-// any Flag or suspension. Exact duplicates return the retained result; other
-// replays of an accepted sequence conflict.
-//
-// It is the single PostgreSQL-time evaluation operation. It atomically accepts
-// the next sequence, records gap uncertainty, evaluates and consumes the
-// rolling bucket, bounds evidence/overflow or disabled-policy diagnostics,
-// creates at most one Flag and warning per generation, applies the configured
-// suspension fence, and completes the supplied safe audit. Equal latest
-// sequence is a duplicate only when duration and source match; changed
-// equal-sequence or lower sequence conflicts as focus_loss_sequence. Exact
-// duplicates reauthorize and complete their new audit before returning the
-// retained result. A threshold-crossing FlagAndSuspend duplicate remains
-// replayable through its exact retained causal selector after that transition
-// closed the Participation and Connection; it cannot admit any different or
-// later claim through the closed selector. Stable access conflicts retain the
-// existing Attempt/Participation/Connection constraint vocabulary.
+// RecordFocusLoss evaluates the next sequence against the exam policy at
+// database time, applying at most one flag and suspension per generation.
+// An equal latest sequence is a duplicate only when duration and source
+// match; anything else at or below it is a focus_loss_sequence conflict.
+// Duplicates reauthorize and complete their new audit before returning the
+// retained result, and a FlagAndSuspend duplicate stays replayable through its
+// retained selector after the participation closed, without admitting any
+// other claim.
 func (s *SQLExamFocusLossStore) RecordFocusLoss(
 	ctx context.Context,
 	input *store.ExamAttemptFocusLossSignal,
@@ -213,8 +198,6 @@ func (s *SQLExamFocusLossStore) RecordFocusLoss(
 	})
 }
 
-// recordFocusLoss evaluates and retains one Focus Loss signal inside the
-// caller's transaction.
 func recordFocusLoss(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -316,8 +299,6 @@ func replayFocusLoss(
 	return result, nil
 }
 
-// decideFocusLoss maintains the pending evaluation window for the signal and
-// decides its policy outcome.
 func decideFocusLoss(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -436,16 +417,14 @@ func decideFocusLoss(
 }
 
 // focusLossApplied is what applying a decision did beyond the evaluation
-// state: whether the new Flag asked for a screen clip, and the Suspension
-// and closed Connection a suspend decision produced.
+// state: whether the new flag asked for a screen clip, and the suspension
+// and closed connection a suspend decision produced.
 type focusLossApplied struct {
 	clipRequested    bool
 	connectionClosed bool
 	suspensionID     sql.NullString
 }
 
-// applyFocusLossDecision creates the decided Flag, consumes the window and
-// applies any suspension, updating the evaluation state.
 func applyFocusLossDecision(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -497,8 +476,6 @@ func applyFocusLossDecision(
 	return applied, nil
 }
 
-// retainFocusLossOutcome writes the signal's decision and the updated
-// evaluation state.
 func retainFocusLossOutcome(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -764,7 +741,7 @@ type focusLossPendingRow struct {
 	ReceivedAt     time.Time      `db:"received_at"`
 }
 
-// evidence is the retained episode row as Focus Loss evidence for flagID.
+// evidence is the retained episode row as focus loss evidence for flagID.
 func (row focusLossPendingRow) evidence(
 	access store.ExamAttemptFocusLossAccess,
 	flagID model.IntegrityFlagID,
@@ -865,9 +842,9 @@ func consumeFocusLossBucket(
 	return nil
 }
 
-// suspendForIntegrityPolicy suspends the Attempt of row for the policy kind:
-// it suspends the Attempt, ends the Participation, closes native delivery and
-// the Connection, and opens the policy Suspension linked to the Flag. Focus
+// suspendForIntegrityPolicy suspends the attempt of row for the policy kind:
+// it suspends the attempt, ends the participation, closes native delivery and
+// the connection, and opens the policy suspension linked to the flag. Focus
 // Loss and native rules share it.
 func suspendForIntegrityPolicy(
 	ctx context.Context,
@@ -1243,8 +1220,6 @@ func loadFocusLossFlag(ctx context.Context, tx *sqlxTxWrapper, id string) (*mode
 	return flag, nil
 }
 
-// focusLossSuspensionRow is the Attempt, Participation, Connection and
-// suspension state a Focus Loss suspension outcome is rebuilt from.
 type focusLossSuspensionRow struct {
 	AdmissionRevisionID string         `db:"admission_revision_id"`
 	AttemptState        string         `db:"attempt_state"`
@@ -1339,8 +1314,6 @@ func loadFocusLossSuspensionResult(
 	return nil
 }
 
-// focusLossSuspensionParticipation rebuilds and validates the suspended
-// Participation and Connection views.
 func focusLossSuspensionParticipation(
 	access focusLossAccessRow,
 	row focusLossSuspensionRow,
@@ -1410,8 +1383,6 @@ func focusLossSuspensionParticipation(
 	return participation, connection, nil
 }
 
-// focusLossSuspensionView rebuilds and validates the Focus Loss suspension
-// view.
 func focusLossSuspensionView(
 	row focusLossSuspensionRow,
 	suspensionID string,

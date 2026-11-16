@@ -99,7 +99,7 @@ func (s SQLExternalLoginStateStore) Save(ctx context.Context, input *store.Exter
 	return s.save(ctx, state, lifetime, "external login state save", nil)
 }
 
-// SaveInvitationAdmission stores a new external login state bound to the Invitation claim digest in the input.
+// SaveInvitationAdmission stores a new external login state bound to the invitation claim digest in the input.
 func (s SQLExternalLoginStateStore) SaveInvitationAdmission(
 	ctx context.Context,
 	input *store.ExternalLoginStateInvitationAdmission,

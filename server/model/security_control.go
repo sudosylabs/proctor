@@ -14,11 +14,11 @@ import (
 	"slices"
 )
 
-// The security renewal is a canonical, digest-bound document Desktop sends
-// with each Participation renewal: it is accepted only when its bytes are
+// SecurityControlMaxBytes bounds the security renewal document Desktop sends
+// with each participation renewal. It is accepted only when its bytes are
 // already canonical, and its digest is the replay identity. It carries the
-// delivery watermarks of the live Participation's streams; what Desktop
-// observes travels as capability facts on the native stream, not here.
+// stream delivery watermarks; observations travel as capability facts on the
+// native stream, not here.
 const SecurityControlMaxBytes = 16 * 1024
 
 var (

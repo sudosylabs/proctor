@@ -19,9 +19,8 @@ import (
 )
 
 const (
-	// reliablePeerQueueEnvelopes and reliablePeerQueueBytes bound the
-	// envelopes waiting for one peer's reliable stream. One wire envelope is
-	// at most maxWireBytes, so the byte bound always admits the newest one.
+	// These bound one peer's waiting envelopes. An envelope is at most
+	// maxWireBytes, so the byte bound always admits the newest one.
 	reliablePeerQueueEnvelopes = 64
 	reliablePeerQueueBytes     = 8 * maxWireBytes
 	// reliablePeerIdleTimeout ends a peer's delivery goroutine once its queue
@@ -29,24 +28,22 @@ const (
 	reliablePeerIdleTimeout = time.Minute
 )
 
-// errReliableQueueFull reports an envelope dropped, oldest first, because its
-// peer's bounded reliable queue could not admit a newer envelope.
+// errReliableQueueFull reports an envelope dropped, oldest first, to make room
+// for a newer one.
 var errReliableQueueFull = errors.New("cluster peer reliable queue is full")
 
-// reliableEnvelope is one encoded envelope waiting for a peer's reliable
-// stream. done receives the send outcome, errReliableQueueFull when the
-// envelope is dropped, or cluster.ErrStopped when delivery stops first.
+// reliableEnvelope's done receives the send result, errReliableQueueFull when
+// dropped, or cluster.ErrStopped when delivery stops first.
 type reliableEnvelope struct {
 	node    *hashimemberlist.Node
 	payload []byte
 	done    func(error)
 }
 
-// reliableDelivery sends envelopes too large for one UDP packet over each
-// peer's reliable stream on a goroutine owned per peer. Memberlist dials a
-// fresh TCP connection for every reliable send and blocks for up to its TCP
-// timeout without a context, so publishers only enqueue: a slow or
-// partitioned peer delays its own queue, never the caller or another peer.
+// reliableDelivery sends envelopes too large for one UDP packet, with one
+// goroutine per peer. Memberlist dials TCP for every reliable send and blocks
+// up to its timeout without a context, so callers only enqueue: a slow peer
+// delays its own queue, never the caller or another peer.
 type reliableDelivery struct {
 	send             func(*hashimemberlist.Node, []byte) error
 	maximumEnvelopes int
@@ -75,9 +72,8 @@ func newReliableDelivery(send func(*hashimemberlist.Node, []byte) error) *reliab
 	}
 }
 
-// enqueue admits one envelope for node without waiting for the network. When
-// the peer's queue is full, the oldest waiting envelopes are dropped until the
-// new one fits; each dropped envelope's done receives errReliableQueueFull.
+// enqueue never waits for the network. A full queue drops its oldest envelopes
+// until the new one fits.
 func (d *reliableDelivery) enqueue(node *hashimemberlist.Node, payload []byte, done func(error)) {
 	d.mu.Lock()
 	if d.stopped {
@@ -165,9 +161,8 @@ func (d *reliableDelivery) deliver(name string, peer *reliablePeer) {
 	}
 }
 
-// close refuses new envelopes and reports every waiting envelope as stopped.
-// A send already inside Memberlist cannot be interrupted; Memberlist shutdown
-// makes it fail, and wait observes the goroutines' exit.
+// close fails every waiting envelope with cluster.ErrStopped. A send already
+// inside memberlist cannot be interrupted; memberlist shutdown makes it fail.
 func (d *reliableDelivery) close() {
 	d.mu.Lock()
 	if d.stopped {
@@ -190,7 +185,6 @@ func (d *reliableDelivery) close() {
 	}
 }
 
-// wait blocks until every peer goroutine has exited after close, or ctx ends.
 func (d *reliableDelivery) wait(ctx context.Context) error {
 	finished := make(chan struct{})
 	go func() {

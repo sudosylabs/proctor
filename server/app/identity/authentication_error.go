@@ -22,8 +22,8 @@ func invalidCredentialsAppError() error {
 	return apperror.New("authentication.credentials_invalid")
 }
 
-// mfaEnrollmentRequiredAppError refuses a sign-in or refresh that cannot
-// continue until the User sets up two-step verification in the browser.
+// mfaEnrollmentRequiredAppError refuses a sign-in or refresh until the user
+// sets up two-step verification in the browser.
 func mfaEnrollmentRequiredAppError() error {
 	return apperror.New("authentication.mfa.enrollment_required")
 }
@@ -32,8 +32,8 @@ func authenticationUnavailable(err error) error {
 	return apperror.New("authentication.internal").Wrap(err)
 }
 
-// RateLimitUnavailableAppError reports that attempt accounting failed, so the
-// attempt is refused rather than admitted unbounded.
+// RateLimitUnavailableAppError fails an attempt closed when accounting is
+// unavailable, rather than admitting it unbounded.
 func RateLimitUnavailableAppError(err error) error {
 	return apperror.New("authentication.rate_limit_unavailable").Wrap(err)
 }

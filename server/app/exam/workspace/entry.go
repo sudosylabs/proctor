@@ -40,8 +40,8 @@ type RemoveEntryCommand struct {
 	IdempotencyKey        string
 }
 
-// CreateExamStarterWorkspaceDirectory idempotently creates a directory in the
-// Exam Draft's Starter Workspace, fenced by ExpectedDraftRevision.
+// CreateExamStarterWorkspaceDirectory accepts only a Path already in the form
+// NormalizePath returns, and is fenced by ExpectedDraftRevision.
 func (s *Service) CreateExamStarterWorkspaceDirectory(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -102,8 +102,8 @@ func (s *Service) CreateExamStarterWorkspaceDirectory(
 	)
 }
 
-// MoveExamStarterWorkspaceEntry idempotently moves an entry of the Exam
-// Draft's Starter Workspace to a new path, fenced by ExpectedDraftRevision.
+// MoveExamStarterWorkspaceEntry moves a file or directory to Path, which must
+// already be normalized, fenced by ExpectedDraftRevision.
 func (s *Service) MoveExamStarterWorkspaceEntry(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -150,9 +150,8 @@ func (s *Service) MoveExamStarterWorkspaceEntry(
 	return s.runMutation(ctx, inv, authorization, "entry_move", ChangeEntryMoved, mutation, commandIdempotency, s.workspaces.MoveEntry)
 }
 
-// RemoveExamStarterWorkspaceEntry idempotently removes an entry, recursively
-// when requested, from the Exam Draft's Starter Workspace, fenced by
-// ExpectedDraftRevision.
+// RemoveExamStarterWorkspaceEntry removes a non-empty directory only when
+// Recursive is set, and is fenced by ExpectedDraftRevision.
 func (s *Service) RemoveExamStarterWorkspaceEntry(
 	ctx context.Context,
 	inv invocation.Invocation,

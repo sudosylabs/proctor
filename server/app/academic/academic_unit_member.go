@@ -40,7 +40,7 @@ type EndAcademicUnitMemberCommand struct {
 	Batch          batchitem.Item
 }
 
-// CreateAcademicUnitMember creates an Academic Unit Membership after authorizing the caller.
+// CreateAcademicUnitMember needs academic_unit.members.manage.
 func (s *Service) CreateAcademicUnitMember(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -142,7 +142,7 @@ func (s *Service) CreateAcademicUnitMember(
 	return result, err
 }
 
-// EndAcademicUnitMember ends an Academic Unit Membership after authorizing the caller.
+// EndAcademicUnitMember needs academic_unit.members.manage.
 func (s *Service) EndAcademicUnitMember(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -273,8 +273,8 @@ func (s *Service) authorizeUnit(
 	return resource, nil
 }
 
-// AcademicUnitMemberStoreErrors translates Academic Unit Membership Store
-// failures; onboarding imports present them the same way.
+// AcademicUnitMemberStoreErrors maps unit membership store failures;
+// onboarding imports use it too.
 var AcademicUnitMemberStoreErrors = apperror.AdministrationStoreTable(
 	"academic_unit_member",
 	"academic_unit_member.conflict",
@@ -284,8 +284,8 @@ var AcademicUnitMemberStoreErrors = apperror.AdministrationStoreTable(
 	},
 )
 
-// ListAcademicUnitMembersPageQuery opts into bounded membership enumeration. Each page is
-// authorized independently and explicit selectors preserve its effective filter.
+// ListAcademicUnitMembersPageQuery selects one page of a unit's memberships.
+// Each page is authorized on its own.
 type ListAcademicUnitMembersPageQuery struct {
 	AfterStartAt   time.Time
 	AfterUserID    model.UserID
@@ -294,12 +294,11 @@ type ListAcademicUnitMembersPageQuery struct {
 	MembershipPageQuery
 }
 
-// AcademicUnitMemberPage is one page of a unit's memberships. Users names
-// every listed member; its Email is set only for a caller holding
-// Institution-wide user.view. RolesHere holds each member's current Role
-// Bindings scoped exactly to the unit, at most academicUnitMemberRolesHere
-// each, and is nil when the caller lacks role_binding.view on the unit. The
-// first page also counts every membership the page's filters match.
+// AcademicUnitMemberPage is one page of a unit's memberships. A member's
+// Email is set only for a caller with institution-wide user.view. RolesHere
+// holds up to academicUnitMemberRolesHere bindings per member scoped exactly
+// to the unit, and is nil without role_binding.view on the unit. Only the
+// first page is counted.
 type AcademicUnitMemberPage struct {
 	Members   []*model.AcademicUnitMember
 	HasMore   bool
@@ -309,10 +308,9 @@ type AcademicUnitMemberPage struct {
 	paging.Total
 }
 
-// academicUnitMemberRolesHere bounds the Role Bindings shown per member.
 const academicUnitMemberRolesHere = 5
 
-// ListAcademicUnitMembersPage lists a page of Academic Unit Memberships after authorizing the caller.
+// ListAcademicUnitMembersPage needs academic_unit.members.view.
 func (s *Service) ListAcademicUnitMembersPage(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -374,10 +372,8 @@ func (s *Service) ListAcademicUnitMembersPage(
 	return result, nil
 }
 
-// describeMembers names the page's members in one read and, for a caller
-// holding role_binding.view on the unit, reads their current Role Bindings
-// scoped exactly to it in another. Seeing a unit's members shows who they
-// are; email stays with Institution-wide user.view, as in the User directory.
+// describeMembers keeps email behind institution-wide user.view, as the user
+// directory does.
 func (s *Service) describeMembers(
 	ctx context.Context,
 	inv invocation.Invocation,

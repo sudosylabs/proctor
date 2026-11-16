@@ -26,10 +26,8 @@ type collectionInvalidationData struct {
 	SchemaVersion int `json:"schema_version"`
 }
 
-// NewCandidateExamActivityChangedEvent constructs the payload-minimal
-// collection invalidation sent only to the affected candidate. The public
-// payload deliberately carries no selector because the delivery envelope
-// already owns the exact User target.
+// NewCandidateExamActivityChangedEvent carries no selector because the
+// envelope already targets the candidate.
 func NewCandidateExamActivityChangedEvent(candidateID model.UserID) (Event, error) {
 	if !candidateID.IsValid() {
 		return Event{}, errors.New("candidate Exam activity invalidation requires a valid User identity")
@@ -41,8 +39,8 @@ func NewCandidateExamActivityChangedEvent(candidateID model.UserID) (Event, erro
 	return Event{Name: candidateExamActivityChangedMessage.name, UserID: candidateID, Data: data}, nil
 }
 
-// NewCurrentUserContextChangedEvent constructs a content-free refetch signal
-// for the affected User's bounded navigation projection.
+// NewCurrentUserContextChangedEvent is a content-free refetch signal for the
+// user's current-user context.
 func NewCurrentUserContextChangedEvent(userID model.UserID) (Event, error) {
 	if !userID.IsValid() {
 		return Event{}, errors.New("current User context invalidation requires a valid User identity")
@@ -54,9 +52,8 @@ func NewCurrentUserContextChangedEvent(userID model.UserID) (Event, error) {
 	return Event{Name: currentUserContextChangedMessage.name, UserID: userID, Data: data}, nil
 }
 
-// NewCurrentUserSessionsChangedEvent tells the User's connections to refetch
-// their own Session list: one of their Sessions ended, was revoked or was
-// renamed. It names no Session; the connections of an ended Session close.
+// NewCurrentUserSessionsChangedEvent names no session; the connections of an
+// ended session close anyway.
 func NewCurrentUserSessionsChangedEvent(userID model.UserID) (Event, error) {
 	if !userID.IsValid() {
 		return Event{}, errors.New("current User Sessions invalidation requires a valid User identity")
@@ -68,9 +65,8 @@ func NewCurrentUserSessionsChangedEvent(userID model.UserID) (Event, error) {
 	return Event{Name: currentUserSessionsChangedMessage.name, UserID: userID, Data: data}, nil
 }
 
-// NewUserSettingsChangedEvent constructs the content-free refetch hint sent to
-// the owning User's live sessions after a durable settings replacement. The
-// source document and all client/session details deliberately remain absent.
+// NewUserSettingsChangedEvent is a content-free refetch hint; no settings or
+// client details travel.
 func NewUserSettingsChangedEvent(
 	userID model.UserID,
 	revision model.UserSettingsRevision,
@@ -103,9 +99,8 @@ type userProfilePictureChangedData struct {
 	ChangedAt         string `json:"changed_at"`
 }
 
-// NewUserProfilePictureChangedEvent tells the User's live sessions which File
-// Entry is now their profile picture, with the User revision and the instant
-// of the change.
+// NewUserProfilePictureChangedEvent names the file entry that is now the
+// profile picture.
 func NewUserProfilePictureChangedEvent(
 	userID model.UserID,
 	activeFileEntryID model.FileEntryID,

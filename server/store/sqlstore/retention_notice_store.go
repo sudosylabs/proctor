@@ -35,7 +35,7 @@ type retentionNoticeRow struct {
 	DeliveryCode  string       `db:"delivery_error_code"`
 }
 
-// retentionNoticeSelect joins the Sitting and the Exam Revision it delivered;
+// retentionNoticeSelect joins the sitting and the exam revision it delivered;
 // retention never removes either, and the foreign keys guarantee both exist.
 const retentionNoticeSelect = `SELECT n.retirement_id, n.recipient_user_id, r.exam_id, r.exam_sitting_id, r.submission_id,
 	r.category, r.state, n.created_at, r.retire_after, n.canceled_at, n.delivery_state, n.delivery_error_code,

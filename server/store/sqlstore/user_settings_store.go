@@ -208,14 +208,14 @@ func (s SQLUserSettingsStore) Replace(
 	return &result, nil
 }
 
-// userSettingsReplacementOutcome is the committed result of a User Settings
+// userSettingsReplacementOutcome is the committed result of a user settings
 // replacement; only its Result persists, as userSettingsReplacementDocument.
 type userSettingsReplacementOutcome struct {
 	Result       store.UserSettingsReplacementResult
 	AuditEventID string
 }
 
-// userSettingsReplacementDocument is the persisted outcome of a User Settings
+// userSettingsReplacementDocument is the persisted outcome of a user settings
 // replacement.
 type userSettingsReplacementDocument struct {
 	Revision      model.UserSettingsRevision `json:"revision"`

@@ -25,8 +25,7 @@ import (
 const examResourceUploadBodyLimit = model.ExamResourceMaximumBytes + 64*1024
 const examResourceMetadataLimit = 32 * 1024
 
-// examResourceHandlers serves the Exam Resource routes: the files attached to
-// an Exam draft. The Exam routes themselves are examHandlers.
+// examResourceHandlers serves the files attached to an exam draft.
 type examResourceHandlers struct{ app *resource.Service }
 type examResourceUploadMetadata struct {
 	ExpectedDraftRevision int64  `json:"expected_revision"`
@@ -67,8 +66,8 @@ type examResourceResponse struct {
 	DraftRevision       int64  `json:"draft_revision"`
 }
 
-// examResourceResource is the HTTP resource of the Exam Resource entity, hence
-// the doubled word; examResource is the Exam's.
+// examResourceResource is the HTTP resource of the exam resource entity, hence
+// the doubled word; examResource is the exam's.
 func examResourceResource(app *resource.Service) route.Resource {
 	h := examResourceHandlers{app: app}
 	collection := "/exams/{exam_id}/draft/resources"
@@ -256,7 +255,7 @@ func (h examResourceHandlers) list(request route.Request) (route.Result, error) 
 		return route.Result{}, err
 	}
 
-	// The Exam Capacity Policy bounds the Draft's Resources, so the complete
+	// The exam capacity policy bounds the draft's resources, so the complete
 	// ordered set is paged by position.
 	response, err := route.BoundedList(
 		request,
@@ -395,7 +394,7 @@ func (h examResourceHandlers) reorder(request route.Request) (route.Result, erro
 		return route.Result{}, err
 	}
 
-	// The new order is the complete Resource set, presented in the
+	// The new order is the complete resource set, presented in the
 	// collection envelope without a continuation.
 	response, err := route.NewList(items, false, examResourceResponseFromRecord, nil)
 	if err != nil {

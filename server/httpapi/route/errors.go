@@ -150,9 +150,8 @@ func routeErrorAllowed(policy routeErrorPolicy, err error) bool {
 	return allowed
 }
 
-// applicationErrorMapping is the HTTP presentation for one public error code.
-// The Problem Details type is derived from the code. The table itself is
-// generated from error_catalog.yaml into error_mapping.go.
+// applicationErrorMapping is one row of the table generated from
+// error_catalog.yaml into error_mapping.go.
 type applicationErrorMapping struct {
 	status int
 	// retryAfter is the Retry-After delay in seconds; zero sends none.

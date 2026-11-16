@@ -17,9 +17,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// clusterInvalidation carries Academic Period invalidations to the other
-// nodes, so their local caches drop a period this node changed. Peers only
-// invalidate locally and never rebroadcast.
+// clusterInvalidation tells other nodes to drop an academic period this node
+// changed. Peers only invalidate locally and never rebroadcast.
 type clusterInvalidation struct {
 	cluster cluster.Transport
 }
@@ -30,7 +29,8 @@ type academicPeriodInvalidationMessage struct {
 
 const academicPeriodInvalidatedEvent cluster.Event = "store.academic_period.invalidated"
 
-// NewClusterInvalidation returns the InvalidationFanout over transport.
+// NewClusterInvalidation returns an InvalidationFanout over the cluster
+// transport.
 func NewClusterInvalidation(transport cluster.Transport) (InvalidationFanout, error) {
 	if transport == nil {
 		return nil, errors.New("cluster is nil")

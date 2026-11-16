@@ -15,14 +15,12 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// MutationAuditAdapter is the one Invocation-shaped view of the audit service.
-// Every parent use case and Exam child receives it directly for
-// principal-attributed mutation audit; it never wraps another adapter.
+// MutationAuditAdapter audits mutations attributed to the invocation's
+// principal. Areas receive it directly; it never wraps another adapter.
 type MutationAuditAdapter struct{ audit *Auditor }
 
-// Begin persists the attempt of a mutation. The Mutation's fields choose how
-// it is recorded: a Subject names the affected User, a ScopeType or ScopeID
-// records the explicit authorization scope, and neither records the
+// Begin records the attempt at the subject user when Subject is set, at the
+// explicit scope when ScopeType or ScopeID is set, and otherwise at the
 // resource's own scope.
 func (a MutationAuditAdapter) Begin(ctx context.Context, attempt Mutation) (model.AuditEventID, error) {
 	var event *model.AuditEvent
@@ -61,8 +59,6 @@ func (a MutationAuditAdapter) Begin(ctx context.Context, attempt Mutation) (mode
 	return event.ID, nil
 }
 
-// beginForSubject begins the attempt of a mutation whose resource is not the
-// affected User, naming that User as the event's subject.
 func (a MutationAuditAdapter) beginForSubject(ctx context.Context, attempt Mutation) (*model.AuditEvent, error) {
 	principal := attempt.Invocation.Principal()
 	if principal.ValidateMFARecovery() != nil {
@@ -94,7 +90,7 @@ func (a MutationAuditAdapter) beginForSubject(ctx context.Context, attempt Mutat
 	)
 }
 
-// Fail completes an attempt as failed with the error code.
+// Fail completes an attempt as failed; errorCode is the public error code.
 func (a MutationAuditAdapter) Fail(ctx context.Context, auditID model.AuditEventID, errorCode string) error {
 	_, appErr := a.audit.CompleteCriticalAction(
 		ctx,
@@ -106,7 +102,8 @@ func (a MutationAuditAdapter) Fail(ctx context.Context, auditID model.AuditEvent
 	return appErr
 }
 
-// PrepareAtScope builds the audit draft of a mutation that a Store aggregate inserts itself.
+// PrepareAtScope builds an unpersisted audit event for a store aggregate to
+// insert in its own commit.
 func (a MutationAuditAdapter) PrepareAtScope(
 	_ context.Context,
 	inv invocation.Invocation,
@@ -130,7 +127,8 @@ func (a MutationAuditAdapter) PrepareAtScope(
 	)
 }
 
-// RecordAuthorizationDecision persists an authorization decision for the invocation.
+// RecordAuthorizationDecision records an allowed or denied decision
+// attributed to the invocation's principal.
 func (a MutationAuditAdapter) RecordAuthorizationDecision(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -152,7 +150,7 @@ func (a MutationAuditAdapter) RecordAuthorizationDecision(
 	)
 }
 
-// Complete completes an attempt as successful with its result.
+// Complete marks an attempt successful; value is the recorded result.
 func (a MutationAuditAdapter) Complete(ctx context.Context, auditID model.AuditEventID, value map[string]any) error {
 	_, err := a.audit.CompleteCriticalAction(ctx, auditID, model.AuditStatusSuccess, "", value)
 	return err

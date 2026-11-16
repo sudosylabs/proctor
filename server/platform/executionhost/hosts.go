@@ -5,10 +5,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package executionhost is the execenv adapter behind the Attempt
-// Environment's host port: it dials the configured execution hosts and
-// translates the owner's calls and execenv's answers. No execenv type
-// leaves it.
+// Package executionhost implements environment.Hosts over execenv: it dials
+// the configured execution hosts and translates calls and answers. No execenv
+// type leaves it.
 package executionhost
 
 import (
@@ -101,8 +100,6 @@ func New(cfg Config) (*Hosts, error) {
 	return hosts, nil
 }
 
-// dialRemote dials a host over TLS with its certificate authority and
-// token.
 func dialRemote(_ context.Context, configured config.ExecutionHost) (execenv.Host, error) {
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM([]byte(configured.CAPEM)) {
@@ -130,7 +127,6 @@ func (h *Hosts) Close() error {
 	return nil
 }
 
-// client returns the named host's client, dialing it when needed.
 func (h *Hosts) client(ctx context.Context, name string) (execenv.Host, error) {
 	h.mu.Lock()
 	target := h.byName[name]

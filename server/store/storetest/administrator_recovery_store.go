@@ -20,15 +20,17 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// TestAdministratorRecoveryStore exercises the offline installation-level
-// aggregate. The supplied password hashes are deliberately synthetic: the
-// Store owns atomic persistence, while the application owns password hashing.
+// AdministratorRecoverySQLProbe holds the locks TestAdministratorRecoveryStore
+// races recovery against.
 type AdministratorRecoverySQLProbe struct {
 	HoldAuthenticationPathFence func(*testing.T, context.Context) (int, func())
 	HoldServingNodeLeaseFence   func(*testing.T, context.Context) (int, func())
 	WaitForBlockedTransactions  func(*testing.T, context.Context, int, int)
 }
 
+// TestAdministratorRecoveryStore exercises offline administrator recovery.
+// The password hashes are deliberately synthetic: the store owns atomic
+// persistence, the application owns hashing.
 func TestAdministratorRecoveryStore(t *testing.T, ss store.Store, probes ...AdministratorRecoverySQLProbe) {
 	t.Helper()
 	ctx := context.Background()

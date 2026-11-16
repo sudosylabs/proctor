@@ -59,9 +59,7 @@ type examRevisionPublishedData struct {
 	PublishedAt  string `json:"published_at"`
 }
 
-// NewExamRevisionPublishedEvent tells viewers of an Exam that a new Exam
-// Revision was published. The payload carries the Revision's number,
-// publication kind, and policy digest, and none of the published content.
+// NewExamRevisionPublishedEvent carries none of the published content.
 // policyDigest must be 64 characters long.
 func NewExamRevisionPublishedEvent(
 	revisionID model.ExamRevisionID,
@@ -95,7 +93,7 @@ func NewExamRevisionPublishedEvent(
 	}, nil
 }
 
-// NewExamCreatedEvent constructs the stable, content-free authoring event.
+// NewExamCreatedEvent carries only the exam's identifier.
 func NewExamCreatedEvent(examID model.ExamID) (Event, error) {
 	if !examID.IsValid() {
 		return Event{}, errors.New("exam created event requires a valid Exam ID")
@@ -107,8 +105,7 @@ func NewExamCreatedEvent(examID model.ExamID) (Event, error) {
 	}, nil
 }
 
-// NewExamDraftUpdatedEvent owns the bounded wire projection for a Draft text
-// or policy change. Authored content and policy values are deliberately absent.
+// NewExamDraftUpdatedEvent carries no authored content or policy values.
 func NewExamDraftUpdatedEvent(examID model.ExamID, revision int64) (Event, error) {
 	if !examID.IsValid() || revision < 1 {
 		return Event{}, errors.New("exam Draft update event requires a valid identity and revision")
@@ -127,9 +124,8 @@ func NewExamDraftUpdatedEvent(examID model.ExamID, revision int64) (Event, error
 	}, nil
 }
 
-// NewExamStarterWorkspaceChangedEvent constructs the content-free fact emitted
-// after one Starter Workspace hierarchy/content mutation commits. Logical
-// paths, opaque object identities, checksums, and authored bytes are absent.
+// NewExamStarterWorkspaceChangedEvent carries no paths, object identities,
+// checksums or bytes.
 func NewExamStarterWorkspaceChangedEvent(
 	examID model.ExamID,
 	entryID model.StarterWorkspaceEntryID,
@@ -169,7 +165,7 @@ func validExamStarterWorkspaceOperation(operation string) bool {
 	}
 }
 
-// NewExamArchivedEvent constructs the content-free Exam lifecycle event.
+// NewExamArchivedEvent carries no exam content.
 func NewExamArchivedEvent(examID model.ExamID, revision int64, archivedAt time.Time) (Event, error) {
 	if !examID.IsValid() || revision < 1 || archivedAt.IsZero() {
 		return Event{}, errors.New("exam archived event requires a valid identity, revision, and time")
@@ -192,10 +188,9 @@ func NewExamArchivedEvent(examID model.ExamID, revision int64, archivedAt time.T
 	}, nil
 }
 
-// NewExamManagerChangedEvent tells viewers of an Exam that userID was added
-// as an Exam Manager (present true) or removed (present false). revision is
-// the Exam's revision after the change. An ownership transfer is announced by
-// NewExamOwnerTransferredEvent instead.
+// NewExamManagerChangedEvent reports userID added (present true) or removed
+// as a manager. An ownership transfer uses NewExamOwnerTransferredEvent
+// instead.
 func NewExamManagerChangedEvent(
 	examID model.ExamID,
 	userID model.UserID,
@@ -226,8 +221,8 @@ func NewExamManagerChangedEvent(
 	}, nil
 }
 
-// NewExamOwnerTransferredEvent tells those who may view the Exam that it has
-// a new owner, at the Exam revision the transfer produced.
+// NewExamOwnerTransferredEvent tells exam viewers it has a new owner;
+// revision is the one the transfer produced.
 func NewExamOwnerTransferredEvent(examID model.ExamID, ownerID model.UserID, revision int64, changedAt time.Time) (Event, error) {
 	if !examID.IsValid() || !ownerID.IsValid() || revision < 1 || changedAt.IsZero() {
 		return Event{}, errors.New("Exam owner transfer event requires valid identities, revision, and time")

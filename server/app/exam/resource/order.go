@@ -25,8 +25,8 @@ type ReorderCommand struct {
 	IdempotencyKey        string
 }
 
-// ReorderExamResources idempotently sets the order of the Exam Draft's Exam
-// Resources, fenced by ExpectedDraftRevision. ResourceIDs must not repeat.
+// ReorderExamResources sets the draft's resource order, fenced by
+// ExpectedDraftRevision. ResourceIDs must not repeat.
 func (s *Service) ReorderExamResources(
 	ctx context.Context,
 	inv invocation.Invocation,

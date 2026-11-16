@@ -386,8 +386,8 @@ func sealAutomaticExamSubmission(
 	return automaticExamSubmissionSealResult(outcome, beforeConnection == model.AttemptConnectionOpen)
 }
 
-// automaticExamSubmissionSealable reports whether the locked Attempt is an
-// active, ready or suspended Attempt of a closing Sitting.
+// automaticExamSubmissionSealable reports whether the locked attempt is an
+// active, ready or suspended attempt of a closing sitting.
 func automaticExamSubmissionSealable(row automaticExamSubmissionRow) bool {
 	return row.SittingState == string(model.ExamSittingClosing) &&
 		(row.AttemptState == string(model.ExamAttemptActive) ||
@@ -396,7 +396,7 @@ func automaticExamSubmissionSealable(row automaticExamSubmissionRow) bool {
 }
 
 // automaticExamSubmissionSealResult converts a fresh automatic seal outcome
-// into its result, reporting whether the seal closed an open Connection.
+// into its result, reporting whether the seal closed an open connection.
 func automaticExamSubmissionSealResult(outcome examSubmissionSealOutcome, connectionClosed bool,
 ) (*store.ExamSubmissionAutomaticSealResult, error) {
 	result, err := examSubmissionSealResult(outcome)
@@ -439,7 +439,7 @@ func prepareAutomaticExamSubmissionReceipt(
 }
 
 // automaticExamSubmissionAccounting is the locked integrity tail, decoded
-// policy and unresolved integrity counts of an automatically ended Attempt.
+// policy and unresolved integrity counts of an automatically ended attempt.
 type automaticExamSubmissionAccounting struct {
 	Integrity          automaticExamSubmissionIntegrity
 	Policy             model.ExamPolicySet
@@ -448,8 +448,8 @@ type automaticExamSubmissionAccounting struct {
 	MissingCorrections []model.ExamRevisionID
 }
 
-// lockAutomaticExamSubmissionAccounting locks the Attempt's integrity tail,
-// decodes its policy, and counts the unresolved Focus Loss gaps plus missing
+// lockAutomaticExamSubmissionAccounting locks the attempt's integrity tail,
+// decodes its policy, and counts the unresolved focus loss gaps plus missing
 // correction acknowledgements; policyField names the policy in errors.
 func lockAutomaticExamSubmissionAccounting(
 	ctx context.Context,
@@ -505,7 +505,7 @@ func lockAutomaticExamSubmissionAccounting(
 	}, nil
 }
 
-// focusLossReason names why the automatically ended Attempt's Focus Loss
+// focusLossReason names why the automatically ended attempt's focus loss
 // evidence is incomplete.
 func (a automaticExamSubmissionAccounting) focusLossReason() model.IntegrityDiscrepancyFocusLossGapReason {
 	focusReason := model.IntegrityDiscrepancyFocusLossSequenceGap

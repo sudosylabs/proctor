@@ -51,10 +51,8 @@ type installationStateResponse struct {
 	AdministratorUserID string `json:"administrator_user_id"`
 }
 
-// installationBootstrapResponse is the transport-owned success body for the
-// one-time bootstrap command. Field names match the historical v1 envelope so
-// existing clients and integration tests keep working while domain models no
-// longer serialize directly.
+// installationBootstrapResponse is the one-time bootstrap success body. Its
+// field names are the v1 envelope's, which existing clients depend on.
 type installationBootstrapResponse struct {
 	State         *installationStateResponse   `json:"state"`
 	Institution   *institutionResponse         `json:"institution"`

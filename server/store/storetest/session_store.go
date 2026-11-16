@@ -98,8 +98,8 @@ func testSessionListByUserPages(t *testing.T, ss store.Store) {
 	}
 }
 
-// purgeRetiredUntil runs Session purge passes until gone reports true. Other
-// fixtures may contribute retired Sessions, so it walks every pass.
+// purgeRetiredUntil runs session purge passes until gone reports true. Other
+// fixtures may contribute retired sessions, so it walks every pass.
 func purgeRetiredUntil(t *testing.T, ctx context.Context, ss store.Store, gone func() bool) {
 	t.Helper()
 	for range 20 {
@@ -142,7 +142,7 @@ func testSessionPurgeRetired(t *testing.T, ss store.Store) {
 	_, err = ss.Session().Get(ctx, retired.ID)
 	require.NoError(t, err, "a Session inside its grace is kept")
 
-	// A rotation revokes the live Session's first access credential and
+	// A rotation revokes the live session's first access credential and
 	// marks its refresh credential used.
 	now := live.CreatedAt.Add(time.Millisecond)
 	_, err = ss.SessionCredential().RotateRefresh(ctx, &store.SessionRefreshRotation{TokenHash: model.HashToken(liveRaw.refresh), Access: &model.SessionCredential{TokenHash: model.HashToken(model.NewCredentialToken()), ExpiresAt: now.Add(15 * time.Minute)}, Refresh: &model.SessionCredential{TokenHash: model.HashToken(model.NewCredentialToken()), ExpiresAt: live.ExpiresAt}, Now: now, IdleExpiresAt: now.Add(time.Hour)})
@@ -403,7 +403,7 @@ func testSessionUpdateActivity(t *testing.T, ss store.Store) {
 	require.Equal(t, user.LastLoginAt, signedIn.LastLoginAt, "activity is not a sign-in")
 	require.Equal(t, user.Revision, signedIn.Revision, "activity is not a profile change")
 
-	// A second Session reporting older activity cannot move the User backwards.
+	// A second session reporting older activity cannot move the user backwards.
 	earlier := other.LastActivityAt.Add(100 * time.Millisecond)
 	require.True(t, earlier.Before(at))
 	require.NoError(t, ss.Session().UpdateActivity(ctx, &store.SessionActivityUpdate{ID: other.ID, LastActivityAt: earlier, IdleExpiresAt: earlier.Add(time.Hour)}))
@@ -935,7 +935,7 @@ func testPasswordProof(t *testing.T, ctx context.Context, ss store.Store, userID
 	return store.PasswordCredentialProof{ID: credential.ID, Revision: credential.Revision}
 }
 
-// everySession pages all of one fixture User's Sessions at once.
+// everySession pages all of one fixture user's sessions at once.
 func everySession(userID model.UserID) *store.SessionPageQuery {
 	return &store.SessionPageQuery{UserID: userID, Limit: store.MaximumSessionPageSize}
 }

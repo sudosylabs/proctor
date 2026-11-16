@@ -22,7 +22,7 @@ import (
 )
 
 // SQLAccessPolicyStore implements store.AccessPolicyStore. A policy transition
-// and the Session and credential revocations it forces commit together.
+// and the session and credential revocations it forces commit together.
 type SQLAccessPolicyStore struct{ *SQLStore }
 
 func newSQLAccessPolicyStore(sqlStore *SQLStore) store.AccessPolicyStore {
@@ -126,9 +126,9 @@ func (s SQLAccessPolicyStore) Preflight(
 	})
 }
 
-// roleHolderUserPredicate selects an active User u holding, at the instant bound
-// to $1, a current Role Binding of an unarchived Role whose Academic Unit or
-// Class scope is not archived. A binding at any scope makes a User a role holder.
+// roleHolderUserPredicate selects an active user u holding, at the instant bound
+// to $1, a current role binding of an unarchived role whose academic unit or
+// class scope is not archived. A binding at any scope makes a user a role holder.
 const roleHolderUserPredicate = `u.archived_at IS NULL
 		AND u.disabled_at IS NULL
 		AND EXISTS (
@@ -163,7 +163,7 @@ const roleHolderUserPredicate = `u.archived_at IS NULL
 				)
 		)`
 
-// roleHolderSingleFactorSessionPredicate selects the Sessions s that are live at
+// roleHolderSingleFactorSessionPredicate selects the sessions s that are live at
 // the instant bound to $1 and have not proved a second factor.
 const roleHolderSingleFactorSessionPredicate = `s.archived_at IS NULL
 		AND s.revoked_at IS NULL
@@ -171,8 +171,8 @@ const roleHolderSingleFactorSessionPredicate = `s.archived_at IS NULL
 		AND s.idle_expires_at > $1
 		AND s.authentication_strength <> 'multi_factor'`
 
-// HasRoleHolderMFARequirement reports whether the current Access Policy requires
-// two-step verification of role holders and the User is a role holder at the given instant.
+// HasRoleHolderMFARequirement reports whether the current access policy requires
+// two-step verification of role holders and the user is a role holder at the given instant.
 func (s SQLAccessPolicyStore) HasRoleHolderMFARequirement(ctx context.Context, userID model.UserID, at time.Time) (bool, error) {
 	if !userID.IsValid() || at.IsZero() {
 		return false, store.NewErrInvalidInput("access_policy", "has_role_holder_mfa_requirement", nil)
@@ -190,7 +190,7 @@ func (s SQLAccessPolicyStore) HasRoleHolderMFARequirement(ctx context.Context, u
 	return required, nil
 }
 
-// accessPolicyReplacementOutcome is the committed result of an Access Policy
+// accessPolicyReplacementOutcome is the committed result of an access policy
 // replacement. It persists as accessPolicyReplacementDocument.
 type accessPolicyReplacementOutcome struct {
 	Result              *store.AccessPolicyReplacementResult
@@ -198,8 +198,8 @@ type accessPolicyReplacementOutcome struct {
 	RevokedSessionCount int
 }
 
-// accessPolicyReplacementDocument is the persisted outcome of an Access
-// Policy replacement. Revocation identifiers and token hashes are post-commit
+// accessPolicyReplacementDocument is the persisted outcome of an access
+// policy replacement. Revocation identifiers and token hashes are post-commit
 // effects, not part of the retained response, so replays never emit them.
 type accessPolicyReplacementDocument struct {
 	Policy              accessPolicyDocument             `json:"policy"`
@@ -268,8 +268,8 @@ func encodeAccessPolicyReplacementOutcome(outcome accessPolicyReplacementOutcome
 	return encodeOutcome(document)
 }
 
-// Replace applies a preflighted Access Policy replacement at the expected
-// revision as an idempotent mutation, optionally revoking Sessions of disabled
+// Replace applies a preflighted access policy replacement at the expected
+// revision as an idempotent mutation, optionally revoking sessions of disabled
 // methods.
 func (s SQLAccessPolicyStore) Replace(
 	ctx context.Context,
@@ -301,7 +301,6 @@ func (s SQLAccessPolicyStore) Replace(
 	return result, nil
 }
 
-// replaceAccessPolicy applies a preflighted Access Policy replacement inside the idempotent mutation transaction.
 func replaceAccessPolicy(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -380,7 +379,6 @@ func replaceAccessPolicy(
 	return outcome, nil
 }
 
-// lockUnblockedAccessPolicy locks the current Access Policy at the expected revision and requires the replacement to have no blockers.
 func lockUnblockedAccessPolicy(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -414,7 +412,6 @@ func lockUnblockedAccessPolicy(
 	return current, databaseNow, nil
 }
 
-// persistAccessPolicyReplacement writes the changed Access Policy, records its transition and bounds the transition history.
 func persistAccessPolicyReplacement(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -712,10 +709,8 @@ func revokeSessionsForDisabledAccessMethods(
 	return result, nil
 }
 
-// revokeRoleHolderSingleFactorSessions revokes, with their credentials, the live
-// Sessions of role holders that have not proved a second factor. Replacement
-// calls it when the policy starts requiring two-step verification of role holders
-// and the administrator chose revoke_existing_sessions.
+// revokeRoleHolderSingleFactorSessions revokes, with their credentials, the
+// live sessions of role holders that have not proved a second factor.
 func revokeRoleHolderSingleFactorSessions(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -809,9 +804,9 @@ func revokeRoleHolderSingleFactorSessions(
 	return revocations, nil
 }
 
-// mergeAccessPolicySessionRevocations joins two per-User revocation lists in
-// User order. A Session appears in at most one list: the first revocation
-// already ended it before the second selected live Sessions.
+// mergeAccessPolicySessionRevocations joins two per-user revocation lists in
+// user order. A session appears in at most one list: the first revocation
+// already ended it before the second selected live sessions.
 func mergeAccessPolicySessionRevocations(first, second []store.AccessPolicySessionRevocation) []store.AccessPolicySessionRevocation {
 	byUser := make(map[model.UserID]int, len(first)+len(second))
 	merged := make([]store.AccessPolicySessionRevocation, 0, len(first)+len(second))
@@ -837,12 +832,9 @@ func mergeAccessPolicySessionRevocations(first, second []store.AccessPolicySessi
 	return merged
 }
 
-// shortenLiveSessionDeadlines pulls the deadlines of every live Session in to
-// a shorter effective Session length, in the replacement transaction: idle
-// expiry to last activity plus the new idle length, absolute expiry to
-// creation plus the new absolute length, and each credential to its Session's
-// new absolute expiry. LEAST never extends a running Session, so a longer
-// length leaves it unchanged.
+// shortenLiveSessionDeadlines pulls every live session's idle, absolute and
+// credential deadlines in to a shorter session length. LEAST never extends a
+// running session, so a longer length leaves it unchanged.
 func shortenLiveSessionDeadlines(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -860,11 +852,9 @@ func shortenLiveSessionDeadlines(
 		UserID    string `db:"user_id"`
 		SessionID string `db:"session_id"`
 	}{}
-	// A Session older than the new absolute length ends one microsecond after
-	// its last activity, already in the past. The new deadlines therefore
-	// stay after last activity and creation, the idle deadline never passes
-	// the absolute one, and neither ever moves later, so every row keeps the
-	// Session invariants.
+	// A session older than the new absolute length ends one microsecond after
+	// its last activity, already in the past, so deadlines stay after last
+	// activity and creation, idle never passes absolute, and neither moves later.
 	if err := tx.Select(ctx, &rows, `WITH shortened AS (
 			SELECT id,
 				GREATEST(
@@ -903,7 +893,7 @@ func shortenLiveSessionDeadlines(
 
 	// A credential keeps expiring after its creation and any use, so one
 	// issued or used after the new absolute expiry ends just after that; its
-	// Session has already ended.
+	// session has already ended.
 	if _, err := tx.Exec(ctx, `UPDATE session_credentials c
 		SET updated_at = GREATEST(c.updated_at, ?),
 			expires_at = GREATEST(
@@ -970,7 +960,7 @@ func shortenLiveSessionDeadlines(
 	return changes, nil
 }
 
-// nullableMinutes stores an unset Session length as NULL.
+// nullableMinutes stores an unset session length as NULL.
 func nullableMinutes(minutes int) sql.NullInt64 {
 	return sql.NullInt64{Int64: int64(minutes), Valid: minutes > 0}
 }

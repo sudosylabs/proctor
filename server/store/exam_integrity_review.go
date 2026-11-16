@@ -24,8 +24,8 @@ const (
 	ExamIntegrityReviewFlagReadMaximum        = 200
 )
 
-// ExamIntegrityReviewAuthorization is the canonical ownership projection for
-// review/release authorization and nested-route concealment.
+// ExamIntegrityReviewAuthorization is a submission's ownership, used to
+// authorize review and release and to conceal nested routes.
 type ExamIntegrityReviewAuthorization struct {
 	SubmissionID    model.SubmissionID
 	ExamID          model.ExamID
@@ -35,12 +35,8 @@ type ExamIntegrityReviewAuthorization struct {
 	AcademicUnitID  model.AcademicUnitID
 }
 
-// ConsistentWith reports whether the projection is for the Submission that was
-// asked for and names its Exam, Sitting, Attempt, candidate and owning
-// Academic Unit.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the projection is for the submission asked
+// for and names every owner.
 func (a *ExamIntegrityReviewAuthorization) ConsistentWith(submissionID model.SubmissionID) bool {
 	return !(a == nil ||
 		a.SubmissionID != submissionID ||
@@ -51,8 +47,8 @@ func (a *ExamIntegrityReviewAuthorization) ConsistentWith(submissionID model.Sub
 		!a.AcademicUnitID.IsValid())
 }
 
-// ExamIntegrityFlagSummary is the bounded manager projection of one Flag. It
-// contains no evidence details or private candidate-authored material.
+// ExamIntegrityFlagSummary is a manager's view of one flag. It holds no
+// evidence detail or private candidate-authored material.
 type ExamIntegrityFlagSummary struct {
 	Browser                *model.BrowserIntegrityGroup
 	Flag                   model.IntegrityFlag
@@ -95,13 +91,12 @@ type ExamIntegrityDiscrepancyPage struct {
 	HasMore bool
 }
 
-// ExamSubmissionReviewSnapshot is the bounded manager-visible Review state.
-// Decision rationale and manager notes are deliberately present only here,
-// behind current review authorization; candidate result reads use a separate
-// projection.
+// ExamSubmissionReviewSnapshot is the manager's view of a review. It is the
+// only place decision rationale and manager notes appear; candidate reads use
+// a separate projection.
 type ExamSubmissionReviewSnapshot struct {
 	NativeConditions model.NativeConditionInventory
-	// AttemptEvidence is the inventory the Submission seal fixed.
+	// AttemptEvidence is the inventory the submission seal fixed.
 	AttemptEvidence           model.AttemptEvidenceInventory
 	DeliveryInventoryRevision int64
 	BrowserEvidenceOverflow   *model.BrowserIntegrityOverflow
@@ -165,9 +160,9 @@ type ExamIntegrityReviewRelease struct {
 	ExpectedRecipientRevision int64
 }
 
-// ExamIntegrityReviewReleasePreparation reserves the PostgreSQL release time
-// for a fresh transition and identifies an already-retained one-way release so
-// the application never prepares another candidate notification on replay.
+// ExamIntegrityReviewReleasePreparation is the reserved release time.
+// Replayed is true when the release already happened, so the application must
+// not prepare another candidate notice.
 type ExamIntegrityReviewReleasePreparation struct {
 	Replayed  bool
 	ReleaseAt time.Time
@@ -180,12 +175,9 @@ type ExamIntegrityReviewMutationResult struct {
 	Replayed      bool
 }
 
-// ConsistentWith reports whether the outcome carries a consistent
-// authorization projection and a valid Review for the given Submission, and
-// its Decision, when present, is valid and belongs to that Review.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the result has a consistent authorization
+// and a valid review for the submission, and a nil or valid decision of that
+// review.
 func (r *ExamIntegrityReviewMutationResult) ConsistentWith(submissionID model.SubmissionID) bool {
 	return !(r == nil ||
 		!r.Authorization.ConsistentWith(submissionID) ||
@@ -195,35 +187,29 @@ func (r *ExamIntegrityReviewMutationResult) ConsistentWith(submissionID model.Su
 		(r.Decision != nil && (r.Decision.Validate() != nil || r.Decision.ReviewID != r.Review.ID)))
 }
 
-// ExamIntegrityReviewStore owns the one Review aggregate for a sealed
-// Submission. Manager reads are purpose-specific and bounded. Each mutation
-// rechecks the canonical Submission/Attempt lineage, current Exam Manager or
-// explicit override, optimistic revisions, audit attempt, and exact command
-// replay under one transaction.
+// ExamIntegrityReviewStore persists the one review of a sealed submission.
+// Each mutation rechecks, in one transaction, the submission and attempt
+// lineage, the current manager or an explicit override, revisions, the audit
+// attempt and command replay.
 //
-// SaveDecision and UpdateDraft create the sole draft Review when expected
-// Review revision is zero, otherwise mutate only the exact current draft.
-// Finalize locks the terminal Submission, complete Flag/evidence inventory,
-// Review, and decisions; requires one decision per Flag; rejects any missing,
-// changed, or over-limit inventory; snapshots immutable inventory rows and a
-// canonical digest, which also binds the native-condition inventory and the
-// Attempt evidence inventory the seal fixed; freezes the Review; and
-// commits audit/outcome atomically. ListAttemptEvidence pages the sealed
-// Submission's Attempt evidence in ID order, at most
-// AttemptEvidenceReviewMaximum per page, and conceals it once integrity
-// has retired. PrepareRelease locks the exact finalized Review, distinguishes its retained
-// one-way release, and durably reserves a millisecond PostgreSQL release time
-// without changing Review state. Release is a distinct one-way authorized
-// transaction that locks and consumes that exact preparation. Fresh
-// release first locks and revalidates the canonical candidate User and frozen
-// recipient revision, then the authorization hierarchy, Submission/Attempt,
-// and Review. It commits the released Review, safe audit result, one semantic
-// candidate occurrence, queued or terminally suppressed delivery, delivery
-// Job, and retained command outcome atomically. Encrypted mail holds the
-// primary-key fence through commit. Failure commits none of them. Exact
-// replays repeat current authorization/audit, return the retained result, and
-// require or insert no notice. GetReleasedStudentResult exposes only the
-// candidate-owned released projection and conceals all pre-release state.
+// SaveDecision and UpdateDraft create the draft when the expected review
+// revision is zero and otherwise change only the current draft. Finalize locks
+// the submission, the full flag and evidence inventory, the review and its
+// decisions; requires one decision per flag; rejects a missing, changed or
+// over-limit inventory; snapshots the inventory with a digest that also binds
+// the native-condition and attempt evidence inventories; and freezes the
+// review. ListAttemptEvidence pages in ID order, at most
+// AttemptEvidenceReviewMaximum per page, and conceals evidence once integrity
+// retention has ended.
+//
+// PrepareRelease reserves a millisecond release time on the database clock
+// without changing the review. Release is one-way and consumes that
+// preparation. A fresh release locks the candidate and recipient revision
+// first, then the hierarchy, submission, attempt and review, and commits the
+// released review, audit, candidate notice and its delivery Job atomically;
+// encrypted mail holds the primary-key fence through commit. A replay
+// rechecks authorization and returns the retained result without a notice.
+// GetReleasedStudentResult conceals everything before release.
 type ExamIntegrityReviewStore interface {
 	ListNativeConditions(context.Context, NativeConditionListOptions) (*NativeConditionPage, error)
 	ListAttemptEvidence(context.Context, AttemptEvidenceListOptions) (*AttemptEvidencePage, error)
@@ -240,7 +226,8 @@ type ExamIntegrityReviewStore interface {
 	GetReleasedStudentResult(context.Context, model.ExamAttemptID, model.UserID) (*model.StudentResult, error)
 }
 
-// Native condition records are reviewable without a Flag or a guilt decision.
+// NativeConditionListOptions pages native condition records, which are
+// reviewable without a flag or a decision.
 type NativeConditionListOptions struct {
 	SubmissionID model.SubmissionID
 	AfterID      model.IntegrityEvidenceID
@@ -251,7 +238,8 @@ type NativeConditionPage struct {
 	HasMore bool
 }
 
-// ExamIntegrityReviewReleasePrepare is the input to ExamIntegrityReviewStore.PrepareRelease.
+// ExamIntegrityReviewReleasePrepare names the finalized review to prepare for
+// release.
 type ExamIntegrityReviewReleasePrepare struct {
 	SubmissionID     model.SubmissionID
 	ReviewID         model.SubmissionReviewID

@@ -79,7 +79,6 @@ func academicNamePage(request route.Request, directed bool) (paging.NameQuery, e
 	return query, nil
 }
 
-// academicNameListResult presents one name-ordered page.
 func academicNameListResult[I, T any](page paging.Page[I], present func(I) T, key func(I) (string, string)) (route.Result, error) {
 	response, err := academicNameList(page, false, present, key)
 	if err != nil {
@@ -118,7 +117,7 @@ func academicNameList[I, T any](page paging.Page[I], descending bool, present fu
 	})
 }
 
-// academicPeriodCursor continues the Academic Period listing ordered by start,
+// academicPeriodCursor continues the academic period listing ordered by start,
 // name, then identity.
 type academicPeriodCursor struct {
 	StartAt string `json:"start_at"`

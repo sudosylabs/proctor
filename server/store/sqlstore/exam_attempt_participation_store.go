@@ -37,19 +37,10 @@ type attemptParticipationRenewalRow struct {
 	SessionExpiresAt     time.Time      `db:"session_expires_at"`
 }
 
-// RenewParticipation extends the lease of the Candidate's active Participation
-// generation.
-//
-// It locks and validates the exact Attempt, active Participation generation,
-// owning candidate, Session-bound open Connection, and credential digest.
-// Sequence equal to the current accepted sequence is an idempotent duplicate;
-// an older sequence conflicts. A greater sequence sets expiry to the earlier
-// of PostgreSQL decision time plus the fixed 20-second lease and the locked
-// current Sitting end. expires_at <= database_now returns the stable expired
-// conflict and never mutates or revives the generation. Stable conflict
-// constraints are attempt_participation_credential,
-// attempt_participation_generation, attempt_participation_sequence, and
-// attempt_participation_expired.
+// RenewParticipation extends the active generation's lease to the earlier of
+// database time plus 20 seconds and the sitting end. An equal sequence is a
+// duplicate and an older one conflicts. An expired lease returns the
+// attempt_participation_expired conflict and is never revived.
 func (s *SQLExamAttemptStore) RenewParticipation(
 	ctx context.Context,
 	input *store.ExamAttemptParticipationRenewal,
@@ -57,8 +48,8 @@ func (s *SQLExamAttemptStore) RenewParticipation(
 	return s.changeParticipationControl(ctx, input, true)
 }
 
-// participationRenewalAttemptRow is the Attempt and Sitting state a
-// Participation renewal locks before the Participation itself.
+// participationRenewalAttemptRow is the attempt and sitting state a
+// participation renewal locks before the participation itself.
 type participationRenewalAttemptRow struct {
 	CandidateID    string    `db:"candidate_user_id"`
 	ExamID         string    `db:"exam_id"`
@@ -109,8 +100,8 @@ func validParticipationControl(input *store.ExamAttemptParticipationRenewal, ren
 	return true
 }
 
-// changeParticipationControlInTx locks and checks the Attempt, Participation,
-// Session and Connection, processes the security control, and advances the lease
+// changeParticipationControlInTx locks and checks the attempt, participation,
+// session and connection, processes the security control, and advances the lease
 // when renew carries a new sequence.
 func (s *SQLExamAttemptStore) changeParticipationControlInTx(
 	ctx context.Context,
@@ -181,8 +172,8 @@ func (s *SQLExamAttemptStore) changeParticipationControlInTx(
 	}, nil
 }
 
-// lockParticipationRenewalAttempt locks the Attempt and shares its Sitting,
-// requiring the input Candidate to own the Attempt.
+// lockParticipationRenewalAttempt locks the attempt and shares its sitting,
+// requiring the input candidate to own the attempt.
 func lockParticipationRenewalAttempt(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAttemptParticipationRenewal,
 ) (participationRenewalAttemptRow, model.ExamID, model.ExamSittingID, error) {
 	var attempt participationRenewalAttemptRow
@@ -213,8 +204,8 @@ func lockParticipationRenewalAttempt(ctx context.Context, tx *sqlxTxWrapper, inp
 	return attempt, examID, sittingID, nil
 }
 
-// lockParticipationRenewalCredential locks the Participation with its Session
-// and Desktop Registration and checks the credential, generation and states.
+// lockParticipationRenewalCredential locks the participation with its session
+// and desktop registration and checks the credential, generation and states.
 func lockParticipationRenewalCredential(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -265,8 +256,8 @@ func lockParticipationRenewalCredential(
 	return row, nil
 }
 
-// lockParticipationRenewalConnection locks the renewing Connection and
-// requires it to be open on the input Session.
+// lockParticipationRenewalConnection locks the renewing connection and
+// requires it to be open on the input session.
 func lockParticipationRenewalConnection(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAttemptParticipationRenewal) error {
 	var connection struct {
 		SessionID string `db:"session_id"`
@@ -292,7 +283,7 @@ func lockParticipationRenewalConnection(ctx context.Context, tx *sqlxTxWrapper, 
 }
 
 // checkParticipationRenewalTime reads the decision time into row and checks
-// the Session, Sitting deadline, lease and renewal sequence against it.
+// the session, sitting deadline, lease and renewal sequence against it.
 func checkParticipationRenewalTime(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -317,8 +308,8 @@ func checkParticipationRenewalTime(
 	return nil
 }
 
-// applyParticipationRenewal renews the Participation domain state, bounds the
-// lease by the Sitting end, and writes it fenced on the prior sequence.
+// applyParticipationRenewal renews the participation domain state, bounds the
+// lease by the sitting end, and writes it fenced on the prior sequence.
 func applyParticipationRenewal(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -398,16 +389,9 @@ const participationExpiryDueSelect = `SELECT a.exam_id, a.exam_sitting_id, s.cla
 	JOIN exam_sittings s ON s.id = a.exam_sitting_id
 		AND s.exam_id = a.exam_id`
 
-// ResolveParticipationExpiry returns the active Participation generation only
-// when its lease has expired by the database clock. An unexpired or
-// non-matching generation is an attempt_participation_expired conflict.
-//
-// It returns the exact active generation only when expires_at <= PostgreSQL
-// current time, with the same safe scope projection produced by the scanner. A
-// late renewal uses it to begin actorless scoped audit before invoking
-// ExpireParticipation; it never performs the transition. Exact
-// selector/generation mismatches and a current unexpired lease fail with stable
-// not-found/conflict errors rather than exposing another record.
+// ResolveParticipationExpiry returns the active generation only when its lease
+// has expired by the database clock, so a late renewal can begin audit before
+// ExpireParticipation. It never performs the transition.
 func (s *SQLExamAttemptStore) ResolveParticipationExpiry(
 	ctx context.Context,
 	attemptID model.ExamAttemptID,
@@ -442,7 +426,7 @@ func (s *SQLExamAttemptStore) ResolveParticipationExpiry(
 	return row.expiryDue()
 }
 
-// ListExpiredParticipations returns up to limit (1..200) active Participation
+// ListExpiredParticipations returns up to limit (1..200) active participation
 // generations whose lease has expired by the database clock, oldest expiry
 // first: expiry at or before PostgreSQL's current time, ordered by
 // (LeaseExpiresAt, ParticipationID).
@@ -535,21 +519,11 @@ type participationExpiryLockRow struct {
 	DatabaseNow            time.Time      `db:"database_now"`
 }
 
-// ExpireParticipation implements store.ExamAttemptStore: it ends the expired
-// Participation generation as lease_expired, closes its Connection, records
-// Connection Loss evidence and a Flag, and suspends the Attempt in one
-// transaction. A later call for the same generation returns the retained
-// outcome.
-//
-// It is the single conditional operation shared by late renewal and the
-// recurring scan. It locks the exact generation and, when expires_at <=
-// PostgreSQL now, atomically ends it as lease_expired, closes its open
-// Connection, creates neutral Connection Loss evidence and the one
-// generation-scoped flag, suspends the Attempt, completes audit, and retains
-// the outcome. Exact later calls rehydrate that outcome. A generation that was
-// renewed before the lock conflicts as attempt_participation_not_expired
-// without partial state; a non-current generation conflicts as
-// attempt_participation_generation.
+// ExpireParticipation ends an expired generation as lease_expired, closes its
+// connection, records connection loss with a flag and suspends the attempt in
+// one transaction; a later call returns the retained outcome. Late renewal and
+// the recurring scan share it. A generation renewed before the lock conflicts
+// as attempt_participation_not_expired.
 func (s *SQLExamAttemptStore) ExpireParticipation(
 	ctx context.Context,
 	input *store.ExamAttemptParticipationExpiry,
@@ -574,8 +548,6 @@ func (s *SQLExamAttemptStore) ExpireParticipation(
 	})
 }
 
-// participationExpiryChange holds the domain values one Participation expiry
-// writes.
 type participationExpiryChange struct {
 	attempt       *model.ExamAttempt
 	participation *model.AttemptParticipation
@@ -584,7 +556,7 @@ type participationExpiryChange struct {
 	suspension    *model.AttemptSuspension
 }
 
-// expireParticipation ends the expired Participation generation inside tx,
+// expireParticipation ends the expired participation generation inside tx,
 // or replays the retained outcome when it already ended as lease_expired.
 func expireParticipation(
 	ctx context.Context,
@@ -622,8 +594,6 @@ func expireParticipation(
 	return finishParticipationExpiry(ctx, tx, input, row, false)
 }
 
-// finishParticipationExpiry loads the expiry result for row and completes its
-// audit event.
 func finishParticipationExpiry(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -642,9 +612,9 @@ func finishParticipationExpiry(
 	return result, nil
 }
 
-// prepareParticipationExpiry locks the open Connection, reads the decision
+// prepareParticipationExpiry locks the open connection, reads the decision
 // time into row, checks the lease has expired, and builds the suspended
-// Attempt, ended Participation, Flag, evidence and Suspension.
+// attempt, ended participation, flag, evidence and suspension.
 func prepareParticipationExpiry(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -721,9 +691,6 @@ func prepareParticipationExpiry(
 	return change, nil
 }
 
-// persistParticipationExpiry writes the suspended Attempt and ended
-// Participation, closes native delivery and the Connection, and inserts the
-// Flag, evidence and Suspension.
 func persistParticipationExpiry(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -773,7 +740,7 @@ func persistParticipationExpiry(
 		return fmt.Errorf("close expired Attempt Connection: %w", err)
 	}
 
-	// Connection Loss asks for its clip like any Flag; Desktop finds the
+	// Connection Loss asks for its clip like any flag; Desktop finds the
 	// request when it reconnects.
 	if _, err := insertIntegrityFlag(ctx, tx, flag); err != nil {
 		return err
@@ -886,8 +853,6 @@ type participationExpiryRecordRow struct {
 	PrivateReason             sql.NullString `db:"private_reason"`
 }
 
-// loadParticipationExpiryResult builds the expiry result for row from the
-// records the expiry retained.
 func loadParticipationExpiryResult(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -967,8 +932,8 @@ func loadParticipationExpiryResult(
 	}, nil
 }
 
-// participationExpiryRecords validates the Connection Loss Flag, evidence and
-// Suspension of one expiry and returns the Suspension as it was recorded at
+// participationExpiryRecords validates the connection loss flag, evidence and
+// suspension of one expiry and returns the suspension as it was recorded at
 // expiry.
 func participationExpiryRecords(
 	records participationExpiryRecordRow,
@@ -1069,7 +1034,7 @@ func participationExpiryRecords(
 	return flag, evidence, suspension, nil
 }
 
-// loadExpiredAttemptConnection loads the Participation's latest Connection,
+// loadExpiredAttemptConnection loads the participation's latest connection,
 // if any, and reports whether lease expiry closed it.
 func loadExpiredAttemptConnection(
 	ctx context.Context,

@@ -14,8 +14,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// DesktopAuthorizationCreation is the closed input for creating a pending
-// desktop browser handoff. The Store owns the initial state and all timestamps.
+// DesktopAuthorizationCreation is the input of a pending desktop browser
+// handoff. The store sets the initial state and every timestamp.
 type DesktopAuthorizationCreation struct {
 	ID                      model.BrowserAuthenticationTransactionID
 	InstitutionID           model.InstitutionID
@@ -42,8 +42,8 @@ type DesktopAuthorizationCreated struct {
 	ExpiresAt time.Time
 }
 
-// DesktopAuthorizationBinding atomically consumes the URL handle and initial
-// fragment proof and replaces them with one server-owned browser binding.
+// DesktopAuthorizationBinding consumes the URL handle and fragment proof and
+// replaces them, atomically, with one server-owned browser binding.
 type DesktopAuthorizationBinding struct {
 	HandleHash       string
 	BrowserProofHash string
@@ -55,33 +55,30 @@ type DesktopAuthorizationBound struct {
 	ExpiresAt time.Time
 }
 
-// DesktopAuthorizationContext is the safe current state selected only by the
-// opaque browser-binding cookie. Authentication proof details remain durable
-// but are not projected to the browser.
+// DesktopAuthorizationContext is the state the browser-binding cookie may
+// see; proof details are stored but never projected.
 type DesktopAuthorizationContext struct {
 	ID         model.BrowserAuthenticationTransactionID
 	State      model.BrowserAuthenticationState
 	UserID     model.UserID
 	DeviceName string
-	// CreatedAt is the authoritative instant Desktop started the request.
-	CreatedAt time.Time
-	ExpiresAt time.Time
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
 }
 
-// DesktopAuthorizationAuthentication binds one proved identity to the exact
-// browser transaction. The Store rechecks active User, authentication policy,
-// external-identity provenance, password proof, and the active-Attempt Session
-// lock together. Reusing a Web Session requires its exact live access credential;
-// the Store derives the authentication context from that Session. Otherwise a
-// local authentication supplies PasswordProof and an external one supplies its
-// exact External Identity. Source Session and direct password proof cannot mix.
-// Fresh password authentication and MFA use the Store's transition instant.
-// External authentication and MFA retain their asserted history, capped at that
-// instant when the provider clock is ahead. Session reuse takes the Session's
-// latest primary proof (initial or reauthenticated) and its MFA history,
-// recording an earlier MFA completion at that proof instant, and rechecks
-// Session and access-proof expiry at the transition. An inconsistent resulting state rolls back. None
-// of these operations extend the browser transaction's original deadline.
+// DesktopAuthorizationAuthentication binds one proved identity to the browser
+// transaction. The store rechecks the active user, authentication policy,
+// external-identity provenance, password proof and the active-attempt session
+// lock together, and rolls back on an inconsistent result.
+//
+// Exactly one proof is given: a source web session with its live access
+// credential (the store derives the authentication from that session), a
+// PasswordProof, or an external identity. Fresh password and MFA proofs take
+// the store's transition instant. External proofs keep their asserted times,
+// capped at that instant when the provider clock is ahead. Session reuse takes
+// the session's latest primary proof and its MFA history, records an earlier
+// MFA completion at that proof instant, and rechecks session and access-proof
+// expiry. Nothing here extends the transaction's original deadline.
 type DesktopAuthorizationAuthentication struct {
 	PasswordProof            PasswordCredentialProof
 	SourceSessionID          model.SessionID
@@ -104,18 +101,17 @@ type DesktopAuthorizationAuthenticationResult struct {
 
 type DesktopAuthorizationAccountReset struct{ BindingHash string }
 
-// BrowserInvitationTransactionProof lets an Invitation acceptance aggregate
-// consume the already-proved browser transaction in the same database commit.
-// The accepting Store supplies the authoritative Invitation and User.
+// BrowserInvitationTransactionProof lets an invitation acceptance consume the
+// proved browser transaction in the same commit. The accepting store supplies
+// the invitation and user.
 type BrowserInvitationTransactionProof struct {
 	ID               model.BrowserAuthenticationTransactionID
 	HandleHash       string
 	BrowserProofHash string
 }
 
-// BrowserInvitationTransactionCreation is the closed input for atomically
-// rechecking one Invitation and creating its browser handoff. The Store owns
-// the authoritative creation time and deadline calculation.
+// BrowserInvitationTransactionCreation rechecks one invitation and creates its
+// browser handoff atomically. The store sets the creation time and deadline.
 type BrowserInvitationTransactionCreation struct {
 	ID                  model.BrowserAuthenticationTransactionID
 	InstitutionID       model.InstitutionID
@@ -138,19 +134,17 @@ type BrowserInvitationResolution struct {
 	InvitationClaimHash string
 }
 
-// BrowserAuthenticationMaintenanceResult describes one bounded, authoritative
-// database-clock maintenance page. More reports that immediately eligible work
-// remains for a subsequent page or scheduled occurrence.
+// BrowserAuthenticationMaintenanceResult is one bounded maintenance page, run
+// on the database clock. More reports that eligible work remains now.
 type BrowserAuthenticationMaintenanceResult struct {
 	Expired int
 	Purged  int
 	More    bool
 }
 
-// BrowserAuthenticationStore owns the shared durable browser-authentication
-// transaction aggregate used by desktop authorization, desktop
-// reauthentication and hosted Invitation acceptance. No raw browser credential
-// crosses this boundary.
+// BrowserAuthenticationStore persists the browser transactions behind desktop
+// authorization, desktop reauthentication and invitation acceptance. Only
+// hashes of browser credentials cross it, never raw values.
 type BrowserAuthenticationStore interface {
 	CreateDesktopAuthorization(context.Context, *DesktopAuthorizationCreation) (*DesktopAuthorizationCreated, error)
 	BindDesktopAuthorization(context.Context, *DesktopAuthorizationBinding) (*DesktopAuthorizationBound, error)

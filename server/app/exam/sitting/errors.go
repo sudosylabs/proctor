@@ -16,8 +16,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// publicFailures presents every Sitting use-case failure: unexpected errors
-// become exam.sitting.unavailable, and protected targets conceal denial and absence.
+// publicFailures turns unexpected errors into exam.sitting.unavailable, and
+// reports denial as not_found so callers can't probe for sittings.
 var publicFailures = apperror.Concealment{
 	Unavailable: "exam.sitting.unavailable",
 	Concealed:   []apperror.Code{"exam.sitting.not_found"},

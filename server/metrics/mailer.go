@@ -93,7 +93,7 @@ func mailPayloadBytes(message mail.Message) int {
 
 var _ platform.Mailer = (*measuredMailer)(nil)
 
-// newMailCollectors creates the SMTP, durable mail and application event collectors.
+// newMailCollectors also creates the application event collectors.
 func (m *Module) newMailCollectors() {
 	m.smtpOperations = operationCounter("smtp", "SMTP transport operations.", []string{"operation", "outcome"})
 	m.smtpDuration = operationDuration("smtp", "SMTP transport operation duration.", []string{"operation"})

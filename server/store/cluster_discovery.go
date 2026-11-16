@@ -17,30 +17,28 @@ import (
 )
 
 const (
-	// ClusterDiscoveryNodeIDMaxBytes bounds operator-configured node identities.
+	// ClusterDiscoveryNodeIDMaxBytes bounds the operator-configured node ID.
 	ClusterDiscoveryNodeIDMaxBytes = 128
-	// ClusterDiscoveryAdvertiseAddressMaxBytes bounds join addresses.
+	// ClusterDiscoveryAdvertiseAddressMaxBytes bounds the join address.
 	ClusterDiscoveryAdvertiseAddressMaxBytes = 512
-	// ClusterDiscoveryServerVersionMaxBytes bounds version advertisement strings.
+	// ClusterDiscoveryServerVersionMaxBytes bounds the advertised version.
 	ClusterDiscoveryServerVersionMaxBytes = 128
 )
 
-// ClusterDiscoveryNode is a short-lived, disposable bootstrap record used to
-// find peer join addresses. It is never a message queue and must not store
-// application event payloads.
+// ClusterDiscoveryNode is a disposable bootstrap record for finding peer join
+// addresses. It is not a message queue: never store event payloads in it.
 type ClusterDiscoveryNode struct {
 	NodeID           string
 	AdvertiseAddress string
 	ServerVersion    string
 	ProtocolMin      int
 	ProtocolMax      int
-	// ExpiresAt is the exclusive liveness deadline.
+	// ExpiresAt is exclusive: the record is dead at that instant.
 	ExpiresAt time.Time
-	// UpdatedAt is the last successful upsert/heartbeat time.
 	UpdatedAt time.Time
 }
 
-// Validate checks local discovery-record invariants without I/O.
+// Validate checks the record's bounds and lifetime without I/O.
 func (n *ClusterDiscoveryNode) Validate() error {
 	if n == nil {
 		return errors.New("cluster discovery node is nil")
@@ -70,25 +68,20 @@ func (n *ClusterDiscoveryNode) Validate() error {
 	return nil
 }
 
-// IsLive reports whether the record is still within its exclusive expiry window.
+// IsLive reports whether now is before ExpiresAt; a zero now is never live.
 func (n *ClusterDiscoveryNode) IsLive(now time.Time) bool {
 	return n != nil && !now.IsZero() && n.ExpiresAt.After(now)
 }
 
-// ClusterDiscoveryStore persists short-lived multi-node bootstrap records.
-// Concrete adapters enforce expiry and uniqueness; callers treat rows as
-// reconstructible and disposable.
+// ClusterDiscoveryStore persists cluster bootstrap records. The store enforces
+// expiry and uniqueness; callers treat rows as disposable.
 type ClusterDiscoveryStore interface {
-	// Upsert inserts or replaces the node record. The supplied ExpiresAt is
-	// authoritative for the new lease window.
+	// Upsert inserts or replaces the record; its ExpiresAt is taken as given.
 	Upsert(context.Context, *ClusterDiscoveryNode) error
-	// ListLive returns non-expired peers ordered by node ID. liveAt is the
-	// exclusive liveness threshold (ExpiresAt after liveAt).
+	// ListLive returns records with ExpiresAt after liveAt, by node ID.
 	ListLive(ctx context.Context, liveAt time.Time) ([]*ClusterDiscoveryNode, error)
-	// Delete removes one node record, typically on graceful shutdown.
 	Delete(context.Context, string) error
-	// DeleteExpired removes stale records and returns the number of rows deleted.
-	// expiredAt is the inclusive expiry threshold (ExpiresAt at or before it).
+	// DeleteExpired removes records with ExpiresAt at or before expiredAt.
 	DeleteExpired(ctx context.Context, expiredAt time.Time) (int64, error)
 }
 

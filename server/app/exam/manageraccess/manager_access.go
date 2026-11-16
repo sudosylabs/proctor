@@ -15,12 +15,10 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// SelectAction chooses the caller's ordinary action only for a current Exam
-// Manager with current membership in the Exam's exact Academic Unit. Otherwise
-// it chooses the explicit override action, which the caller must authorize.
-// The caller validates its inputs and supplies non-nil access, access.Exam,
-// and memberships.
-// Lookup failures are returned unchanged for the owning use case to present.
+// SelectAction returns ordinaryAction for a current manager with current
+// membership in the exam's exact unit, and overrideAction otherwise. access,
+// access.Exam and memberships must be non-nil. A lookup failure selects
+// neither action and is returned unchanged.
 func SelectAction(
 	ctx context.Context,
 	memberships store.AcademicUnitMemberStore,
@@ -42,8 +40,8 @@ func SelectAction(
 	return overrideAction, nil
 }
 
-// HasCurrentMembership checks the exact Academic Unit at the supplied time.
-// It grants no role permission and implies no Exam Manager relationship.
+// HasCurrentMembership reports whether userID is an active member of exactly
+// unitID at at. It implies no role permission and no manager relationship.
 func HasCurrentMembership(
 	ctx context.Context,
 	memberships store.AcademicUnitMemberStore,

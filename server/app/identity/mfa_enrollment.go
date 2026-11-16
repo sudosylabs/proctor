@@ -37,7 +37,7 @@ type ActivateMFACommand struct {
 	Code string
 }
 
-// MFASetup is one-time setup material. It must never be logged or audited.
+// MFASetup is one-time setup material; it must never be logged or audited.
 type MFASetup struct {
 	Secret          string
 	ProvisioningURI string
@@ -52,7 +52,7 @@ type MFAActivation struct {
 // MFAMethodAuthenticatorApp is the only second factor: a TOTP authenticator app.
 const MFAMethodAuthenticatorApp = "authenticator_app"
 
-// MFAStatus is the caller's enrollment status.
+// MFAStatus is the caller's enrollment status and session assurance.
 type MFAStatus struct {
 	ServiceEnabled           bool
 	MFARecoveryRequired      bool
@@ -78,16 +78,12 @@ type MFAStatus struct {
 	RecoveryCodesGeneratedAt model.OptionalTime
 	// PasswordChangedAt is unset for an account without a password credential.
 	PasswordChangedAt model.OptionalTime
-	// RecentAuthenticationTTL is the configured recent-authentication window;
-	// RecentlyAuthenticatedUntil is when it ends for this Session, set only
-	// while the Session is recently authenticated.
+	// RecentlyAuthenticatedUntil is set only while the session is recently
+	// authenticated.
 	RecentAuthenticationTTL    time.Duration
 	RecentlyAuthenticatedUntil model.OptionalTime
 }
 
-// requireMFA checks the collaborators two-step verification uses: the Stores
-// it reads and writes, its effects, mail, mechanics, authorization, attempt
-// accounting and policy, the role holder requirement and the clock.
 func (s *Service) requireMFA() error {
 	switch {
 	case s.users == nil:
@@ -111,8 +107,8 @@ func (s *Service) requireMFA() error {
 	case s.loginRateLimit.MaximumAttempts <= 0 || s.loginRateLimit.MaximumSourceAttempts <= 0 || s.loginRateLimit.Window <= 0:
 		return errors.New("MFA attempt policy is required")
 	case s.accessPolicy == nil:
-		// The Access Policy refuses disabling the second factor of a User it
-		// requires to use two-step verification.
+		// The access policy refuses disabling MFA for a user it requires to
+		// use it.
 		return errors.New("MFA role holder policy is required")
 	case s.recentAuthenticationTTL <= 0:
 		return errors.New("MFA recent authentication TTL must be positive")
@@ -123,8 +119,7 @@ func (s *Service) requireMFA() error {
 	return nil
 }
 
-// GetMFAStatus reports the caller's two-step verification enrollment and
-// Session assurance.
+// GetMFAStatus reports the caller's enrollment and session assurance.
 func (s *Service) GetMFAStatus(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -188,8 +183,7 @@ func (s *Service) GetMFAStatus(
 	return status, nil
 }
 
-// SetupMFA starts a pending TOTP enrollment for the caller with a freshly
-// sealed secret.
+// SetupMFA starts a pending TOTP enrollment with a freshly sealed secret.
 func (s *Service) SetupMFA(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -354,7 +348,7 @@ func (s *Service) ActivateMFA(
 	return &MFAActivation{RecoveryCodes: rawCodes}, nil
 }
 
-// DisableMFA removes the caller's second factor unless the Access Policy
+// DisableMFA removes the caller's second factor unless the access policy
 // requires it.
 func (s *Service) DisableMFA(
 	ctx context.Context,

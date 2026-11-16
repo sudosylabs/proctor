@@ -220,7 +220,7 @@ func persistConnectSecurity(
 ) error {
 	security := allocation.binding.Security
 	attemptID := security.Policy.Scope.AttemptID.String()
-	// Recheck clock fences after all admission locks and Workspace creation.
+	// Recheck clock fences after all admission locks and workspace creation.
 	// A slow transaction cannot spend a report or issue a lease after its deadline.
 	var timing struct {
 		Now         time.Time `db:"now"`
@@ -260,7 +260,7 @@ func persistConnectSecurity(
 
 	allocation.now = timing.Now.UTC().Truncate(time.Millisecond)
 
-	// The Attempt row is locked by Connect. Other delivery owners must acquire
+	// The attempt row is locked by Connect. Other delivery owners must acquire
 	// the same budget row before reserving; no reservation is ever refunded.
 	if _, err := tx.Exec(
 		ctx,
@@ -440,10 +440,10 @@ func validateSecurityResume(
 	return nil
 }
 
-// RecoverSecurityPolicy returns the admitted security policy, frozen Attempt
-// Configuration, and native control state for the Candidate's active
-// Participation, so a desktop can recover after losing a Connect response. It
-// needs no open Connection, but an expired Participation lease is a conflict.
+// RecoverSecurityPolicy returns the admitted security policy, frozen attempt
+// configuration, and native control state for the candidate's active
+// participation, so a desktop can recover after losing a Connect response. It
+// needs no open connection, but an expired participation lease is a conflict.
 func (s *SQLSecurityPreflightStore) RecoverSecurityPolicy(
 	ctx context.Context,
 	access store.SecurityPreflightAccess,
@@ -476,7 +476,7 @@ func (s *SQLSecurityPreflightStore) RecoverSecurityPolicy(
 			LeaseExpiresAt      time.Time `db:"lease_expires_at"`
 		}
 		// Recovery works after a lost Connect response even if the transport has
-		// closed. It does not require an open Connection or expose ended generations.
+		// closed. It does not require an open connection or expose ended generations.
 		readOwner := func() error {
 			return tx.Get(
 				ctx,

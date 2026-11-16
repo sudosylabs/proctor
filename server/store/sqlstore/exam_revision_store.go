@@ -20,8 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// SQLExamRevisionStore implements store.ExamRevisionStore: it freezes a Draft's
-// resources and Starter Workspace into immutable exam_revisions history.
+// SQLExamRevisionStore implements store.ExamRevisionStore: it freezes a draft's
+// resources and starter workspace into immutable exam_revisions history.
 type SQLExamRevisionStore struct{ *SQLStore }
 
 func newSQLExamRevisionStore(sqlStore *SQLStore) store.ExamRevisionStore {
@@ -346,8 +346,8 @@ func publishExamRevision(
 	}, nil
 }
 
-// lockExamRevisionDraft locks the Exam and its draft and requires a manager
-// (or override), an unarchived Exam and the expected draft revision.
+// lockExamRevisionDraft locks the exam and its draft and requires a manager
+// (or override), an unarchived exam and the expected draft revision.
 func lockExamRevisionDraft(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamRevisionPublication) (examRevisionDraftRow, error) {
 	var draft examRevisionDraftRow
 	if err := tx.Get(
@@ -379,8 +379,8 @@ func lockExamRevisionDraft(ctx context.Context, tx *sqlxTxWrapper, input *store.
 	return draft, nil
 }
 
-// publishedExamResourceSnapshots snapshots the Exam's complete active
-// Resource selection for publication.
+// publishedExamResourceSnapshots snapshots the exam's complete active
+// resource selection for publication.
 func publishedExamResourceSnapshots(ctx context.Context, tx *sqlxTxWrapper, examID model.ExamID) ([]model.ExamRevisionResource, error) {
 	resources, err := listExamResourceRecords(ctx, tx, examID)
 	if err != nil {
@@ -434,8 +434,8 @@ func publishedExamResourceSnapshots(ctx context.Context, tx *sqlxTxWrapper, exam
 	return resourceSnapshots, nil
 }
 
-// publishedStarterWorkspaceSnapshots snapshots the Exam's active Starter
-// Workspace entries for publication.
+// publishedStarterWorkspaceSnapshots snapshots the exam's active starter
+// workspace entries for publication.
 func publishedStarterWorkspaceSnapshots(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -475,7 +475,7 @@ func publishedStarterWorkspaceSnapshots(
 	return workspaceSnapshots, nil
 }
 
-// recordExamRevisionPublication inserts the revision and makes it the Exam's
+// recordExamRevisionPublication inserts the revision and makes it the exam's
 // default and the draft's base at their locked revisions.
 func recordExamRevisionPublication(ctx context.Context, tx *sqlxTxWrapper, revision *model.ExamRevision, draft examRevisionDraftRow) error {
 	if err := insertExamRevision(ctx, tx, revision); err != nil {
@@ -873,7 +873,7 @@ func getExamRevisionSnapshot(
 	return revision, nil
 }
 
-// getExamRevisionResourceSnapshots reads the revision's Resource snapshots
+// getExamRevisionResourceSnapshots reads the revision's resource snapshots
 // in position order.
 func getExamRevisionResourceSnapshots(
 	ctx context.Context,
@@ -936,7 +936,7 @@ func getExamRevisionResourceSnapshots(
 	return resources, nil
 }
 
-// getExamRevisionWorkspaceSnapshots reads the revision's Starter Workspace
+// getExamRevisionWorkspaceSnapshots reads the revision's starter workspace
 // entry snapshots in path order.
 func getExamRevisionWorkspaceSnapshots(
 	ctx context.Context,
@@ -988,7 +988,7 @@ func getExamRevisionWorkspaceSnapshots(
 	return workspace, nil
 }
 
-// policies decodes the header row's canonical Exam and Browser policies and
+// policies decodes the header row's canonical exam and Browser policies and
 // requires their stored documents to canonicalize to the same bytes.
 func (row examRevisionHeaderRow) policies() (model.ExamRevisionPolicy, model.BrowserPolicy, error) {
 	policy, err := model.CanonicalizeExamRevisionPolicy(row.PolicyCanonical)
@@ -1028,7 +1028,7 @@ func (row examRevisionHeaderRow) policies() (model.ExamRevisionPolicy, model.Bro
 	return policy, browserPolicy, nil
 }
 
-// candidateCorrectionNotice decodes the header row's Candidate Correction Notice,
+// candidateCorrectionNotice decodes the header row's candidate correction notice,
 // which is either wholly absent or wholly present.
 func (row examRevisionHeaderRow) candidateCorrectionNotice() (*model.CandidateCorrectionNotice, error) {
 	if !row.CandidateCorrectionSummary.Valid &&

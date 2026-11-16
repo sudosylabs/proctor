@@ -21,9 +21,8 @@ const (
 	personalAccessTokenMaintenanceInterval     = time.Minute
 )
 
-// personalAccessTokenMaintenance performs one bounded pass on
-// every node. PostgreSQL SKIP LOCKED claiming converges without durable Jobs,
-// Attempts, occurrences, or permanent deduplication-ledger rows.
+// personalAccessTokenMaintenance runs on every node; SKIP LOCKED claiming
+// converges without durable jobs or deduplication rows.
 type personalAccessTokenMaintenance struct {
 	tokens store.PersonalAccessTokenStore
 }

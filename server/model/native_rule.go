@@ -32,10 +32,10 @@ const (
 type NativeRuleMode string
 
 const (
-	// NativeRuleEnforce contains on not met and on unknown, and blocks Start.
+	// NativeRuleEnforce contains on not met and on unknown, and blocks start.
 	NativeRuleEnforce NativeRuleMode = "enforce"
 	// NativeRuleObserve is evaluated and reported, never contains and never
-	// blocks Start.
+	// blocks start.
 	NativeRuleObserve NativeRuleMode = "observe"
 )
 
@@ -51,7 +51,7 @@ const (
 	NativeRuleBoth          NativeRulePhase = "both"
 )
 
-// IsValid reports whether the phase is a known one.
+// IsValid reports whether p is readiness, participation or both.
 func (p NativeRulePhase) IsValid() bool {
 	return p == NativeRuleReadiness || p == NativeRuleParticipation || p == NativeRuleBoth
 }
@@ -91,7 +91,7 @@ type NativeScalar struct {
 	Boolean bool
 }
 
-// NativeCount, NativeEnum and NativeBoolean build scalars.
+// NativeCount, NativeEnum and NativeBoolean build scalars of each type.
 func NativeCount(value int64) NativeScalar { return NativeScalar{Type: NativeFieldCount, Count: value} }
 func NativeEnum(value string) NativeScalar { return NativeScalar{Type: NativeFieldEnum, Enum: value} }
 func NativeBoolean(value bool) NativeScalar {
@@ -131,11 +131,10 @@ type NativeRule struct {
 
 var errNativeRule = errors.New("native rule is invalid")
 
-// ValidateNativeRules checks a rule list against the registry, the activated
-// capabilities and the application catalog. The catalog says whether an
-// application is registered and whether a policy may allow it. Policy rules
-// pass the release registry as their catalog; baseline rules pass nil, so no
-// application condition is valid in them.
+// ValidateNativeRules checks rules against the registry, the activated
+// capabilities and the application catalog. Policy rules pass the release
+// registry as catalog; baseline rules pass nil, so no application condition
+// is valid in them.
 func ValidateNativeRules(
 	rules []NativeRule,
 	registry *NativeCapabilityRegistry,
@@ -289,9 +288,9 @@ func validNativeAppIDs(ids []string, catalog *NativeCapabilityRegistry, allowlis
 // isNativeRuleID accepts r1 or baseline.single_display.
 func isNativeRuleID(value string) bool { return isNativeIdentifier(value) || isNativeReasonID(value) }
 
-// Wire forms. They follow Desktop's rule grammar exactly; decoding rejects
-// unknown members, duplicate or aliased keys, and anything that does not
-// re-encode to the same canonical bytes.
+// Wire forms follow Desktop's rule grammar exactly; decoding rejects unknown
+// members, duplicate or aliased keys, and anything that does not re-encode to
+// the same canonical bytes.
 
 type nativeRuleWire struct {
 	RuleID      string              `json:"rule_id"`

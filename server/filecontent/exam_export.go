@@ -29,10 +29,9 @@ func (e *uncertainExamExportWrite) Error() string           { return "Exam expor
 func (e *uncertainExamExportWrite) Unwrap() error           { return e.cause }
 func (*uncertainExamExportWrite) ExamExportWriteUncertain() {}
 
-// BuildExamExport writes only the pre-registered opaque attempt identity. It
-// verifies every original file while the configured export format reads it,
-// then reopens and hashes the managed object before returning verified
-// publication metadata. It fails when no export format is configured.
+// BuildExamExport writes only to the export identity registered in input. It
+// verifies each source file as the format reads it, and re-reads the stored
+// archive before returning. It fails when no export format is configured.
 func (c *Content) BuildExamExport(ctx context.Context, input exam.ExportArchiveInput) (*exam.ExportArchiveContent, error) {
 	if c == nil || c.examExportFormat == nil {
 		return nil, errExamExportFormatUnavailable
@@ -44,13 +43,12 @@ func (c *Content) BuildExamExport(ctx context.Context, input exam.ExportArchiveI
 	return c.buildExamExport(ctx, input, format)
 }
 
-// errExamExportFormatUnavailable is returned when no plugin offers the Exam
-// export format, because the plugin is turned off or has failed.
+// errExamExportFormatUnavailable means the plugin that offers the format is
+// off or has failed.
 var errExamExportFormatUnavailable = errors.New("Exam export format is unavailable")
 
-// buildExamExport owns everything around format: validation, the work
-// budget, the private spool and its size bound, per-file verification,
-// hashing and storage. format only encodes the archive it is handed.
+// format only encodes the archive; validation, limits, verification and
+// storage stay here so a plugin cannot weaken them.
 func (c *Content) buildExamExport(ctx context.Context, input exam.ExportArchiveInput, format plugin.ExportFormat) (*exam.ExportArchiveContent, error) {
 	if err := c.validateExamExportInput(input); err != nil {
 		return nil, err
@@ -90,7 +88,6 @@ func (c *Content) buildExamExport(ctx context.Context, input exam.ExportArchiveI
 	return c.storeExamExport(ctx, examExportKey(input.ExportID, input.AttemptID), spool, result)
 }
 
-// validateExamExportInput rejects malformed records, foreign owners, invalid or duplicate files and oversized sources.
 func (c *Content) validateExamExportInput(input exam.ExportArchiveInput) error {
 	if c == nil ||
 		c.filesystem == nil ||
@@ -132,7 +129,6 @@ func (c *Content) validateExamExportInput(input exam.ExportArchiveInput) error {
 	return nil
 }
 
-// storeExamExport writes the spooled archive under key and publishes it only after an independent read verifies it.
 func (c *Content) storeExamExport(
 	ctx context.Context,
 	key string,
@@ -160,8 +156,8 @@ func (c *Content) storeExamExport(
 
 	size := result.SizeBytes
 	_, writeErr := c.filesystem.Write(ctx, key, workReader{ctx: ctx, reader: spool}, vfs.WriteOptions{Size: &size, NoOverwrite: conditional})
-	// An error acknowledgement can still mean the exact immutable write
-	// committed. Never publish until an independent read proves all bytes.
+	// A write error can still mean the write committed, and a success is not
+	// proof; only the re-read decides.
 	matching, verifyErr := c.verifyExamExport(ctx, key, result)
 	if verifyErr != nil || !matching {
 		if writeErr != nil {

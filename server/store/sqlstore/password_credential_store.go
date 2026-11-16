@@ -107,7 +107,7 @@ func insertPasswordCredential(
 	return nil
 }
 
-// GetByUser returns the User's unarchived password credential, or a not-found
+// GetByUser returns the user's unarchived password credential, or a not-found
 // error.
 func (s SQLPasswordCredentialStore) GetByUser(ctx context.Context, userID model.UserID) (*model.PasswordCredential, error) {
 	var row passwordCredentialRow
@@ -199,7 +199,7 @@ func (row passwordCredentialRow) model() (*model.PasswordCredential, error) {
 
 var _ store.PasswordCredentialStore = (*SQLPasswordCredentialStore)(nil)
 
-// The caller holds the per-User Session lock, also held by reset and removal.
+// The caller holds the per-user session lock, also held by reset and removal.
 // Rehash does not advance Revision, so a work-factor upgrade cannot invalidate
 // independently collected proof of the same password.
 func requireCurrentPasswordProof(

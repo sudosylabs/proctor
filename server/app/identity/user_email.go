@@ -26,8 +26,8 @@ type ChangeUserEmailCommand struct {
 	Email  string
 }
 
-// UserEmailState is the narrow result of an explicit email-security mutation.
-// It deliberately omits the mailbox and unrelated profile/account metadata.
+// UserEmailState deliberately omits the address itself and unrelated profile
+// and account metadata.
 type UserEmailState struct {
 	UserID        model.UserID
 	EmailVerified bool
@@ -40,8 +40,8 @@ func userEmailState(account *model.User) *UserEmailState {
 	return &UserEmailState{UserID: account.ID, EmailVerified: account.EmailVerified}
 }
 
-// ChangeUserEmail changes a User's email address as an administrator and
-// sends the warning and verification mail.
+// ChangeUserEmail changes a user's address as an administrator and sends the
+// warning and verification mail.
 func (s *Service) ChangeUserEmail(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -109,10 +109,9 @@ func (s *Service) ChangeUserEmail(
 	)
 }
 
-// VerifyUserEmailPrivileged marks a User's email address verified as an
-// administrator, without a verification token, and notifies the User. It
-// requires a strong recent Session and is a no-op when the email is already
-// verified.
+// VerifyUserEmailPrivileged marks a user's address verified without a token
+// and notifies the user. It requires a strong recent session and is a no-op
+// when the address is already verified.
 func (s *Service) VerifyUserEmailPrivileged(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -258,9 +257,9 @@ type CompleteEmailChangeUndoCommand struct {
 	Source string
 }
 
-// CompleteEmailChangeUndo restores the previous address an undo credential
-// names, signs every Session of the account out, and audits the undo. The
-// response conceals whether the credential ever existed.
+// CompleteEmailChangeUndo restores the previous address and signs out every
+// session of the account. The response conceals whether the credential ever
+// existed.
 func (s *Service) CompleteEmailChangeUndo(
 	ctx context.Context,
 	inv invocation.Invocation,

@@ -14,8 +14,8 @@ import (
 	"time"
 )
 
-// NativeInterpretationMaxBytes bounds the stored interpretation state of one
-// Participation: every activated capability's latest facts and every rule's
+// NativeInterpretationMaxBytes bounds the stored interpretation of one
+// participation: every activated capability's latest facts and every rule's
 // tracker.
 const NativeInterpretationMaxBytes = 256 * 1024
 
@@ -30,7 +30,7 @@ type NativeObservedFact struct {
 }
 
 // ObserveFact checks a reported fact against the capability's published
-// schemas and reads its registered fields.
+// schemas and reads its registered fields; false means it does not conform.
 func (r *NativeCapabilityRegistry) ObserveFact(fact NativeCapabilityFact) (NativeObservedFact, bool) {
 	facts, ok := r.facts(fact.NativeCapabilityReadiness)
 	if !ok || fact.Validate() != nil {
@@ -80,11 +80,11 @@ func (t NativeRuleTransition) Validate() error {
 	return nil
 }
 
-// NativeInterpretation is the server's evaluation of one Participation's
-// native facts: the latest facts of each activated capability and the status
-// of each rule of the current phase. It starts from the facts Desktop
-// reported at Start, in the readiness phase, and advances one delivery record
-// at a time, in stream order. Participation is confirmed on the stream.
+// NativeInterpretation is the server's evaluation of one participation's
+// native facts: each activated capability's latest facts and the status of
+// each rule in the current phase. It starts in the readiness phase from the
+// facts reported at start and advances one delivery record at a time, in
+// stream order.
 type NativeInterpretation struct {
 	capabilities map[NativeCapabilityID]*nativeCapabilityTrack
 	rules        map[string]*nativeRuleTrack
@@ -113,7 +113,7 @@ type nativeRuleTrack struct {
 	Discrepancies int64              `json:"discrepancies"`
 }
 
-// NativeRuleStanding is a rule's current standing for the board.
+// NativeRuleStanding is a rule's current standing, as the board shows it.
 type NativeRuleStanding struct {
 	Rule           NativeRuleReport
 	Capability     NativeCapabilityID
@@ -125,10 +125,9 @@ type NativeRuleStanding struct {
 	Discrepancies  int64
 }
 
-// StartNativeInterpretation evaluates the readiness rules of a policy on the
-// facts Desktop reported at Start; they hold until participation is
-// confirmed. The registry supplies each
-// capability's stability time and reads the reported facts.
+// StartNativeInterpretation evaluates a policy's readiness rules on the facts
+// Desktop reported at start; they hold until participation is confirmed. The
+// registry supplies each capability's stability time and reads the facts.
 func StartNativeInterpretation(
 	registry *NativeCapabilityRegistry,
 	policy EffectiveExamSecurityPolicy,
@@ -238,7 +237,7 @@ func (s *NativeInterpretation) ApplyDesktopStatus(rules []NativeRule, report Nat
 	return transitions
 }
 
-// Standings returns each tracked rule's standing, by rule ID.
+// Standings returns each tracked rule's standing, ordered by rule ID.
 func (s *NativeInterpretation) Standings() []NativeRuleStanding {
 	standings := make([]NativeRuleStanding, 0, len(s.rules))
 	for id, track := range s.rules {

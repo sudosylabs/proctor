@@ -18,9 +18,9 @@ import (
 )
 
 // lockAttemptEnvironmentReadGuard checks an environment owner's access for
-// a read or an evidence append: the access's lease is the Attempt's current
+// a read or an evidence append: the access's lease is the attempt's current
 // unexpired one, its incarnation the environment's current one, and the
-// Attempt has no Submission. It share-locks the Attempt, the lease and the
+// attempt has no submission. It share-locks the attempt, the lease and the
 // environment, so a seal, a new claim or a new incarnation waits for the
 // caller or is seen by it.
 func lockAttemptEnvironmentReadGuard(
@@ -42,8 +42,8 @@ func lockAttemptEnvironmentReadGuard(
 }
 
 // checkAttemptEnvironmentOwner requires the access's lease and incarnation to
-// be current and the Attempt, already locked in state attemptState, to have
-// no Submission. The lease and environment rows are share-locked.
+// be current and the attempt, already locked in state attemptState, to have
+// no submission. The lease and environment rows are share-locked.
 func checkAttemptEnvironmentOwner(
 	ctx context.Context,
 	tx *sqlxTxWrapper,

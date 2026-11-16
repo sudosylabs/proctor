@@ -36,8 +36,8 @@ type StageResourceContentCommand struct {
 	IdempotencyKey string
 }
 
-// ResourceStage is staged Resource content an ApplyCommand may select by
-// StageID until ExpiresAt, with the size and checksum the server verified.
+// ResourceStage is verified staged content an ApplyCommand may select by
+// StageID until ExpiresAt.
 type ResourceStage struct {
 	StageID    model.ExamCorrectionResourceStageID
 	ResourceID model.ExamResourceID
@@ -47,10 +47,9 @@ type ResourceStage struct {
 	ExpiresAt  time.Time
 }
 
-// StageExamSittingCorrectionResourceContent idempotently uploads and verifies
-// Exam Resource content against its expected SHA-256 for a later correction
-// of the Sitting based on BaseRevisionID. The returned stage expires at
-// ExpiresAt.
+// StageExamSittingCorrectionResourceContent rejects content whose SHA-256
+// differs from ExpectedSHA256. The stage is valid only for a correction based
+// on BaseRevisionID.
 func (s *Service) StageExamSittingCorrectionResourceContent(
 	ctx context.Context,
 	inv invocation.Invocation,

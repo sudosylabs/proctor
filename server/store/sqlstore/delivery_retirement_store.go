@@ -16,8 +16,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Callers hold the Sitting and Submission fences. Delivery takes Sitting before
-// Attempt, so retirement cannot race an upload or erase newly accepted evidence.
+// Callers hold the sitting and submission fences. Delivery takes sitting before
+// attempt, so retirement cannot race an upload or erase newly accepted evidence.
 func lockRetiringDeliveryAttempt(ctx context.Context, tx *sqlxTxWrapper, submission model.SubmissionID) (model.ExamAttemptID, error) {
 	var id string
 	if err := tx.Get(
@@ -254,10 +254,10 @@ func deleteDeliveryRetryCopies(ctx context.Context, tx *sqlxTxWrapper, attempt m
 	return err
 }
 
-// Retirement removes the retry outcomes that still cite a retired Attempt's
+// Retirement removes the retry outcomes that still cite a retired attempt's
 // delivery or admission. Each statement reaches audit_events through one index
 // (the candidate's command key, or one audited result identity): an OR across
-// two lookups would scan every audit event for each retired Submission.
+// two lookups would scan every audit event for each retired submission.
 const (
 	preflightOutcomeRetirement = `DELETE FROM command_outcomes co
 		WHERE co.operation IN (?, ?)

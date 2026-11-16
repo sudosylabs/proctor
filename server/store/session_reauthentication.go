@@ -13,13 +13,12 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// SessionPasswordReauthentication refreshes primary proof for the exact active
-// password Session and access credential. The operation rechecks current local
-// login policy, active User, credential validity and password revision under
-// the same per-User fence as password replacement and Session revocation.
-// PostgreSQL establishes the fresh proof instant after those fences. Initial
-// authentication and MFA provenance, Session identity and expiry are unchanged.
-// The fresh proof and required success audit commit atomically.
+// SessionPasswordReauthentication refreshes the primary proof of an active
+// password session. It rechecks local login policy, the active user, the
+// credential and password revision under the same per-user fence as password
+// replacement and session revocation, then takes the proof instant from the
+// database clock. The session's identity, expiry, initial authentication and
+// MFA history do not change.
 type SessionPasswordReauthentication struct {
 	SessionID     model.SessionID
 	CredentialID  model.SessionCredentialID
@@ -28,16 +27,16 @@ type SessionPasswordReauthentication struct {
 	AuditEventID  model.AuditEventID
 }
 
-// SessionReauthenticationResult contains the current committed Session and the
-// access hashes to invalidate only after successful audit and proof commit.
+// SessionReauthenticationResult is the committed session and the access token
+// hashes to invalidate once the commit succeeded.
 type SessionReauthenticationResult struct {
 	Session           *model.Session
 	AccessTokenHashes []string
 }
 
-// SessionExternalReauthentication consumes verified fresh provider proof for
-// the exact Session, access credential and External Identity already bound to
-// a consumed reauthentication state. The subject never enters audit output.
+// SessionExternalReauthentication consumes a fresh provider proof for the
+// session, credential and external identity bound to StateID. Subject must
+// never appear in audit output.
 type SessionExternalReauthentication struct {
 	StateID         model.ExternalLoginStateID
 	ProviderID      string

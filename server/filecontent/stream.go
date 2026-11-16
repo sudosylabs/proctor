@@ -16,8 +16,8 @@ import (
 	"os"
 )
 
-// streamReadLimit bounds each read from a caller-supplied body, whatever
-// buffer the consuming backend offers.
+// streamReadLimit caps each read from a caller's body, whatever buffer the
+// backend offers.
 const streamReadLimit = 32 << 10
 
 var (
@@ -102,9 +102,8 @@ func (r *exactSizeReader) probe() error {
 	}
 }
 
-// finish consumes any bytes the backend did not read, so the digest covers
-// the complete declared body, and reports whether the body had exactly the
-// declared size.
+// finish drains what the backend did not read, so the digest covers the whole
+// declared body.
 func (r *exactSizeReader) finish() error {
 	if _, err := io.CopyBuffer(io.Discard, r, make([]byte, streamReadLimit)); err != nil {
 		return err
@@ -116,12 +115,10 @@ func (r *exactSizeReader) checksum() string {
 	return fmt.Sprintf("%x", r.digest.Sum(nil))
 }
 
-// createUnlinkedSpool creates a private (0600) temporary file for content that
-// must be read more than once and removes its name at once where the
-// platform allows it. The open descriptor keeps the bytes readable, nothing
-// else can open them by name, and the storage is released when the
-// descriptor closes, including when the process dies. Where an open file
-// cannot be unlinked, release removes it after closing.
+// createUnlinkedSpool creates a 0600 temporary file and unlinks it at once
+// where the platform allows, so nothing else can open it by name and its
+// storage is freed when the descriptor closes, even if the process dies.
+// Elsewhere release removes it after closing.
 func createUnlinkedSpool(pattern string) (*os.File, func(), error) {
 	spool, err := os.CreateTemp("", pattern)
 	if err != nil {

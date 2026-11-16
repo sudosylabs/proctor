@@ -31,8 +31,8 @@ type CreateLocalUserCommand struct {
 	Password string
 }
 
-// CreateLocalUser creates a local User with a hashed password credential, its
-// initial settings and its default profile picture Job.
+// CreateLocalUser creates a local user with a password, initial settings and
+// a default profile picture job.
 func (s *Service) CreateLocalUser(
 	ctx context.Context,
 	command CreateLocalUserCommand,

@@ -31,8 +31,8 @@ import (
 // MaximumAcademicAdministrationBatchItems bounds one batch request.
 const MaximumAcademicAdministrationBatchItems = 200
 
-// AcademicAdministrationBatchOperation names the one change a batch applies
-// to every item.
+// AcademicAdministrationBatchOperation is the one change a batch applies to
+// every item.
 type AcademicAdministrationBatchOperation string
 
 // The operations a batch may apply.
@@ -51,8 +51,7 @@ const (
 	AcademicAdministrationUserSessionsRevoke    AcademicAdministrationBatchOperation = "user_sessions.revoke"
 )
 
-// IsValid reports whether o is a supported academic administration batch
-// operation.
+// IsValid reports whether o is a supported operation.
 func (o AcademicAdministrationBatchOperation) IsValid() bool {
 	switch o {
 	case AcademicAdministrationAffiliationAdd,
@@ -86,8 +85,8 @@ func (o AcademicAdministrationBatchOperation) requiresStrongRecentSession() bool
 	}
 }
 
-// AcademicAdministrationBatchItemCommand is a closed union. Fields that are
-// not owned by the batch operation make only that row invalid.
+// AcademicAdministrationBatchItemCommand is a union read according to the
+// batch's operation; a field that does not apply makes only that row invalid.
 type AcademicAdministrationBatchItemCommand struct {
 	IdempotencyKey  string
 	UserID          model.UserID
@@ -120,8 +119,8 @@ type AcademicAdministrationBatchItemResult struct {
 	ErrorCode  string
 }
 
-// AcademicAdministrationBatchResult reports every item of a batch; one item
-// failing does not stop the others.
+// AcademicAdministrationBatchResult reports every item; one failing item
+// does not stop the others.
 type AcademicAdministrationBatchResult struct {
 	Operation AcademicAdministrationBatchOperation
 	Items     []AcademicAdministrationBatchItemResult
@@ -130,10 +129,9 @@ type AcademicAdministrationBatchResult struct {
 	Failed    int
 }
 
-// RunAcademicAdministrationBatch runs one closed academic administration operation over up to
-// MaximumAcademicAdministrationBatchItems rows, each through the ordinary
-// academic, administration or identity command, after one batch
-// authorization at the scope.
+// RunAcademicAdministrationBatch authorizes once at the scope, then runs each
+// row through the ordinary academic, administration or identity command,
+// which authorizes it again.
 func (s *Service) RunAcademicAdministrationBatch(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -422,9 +420,8 @@ func validateAcademicAdministrationBatchItem(
 	return nil
 }
 
-// AcademicAdministrationBatchErrorCodes is the closed catalogue of safe
-// failure codes an academic administration batch item reports. Any other
-// failure is reported as administration.unavailable.
+// AcademicAdministrationBatchErrorCodes is the closed set of codes a batch
+// item reports; any other failure is reported as administration.unavailable.
 func AcademicAdministrationBatchErrorCodes() []string {
 	return []string{
 		"request.invalid",

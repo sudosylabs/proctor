@@ -20,7 +20,7 @@ import (
 )
 
 // SQLExamRecordsStore implements store.ExamRecordsStore: records completion,
-// review waivers and retention holds for sealed Sittings.
+// review waivers and retention holds for sealed sittings.
 type SQLExamRecordsStore struct{ *SQLStore }
 
 func newSQLExamRecordsStore(s *SQLStore) store.ExamRecordsStore { return &SQLExamRecordsStore{s} }
@@ -299,7 +299,7 @@ func findRecordsWaiver(ctx context.Context, executor sqlxExecutor, id model.Subm
 	return w, err == nil, err
 }
 
-// lockExamRecordsAuthority preserves User-before-hierarchy-before-Exam order.
+// lockExamRecordsAuthority preserves user-before-hierarchy-before-exam order.
 // Wall time and credential validity are rechecked after every serialization
 // boundary. The selected action is reauthorized rather than trusting a boolean.
 func lockExamRecordsAuthority(
@@ -553,7 +553,7 @@ func runExamRecordsMutation[T any](
 	})
 }
 
-// examRecordsOutcomeCodec persists one Exam records mutation result as its
+// examRecordsOutcomeCodec persists one exam records mutation result as its
 // outcome document; decode validates the rehydrated value.
 type examRecordsOutcomeCodec[T any] struct {
 	encode func(T) ([]byte, error)
@@ -575,7 +575,7 @@ var (
 	}
 )
 
-// recordsCompletionOutcome is the persisted outcome of a Sitting records
+// recordsCompletionOutcome is the persisted outcome of a sitting records
 // completion; it converts directly to model.ExamSittingRecordsCompletion.
 type recordsCompletionOutcome struct {
 	SittingID                 model.ExamSittingID `json:"sitting_id"`
@@ -602,7 +602,7 @@ func decodeRecordsCompletionOutcome(data []byte) (*model.ExamSittingRecordsCompl
 	return &value, value.Validate()
 }
 
-// reviewWaiverOutcome is the persisted outcome of a Review waiver; it converts
+// reviewWaiverOutcome is the persisted outcome of a review waiver; it converts
 // directly to model.SubmissionReviewWaiver.
 type reviewWaiverOutcome struct {
 	DeliveryInventoryRevision int64              `json:"delivery_inventory_revision"`
@@ -632,7 +632,7 @@ func decodeReviewWaiverOutcome(data []byte) (*model.SubmissionReviewWaiver, erro
 	return &value, value.Validate()
 }
 
-// retentionHoldOutcome is the persisted outcome of a Retention Hold placement
+// retentionHoldOutcome is the persisted outcome of a retention hold placement
 // or release.
 type retentionHoldOutcome struct {
 	ID                              model.RetentionHoldID      `json:"id"`
@@ -1014,8 +1014,8 @@ func (s *SQLExamRecordsStore) WaiveReview(
 }
 
 // invalidateWaivedReviewRecords invalidates a completion that could have relied
-// on a waiver for the previous Review revision. The owning Review mutation has
-// already locked the Sitting, and idempotent replay never reaches this helper.
+// on a waiver for the previous review revision. The owning review mutation has
+// already locked the sitting, and idempotent replay never reaches this helper.
 func invalidateWaivedReviewRecords(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -1040,7 +1040,7 @@ func invalidateWaivedReviewRecords(
 }
 
 // invalidateSittingRecordsForIntegrity is called inside the accepted-data
-// transaction while its Sitting is locked. Exact replay never calls it.
+// transaction while its sitting is locked. Exact replay never calls it.
 func invalidateSittingRecordsForIntegrity(ctx context.Context, tx *sqlxTxWrapper, id model.ExamSittingID, at time.Time) error {
 	c, err := getRecordsCompletion(ctx, tx, id)
 	if err != nil {

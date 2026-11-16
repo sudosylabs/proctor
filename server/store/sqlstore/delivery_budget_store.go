@@ -252,8 +252,8 @@ func deliveryBudgetSnapshot(
 	return value, nil
 }
 
-// ResolveLiveDeliveryTarget returns the Sitting and Class that own the
-// Candidate's live Attempt, after locking its Candidate guard.
+// ResolveLiveDeliveryTarget returns the sitting and class that own the
+// candidate's live attempt, after locking its candidate guard.
 func (s *SQLDeliveryBudgetStore) ResolveLiveDeliveryTarget(
 	ctx context.Context,
 	access store.CandidateAttemptAccess,
@@ -272,7 +272,7 @@ func (s *SQLDeliveryBudgetStore) ResolveLiveDeliveryTarget(
 }
 
 // DeliveryBudget returns the current delivery budget snapshot of the
-// Participation named by access.
+// participation named by access.
 func (s *SQLDeliveryBudgetStore) DeliveryBudget(
 	ctx context.Context,
 	access store.DeliveryBudgetAccess,
@@ -323,10 +323,10 @@ func (s *SQLDeliveryBudgetStore) lockDeliveryStop(
 	return value, nil
 }
 
-// StopDeliveryDetails latches native or Browser Activity delivery for the
-// Participation so no further detail is accepted, and returns the settled
+// StopDeliveryDetails latches native or browser activity delivery for the
+// participation so no further detail is accepted, and returns the settled
 // delivery status and budget. It requires a DeliveryStopDetailsOperation
-// command owned by the Candidate; replays return the retained result.
+// command owned by the candidate; replays return the retained result.
 func (s *SQLDeliveryBudgetStore) StopDeliveryDetails(
 	ctx context.Context,
 	input *store.DeliveryDetailsStop,
@@ -505,7 +505,6 @@ func (s *SQLDeliveryBudgetStore) projectDeliveryStop(
 	return value, nil
 }
 
-// completeDeliveryStopAudit completes the stop's audit event.
 func completeDeliveryStopAudit(ctx context.Context, tx *sqlxTxWrapper, input *store.DeliveryDetailsStop, replay bool) error {
 	raw, err := model.EncodeAuditData(map[string]any{
 		"exam_attempt_id":      input.Access.AttemptID.String(),

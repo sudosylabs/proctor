@@ -29,12 +29,10 @@ const (
 	testRateLimitMaximum = 3
 )
 
-// DeliveryView is the safe operator projection of one mail delivery: its
-// identity, template, masked recipient, state and timings, never its
-// recipient address or content. RecipientDisplayName is the current name of
-// the User the delivery is addressed to, present on reads only while the
-// viewer can see that User through the User directory's visibility; an
-// Invitation delivery has no User and so no name.
+// DeliveryView is the operator projection of one delivery: never its
+// recipient address or content. RecipientDisplayName is present only while
+// the viewer can see that user through the directory; an invitation delivery
+// has no user and so no name.
 type DeliveryView struct {
 	ID                                          model.MailDeliveryID
 	OccurrenceID                                model.MailOccurrenceID
@@ -52,20 +50,18 @@ type DeliveryView struct {
 	RecipientDisplayName                        string
 }
 
-// DeliveryPage is one page of mail deliveries; HasMore reports that
-// another page follows the last item. The first page also carries their
-// total (see paging.Total).
+// DeliveryPage is one page of mail deliveries; only the first page is
+// counted (see paging.Total).
 type DeliveryPage struct {
 	Items   []DeliveryView
 	HasMore bool
 	paging.Total
 }
 
-// ListDeliveriesQuery lists deliveries newest first by Order's instant (last
-// update when Order is empty), or oldest first when Ascending; BeforeAt and
-// BeforeID continue past the previous page's last delivery in that order.
-// RecipientUserID keeps the deliveries addressed to that User; mail history is
-// never searched by address.
+// ListDeliveriesQuery lists newest first by Order's instant (last update when
+// empty), or oldest first when Ascending. RecipientUserID keeps the
+// deliveries addressed to that user; mail history is never searched by
+// address.
 type ListDeliveriesQuery struct {
 	States          []model.MailDeliveryState
 	TemplateKeys    []model.MailTemplateKey
@@ -79,15 +75,15 @@ type ListDeliveriesQuery struct {
 	Limit           int
 }
 
-// InstitutionAuthorization authorizes a mail operator Action on the singleton
-// Institution. It is not access.Authorizer.AuthorizeInstitution because an
-// Institution that cannot be read is presented as mail.unavailable here.
+// InstitutionAuthorization authorizes a mail operator action on the
+// institution. It is not access.Authorizer.AuthorizeInstitution because an
+// unreadable institution is reported as mail.unavailable here.
 type InstitutionAuthorization struct {
 	Authorizer   *access.Authorizer
 	Institutions store.InstitutionStore
 }
 
-// AuthorizeInstitution reads the Institution and authorizes action on it.
+// AuthorizeInstitution reads the institution and authorizes action on it.
 func (a InstitutionAuthorization) AuthorizeInstitution(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -110,8 +106,8 @@ func (a InstitutionAuthorization) AuthorizeInstitution(
 	return resource, nil
 }
 
-// GrantedUserVisibility reports the Users the principal can see now, as the
-// User directory applies it, without recording a decision.
+// GrantedUserVisibility reports the users the principal can see now, as the
+// user directory applies it, without recording a decision.
 func (a InstitutionAuthorization) GrantedUserVisibility(ctx context.Context, principal model.Principal) (store.UserVisibilityScope, error) {
 	if a.Authorizer == nil {
 		return store.UserVisibilityScope{}, apperror.New("mail.unavailable")
@@ -119,18 +115,16 @@ func (a InstitutionAuthorization) GrantedUserVisibility(ctx context.Context, pri
 	return a.Authorizer.GrantedUserVisibility(ctx, principal)
 }
 
-// testLimiter counts one operator test mail for a User and reports whether
-// that User has now sent more than maximum within window. Production passes
-// the identity area's attempt accounting, which this package cannot import.
+// testLimiter reports whether a user has now sent more than maximum test
+// mails within window. Production passes the identity area's attempt
+// accounting, which this package cannot import.
 type testLimiter interface {
 	AccountMailTest(ctx context.Context, userID model.UserID, window time.Duration, maximum int) (bool, error)
 }
 
-// OperationsDependencies are the collaborators of Operations;
-// NewOperations validates them once and Operations keeps them in deps.
-// RekeyJobs and Wake serve payload-key rotation and the Job wake-up after a
-// queued delivery; without them those use cases answer that mail is
-// unavailable.
+// OperationsDependencies are the collaborators of Operations, validated once
+// by NewOperations. Without RekeyJobs and Wake, payload-key rotation and the
+// post-queue job wake answer that mail is unavailable.
 type OperationsDependencies struct {
 	Mail                    store.MailStore
 	Users                   store.UserStore
@@ -143,22 +137,19 @@ type OperationsDependencies struct {
 	Sealer                  *secretseal.Sealer
 	RecentAuthenticationTTL time.Duration
 	Now                     func() time.Time
-	// InstitutionName supplies the institution display name to mail copy.
-	InstitutionName func() string
-	RekeyJobs       store.JobStore
-	Wake            func()
+	InstitutionName         func() string
+	RekeyJobs               store.JobStore
+	Wake                    func()
 }
 
-// Operations holds the operator mail use cases: delivery listing, inspection,
-// cancellation and retry, metrics, test mail, and payload-key rotation. A nil
-// Operations answers that mail operations are unavailable.
+// Operations holds the operator mail use cases. A nil Operations answers that
+// mail operations are unavailable.
 type Operations struct {
 	deps OperationsDependencies
 
-	// audit prepares the audit of test mail and delivery control.
 	audit access.MailAuditAdapter
-	// rekeyAudit opens and fails the attempt of a payload-key rotation; the
-	// Store completes a committed attempt.
+	// rekeyAudit fails the attempt of a rotation that does not commit; the
+	// store completes a committed one.
 	rekeyAudit access.MutationAuditAdapter
 	rekeyJobs  store.JobStore
 
@@ -167,9 +158,9 @@ type Operations struct {
 	wake func()
 }
 
-// NewOperations builds the operator mail service and the Composer its test
-// mail is prepared with. It refuses a missing collaborator, and an enabled
-// sender without secret sealing.
+// NewOperations also builds the Composer test mail is prepared with. It
+// refuses a missing collaborator, and an enabled sender without secret
+// sealing.
 func NewOperations(deps OperationsDependencies) (*Operations, error) {
 	if deps.Mail == nil ||
 		deps.Users == nil ||
@@ -209,7 +200,7 @@ func NewOperations(deps OperationsDependencies) (*Operations, error) {
 	}, nil
 }
 
-// GetMailMetrics returns the current mail delivery metrics snapshot.
+// GetMailMetrics returns the current delivery metrics snapshot.
 func (s *Operations) GetMailMetrics(ctx context.Context, inv invocation.Invocation) (MetricsSnapshot, error) {
 	if s == nil {
 		return MetricsSnapshot{}, apperror.New("mail.unavailable")
@@ -287,7 +278,7 @@ func (s *Operations) SendTestMail(ctx context.Context, inv invocation.Invocation
 	return deliveryView(created), nil
 }
 
-// GetMailDelivery returns one mail delivery.
+// GetMailDelivery returns one delivery.
 func (s *Operations) GetMailDelivery(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -320,7 +311,7 @@ func (s *Operations) GetMailDelivery(
 	return views[0], nil
 }
 
-// ListMailDeliveries lists one page of mail deliveries.
+// ListMailDeliveries lists one page of deliveries.
 func (s *Operations) ListMailDeliveries(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -385,11 +376,10 @@ func (s *Operations) ListMailDeliveries(
 	return page, nil
 }
 
-// nameRecipients names, in one bounded read, the Users the deliveries are
-// addressed to, each only while the viewer can see that User now. Holding
-// mail.view shows that a delivery exists and its masked address; it does not
-// by itself reveal whose it is. The name never comes from the delivery's own
-// encrypted address, and no address is read.
+// nameRecipients names each recipient only while the viewer can see that
+// user now: mail.view shows that a delivery exists and its masked address,
+// not whose it is. The name never comes from the delivery's own encrypted
+// address, and no address is read.
 func (s *Operations) nameRecipients(ctx context.Context, principal model.Principal, views []DeliveryView) error {
 	var recipients []model.UserID
 	for _, view := range views {
@@ -419,11 +409,10 @@ func (s *Operations) nameRecipients(ctx context.Context, principal model.Princip
 	return nil
 }
 
-// CountFailedMailDeliveries counts the deliveries in the failed terminal
-// state, authorized and audited exactly as ListMailDeliveries is, stopping
-// at maximum. Suppressed and canceled deliveries are policy and operator
-// outcomes rather than failures, so they are not counted. The administration
-// counts read it.
+// CountFailedMailDeliveries counts deliveries in the failed terminal state,
+// authorized and audited as ListMailDeliveries is, stopping at maximum.
+// Suppressed and canceled deliveries are policy and operator outcomes, not
+// failures, so they are not counted.
 func (s *Operations) CountFailedMailDeliveries(ctx context.Context, inv invocation.Invocation, maximum int) (int, error) {
 	if s == nil {
 		return 0, apperror.New("mail.unavailable")
@@ -447,8 +436,8 @@ func (s *Operations) CountFailedMailDeliveries(ctx context.Context, inv invocati
 	return total, nil
 }
 
-// listError maps a delivery list or count failure: invalid filters are
-// the caller's query, anything else is the mail Store's.
+// listError reports invalid filters as the caller's query and anything else
+// as the mail store's.
 func listError(err error) error {
 	var invalid *store.ErrInvalidInput
 	if errors.As(err, &invalid) {
@@ -457,7 +446,7 @@ func listError(err error) error {
 	return storeErrors.Translate(err)
 }
 
-// CancelMailDelivery cancels one mail delivery, with audit.
+// CancelMailDelivery cancels one delivery, with audit.
 func (s *Operations) CancelMailDelivery(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -469,9 +458,9 @@ func (s *Operations) CancelMailDelivery(
 	return s.mutate(ctx, inv, "cancel", id, false, s.deps.Mail.CancelDelivery)
 }
 
-// RetryMailDelivery retries one mail delivery, with audit. The retry reuses
-// the same Delivery, recipient and Message-ID; no operator route can create
-// mail of its own.
+// RetryMailDelivery retries one delivery, with audit. The retry reuses the
+// same delivery, recipient and Message-ID; no operator route can create mail
+// of its own.
 func (s *Operations) RetryMailDelivery(
 	ctx context.Context,
 	inv invocation.Invocation,

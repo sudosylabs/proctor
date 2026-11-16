@@ -122,7 +122,7 @@ func (s SQLProgrammeStore) createProgramme(
 	})
 }
 
-// Get returns the unarchived Programme with id, or a not-found error.
+// Get returns the unarchived programme with id, or a not-found error.
 func (s SQLProgrammeStore) Get(ctx context.Context, id model.ProgrammeID) (*model.Programme, error) {
 	var row programmeRow
 	query := s.programmesQuery.Where(sq.Eq{
@@ -135,7 +135,7 @@ func (s SQLProgrammeStore) Get(ctx context.Context, id model.ProgrammeID) (*mode
 	return row.model()
 }
 
-// GetByName returns the unarchived Programme of the Academic Unit with the
+// GetByName returns the unarchived programme of the academic unit with the
 // exact name, or a not-found error.
 func (s SQLProgrammeStore) GetByName(ctx context.Context, academicUnitID model.AcademicUnitID, name string) (*model.Programme, error) {
 	var row programmeRow
@@ -150,7 +150,7 @@ func (s SQLProgrammeStore) GetByName(ctx context.Context, academicUnitID model.A
 	return row.model()
 }
 
-// ListByAcademicUnit returns the unarchived Programmes of the Academic Unit,
+// ListByAcademicUnit returns the unarchived programmes of the academic unit,
 // ordered by name.
 func (s SQLProgrammeStore) ListByAcademicUnit(ctx context.Context, academicUnitID model.AcademicUnitID) ([]*model.Programme, error) {
 	query := s.programmesQuery.
@@ -175,8 +175,8 @@ func (s SQLProgrammeStore) ListByAcademicUnit(ctx context.Context, academicUnitI
 	return programmes, nil
 }
 
-// SearchByAcademicUnit returns one page of unarchived Programmes of the
-// Academic Unit selected and ordered by options.
+// SearchByAcademicUnit returns one page of unarchived programmes of the
+// academic unit selected and ordered by options.
 func (s SQLProgrammeStore) SearchByAcademicUnit(
 	ctx context.Context,
 	academicUnitID model.AcademicUnitID,
@@ -453,7 +453,7 @@ func (row programmeRow) model() (*model.Programme, error) {
 var _ store.ProgrammeStore = (*SQLProgrammeStore)(nil)
 
 // SeedUpdate is an unaudited fixture write that may also change what the
-// audited Update forbids (moving the owner, or editing a bound Role); production
+// audited Update forbids (moving the owner, or editing a bound role); production
 // code never calls it, which an architecture test enforces.
 func (s SQLProgrammeStore) SeedUpdate(ctx context.Context, programme *model.Programme) (*model.Programme, error) {
 	if programme == nil {
@@ -480,7 +480,7 @@ func (s SQLProgrammeStore) CountByAcademicUnit(
 	return countAcademicNamePage(ctx, s.GetMaster(), rows, "programmes", options, maximum)
 }
 
-// programmesInUnit keeps the unit's unarchived Programmes.
+// programmesInUnit keeps the unit's unarchived programmes.
 func programmesInUnit(query sq.SelectBuilder, academicUnitID model.AcademicUnitID) sq.SelectBuilder {
 	return query.Where(sq.Eq{"programmes.academic_unit_id": academicUnitID, "programmes.archived_at": nil})
 }

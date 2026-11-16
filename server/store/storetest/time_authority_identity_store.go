@@ -26,7 +26,7 @@ type TimeAuthorityIdentitySQLProbe struct {
 }
 
 // timeAuthorityNodeLead is how far a creating node's clock leads PostgreSQL
-// in these probes; well inside the seven-day Invitation lifetime.
+// in these probes; well inside the seven-day invitation lifetime.
 const timeAuthorityNodeLead = 5 * time.Minute
 
 func timeAuthorityStudentInvitation(t *testing.T, ctx context.Context, ss store.Store, probe TimeAuthorityIdentitySQLProbe,
@@ -68,7 +68,7 @@ func requireTimeAuthorityInvitationPersisted(t *testing.T, ctx context.Context, 
 }
 
 // RunTimeAuthorityInvitationTransitions proves that PostgreSQL-timed
-// Invitation transitions accept Invitations issued by a node whose clock leads
+// invitation transitions accept invitations issued by a node whose clock leads
 // the database and never record an instant before the issue.
 func RunTimeAuthorityInvitationTransitions(t *testing.T, ss store.Store, probe TimeAuthorityIdentitySQLProbe) {
 	t.Run("AcceptStudentClass", func(t *testing.T) {
@@ -181,9 +181,9 @@ func RunTimeAuthorityOnboardingImportRowOutcome(t *testing.T, ss store.Store) {
 	require.False(t, page.Rows[0].UpdatedAt.Before(executing.UpdatedAt), "onboarding import rows = %#v; executing %#v", page, executing)
 }
 
-// RunTimeAuthorityUserDisable proves that disabling a User whose lifecycle
+// RunTimeAuthorityUserDisable proves that disabling a user whose lifecycle
 // leads the disabling node's clock never records a modification or disable
-// before the User's creation.
+// before the user's creation.
 func RunTimeAuthorityUserDisable(t *testing.T, ss store.Store, probe TimeAuthorityIdentitySQLProbe) {
 	ctx := context.Background()
 	user := saveUser(t, ctx, ss)
@@ -210,8 +210,8 @@ func RunTimeAuthorityUserDisable(t *testing.T, ss store.Store, probe TimeAuthori
 }
 
 // RunTimeAuthorityUserLogin proves a login never records a last login or
-// activity instant before the User's own creation, even when the node that
-// created the User ran ahead of the database clock.
+// activity instant before the user's own creation, even when the node that
+// created the user ran ahead of the database clock.
 func RunTimeAuthorityUserLogin(t *testing.T, ss store.Store, probe TimeAuthorityIdentitySQLProbe) {
 	ctx := context.Background()
 	user := saveUser(t, ctx, ss)

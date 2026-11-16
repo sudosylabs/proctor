@@ -28,7 +28,7 @@ const attemptWorkspaceOutcomeProtects = `EXISTS (
 		AND outcomes.outcome->'o' @> to_jsonb(objects.id::text)
 )`
 
-// ClaimObjectsForCleanup claims up to the input limit of due Attempt Workspace objects for physical cleanup under the input claim token.
+// ClaimObjectsForCleanup claims up to the input limit of due attempt workspace objects for physical cleanup under the input claim token.
 func (s *SQLExamAttemptWorkspaceStore) ClaimObjectsForCleanup(
 	ctx context.Context,
 	input *store.AttemptWorkspaceCleanupClaim,
@@ -125,7 +125,7 @@ func (s *SQLExamAttemptWorkspaceStore) ClaimObjectsForCleanup(
 	return objects, nil
 }
 
-// CompleteObjectCleanup records that the claimed Attempt Workspace object was removed from storage; repeating it with the same claim token is a no-op.
+// CompleteObjectCleanup records that the claimed attempt workspace object was removed from storage; repeating it with the same claim token is a no-op.
 func (s *SQLExamAttemptWorkspaceStore) CompleteObjectCleanup(ctx context.Context, input *store.AttemptWorkspaceCleanupCompletion) error {
 	objectID := input.ObjectID
 	claimToken := input.ClaimToken
@@ -187,7 +187,7 @@ func (s *SQLExamAttemptWorkspaceStore) CompleteObjectCleanup(ctx context.Context
 	return nil
 }
 
-// ReleaseObjectCleanup returns a claimed Attempt Workspace object to the cleanup queue without removing it.
+// ReleaseObjectCleanup returns a claimed attempt workspace object to the cleanup queue without removing it.
 func (s *SQLExamAttemptWorkspaceStore) ReleaseObjectCleanup(ctx context.Context, input *store.AttemptWorkspaceCleanupRelease) error {
 	objectID := input.ObjectID
 	claimToken := input.ClaimToken

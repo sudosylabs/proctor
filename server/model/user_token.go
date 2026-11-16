@@ -24,17 +24,14 @@ const (
 	UserTokenPasswordReset     UserTokenPurpose = "password_reset"
 	UserTokenEmailVerification UserTokenPurpose = "email_verification" //nolint:gosec // G101: a token purpose name, not a credential.
 	// UserTokenEmailChangeUndo is sent to the previous address when an
-	// account's email changes; its Target is that previous address, which
-	// redeeming the token restores.
+	// account's email changes; its Target is that address, which redeeming
+	// the token restores.
 	UserTokenEmailChangeUndo UserTokenPurpose = "email_change_undo"
 )
 
-// UserToken is a short-lived, single-use credential for one explicit account
-// operation. Invitation tokens need their own invitation model because they
-// may exist before a User; they must not overload this type with generic data.
-//
-// TokenHash and Target are deliberately excluded from JSON. Soft archive uses
-// ArchivedAt.
+// UserToken is a short-lived, single-use credential for one account operation.
+// Invitations have their own model because they exist before a user does.
+// TokenHash and Target are never in JSON.
 type UserToken struct {
 	ID         UserTokenID
 	CreatedAt  time.Time
@@ -48,7 +45,8 @@ type UserToken struct {
 	ConsumedAt OptionalTime
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
+// PrepareCreate stamps the ID and creation time and lowercases Target; it does
+// nothing on nil.
 func (t *UserToken) PrepareCreate(id UserTokenID, at time.Time) {
 	if t == nil {
 		return
@@ -62,8 +60,7 @@ func (t *UserToken) PrepareCreate(id UserTokenID, at time.Time) {
 	t.ExpiresAt = TimeUTC(t.ExpiresAt)
 }
 
-// PrepareUpdate applies the application-selected transition time and
-// normalizes the target email.
+// PrepareUpdate stamps the update time and lowercases Target.
 func (t *UserToken) PrepareUpdate(at time.Time) {
 	if t == nil {
 		return
@@ -72,7 +69,7 @@ func (t *UserToken) PrepareUpdate(at time.Time) {
 	t.UpdatedAt = TimeUTC(at)
 }
 
-// Validate checks rehydrated user-token state.
+// Validate checks the token's fields, for new and stored values alike.
 func (t *UserToken) Validate() error {
 	const where = "UserToken.Validate"
 	if t == nil {
@@ -125,7 +122,7 @@ func (t *UserToken) Validate() error {
 	return nil
 }
 
-// IsValid reports whether the purpose is a recognized account operation.
+// IsValid reports whether the purpose is a known account operation.
 func (p UserTokenPurpose) IsValid() bool {
 	return p == UserTokenPasswordReset || p == UserTokenEmailVerification || p == UserTokenEmailChangeUndo
 }
@@ -140,8 +137,8 @@ func (t *UserToken) IsActiveAt(now time.Time) bool {
 	return now.Before(t.ExpiresAt)
 }
 
-// Auditable returns a deliberately safe audit projection. Token hashes and
-// target emails are never included.
+// Auditable returns the fields safe to audit; hashes and target emails are
+// never included.
 func (t *UserToken) Auditable() map[string]any {
 	if t == nil {
 		return map[string]any{}

@@ -251,9 +251,9 @@ func copyDefinition(id string) localization.Definition {
 	return value
 }
 
-// LocalizationDefinitions returns the closed set of copy consumed by the mail
-// renderer. The IDs are derived from the same typed template registry used at
-// runtime, so adding a template cannot silently escape catalog validation.
+// LocalizationDefinitions returns the closed set of copy the renderer uses.
+// It is derived from the same template registry used at runtime, so a new
+// template cannot escape catalog validation.
 func LocalizationDefinitions() []localization.Definition {
 	definitions := make([]localization.Definition, 0, len(model.AllMailTemplateKeys())*8+len(commonCopyFields))
 	for _, field := range commonCopyFields {

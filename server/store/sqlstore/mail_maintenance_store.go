@@ -184,7 +184,7 @@ func (s SQLMailStore) suppressDeliveryPage(
 				return nil, invalidPersistedState("mail_delivery", "suppression", modelErr)
 			}
 			// The shared transition keeps dependent projections, such as a
-			// Retention Notice's delivery state, and payload-key references in
+			// retention notice's delivery state, and payload-key references in
 			// step with the delivery.
 			if err = updateMailDelivery(ctx, tx, current, updated); err != nil {
 				return nil, fmt.Errorf("suppress mail delivery: %w", err)

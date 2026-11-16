@@ -17,9 +17,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Presentation is what the candidate's live Attempt displays: the Exam title,
-// sanitized Exam Instructions, capacity policy, Exam Resources, runtime
-// capabilities, browser policy, and live corrections.
+// Presentation is what the candidate's live attempt displays; its
+// instructions are already sanitized.
 type Presentation struct {
 	AttemptID            model.ExamAttemptID
 	SittingID            model.ExamSittingID
@@ -33,8 +32,7 @@ type Presentation struct {
 	Resources            []Resource
 }
 
-// Resource is the candidate-visible metadata of one published Exam Resource,
-// in presentation order.
+// Resource is the candidate-visible metadata of one published exam resource.
 type Resource struct {
 	ResourceID          model.ExamResourceID
 	DisplayName         string
@@ -45,9 +43,7 @@ type Resource struct {
 	SHA256              string
 }
 
-// GetCandidateExamPresentation returns what the candidate's live Attempt
-// displays: title, sanitized Exam Instructions, Exam Resources, runtime
-// capabilities, browser policy, and live corrections.
+// GetCandidateExamPresentation requires a live attempt.
 func (s *Service) GetCandidateExamPresentation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -91,15 +87,15 @@ func (s *Service) GetCandidateExamPresentation(
 	return result, nil
 }
 
-// OpenResourceQuery names one published Resource through the candidate's
-// Attempt access.
+// OpenResourceQuery names one published resource through the candidate's
+// access.
 type OpenResourceQuery struct {
 	Access     CandidateAccess
 	ResourceID model.ExamResourceID
 }
 
-// OpenCandidateExamResource opens the content of one Exam Resource presented
-// to the candidate's live Attempt.
+// OpenCandidateExamResource opens only a resource presented to the
+// candidate's live attempt.
 func (s *Service) OpenCandidateExamResource(
 	ctx context.Context,
 	inv invocation.Invocation,

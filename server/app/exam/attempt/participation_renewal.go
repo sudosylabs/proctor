@@ -19,10 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// RenewParticipationCommand renews the Participation Lease of one Attempt
-// Participation Generation on a named Attempt Connection. Sequence orders
-// renewals within the generation; the continuity credential authenticates
-// it, and Security carries Desktop's security control.
+// RenewParticipationCommand renews one generation's lease. Sequence orders
+// renewals within the generation.
 type RenewParticipationCommand struct {
 	Security             model.SecurityControl
 	AttemptID            model.ExamAttemptID
@@ -33,8 +31,7 @@ type RenewParticipationCommand struct {
 	ContinuityCredential string
 }
 
-// ParticipationRenewal is the candidate-safe acknowledgement of one explicit
-// application renewal. It contains authoritative database time but no raw or
+// ParticipationRenewal carries authoritative database time and no raw or
 // hashed credential material.
 type ParticipationRenewal struct {
 	Security         model.SecurityControlResult
@@ -50,10 +47,9 @@ type ParticipationRenewal struct {
 	Duplicate        bool
 }
 
-// RenewExamAttemptParticipation authenticates a continuity renewal
-// independently of the WebSocket transport ping. Store owns the database
-// clock, exclusive expiry boundary, duplicate outcome, and permanent
-// generation fence.
+// RenewExamAttemptParticipation is independent of the WebSocket ping. The
+// store owns the clock, the exclusive expiry boundary, duplicate outcomes and
+// the generation fence.
 func (s *Service) RenewExamAttemptParticipation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -61,8 +57,8 @@ func (s *Service) RenewExamAttemptParticipation(
 ) (_ ParticipationRenewal, resultErr error) {
 	defer func() { s.recordOperational("renew", resultErr) }()
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	// Requests that can never renew are refused before admission, so they
-	// take no worker, queue place, or allowance from the live lane.
+	// Refuse requests that can never renew before admission, so they take no
+	// worker, queue place or allowance from the live lane.
 	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return ParticipationRenewal{}, apperror.New("authentication.token_invalid")

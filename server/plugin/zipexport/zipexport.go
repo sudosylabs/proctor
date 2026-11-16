@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------------------------
 
 // Package zipexport is the built-in export.zip plugin: the stored-ZIP
-// encoding of Exam exports. The core chooses, bounds and verifies every file
+// encoding of exam exports. The core chooses, bounds and verifies every file
 // it reads; this package only encodes the archive it is handed.
 package zipexport
 
@@ -58,11 +58,11 @@ Hashes detect changes; they are not a digital signature or proof of authorship.
 This format is a portable record archive, not an installation backup or importer.
 `
 
-// MediaType is the media type of the zip Exam export format.
+// MediaType is the media type of the zip exam export format.
 const MediaType = "application/zip"
 
-// Plugin is the built-in export.zip plugin. It offers the zip Exam export
-// format, which every installation needs, so it is required.
+// Plugin is the built-in export.zip plugin. It is required because every
+// installation needs an exam export format.
 type Plugin struct{}
 
 // NewPlugin returns the built-in export.zip plugin.
@@ -73,7 +73,7 @@ func (Plugin) Manifest() plugin.Manifest {
 	return plugin.Manifest{ID: "export.zip", Name: "Zip export", EnabledByDefault: true, Required: true}
 }
 
-// Activate offers the zip Exam export format.
+// Activate offers the zip exam export format.
 func (Plugin) Activate(_ context.Context, host plugin.Host) error {
 	return host.AddExportFormat(zipExportFormat{})
 }
@@ -81,13 +81,13 @@ func (Plugin) Activate(_ context.Context, host plugin.Host) error {
 // Deactivate has nothing to release.
 func (Plugin) Deactivate(context.Context) error { return nil }
 
-// zipExportFormat is the built-in Examination Export encoding: a stored
-// (uncompressed) ZIP of records.json, README.txt, every file and a closing
-// manifest.json. Its bytes are deterministic for a given archive.
+// zipExportFormat writes a stored (uncompressed) ZIP of records.json,
+// README.txt, every file and a closing manifest.json. Its bytes are
+// deterministic for a given archive.
 //
-// The manifest records the size and digest the format computed while
-// writing each member. For files these equal ExportFile.Size and SHA256
-// whenever the export succeeds, because the core verifies every file read.
+// The manifest records the size and digest computed while writing each
+// member. For files these equal ExportFile.Size and SHA256 whenever the
+// export succeeds, because the core verifies every file read.
 type zipExportFormat struct{}
 
 var (
@@ -98,7 +98,6 @@ var (
 func (zipExportFormat) MediaType() string     { return MediaType }
 func (zipExportFormat) FileExtension() string { return ".zip" }
 
-// Write writes the records, README, files and manifest, then closes the ZIP.
 func (zipExportFormat) Write(ctx context.Context, archive plugin.ExportArchive, w io.Writer) error {
 	writer := zip.NewWriter(w)
 	manifest := examExportManifest{ExportID: model.ExamExportID(archive.ExportID), Entries: make([]examExportManifestEntry, 0, len(archive.Files)+2)}
@@ -132,8 +131,7 @@ func (zipExportFormat) Write(ctx context.Context, archive plugin.ExportArchive, 
 	return nil
 }
 
-// writeExamExportFile opens one file once, copies it to its member and
-// returns its manifest entry. An open failure is returned as the core
+// writeExamExportFile returns an open failure unwrapped, as the core
 // reported it.
 func writeExamExportFile(ctx context.Context, writer *zip.Writer, f plugin.ExportFile) (examExportManifestEntry, error) {
 	body, err := f.Open(ctx)

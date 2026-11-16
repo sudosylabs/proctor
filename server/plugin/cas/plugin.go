@@ -12,9 +12,8 @@ import "github.com/sudosylabs/proctor/server/platform/externalauth"
 // Type is the provider type a configured CAS provider selects.
 const Type = "cas"
 
-// NewPlugin returns the built-in Central Authentication Service sign-in
-// plugin. It offers the "cas" identity provider type, which builds each
-// configured CAS provider from its own settings.
+// NewPlugin returns the built-in CAS sign-in plugin, which offers the "cas"
+// identity provider type.
 func NewPlugin() externalauth.ProtocolPlugin {
 	return externalauth.ProtocolPlugin{Protocol: Type, Name: "CAS", Build: New}
 }

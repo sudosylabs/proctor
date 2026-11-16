@@ -265,8 +265,8 @@ func mailRekeyDescriptor(handler job.Handler) job.Descriptor {
 	return descriptor
 }
 
-// NewMailRekey registers the re-sealing of stored mail payloads
-// under a new primary key.
+// NewMailRekey registers the resealing of stored mail payloads under a new
+// primary key.
 func NewMailRekey(mail store.MailStore, sealer *secretseal.Sealer) job.Registration {
 	return job.Registration{Descriptor: mailRekeyDescriptor(mailRekeyHandler{mail: mail, sealer: sealer})}
 }

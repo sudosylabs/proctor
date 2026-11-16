@@ -27,8 +27,8 @@ type CommitOnboardingImportCommand struct {
 	IdempotencyKey   string
 }
 
-// CommitOnboardingImport commits a previewed onboarding import whose preview digest
-// and revision still match, proposing its execution.
+// CommitOnboardingImport commits a previewed import only while its digest
+// and revision still match, then queues its execution.
 func (s *Service) CommitOnboardingImport(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -41,9 +41,8 @@ func (s *Service) CommitOnboardingImport(
 	return onboardingImportView(committed), nil
 }
 
-// commitImport commits the import of expectedMode, or of any generic mode
-// when it is empty, and returns the committed snapshot the Store recorded,
-// the same on an idempotent replay.
+// commitImport accepts any generic mode when expectedMode is empty. An
+// idempotent replay returns the snapshot recorded by the first commit.
 func (s *Service) commitImport(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -177,7 +176,8 @@ func (s *Service) commitImport(
 	return committed, nil
 }
 
-// CancelOnboardingImport cancels an unfinished onboarding import.
+// CancelOnboardingImport cancels an unfinished import; rows already executed
+// are not undone.
 func (s *Service) CancelOnboardingImport(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -190,8 +190,6 @@ func (s *Service) CancelOnboardingImport(
 	return onboardingImportView(canceled), nil
 }
 
-// cancelImport cancels the import of expectedMode, or of any generic mode
-// when it is empty, and returns the canceled snapshot.
 func (s *Service) cancelImport(
 	ctx context.Context,
 	inv invocation.Invocation,

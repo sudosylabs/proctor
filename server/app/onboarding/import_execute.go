@@ -58,8 +58,7 @@ func (s *Service) executeImport(ctx context.Context, id model.OnboardingImportID
 			return pageErr
 		}
 
-		// A filter preview's rows are checked against the frozen caller's
-		// directory visibility, resolved once for each page it executes.
+		// Resolve the frozen caller's directory visibility once per page.
 		var guard *academicAdministrationFilterRowGuard
 		if current.Mode == model.OnboardingImportAcademicAdministrationFilter {
 			if guard, err = s.newAcademicAdministrationFilterRowGuard(ctx, actorInvocation, current); err != nil {
@@ -128,8 +127,7 @@ func (s *Service) executeImport(ctx context.Context, id model.OnboardingImportID
 	}
 }
 
-// executeImportRow runs one pending row. guard is the page's filter row
-// guard for an academic administration filter preview and nil otherwise.
+// executeImportRow takes a nil guard except for a filter preview.
 func (s *Service) executeImportRow(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -146,8 +144,8 @@ func (s *Service) executeImportRow(
 
 	filterMode := current != nil && current.Mode == model.OnboardingImportAcademicAdministrationFilter
 	if filterMode {
-		// Every failure of the check is a dependency failure, so the row is
-		// retried rather than recorded.
+		// Every check failure is a dependency failure, so the row is retried
+		// rather than recorded.
 		code, err := s.checkAcademicAdministrationFilterRow(ctx, current, guard, row)
 		if err != nil {
 			return "", "", "", "", err
@@ -276,12 +274,9 @@ func (s *Service) executeImportRow(
 	return model.OnboardingImportRowFailed, "", "", item.ErrorCode, nil
 }
 
-// academicAdministrationImportRowItem is the one batch item a frozen
-// academic administration import row runs as, whichever source froze it: a
-// CSV upload, a Student Progression or a filter preview. Each operation names
-// exactly what it owns. An ending operation names only the relationship it
-// ends, although the row also records the User and kind it resolved to, so
-// the item passes the batch's own validation.
+// academicAdministrationImportRowItem sets only the fields each operation
+// owns. An ending operation names only the relationship it ends, though the
+// row also records the user and kind, so the item passes batch validation.
 func academicAdministrationImportRowItem(row store.OnboardingImportRow) AcademicAdministrationBatchItemCommand {
 	item := AcademicAdministrationBatchItemCommand{
 		IdempotencyKey: strconv.Itoa(row.RowNumber),
@@ -312,9 +307,9 @@ func onboardingImportRetryableError(err error) bool {
 	return ok && onboardingImportRetryablePublicCode(appErr.Code())
 }
 
-// onboardingImportRetryableCodes are the public failure codes after which a
-// row is retried instead of recorded as failed. A recorded batch item code is
-// re-presented through this table so every presented code stays a constant.
+// onboardingImportRetryableCodes are the codes after which a row is retried
+// instead of recorded as failed. Codes are re-presented through this table so
+// every presented code stays a constant.
 var onboardingImportRetryableCodes = map[string]apperror.Code{
 	"administration.unavailable":    "administration.unavailable",
 	"audit.unavailable":             "audit.unavailable",

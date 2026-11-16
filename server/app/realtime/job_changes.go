@@ -16,27 +16,26 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// JobChangePublisher publishes the Job engine's Changes as job.changed for
-// the operators subscribed to job.view on the Institution. The engine may not
-// import this package, so the publisher turns its Change into the event.
+// JobChangePublisher publishes job engine changes as job.changed. It exists
+// because the engine may not import this package.
 type JobChangePublisher struct {
 	publisher    Publisher
 	institutions store.InstitutionStore
 
 	mu sync.Mutex
-	// institutionID is remembered once read: an installation's one
-	// Institution never changes identity.
+	// institutionID is cached once read: an installation's institution never
+	// changes identity.
 	institutionID model.InstitutionID
 }
 
-// NewJobChangePublisher publishes through publisher on the Institution that
-// institutions holds.
+// NewJobChangePublisher reads the institution lazily, so it works before
+// bootstrap.
 func NewJobChangePublisher(publisher Publisher, institutions store.InstitutionStore) *JobChangePublisher {
 	return &JobChangePublisher{publisher: publisher, institutions: institutions}
 }
 
 // JobChanged publishes change, best effort. Before bootstrap there is no
-// Institution and so no subscriber, and nothing is published.
+// institution and so no subscriber, and nothing is published.
 func (p *JobChangePublisher) JobChanged(ctx context.Context, change job.Change) {
 	institutionID, err := p.institution(ctx)
 	if store.IsNotFound(err) {

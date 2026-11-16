@@ -29,7 +29,7 @@ import (
 )
 
 // SQLClassMemberStore implements store.ClassMemberStore. An enrollment change
-// locks the member's current enrollment row and advances each affected Class's
+// locks the member's current enrollment row and advances each affected class's
 // mail audience revision in the same transaction.
 type SQLClassMemberStore struct {
 	*SQLStore
@@ -498,7 +498,7 @@ func (s SQLClassMemberStore) enrollInTransaction(
 	return &classMemberMutationResult{Enrollment: result}, nil
 }
 
-// lockClassEnrollmentPaths takes the notice, lifecycle, mail key and enrollment locks and fills the candidate's Academic Period.
+// lockClassEnrollmentPaths takes the notice, lifecycle, mail key and enrollment locks and fills the candidate's academic period.
 func lockClassEnrollmentPaths(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -549,7 +549,7 @@ func lockClassEnrollmentPaths(
 	return lockClassEnrollment(ctx, tx, candidate.UserID.String(), candidate.AcademicPeriodID.String())
 }
 
-// requireClassEnrollmentStudent validates the candidate and requires a current student Affiliation at its start.
+// requireClassEnrollmentStudent validates the candidate and requires a current student affiliation at its start.
 func requireClassEnrollmentStudent(ctx context.Context, tx *sqlxTxWrapper, candidate *model.ClassMember) error {
 	if err := candidate.Validate(); err != nil {
 		return store.NewErrInvalidInput("class_member", "value", nil).Wrap(err)
@@ -619,7 +619,6 @@ func findProgressionDestinationEnrollment(
 	return nil, nil
 }
 
-// completeClassEnrollmentNoOp completes any no-op audit and reports the existing enrollment unchanged.
 func completeClassEnrollmentNoOp(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -636,7 +635,7 @@ func completeClassEnrollmentNoOp(
 	return &classMemberMutationResult{Enrollment: &store.ClassEnrollmentResult{Membership: membership}, NoOp: true}, nil
 }
 
-// lockCurrentClassEnrollment locks the student's open enrollment in the candidate's Academic Period, or returns nil when none exists.
+// lockCurrentClassEnrollment locks the student's open enrollment in the candidate's academic period, or returns nil when none exists.
 func lockCurrentClassEnrollment(ctx context.Context, tx *sqlxTxWrapper, candidate *model.ClassMember) (*model.ClassMember, error) {
 	var previousRow classMemberRow
 	err := tx.Get(
@@ -666,7 +665,7 @@ func lockCurrentClassEnrollment(ctx context.Context, tx *sqlxTxWrapper, candidat
 	return nil, nil
 }
 
-// endPreviousClassEnrollment ends the previous enrollment at the transfer instant and advances both Classes' mail audiences.
+// endPreviousClassEnrollment ends the previous enrollment at the transfer instant and advances both classes' mail audiences.
 func endPreviousClassEnrollment(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -740,7 +739,6 @@ func validateClassEnrollmentNotice(
 	return nil
 }
 
-// requireNoClassEnrollmentOverlap rejects a candidate whose effective range overlaps another enrollment in its Academic Period.
 func requireNoClassEnrollmentOverlap(ctx context.Context, tx *sqlxTxWrapper, candidate, previous *model.ClassMember) error {
 	startAt := candidate.StartsAt
 	endAt := NullTimeFromOptional(candidate.EndsAt)
@@ -784,7 +782,7 @@ func requireNoClassEnrollmentOverlap(ctx context.Context, tx *sqlxTxWrapper, can
 	return nil
 }
 
-// insertClassEnrollment inserts the candidate enrollment at its Class's advanced mail audience revision.
+// insertClassEnrollment inserts the candidate enrollment at its class's advanced mail audience revision.
 func insertClassEnrollment(ctx context.Context, tx *sqlxTxWrapper, candidate *model.ClassMember, audienceRevision int64) error {
 	row := newClassMemberRow(candidate)
 	row.MailAudienceRevision = audienceRevision
@@ -805,7 +803,6 @@ func insertClassEnrollment(ctx context.Context, tx *sqlxTxWrapper, candidate *mo
 	return nil
 }
 
-// completeClassEnrollmentAudit completes the enrollment audit and, for a transfer, the previous enrollment's audit.
 func completeClassEnrollmentAudit(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -834,7 +831,7 @@ func completeClassEnrollmentAudit(
 	return nil
 }
 
-// Get returns the unarchived Class Member with id, or a not-found error.
+// Get returns the unarchived class member with id, or a not-found error.
 func (s SQLClassMemberStore) Get(ctx context.Context, id model.ClassMemberID) (*model.ClassMember, error) {
 	var row classMemberRow
 	if err := s.GetMaster().GetBuilder(ctx, &row, s.query.Where(sq.Eq{
@@ -847,7 +844,7 @@ func (s SQLClassMemberStore) Get(ctx context.Context, id model.ClassMemberID) (*
 	return row.model()
 }
 
-// ListByUser returns every unarchived Class membership of userID, ended or not,
+// ListByUser returns every unarchived class membership of userID, ended or not,
 // newest start first.
 func (s SQLClassMemberStore) ListByUser(ctx context.Context, userID model.UserID) ([]*model.ClassMember, error) {
 	return s.selectMembers(ctx, s.query.Where(sq.Eq{
@@ -856,7 +853,7 @@ func (s SQLClassMemberStore) ListByUser(ctx context.Context, userID model.UserID
 	}).OrderBy("class_members.start_at DESC", "class_members.id"))
 }
 
-// ListByClass returns the unarchived Class Members of classID. A non-zero at
+// ListByClass returns the unarchived class members of classID. A non-zero at
 // restricts the result to memberships active at that
 // instant; zero returns all of them.
 func (s SQLClassMemberStore) ListByClass(ctx context.Context, classID model.ClassID, at time.Time) ([]*model.ClassMember, error) {
@@ -873,7 +870,7 @@ func (s SQLClassMemberStore) ListByClass(ctx context.Context, classID model.Clas
 	return s.selectMembers(ctx, query.OrderBy("class_members.user_id", "class_members.id"))
 }
 
-// ListActiveByUser returns the unarchived Class memberships of userID active at
+// ListActiveByUser returns the unarchived class memberships of userID active at
 // at.
 func (s SQLClassMemberStore) ListActiveByUser(ctx context.Context, userID model.UserID, at time.Time) ([]*model.ClassMember, error) {
 	activeAt := model.TimeUTC(at)
@@ -1217,10 +1214,10 @@ func advanceClassMailAudienceRevisions(
 	return result, nil
 }
 
-// lockCandidateUser locks the User row that a candidate-scoped advisory fence
-// names before the fence itself. Invitation acceptance locks the User first and
-// then the Attempt admission, Class-enrollment, or Class lifecycle lock; every
-// other path that takes one of those for the User takes the same order, so no
+// lockCandidateUser locks the user row that a candidate-scoped advisory fence
+// names before the fence itself. Invitation acceptance locks the user first and
+// then the attempt admission, class-enrollment, or class lifecycle lock; every
+// other path that takes one of those for the user takes the same order, so no
 // side can hold a fence while waiting for the row.
 func lockCandidateUser(ctx context.Context, executor sqlxExecutor, userID string) error {
 	if _, err := executor.Exec(ctx, `SELECT 1 FROM users WHERE id = ? FOR SHARE`, userID); err != nil {
@@ -1342,8 +1339,8 @@ func (s SQLClassMemberStore) CountPageByClass(ctx context.Context, options store
 	return countBounded(ctx, s.GetMaster(), filterClassMemberPage(sq.Select("class_members.id").From("class_members"), options), maximum, "class members")
 }
 
-// CountCurrentByClasses counts each Class's current memberships through the
-// current-member index, reading at most one row past maximum per Class.
+// CountCurrentByClasses counts each class's current memberships through the
+// current-member index, reading at most one row past maximum per class.
 func (s SQLClassMemberStore) CountCurrentByClasses(
 	ctx context.Context,
 	classIDs []model.ClassID,
@@ -1391,7 +1388,7 @@ func (s SQLClassMemberStore) CountCurrentByClasses(
 }
 
 // filterClassMemberPage applies every ListPageByClass filter but the keyset:
-// the Class, unarchived memberships, and the effective instant.
+// the class, unarchived memberships, and the effective instant.
 func filterClassMemberPage(query sq.SelectBuilder, options store.ClassMemberPageOptions) sq.SelectBuilder {
 	query = query.Where(sq.Eq{"class_members.class_id": options.ClassID.String(), "class_members.archived_at": nil})
 	if !options.ActiveAt.IsZero() {

@@ -25,7 +25,7 @@ import (
 type AccessPolicySQLProbe struct {
 	HoldAuthenticationPathFence func(*testing.T, context.Context) (int, func())
 	WaitForBlockedTransactions  func(*testing.T, context.Context, int, int)
-	// LeadDatabaseClock moves one Session's node-clock instants after the
+	// LeadDatabaseClock moves one session's node-clock instants after the
 	// database clock, as a creating node whose clock leads PostgreSQL does.
 	LeadDatabaseClock func(*testing.T, context.Context, model.SessionID)
 }

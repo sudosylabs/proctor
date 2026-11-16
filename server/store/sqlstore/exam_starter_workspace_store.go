@@ -19,8 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// SQLExamStarterWorkspaceStore is the PostgreSQL adapter for one Exam Draft's
-// bounded logical Starter Workspace.
+// SQLExamStarterWorkspaceStore is the PostgreSQL adapter for one exam draft's
+// bounded logical starter workspace.
 type SQLExamStarterWorkspaceStore struct{ *SQLStore }
 
 // NewSQLExamStarterWorkspaceStore constructs the adapter for registration by
@@ -306,7 +306,7 @@ func (s SQLExamStarterWorkspaceStore) runMutation(
 	return result.Value, nil
 }
 
-// MarkObjectReclaimable marks an unreferenced Starter Workspace object reclaimable from the input instant.
+// MarkObjectReclaimable marks an unreferenced starter workspace object reclaimable from the input instant.
 func (s SQLExamStarterWorkspaceStore) MarkObjectReclaimable(ctx context.Context, input *store.StarterWorkspaceObjectReclaim) error {
 	objectID := input.ObjectID
 	at := input.At
@@ -329,7 +329,7 @@ func (s SQLExamStarterWorkspaceStore) MarkObjectReclaimable(ctx context.Context,
 	return nil
 }
 
-// ClaimObjectsForCleanup claims up to the input limit of reclaimable Starter Workspace objects for physical cleanup under the input claim token.
+// ClaimObjectsForCleanup claims up to the input limit of reclaimable starter workspace objects for physical cleanup under the input claim token.
 func (s SQLExamStarterWorkspaceStore) ClaimObjectsForCleanup(
 	ctx context.Context,
 	input *store.StarterWorkspaceCleanupClaim,
@@ -409,7 +409,7 @@ func (s SQLExamStarterWorkspaceStore) ClaimObjectsForCleanup(
 	return objects, nil
 }
 
-// CompleteObjectCleanup records that the claimed Starter Workspace object was removed from storage; repeating it with the same claim token is a no-op.
+// CompleteObjectCleanup records that the claimed starter workspace object was removed from storage; repeating it with the same claim token is a no-op.
 func (s SQLExamStarterWorkspaceStore) CompleteObjectCleanup(ctx context.Context, input *store.StarterWorkspaceCleanupCompletion) error {
 	objectID := input.ObjectID
 	claimToken := input.ClaimToken
@@ -480,7 +480,7 @@ func (s SQLExamStarterWorkspaceStore) CompleteObjectCleanup(ctx context.Context,
 	return err
 }
 
-// ReleaseObjectCleanup returns a claimed Starter Workspace object to the cleanup queue without removing it.
+// ReleaseObjectCleanup returns a claimed starter workspace object to the cleanup queue without removing it.
 func (s SQLExamStarterWorkspaceStore) ReleaseObjectCleanup(ctx context.Context, input *store.StarterWorkspaceCleanupRelease) error {
 	objectID := input.ObjectID
 	claimToken := input.ClaimToken
@@ -1402,8 +1402,8 @@ func optionalTime(value sql.NullTime) model.OptionalTime {
 
 var _ store.ExamStarterWorkspaceStore = (*SQLExamStarterWorkspaceStore)(nil)
 
-// starterWorkspaceMutationOutcome is the persisted outcome of a Starter
-// Workspace mutation.
+// starterWorkspaceMutationOutcome is the persisted outcome of a starter
+// workspace mutation.
 type starterWorkspaceMutationOutcome struct {
 	Entry             *starterWorkspaceEntryDocument  `json:"entry"`
 	Object            *starterWorkspaceObjectDocument `json:"object,omitempty"`

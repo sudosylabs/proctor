@@ -7,8 +7,8 @@
 
 package model
 
-// ClassEnrollment reports the membership created by an enrollment or transfer
-// and the prior membership closed by the same transaction, when one existed.
+// ClassEnrollment is the membership an enrollment or transfer created and,
+// when one existed, the prior membership the same transaction closed.
 type ClassEnrollment struct {
 	Membership *ClassMember
 	Previous   *ClassMember

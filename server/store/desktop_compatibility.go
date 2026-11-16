@@ -14,8 +14,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// DesktopCompatibilityPolicyReplacement is the named atomic mutation for the
-// Institution-owned compatibility policy and its required audit completion.
+// DesktopCompatibilityPolicyReplacement replaces the institution's
+// compatibility policy and completes its audit in one transaction.
 type DesktopCompatibilityPolicyReplacement struct {
 	ActorID          model.UserID
 	ExpectedRevision int64
@@ -24,16 +24,16 @@ type DesktopCompatibilityPolicyReplacement struct {
 	AuditAt          time.Time
 }
 
-// DesktopCompatibilityPolicyReplacementResult reports the authoritative
-// policy and whether this invocation executed or replayed the mutation.
+// DesktopCompatibilityPolicyReplacementResult is the stored policy; Replayed
+// is true when an earlier identical command's outcome was returned.
 type DesktopCompatibilityPolicyReplacementResult struct {
 	Policy   *model.DesktopCompatibilityPolicy
 	Changed  bool
 	Replayed bool
 }
 
-// DesktopCompatibilityPolicyStore owns the singleton policy and its
-// revision-fenced idempotent replacement.
+// DesktopCompatibilityPolicyStore holds the one compatibility policy;
+// Replace is revision-fenced and idempotent.
 type DesktopCompatibilityPolicyStore interface {
 	Get(context.Context) (*model.DesktopCompatibilityPolicy, error)
 	Replace(
@@ -43,8 +43,8 @@ type DesktopCompatibilityPolicyStore interface {
 	) (*DesktopCompatibilityPolicyReplacementResult, error)
 }
 
-// ErrDesktopCompatibilityPolicyRevisionConflict reports the current revision
-// without exposing any build policy data.
+// ErrDesktopCompatibilityPolicyRevisionConflict carries only the current
+// revision, never policy data.
 type ErrDesktopCompatibilityPolicyRevisionConflict struct {
 	CurrentRevision int64
 }

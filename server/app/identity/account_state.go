@@ -23,24 +23,20 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// SetUserEnabledCommand enables or disables a User. Reason, accepted only
-// when disabling, is the administrator's optional note; it is trimmed, holds
-// 1 to MaximumAccountDisableReasonRunes runes without control characters,
-// and is kept only in the audit event's parameters.
+// SetUserEnabledCommand enables or disables a user. Reason is accepted only
+// when disabling and is stored only in the audit event.
 type SetUserEnabledCommand struct {
 	ID             model.UserID
 	Enabled        bool
 	Reason         *string
 	IdempotencyKey string
-	// Batch is the administration batch context; a transport leaves it zero.
+	// Batch is zero outside an administration batch.
 	Batch batchitem.Item
 }
 
-// MaximumAccountDisableReasonRunes bounds the optional disable reason.
+// MaximumAccountDisableReasonRunes is the longest disable reason, in runes.
 const MaximumAccountDisableReasonRunes = 500
 
-// accountDisableReason validates the optional disable reason and returns it
-// trimmed; an absent reason is empty.
 func accountDisableReason(command SetUserEnabledCommand) (string, error) {
 	if command.Reason == nil {
 		return "", nil
@@ -58,9 +54,9 @@ func accountDisableReason(command SetUserEnabledCommand) (string, error) {
 	return reason, nil
 }
 
-// SetUserEnabled enables or disables a User after authorizing account state
-// management. Disabling revokes the User's Sessions and access tokens in the
-// same Store operation; their revocation is published after commit.
+// SetUserEnabled enables or disables a user. Disabling revokes the user's
+// sessions in the same store operation and publishes the revocation after
+// commit.
 func (s *Service) SetUserEnabled(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -108,9 +104,9 @@ func (s *Service) SetUserEnabled(
 
 	now := model.TimeUTC(s.now())
 	recipient := *current
-	// Preparation freezes recipient fields only. SQL remains authoritative for
-	// whether the state change is a no-op, so make the snapshot mail-eligible
-	// even when a concurrent re-enable could turn a stale no-op into a mutation.
+	// The store, not this snapshot, decides whether the change is a no-op, so
+	// keep the recipient mail-eligible in case a concurrent re-enable turns a
+	// stale no-op into a real change.
 	recipient.DisabledAt = model.OptionalTime{}
 	prepared := &store.PreparedMail{}
 	if !batch.RetainedOutcome {

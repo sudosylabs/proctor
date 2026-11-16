@@ -59,7 +59,7 @@ type ArchiveClassCommand struct {
 	ID               model.ClassID
 }
 
-// GetClass reads one Class after authorizing the caller.
+// GetClass needs class.view.
 func (s *Service) GetClass(ctx context.Context, inv invocation.Invocation, id model.ClassID) (*model.Class, error) {
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "class_id")
@@ -82,17 +82,17 @@ func (s *Service) GetClass(ctx context.Context, inv invocation.Invocation, id mo
 	return class, nil
 }
 
-// ClassPage is one page of Classes. The first page also counts every Class
-// the listing matches. StudentCounts holds each listed Class's current member
-// count, stopped at store.MaximumListCount and absent for a Class with none;
-// it is nil when the caller lacks class.members.view on the listing's scope.
+// ClassPage is one page of classes; only the first page is counted.
+// StudentCounts holds each class's current member count, capped at
+// store.MaximumListCount and absent for a class with none; it is nil without
+// class.members.view on the listing's scope.
 type ClassPage struct {
 	paging.Counted[*model.Class]
 	StudentCounts map[model.ClassID]int
 }
 
-// ListClasses lists a Programme Level's Classes by name after authorizing the
-// caller.
+// ListClasses lists a programme level's classes by name; it needs
+// class.view.
 func (s *Service) ListClasses(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -129,8 +129,7 @@ func (s *Service) ListClasses(
 	})
 }
 
-// SearchClasses searches an Academic Unit's Classes by name after
-// authorizing the caller.
+// SearchClasses searches a unit's classes by name; it needs class.view.
 func (s *Service) SearchClasses(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -168,9 +167,6 @@ func (s *Service) SearchClasses(
 	})
 }
 
-// classPage counts the first page of a Class listing and, for a caller
-// holding class.members.view on the listing's scope, each listed Class's
-// current students in one grouped read.
 func (s *Service) classPage(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -215,7 +211,7 @@ func (s *Service) classPage(
 	return result, nil
 }
 
-// CreateClass creates a Class after authorizing the caller.
+// CreateClass needs class.manage.
 func (s *Service) CreateClass(ctx context.Context, inv invocation.Invocation, command CreateClassCommand) (*model.Class, error) {
 	levelID := command.ProgrammeLevelID
 	if !levelID.IsValid() {
@@ -275,7 +271,7 @@ func (s *Service) CreateClass(ctx context.Context, inv invocation.Invocation, co
 	)
 }
 
-// UpdateClass updates a Class after authorizing the caller.
+// UpdateClass needs class.manage.
 func (s *Service) UpdateClass(ctx context.Context, inv invocation.Invocation, command UpdateClassCommand) (*model.Class, error) {
 	id := command.ID
 	if !id.IsValid() {
@@ -371,7 +367,7 @@ func (s *Service) UpdateClass(ctx context.Context, inv invocation.Invocation, co
 	)
 }
 
-// ArchiveClass archives a Class after authorizing the caller.
+// ArchiveClass needs class.manage.
 func (s *Service) ArchiveClass(ctx context.Context, inv invocation.Invocation, command ArchiveClassCommand) error {
 	id := command.ID
 	if !id.IsValid() {

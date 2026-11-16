@@ -18,8 +18,8 @@ import (
 
 const maxAllowedAttempts = 10
 
-// Policy bounds retry behavior and delegates transient-failure knowledge to
-// the concrete adapter at root composition.
+// Policy bounds retries. IsTransient comes from the database adapter;
+// MaxAttempts is 1..10.
 type Policy struct {
 	MaxAttempts    int
 	InitialBackoff time.Duration
@@ -27,13 +27,13 @@ type Policy struct {
 	IsTransient    func(error) bool
 }
 
-// Recorder observes aggregate retry decisions without store arguments,
-// operation values, errors, or caller context.
+// Recorder counts retry decisions ("retry" or "exhausted") without store
+// arguments, errors or context.
 type Recorder interface {
 	ObserveStoreRetry(outcome string)
 }
 
-// DefaultPolicy returns the conservative production retry policy.
+// DefaultPolicy makes three attempts with backoff from 10ms to 100ms.
 func DefaultPolicy(classifier func(error) bool) Policy {
 	return Policy{
 		MaxAttempts:    3,
@@ -43,8 +43,8 @@ func DefaultPolicy(classifier func(error) bool) Policy {
 	}
 }
 
-// Layer is a safe-by-default store decorator. Embedded methods are forwarded
-// exactly once; only handwritten overrides opt an operation into retries.
+// Layer retries only its handwritten overrides; embedded methods are
+// forwarded exactly once.
 type Layer struct {
 	store.Store
 	policy   Policy
@@ -52,8 +52,7 @@ type Layer struct {
 	stores   retryStores
 }
 
-// NewWithRecorder constructs a constrained retry layer with bounded retry
-// telemetry. The recorder observes decisions only, never store arguments.
+// NewWithRecorder wraps next. A nil recorder records nothing.
 func NewWithRecorder(next store.Store, policy Policy, recorder Recorder) (*Layer, error) {
 	return newLayer(next, policy, recorder)
 }
@@ -82,7 +81,7 @@ func (l *Layer) Ping(ctx context.Context) error {
 	return retryCall0(ctx, l, func() error { return l.Store.Ping(ctx) })
 }
 
-// GetDBSchemaVersion retries the idempotent persisted-version query.
+// GetDBSchemaVersion retries the idempotent schema version query.
 func (l *Layer) GetDBSchemaVersion(ctx context.Context) (int, error) {
 	return retryCall1(ctx, l, func() (int, error) { return l.Store.GetDBSchemaVersion(ctx) })
 }

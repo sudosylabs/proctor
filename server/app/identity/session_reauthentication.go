@@ -18,15 +18,14 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ReauthenticatePasswordCommand proves the password of the current Session's
-// User. It intentionally contains no selectable User or login identifier.
+// ReauthenticatePasswordCommand deliberately has no user or login field: it
+// can only prove the current session's user.
 type ReauthenticatePasswordCommand struct {
 	Password string
 	Source   string
 }
 
-// ReauthenticatePassword proves the current Session User's password again and
-// records the recent authentication on that Session.
+// ReauthenticatePassword records recent authentication on the current session.
 func (s *Service) ReauthenticatePassword(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -36,8 +35,8 @@ func (s *Service) ReauthenticatePassword(
 	if principal.ValidateMFARecovery() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return nil, access.InvalidTokenAppError()
 	}
-	// A Session retains its original authentication method and provider. A
-	// password cannot silently substitute for an external identity's proof.
+	// A session keeps its original method and provider: a password must not
+	// stand in for an external identity's proof.
 	if principal.AuthenticationMethod != "password" || principal.AuthenticationProviderID != "" {
 		return nil, apperror.New("authentication.reauthentication_method_required")
 	}

@@ -27,10 +27,7 @@ func newRouteErrorPolicy(codes []string) routeErrorPolicy {
 	return policy
 }
 
-// compileRoutes validates the resources and builds everything the API serves
-// from: the router, the sorted route manifest, and the matchers that answer
-// "which methods does this path allow". It runs once; a failure leaves the
-// API without a router.
+// compileRoutes runs once; a failure leaves the API without a router.
 //
 // Each route's handler is wrapped, innermost first, as: the operation,
 // idempotency key, authentication and assurance, body limit, request
@@ -66,17 +63,14 @@ func (a *API) compileRoutes(apiPrefix string, maxBodyBytes int64, resources ...R
 	return nil
 }
 
-// compiledCatalog is one compiled route set: its router, its sorted
-// manifest, and the matchers that answer which methods a path allows.
 type compiledCatalog struct {
 	router   *mux.Router
 	routes   []Entry
 	matchers []routeMatcher
 }
 
-// compileCatalog compiles validated resources into a router. available, when
-// set, gates each resource's routes: a route of a resource it reports false
-// for answers as if it did not exist.
+// compileCatalog gates each resource's routes on available, when set: a route
+// whose resource reports false answers as if it did not exist.
 func (a *API) compileCatalog(apiPrefix string, available []func() bool, resources ...Resource) (compiledCatalog, error) {
 	router := mux.NewRouter()
 	routeKeys := make(map[string]struct{})
@@ -177,9 +171,9 @@ func (a *API) gateRoute(next http.Handler, available func() bool) http.Handler {
 	})
 }
 
-// Entry is one compiled route as API.Routes reports it. Path is the router
-// template under the API prefix, ErrorCodes is the sorted union of the
-// endpoint's own codes and the kernel's, and Idempotency is never empty.
+// Entry is one compiled route. Path includes the API prefix, ErrorCodes is the
+// sorted union of the endpoint's and the kernel's codes, and Idempotency is
+// never empty.
 type Entry struct {
 	Method       string
 	Path         string

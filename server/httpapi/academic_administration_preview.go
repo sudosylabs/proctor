@@ -23,7 +23,7 @@ type academicAdministrationPreviewHandlers struct {
 	app *onboarding.Service
 }
 
-// academicAdministrationPreviewFilterBody is the User directory filter of a
+// academicAdministrationPreviewFilterBody is the user directory filter of a
 // preview, spelled as the directory's query parameters are.
 type academicAdministrationPreviewFilterBody struct {
 	Q                string   `json:"q,omitempty"`

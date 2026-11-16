@@ -29,8 +29,8 @@ type desktopRegistrationResponse struct {
 	Current          bool   `json:"current"`
 }
 
-// renameDesktopRegistrationRequest names one of the caller's Desktop
-// Registrations.
+// renameDesktopRegistrationRequest names one of the caller's desktop
+// registrations.
 type renameDesktopRegistrationRequest struct {
 	DisplayName string `json:"display_name"`
 }
@@ -114,8 +114,8 @@ func (h desktopRegistrationHandlers) list(request route.Request) (route.Result, 
 	return route.JSON(http.StatusOK, response).WithHeaders(privateNoStoreHeaders()), nil
 }
 
-// rename needs only an interactive Session, unlike revoke: a name changes no
-// key, Session, or credential, and it is visible only in the User's own lists.
+// rename needs only an interactive session, unlike revoke: a name changes no
+// key, session, or credential, and only the user's own lists show it.
 func (h desktopRegistrationHandlers) rename(request route.Request) (route.Result, error) {
 	registrationID, err := route.PathID[model.DesktopRegistrationID](request, "desktop_registration_id")
 	if err != nil {

@@ -33,9 +33,9 @@ type automaticCertificateManager interface {
 	Close() error
 }
 
-// standardHTTPRuntime owns the complete client-facing HTTP lifecycle. The
-// outer Server supplies the primary listener; this implementation additionally
-// owns the optional ACME challenge and HTTP-to-HTTPS forwarding listener.
+// standardHTTPRuntime serves the primary listener the Server hands it, and
+// owns the optional HTTP-to-HTTPS forwarding listener, which also answers
+// ACME challenges.
 type standardHTTPRuntime struct {
 	primary                        *http.Server
 	forwarding                     *http.Server

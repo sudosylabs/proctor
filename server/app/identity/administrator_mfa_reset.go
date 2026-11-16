@@ -25,11 +25,9 @@ type AdministratorMFAResetResult struct {
 	ReenrollmentRequired bool
 }
 
-// ResetAdministratorMFA is host authority, never a User impersonation or
-// network credential; it deliberately takes no password or factor input. It
-// is absent from every network application capability.
-// The module root borrows it only while its Server is inert, and the Store
-// serializes it against all serving nodes and unreconciled host recovery.
+// ResetAdministratorMFA is a host-only recovery: it deliberately takes no
+// password or factor and is never exposed over the network. It runs only while
+// the server is inert, and the store serializes it against serving nodes.
 func (s *Service) ResetAdministratorMFA(
 	ctx context.Context,
 	system invocation.System,

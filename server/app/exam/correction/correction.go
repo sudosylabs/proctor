@@ -19,9 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Content writes the bytes of a staged Exam Resource under the File Revision
-// and Rendition identifiers the Store reserved, so a retry of the same stage
-// writes the same object.
+// Content writes staged resource bytes under the revision and rendition IDs
+// the store reserved, so a retried stage writes the same object.
 type Content interface {
 	StoreExamResourceRendition(
 		context.Context,
@@ -34,19 +33,18 @@ type Content interface {
 	) (model.FileRendition, error)
 }
 
-// Service stages Exam Resource content for, and applies, live corrections to
-// an Exam Sitting.
+// Service stages resource content for, and applies, live corrections; build
+// it with New.
 type Service struct {
-	corrections store.ExamCorrectionStore
-	revisions   store.ExamRevisionStore
-	// sittings finds the candidates whose Exam activity a correction refreshes.
+	corrections         store.ExamCorrectionStore
+	revisions           store.ExamRevisionStore
 	sittings            store.ExamSittingStore
 	exams               store.ExamAuthoringStore
 	academicUnitMembers store.AcademicUnitMemberStore
 
 	authorizer *access.Authorizer
-	// auditor records the attempt and failure of each audited command; the
-	// Store completes the attempt with the change it commits.
+	// auditor only begins and fails audits; the store completes them in the
+	// same transaction as the change.
 	auditor           access.MutationAuditAdapter
 	publisher         realtime.Publisher
 	content           Content
@@ -62,8 +60,8 @@ type Service struct {
 	newExamRevisionID func() model.ExamRevisionID
 }
 
-// Dependencies are the collaborators New validates once and distributes to
-// the Service.
+// Dependencies are the Service's collaborators. New requires every field
+// except InstitutionOrigin.
 type Dependencies struct {
 	Persistence       store.ExamCorrectionStore
 	Revisions         store.ExamRevisionStore
@@ -85,8 +83,7 @@ type Dependencies struct {
 	InstitutionOrigin string
 }
 
-// New returns a correction Service, or an error when a required dependency is
-// missing.
+// New returns an error when a required dependency is nil.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Persistence == nil ||
 		deps.Revisions == nil ||

@@ -52,9 +52,8 @@ func newI18nCommand() *cobra.Command {
 }
 
 func localizationDefinitions() ([]localization.Definition, error) {
-	// This explicit aggregation is intentional. Dynamic families are expanded
-	// by their owning package; irregular messages are declared beside their
-	// consumer. Adding a new consumer requires one visible registration here.
+	// Kept explicit on purpose: a new consumer needs one visible registration
+	// here. Each package expands its own dynamic families.
 	return localization.MergeDefinitions(
 		mail.LocalizationDefinitions(),
 		commands.LocalizationDefinitions(),
@@ -86,9 +85,8 @@ func newI18nCheckCommand(options *i18nOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			// Browser source owns and exactly validates the webapp namespace in
-			// webapp/scripts/generate-i18n.mjs. Server consumers retain exact
-			// ownership of every other catalog entry.
+			// webapp/scripts/generate-i18n.mjs validates the webapp. namespace;
+			// the server validates every other entry.
 			if validateErr := localizer.ValidateDefinitionsWithDelegatedPrefixes(definitions, "webapp."); validateErr != nil {
 				return validateErr
 			}

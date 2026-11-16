@@ -20,11 +20,10 @@ type CacheRedis struct {
 	ConnectTimeout Duration `json:"ConnectTimeout"`
 }
 
-// CacheMemory bounds the process-local disposable cache. MaxBytes accounts for
-// retained key and encoded-value bytes; implementation overhead is additional.
-// MaxCounters separately bounds the atomic counters that hold authentication
-// rate-limit windows: they are never evicted, so when every slot is live a new
-// counter is refused and the guarded action fails closed.
+// CacheMemory bounds the process-local cache. MaxBytes counts key and encoded
+// value bytes only, not implementation overhead. MaxCounters bounds the
+// rate-limit counters, which are never evicted: when all are live a new one is
+// refused and the guarded action fails closed.
 type CacheMemory struct {
 	MaxEntries  int   `json:"MaxEntries"`
 	MaxBytes    int64 `json:"MaxBytes"`

@@ -18,8 +18,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ManualSuspensionCommand is an Exam Manager's kick: the immediate manual
-// control that blocks an active Attempt until an authorized re-allow.
+// ManualSuspensionCommand is a manager's kick, which blocks an active attempt
+// until an authorized re-allow.
 type ManualSuspensionCommand struct {
 	ExamID                  model.ExamID
 	SittingID               model.ExamSittingID
@@ -29,9 +29,9 @@ type ManualSuspensionCommand struct {
 	IdempotencyKey          string
 }
 
-// ManualSuspensionResult is the committed, private-reason-free kick outcome.
-// Connection is the kicked generation's latest Connection, if any;
-// ConnectionClosed is true when the kick closed it.
+// ManualSuspensionResult never carries the private reason. Connection is the
+// kicked generation's latest connection, if any; ConnectionClosed is true when
+// the kick closed it.
 type ManualSuspensionResult struct {
 	ExamID           model.ExamID
 	SittingID        model.ExamSittingID
@@ -45,13 +45,10 @@ type ManualSuspensionResult struct {
 	Replayed         bool
 }
 
-// SuspendExamAttempt authorizes the exact Sitting before reading the Attempt,
-// audits the attempt, and lets the named Store operation end the live
-// generation and open one manual Suspension episode atomically. Effects are
-// published only for a fresh commit. A kick past the Sitting's scheduled end
-// is refused; a kick of a generation whose lease already lapsed records that
-// Connection Loss through the expiry transition and is refused as
-// connection_lost.
+// SuspendExamAttempt ends the live generation and opens a manual suspension
+// atomically. A kick past the sitting's scheduled end is refused; a kick of a
+// generation whose lease already lapsed records that connection loss and is
+// refused as connection_lost.
 func (s *Service) SuspendExamAttempt(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -149,9 +146,9 @@ func (s *Service) SuspendExamAttempt(
 	}, commandIdempotency)
 	var conflict *store.ErrConflict
 	if errors.As(err, &conflict) && conflict.Constraint == "attempt_participation_expired" {
-		// The generation lapsed before the kick: that is Connection Loss,
-		// which the kick must not erase. Record it as the scanner would and
-		// refuse the kick with the stable outcome the manager can act on.
+		// The generation lapsed before the kick: that is connection loss, which
+		// the kick must not erase. Record it as the scanner would and refuse
+		// with an outcome the manager can act on.
 		latest := managerSnapshot.LatestParticipation
 		if latest == nil || !latest.ID.IsValid() || latest.Generation < 1 {
 			return ManualSuspensionResult{}, s.failAudit(ctx, auditID, apperror.New("exam.attempt.connection_lost").Wrap(err))

@@ -197,7 +197,7 @@ func nativeDeliveryResource(app *attempt.Service) route.Resource {
 }
 
 // nativeDeliveryQuery builds the query for one delivery stream. streamID names
-// a delivery stream, Participation, or source session chosen by the Store, so
+// a delivery stream, participation, or source session chosen by the store, so
 // it stays an untyped opaque identifier.
 func nativeDeliveryQuery(request route.Request, streamID string) (attempt.NativeDeliveryQuery, error) {
 	attemptID, err := route.PathID[model.ExamAttemptID](request, "exam_attempt_id")
@@ -210,7 +210,7 @@ func nativeDeliveryQuery(request route.Request, streamID string) (attempt.Native
 	}
 
 	query := attempt.NativeDeliveryQuery{Access: attempt.CandidateAccess{AttemptID: attemptID}, StreamID: streamID}
-	// Omission does not select historical authority. The Store decides from the
+	// Omission does not select historical authority. The store decides from the
 	// recorded source closure, and rejects omission for a live source.
 	if len(request.HTTP.Header.Values(candidateAttemptCredentialHeader)) > 0 ||
 		len(request.HTTP.Header.Values(candidateAttemptConnectionHeader)) > 0 {

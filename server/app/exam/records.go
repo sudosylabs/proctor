@@ -16,15 +16,14 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Records owns the separate post-delivery completion and preservation lifecycle.
-// Retention scheduling and deletion are separate use cases.
+// Records owns records completion, retention holds and review waivers after
+// delivery. Retention scheduling and deletion live elsewhere.
 type Records struct {
-	records store.ExamRecordsStore
-	// exams reads the Exam ownership a records decision is authorized against.
+	records             store.ExamRecordsStore
 	exams               store.ExamAuthoringStore
 	academicUnitMembers store.AcademicUnitMemberStore
 
-	// authorizer also records the durable denial of a prohibited self-waiver.
+	// authorizer also audits the denial of a self-waiver.
 	authorizer *access.Authorizer
 	auditor    access.MutationAuditAdapter
 	recentTTL  time.Duration
@@ -32,8 +31,7 @@ type Records struct {
 	newHoldID  func() model.RetentionHoldID
 }
 
-// RecordsDependencies are the collaborators NewRecords validates once and
-// distributes to the Records.
+// RecordsDependencies are the collaborators of NewRecords.
 type RecordsDependencies struct {
 	Persistence store.ExamRecordsStore
 	Access      store.ExamAuthoringStore

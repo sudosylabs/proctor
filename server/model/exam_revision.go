@@ -29,9 +29,9 @@ func (k ExamRevisionPublicationKind) IsValid() bool {
 	return k == ExamRevisionPublicationStandard || k == ExamRevisionPublicationLiveCorrection
 }
 
-// ExamRevisionPolicy is the exact canonical policy document frozen into one
-// published Revision. Bytes are application canonical JSON, never PostgreSQL's
-// JSONB textual representation; SHA256 is lowercase hexadecimal over Bytes.
+// ExamRevisionPolicy is the canonical policy document frozen into one
+// published revision. Bytes is the application's canonical JSON, never
+// PostgreSQL's jsonb text; SHA256 is lowercase hex over Bytes.
 type ExamRevisionPolicy struct {
 	SchemaVersion int
 	Bytes         []byte
@@ -46,9 +46,9 @@ func NewExamRevisionPolicy(policy ExamPolicySet) (ExamRevisionPolicy, error) {
 	return newExamRevisionPolicy(policy.SchemaVersion, encoded), nil
 }
 
-// CanonicalizeExamRevisionPolicy strictly decodes an authored or persisted
-// policy document, then re-encodes the typed value using the explicit schema
-// codec. Input whitespace and member order therefore cannot affect its digest.
+// CanonicalizeExamRevisionPolicy decodes a policy document strictly and
+// re-encodes it with the schema codec, so whitespace and member order cannot
+// affect its digest.
 func CanonicalizeExamRevisionPolicy(data []byte) (ExamRevisionPolicy, error) {
 	policy, err := DecodeExamPolicySet(data)
 	if err != nil {
@@ -203,9 +203,9 @@ type ExamRevisionSpecification struct {
 	CandidateCorrection  *CandidateCorrectionNotice
 }
 
-// ExamRevision is one immutable published generation. Its aggregate digests
-// make unchanged-Draft detection and later live-correction constraints
-// independent of SQL JSON rendering and row order.
+// ExamRevision is one immutable published generation. Its digests make
+// unchanged-draft detection and live-correction checks independent of SQL
+// JSON rendering and row order.
 type ExamRevision struct {
 	ID                     ExamRevisionID
 	ExamID                 ExamID
@@ -275,16 +275,16 @@ func NewExamRevision(spec ExamRevisionSpecification) (*ExamRevision, error) {
 	return revision, nil
 }
 
-// NewLiveCorrectionExamRevision derives one immutable live correction from an
-// already published Revision. Only candidate-visible instructions and the
-// complete ordered resource manifest may change; policy, plugin sections and
-// Starter Workspace remain pinned byte-for-byte to the base Revision.
+// LiveCorrectionExamRevisionSpecification is the input to
+// NewLiveCorrectionExamRevision. Only the instructions, the ordered resources
+// and the browser policy may change; the exam policy, title, plugin sections
+// and starter workspace stay those of the base revision.
 type LiveCorrectionExamRevisionSpecification struct {
 	ID                   ExamRevisionID
 	Number               int64
 	InstructionsMarkdown string
 	Resources            []ExamRevisionResource
-	// BrowserPolicy replaces the base Revision's policy; nil keeps it.
+	// BrowserPolicy replaces the base revision's policy; nil keeps it.
 	BrowserPolicy           *BrowserPolicy
 	CandidateSummary        string
 	AffectedCapabilities    []CandidateCapability

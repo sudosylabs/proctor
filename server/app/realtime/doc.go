@@ -14,28 +14,11 @@
 // delivery while using transport-neutral event intents and composition-owned
 // wire adapters. The server NOTICE records the complete provenance.
 
-// Package realtime tells connected clients that something changed. Event is
-// one such notice (its name, who may receive it and a small payload), event.go
-// and the *_event.go files beside it have one constructor per event,
-// message.go declares the closed list of events the server sends (each one an
-// AsyncAPI message in server/asyncapi), and Delivery delivers an event to this
-// node's sockets first and then to the other nodes.
+// Package realtime tells connected clients that something changed: this node's
+// sockets first, then the other nodes. It knows no WebSocket frames.
 //
-// An application area does not call Delivery directly. It holds a Publisher,
-// builds its events in its own effects.go, and publishes only after its Store
-// operation has committed. Service is the production Publisher: it turns
-// Delivery's failures into application errors and adds the Attempt and
-// current-user notices a Session revocation or an authorization change owes.
-// The one Attempt lookup that needs comes through SessionAttemptTargets,
-// which StoreSessionAttemptTargets answers from the Exam Attempt Store; the
-// other reads are the Institution for JobChangePublisher. Delivery is best
-// effort: nothing here queues or retries, and a failed publication never
-// undoes the committed change.
-//
-// The package knows nothing about WebSocket frames. The websocket Hub is
-// attached as the Sink and the cluster transport as the fan-out, once each,
-// while the node is built. Start with publisher.go, then service.go and
-// delivery.go. The realtimetest child holds the recording
-// Publisher that area tests use, and sitting_invalidation.go the two Sitting
-// notices several Exam packages share.
+// Areas hold a Publisher and publish only after their store change commits.
+// Delivery is best effort: nothing queues or retries, and a failed
+// publication never undoes the change. Every event name must be declared in
+// message.go, which mirrors the AsyncAPI messages.
 package realtime

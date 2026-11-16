@@ -15,16 +15,16 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// Handler is what a Job type implements. Run does one attempt's work and must
-// be idempotent, because a Job can run more than once. Its context ends at
-// the descriptor's Timeout, when the engine closes, when the claim is lost
-// and, for a cancelable type, when cancellation is requested.
+// Handler is what a job type implements. Run must be idempotent, because a
+// job can run more than once. Its context ends at the descriptor's Timeout,
+// when the engine closes, when the claim is lost and, for a cancelable type,
+// when cancellation is requested.
 type Handler interface {
 	Run(context.Context, Execution) Outcome
 }
 
-// Execution is what a handler runs with: the engine never runs a handler
-// without a Job, so handlers read Execution.Job without checking it.
+// Execution is what a handler runs with. The engine never runs a handler
+// without a job, so handlers read Job without checking it.
 type Execution struct {
 	Job         *model.Job
 	Attempt     *model.JobAttempt
@@ -32,10 +32,8 @@ type Execution struct {
 	reserveWork func(context.Context, int, int) (bool, error)
 }
 
-// NewExecution builds the Execution a handler runs with and validates nothing.
-// checkpoint and reserveWork back Execution.Checkpoint and
-// Execution.ReserveWork; when one is nil, that method returns an error instead
-// of acting.
+// NewExecution validates nothing. When checkpoint or reserveWork is nil, the
+// matching method returns an error instead of acting.
 func NewExecution(
 	record *model.Job,
 	attempt *model.JobAttempt,
@@ -45,9 +43,9 @@ func NewExecution(
 	return Execution{Job: record, Attempt: attempt, checkpoint: checkpoint, reserveWork: reserveWork}
 }
 
-// ReserveWork consumes units of the Job's work budget and reports false when
-// that would pass limit. The budget is counted across every attempt of the
-// Job, so a retry cannot spend again what a lost attempt already reserved.
+// ReserveWork consumes units of the job's work budget and reports false when
+// that would pass limit. The budget spans every attempt, so a retry cannot
+// spend again what a lost attempt already reserved.
 func (e Execution) ReserveWork(ctx context.Context, units, limit int) (bool, error) {
 	if e.reserveWork == nil {
 		return false, errors.New("job execution does not support work reservation")
@@ -55,9 +53,9 @@ func (e Execution) ReserveWork(ctx context.Context, units, limit int) (bool, err
 	return e.reserveWork(ctx, units, limit)
 }
 
-// CheckpointValue is what a handler saves so a later attempt can resume:
-// Document is the handler's own cursor, and Progress, when set, is the
-// position operators see.
+// CheckpointValue is what a handler saves so a later attempt can resume.
+// Document is the handler's own cursor; Progress, when set, is what
+// operators see.
 type CheckpointValue struct {
 	Progress *model.JobProgress
 	Document json.RawMessage
@@ -99,26 +97,26 @@ const (
 	OutcomeCanceled         OutcomeKind = "canceled"
 )
 
-// RetryableFailure reports a failure another attempt may overcome. The Job is
-// requeued after the descriptor's backoff while it has attempts left.
+// RetryableFailure requeues the job after the descriptor's backoff while it
+// has attempts left.
 func RetryableFailure(code string, err error) Outcome {
 	return Outcome{Kind: OutcomeRetryableFailure, PublicErrorCode: code, Err: err}
 }
 
-// Relinquished reports that the claiming node cannot execute the immutable
-// command, while another compatible node may. The attempt remains visible but
-// does not consume the Job's failure-attempt budget.
+// Relinquished reports that this node cannot execute the command but another
+// compatible node may. The attempt stays visible but does not use up the
+// job's failure budget.
 func Relinquished(code string, err error) Outcome {
 	return Outcome{Kind: OutcomeRelinquished, PublicErrorCode: code, Err: err}
 }
 
-// PermanentFailure reports a failure no retry can overcome, such as a command
-// that does not decode. The Job fails without another attempt.
+// PermanentFailure fails the job without another attempt, for example when
+// its command does not decode.
 func PermanentFailure(code string, err error) Outcome {
 	return Outcome{Kind: OutcomePermanentFailure, PublicErrorCode: code, Err: err}
 }
 
-// Canceled reports that the handler stopped because the Job was canceled.
+// Canceled reports that the handler stopped because the job was canceled.
 func Canceled(code string) Outcome {
 	return Outcome{Kind: OutcomeCanceled, PublicErrorCode: code}
 }

@@ -14,12 +14,10 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// AuditListOptions narrows an audit listing inside Visibility. ActorID,
-// SubjectUserID, Status and Resource each match exactly; Actions are
-// alternatives, at most MaximumAuditListActions of them; Kind keeps the
-// actions of that model.AuditKind, or every action when empty. Every filter
-// narrows the visibility and the others, so an academic visibility still reads
-// only its subtrees and AllowedActions catalog.
+// AuditListOptions filters an audit listing. Actions are alternatives (at most
+// MaximumAuditListActions); an empty Kind keeps every kind. Filters only
+// narrow Visibility, so an academic visibility still reads only its subtrees
+// and AllowedActions.
 type AuditListOptions struct {
 	ActorID       model.UserID
 	SubjectUserID model.UserID
@@ -34,8 +32,7 @@ type AuditListOptions struct {
 	// Ascending reads oldest first; the default is newest first.
 	Ascending bool
 	// BeforeCreatedAt and BeforeID are the previous page's last key, at
-	// microsecond precision. The page continues past it in the read order:
-	// older entries when newest first, newer entries when Ascending.
+	// microsecond precision.
 	BeforeCreatedAt time.Time
 	BeforeID        model.AuditEventID
 	Limit           int
@@ -45,12 +42,10 @@ type AuditListOptions struct {
 // MaximumAuditListActions bounds the actions one audit listing names.
 const MaximumAuditListActions = 32
 
-// AuditVisibilityScope constrains audit history in persistence. InstitutionWide
-// explicitly retains operator visibility; its zero value denies all rows.
-// AcademicInstitutionWide permits only events whose scope resolves to an
-// Academic Unit or Class anywhere in the Institution and still requires the
-// closed application-selected AllowedActions catalog. AcademicUnitRootIDs name
-// current authorized subtrees. A subtree projection requires roots and actions.
+// AuditVisibilityScope limits which audit events a reader sees; the zero value
+// sees nothing. InstitutionWide is operator visibility. AcademicInstitutionWide
+// sees only events scoped to an academic unit or class, and like
+// AcademicUnitRootIDs still requires AllowedActions.
 type AuditVisibilityScope struct {
 	InstitutionWide         bool
 	AcademicInstitutionWide bool
@@ -58,9 +53,9 @@ type AuditVisibilityScope struct {
 	AllowedActions          []string
 }
 
-// AuditSelfRelation narrows a User's own history to the events about their
-// account (subject) or the events they performed on anything else (actor).
-// The zero value selects both.
+// AuditSelfRelation narrows a user's own history to events about their
+// account (subject) or events they performed on anything else (actor). The
+// zero value selects both.
 type AuditSelfRelation string
 
 const (
@@ -68,15 +63,12 @@ const (
 	AuditSelfRelationActor   AuditSelfRelation = "actor"
 )
 
-// MaximumAuditSelfEventKeys bounds the closed catalogue keys one self-history
-// read may match.
+// MaximumAuditSelfEventKeys bounds AuditSelfListOptions.Events.
 const MaximumAuditSelfEventKeys = 256
 
-// AuditSelfListOptions selects one keyset page of a User's own terminal audit
-// history: events whose subject is the User, and events the User performed
-// whose subject is anyone or nothing else. Events names the exact catalogue
-// keys to match and is required; attempt rows never match. Since is
-// inclusive and Until exclusive; both are optional.
+// AuditSelfListOptions pages a user's own completed audit history. Events is
+// required and names the catalogue keys to match; unfinished attempts never
+// match. Since is inclusive and Until exclusive; both are optional.
 type AuditSelfListOptions struct {
 	UserID   model.UserID
 	Relation AuditSelfRelation
@@ -86,23 +78,21 @@ type AuditSelfListOptions struct {
 	// Ascending reads oldest first; the default is newest first.
 	Ascending bool
 	// BeforeCreatedAt and BeforeID are the previous page's last key, at
-	// microsecond precision. The page continues past it in the read order:
-	// older entries when newest first, newer entries when Ascending.
+	// microsecond precision.
 	BeforeCreatedAt time.Time
 	BeforeID        model.AuditEventID
 	Limit           int
 }
 
-// MaximumAuditSelfCount bounds CountSelf. A history at the bound reports the
-// bound, and the caller presents it as a lower bound.
+// MaximumAuditSelfCount bounds CountSelf; a count at the bound means "at
+// least".
 const MaximumAuditSelfCount = MaximumListCount
 
-// AuditSelfEntry is the bounded projection of one self-history event. It
-// carries no parameters, prior state, or result beyond the recorded
-// operation name and, for a Role Binding change, the bound Role.
-// ResourceRelated reports whether the resource is the User themself, the
-// Institution, or an Academic Unit or Class the User has a membership or Role
-// Binding at, whether current or ended.
+// AuditSelfEntry is one event of a user's own history. It carries no
+// parameters, prior state or result beyond the operation name and, for a role
+// binding change, the role. ResourceRelated is true when the resource is the
+// user, the institution, or a unit or class the user has or had a membership
+// or binding at.
 type AuditSelfEntry struct {
 	ID              model.AuditEventID
 	CreatedAt       time.Time
@@ -117,28 +107,23 @@ type AuditSelfEntry struct {
 	IPAddress       string
 	UserAgent       string
 	ErrorCode       string
-	// RoleID is the Role a role_binding.manage event granted or ended, read
-	// from its value or, for an end, its prior state; zero for any other
-	// action.
+	// RoleID is the role a role_binding.manage event granted or ended; zero
+	// for any other action.
 	RoleID model.RoleID
 }
 
-// MaximumAuditNames bounds the identifiers of each kind one ListNames read
-// names: an audit page of at most 201 events names an actor, a subject and a
-// resource each.
+// MaximumAuditNames bounds the IDs of each kind one ListNames call takes: a
+// 201-event page names an actor, a subject and a resource each.
 const MaximumAuditNames = 3 * 201
 
-// AuditNameOptions names the records one page of audit events refers to, so
-// the page reads every name in one bounded call rather than one per event.
-// Each name is read only inside its visibility, the current authority the
-// reader would need to see that record: Users through UserVisibility as the
-// User directory applies it (a scoped visibility never names a disabled
-// User), Academic Units through AcademicUnitInstitutionWide or the
-// AcademicUnitRootIDs subtrees, and Classes through ClassVisibility as a
-// Class search applies it. A zero visibility names nothing. Roles carry no
-// visibility: the caller asks only for Roles the reader is already entitled
-// to, such as the Roles bound to the reader themself. Archived and missing
-// records are never named.
+// AuditNameOptions lists the records an audit page refers to, so the page
+// reads every name in one call. Each name is read only inside the visibility
+// the reader would need to see that record: users as the directory applies
+// UserVisibility, units through AcademicUnitInstitutionWide or the root
+// subtrees, classes as a class search applies ClassVisibility. A zero
+// visibility names nothing. Roles have no visibility check, so the caller must
+// ask only for roles the reader may already see. Archived and missing records
+// are never named.
 type AuditNameOptions struct {
 	UserIDs                     []model.UserID
 	UserVisibility              UserVisibilityScope
@@ -150,8 +135,8 @@ type AuditNameOptions struct {
 	RoleIDs                     []model.RoleID
 }
 
-// AuditNames are the current presentable names ListNames found. A record
-// outside its visibility, archived, or missing is absent.
+// AuditNames are the names ListNames found; a record outside its visibility,
+// archived or missing is absent.
 type AuditNames struct {
 	Users         map[model.UserID]string
 	AcademicUnits map[model.AcademicUnitID]string
@@ -159,45 +144,38 @@ type AuditNames struct {
 	Roles         map[model.RoleID]AuditRoleName
 }
 
-// AuditRoleName names one Role: its stable Name, which identifies the
-// built-in System Administrator Role whose presentation is localized, and its
-// DisplayName.
+// AuditRoleName carries Name as well as DisplayName because the built-in
+// system administrator role is recognized by Name and shown localized.
 type AuditRoleName struct {
 	Name        string
 	DisplayName string
 }
 
-// AuditStore owns authoritative security records. Events are append-oriented;
-// Complete permits only the terminal transition from attempt to success/fail.
+// AuditStore persists security records. Events are append-only, except that
+// Complete moves an attempt to success or failure once.
 type AuditStore interface {
 	Save(context.Context, *model.AuditEvent) (*model.AuditEvent, error)
 	Get(context.Context, model.AuditEventID) (*model.AuditEvent, error)
 	Complete(context.Context, *AuditCompletion) (*model.AuditEvent, error)
 	List(context.Context, AuditListOptions) ([]*model.AuditEvent, error)
-	// Count counts the events List would return across every page for the
-	// same filters and visibility, ignoring the keyset and limit, and stops
-	// at maximum (see MaximumListCount).
+	// Count counts what List would return across every page, ignoring the
+	// keyset and limit, capped at maximum (see MaximumListCount).
 	Count(context.Context, AuditListOptions, int) (int, error)
-	// ListSelf returns up to Limit entries of one User's own history, newest
-	// first by (created_at, id). It is the union of the subject and actor
+	// ListSelf orders by (created_at, id). It unions the subject and actor
 	// relations, each read through its own index.
 	ListSelf(context.Context, AuditSelfListOptions) ([]*AuditSelfEntry, error)
-	// CountSelf counts the entries ListSelf would return across every page
-	// for the same filters, ignoring the order, keyset, and limit, and stops
-	// at MaximumAuditSelfCount.
+	// CountSelf counts what ListSelf would return across every page, capped at
+	// MaximumAuditSelfCount.
 	CountSelf(context.Context, AuditSelfListOptions) (int, error)
-	// ListNames reads, in one bounded call per page, the current names of
-	// the records the page's events refer to, each inside its visibility.
 	ListNames(context.Context, AuditNameOptions) (AuditNames, error)
-	// FailAbandonedAttempts terminalizes up to Limit attempts created longer
-	// than Age ago by PostgreSQL time, oldest first, as failures with
-	// model.AuditErrorAttemptAbandoned, and returns how many it changed.
+	// FailAbandonedAttempts fails, with model.AuditErrorAttemptAbandoned, up
+	// to Limit attempts older than Age on the database clock, oldest first.
 	FailAbandonedAttempts(context.Context, *AuditAttemptAbandonment) (int64, error)
 }
 
-// AuditAttemptAbandonment bounds one pass over attempts whose requester never
-// recorded their outcome, such as a node lost between the attempt and its
-// completion. A terminal row lets retention reason about it again.
+// AuditAttemptAbandonment bounds one pass over attempts whose outcome was
+// never recorded, such as when a node died in between. Failing them gives
+// retention a terminal row to work with.
 type AuditAttemptAbandonment struct {
 	Age   time.Duration
 	Limit int

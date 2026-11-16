@@ -14,13 +14,11 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// SessionRevocation is the complete durable input for revoking one session
-// under an already-persisted audit attempt. AuditEventID must identify an
-// attempt that is completed successfully before the revocation may commit.
-// UserSession and UserLogout reasons forbid administrative mail; other reasons
-// require the existing security-notice bundle. UserLogout completes a successful
-// no-op audit if the caller's Session is already absent or revoked. Other single
-// revocations return not found for an inactive or non-owned Session.
+// SessionRevocation revokes one session and completes its recorded audit
+// attempt in the same commit. The UserSession and UserLogout reasons forbid the
+// notice mail; every other reason requires it. UserLogout of an absent or
+// revoked session succeeds as an audited no-op; any other reason returns
+// ErrNotFound for an inactive or another user's session.
 type SessionRevocation struct {
 	SessionID    model.SessionID
 	UserID       model.UserID
@@ -33,18 +31,15 @@ type SessionRevocation struct {
 	AuditAt      time.Time
 }
 
-// SessionRevocationResult contains the revoked session and token hashes needed
-// for post-commit cache and realtime effects. Session is nil for a successful
-// UserLogout no-op, which has no new post-commit effects.
+// SessionRevocationResult is what post-commit cache and realtime invalidation
+// need. Session is nil for a UserLogout no-op, which needs none.
 type SessionRevocationResult struct {
 	Session     *model.Session
 	TokenHashes []string
 }
 
-// SessionRename is the complete durable input for renaming one of a User's
-// browser or CLI Sessions under an already-persisted audit attempt.
-// DeviceName is the normalized name the User chose
-// (model.NormalizeSessionDeviceName).
+// SessionRename renames a user's browser or CLI session. DeviceName must
+// already be normalized with model.NormalizeSessionDeviceName.
 type SessionRename struct {
 	SessionID    model.SessionID
 	UserID       model.UserID
@@ -53,23 +48,20 @@ type SessionRename struct {
 	AuditAt      time.Time
 }
 
-// SessionExpiryEnforcementResult reports the authoritative outcome of checking
-// one active Session against both of its durable expiry clocks. Expired is true
-// only when this call committed the Session and credential-family revocation.
+// SessionExpiryEnforcementResult is a session checked against both its
+// deadlines. Expired is true only when this call committed the revocation.
 type SessionExpiryEnforcementResult struct {
 	Session     *model.Session
 	TokenHashes []string
 	Expired     bool
 }
 
-// UserSessionsRevocation is the complete durable input for revoking every
-// active session belonging to one user under an already-persisted audit
-// attempt. UserAllSessions and UserOtherSessions forbid administrative mail and
-// command idempotency; other reasons retain the administrative notice contract.
-// KeepSessionID is required with UserOtherSessions and forbidden otherwise: it
-// must name a live Session of the User at RevokedAt (ErrNotFound when it does
-// not), and that Session stays live. An empty set completes a successful audit
-// with zero revoked sessions and no notice or transient effect.
+// UserSessionsRevocation revokes every active session of one user. The
+// UserAllSessions and UserOtherSessions reasons forbid the notice mail and
+// Command; other reasons require the notice. KeepSessionID is required with
+// UserOtherSessions and forbidden otherwise; it must name a live session of
+// the user at RevokedAt (else ErrNotFound) and that session stays live. With
+// nothing to revoke the audit still succeeds and no notice is sent.
 type UserSessionsRevocation struct {
 	UserID        model.UserID
 	KeepSessionID model.SessionID
@@ -85,16 +77,16 @@ type UserSessionsRevocation struct {
 	NoOp          bool
 }
 
-// UserSessionsRevocationResult contains the revoked sessions and token hashes
-// needed for post-commit cache and realtime effects.
+// UserSessionsRevocationResult is what post-commit cache and realtime
+// invalidation need.
 type UserSessionsRevocationResult struct {
 	Sessions    []*model.Session
 	TokenHashes []string
 }
 
-// SessionStore persists sessions and owns atomic session lifecycle changes.
-// Active reads, activity updates, and expiry enforcement share UTC microsecond
-// decision instants. A Session is inactive at either expiry deadline.
+// SessionStore persists sessions. Active reads, activity updates and expiry
+// compare at UTC microsecond precision, and a session is inactive at either
+// deadline.
 type SessionStore interface {
 	ReauthenticateExternal(context.Context, *SessionExternalReauthentication) (*SessionReauthenticationResult, error)
 	ReauthenticatePassword(context.Context, *SessionPasswordReauthentication) (*SessionReauthenticationResult, error)
@@ -104,32 +96,27 @@ type SessionStore interface {
 	ListActiveByUser(context.Context, model.UserID, time.Time) ([]*model.Session, error)
 	UpdateActivity(context.Context, *SessionActivityUpdate) error
 	EnforceExpiry(context.Context, *SessionExpiryEnforcement) (*SessionExpiryEnforcementResult, error)
-	// Withdraw revokes one Session the system itself just issued or refreshed
-	// and must take back: the Desktop nonce could not be stored after the
-	// audited exchange committed, or the User became inactive at refresh. It
-	// has no actor and is a compensation rather than a decision, so the
-	// Session's closed revocation reason is its durable record. Any other
-	// reason is rejected.
+	// Withdraw takes back a session the system just issued or refreshed: the
+	// Desktop nonce could not be stored after the exchange committed, or the
+	// user became inactive at refresh. It is a compensation with no actor and
+	// no audit; the revocation reason is the record, and any other reason is
+	// rejected.
 	Withdraw(context.Context, *SessionWithdrawal) ([]string, error)
 	Revoke(context.Context, *SessionRevocation) (*SessionRevocationResult, error)
 	RevokeAllForUser(context.Context, *UserSessionsRevocation) (*UserSessionsRevocationResult, error)
-	// Rename sets the device name of the User's live Web or CLI Session and
-	// completes the audit attempt as success in the same transaction. A
-	// Session that is missing, belongs to another User, or is revoked,
-	// archived, or expired by PostgreSQL time is ErrNotFound. A Desktop
-	// Session is ErrConflict and stays unchanged: its name belongs to its
-	// Desktop Registration. The Session row lock serializes a rename with
-	// revocation.
+	// Rename completes the audit in the same transaction. A missing, another
+	// user's, revoked, archived or expired session is ErrNotFound. A Desktop
+	// session is ErrConflict, since its name belongs to its registration. The
+	// row lock serializes a rename with revocation.
 	Rename(context.Context, *SessionRename) (*model.Session, error)
-	// PurgeRetired deletes retired Sessions and their credentials once their
-	// grace has passed and nothing else references them.
+	// PurgeRetired deletes retired sessions and their credentials once past
+	// their grace and unreferenced.
 	PurgeRetired(context.Context, *SessionPurge) (*SessionPurgeResult, error)
 }
 
-// SessionPageQuery pages one User's Sessions newest first by creation, with
-// the Session ID as the tie-break. A non-zero ActiveAt keeps only Sessions
-// that are unrevoked and unexpired at that UTC microsecond instant. The page
-// continues after BeforeCreatedAt and BeforeID when both are set.
+// SessionPageQuery pages a user's sessions newest first by creation then ID.
+// A non-zero ActiveAt keeps only sessions unrevoked and unexpired at that
+// instant.
 type SessionPageQuery struct {
 	UserID          model.UserID
 	ActiveAt        time.Time
@@ -138,32 +125,29 @@ type SessionPageQuery struct {
 	Limit           int
 }
 
-// MaximumSessionPageSize bounds one Session read: a page of at most 200
-// Sessions and the probe row that says another page follows.
+// MaximumSessionPageSize is a 200-session page plus the look-ahead row.
 const MaximumSessionPageSize = 201
 
-// MaximumSessionPurgeBatch bounds one Session or credential purge pass.
+// MaximumSessionPurgeBatch bounds one session or credential purge pass.
 const MaximumSessionPurgeBatch = 1000
 
-// SessionPurge examines Sessions retired (revoked, expired, or idle-expired)
-// longer than Grace ago by PostgreSQL time, oldest first after After, and
-// deletes those that no other durable record references, with their
-// credentials.
+// SessionPurge examines sessions retired (revoked, expired or idle-expired)
+// more than Grace ago on the database clock, oldest first after After, and
+// deletes the unreferenced ones with their credentials.
 type SessionPurge struct {
 	Grace time.Duration
 	Limit int
 	After SessionPurgePosition
 }
 
-// SessionPurgePosition is the retirement order position of the last Session a
-// purge pass examined.
+// SessionPurgePosition is the last session a purge pass examined.
 type SessionPurgePosition struct {
 	RetiredAt time.Time
 	SessionID model.SessionID
 }
 
-// SessionPurgeResult reports one purge pass. Examined below the pass limit
-// means no retired Session remains after Next.
+// SessionPurgeResult reports one purge pass. Examined below the limit means no
+// retired session remains after Next.
 type SessionPurgeResult struct {
 	Examined    int
 	Sessions    int64
@@ -171,30 +155,27 @@ type SessionPurgeResult struct {
 	Next        SessionPurgePosition
 }
 
-// SessionCredentialPurge deletes credentials that expired or were revoked
-// longer than Grace ago, including superseded credentials of live Sessions.
+// SessionCredentialPurge deletes credentials expired or revoked more than
+// Grace ago, including superseded credentials of live sessions.
 type SessionCredentialPurge struct {
 	Grace time.Duration
 	Limit int
 }
 
-// SessionCreation creates one Session and its credentials atomically. Password
-// authentication requires current PasswordProof; external authentication forbids
-// it. Creation and password reset/removal serialize on the same per-User lock:
-// either creation commits first and reset revokes it, or stale proof is rejected
-// with ErrPasswordCredentialChanged. Credential generation and password hashing
-// occur before this operation. The login audit attempt completes atomically
-// with the Session, so no issued Session exists without its success record.
+// SessionCreation creates a session and its credentials atomically. Password
+// sign-in requires PasswordProof; external sign-in forbids it. Creation and
+// password reset or removal share the per-user lock: either creation commits
+// first and the reset revokes it, or the stale proof fails with
+// ErrPasswordCredentialChanged. The login audit completes in the same commit,
+// so no session exists without its success record.
 type SessionCreation struct {
 	ExternalLoginStateID model.ExternalLoginStateID
 	Session              *model.Session
 	Credentials          []*model.SessionCredential
 	MaximumActive        int
 	PasswordProof        PasswordCredentialProof
-	// AuditEventID is the issuing login's persisted attempt. Creation completes
-	// it with the Session projection in the same transaction.
-	AuditEventID model.AuditEventID
-	AuditAt      time.Time
+	AuditEventID         model.AuditEventID
+	AuditAt              time.Time
 }
 
 type SessionRotation struct {
@@ -206,9 +187,9 @@ type SessionRotation struct {
 	Expired             bool
 }
 
-// SessionCredentialStore resolves bearer credentials and atomically rotates
-// refresh credentials with replay detection. Rotation compares the supplied
-// UTC microsecond instant against exclusive credential and Session deadlines.
+// SessionCredentialStore resolves bearer credentials and rotates refresh
+// credentials with replay detection. Rotation compares Now, at UTC
+// microsecond precision, with exclusive credential and session deadlines.
 type SessionCredentialStore interface {
 	GetSessionByTokenHash(
 		context.Context,
@@ -216,8 +197,8 @@ type SessionCredentialStore interface {
 		model.SessionCredentialKind,
 	) (*model.SessionCredential, *model.Session, error)
 	RotateRefresh(context.Context, *SessionRefreshRotation) (*SessionRotation, error)
-	// PurgeRetired deletes retired credentials, including superseded
-	// credentials of live Sessions, once their grace has passed.
+	// PurgeRetired also deletes superseded credentials of live sessions once
+	// their grace has passed.
 	PurgeRetired(context.Context, *SessionCredentialPurge) (int64, error)
 }
 
@@ -228,8 +209,8 @@ type SessionRefreshRotation struct {
 	Refresh       *model.SessionCredential
 	Now           time.Time
 	IdleExpiresAt time.Time
-	// MFARequiredByPolicy restricts a single-factor Web Session to MFA
-	// enrollment as it rotates; a multi-factor Session is unchanged.
+	// MFARequiredByPolicy restricts a single-factor web session to MFA
+	// enrollment as it rotates; a multi-factor session is unchanged.
 	MFARequiredByPolicy bool
 }
 

@@ -19,9 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// AuthorizeSittingView rechecks the current relationship and permission used by an
-// exact read without returning Sitting state. Realtime subscriptions use this
-// gate before accepting or retaining a resource-scoped subscription.
+// AuthorizeSittingView rechecks the caller's view permission without returning
+// sitting state; realtime calls it before accepting or keeping a subscription.
 func (s *Service) AuthorizeSittingView(ctx context.Context, inv invocation.Invocation, sittingID model.ExamSittingID) error {
 	if !sittingID.IsValid() {
 		return apperror.Invalid("exam.sitting.invalid", "exam_sitting_id")
@@ -52,9 +51,9 @@ func (s *Service) AuthorizeSittingView(ctx context.Context, inv invocation.Invoc
 	return err
 }
 
-// AuthorizeBrowserActivityView requires exact current Exam Manager membership
-// plus the dedicated permission on every read, including later pages.
-// Browser history has no administrator or general examination override.
+// AuthorizeBrowserActivityView requires current exam manager membership and
+// the dedicated permission on every read, including later pages. Browser
+// history deliberately has no administrator override.
 func (s *Service) AuthorizeBrowserActivityView(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -110,11 +109,9 @@ func (s *Service) authorizeBrowserActivityView(
 	return examAccess.Exam.AcademicUnitID, nil
 }
 
-// AuthorizeSubmissionView applies the current Exam Manager relationship and
-// exact-unit membership decision to one immutable Submission resource. The
-// caller resolves the Submission's owning Exam through the bounded ownership
-// projection before invoking this gate; authorization independently resolves
-// the canonical Submission resource for its scoped, durable decision audit.
+// AuthorizeSubmissionView checks the caller may view one submission. examID
+// must already be resolved as the submission's owner; the authorizer resolves
+// the submission resource itself for the audit.
 func (s *Service) AuthorizeSubmissionView(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -132,8 +129,8 @@ func (s *Service) AuthorizeSubmissionView(
 	return err
 }
 
-// AuthorizeSubmissionReview applies the current Exam Manager relationship and
-// exact-unit membership decision for draft decisions and finalization.
+// AuthorizeSubmissionReview checks the caller may record decisions on and
+// finalize one submission, and reports whether an override was used.
 func (s *Service) AuthorizeSubmissionReview(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -151,8 +148,8 @@ func (s *Service) AuthorizeSubmissionReview(
 	return access.ManagerAuthorization{Override: override}, err
 }
 
-// AuthorizeSubmissionRelease keeps result release as a distinct, explicit
-// permission from evidence review and finalization.
+// AuthorizeSubmissionRelease checks result release, which is a permission
+// separate from review and finalization.
 func (s *Service) AuthorizeSubmissionRelease(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -200,9 +197,8 @@ func (s *Service) authorizeSubmission(
 	return decision.override, nil
 }
 
-// AuthorizeSittingManage rechecks the current manager relationship for a Sitting and
-// reports whether the caller used the explicit management override action.
-// It returns no mutable Sitting state and performs no mutation.
+// AuthorizeSittingManage rechecks the caller's manage permission and reports
+// whether the override action was used. It changes nothing.
 func (s *Service) AuthorizeSittingManage(
 	ctx context.Context,
 	inv invocation.Invocation,

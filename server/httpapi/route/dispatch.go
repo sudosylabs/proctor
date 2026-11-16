@@ -17,10 +17,9 @@ import (
 	"github.com/sudosylabs/proctor/server/logging"
 )
 
-// prepareOperation gathers what the middleware attached to the request into
-// the value an operation receives. It answers the request itself and reports
-// false when the route requires a Principal the request does not carry, or
-// the path parameters are missing.
+// prepareOperation answers the request itself and reports false when the
+// route requires a principal the request lacks, or path parameters are
+// missing.
 func (a *API) prepareOperation(
 	writer http.ResponseWriter,
 	request *http.Request,

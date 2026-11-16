@@ -20,26 +20,26 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// MFASealingPurpose authenticates every TOTP secret envelope to its purpose;
-// the owner is the credential's User.
+// MFASealingPurpose binds every TOTP secret envelope to its purpose; the
+// owner is the credential's user.
 const MFASealingPurpose = "mfa.totp"
 
 const mfaRekeyPageSize = 100
 
-// MFARekeyCommand is the immutable command of the MFA rekey Job.
+// MFARekeyCommand is the immutable command of the MFA rekey job.
 type MFARekeyCommand struct {
 	PrimaryKeyID  string `json:"primary_key_id"`
 	RetiringKeyID string `json:"retiring_key_id"`
 }
 
-// MFARekeyCheckpoint is the resumable checkpoint of the MFA rekey Job.
+// MFARekeyCheckpoint is the resumable checkpoint of the MFA rekey job.
 type MFARekeyCheckpoint struct {
 	AfterCredentialID model.MFACredentialID `json:"after_credential_id"`
 	Processed         int64                 `json:"processed"`
 	Resealed          int64                 `json:"resealed"`
 }
 
-// MFARekeyResult is the safe result of the MFA rekey Job: the retirement proof.
+// MFARekeyResult is the MFA rekey job's retirement proof.
 type MFARekeyResult struct {
 	PrimaryKeyID         string `json:"primary_key_id"`
 	RetiringKeyID        string `json:"retiring_key_id"`
@@ -50,29 +50,29 @@ type MFARekeyResult struct {
 	RetirementSafe       bool   `json:"retirement_safe"`
 }
 
-// DecodeMFARekeyCommand strictly decodes an MFA rekey Job command.
+// DecodeMFARekeyCommand decodes a command strictly.
 func DecodeMFARekeyCommand(document json.RawMessage) (MFARekeyCommand, error) {
 	var value MFARekeyCommand
 	err := model.DecodeStrictJobDocument(document, &value)
 	return value, err
 }
 
-// DecodeMFARekeyCheckpoint strictly decodes and validates an MFA rekey Job checkpoint.
+// DecodeMFARekeyCheckpoint decodes and validates a checkpoint strictly.
 func DecodeMFARekeyCheckpoint(document json.RawMessage) (MFARekeyCheckpoint, error) {
 	return decodeMFARekeyCheckpoint(document)
 }
 
-// DecodeMFARekeyResult strictly decodes an MFA rekey Job result.
+// DecodeMFARekeyResult decodes a result strictly.
 func DecodeMFARekeyResult(document json.RawMessage) (MFARekeyResult, error) {
 	var value MFARekeyResult
 	err := model.DecodeStrictJobDocument(document, &value)
 	return value, err
 }
 
-// mfaRekeyHandler re-seals every live TOTP secret under the fenced primary.
-// Each replacement is a compare-and-swap on the credential's key identity and
-// is checkpointed after it commits, so a retry or another node resumes after
-// the last re-sealed credential and a replayed replacement is a no-op.
+// mfaRekeyHandler reseals every live TOTP secret under the fenced primary.
+// Each replacement is a compare-and-swap on the credential's key and is
+// checkpointed after it commits, so a retry or another node resumes after the
+// last resealed credential and a replayed replacement is a no-op.
 type mfaRekeyHandler struct {
 	credentials store.MFAStore
 	sealer      *secretseal.Sealer
@@ -300,8 +300,8 @@ func mfaRekeyDescriptor(handler job.Handler) job.Descriptor {
 	return descriptor
 }
 
-// NewMFARekey registers the re-sealing of MFA credentials under a
-// new primary key.
+// NewMFARekey registers the resealing of MFA credentials under a new primary
+// key.
 func NewMFARekey(credentials store.MFAStore, sealer *secretseal.Sealer) job.Registration {
 	return job.Registration{Descriptor: mfaRekeyDescriptor(mfaRekeyHandler{credentials: credentials, sealer: sealer})}
 }

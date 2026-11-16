@@ -53,7 +53,7 @@ func (r *runner) exam(index int, unit, class string, teacher *account) error {
 		return err
 	}
 
-	// One completely bare draft complements the richly populated examples.
+	// Every third exam stays a bare draft.
 	if index%3 != 1 {
 		for _, directory := range template.Directories {
 			if _, err = r.examChange(

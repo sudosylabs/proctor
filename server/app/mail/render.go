@@ -28,10 +28,8 @@ import (
 
 const maxRenderedMessageBytes = 1 << 20
 
-// templateProperties is the complete typed model visible to presentation assets.
-// Every template shares one layout: copy, an optional emphasized hero detail,
-// labeled facts, an optional aside, and an optional action. It intentionally
-// contains no arbitrary map and offers no template helpers.
+// templateProperties is the whole model presentation assets can see. It
+// deliberately has no arbitrary map and offers no template helpers.
 type templateProperties struct {
 	Copy       templateCopy
 	ActionURL  string
@@ -68,18 +66,15 @@ type renderedMessage struct {
 	HTML    string
 }
 
-// templateRendererDependencies are the collaborators of TemplateRenderer;
-// newRenderer validates them once and TemplateRenderer keeps them in deps.
 type templateRendererDependencies struct {
 	Files                   fs.FS
 	Localizer               *localization.Localizer
 	ValidateCompleteCatalog bool
 }
 
-// TemplateRenderer renders every transactional mail template from the
-// installation's presentation assets and message catalogs. It parses and
-// validates all templates once, so a renderer that was built can render any
-// template key.
+// TemplateRenderer renders every transactional mail template. It parses and
+// validates all templates once, so a built renderer can render any template
+// key.
 type TemplateRenderer struct {
 	deps templateRendererDependencies
 
@@ -90,26 +85,24 @@ type TemplateRenderer struct {
 	displayLocation              *time.Location
 }
 
-// RendererPolicy contains composition-proven transport exceptions and
-// installation presentation settings. Production callers leave
-// AllowLoopbackHTTPDevelopment false so action links remain HTTPS-only.
+// RendererPolicy holds composition-proven transport exceptions and
+// installation presentation settings. Production leaves
+// AllowLoopbackHTTPDevelopment false so action links stay HTTPS-only.
 type RendererPolicy struct {
 	AllowLoopbackHTTPDevelopment bool
 	// SupportAddress is shown in every footer when set.
 	SupportAddress string
-	// DisplayTimezone is the IANA zone used for recipients whose own time zone
-	// is unset or the UTC default. Empty means UTC.
+	// DisplayTimezone is the IANA zone for recipients whose own zone is unset
+	// or the UTC default. Empty means UTC.
 	DisplayTimezone string
 }
 
-// NewRenderer constructs the application-owned renderer from presentation
-// assets and the installation localizer.
+// NewRenderer builds a renderer with the default policy.
 func NewRenderer(files fs.FS, localizer *localization.Localizer) (*TemplateRenderer, error) {
 	return NewRendererWithPolicy(files, localizer, RendererPolicy{})
 }
 
-// NewRendererWithPolicy constructs a renderer with an explicit
-// composition-owned policy.
+// NewRendererWithPolicy builds a renderer under policy.
 func NewRendererWithPolicy(files fs.FS, localizer *localization.Localizer, policy RendererPolicy) (*TemplateRenderer, error) {
 	renderer, err := newRenderer(templateRendererDependencies{Files: files, Localizer: localizer, ValidateCompleteCatalog: true})
 	if err != nil {
@@ -205,9 +198,8 @@ func newRenderer(deps templateRendererDependencies) (*TemplateRenderer, error) {
 	return renderer, nil
 }
 
-// clockFor picks the recipient's own time zone when they have set one, and the
-// installation display time zone otherwise. UTC is the unset default, so it
-// falls back too.
+// clockFor treats UTC as unset, because it is the default, and falls back to
+// the installation display zone.
 func (r *TemplateRenderer) clockFor(timezone string) clock {
 	timezone = strings.TrimSpace(timezone)
 	if timezone != "" && timezone != model.DefaultTimezone && timezone != "Local" {
@@ -273,7 +265,6 @@ func (r *TemplateRenderer) render(request renderRequest) (renderedMessage, error
 	return renderedMessage{Key: request.Key, Locale: locale, Subject: copy.Subject, Text: text, HTML: html}, nil
 }
 
-// firstName returns the greeting name: the first word of a display name.
 func firstName(displayName string) string {
 	fields := strings.Fields(displayName)
 	if len(fields) == 0 {
@@ -291,7 +282,6 @@ func firstName(displayName string) string {
 	return name
 }
 
-// executeTemplates executes the HTML and text templates for the key and enforces the rendered size bound.
 func (r *TemplateRenderer) executeTemplates(key model.MailTemplateKey, properties templateProperties) (text, html string, err error) {
 	htmlValue, ok := r.html[key]
 	if !ok {
@@ -315,7 +305,7 @@ func (r *TemplateRenderer) executeTemplates(key model.MailTemplateKey, propertie
 	return textOutput.String(), htmlOutput.String(), nil
 }
 
-// Render turns a RenderRequest into FrozenContent in the requested locale.
+// Render renders request in its requested locale.
 func (r *TemplateRenderer) Render(request RenderRequest) (FrozenContent, error) {
 	internal := renderRequest{
 		Key:               request.Key,
@@ -353,7 +343,7 @@ func (r *TemplateRenderer) Render(request RenderRequest) (FrozenContent, error) 
 	return r.renderContent(internal)
 }
 
-// SittingLocales reports the default and supported locales, so a Sitting
+// SittingLocales reports the default and supported locales, so a sitting
 // bundle can be frozen in every locale before its recipients are known.
 func (r *TemplateRenderer) SittingLocales() (string, []string) {
 	return r.deps.Localizer.DefaultLocale(), r.deps.Localizer.SupportedLocales()

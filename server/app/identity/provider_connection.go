@@ -23,10 +23,9 @@ type BeginProviderConnectionCommand struct {
 	Source     string
 }
 
-// BeginProviderConnection starts linking a provider to the current User after
-// strong recent authentication and audits the attempt it begins. The state is
-// pinned to this User; only proof of the provider subject completes the link,
-// and a matching email or username must never select the account.
+// BeginProviderConnection requires strong recent authentication. The state is
+// pinned to the current user: only proof of the provider subject completes the
+// link, and a matching email or username must never select the account.
 func (s *Service) BeginProviderConnection(
 	ctx context.Context,
 	inv invocation.Invocation,

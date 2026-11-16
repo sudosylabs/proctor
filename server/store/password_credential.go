@@ -24,11 +24,11 @@ type PasswordCredentialStore interface {
 	Change(context.Context, *PasswordCredentialChange) (*AuthenticationMethodMutationResult, error)
 }
 
-// PasswordCredentialRehash upgrades only the active credential whose encoded
-// hash was verified. It preserves PasswordChangedAt and the password revision.
-// A competing rehash, reset, removal, or replacement returns
-// ErrPasswordCredentialChanged without writing anything. Unknown commit outcomes
-// must not be retried automatically. Hashing occurs before this operation.
+// PasswordCredentialRehash replaces the hash of the active credential only if
+// it is still ExpectedHash, keeping PasswordChangedAt and the revision. A
+// competing rehash, reset, removal or replacement returns
+// ErrPasswordCredentialChanged and writes nothing. Do not retry an unknown
+// commit outcome automatically.
 type PasswordCredentialRehash struct {
 	ID               model.PasswordCredentialID
 	UserID           model.UserID
@@ -37,9 +37,9 @@ type PasswordCredentialRehash struct {
 	PasswordHash     string
 }
 
-// PasswordCredentialProof identifies the password that was verified without
-// transporting its encoded hash. It is valid only while ID and Revision still
-// identify the User's active credential at the consuming transaction's commit.
+// PasswordCredentialProof names the verified password without carrying its
+// hash. It holds only if ID and Revision still name the active credential
+// when the consuming transaction commits.
 type PasswordCredentialProof struct {
 	ID       model.PasswordCredentialID
 	Revision int64
@@ -47,33 +47,29 @@ type PasswordCredentialProof struct {
 
 func (p PasswordCredentialProof) IsValid() bool { return p.ID.IsValid() && p.Revision > 0 }
 
-// PasswordMatcher reports whether the password being set matches one encoded
-// hash. Implementations verify with the password hasher; an error aborts the
-// credential change.
+// PasswordMatcher reports whether the new password matches an encoded hash.
+// An error aborts the credential change.
 type PasswordMatcher interface {
 	Matches(context.Context, string) (bool, error)
 }
 
-// PasswordReuseCheck refuses a new password that matches one of the User's
-// Limit most recent passwords: the active and archived credentials and the
-// retained history of superseded hashes, newest first. The Store reads them
-// under the credential transaction's per-User locks and asks Matcher about
-// each, so a concurrent change cannot slip between check and write; a match
-// fails the operation with ErrPasswordReused. A credential replaced in place
-// moves its old hash into history, and history is pruned to Limit entries per
-// User in the same transaction. Limit zero disables the check and discards
-// the User's history.
+// PasswordReuseCheck refuses, with ErrPasswordReused, a new password matching
+// one of the user's Limit most recent ones (active, archived and history,
+// newest first). The store checks under the transaction's per-user locks, so
+// a concurrent change cannot slip between check and write. A replaced hash
+// moves into history, which is pruned to Limit in the same transaction. Limit
+// zero disables the check and discards the history.
 type PasswordReuseCheck struct {
 	Limit   int
 	Matcher PasswordMatcher
 }
 
-// Valid reports whether the check is complete enough to run.
+// Valid reports whether Limit is in range and Matcher is set when needed.
 func (c PasswordReuseCheck) Valid() bool {
 	return c.Limit >= 0 && c.Limit <= MaximumPasswordHistory && (c.Limit == 0 || c.Matcher != nil)
 }
 
-// MaximumPasswordHistory bounds the retained password history per User.
+// MaximumPasswordHistory bounds the retained password history per user.
 const MaximumPasswordHistory = 24
 
 type PasswordCredentialEnrollment struct {
@@ -93,15 +89,12 @@ type PasswordCredentialRemoval struct {
 	AuditAt          time.Time
 }
 
-// PasswordCredentialChange is the named self-service transition that replaces
-// an active User's existing password while local login is enabled. In one
-// transaction it takes the per-User Session lock, advances the credential
-// revision and change time at one database instant, invalidates outstanding
-// password-reset tokens, revokes every other live Session of the User with
-// RevocationReason (KeepSessionID stays live), queues the frozen
-// password-changed notice, and completes the audit attempt. A User without an
-// active credential returns ErrNotFound; an ineligible User returns a
-// conflict. Hashing occurs before this operation.
+// PasswordCredentialChange is a user changing their own password while local
+// login is enabled. In one transaction, under the per-user session lock, it
+// advances the revision and change time, invalidates outstanding reset
+// tokens, revokes every other live session (KeepSessionID stays), queues the
+// notice and completes the audit. No active credential is ErrNotFound; an
+// ineligible user is a conflict.
 type PasswordCredentialChange struct {
 	UserID           model.UserID
 	KeepSessionID    model.SessionID

@@ -261,7 +261,7 @@ func TestJobStore(t *testing.T, ss store.Store) {
 	testJobInitiator(t, ctx, ss, created, at)
 }
 
-// testJobInitiator proves a Job keeps the operator who started it, and that
+// testJobInitiator proves a job keeps the operator who started it, and that
 // system work has none.
 func testJobInitiator(t *testing.T, ctx context.Context, ss store.Store, system *model.Job, at time.Time) {
 	t.Helper()
@@ -269,7 +269,7 @@ func testJobInitiator(t *testing.T, ctx context.Context, ss store.Store, system 
 	require.NoError(t, err)
 	require.True(t, stored.CreatedByUserID.IsZero(), "system work names no initiator")
 	operator := saveUser(t, ctx, ss)
-	// A type no other step claims keeps these Jobs out of the claim sequence.
+	// A type no other step claims keeps these jobs out of the claim sequence.
 	initiated := func(dedupe string, userID model.UserID) *model.Job {
 		job, jobErr := model.NewJob(model.NewJobID(), model.JobTypeMFARekey, json.RawMessage(`{}`), dedupe, at, at, 1)
 		require.NoError(t, jobErr)

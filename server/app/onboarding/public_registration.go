@@ -21,10 +21,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// RegisterLocalUserCommand contains the public, request-only account fields.
-// Password and mailbox values never enter audit data or successful responses.
-// The names are self-asserted presentation and must never be treated as proof
-// of identity, affiliation or membership.
+// RegisterLocalUserCommand holds public request fields. Password and mailbox
+// never enter audit data or responses; the names are self-asserted and never
+// proof of identity, affiliation or membership.
 type RegisterLocalUserCommand struct {
 	Username  string
 	Email     string
@@ -34,9 +33,9 @@ type RegisterLocalUserCommand struct {
 	Source    string
 }
 
-// RegisterLocalUser registers an unverified local account when the Access Policy
-// allows public registration, mailing its email verification. A duplicate
-// identity is indistinguishable from accepted work.
+// RegisterLocalUser registers an unverified local account and mails its
+// verification. A duplicate identity looks exactly like success, so the
+// response cannot be used to enumerate accounts.
 func (s *Service) RegisterLocalUser(ctx context.Context, inv invocation.Invocation, command RegisterLocalUserCommand) error {
 	registrationEnabled, localLoginEnabled, err := s.publicRegistrationPolicy(ctx)
 	if err != nil {
@@ -145,7 +144,7 @@ func (s *Service) RegisterLocalUser(ctx context.Context, inv invocation.Invocati
 	}
 
 	if store.IsUserIdentityConflict(err) {
-		// A syntactically valid duplicate is indistinguishable from accepted work.
+		// Answer a duplicate as success so it cannot enumerate accounts.
 		return nil
 	}
 
@@ -179,8 +178,6 @@ func registrationUnavailable(err error) error {
 	return apperror.New("authentication.registration.unavailable").Wrap(err)
 }
 
-// publicRegistrationPolicy reads whether the current Access Policy allows
-// public registration and local login.
 func (s *Service) publicRegistrationPolicy(ctx context.Context) (enabled bool, localLogin bool, err error) {
 	snapshot, err := s.accessPolicies.Get(ctx, 0)
 	if err != nil {
@@ -192,8 +189,6 @@ func (s *Service) publicRegistrationPolicy(ctx context.Context) (enabled bool, l
 	return snapshot.Policy.PublicRegistrationEnabled, snapshot.Policy.LocalLoginEnabled, nil
 }
 
-// institutionID reads the singleton Institution's identifier; an absent or
-// invalid Institution yields an empty identifier and the Store's error.
 func (s *Service) institutionID(ctx context.Context) (model.InstitutionID, error) {
 	institution, err := s.institutions.GetSingleton(ctx)
 	if err != nil || institution == nil || !institution.ID.IsValid() {

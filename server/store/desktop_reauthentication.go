@@ -13,12 +13,11 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// DesktopReauthenticationCreation starts a browser handoff that refreshes
-// primary proof on one existing Desktop Session. The Store rechecks that the
-// exact Session, its current access credential, Desktop Registration and DPoP
-// key are live and belong to the User, and pins the Session's own
-// authentication method and provider as the only acceptable proof. It owns the
-// initial state and every timestamp.
+// DesktopReauthenticationCreation starts a browser handoff that refreshes the
+// primary proof of an existing Desktop session. The store rechecks that the
+// session, its access credential, registration and DPoP key are live and the
+// user's, pins the session's own method and provider as the only acceptable
+// proof, and sets every timestamp.
 type DesktopReauthenticationCreation struct {
 	ID                    model.BrowserAuthenticationTransactionID
 	InstitutionID         model.InstitutionID
@@ -36,9 +35,8 @@ type DesktopReauthenticationCreation struct {
 	Lifetime              time.Duration
 }
 
-// DesktopReauthenticationContext is the safe current state selected only by
-// the opaque browser-binding cookie. The expected method and provider are the
-// Desktop Session's own; no other proof is offered or accepted.
+// DesktopReauthenticationContext is the state the browser-binding cookie may
+// see. Only the session's own method and provider are offered or accepted.
 type DesktopReauthenticationContext struct {
 	ID                           model.BrowserAuthenticationTransactionID
 	State                        model.BrowserAuthenticationState
@@ -49,14 +47,13 @@ type DesktopReauthenticationContext struct {
 	ExpiresAt                    time.Time
 }
 
-// DesktopReauthenticationAuthentication records one fresh primary proof on a
-// bound Desktop reauthentication, selected by its browser binding or, after a
-// provider redirect, by its identifier. A password proof names the exact
-// current password revision; a provider proof names the exact External
-// Identity and its asserted instant. The Store rechecks that the proof uses
-// the pinned method and provider, that the proved User is the Session's User
-// and, for a provider, that the identity is the Session's own; a different
-// account denies the transaction. A live browser Web Session is never proof.
+// DesktopReauthenticationAuthentication records one fresh primary proof,
+// selected by browser binding or, after a provider redirect, by
+// TransactionID. A password proof names the current password revision; a
+// provider proof names the external identity and its asserted instant. The
+// store rechecks the pinned method and provider and that the proof is for the
+// session's user and identity; another account denies the transaction. A live
+// browser web session is never accepted as proof.
 type DesktopReauthenticationAuthentication struct {
 	BindingHash          string
 	TransactionID        model.BrowserAuthenticationTransactionID
@@ -68,17 +65,15 @@ type DesktopReauthenticationAuthentication struct {
 	AuthenticatedAt      time.Time
 }
 
-// DesktopReauthenticationAuthenticationResult reports whether the proof was
-// refused because it proved another account, and names the Desktop Session's
-// User the refusal protected.
+// DesktopReauthenticationAuthenticationResult has Denied set when the proof
+// was for another account; UserID is the session's user it protected.
 type DesktopReauthenticationAuthenticationResult struct {
 	Denied bool
 	UserID model.UserID
 }
 
 // DesktopReauthenticationCodeIssue turns an authenticated reauthentication
-// into one short-lived single-use code. CodeLifetime is applied to the Store's
-// authoritative database timestamp.
+// into a single-use code; CodeLifetime starts from the database clock.
 type DesktopReauthenticationCodeIssue struct {
 	BindingHash  string
 	StateHash    string
@@ -86,10 +81,10 @@ type DesktopReauthenticationCodeIssue struct {
 	CodeLifetime time.Duration
 }
 
-// DesktopReauthenticationCompletion consumes one code for the exact Desktop
-// Session, Registration and DPoP key that started the handoff and, in the same
-// transaction, refreshes that Session's primary proof and completes the
-// required audit. No Session is created and no Registration changes.
+// DesktopReauthenticationCompletion consumes one code for the session,
+// registration and DPoP key that started the handoff, and in the same
+// transaction refreshes the session's primary proof and completes the audit.
+// It creates no session and changes no registration.
 type DesktopReauthenticationCompletion struct {
 	CodeHash              string
 	StateHash             string

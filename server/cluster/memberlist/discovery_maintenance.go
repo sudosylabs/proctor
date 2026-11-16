@@ -54,9 +54,8 @@ type discoveryMaintenanceConfig struct {
 	newTicker          func(time.Duration) discoveryTicker
 }
 
-// discoveryMaintenance owns the disposable discovery lease and bootstrap seed
-// preparation. Transport remains responsible for Memberlist and for invoking
-// this module within its serialized lifecycle.
+// discoveryMaintenance keeps this node's advertisement fresh and picks seeds.
+// Transport calls it only from its serialized lifecycle.
 type discoveryMaintenance struct {
 	cfg discoveryMaintenanceConfig
 }
@@ -86,9 +85,8 @@ func newSystemDiscoveryMaintenance(cfg Config) *discoveryMaintenance {
 	})
 }
 
-// prepare advertises this node before selecting bootstrap peers. It uses one
-// instant for both the lease and the live-peer query so a startup attempt has a
-// single, deterministic view of discovery time.
+// prepare advertises before listing peers, using one instant for both so a
+// startup attempt sees a single view of discovery time.
 func (m *discoveryMaintenance) prepare(ctx context.Context) ([]string, error) {
 	now := m.cfg.now().UTC()
 	if err := m.advertiseAt(ctx, now); err != nil {
@@ -126,9 +124,7 @@ func (m *discoveryMaintenance) seedsAt(ctx context.Context, now time.Time) ([]st
 	return seeds, nil
 }
 
-// run refreshes and cleans discovery until its transport-owned context is
-// canceled. Schedule construction happens here rather than during module or
-// transport construction.
+// run creates its ticker here, not in the constructor, so New starts nothing.
 func (m *discoveryMaintenance) run(
 	ctx context.Context,
 	rejoin func(context.Context, []string) error,
@@ -199,9 +195,8 @@ func discoveryLease(now time.Time, ttl time.Duration) (updatedAt, expiresAt time
 	return updatedAt, expiresAt, nil
 }
 
-// rollback withdraws an advertisement after a later startup step fails. The
-// primary startup error remains authoritative; withdrawal is best-effort and
-// only reported through diagnostics.
+// rollback withdraws the advertisement after a later startup step fails. It
+// only logs its own failure, so the startup error stays the one returned.
 func (m *discoveryMaintenance) rollback(ctx context.Context) {
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), discoveryRollbackTimeout)
 	defer cancel()
@@ -213,8 +208,7 @@ func (m *discoveryMaintenance) rollback(ctx context.Context) {
 	}
 }
 
-// withdraw removes the local advertisement during graceful transport stop.
-// Discovery remains disposable, so withdrawal failure is diagnostic-only.
+// withdraw only logs a failure: the advertisement expires on its own.
 func (m *discoveryMaintenance) withdraw(ctx context.Context) {
 	if err := m.cfg.discovery.Delete(ctx, m.cfg.nodeID); err != nil {
 		m.observe("withdraw", err)

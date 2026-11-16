@@ -19,20 +19,18 @@ import (
 
 type ApproveDesktopAuthorizationCommand struct{ Binding, State string }
 
-// DesktopAuthorizationApproval is the outcome of approving a Desktop
-// authorization or reauthentication. RedirectURL is the Desktop's callback
-// URL with the one-use code and the state added as query parameters.
-// ExpiresAt is the code's deadline in Unix milliseconds.
+// DesktopAuthorizationApproval carries the desktop callback URL with the
+// one-use code and state added; ExpiresAt is the code deadline in Unix
+// milliseconds.
 type DesktopAuthorizationApproval struct {
 	RedirectURL string
 	ExpiresAt   int64
 }
 
 // ApproveDesktopAuthorization issues the one-use code for the account bound to
-// the browser transaction. The binding cookie and pinned state are the
-// approval proof; a caller that also presents a Principal must be that same
-// account, so one signed-in User can never approve a transaction
-// authenticated as another.
+// the browser transaction. The binding cookie and state are the proof; a
+// caller that is also signed in must be that same account, so one user can
+// never approve a transaction authenticated as another.
 func (s *Service) ApproveDesktopAuthorization(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -112,7 +110,7 @@ func (s *Service) ApproveDesktopAuthorization(
 	return &DesktopAuthorizationApproval{RedirectURL: redirect, ExpiresAt: issued.CodeExpiresAt.UnixMilli()}, nil
 }
 
-// CancelDesktopAuthorization ends the bound Desktop authorization.
+// CancelDesktopAuthorization ends the bound desktop authorization.
 func (s *Service) CancelDesktopAuthorization(
 	ctx context.Context,
 	_ invocation.Invocation,

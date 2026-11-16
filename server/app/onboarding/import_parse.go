@@ -234,8 +234,6 @@ func (s *Service) parseImportCSV(
 	return rows, ignored, digest, nil
 }
 
-// parseOnboardingImportHeader validates the CSV header for the import mode and returns the column indexes and the
-// sorted names of ignored columns.
 func parseOnboardingImportHeader(mode model.OnboardingImportMode, header []string) (map[string]int, []string, error) {
 	indexes := make(map[string]int, len(header))
 	ignored := make([]string, 0)
@@ -274,8 +272,8 @@ func parseOnboardingImportHeader(mode model.OnboardingImportMode, header []strin
 	return indexes, ignored, nil
 }
 
-// parseOnboardingImportRow validates one CSV record, builds its import row, and resolves its preview status; the
-// returned error is either an invalid-file error or a retryable resolution error.
+// parseOnboardingImportRow returns either an invalid-file error or a
+// retryable resolution error.
 func (s *Service) parseOnboardingImportRow(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -346,7 +344,8 @@ func (s *Service) parseOnboardingImportRow(
 	return row, nil
 }
 
-// markOnboardingImportDuplicates marks every row whose duplicate key occurs more than once as a duplicate.
+// markOnboardingImportDuplicates marks every occurrence of a repeated key,
+// including the first.
 func markOnboardingImportDuplicates(rows []store.OnboardingImportRow) {
 	duplicates := make(map[string]int, len(rows))
 	for _, row := range rows {
@@ -365,8 +364,8 @@ func markOnboardingImportDuplicates(rows []store.OnboardingImportRow) {
 	}
 }
 
-// onboardingImportDigest computes the hex SHA-256 digest of the ignored headers and the import-independent row
-// content.
+// onboardingImportDigest leaves out the import ID and timestamps, so the same
+// content always yields the same digest.
 func onboardingImportDigest(ignored []string, rows []store.OnboardingImportRow) (string, error) {
 	digestRows := make([]store.OnboardingImportRow, len(rows))
 	copy(digestRows, rows)

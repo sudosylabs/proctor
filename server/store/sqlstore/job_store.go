@@ -268,12 +268,12 @@ func insertQueuedJob(ctx context.Context, executor sqlxExecutor, job *model.Job,
 	)
 }
 
-// jobInitiator is the persisted spelling of a Job's optional initiator.
+// jobInitiator is the persisted spelling of a job's optional initiator.
 func jobInitiator(job *model.Job) sql.NullString {
 	return sql.NullString{String: job.CreatedByUserID.String(), Valid: !job.CreatedByUserID.IsZero()}
 }
 
-// leaseExpiryBackoff delays a Job whose attempt lost its lease, which usually
+// leaseExpiryBackoff delays a job whose attempt lost its lease, which usually
 // means its worker died. The delay starts at the expired lease's duration and
 // doubles with each attempt up to an hour, so work that crashes its worker
 // does not take down the next node at once.
@@ -614,7 +614,7 @@ func (s SQLJobStore) Complete(ctx context.Context, input *store.JobCompletion) (
 		}
 
 		// The lease fence above used CURRENT_TIMESTAMP. The recorded transition
-		// never precedes the Job's enqueueing node clock or a transition that a
+		// never precedes the job's enqueueing node clock or a transition that a
 		// later-starting transaction committed before this one locked the rows.
 		jobAt := latestTime(job.UpdatedAt, databaseNow)
 		var attemptStatus model.JobAttemptStatus
@@ -839,8 +839,8 @@ func (s SQLJobStore) CancellationRequested(ctx context.Context, attemptID model.
 	})
 }
 
-// Cancel requests cancellation of the Job for an operator and completes the
-// operator audit event. The Job must still be at ExpectedRevision, and a Job
+// Cancel requests cancellation of the job for an operator and completes the
+// operator audit event. The job must still be at ExpectedRevision, and a job
 // whose status cannot be canceled is a conflict.
 func (s SQLJobStore) Cancel(ctx context.Context, input *store.JobMutation) (*model.Job, error) {
 	return s.mutateOperatorJob(ctx, input, "cancel", func(
@@ -851,7 +851,7 @@ func (s SQLJobStore) Cancel(ctx context.Context, input *store.JobMutation) (*mod
 	})
 }
 
-// Retry explicitly retries the Job for an operator and completes the operator
+// Retry explicitly retries the job for an operator and completes the operator
 // audit event, with the same revision fencing as Cancel.
 func (s SQLJobStore) Retry(ctx context.Context, input *store.JobMutation) (*model.Job, error) {
 	return s.mutateOperatorJob(ctx, input, "retry", func(job *model.Job, at time.Time) (*model.Job, error) { return job.ExplicitRetry(at) })
@@ -960,7 +960,7 @@ func (s SQLJobStore) DeleteTerminalHistory(ctx context.Context, input *store.Job
 			arguments = append(arguments, string(policy.Type), databaseNow.Add(-policy.SucceededCanceledAge), databaseNow.Add(-policy.FailedAge))
 		}
 
-		// A Job that an onboarding import or a mail delivery still references
+		// A job that an onboarding import or a mail delivery still references
 		// stays until that row is removed; its NO ACTION foreign key would
 		// otherwise fail every page that reaches it.
 		query := `SELECT id, completed_at FROM jobs WHERE id <> ? AND status IN ('succeeded', 'failed', 'canceled') AND completed_at IS NOT NULL

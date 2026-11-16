@@ -23,11 +23,10 @@ const (
 	ExamWorkspaceMaximumTotalBytes        int64 = 1 << 30
 )
 
-// ExamCapacityPolicy is the institution-owned admission policy for authored
-// Exam content and candidate Workspace growth. Published Revisions freeze the
-// policy so later institution changes cannot alter a Sitting in progress.
-// Fixed constants above remain server safety ceilings and are not mutable
-// institution policy.
+// ExamCapacityPolicy is the institution's admission policy for authored exam
+// content and candidate workspace growth. Published revisions freeze it, so a
+// later change cannot alter a sitting in progress. The constants above are
+// fixed server ceilings, not institution policy.
 type ExamCapacityPolicy struct {
 	ResourceMaximumCount       int   `json:"resource_maximum_count"`
 	ResourceMaximumBytes       int64 `json:"resource_maximum_bytes"`

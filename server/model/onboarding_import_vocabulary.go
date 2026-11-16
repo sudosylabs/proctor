@@ -41,9 +41,9 @@ func ValidOnboardingImportFileName(name string) bool {
 	return true
 }
 
-// StudentProgressionFailureCodes is the closed catalogue of codes a student
-// progression preview fails with: its Job's public failure codes beyond the
-// shared onboarding ones, and the progression's own failure_code.
+// StudentProgressionFailureCodes is the closed list of codes a student
+// progression preview fails with: its job's public failure codes beyond the
+// shared onboarding ones, plus the progression's own failure_code.
 func StudentProgressionFailureCodes() []string {
 	return []string{
 		"student_progression.authorization_lost",
@@ -65,12 +65,10 @@ func StudentProgressionPreviewCodes() []string {
 	}
 }
 
-// AcademicAdministrationPreviewFailureCodes is the closed catalogue of codes
-// an academic administration filter preview's resolution fails with: its
-// Job's public failure codes beyond the shared onboarding ones, and the
-// preview's own failure_code. The caller lost the authority it asked with,
-// the scope or Role changed, or the filter matched more Users than one
-// preview holds.
+// AcademicAdministrationPreviewFailureCodes is the closed list of codes a
+// filter preview's resolution fails with, beyond the shared onboarding ones:
+// the caller lost the authority it asked with, the scope or role changed, or
+// the filter matched more users than one preview holds.
 func AcademicAdministrationPreviewFailureCodes() []string {
 	return []string{
 		"academic_administration_preview.authorization_lost",

@@ -31,7 +31,6 @@ const (
 
 type defaultProfilePictureGlyph [5][5]bool
 
-// renderDefaultProfilePicture builds one antialiased master for every rendition.
 func renderDefaultProfilePicture(ctx context.Context, seed string) (*image.NRGBA, error) {
 	if len(seed) != model.ProfilePictureSeedLength {
 		return nil, fmt.Errorf("invalid default profile-picture seed")
@@ -74,8 +73,8 @@ func renderDefaultProfilePicture(ctx context.Context, seed string) (*image.NRGBA
 		}
 	}
 
-	// Downsample a single antialiased master so the geometry and edge treatment
-	// agree for persisted renditions and transient reads at every supported size.
+	// One master downsampled to every size keeps stored and rendered pictures
+	// identical in shape.
 	master := imaging.Resize(
 		canvas,
 		defaultProfilePictureSize,
@@ -194,8 +193,7 @@ func defaultProfilePictureShape(ctx context.Context, seed []byte) (defaultProfil
 			outer = outer || glyph[row][0]
 		}
 
-		// Bound density and require a full-height, full-width connected silhouette
-		// so small circular crops retain a substantial, recognizable shape.
+		// A dense, connected, full-size silhouette survives small circular crops.
 		densityOK := count >= 11 && count <= 17
 		extentOK := rows == 5 && outer
 		if densityOK && extentOK && glyph.connected(count) {

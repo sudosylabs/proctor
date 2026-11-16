@@ -14,24 +14,21 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// The idempotent command operations on environment profiles.
 const (
 	EnvironmentProfileCreateOperation = "environment_profile.create"
 	EnvironmentProfileRetireOperation = "environment_profile.retire"
 )
 
-// EnvironmentProfileCreation is the named atomic mutation that saves one new
-// environment profile and completes its audit. Profile is the proposed
-// profile; the store sets its creation time from PostgreSQL.
+// EnvironmentProfileCreation saves one new profile and completes its audit.
+// The store sets the creation time from the database clock.
 type EnvironmentProfileCreation struct {
 	Profile      *model.EnvironmentProfile
 	AuditEventID model.AuditEventID
 	AuditAt      time.Time
 }
 
-// EnvironmentProfileRetirement retires one profile so new Exam Revisions can
-// no longer name it, and completes its audit. Retiring a retired profile
-// changes nothing.
+// EnvironmentProfileRetirement stops new exam revisions naming a profile.
+// Retiring a retired profile changes nothing.
 type EnvironmentProfileRetirement struct {
 	ActorID      model.UserID
 	ProfileID    model.EnvironmentProfileID
@@ -39,25 +36,23 @@ type EnvironmentProfileRetirement struct {
 	AuditAt      time.Time
 }
 
-// EnvironmentProfileCommandResult is the profile a command left, whether the
-// command changed it, and whether it replayed an earlier one.
+// EnvironmentProfileCommandResult is the profile after a command; Changed is
+// false for a no-op and Replayed true for a replayed command.
 type EnvironmentProfileCommandResult struct {
 	Profile  *model.EnvironmentProfile
 	Changed  bool
 	Replayed bool
 }
 
-// EnvironmentProfileStore owns the installation's environment profiles.
+// EnvironmentProfileStore persists the installation's environment profiles,
+// which are never edited or deleted.
 //
-// Create and Retire require the actor to be an active System Administrator,
-// decided in the transaction, and conflict with
-// actor_not_system_administrator otherwise. A profile's name is unique among
-// the profiles that are not retired (conflict environment_profile_name), and
-// at most model.EnvironmentProfileListMaximum are not retired at once
-// (conflict environment_profile_limit). A profile is never edited or deleted.
-// Get returns any profile, retired or not; List returns every profile that
-// is not retired, by name, and with includeRetired the retired ones after
-// them, newest retirement first.
+// Create and Retire check in the transaction that the actor is an active
+// system administrator (conflict actor_not_system_administrator). Names are
+// unique among unretired profiles (conflict environment_profile_name), and at
+// most model.EnvironmentProfileListMaximum are unretired at once (conflict
+// environment_profile_limit). List returns unretired profiles by name, then,
+// with includeRetired, retired ones newest retirement first.
 type EnvironmentProfileStore interface {
 	Create(context.Context, *EnvironmentProfileCreation, *CommandIdempotency) (*EnvironmentProfileCommandResult, error)
 	Retire(context.Context, *EnvironmentProfileRetirement, *CommandIdempotency) (*EnvironmentProfileCommandResult, error)

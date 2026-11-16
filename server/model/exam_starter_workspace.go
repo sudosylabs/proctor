@@ -28,8 +28,8 @@ const (
 )
 
 // NormalizeStarterWorkspacePath accepts only an already-canonical,
-// case-sensitive POSIX-relative logical path. It never cleans or case-folds a
-// caller's input because doing so could silently select a different entry.
+// case-sensitive, relative POSIX path. It never cleans or case-folds input,
+// which could silently select a different entry.
 func NormalizeStarterWorkspacePath(value string) (string, error) {
 	if value == "" ||
 		!utf8.ValidString(value) ||
@@ -69,8 +69,8 @@ const (
 	StarterWorkspaceEntryDirectory StarterWorkspaceEntryKind = "directory"
 )
 
-// StarterWorkspaceEntry is one stable logical file or directory in an Exam
-// Draft. Path is mutable metadata; it is never a VFS key.
+// StarterWorkspaceEntry is one stable logical file or directory in a draft.
+// Path is mutable metadata, never a VFS key.
 type StarterWorkspaceEntry struct {
 	ID              StarterWorkspaceEntryID
 	ExamID          ExamID
@@ -189,9 +189,9 @@ const (
 	StarterWorkspaceObjectClaimed     StarterWorkspaceObjectState = "claimed"
 )
 
-// StarterWorkspaceObject is one opaque content object. Only Current objects
-// may be selected by visible file entries; staged and reclaimable objects are
-// cleanup bookkeeping and are not discoverable workspace content.
+// StarterWorkspaceObject is one opaque content object. Only current objects can
+// be selected by visible entries; staged and reclaimable ones are cleanup
+// bookkeeping, not discoverable content.
 type StarterWorkspaceObject struct {
 	ID              StarterWorkspaceObjectID
 	ExamID          ExamID
@@ -209,8 +209,8 @@ type StarterWorkspaceObject struct {
 	ClaimedAt       OptionalTime
 }
 
-// StarterWorkspaceContent is bounded metadata derived while an opaque object
-// is streamed. It contains no logical path or storage key.
+// StarterWorkspaceContent is metadata derived while an object streams. It holds
+// no logical path or storage key.
 type StarterWorkspaceContent struct {
 	MediaType string
 	SizeBytes int64

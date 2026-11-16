@@ -53,8 +53,7 @@ type academicPeriodRow struct {
 	EndAt          time.Time      `db:"end_at"`
 }
 
-// academicPeriodOutcome is the persisted outcome of an idempotent Academic
-// Period creation: the period as created.
+// academicPeriodOutcome is the saved outcome of an idempotent creation.
 type academicPeriodOutcome struct {
 	ID             string             `json:"id"`
 	CreatedAt      time.Time          `json:"created_at"`
@@ -237,8 +236,7 @@ func createAcademicPeriod(
 	return candidate, nil
 }
 
-// Get returns the unarchived Academic Period with id, or a not-found error when
-// it is absent or archived.
+// Get returns a not-found error when the period is absent or archived.
 func (s SQLAcademicPeriodStore) Get(ctx context.Context, id model.AcademicPeriodID) (*model.AcademicPeriod, error) {
 	var row academicPeriodRow
 	query := s.academicPeriodsQuery.Where(sq.Eq{
@@ -434,9 +432,9 @@ func (s SQLAcademicPeriodStore) updateAcademicPeriod(
 	})
 }
 
-// Archive archives the Academic Period and completes its audit event. A
-// positive ExpectedRevision must match the stored revision, and Classes or
-// Class Members still active in the period make it a conflict.
+// Archive archives the academic period and completes its audit event. A
+// positive ExpectedRevision must match the stored revision, and classes or
+// class members still active in the period make it a conflict.
 func (s SQLAcademicPeriodStore) Archive(ctx context.Context, input *store.AcademicPeriodArchive) (*model.AcademicPeriod, error) {
 	if input == nil ||
 		!input.ID.IsValid() ||

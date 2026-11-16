@@ -49,30 +49,26 @@ func DecodeJSON(request *http.Request, target any) error {
 	return nil
 }
 
-// Request is what an operation receives. The kernel fills it after the route's
-// credential, assurance, body-limit and idempotency checks have passed.
+// Request is what an operation receives, after every kernel check passed.
 type Request struct {
-	// Context is the request context: cancellation and deadlines only. Pass
-	// it to the use case beside Invocation.
+	// Context carries cancellation and deadlines only; identity travels in
+	// Invocation.
 	Context context.Context
-	// Principal is the authenticated caller, zero on a public route.
+	// Principal is zero on a public route.
 	Principal model.Principal
 	// Metadata is the request ID, client address and user agent that audit
 	// records.
 	Metadata model.RequestMetadata
-	// Params are the path variables. Read identifiers through PathID and its
-	// siblings.
+	// Params are the path variables; read identifiers through PathID.
 	Params Params
-	// HTTP is the underlying request, for headers, cookies, query values and
-	// a body an operation streams itself.
-	HTTP *http.Request
+	HTTP   *http.Request
 	// IdempotencyKey is the validated Idempotency-Key header, or "" when the
 	// request carried none.
 	IdempotencyKey string
 }
 
-// Invocation returns the immutable call context every use case takes: the
-// Principal, zero on a public route, and the request metadata.
+// Invocation returns the call context for a use case; its principal is zero on
+// a public route.
 func (r Request) Invocation() invocation.Invocation {
 	return invocation.New(r.Principal, r.Metadata)
 }
@@ -92,8 +88,7 @@ func (r Request) QueryValue(name string) string {
 	return strings.TrimSpace(r.HTTP.URL.Query().Get(name))
 }
 
-// QueryLimit returns the collection page size with the shared default and
-// bound.
+// QueryLimit returns the page size, defaulted and bounded like Page.
 func (r Request) QueryLimit() (int, error) {
 	page, err := r.Page()
 	return page.Limit, err

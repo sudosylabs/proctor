@@ -94,8 +94,8 @@ type mailDeliveryResponse struct {
 	AcceptedAt        string `json:"accepted_at,omitempty"`
 	FailedAt          string `json:"failed_at,omitempty"`
 	PublicFailureCode string `json:"public_failure_code,omitempty"`
-	// RecipientDisplayName names the User target_user_id identifies, only on
-	// reads and only while the viewer can see that User.
+	// RecipientDisplayName names the user target_user_id identifies, only on
+	// reads and only while the viewer can see that user.
 	RecipientDisplayName string `json:"recipient_display_name,omitempty"`
 }
 

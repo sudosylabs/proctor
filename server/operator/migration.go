@@ -51,9 +51,8 @@ func MigrateStatus(ctx context.Context, configPath string) (MigrationStatus, err
 	return readMigrationStatus(ctx, database)
 }
 
-// openMigrator opens the migration runner for the configured database. The
-// returned closer releases the migrator and configuration; its failure is
-// intentionally unobserved, matching the historical command behavior.
+// openMigrator's closer ignores close failures on purpose: the command's
+// result is already decided by then.
 func openMigrator(
 	ctx context.Context,
 	configPath string,

@@ -272,9 +272,9 @@ func (p *Provider) Complete(
 	emailVerified := p.mapperEmailVerified(values)
 	authenticatedAt := p.now()
 	if !request.AuthenticationStartedAt.IsZero() {
-		// renew is checked by CAS at ticket validation as well as login.
-		// Use the transaction start as a conservative proof instant: the
-		// service-bound ticket required primary credentials after that start.
+		// CAS checks renew at ticket validation too, so the ticket proves
+		// credentials were entered after the transaction started. That start
+		// is a conservative authentication time.
 		if request.AuthenticationStartedAt.After(authenticatedAt) {
 			return plugin.Assertion{}, externalauth.Rejected("verify fresh CAS authentication", errors.New("fresh authentication time is invalid"))
 		}
@@ -290,8 +290,8 @@ func (p *Provider) Complete(
 }
 
 func (p *Provider) mapperEmailVerified(values map[string][]string) bool {
-	// CAS does not define a standard email-verification assertion. An operator
-	// may explicitly trust released email data or map a boolean-like attribute.
+	// CAS has no standard email-verified attribute, so the operator either
+	// trusts released email outright or maps a boolean-like attribute.
 	claims := p.mapperClaims()
 	if claims.TrustEmail {
 		return true

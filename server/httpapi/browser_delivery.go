@@ -289,7 +289,7 @@ func (h examAttemptHandlers) browserSourceList(request route.Request) (route.Res
 		}
 	}
 
-	// A Participation holds at most BrowserSourceMaximumPerParticipation
+	// A participation holds at most BrowserSourceMaximumPerParticipation
 	// sources, so the complete set is paged by source identity.
 	response, err := route.BoundedList(
 		request,
@@ -407,7 +407,7 @@ func (h examAttemptHandlers) declareBrowserDeliveryGaps(request route.Request) (
 	).WithHeaders(noStoreHeaders()), nil
 }
 
-// browserDeliveryGapResponse acknowledges a Browser delivery gap declaration
+// browserDeliveryGapResponse acknowledges a browser delivery gap declaration
 // with its receipt and the resulting source status.
 type browserDeliveryGapResponse struct {
 	Receipt model.DeliveryGapReceipt  `json:"receipt"`

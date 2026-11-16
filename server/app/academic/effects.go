@@ -16,8 +16,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// classMembershipSittingPage is how many Sittings of one Class a Class
-// Membership change reads at a time.
+// classMembershipSittingPage is how many sittings of one class a membership
+// change reads at a time.
 const classMembershipSittingPage = 200
 
 func (s *Service) publishAcademicUnitCreated(ctx context.Context, unitID model.AcademicUnitID) error {
@@ -33,7 +33,7 @@ func (s *Service) publishAcademicUnitArchived(ctx context.Context, unitID model.
 }
 
 // publishAcademicUnit publishes a payload-free event to everyone who may view
-// the Academic Unit.
+// the unit.
 func (s *Service) publishAcademicUnit(
 	ctx context.Context,
 	newEvent func(model.AcademicUnitID) (realtime.Event, error),
@@ -46,15 +46,14 @@ func (s *Service) publishAcademicUnit(
 	return s.publisher.Publish(ctx, event)
 }
 
-// PublishClassMembershipChanged tells a candidate that their Exam activity
-// and current-user context changed, then tells the managers of every Sitting
-// of each Class to refresh their Sitting board. A Class named twice is
-// published once. Every failure is collected and returned joined, so one
-// failed publication never stops the rest.
+// PublishClassMembershipChanged tells a candidate their exam activity and
+// current-user context changed, then tells the managers of every sitting of
+// each class to refresh their board. One failed publication never stops the
+// rest; failures are returned joined.
 //
-// It is a function over the two collaborators rather than a Service method
-// because Invitation acceptance in app/onboarding grants a Class Membership
-// through its own Store operation and owes the same publications.
+// It is a function rather than a Service method because invitation
+// acceptance in app/onboarding grants a class membership through its own
+// store operation and owes the same publications.
 func PublishClassMembershipChanged(
 	ctx context.Context,
 	publisher realtime.Publisher,

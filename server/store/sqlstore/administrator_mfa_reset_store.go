@@ -117,7 +117,7 @@ func (s SQLInstallationStore) ResetAdministratorMFA(
 		}
 
 		// Recovery may be restarted for an already restricted administrator.
-		// Only an existing primary method is required here; this User is not
+		// Only an existing primary method is required here; this user is not
 		// counted as an ordinary usable administrator path until reenrollment.
 		usable, err := hasUsableUserAuthenticationPath(ctx, tx, input.UserID.String(), policy.Settings(), input.Capabilities, false, "")
 		if err != nil {

@@ -20,9 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ExamSittingLifecycleJobResult is deliberately limited to safe lifecycle
-// state. The immutable command, audit documents, and private manager reasons
-// never enter the generic Job result.
+// ExamSittingLifecycleJobResult holds only lifecycle state. The command,
+// audit documents and private manager reasons never enter a job result.
 type ExamSittingLifecycleJobResult struct {
 	Changed    bool                                     `json:"changed"`
 	Transition store.ExamSittingLifecycleTransitionCode `json:"transition,omitempty"`
@@ -97,9 +96,9 @@ func validExamSittingLifecycleTransition(value store.ExamSittingLifecycleTransit
 	}
 }
 
-// examSittingLifecycleFailure fails permanently only for input the Store refused. A
-// database constraint rejection can come from a concurrent transition or clock
-// skew, so it stays retryable within the attempt budget.
+// examSittingLifecycleFailure fails permanently only for input the store
+// refused. A database constraint rejection can come from a concurrent
+// transition or clock skew, so it stays retryable within the attempt budget.
 func examSittingLifecycleFailure(err error) job.Outcome {
 	var invalid *store.ErrInvalidInput
 	if (errors.As(err, &invalid) && !store.IsConstraintViolation(err)) || store.IsNotFound(err) {
@@ -118,31 +117,31 @@ func examSittingLifecycleDescriptor(handler job.Handler) job.Descriptor {
 	return descriptor
 }
 
-// ExamSittingLifecycleJobFactory builds the lifecycle Jobs a Sitting command
-// enqueues in the same transaction that schedules the Sitting.
+// ExamSittingLifecycleJobFactory builds the lifecycle jobs a sitting command
+// enqueues in the same transaction that schedules the sitting.
 type ExamSittingLifecycleJobFactory struct {
 	now   func() time.Time
 	newID func() model.JobID
-	// settle delays the sealing Job so the Sitting's execution
-	// environments can settle before it seals their Attempts.
+	// settle delays the sealing job so the sitting's execution environments
+	// can settle before it seals their attempts.
 	settle time.Duration
 }
 
-// NewExamSittingLifecycleJobFactory returns a factory that stamps Jobs with
-// now and identifies them with newID.
+// NewExamSittingLifecycleJobFactory stamps jobs with now and identifies them
+// with newID.
 func NewExamSittingLifecycleJobFactory(now func() time.Time, newID func() model.JobID) ExamSittingLifecycleJobFactory {
 	return ExamSittingLifecycleJobFactory{now: now, newID: newID}
 }
 
-// WithSettleBudget returns a factory whose sealing Jobs wait budget past
-// the moment a Sitting closes, so execution environments settle first.
+// WithSettleBudget returns a factory whose sealing jobs wait budget past the
+// moment a sitting closes, so execution environments settle first.
 func (f ExamSittingLifecycleJobFactory) WithSettleBudget(budget time.Duration) ExamSittingLifecycleJobFactory {
 	f.settle = max(budget, 0)
 	return f
 }
 
-// BoundaryJobs returns the Sitting's open Job, available at startAt, and its
-// deadline Job, available at endAt, deduplicated by Sitting, phase, and
+// BoundaryJobs returns the sitting's open job, available at startAt, and its
+// deadline job, available at endAt, deduplicated by sitting, phase and
 // resultingRevision.
 func (f ExamSittingLifecycleJobFactory) BoundaryJobs(
 	sittingID model.ExamSittingID,
@@ -163,8 +162,8 @@ func (f ExamSittingLifecycleJobFactory) BoundaryJobs(
 	return openJob, deadlineJob, nil
 }
 
-// DeadlineJob returns a Sitting deadline Job available at deadline,
-// deduplicated by Sitting and resultingRevision.
+// DeadlineJob returns a deadline job available at deadline, deduplicated by
+// sitting and resultingRevision.
 func (f ExamSittingLifecycleJobFactory) DeadlineJob(
 	sittingID model.ExamSittingID,
 	resultingRevision int64,
@@ -173,9 +172,9 @@ func (f ExamSittingLifecycleJobFactory) DeadlineJob(
 	return f.job(sittingID, model.ExamSittingLifecycleJobDeadline, resultingRevision, deadline)
 }
 
-// FinalizeJob returns the Sitting sealing Job that finalizes a closing
-// Sitting, available at availableAt plus the settle budget and deduplicated
-// by Sitting and resultingRevision.
+// FinalizeJob returns the sealing job of a closing sitting, available at
+// availableAt plus the settle budget and deduplicated by sitting and
+// resultingRevision.
 func (f ExamSittingLifecycleJobFactory) FinalizeJob(
 	sittingID model.ExamSittingID,
 	resultingRevision int64,
@@ -219,8 +218,8 @@ func (f ExamSittingLifecycleJobFactory) jobOfType(
 	return model.NewJob(f.newID(), jobType, command, dedupeKey, at, model.TimeUTC(availableAt), 8)
 }
 
-// NewExamSittingLifecycle registers the open and deadline
-// transitions of Exam Sittings.
+// NewExamSittingLifecycle registers the open and deadline transitions of
+// sittings.
 func NewExamSittingLifecycle(sittings *sitting.Service) job.Registration {
 	return job.Registration{Descriptor: examSittingLifecycleDescriptor(examSittingLifecycleHandler{sittings: sittings})}
 }

@@ -24,7 +24,7 @@ import (
 // preparations.
 type SQLExamIntegrityReviewStore struct{ *SQLStore }
 
-// NewSQLExamIntegrityReviewStore returns the Integrity Review Store over
+// NewSQLExamIntegrityReviewStore returns the integrity review Store over
 // sqlStore. Integration tests build a second one over a peer connection to
 // race two transactions.
 func NewSQLExamIntegrityReviewStore(sqlStore *SQLStore) store.ExamIntegrityReviewStore {
@@ -731,7 +731,7 @@ func (s *SQLExamIntegrityReviewStore) ListDiscrepancies(ctx context.Context,
 	return page, nil
 }
 
-// examIntegrityReviewOutcome is the committed result of one Review mutation.
+// examIntegrityReviewOutcome is the committed result of one review mutation.
 // It persists as examIntegrityReviewOutcomeDocument.
 type examIntegrityReviewOutcome struct {
 	Authorization store.ExamIntegrityReviewAuthorization
@@ -739,7 +739,7 @@ type examIntegrityReviewOutcome struct {
 	Decision      *model.IntegrityReviewDecision
 }
 
-// examIntegrityReviewOutcomeDocument is the persisted outcome of a Review
+// examIntegrityReviewOutcomeDocument is the persisted outcome of a review
 // mutation. Its nested documents convert directly to and from their store
 // and model types.
 type examIntegrityReviewOutcomeDocument struct {
@@ -943,7 +943,7 @@ func (s *SQLExamIntegrityReviewStore) Release(
 	)
 }
 
-// PrepareRelease fences the finalized Review at the input revision and records the PostgreSQL release instant the following Release must use.
+// PrepareRelease fences the finalized review at the input revision and records the PostgreSQL release instant the following Release must use.
 func (s *SQLExamIntegrityReviewStore) PrepareRelease(
 	ctx context.Context,
 	input *store.ExamIntegrityReviewReleasePrepare,
@@ -985,7 +985,7 @@ func (s *SQLExamIntegrityReviewStore) PrepareRelease(
 			return nil, fmt.Errorf("read Student Result release time: %w", err)
 		}
 
-		// PostgreSQL time chooses the release instant, raised to the Review's own
+		// PostgreSQL time chooses the release instant, raised to the review's own
 		// lifecycle so a node-clock finalization never postdates its release.
 		releaseAt := resultReleaseInstant(databaseNow, review)
 		if replayed {
@@ -1139,9 +1139,9 @@ func lockReviewScope(
 	actorID model.UserID,
 	override bool,
 ) (*store.ExamIntegrityReviewAuthorization, error) {
-	// Submission identity is immutable. Resolve its owning Exam without taking
+	// Submission identity is immutable. Resolve its owning exam without taking
 	// a lower-aggregate lock, then preserve the installation lock order by
-	// authorizing/locking the Exam before locking Submission and Attempt.
+	// authorizing/locking the exam before locking submission and attempt.
 	var examIDString string
 	if err := tx.Get(ctx, &examIDString, `SELECT a.exam_id
 		FROM exam_submissions sub
@@ -1196,7 +1196,7 @@ func loadReviewForMutation(ctx context.Context, tx *sqlxTxWrapper, submissionID 
 }
 
 // The permanent category marker survives content removal and guards operations
-// that would otherwise replay retained private data or recreate retired Review
+// that would otherwise replay retained private data or recreate retired review
 // state. Callers preserve their aggregate lock order before invoking this guard.
 func requireLiveSubmissionIntegrity(ctx context.Context, tx *sqlxTxWrapper, submissionID model.SubmissionID) error {
 	var id string
@@ -1570,8 +1570,8 @@ func releaseReview(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamInte
 	return out, nil
 }
 
-// resultReleaseInstant is the millisecond Student Result release instant for
-// PostgreSQL time: never earlier than the Review lifecycle it follows.
+// resultReleaseInstant is the millisecond student result release instant for
+// PostgreSQL time: never earlier than the review lifecycle it follows.
 func resultReleaseInstant(databaseNow time.Time, review *model.SubmissionReview) time.Time {
 	return transitionInstant(databaseNow, review.CreatedAt, review.UpdatedAt, review.FinalizedAt.Time)
 }

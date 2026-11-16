@@ -16,11 +16,9 @@ import (
 )
 
 // revokeSession, revokeAllSessions and revokeAllSessionsCounted commit an
-// already-authorized revocation and publish only its new durable effects.
-// Callers retain ownership checks, audit intent, public errors,
-// administrative mail and command preparation, and set the attempt's At, the
-// instant the mutation audit is stamped with. Account and password transitions keep their
-// separate atomic Store operations.
+// already-authorized revocation and publish only its new effects. Callers own
+// ownership checks, audit intent, public errors and mail, and set At, the
+// instant the audit is stamped with.
 func (s *Service) revokeSession(
 	ctx context.Context,
 	attempt access.Mutation,
@@ -42,8 +40,8 @@ func (s *Service) revokeSession(
 		return err
 	}
 
-	// The Store represents an already-absent logout with no affected Session;
-	// other single revocations retain their owning use case's not-found error.
+	// The store reports a logout of an absent session as no affected session;
+	// other single revocations keep their caller's not-found error.
 	if result != nil && result.Session != nil {
 		s.publishSessionsRevoked(ctx, input.UserID.String(), []*model.Session{result.Session}, result.TokenHashes)
 	}
@@ -62,9 +60,8 @@ func (s *Service) revokeAllSessions(
 	return err
 }
 
-// revokeAllSessionsCounted is revokeAllSessions that also reports how many
-// Sessions this call newly revoked; a replayed or no-op revocation reports
-// zero.
+// revokeAllSessionsCounted also reports how many sessions this call newly
+// revoked; a replayed or no-op revocation reports zero.
 func (s *Service) revokeAllSessionsCounted(
 	ctx context.Context,
 	attempt access.Mutation,
@@ -80,8 +77,8 @@ func (s *Service) revokeAllSessionsCounted(
 			input.RevokedAt = reference.MutationAt
 			input.AuditEventID, input.AuditAt = reference.ID, reference.MutationAt
 			value, err := s.sessions.RevokeAllForUser(ctx, input)
-			// Batch callers retain the Store's replay/no-op observation even when
-			// the mutation fails; an unavailable audit attempt leaves it untouched.
+			// Batch callers need the replay/no-op observation even when the
+			// mutation fails; an unavailable audit attempt leaves it untouched.
 			if unchanged != nil {
 				*unchanged = input.Replayed || input.NoOp
 			}

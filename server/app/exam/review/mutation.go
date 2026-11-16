@@ -17,10 +17,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Result is the committed state a Review mutation returns: the Review, the
-// Decision when the mutation saved one, and the authorization projection the
-// Store resolved. Replayed reports a retained idempotent outcome, for which
-// no effect is published.
+// Result is the committed state of a review mutation. Decision is nil unless
+// the mutation saved one; Replayed marks a retained idempotent outcome, for
+// which no event is published.
 type Result struct {
 	Authorization store.ExamIntegrityReviewAuthorization
 	Review        *model.SubmissionReview
@@ -64,8 +63,8 @@ func (s *Service) resolveMutationAuthorization(
 		return false, nil, storeErrors.Translate(err)
 	}
 
-	// The Candidate was denied on this projection, so it must be the
-	// requested Submission's, whatever the Store returned.
+	// The self-review denial ran on an earlier resolve, so this projection must
+	// be the requested submission's too, whatever the store returned.
 	if !authorization.ConsistentWith(submissionID) {
 		return false, nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent Review authorization"))
 	}

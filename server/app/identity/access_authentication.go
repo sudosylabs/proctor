@@ -46,9 +46,8 @@ func (s *Service) AuthenticateAccess(
 	return principal, err
 }
 
-// AuthenticateBearer accepts the two Authorization-header credential classes:
-// a CLI session access credential or a personal access token. Cookie
-// authentication remains session-only and therefore calls AuthenticateAccess.
+// AuthenticateBearer accepts a session access token or a personal access
+// token; cookie authentication is session-only and uses AuthenticateAccess.
 func (s *Service) AuthenticateBearer(
 	ctx context.Context,
 	rawToken string,
@@ -77,9 +76,8 @@ func (s *Service) authenticateAccess(
 
 	now := model.TimeUTC(s.now())
 	tokenHash := model.HashToken(rawToken)
-	// Resolve every new authentication decision from the authoritative Store.
-	// Positive cache entries cannot preserve access after committed revocation,
-	// credential rotation, or account disablement when invalidation is lost.
+	// Always read the store: a positive cache entry would outlive a
+	// revocation, rotation or disablement whose invalidation was lost.
 	credential, session, err := s.sessionCredentials.GetSessionByTokenHash(
 		ctx, tokenHash, model.SessionCredentialAccess,
 	)
@@ -107,7 +105,7 @@ func (s *Service) authenticateAccess(
 	if err != nil {
 		return nil, err
 	}
-	// A Desktop credential is bound to its key, so presenting it without a
+	// A desktop credential is bound to its key, so presenting it without a
 	// DPoP proof must fail like an unknown token.
 	if resolved.Session.ClientType == model.SessionClientDesktop {
 		return nil, access.InvalidTokenAppError()
@@ -142,8 +140,6 @@ func (s *Service) authenticateAccess(
 	return principal, nil
 }
 
-// resolvePersonalAccessTokenBearer resolves a raw personal access token to
-// its CLI principal, debouncing the token's last-used write.
 func (s *Service) resolvePersonalAccessTokenBearer(
 	ctx context.Context,
 	rawToken string,
@@ -239,10 +235,9 @@ func (s *Service) updateActivity(
 	return nil
 }
 
-// ValidatePrincipal revalidates the authoritative Session and User state
-// behind a principal that was established earlier. WebSocket admission and
-// onboarding import call it before they trust that principal again; it grants
-// nothing a fresh authentication would not.
+// ValidatePrincipal rechecks the stored session and user behind a principal
+// established earlier, for callers that hold one over time; it grants nothing
+// a fresh authentication would not.
 func (s *Service) ValidatePrincipal(ctx context.Context, principal model.Principal) error {
 	return s.validatePrincipal(ctx, principal)
 }

@@ -19,9 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// SQLInvitationStore implements store.InvitationStore. Its issuance,
-// administration and acceptance operations live in the invitation_*_store.go
-// files.
+// SQLInvitationStore implements store.InvitationStore.
 type SQLInvitationStore struct{ *SQLStore }
 
 const invitationTerminalRetention = 90 * 24 * time.Hour
@@ -174,8 +172,8 @@ func invitationOnboardingOutcome(result *store.InvitationCommandResult) (onboard
 	return onboardingImportCommandResult{Status: model.OnboardingImportRowSucceeded, InvitationID: result.Invitation.ID}, nil
 }
 
-// ReplayIssue returns the retained outcome of an earlier Invitation issue
-// command and completes the replay audit event; it never issues an Invitation
+// ReplayIssue returns the retained outcome of an earlier invitation issue
+// command and completes the replay audit event; it never issues an invitation
 // itself.
 func (s SQLInvitationStore) ReplayIssue(
 	ctx context.Context,
@@ -232,9 +230,9 @@ func (s SQLInvitationStore) FindCommandOutcome(
 	return result.Value, nil
 }
 
-// ReplayAdministration returns the retained outcome of an earlier Invitation
+// ReplayAdministration returns the retained outcome of an earlier invitation
 // administration command and completes the replay audit event; it never mutates
-// the Invitation itself.
+// the invitation itself.
 func (s SQLInvitationStore) ReplayAdministration(
 	ctx context.Context,
 	input *store.InvitationReplay,

@@ -5,8 +5,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// This file turns typed presentation details into the shared message layout:
-// an optional emphasized hero detail and an ordered list of labeled facts.
 package mail
 
 import (
@@ -69,7 +67,6 @@ type heroProperties struct {
 	Struck    bool
 }
 
-// factProperties is one labeled row in the message's detail list.
 type factProperties struct {
 	Label  string
 	Value  string
@@ -77,8 +74,8 @@ type factProperties struct {
 	Struck bool
 }
 
-// clock formats instants for people in one display location. Mail copy is
-// English-canonical; date patterns follow it.
+// clock formats instants in one display location. Mail copy is
+// English-canonical, and date patterns follow it.
 type clock struct{ location *time.Location }
 
 func (c clock) in(t time.Time) time.Time { return t.In(c.location) }
@@ -140,9 +137,8 @@ func (c clock) dateTimeSeconds(t time.Time) string {
 	return c.in(t).Format("Monday 2 January 2006, 15:04:05") + " " + c.shortZone(t)
 }
 
-// timeRange formats a sitting window. Windows that cross midnight repeat the
-// end date.
-// A window across a daylight-saving change labels each end with its own zone.
+// timeRange repeats the end date for windows that cross midnight, and labels
+// each end with its own zone across a daylight-saving change.
 func (c clock) timeRange(start, end time.Time) string {
 	s, e := c.in(start), c.in(end)
 	endTime := e.Format("15:04")
@@ -162,7 +158,6 @@ func (c clock) whenAt(t time.Time) string {
 	return c.in(t).Format("Mon 2 Jan") + " at " + c.in(t).Format("15:04") + " " + c.shortZone(t)
 }
 
-// layout holds everything the shared template needs besides the copy.
 type layout struct {
 	Hero  *heroProperties
 	Facts []factProperties
@@ -172,12 +167,10 @@ func (l *layout) fact(label, value string) {
 	l.Facts = append(l.Facts, factProperties{Label: label, Value: value})
 }
 
-// layoutBuilder produces the hero and facts once the copy is resolved.
 type layoutBuilder func(templateCopy, *copyResolver) layout
 
-// buildLayout validates the presentation detail against the template key and
-// returns the family's layout builder. It also completes copy data that
-// subjects and previews interpolate.
+// buildLayout also completes the copy data that subjects and previews
+// interpolate.
 func buildLayout(request renderRequest, c clock, data *copyData) (layoutBuilder, error) {
 	if err := validatePresentation(request); err != nil {
 		return nil, err

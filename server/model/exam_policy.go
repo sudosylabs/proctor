@@ -35,8 +35,8 @@ type FocusLossPolicy struct {
 	Outcome         IntegrityOutcome
 }
 
-// ExamPolicySet is the complete typed policy copied into each new Exam Draft.
-// Its Go name is unversioned; SchemaVersion selects the explicit persisted codec.
+// ExamPolicySet is the whole typed policy copied into each new draft.
+// SchemaVersion selects the stored codec; the Go name stays unversioned.
 type ExamPolicySet struct {
 	SchemaVersion  int
 	ConnectionLoss ConnectionLossPolicy
@@ -45,11 +45,10 @@ type ExamPolicySet struct {
 	Execution      ExecutionPolicy
 }
 
-// ExecutionPolicy says whether an Exam's Attempts get an execution
-// environment, and which. Profile names the environment profile Attempts are
-// created from; publication requires it to exist and not be retired, and
-// Terminals to be within its maximum. RecordInput records terminal input as
-// evidence; output is never recorded. A disabled policy names no profile.
+// ExecutionPolicy says whether an exam's attempts get an execution
+// environment and from which profile. Publication requires the profile to
+// exist, be unretired and allow Terminals. RecordInput records terminal input
+// as evidence; output is never recorded. A disabled policy names no profile.
 type ExecutionPolicy struct {
 	Enabled     bool
 	Profile     EnvironmentProfileID
@@ -281,14 +280,14 @@ func requireJSONEOF(decoder *json.Decoder) error {
 	return nil
 }
 
-// validateExamDocumentJSON preserves strict wire validation before typed decoding.
+// validateExamDocumentJSON runs the strict wire checks before typed decoding.
 func validateExamDocumentJSON(data []byte) error {
 	_, err := canonicaljson.Canonicalize(data, len(data))
 	return err
 }
 
-// encodeCanonicalExamDocument receives already validated, schema-owned values.
-// Its callers select digest fields and enforce the canonical document size.
+// encodeCanonicalExamDocument takes already validated values; callers choose
+// the digest fields and enforce the size bound.
 func encodeCanonicalExamDocument(value any) ([]byte, error) {
 	encoded, err := json.Marshal(value)
 	if err != nil {
@@ -297,10 +296,10 @@ func encodeCanonicalExamDocument(value any) ([]byte, error) {
 	return canonicaljson.Canonicalize(encoded, len(encoded))
 }
 
-// Clone isolates the authored family collection; family values are immutable.
+// Clone copies the native family slice; the family values are immutable.
 func (p ExamPolicySet) Clone() ExamPolicySet { p.Native = p.Native.Clone(); return p }
 
-// Equal compares complete validated semantics, including native selections.
+// Equal compares the whole validated policy, native selections included.
 func (p ExamPolicySet) Equal(other ExamPolicySet) bool {
 	left, err := EncodeExamPolicySet(p)
 	if err != nil {

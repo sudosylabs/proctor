@@ -20,15 +20,15 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Sentinel errors returned by the composition-owned external provider adapter.
-// Application code never imports concrete protocol packages.
+// Sentinel errors the provider adapter must translate protocol failures into,
+// so this package never imports a concrete protocol.
 var (
 	ErrExternalAuthenticationRejected    = errors.New("external authentication rejected")
 	ErrExternalAuthenticationInvalid     = errors.New("external authentication response is invalid")
 	ErrExternalAuthenticationUnavailable = errors.New("external authentication provider is unavailable")
 )
 
-// ExternalProviderBeginRequest is the protocol-neutral start challenge.
+// ExternalProviderBeginRequest asks a provider for its redirect challenge.
 type ExternalProviderBeginRequest struct {
 	CallbackURL         string
 	State               string
@@ -36,12 +36,12 @@ type ExternalProviderBeginRequest struct {
 	FreshAuthentication bool
 }
 
-// ExternalProviderBeginResponse is the protocol-neutral redirect challenge.
+// ExternalProviderBeginResponse is the provider's redirect challenge.
 type ExternalProviderBeginResponse struct {
 	RedirectURL string
 }
 
-// ExternalProviderCompleteRequest is the protocol-neutral callback completion.
+// ExternalProviderCompleteRequest hands a callback to its provider to verify.
 type ExternalProviderCompleteRequest struct {
 	CallbackURL             string
 	State                   string
@@ -50,8 +50,8 @@ type ExternalProviderCompleteRequest struct {
 	AuthenticationStartedAt time.Time
 }
 
-// ExternalIdentityProvider is the app-owned protocol-neutral provider port.
-// Composition adapts concrete CAS/OIDC implementations to this surface.
+// ExternalIdentityProvider is one configured provider; composition adapts the
+// CAS and OIDC implementations to it.
 type ExternalIdentityProvider interface {
 	Descriptor() model.ExternalAuthenticationProvider
 	AutoProvision() bool
@@ -63,17 +63,14 @@ type ExternalIdentityProvider interface {
 	) (*model.ExternalAuthenticationAssertion, error)
 }
 
-// ExternalProviderSource is the protocol-neutral registry surface consumed by
-// application external-login orchestration. Concrete CAS/OIDC adapters remain
-// outside package app.
+// ExternalProviderSource is the configured provider registry.
 type ExternalProviderSource interface {
 	Descriptors() []model.ExternalAuthenticationProvider
 	Provider(id string) (ExternalIdentityProvider, bool)
 }
 
-// InvitationAcceptor admits an External Identity through the Invitation its
-// login state carries. The parent app package connects it to the onboarding
-// area's Invitation acceptance.
+// InvitationAcceptor admits an external identity through the invitation its
+// login state carries; onboarding implements it.
 type InvitationAcceptor interface {
 	AcceptExternalIdentity(
 		context.Context,
@@ -85,7 +82,8 @@ type InvitationAcceptor interface {
 	) (*store.ExternalIdentityInvitationAcceptanceResult, error)
 }
 
-// ExternalAuthenticationPolicy is the deployment projection for external login.
+// ExternalAuthenticationPolicy is the deployment configuration for external
+// login; empty fields default to the Service's own.
 type ExternalAuthenticationPolicy struct {
 	PublicURL      string
 	LoginStateTTL  time.Duration
@@ -93,9 +91,8 @@ type ExternalAuthenticationPolicy struct {
 	NodeID         string
 }
 
-// requireExternalAuthentication refuses a Service whose external
-// authentication collaborators are incomplete. New calls it once, after
-// sign-in and Desktop authorization are set up.
+// requireExternalAuthentication must run after sign-in and desktop
+// authorization are set up.
 func (s *Service) requireExternalAuthentication() error {
 	if s.externalProviders == nil {
 		return errors.New("external authentication provider registry is required")
@@ -127,10 +124,9 @@ func (s *Service) requireExternalAuthentication() error {
 	return nil
 }
 
-// ExternalAuthenticationProviders lists the configured providers the current
-// Access Policy offers for sign-in. When the policy cannot be read it fails
-// rather than falling back to the deployment catalog, which would offer
-// providers the policy has disabled.
+// ExternalAuthenticationProviders lists the providers the current access
+// policy offers. If the policy can't be read it fails rather than fall back to
+// the configured list, which could offer providers the policy has disabled.
 func (s *Service) ExternalAuthenticationProviders(
 	ctx context.Context,
 	_ invocation.Invocation,

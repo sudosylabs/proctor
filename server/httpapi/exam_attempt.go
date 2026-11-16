@@ -30,7 +30,7 @@ type candidateAttemptHeaderAccess struct {
 
 // candidateAttemptAccessHeaders reads the continuity credential only from its
 // header, never from the URL, and the value must never be echoed, logged or
-// put in a Problem. Every bad value fails the same way so a client cannot tell
+// put in a problem. Every bad value fails the same way so a client cannot tell
 // which selector was wrong.
 func candidateAttemptAccessHeaders(request *http.Request) (candidateAttemptHeaderAccess, error) {
 	if request == nil {
@@ -48,9 +48,9 @@ func candidateAttemptAccessHeaders(request *http.Request) (candidateAttemptHeade
 	return candidateAttemptHeaderAccess{ConnectionID: connectionID, ContinuityCredential: credentials[0]}, nil
 }
 
-// examAttemptHandlers serves every route backed by the Attempt service: the
-// Exam Attempt routes here and the security preflight, native delivery,
-// browser delivery and delivery budget resources in their own files.
+// examAttemptHandlers also serves the security preflight, native delivery,
+// browser delivery and delivery budget resources, which live in their own
+// files.
 type examAttemptHandlers struct{ app *attempt.Service }
 
 func examAttemptResource(app *attempt.Service) route.Resource {

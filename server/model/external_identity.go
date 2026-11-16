@@ -17,28 +17,23 @@ import (
 const (
 	IdentityProviderMaxLength = 64
 	IdentitySubjectMaxRunes   = 512
-	// IdentityProviderMaxCount bounds the external providers one installation
-	// configures, the Access Policy admits, and a safe provider projection
-	// lists.
+	// IdentityProviderMaxCount bounds the providers one installation
+	// configures, the access policy admits and a provider listing shows.
 	IdentityProviderMaxCount = 64
 )
 
 var validIdentityProvider = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
 
 // IsValidIdentityProviderID reports whether value is a deployment-safe,
-// immutable provider identifier. Access Policy, External Identity, and
-// provider-bound Sessions deliberately share this grammar.
+// immutable provider ID. The access policy, external identities and
+// provider-bound sessions share this grammar.
 func IsValidIdentityProviderID(value string) bool {
 	return len(value) > 0 && len(value) <= IdentityProviderMaxLength && validIdentityProvider.MatchString(value)
 }
 
-// ExternalIdentity links a User to one identity-provider subject. A user can
-// have several links, while the store must keep (Provider, Subject) globally
-// unique. Provider adapters may represent OIDC, CAS, SAML, LDAP, or another
-// configured system without coupling the model to one protocol.
-//
-// Subject is deliberately excluded from JSON and must never be logged or
-// audited. Soft archive uses the explicit optional ArchivedAt instant.
+// ExternalIdentity links a user to one identity-provider subject. A user may
+// have several links; the store keeps (Provider, Subject) globally unique.
+// Subject is never in JSON and must never be logged or audited.
 type ExternalIdentity struct {
 	ID         ExternalIdentityID
 	CreatedAt  time.Time
@@ -50,7 +45,8 @@ type ExternalIdentity struct {
 	LastSeenAt OptionalTime
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
+// PrepareCreate stamps the ID and creation time and lowercases the provider;
+// it does nothing on nil.
 func (ei *ExternalIdentity) PrepareCreate(id ExternalIdentityID, at time.Time) {
 	if ei == nil {
 		return
@@ -66,8 +62,7 @@ func (ei *ExternalIdentity) PrepareCreate(id ExternalIdentityID, at time.Time) {
 	}
 }
 
-// PrepareUpdate applies the application-selected transition time and normalizes
-// the provider identifier.
+// PrepareUpdate stamps the update time and lowercases the provider.
 func (ei *ExternalIdentity) PrepareUpdate(at time.Time) {
 	if ei == nil {
 		return
@@ -76,7 +71,7 @@ func (ei *ExternalIdentity) PrepareUpdate(at time.Time) {
 	ei.Provider = strings.ToLower(SanitizeUnicode(ei.Provider))
 }
 
-// Validate checks rehydrated external-identity state.
+// Validate checks the identity's fields, for new and stored values alike.
 func (ei *ExternalIdentity) Validate() error {
 	const where = "ExternalIdentity.Validate"
 	if ei == nil {
@@ -122,8 +117,7 @@ func (ei *ExternalIdentity) Validate() error {
 	return nil
 }
 
-// Auditable returns a deliberately safe audit projection. The opaque subject
-// is never included.
+// Auditable returns the fields safe to audit; the subject is never included.
 func (ei *ExternalIdentity) Auditable() map[string]any {
 	if ei == nil {
 		return map[string]any{}

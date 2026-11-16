@@ -9,11 +9,9 @@ package model
 
 import "sort"
 
-// Event-only audit actions name durable audit outcomes that are not
-// permissions. Authorization never accepts them and no Role, Role Binding, or
-// Personal Access Token can grant them; they appear only as AuditEvent.Action.
-// Every permission Action is also an audit action, because authorization
-// decisions and permission-checked mutations record the checked action.
+// Event-only audit actions are outcomes, not permissions: authorization never
+// accepts them and nothing can grant them. Every permission action is also an
+// audit action, because checked decisions record the action checked.
 const (
 	ActionAuthenticationLogin                     Action = "authentication.login"
 	ActionAuthenticationExternalLogin             Action = "authentication.external_login"
@@ -46,9 +44,8 @@ const (
 	ActionMFADisable                              Action = "mfa.disable"
 )
 
-// eventAuditActionDefinition declares the audit-listing traits of one
-// event-only action. AcademicAudit has the same meaning as on
-// ActionDefinition.
+// eventAuditActionDefinition holds the audit-listing traits of one event-only
+// action; AcademicAudit means the same as on ActionDefinition.
 type eventAuditActionDefinition struct {
 	AcademicAudit bool
 }
@@ -98,9 +95,8 @@ func AuditActions() []string {
 	return actions
 }
 
-// AcademicAuditActions returns, in stable order, the closed action catalog
-// that academic audit visibility may list: every audit action declared with
-// AcademicAudit.
+// AcademicAuditActions returns, in stable order, the actions declared with
+// AcademicAudit: the only ones academic audit visibility may list.
 func AcademicAuditActions() []string {
 	actions := make([]string, 0, 32)
 	for action, definition := range actionDefinitions {

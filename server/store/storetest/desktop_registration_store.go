@@ -18,8 +18,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// TestDesktopRegistrationStore checks the User's rename of a Desktop
-// Registration, and that a Desktop Session cannot be renamed apart from it.
+// TestDesktopRegistrationStore checks the user's rename of a Desktop
+// registration, and that a Desktop session cannot be renamed apart from it.
 func TestDesktopRegistrationStore(t *testing.T, ss store.Store) {
 	ctx := context.Background()
 	institution := saveInstitution(t, ctx, ss)
@@ -58,7 +58,7 @@ func testDesktopRegistrationRenameSurvivesSignIn(t *testing.T, ctx context.Conte
 	require.NotContains(t, string(audit.Result), "Library laptop", "the chosen name entered the audit")
 
 	// The same Desktop key signs in again and reports its device name; the
-	// name the User chose stays.
+	// name the user chose stays.
 	again := saveRegisteredDesktopSession(t, ctx, ss, user.ID, institutionID)
 	require.Equal(t, before.ID, again.DesktopRegistrationID)
 	signedIn, err := ss.DesktopRegistration().Get(ctx, before.ID)

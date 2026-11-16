@@ -19,21 +19,21 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// CreateEnvironmentProfileCommand saves a new environment profile.
+// CreateEnvironmentProfileCommand is the profile to save.
 type CreateEnvironmentProfileCommand struct {
 	Profile        model.EnvironmentProfileSpecification
 	IdempotencyKey string
 }
 
-// RetireEnvironmentProfileCommand retires one profile so new Exam Revisions
-// can no longer name it.
+// RetireEnvironmentProfileCommand retires a profile so new exam revisions can
+// no longer name it.
 type RetireEnvironmentProfileCommand struct {
 	ProfileID      model.EnvironmentProfileID
 	IdempotencyKey string
 }
 
-// ListEnvironmentProfiles returns the profiles that are not retired, by
-// name, and with includeRetired the retired ones after them.
+// ListEnvironmentProfiles returns active profiles by name, followed by the
+// retired ones when includeRetired is set.
 func (s *Service) ListEnvironmentProfiles(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -49,8 +49,8 @@ func (s *Service) ListEnvironmentProfiles(
 	return profiles, nil
 }
 
-// CreateEnvironmentProfile saves a new profile. It requires a strong, recent
-// System Administrator Session.
+// CreateEnvironmentProfile requires a strong, recent system administrator
+// session.
 func (s *Service) CreateEnvironmentProfile(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -100,9 +100,8 @@ func (s *Service) CreateEnvironmentProfile(
 	return stored.Profile, nil
 }
 
-// RetireEnvironmentProfile retires one profile. Exam Revisions already
-// published keep using it. It requires a strong, recent System
-// Administrator Session.
+// RetireEnvironmentProfile leaves already published revisions using the
+// profile. It requires a strong, recent system administrator session.
 func (s *Service) RetireEnvironmentProfile(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -144,8 +143,6 @@ func (s *Service) RetireEnvironmentProfile(
 	return stored.Profile, nil
 }
 
-// authorizeEnvironmentProfiles authorizes profile administration on the
-// Institution.
 func (s *Service) authorizeEnvironmentProfiles(
 	ctx context.Context,
 	inv invocation.Invocation,

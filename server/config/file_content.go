@@ -7,8 +7,8 @@
 
 package config
 
-// FileContent bounds expensive content validation and rendition processing on
-// one node. Changing the limit requires restart.
+// FileContent bounds concurrent content validation and rendition work on one
+// node. Changing it needs a restart.
 type FileContent struct {
 	MaximumConcurrentOperations int `json:"MaximumConcurrentOperations"`
 }

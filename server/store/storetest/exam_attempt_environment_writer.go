@@ -20,14 +20,14 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// newExecutionAttemptFixture publishes the fixture Revision with execution
+// newExecutionAttemptFixture publishes the fixture revision with execution
 // enabled on a fresh profile.
 func newExecutionAttemptFixture(t *testing.T, ctx context.Context, ss store.Store) examAttemptFixture {
 	t.Helper()
 	return newExamAttemptFixtureWithExecution(t, ctx, ss, model.ExecutionPolicy{Enabled: true, Terminals: 1})
 }
 
-// testEnvironmentOwner owns one Attempt's environment in a test: it holds
+// testEnvironmentOwner owns one attempt's environment in a test: it holds
 // the runtime lease and sets the incarnation, as the runtime's owner does.
 type testEnvironmentOwner struct {
 	ss        store.Store
@@ -35,7 +35,7 @@ type testEnvironmentOwner struct {
 	lease     store.AttemptRuntimeLease
 }
 
-// ownTestEnvironment creates the Attempt's environment from its start fact,
+// ownTestEnvironment creates the attempt's environment from its start fact,
 // claims its lease and returns the owner and its access at incarnation 0.
 func ownTestEnvironment(t *testing.T, ctx context.Context, ss store.Store, attemptID model.ExamAttemptID,
 	sittingID model.ExamSittingID, generation int64,
@@ -51,7 +51,7 @@ func ownTestEnvironment(t *testing.T, ctx context.Context, ss store.Store, attem
 	return owner, owner.access(0)
 }
 
-// claim takes the Attempt's lease, which must be free.
+// claim takes the attempt's lease, which must be free.
 func (o *testEnvironmentOwner) claim(t *testing.T, ctx context.Context) {
 	t.Helper()
 	lease, err := o.ss.AttemptRuntimeLease().Claim(ctx, &store.AttemptRuntimeLeaseClaim{AttemptID: o.attemptID, NodeID: "test-node", Lifetime: time.Minute})
@@ -133,10 +133,10 @@ func connectEnvironmentFixture(t *testing.T, ctx context.Context, ss store.Store
 
 // testAttemptEnvironmentWriter covers the execution environment writer: its
 // batch beside the editor's under the owner's lease and incarnation, and
-// that nothing but a stale owner or the Submission stops it. A frozen,
-// Kicked or expired Participation, a passed deadline and a revoked Session
+// that nothing but a stale owner or the submission stops it. A frozen,
+// kicked or expired participation, a passed deadline and a revoked session
 // leave it writing so the owner can harvest the guest's last changes. The
-// seals are covered in the Submission suite.
+// seals are covered in the submission suite.
 func testAttemptEnvironmentWriter(t *testing.T, ss store.Store, workspace store.ExamAttemptWorkspaceStore,
 	probes ...ExamAttemptWorkspaceSQLProbe,
 ) {
@@ -186,7 +186,7 @@ func testAttemptEnvironmentWriterLifecycle(t *testing.T, ctx context.Context, ss
 	access := owner.incarnate(t, ctx, 1)
 
 	// The environment resolves the candidate's target and reads the same
-	// Workspace the candidate does.
+	// workspace the candidate does.
 	target, err := workspace.ReserveObjects(ctx, &store.ExamAttemptWorkspaceObjectReservation{Access: access})
 	require.NoError(t, err)
 	require.Equal(t, fixture.candidate.ID, target.CandidateUserID)
@@ -225,7 +225,7 @@ func testAttemptEnvironmentWriterLifecycle(t *testing.T, ctx context.Context, ss
 	require.Equal(t, access.Fence, recorded.Fence)
 	require.NotContains(t, string(audit.Result), "harvested", "environment batch audit exposed a path")
 
-	// An exact retry replays under the candidate; another User's key is not
+	// An exact retry replays under the candidate; another user's key is not
 	// the candidate's outcome.
 	retry := newAttemptWorkspaceBatch(t, ctx, ss, fixture, access, directory)
 	replayed, err := workspace.ApplyBatch(ctx, retry, command)
@@ -291,8 +291,8 @@ func testAttemptEnvironmentWriterLifecycle(t *testing.T, ctx context.Context, ss
 	require.Greater(t, reclaimed.Fence, restarted.Fence)
 	requireEnvironmentWrites(t, ctx, ss, fixture, reclaimed, "reclaimed", "the next lease")
 
-	// A Kick freezes the environment but leaves its owner writing, as does
-	// a revoked Session.
+	// A kick freezes the environment but leaves its owner writing, as does
+	// a revoked session.
 	kick := &store.ExamAttemptManualSuspension{ExamID: fixture.examID, SittingID: fixture.sitting.ID,
 		AttemptID: attemptID, SuspensionID: model.NewAttemptSuspensionID(), ActorUserID: fixture.manager.ID,
 		ExpectedRevision: connected.Attempt.Revision, PrivateReason: "candidate left the examination room",
@@ -323,7 +323,7 @@ func testAttemptWorkspaceJournalRetention(t *testing.T, ctx context.Context, ss 
 	require.NoError(t, err)
 	projected := created.Changes[0].Cursor
 
-	// The machine holds the Workspace up to the directory.
+	// The machine holds the workspace up to the directory.
 	current, err := ss.AttemptEnvironment().Get(ctx, attemptID)
 	require.NoError(t, err)
 	running := *current

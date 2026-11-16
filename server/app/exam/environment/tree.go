@@ -19,9 +19,9 @@ const (
 	kindDirectory = model.StarterWorkspaceEntryDirectory
 )
 
-// entry is one Attempt Workspace entry as the owner last read it. SHA256 and
-// Size are empty when a journal entry changed the content and nothing has
-// read it since.
+// entry is one workspace entry as the owner last read it. SHA256 and Size
+// are empty when a journal entry changed the content and nothing has read it
+// since.
 type entry struct {
 	ID      model.AttemptWorkspaceEntryID
 	Kind    model.StarterWorkspaceEntryKind
@@ -30,11 +30,11 @@ type entry struct {
 	SHA256  string
 	Size    int64
 	// pending marks an entry a harvest batch is creating, whose ID the
-	// Workspace has not given yet.
+	// workspace has not assigned yet.
 	pending bool
 }
 
-// tree is the Workspace as of Cursor, rebuilt from the manifest and the
+// tree is the workspace as of Cursor, rebuilt from the manifest and the
 // journal on every start: a read view, never an authority.
 type tree struct {
 	Cursor int64
@@ -114,7 +114,6 @@ type projected struct {
 	Versions map[model.AttemptWorkspaceEntryID]model.WorkspaceContentVersion
 }
 
-// advance records that change reached the machine.
 func (p *projected) advance(change model.AttemptWorkspaceJournalEntry) {
 	switch change.Operation {
 	case model.AttemptWorkspaceMutationCreateFile, model.AttemptWorkspaceMutationReplaceFile:
@@ -125,12 +124,11 @@ func (p *projected) advance(change model.AttemptWorkspaceJournalEntry) {
 	p.Cursor = change.Cursor
 }
 
-// projectionMutation is the machine's journal mutation for change, against
-// the projected versions before it. The same change always gives the same
-// mutation, which is how a harvested change's echo is recognized: the owner
-// confirms this mutation for the observation, and applies it again when
-// the journal reaches it. content names the uploaded bytes of a create or
-// replace.
+// projectionMutation is the machine's mutation for change, against the
+// projected versions before it. It is deterministic, which is how a harvested
+// change's echo is recognized: the owner confirms this mutation for the
+// observation and applies it again when the journal reaches it. content names
+// the uploaded bytes of a create or replace.
 func projectionMutation(
 	before map[model.AttemptWorkspaceEntryID]model.WorkspaceContentVersion,
 	change model.AttemptWorkspaceJournalEntry,
@@ -170,7 +168,6 @@ func projectionMutation(
 	return mutation
 }
 
-// carriesContent reports whether a journal change has a body.
 func carriesContent(operation model.AttemptWorkspaceMutationKind) bool {
 	return operation == model.AttemptWorkspaceMutationCreateFile || operation == model.AttemptWorkspaceMutationReplaceFile
 }

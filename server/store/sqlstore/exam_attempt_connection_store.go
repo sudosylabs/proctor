@@ -45,16 +45,10 @@ type examAttemptConnectOutcome struct {
 
 func (examAttemptConnectOutcome) outcomeDocument() {}
 
-// Connect admits the Candidate to the Attempt under command, creating the first
-// Attempt and Workspace when needed. Replays recheck current eligibility and
-// return the stored outcome.
-//
-// Admission is one atomic boundary: authoritative membership and state checks,
-// first Attempt and logical Workspace bootstrap, generation fencing, Connection
-// creation, audit, and the idempotent outcome commit together. An exact command
-// replay recovers the stored outcome only after rechecking the current Session,
-// Sitting capability, and exact-Class membership; every fresh connection
-// performs the same current eligibility checks.
+// Connect admits the candidate to the attempt under command, creating the
+// first attempt and workspace when needed. Admission commits atomically with
+// audit and the outcome; a replay rechecks the current session, sitting and
+// class membership before returning the stored outcome.
 func (s *SQLExamAttemptStore) Connect(
 	ctx context.Context,
 	input *store.ExamAttemptConnect,
@@ -191,9 +185,9 @@ func (s *SQLExamAttemptStore) connect(
 	input *store.ExamAttemptConnect,
 ) (examAttemptConnectOutcome, error) {
 	var zero examAttemptConnectOutcome
-	// Serialize activation with every Session issuance for this User. If the
-	// Session commits first it may be used for admission; once admission commits,
-	// later Session creation observes the active Attempt and fails closed.
+	// Serialize activation with every session issuance for this user. If the
+	// session commits first it may be used for admission; once admission commits,
+	// later session creation observes the active attempt and fails closed.
 	if err := lockUserSessions(ctx, tx, input.CandidateUserID.String()); err != nil {
 		return zero, err
 	}
@@ -697,10 +691,10 @@ func completeExamAttemptConnectAudit(
 	return nil
 }
 
-// CloseConnection closes the Candidate's open Attempt Connection with
+// CloseConnection closes the candidate's open attempt connection with
 // input.Reason at database time and completes the audit event. Closing an
-// already-closed Connection changes nothing and reports Changed false; a
-// Connection of another Candidate or Session is not found.
+// already-closed connection changes nothing and reports Changed false; a
+// connection of another candidate or session is not found.
 func (s *SQLExamAttemptStore) CloseConnection(
 	ctx context.Context,
 	input *store.ExamAttemptConnectionClose,

@@ -21,8 +21,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ListInvitations pages the Invitations visible through the caller's invitation.view
-// scopes; the first page also carries their total.
+// ListInvitations pages the invitations the caller may view; only the first
+// page carries the total.
 func (s *Service) ListInvitations(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -83,9 +83,8 @@ func (s *Service) ListInvitations(
 	return result, nil
 }
 
-// countPendingInvitations counts the unexpired pending Invitations within the
-// caller's invitation.view visibility, authorized and audited exactly as
-// ListInvitations is, stopping at maximum.
+// countPendingInvitations authorizes and audits exactly as ListInvitations
+// and stops at maximum.
 func (s *Service) countPendingInvitations(ctx context.Context, inv invocation.Invocation, maximum int) (int, error) {
 	visibility, err := s.visibility(ctx, inv, model.ActionInvitationView)
 	if err != nil {
@@ -104,9 +103,8 @@ func (s *Service) countPendingInvitations(ctx context.Context, inv invocation.In
 	return total, nil
 }
 
-// GetInvitation reads one Invitation visible through the caller's invitation.view
-// scopes. An Invitation outside them reads as missing, so the answer never
-// confirms that it exists.
+// GetInvitation reads an invitation outside the caller's view as missing,
+// so the answer never confirms that it exists.
 func (s *Service) GetInvitation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -129,8 +127,7 @@ func (s *Service) GetInvitation(
 	return invitationAdministrationView(record), nil
 }
 
-// ResendInvitation issues a fresh claim for a pending Invitation visible through the
-// caller's invitation.manage scopes and mails it.
+// ResendInvitation mails a fresh claim for a pending invitation.
 func (s *Service) ResendInvitation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -285,8 +282,7 @@ func (s *Service) ResendInvitation(
 	return view, nil
 }
 
-// RevokeInvitation revokes a pending Invitation visible through the caller's
-// invitation.manage scopes and mails the revocation notice.
+// RevokeInvitation revokes a pending invitation and mails the notice.
 func (s *Service) RevokeInvitation(
 	ctx context.Context,
 	inv invocation.Invocation,

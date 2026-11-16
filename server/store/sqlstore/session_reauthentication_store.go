@@ -19,8 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ReauthenticatePassword records a fresh password proof on the User's unexpired
-// password Session whose access credential is current, using database time, and
+// ReauthenticatePassword records a fresh password proof on the user's unexpired
+// password session whose access credential is current, using database time, and
 // completes the audit event.
 func (s SQLSessionStore) ReauthenticatePassword(
 	ctx context.Context,
@@ -89,7 +89,7 @@ func (s SQLSessionStore) ReauthenticatePassword(
 		}
 
 		// PostgreSQL time decided validity above. The recorded proof never
-		// precedes the Session's node-clock authentication history.
+		// precedes the session's node-clock authentication history.
 		at = transitionInstant(at, session.AuthenticatedAt, session.ReauthenticatedAt.Time)
 		return commitSessionReauthentication(ctx, tx, session, at, input.AuditEventID)
 	})
@@ -148,8 +148,8 @@ func commitSessionReauthentication(
 const externalReauthenticationClockSkew = time.Minute
 
 // ReauthenticateExternal records a fresh external identity provider proof on
-// the Session named by the consumed reauthentication login state. A state that
-// predates the User's last MFA reset yields
+// the session named by the consumed reauthentication login state. A state that
+// predates the user's last MFA reset yields
 // store.ErrAuthenticationGenerationChanged, and a proof outside the state's
 // lifetime is a reauthentication_time conflict.
 func (s SQLSessionStore) ReauthenticateExternal(

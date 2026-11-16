@@ -17,7 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// editorSealAccess is the voluntary seal access of the editor's Connection.
+// editorSealAccess is the voluntary seal access of the editor's connection.
 func editorSealAccess(editor store.ExamAttemptWorkspaceEditorAccess, revisionID model.ExamRevisionID, cursor int64) store.ExamSubmissionSealAccess {
 	return store.ExamSubmissionSealAccess{AttemptID: editor.AttemptID, ParticipationID: editor.ParticipationID,
 		Generation: editor.Generation, ConnectionID: editor.ConnectionID, CandidateUserID: editor.CandidateUserID,

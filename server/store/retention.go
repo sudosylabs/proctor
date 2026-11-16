@@ -19,10 +19,10 @@ const (
 	RetentionControlOperation = "retention.control"
 )
 
-// RetentionMutation carries the caller's authority into the store, which
-// rechecks it at the locked database time on every write, exact replays and
-// no-ops included, so a retained idempotency key cannot outlive the
-// administrator status or recent proof that first used it.
+// RetentionMutation is the caller's authority. The store rechecks it on the
+// database clock under lock on every write, replays and no-ops included, so a
+// retained idempotency key cannot outlive the administrator status or recent
+// proof that first used it.
 type RetentionMutation struct {
 	Principal               model.Principal
 	AuditEventID            model.AuditEventID
@@ -67,9 +67,9 @@ type RetentionRecordPage struct {
 	HasMore        bool
 }
 
-// RetentionReconciliation is one bounded, naturally idempotent unit of
-// institution-approved work. Persistence uses its own clock and authoritative
-// state; neither the worker nor a preview supplies eligibility assertions.
+// RetentionReconciliation is one idempotent unit of approved retention work.
+// The store decides eligibility from its own clock and state; neither the
+// worker nor a preview asserts it.
 type RetentionReconciliation struct {
 	SubmissionID model.SubmissionID
 	AuditEventID model.AuditEventID
@@ -82,13 +82,10 @@ type RetentionReconciliationResult struct {
 	Retired   int
 }
 
-// RetentionPurgeObject names one exact immutable backend key after all allowed
-// references were released. Keys remain internal to the content boundary. A
-// successful delete acknowledgement does not complete this record: completion
-// requires a subsequent independent observation that the current key is absent.
-//
-// It names either an Attempt Workspace object or a screen clip, whose
-// ChunkCount keys are purged together.
+// RetentionPurgeObject is content whose references have all been released:
+// either a workspace object or a screen clip, whose ChunkCount keys are
+// purged together. A successful delete does not complete it; completion needs
+// a later, separate observation that the key is absent.
 type RetentionPurgeObject struct {
 	RetirementID model.RetentionRetirementID
 	ObjectID     model.AttemptWorkspaceObjectID
@@ -120,18 +117,17 @@ type RetentionNoticeMail struct {
 	FailureCode     string
 }
 
-// RetentionStore owns review, explicit policy approval, per-record grace,
-// cancellation and the irreversible logical retirement boundary. Saving a
-// policy never enables this workflow. Mutations reauthorize the current
-// protected administrator Session, including replay, and complete critical
-// audit atomically. Reconcile locks Policy/control, Exam, Sitting and Submission
-// in that order, rechecks completion and every hold/source protection, and
-// creates durable recipient notices in the same transaction as grace.
+// RetentionStore runs the retention workflow: preview, approval, per-record
+// grace, cancellation and irreversible retirement. Saving a policy never
+// enables it. Mutations, replays included, reauthorize the protected
+// administrator session and complete the audit atomically.
+// ReconcileSubmission locks the policy and control, exam, sitting and
+// submission in that order, rechecks completion and every hold, and creates
+// the recipient notices in the grace transaction.
 //
-// Only Commit retirement may remove sealed content. It leaves a content-free
-// receipt, closes late ingestion, and reserves exact unreferenced objects for
-// retryable physical purge. A later hold or policy change cannot revive content.
-// Ordinary mutations retain their immutable-record guards.
+// Only retirement removes sealed content. It leaves a content-free receipt,
+// closes late ingestion and queues unreferenced objects for a retryable purge.
+// A later hold or policy change cannot bring content back.
 type RetentionStore interface {
 	GetControl(context.Context) (*model.RetentionControl, error)
 	CreatePreview(context.Context, *RetentionPreviewCreation, *CommandIdempotency) (*model.RetentionPreview, error)
@@ -139,20 +135,19 @@ type RetentionStore interface {
 	ChangeControl(context.Context, *RetentionControlChange, *CommandIdempotency) (*RetentionControlResult, error)
 	ListRecords(context.Context, RetentionRecordListOptions) (*RetentionRecordPage, error)
 	ReconcileSubmission(context.Context, *RetentionReconciliation) (*RetentionReconciliationResult, error)
-	// BeginPurgeBatch atomically selects at most limit eligible exact keys in
-	// oldest-due order and defers their next attempt for one hour before I/O.
-	// Concurrent callers skip a selected batch. A lost result may defer keys
-	// without attempting them, but never records absence or releases references.
-	// Callers reserve their bounded work budget before beginning this mutation.
+	// BeginPurgeBatch selects up to limit due keys, oldest first, and defers
+	// each for one hour before any I/O, so concurrent callers skip them. A lost
+	// result may defer keys unattempted but never records absence or releases
+	// references. Callers reserve their work budget first.
 	BeginPurgeBatch(context.Context, int) ([]RetentionPurgeObject, error)
 	CompletePurge(context.Context, *RetentionPurgeCompletion) error
 	ListNotices(context.Context, model.UserID, model.RetentionRetirementID, int) ([]model.RetentionNotice, error)
 	ListPendingNotices(context.Context, int) ([]model.RetentionNotice, error)
 	CompleteNotice(context.Context, *RetentionNoticeMail) error
-	// Expiry is naturally idempotent, policy/control fenced, and completes its
-	// required system audit atomically. Referenced or unfinished records cannot
-	// expire. A resumed eligible record receives a fresh positive grace period;
-	// receipt deletion never changes permanent Submission retirement markers.
+	// Expiry is idempotent, fenced by policy and control, and completes its
+	// audit atomically. Referenced or unfinished records cannot expire. A
+	// resumed record gets a fresh grace period, and deleting a receipt never
+	// clears a submission's retirement markers.
 	ListExpiryRecords(context.Context, RetentionExpiryListOptions) (*RetentionExpiryPage, error)
 	ReconcileExpiry(context.Context, *RetentionExpiryReconciliation) (*RetentionExpiryResult, error)
 	ReconcileCleanupAuditExpiry(context.Context, *RetentionCleanupAuditReconciliation) (*RetentionCleanupAuditResult, error)

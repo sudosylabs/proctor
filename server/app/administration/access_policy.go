@@ -29,11 +29,11 @@ const (
 	desktopAuthorizationProtocolMax = 1
 )
 
-// sessionLengthLimits derives the policy's Session length bounds from the
-// deployment lifetimes. The idle length outlasts an access credential and the
-// activity debounce; the absolute length outlasts both that floor and the
-// recent-authentication window; each default and ceiling is the configured
-// lifetime, which the policy can only shorten.
+// sessionLengthLimits derives the policy's session length bounds from the
+// deployment lifetimes. The idle length must outlast an access credential and
+// the activity debounce, and the absolute length must also outlast the
+// recent-authentication window. Defaults and ceilings are the configured
+// lifetimes, which the policy can only shorten.
 func sessionLengthLimits(sessions identity.SessionPolicy, recentAuthentication time.Duration) model.SessionLengthLimits {
 	wholeMinutesUp := func(duration time.Duration) int { return int((duration + time.Minute - 1) / time.Minute) }
 	idleMinimum := wholeMinutesUp(max(sessions.AccessTTL, sessions.ActivityUpdateInterval+time.Minute))
@@ -48,8 +48,8 @@ func sessionLengthLimits(sessions identity.SessionPolicy, recentAuthentication t
 	}
 }
 
-// AccessPolicyView is the current Access Policy as an administrator sees it:
-// the policy and its history, with what the deployment can actually offer.
+// AccessPolicyView is the current access policy and its history, with what
+// the deployment can actually offer.
 type AccessPolicyView struct {
 	Policy             *model.AccessPolicy
 	History            []*model.AccessPolicyTransition
@@ -58,9 +58,7 @@ type AccessPolicyView struct {
 	// RoleHolderMFAEnforced is true only while the policy requires two-step
 	// verification of role holders and the deployment enables it.
 	RoleHolderMFAEnforced bool
-	// SessionLimits are the deployment defaults and bounds of the Session
-	// lengths.
-	SessionLimits model.SessionLengthLimits
+	SessionLimits         model.SessionLengthLimits
 }
 
 type PreflightAccessPolicyCommand struct {
@@ -70,7 +68,7 @@ type PreflightAccessPolicyCommand struct {
 }
 
 // AccessPolicyPreflightResult reports the blockers of a proposed replacement
-// and the role holder two-step verification counts an administrator weighs.
+// and the role-holder two-step verification counts an administrator weighs.
 type AccessPolicyPreflightResult struct {
 	Blockers                           []store.AccessPolicyBlocker
 	RoleHoldersWithoutMFACount         int
@@ -84,8 +82,8 @@ type ReplaceAccessPolicyCommand struct {
 	IdempotencyKey         string
 }
 
-// GetAccessPolicy returns the Access Policy, its recent history and the
-// deployment capabilities it is weighed against.
+// GetAccessPolicy returns the policy, its recent history and the deployment
+// capabilities it is weighed against.
 func (s *Service) GetAccessPolicy(ctx context.Context, inv invocation.Invocation) (AccessPolicyView, error) {
 	institution, resource, err := s.authorizeAccessPolicy(ctx, inv, model.ActionAccessPolicyView)
 	_ = institution
@@ -101,7 +99,7 @@ func (s *Service) GetAccessPolicy(ctx context.Context, inv invocation.Invocation
 }
 
 // PreflightAccessPolicy reports what would block a proposed replacement. It
-// needs a strong, recent Session and access_policy.manage.
+// needs a strong, recent session and access_policy.manage.
 func (s *Service) PreflightAccessPolicy(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -129,8 +127,8 @@ func (s *Service) PreflightAccessPolicy(
 		RoleHolderSingleFactorSessionCount: preflight.RoleHolderSingleFactorSessionCount}, nil
 }
 
-// ReplaceAccessPolicy replaces the Access Policy behind revision and
-// idempotency fences, then propagates the Sessions it revoked or shortened.
+// ReplaceAccessPolicy replaces the policy behind revision and idempotency
+// fences, then propagates the sessions it revoked or shortened.
 func (s *Service) ReplaceAccessPolicy(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -197,7 +195,7 @@ func (s *Service) ReplaceAccessPolicy(
 		return AccessPolicyView{}, apperror.New("access_policy.unavailable")
 	}
 
-	// The event is best effort and only follows the commit; the Store repeats
+	// The event is best effort and only follows the commit; the store repeats
 	// the blocker and revision checks, so the preflight result is advisory.
 	if stored.Changed && !stored.Replayed {
 		if effectErr := s.publishAccessPolicyChanged(ctx, institution.ID, stored); effectErr != nil {
@@ -225,8 +223,6 @@ func accessPolicyReplacementAuditValue(command ReplaceAccessPolicyCommand) map[s
 	}
 }
 
-// authorizeAccessPolicy authorizes an Access Policy Action on the singleton
-// Institution.
 func (s *Service) authorizeAccessPolicy(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -275,8 +271,8 @@ func (s *Service) preflightInput(
 	}, nil
 }
 
-// invalidAccessPolicySettings refuses settings as access_policy.invalid,
-// naming the offending field when the model names one.
+// invalidAccessPolicySettings names the offending field when the model names
+// one.
 func invalidAccessPolicySettings(err error) error {
 	var invalid *model.ValidationError
 	if errors.As(err, &invalid) && invalid.Field != "" {
@@ -306,20 +302,20 @@ func (s *Service) view(snapshot *store.AccessPolicySnapshot) AccessPolicyView {
 	}
 }
 
-// PublicInstitutionPresentation is the Institution's name as shown to someone
-// who has not signed in.
+// PublicInstitutionPresentation is the institution's name as shown before
+// sign-in.
 type PublicInstitutionPresentation struct {
 	ID                model.InstitutionID
 	Name, DisplayName string
 }
 
 // PublicAccessCapabilities says which ways into the installation are open
-// under the current Access Policy and deployment.
+// under the current policy and deployment.
 type PublicAccessCapabilities struct {
 	LocalLogin, PublicRegistration, InvitationAdmission, DesktopAuthorization bool
 }
 
-// DesktopAuthorizationCompatibility is the range of Desktop authorization
+// DesktopAuthorizationCompatibility is the range of desktop authorization
 // protocol versions this server accepts.
 type DesktopAuthorizationCompatibility struct {
 	Protocol                       string
@@ -327,7 +323,7 @@ type DesktopAuthorizationCompatibility struct {
 }
 
 // PublicAccessDiscovery is what an unauthenticated client may learn before
-// sign-in: where the installation lives and how it admits people.
+// sign-in.
 type PublicAccessDiscovery struct {
 	DiscoveryVersion int
 	CanonicalOrigin  string
@@ -343,8 +339,8 @@ type PublicAccessDiscovery struct {
 	DesktopAuthorization  DesktopAuthorizationCompatibility
 }
 
-// DiscoverAccess returns the public access discovery document. It is
-// anonymous and reports an uninitialized installation without failing.
+// DiscoverAccess is anonymous and reports an uninitialized installation
+// without failing.
 func (s *Service) DiscoverAccess(ctx context.Context, _ invocation.Invocation) (PublicAccessDiscovery, error) {
 	result := PublicAccessDiscovery{
 		DiscoveryVersion:      accessDiscoveryVersion,

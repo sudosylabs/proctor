@@ -138,7 +138,7 @@ func (s SQLDesktopCompatibilityPolicyStore) Replace(
 }
 
 // replaceDesktopCompatibilityPolicy locks the policy, requires an active
-// System Administrator and the expected revision, applies the replacement at
+// system administrator and the expected revision, applies the replacement at
 // PostgreSQL time, and completes the audit.
 func replaceDesktopCompatibilityPolicy(
 	ctx context.Context,

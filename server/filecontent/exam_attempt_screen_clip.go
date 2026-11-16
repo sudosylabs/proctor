@@ -107,9 +107,8 @@ func (c *Content) OpenScreenClipChunk(
 	return file.Body, nil
 }
 
-// PurgeRetiredScreenClip removes every chunk key of a retired clip, then
-// observes each absent. A backend acknowledgement alone is not reported as a
-// verified purge.
+// PurgeRetiredScreenClip removes every chunk of a retired clip and then checks
+// each is gone, since a backend acknowledgement alone is not a verified purge.
 func (c *Content) PurgeRetiredScreenClip(ctx context.Context, clipID model.ScreenClipID, chunks int) error {
 	if c == nil || c.filesystem == nil || !clipID.IsValid() || chunks < 1 || chunks > model.ScreenClipMaxChunks {
 		return errors.New("invalid screen clip identity")

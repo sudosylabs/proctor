@@ -42,8 +42,9 @@ func (s UnretainedDeliverySummary) Canonical() ([]byte, error) {
 	return encodeCanonicalExamDocument(s)
 }
 
-// Compare returns true only for exact current replay. The Store separately
-// fences ownership, expiry and changed-summary rate before replacing its slot.
+// Compare reports true only for an exact replay of the current summary. The
+// store separately fences ownership, expiry and change rate before replacing
+// its slot.
 func (s UnretainedDeliverySummary) Compare(next UnretainedDeliverySummary) (bool, error) {
 	priorRaw, err := s.Canonical()
 	if err != nil {

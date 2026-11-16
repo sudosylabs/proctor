@@ -16,15 +16,12 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// The public code catalogues of onboarding imports and student progressions.
-// Each is closed: the import service records only codes its catalogue lists
-// and refuses to persist any other, so the published enums stay exact. Each
-// may grow, and clients present an unknown value generically.
+// The code catalogues below are closed: a code outside them is refused
+// before it is persisted, so the published enums stay exact. They may grow;
+// clients present an unknown value generically.
 
 // OnboardingImportFailureCodes is every failure_code a failed import or
-// student progression records: a lost credential, an unreadable file, an
-// upload revalidation failure as an Invitation batch would record it, and the
-// progression and academic administration filter preview failures.
+// student progression may record.
 func OnboardingImportFailureCodes() []string {
 	return sortedCodes(
 		[]string{"authentication.token_invalid", "onboarding_import.file_invalid"},
@@ -34,11 +31,7 @@ func OnboardingImportFailureCodes() []string {
 	)
 }
 
-// OnboardingImportPreviewCodes is every preview_code a preview row records:
-// malformed or duplicate CSV rows, target resolution failures as an
-// Invitation batch would record them, the student progression row
-// outcomes, and the academic administration filter preview skip reasons and
-// no-change marker.
+// OnboardingImportPreviewCodes is every preview_code a preview row may record.
 func OnboardingImportPreviewCodes() []string {
 	return sortedCodes(
 		[]string{"request.invalid", "onboarding_batch.duplicate"},
@@ -49,11 +42,8 @@ func OnboardingImportPreviewCodes() []string {
 	)
 }
 
-// OnboardingImportRowCodes is every public_code an executed row records when
-// it fails: a lost credential, and the item failures of the Invitation and
-// academic administration batches that execute the row, which include
-// student_progression.conflict for a changed source membership, and the
-// System Administrator a filter preview row reached after it froze.
+// OnboardingImportRowCodes is every public_code a failed executed row may
+// record.
 func OnboardingImportRowCodes() []string {
 	return sortedCodes(
 		[]string{"authentication.token_invalid", academicAdministrationPreviewSystemAdministrator},
@@ -71,8 +61,6 @@ func sortedCodes(sets ...[]string) []string {
 	return slices.Compact(codes)
 }
 
-// requireOnboardingImportFailureCode refuses a failure_code outside the
-// catalogue before it is persisted.
 func requireOnboardingImportFailureCode(code string) error {
 	if !slices.Contains(OnboardingImportFailureCodes(), code) {
 		return fmt.Errorf("onboarding import failure code %q is outside the catalogue", code)
@@ -80,8 +68,6 @@ func requireOnboardingImportFailureCode(code string) error {
 	return nil
 }
 
-// requireOnboardingImportPreviewCodes refuses preview rows whose code lies
-// outside the catalogue before they are persisted.
 func requireOnboardingImportPreviewCodes(rows []store.OnboardingImportRow) error {
 	codes := OnboardingImportPreviewCodes()
 	for _, row := range rows {
@@ -92,7 +78,6 @@ func requireOnboardingImportPreviewCodes(rows []store.OnboardingImportRow) error
 	return nil
 }
 
-// failImport marks an import failed with a catalogued failure_code.
 func (s *Service) failImport(ctx context.Context, id model.OnboardingImportID, code string) (*store.OnboardingImport, error) {
 	if err := requireOnboardingImportFailureCode(code); err != nil {
 		return nil, err
@@ -100,8 +85,6 @@ func (s *Service) failImport(ctx context.Context, id model.OnboardingImportID, c
 	return s.imports.FailOnboardingImport(ctx, &store.OnboardingImportFailure{ID: id, Code: code, At: model.TimeUTC(s.now())})
 }
 
-// requireOnboardingImportRowCode refuses an executed row's public code
-// outside the catalogue before it is persisted.
 func requireOnboardingImportRowCode(code string) error {
 	if code != "" && !slices.Contains(OnboardingImportRowCodes(), code) {
 		return fmt.Errorf("onboarding import row code %q is outside the catalogue", code)

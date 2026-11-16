@@ -33,13 +33,9 @@ import (
 )
 
 // TestingOverrides replaces individual runtime capabilities for tests. A nil
-// field keeps the production configuration-driven selection. Provided
-// capabilities must be fully constructed by the caller; ownership transfers to
-// the assembled runtime, which closes them on construction failure and when
-// the Server closes, exactly as in production.
-//
-// This surface exists for testlib and focused tests. Production composition
-// uses New with WithConfigPath only.
+// field keeps the production choice. A provided capability must be fully
+// built; the node takes ownership and closes it on construction failure and
+// on Close, as in production.
 type TestingOverrides struct {
 	// ServiceEnvironment defaults to test, independent of process environment
 	// and build tags. Only explicit dev tests bypass Desktop compatibility.
@@ -52,8 +48,7 @@ type TestingOverrides struct {
 	StoreLocalCache    localcachelayer.Cache
 	StoreCachePolicy   *localcachelayer.Policy
 	StoreCacheMetrics  localcachelayer.Recorder
-	// MailMetrics captures bounded mail outcome, queue, and health observations.
-	// A nil value keeps the production bounded operational telemetry recorder.
+	// A nil MailMetrics keeps the production recorder.
 	MailMetrics mail.DeliveryRecorder
 	Cache       platform.Cache
 	Cluster     platform.Cluster
@@ -71,8 +66,8 @@ type TestingOverrides struct {
 	// hosts without isolation. Production always dials the configured
 	// addresses and requires isolation.
 	ExecutionHostDial executionhost.Dialer
-	// AllowMissingJobs is an explicit lifecycle-only test policy. Production
-	// construction always requires durable Job persistence and a Job runtime.
+	// AllowMissingJobs is for lifecycle-only tests. Production always
+	// requires durable job persistence and a job runtime.
 	AllowMissingJobs bool
 	// BuildInfo replaces the served build information when any field is set.
 	BuildInfo httpapi.BuildInfo
@@ -84,19 +79,16 @@ type TestingOverrides struct {
 	BootstrapSecretWriter io.Writer
 }
 
-// TestingRuntime is a non-owning behavioral projection. Server owns lifecycle
-// exactly as in production and must be Closed.
+// TestingRuntime exposes the built node's handles. Only Server owns
+// resources, and the caller must close it.
 type TestingRuntime struct {
 	Server      *Server
 	Application *app.App
 	Handler     http.Handler
 }
 
-// NewForTesting constructs the production runtime graph with explicit
-// capability overrides and returns the assembled handles alongside the
-// lifecycle-owning Server. Construction uses the same private recipe as New,
-// so startup, readiness, shutdown, and cleanup behavior is identical to
-// production.
+// NewForTesting builds the production graph with overrides, through the same
+// path as New, so startup, readiness and shutdown behave as in production.
 func NewForTesting(ctx context.Context, overrides TestingOverrides) (*TestingRuntime, error) {
 	result, err := composeNode(ctx, testingCompositionInput(overrides))
 	if err != nil {

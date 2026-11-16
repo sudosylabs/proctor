@@ -5,7 +5,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// proctor-healthcheck is the narrow distroless-container readiness probe.
+// Command proctor-healthcheck probes node readiness from inside a distroless
+// container.
 package main
 
 import (

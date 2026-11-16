@@ -15,10 +15,9 @@ import (
 	appmail "github.com/sudosylabs/proctor/server/app/mail"
 )
 
-// MailSender is the application's mail Sender over the configured Mailer:
-// it converts the outbound message, attaches the inline images its HTML
-// references, and classifies a transport failure into the application's
-// retry vocabulary.
+// MailSender is the application's mail Sender over the configured Mailer. It
+// attaches the inline images the HTML references and maps transport failures
+// to the application's retry outcomes.
 type MailSender struct {
 	mailer Mailer
 	assets *appmail.InlineAssets

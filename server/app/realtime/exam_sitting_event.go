@@ -22,9 +22,8 @@ type sittingBoardInvalidationData struct {
 	ExamSittingID string `json:"exam_sitting_id"`
 }
 
-// NewManagerSittingBoardChangedEvent constructs a selector-only invalidation
-// for currently authorized Exam Sitting viewers. Candidate and Attempt
-// identities never enter its public payload.
+// NewManagerSittingBoardChangedEvent carries no candidate or attempt
+// identity.
 func NewManagerSittingBoardChangedEvent(examID model.ExamID, sittingID model.ExamSittingID) (Event, error) {
 	if !examID.IsValid() || !sittingID.IsValid() {
 		return Event{}, errors.New("manager Sitting board invalidation requires valid Exam and Sitting identities")
@@ -74,8 +73,8 @@ type examSittingContentCorrectedData struct {
 	EffectiveAt        string `json:"effective_at"`
 }
 
-// NewExamSittingContentCorrectedEvent constructs the content-free fact that
-// tells authorized Sitting subscribers to refetch authoritative presentation.
+// NewExamSittingContentCorrectedEvent is a content-free refetch signal for
+// sitting viewers.
 func NewExamSittingContentCorrectedEvent(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -96,10 +95,9 @@ func NewExamSittingContentCorrectedEvent(
 	)
 }
 
-// NewCandidateExamSittingContentCorrectedEvent constructs the independently
-// authorized candidate fact for the same committed correction. Candidate and
-// manager subscriptions deliberately use different actions so later manager
-// payloads cannot become candidate-visible by accident.
+// NewCandidateExamSittingContentCorrectedEvent uses a different action from
+// the manager event, so a later manager payload cannot become visible to
+// candidates by accident.
 func NewCandidateExamSittingContentCorrectedEvent(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -161,8 +159,8 @@ func newExamSittingContentCorrectedEvent(
 	}, nil
 }
 
-// NewExamSittingLifecycleChangedEvent constructs the safe authoritative fact
-// emitted after one committed lifecycle transition or deadline extension.
+// NewExamSittingLifecycleChangedEvent covers a lifecycle transition or a
+// deadline extension.
 func NewExamSittingLifecycleChangedEvent(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -185,8 +183,8 @@ func NewExamSittingLifecycleChangedEvent(
 	)
 }
 
-// NewCandidateExamSittingLifecycleChangedEvent constructs the candidate-safe
-// lifecycle fact under the relationship-only participation action.
+// NewCandidateExamSittingLifecycleChangedEvent is authorized under the
+// participation action.
 func NewCandidateExamSittingLifecycleChangedEvent(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -270,10 +268,8 @@ func validExamSittingLifecycleEventReason(value string) bool {
 	}
 }
 
-// NewExamSittingScheduledEvent tells subscribers holding the view action on a
-// Sitting that it was scheduled. The payload carries the Sitting's state and
-// revision but nothing of the schedule itself: no times, Class, or Exam
-// Revision. state must be Scheduled.
+// NewExamSittingScheduledEvent carries state and revision but nothing of the
+// schedule. state must be Scheduled.
 func NewExamSittingScheduledEvent(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -287,10 +283,8 @@ func NewExamSittingScheduledEvent(
 	return newExamSittingChangedEvent(examSittingScheduledMessage.name, examID, sittingID, state, revision, changedAt)
 }
 
-// NewExamSittingScheduleUpdatedEvent tells Sitting viewers that a Scheduled
-// Sitting's Exam Revision, Class, start, or end was changed. The payload
-// carries the new Sitting revision but not which of those changed or their
-// new values.
+// NewExamSittingScheduleUpdatedEvent carries the new revision, not what
+// changed.
 func NewExamSittingScheduleUpdatedEvent(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -304,9 +298,8 @@ func NewExamSittingScheduleUpdatedEvent(
 	return newExamSittingChangedEvent(examSittingScheduleUpdatedMessage.name, examID, sittingID, state, revision, changedAt)
 }
 
-// NewExamSittingCanceledEvent tells Sitting viewers that a Sitting was
-// canceled before it opened. state must be Canceled, and the payload carries
-// no cancellation reason.
+// NewExamSittingCanceledEvent carries no cancellation reason. state must be
+// Canceled.
 func NewExamSittingCanceledEvent(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,

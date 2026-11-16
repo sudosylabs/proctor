@@ -59,10 +59,10 @@ func (s *Service) authorizeExam(
 	return authorizationDecision{override: action == overrideAction, academicUnitID: examAccess.Exam.AcademicUnitID}, nil
 }
 
-// currentActiveDraft permits an unaudited no-op only after a bounded
-// authoritative read confirms the exact active Draft generation. Apparent
-// no-ops against archived or stale state must reach the audited named Store
-// command so its locked guards remain authoritative.
+// currentActiveDraft lets a no-op skip the audited store command only when a
+// fresh read confirms the active draft at expectedRevision. Against archived
+// or stale state the command must still run so the store's locked guards
+// decide.
 func (s *Service) currentActiveDraft(
 	ctx context.Context,
 	inv invocation.Invocation,

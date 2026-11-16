@@ -17,8 +17,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// examExportsHandlers serves the Exam export routes of one scope: a whole
-// Sitting, or one Submission when submission is set.
+// examExportsHandlers serves the export routes of one scope: a whole
+// sitting, or one submission when submission is set.
 type examExportsHandlers struct {
 	app        *exam.Exports
 	submission bool
@@ -269,7 +269,7 @@ func (h examExportsHandlers) open(request route.Request) (route.ProtocolResult, 
 
 	headers := privateNoStoreHeaders()
 	headers.Set("Content-Type", "application/zip")
-	// The name carries only the export ID, so no Exam or candidate name ends
+	// The name carries only the export ID, so no exam or candidate name ends
 	// up in a browser's download history.
 	headers.Set("Content-Disposition", `attachment; filename="exam-export-`+query.ExportID.String()+`.zip"`)
 	headers.Set("ETag", `"`+opened.Export.ArchiveSHA256+`"`)

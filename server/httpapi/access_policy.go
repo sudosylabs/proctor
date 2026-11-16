@@ -297,7 +297,7 @@ func requiredAccessPolicySettings(body accessPolicySettingsRequest) (model.Acces
 		return model.AccessPolicySettings{}, false, err
 	}
 
-	// A Session length is required but may be null, which keeps the
+	// A session length is required but may be null, which keeps the
 	// deployment default; a length below one minute is malformed.
 	requiredMinutes := func(field string, value route.Optional[int]) (int, error) {
 		if !value.IsSet() {
@@ -400,7 +400,7 @@ func accessPolicyResponseFromView(view administration.AccessPolicyView) accessPo
 	return response
 }
 
-// optionalMinutes presents an unset Session length as null.
+// optionalMinutes presents an unset session length as null.
 func optionalMinutes(minutes int) *int {
 	if minutes <= 0 {
 		return nil

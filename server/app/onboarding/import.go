@@ -30,15 +30,13 @@ type UploadOnboardingImportCommand struct {
 	ScopeType model.RoleScopeType
 	ScopeID   string
 	RoleID    model.RoleID
-	// FileName is the uploaded file's name when the uploader gave one: it is
-	// trimmed and must be a base name of 1 to 255 runes.
+	// FileName is optional; it must be a base name of 1 to 255 runes.
 	FileName *string
 	Body     io.Reader
 }
 
-// OnboardingImportView is what a caller reads of one onboarding import or
-// Student Progression: its target, lifecycle state, row counts and Jobs. It
-// carries no uploaded row content and none of the frozen actor Principal.
+// OnboardingImportView summarizes an import or student progression. It
+// carries no uploaded row content and nothing of the frozen actor principal.
 type OnboardingImportView struct {
 	ID                  model.OnboardingImportID
 	Mode                model.OnboardingImportMode
@@ -50,8 +48,8 @@ type OnboardingImportView struct {
 	SourceClassID       model.ClassID
 	DestinationPeriodID model.AcademicPeriodID
 	DestinationClassID  model.ClassID
-	// SourceClassName and DestinationClassName are the Classes' display
-	// names, set only on student progression reads and listings.
+	// SourceClassName and DestinationClassName are set only for student
+	// progressions.
 	SourceClassName      string
 	DestinationClassName string
 	EffectiveAt          time.Time
@@ -75,9 +73,7 @@ type OnboardingImportView struct {
 	FileName             string
 }
 
-// OnboardingImportRowView is the safe projection of one import row: where it
-// sits in the file, what it would do and how it ended, without the email
-// address or names the row holds.
+// OnboardingImportRowView omits the email address and names the row holds.
 type OnboardingImportRowView struct {
 	RowNumber    int
 	Reference    string
@@ -89,21 +85,16 @@ type OnboardingImportRowView struct {
 	ResourceID   string
 }
 
-// ListOnboardingImportsQuery selects one page of administrative imports,
-// newest first. States is an optional closed-state filter; BeforeCreatedAt
-// and BeforeID continue after the previous page's last item, both set or both
-// zero.
+// ListOnboardingImportsQuery selects one page of administrative imports.
+// BeforeCreatedAt and BeforeID are both set or both zero.
 type ListOnboardingImportsQuery struct {
-	States []model.OnboardingImportState
-	// Ascending reads oldest first; the default is newest first.
+	States          []model.OnboardingImportState
 	Ascending       bool
 	BeforeCreatedAt time.Time
 	BeforeID        model.OnboardingImportID
 	Limit           int
 }
 
-// requireImports refuses an onboarding import use case on a Service built
-// without onboarding imports.
 func (s *Service) requireImports() error {
 	if s.imports == nil {
 		return apperror.New("onboarding_import.unavailable")
@@ -111,7 +102,7 @@ func (s *Service) requireImports() error {
 	return nil
 }
 
-// UploadOnboardingImport stages an onboarding import file and proposes its parse Job.
+// UploadOnboardingImport stages an import file and queues its parse job.
 func (s *Service) UploadOnboardingImport(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -230,7 +221,8 @@ func newOnboardingImportJob(kind model.JobType, id model.OnboardingImportID, at 
 	return model.NewJob(model.NewJobID(), kind, command, string(kind)+":"+id.String(), at, at, 8)
 }
 
-// GetOnboardingImport reads one onboarding import and its rows.
+// GetOnboardingImport reads one import with its rows; a filter preview
+// reads as absent here.
 func (s *Service) GetOnboardingImport(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -239,10 +231,9 @@ func (s *Service) GetOnboardingImport(
 	return s.getImport(ctx, inv, id, "")
 }
 
-// countOpenOnboardingImports counts the unexpired, unfinished administrative
-// imports within the caller's onboarding_batch.view scopes, the authority
-// GetOnboardingImport checks for those modes, stopping at maximum. Student
-// progressions are authorized per Class pair and are not counted.
+// countOpenOnboardingImports authorizes like GetOnboardingImport and stops at
+// maximum. Student progressions are authorized per class pair and are not
+// counted.
 func (s *Service) countOpenOnboardingImports(ctx context.Context, inv invocation.Invocation, maximum int) (int, error) {
 	if err := s.requireImports(); err != nil {
 		return 0, err
@@ -300,11 +291,8 @@ func (s *Service) getImport(
 }
 
 // ListOnboardingImports lists the unexpired administrative imports the caller
-// could read one by one: the onboarding_batch.view authority is resolved once
-// into a scope and recorded as one authorization decision, as the Invitation
-// listing does. Student progression aggregates authorize through Class
-// progression authority and stay on their own surface, so they are never
-// listed here. Items carry the summary projection without rows.
+// could read one by one, recorded as one authorization decision. Student
+// progressions authorize per class and are never listed here.
 func (s *Service) ListOnboardingImports(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -401,10 +389,9 @@ func (s *Service) authorizeImport(
 	return nil
 }
 
-// requireImportMode refuses an import reached through the surface of another
-// mode, as if it did not exist. The onboarding import surface (expected "")
-// serves every mode but the academic administration filter, whose rows name
-// Users and so are shown only through its own visibility-filtered surface.
+// requireImportMode reads an import of another mode as absent. The general
+// surface (expected "") never serves filter previews, whose rows name users
+// and are shown only through their own visibility-filtered surface.
 func requireImportMode(value *store.OnboardingImport, expected model.OnboardingImportMode) error {
 	if value == nil {
 		return apperror.New("request.invalid")

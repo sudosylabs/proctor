@@ -47,17 +47,10 @@ var restrictedUsernames = map[string]struct{}{
 	"system":  {},
 }
 
-// User is one login-capable account. It intentionally does not contain a
-// permanent teacher/student enum: Affiliation, AcademicUnitMember, ClassMember,
-// and RoleBinding describe the user's contextual academic relationships.
-//
-// Password hashes and external-provider subjects live in separate credential
-// and identity models so an account can use more than one authentication
-// method without overloading the profile.
-//
-// Domain time is UTC time.Time. Optional lifecycle instants use OptionalTime.
-// Soft archive uses ArchivedAt. Revision supports optimistic
-// concurrency on profile updates.
+// User is one login-capable account. There is no teacher or student flag:
+// affiliations, memberships and role bindings describe the user's academic
+// relationships. Password hashes and provider subjects live in their own
+// models so an account can use several sign-in methods.
 type User struct {
 	ID                          UserID
 	CreatedAt                   time.Time
@@ -81,7 +74,8 @@ type User struct {
 	ProfilePictureChangedAt     OptionalTime
 }
 
-// ProfilePictureKind says whether a User's picture is their own upload or the generated default.
+// ProfilePictureKind says whether a user's picture is their own upload or the
+// generated default.
 type ProfilePictureKind string
 
 const (
@@ -89,7 +83,8 @@ const (
 	ProfilePictureDefault ProfilePictureKind = "default"
 )
 
-// ProfilePictureKind reports which picture the User's profile picture route serves.
+// ProfilePictureKind reports which picture the user's profile picture route
+// serves.
 func (u *User) ProfilePictureKind() ProfilePictureKind {
 	if u != nil && !u.CustomProfilePictureFileID.IsZero() {
 		return ProfilePictureCustom
@@ -97,7 +92,8 @@ func (u *User) ProfilePictureKind() ProfilePictureKind {
 	return ProfilePictureDefault
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
+// PrepareCreate stamps the ID and creation time and fills defaults (username,
+// locale, time zone, picture seed); it does nothing on nil.
 func (u *User) PrepareCreate(id UserID, at time.Time) {
 	if u == nil {
 		return
@@ -125,9 +121,8 @@ func (u *User) PrepareCreate(id UserID, at time.Time) {
 	}
 }
 
-// PrepareUpdate applies the application-selected transition time and normalizes
-// profile fields. Callers that need optimistic concurrency must manage
-// Revision separately.
+// PrepareUpdate stamps the update time and normalizes the profile. It does not
+// bump Revision; callers that need optimistic concurrency manage it.
 func (u *User) PrepareUpdate(at time.Time) {
 	if u == nil {
 		return
@@ -139,9 +134,9 @@ func (u *User) PrepareUpdate(at time.Time) {
 	}
 }
 
-// UserProfileChanges carries only the fields that the generic profile command
-// owns. Mailbox and verification state intentionally have no representation
-// here; they change only through the named UserToken aggregates.
+// UserProfileChanges holds only the fields the generic profile command owns.
+// Email and verification state are absent on purpose; they change only
+// through user tokens.
 type UserProfileChanges struct {
 	Username    *string
 	DisplayName *string
@@ -151,7 +146,7 @@ type UserProfileChanges struct {
 	Timezone    *string
 }
 
-// ApplyProfileChanges applies the non-nil generic profile fields from changes.
+// ApplyProfileChanges applies the non-nil fields of changes.
 func (u *User) ApplyProfileChanges(changes *UserProfileChanges) {
 	if u == nil || changes == nil {
 		return
@@ -177,11 +172,10 @@ func (u *User) ApplyProfileChanges(changes *UserProfileChanges) {
 }
 
 // ContainsControlCharacter reports whether value holds a Unicode control
-// character (general category Cc: C0 including tab, CR and LF, DEL, and C1).
-// Profile names are single-line presentation text that mail headers and
-// bodies embed, so they reject these outright. Format characters (Cf) such as
-// the zero-width joiner stay legal because some scripts need them; the
-// directional overrides among them are removed by SanitizeUnicode.
+// character (category Cc, including tab, CR and LF). Profile names are
+// embedded in mail headers and bodies, so they reject these. Format characters
+// (Cf) such as the zero-width joiner stay legal because some scripts need
+// them; SanitizeUnicode removes the directional overrides among them.
 func ContainsControlCharacter(value string) bool {
 	return strings.IndexFunc(value, unicode.IsControl) >= 0
 }
@@ -199,7 +193,7 @@ func (u *User) normalize() {
 	u.Timezone = SanitizeUnicode(u.Timezone)
 }
 
-// Validate checks rehydrated user state.
+// Validate checks the user's fields, for new and stored values alike.
 func (u *User) Validate() error {
 	const where = "User.Validate"
 	if u == nil {
@@ -288,18 +282,18 @@ func newProfilePictureSeed() string {
 	return hex.EncodeToString(value)
 }
 
-// IsActive reports whether the account is not archived and not disabled.
+// IsActive reports whether the account is neither archived nor disabled.
 func (u *User) IsActive() bool {
 	return u != nil && !u.ArchivedAt.Valid && !u.DisabledAt.Valid
 }
 
-// IsArchived reports soft archive state.
+// IsArchived reports whether ArchivedAt is set; a nil user is not archived.
 func (u *User) IsArchived() bool {
 	return u != nil && u.ArchivedAt.Valid
 }
 
-// Auditable returns a deliberately safe audit projection. Profile PII is
-// omitted; lifecycle times remain as Unix milliseconds for wire compatibility.
+// Auditable returns the fields safe to audit, without profile PII and with
+// times as Unix milliseconds.
 func (u *User) Auditable() map[string]any {
 	if u == nil {
 		return map[string]any{}
@@ -317,7 +311,7 @@ func (u *User) Auditable() map[string]any {
 	}
 }
 
-// IsValidUsername validates the normalized public username.
+// IsValidUsername reports whether value is a valid normalized public username.
 func IsValidUsername(value string) bool {
 	if len(value) == 0 || len(value) > UserUsernameMaxLength || !validUsername.MatchString(value) {
 		return false
@@ -326,8 +320,8 @@ func IsValidUsername(value string) bool {
 	return !restricted
 }
 
-// IsValidEmail accepts only a normalized plain mailbox address, not a display
-// name containing an address.
+// IsValidEmail accepts only a normalized bare mailbox address, not one with a
+// display name.
 func IsValidEmail(value string) bool {
 	if value == "" || len(value) > UserEmailMaxLength || strings.ToLower(value) != value {
 		return false

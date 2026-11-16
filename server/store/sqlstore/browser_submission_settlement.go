@@ -15,7 +15,7 @@ import (
 )
 
 // Each source owns a nonrefundable metadata reservation. This bounds the whole
-// Attempt inventory even across Participation generations and retirement stubs.
+// attempt inventory even across participation generations and retirement stubs.
 const maximumAttemptBrowserSources = model.DeliveryMetadataLimitBytes / model.BrowserOwnerReservationBytes
 
 func updateBrowserSourceSettlement(ctx context.Context, tx *sqlxTxWrapper, status *model.BrowserSourceStatus) error {
@@ -189,13 +189,13 @@ func settleSubmissionBrowserSources(
 
 	value, err := browserSubmissionSettlement(ctx, tx, attempt)
 	// Browser delivery uncertainty has its own changing inventory. It is not an
-	// immutable Focus Loss discrepancy or an automatically generated Flag.
+	// immutable focus loss discrepancy or an automatically generated flag.
 	return 0, value, err
 }
 
-// Exhaustion is a settlement transition. The caller holds Sitting then Attempt;
-// every affected source, pending-byte charge and Review changes in that transaction.
-// An empty Participation selects every source in the Attempt.
+// Exhaustion is a settlement transition. The caller holds sitting then attempt;
+// every affected source, pending-byte charge and review changes in that transaction.
+// An empty participation selects every source in the attempt.
 func settleExhaustedBrowserSources(
 	ctx context.Context,
 	tx *sqlxTxWrapper,

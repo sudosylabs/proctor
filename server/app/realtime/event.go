@@ -15,13 +15,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// Event is a transport-neutral, past-tense application fact published
-// after durable commit. Sequence is never assigned here: each owning connection
-// stamps sequence at the WebSocket boundary.
-//
-// JSON field names match the existing cluster publication payload so multi-node
-// peers remain wire-compatible while ownership of wire DTOs moves outward.
-// Cluster fan-out is always best-effort; there is no durable delivery class.
+// Event is a past-tense fact published after commit. It has no sequence:
+// each connection stamps its own at the socket.
 type Event struct {
 	ID       string
 	Name     string
@@ -45,7 +40,7 @@ func (e Event) Clone() Event {
 	return cloned
 }
 
-// ValidateForPublish checks local publication invariants. It performs no I/O.
+// ValidateForPublish checks the event's invariants without I/O.
 func (e Event) ValidateForPublish() error {
 	if e.ID != "" && !model.IsValidOpaqueID(e.ID) {
 		return errors.New("realtime event ID is invalid")
@@ -67,7 +62,7 @@ func (e Event) ValidateForPublish() error {
 		}
 	} else {
 		// An event may address an owning scope the action accepts, as an
-		// onboarding import's Academic Unit or Class.
+		// onboarding import's academic unit or class.
 		definition, ok := model.DefinitionForAction(e.Action)
 		if !ok || e.Resource.Validate() != nil || !definition.AcceptsResource(e.Resource.Type) {
 			return errors.New("realtime event authorization target is invalid")

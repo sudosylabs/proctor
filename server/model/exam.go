@@ -20,8 +20,8 @@ const (
 	ExamInstructionsMarkdownMaxBytes = 64 * 1024
 )
 
-// Exam is the stable authoring identity owned by one Academic Unit. Creator
-// records immutable provenance; OwnerUserID records current responsibility.
+// Exam is the stable authoring identity owned by one academic unit. Creator
+// never changes; OwnerUserID is whoever is responsible now.
 type Exam struct {
 	ID                ExamID
 	AcademicUnitID    AcademicUnitID
@@ -89,8 +89,8 @@ func (e *Exam) Validate() error {
 
 func (e *Exam) IsArchived() bool { return e != nil && e.ArchivedAt.Valid }
 
-// Archive retires an active Exam without deleting its authored or historical
-// state. Archive time is immutable and advances the Exam's optimistic revision.
+// Archive retires an active exam without deleting its authored or historical
+// state, and bumps the revision. The archive time never changes afterwards.
 func (e *Exam) Archive(at time.Time) error {
 	if e == nil {
 		return invalidModelError("Exam.Archive", "exam", "value", "is required", "")
@@ -134,8 +134,8 @@ func (e *Exam) ResourceID() string {
 	return e.ID.String()
 }
 
-// ExamDraft is the single mutable authoring state addressed through its Exam.
-// Published Exam Revisions are separate immutable snapshots.
+// ExamDraft is the one mutable authoring state of an exam. Published revisions
+// are separate immutable snapshots.
 type ExamDraft struct {
 	ExamID               ExamID
 	Title                string
@@ -205,9 +205,9 @@ func (d *ExamDraft) Validate() error {
 	return nil
 }
 
-// ApplyBrowserPolicy replaces the complete authored browser enforcement value.
-// Rules are canonicalized before comparison so authored order and URL spelling
-// cannot manufacture a Draft change.
+// ApplyBrowserPolicy replaces the whole authored browser policy. Rules are
+// canonicalized before comparison so rule order and URL spelling cannot make a
+// draft change.
 func (d *ExamDraft) ApplyBrowserPolicy(policy BrowserPolicy, at time.Time) (bool, error) {
 	if d == nil {
 		return false, invalidModelError("ExamDraft.ApplyBrowserPolicy", "exam_draft", "value", "is required", "")
@@ -247,9 +247,9 @@ func (d *ExamDraft) ApplyBrowserPolicy(policy BrowserPolicy, at time.Time) (bool
 	return true, nil
 }
 
-// ApplyTextPatch updates only authored title and instructions fields. Nil
-// pointers preserve the current value; a non-nil empty instructions value
-// clears the Markdown. A validated no-op leaves revision and time untouched.
+// ApplyTextPatch updates the title and instructions. A nil pointer keeps the
+// current value and an empty instructions value clears it. A no-op leaves the
+// revision and time untouched.
 func (d *ExamDraft) ApplyTextPatch(title, instructionsMarkdown *string, at time.Time) (bool, error) {
 	if d == nil || title == nil && instructionsMarkdown == nil {
 		return false, invalidModelError("ExamDraft.ApplyTextPatch", "exam_draft", "fields", "at least one authored field is required", "")
@@ -276,9 +276,9 @@ func (d *ExamDraft) ApplyTextPatch(title, instructionsMarkdown *string, at time.
 	return true, nil
 }
 
-// ApplyFocusLossPolicy replaces only the configurable Focus Loss rule. The
-// required Connection Loss rule and every other Draft field remain unchanged.
-// A validated no-op leaves revision and time untouched.
+// ApplyFocusLossPolicy replaces only the configurable focus loss rule; the
+// required connection loss rule stays. A no-op leaves the revision and time
+// untouched.
 func (d *ExamDraft) ApplyFocusLossPolicy(policy FocusLossPolicy, at time.Time) (bool, error) {
 	if d == nil {
 		return false, invalidModelError("ExamDraft.ApplyFocusLossPolicy", "exam_draft", "value", "is required", "")
@@ -300,8 +300,8 @@ func (d *ExamDraft) ApplyFocusLossPolicy(policy FocusLossPolicy, at time.Time) (
 	return true, nil
 }
 
-// ApplyExecutionPolicy replaces the Draft's execution policy. Whether the
-// profile it names is usable is the Store's and publication's question.
+// ApplyExecutionPolicy replaces the draft's execution policy. Whether the
+// profile it names is usable is checked by the store and at publication.
 func (d *ExamDraft) ApplyExecutionPolicy(policy ExecutionPolicy, at time.Time) (bool, error) {
 	if d == nil {
 		return false, invalidModelError("ExamDraft.ApplyExecutionPolicy", "exam_draft", "value", "is required", "")
@@ -324,7 +324,7 @@ func (d *ExamDraft) ApplyExecutionPolicy(policy ExecutionPolicy, at time.Time) (
 	return true, nil
 }
 
-// ExamManager grants authoring responsibility independently of role grants.
+// ExamManager grants authoring responsibility independently of role bindings.
 type ExamManager struct {
 	ExamID          ExamID
 	UserID          UserID
@@ -350,7 +350,8 @@ func (m *ExamManager) Validate() error {
 
 var _ Auditable = (*Exam)(nil)
 
-// ApplyNativePolicy replaces optional family selections while preserving the mandatory baseline.
+// ApplyNativePolicy replaces the optional family selections; the mandatory
+// baseline always stays.
 func (d *ExamDraft) ApplyNativePolicy(policy NativeSecurityPolicy, at time.Time) (bool, error) {
 	if d == nil {
 		return false, invalidModelError("ExamDraft.ApplyNativePolicy", "exam_draft", "value", "is required", "")

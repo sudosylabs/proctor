@@ -22,22 +22,22 @@ var (
 	errRetentionPolicyInvalid          = errors.New("retention policy is invalid")
 )
 
-// RetentionPolicy records the Institution's retention preferences. Saving it
-// does not authorize deletion; separate revision-bound approval is required.
+// RetentionPolicy records the institution's retention preferences. Saving it
+// authorizes no deletion; that needs a separate revision-bound approval.
 type RetentionPolicy struct {
 	InstitutionID InstitutionID
 	Revision      int64
 	RetentionPolicySettings
-	// AutomaticDeletionEnabled is an authoritative read projection of the
-	// separate control for this exact revision, never writable configuration.
+	// AutomaticDeletionEnabled mirrors the separate control for this exact
+	// revision; it is read-only, never configuration.
 	AutomaticDeletionEnabled bool
 	CreatedAt                time.Time
 	UpdatedAt                time.Time
 }
 
-// RetentionPolicySettings is a complete replacement. Zero means no configured
-// expiry (or no configured grace period), never immediate deletion. Days are
-// durations of 24 hours; no calendar or timezone-dependent calculation is used.
+// RetentionPolicySettings is a complete replacement. Zero means no expiry (or
+// no grace period), never immediate deletion. A day is 24 hours, with no
+// calendar or time zone arithmetic.
 type RetentionPolicySettings struct {
 	SubmissionRetentionDays          int
 	IntegrityRetentionDays           int
@@ -49,8 +49,8 @@ type RetentionPolicySettings struct {
 	CandidateNotices                 bool
 }
 
-// NewInitialRetentionPolicy preserves all records without selecting retention
-// periods for the Institution. It is persisted atomically with bootstrap.
+// NewInitialRetentionPolicy keeps every record and sets no retention periods;
+// bootstrap stores it atomically.
 func NewInitialRetentionPolicy(institutionID InstitutionID, at time.Time) *RetentionPolicy {
 	at = TimeUTC(at)
 	return &RetentionPolicy{InstitutionID: institutionID, Revision: 1, CreatedAt: at, UpdatedAt: at}
@@ -90,8 +90,8 @@ func (p *RetentionPolicy) Validate() error {
 	return p.RetentionPolicySettings.Validate()
 }
 
-// Replace applies an optimistic replacement. A no-op preserves the revision
-// and time. A rejected replacement leaves the policy unchanged.
+// Replace applies a replacement fenced on expectedRevision. A no-op keeps the
+// revision and time, and a rejected one leaves the policy unchanged.
 func (p *RetentionPolicy) Replace(expectedRevision int64, settings RetentionPolicySettings, at time.Time) error {
 	if p.Validate() != nil || settings.Validate() != nil || at.IsZero() {
 		return errRetentionPolicyInvalid
@@ -124,7 +124,7 @@ func (p *RetentionPolicy) Clone() *RetentionPolicy {
 	return &clone
 }
 
-// Auditable contains only bounded policy values, never examination content.
+// Auditable returns only bounded policy values, never examination content.
 func (p *RetentionPolicy) Auditable() map[string]any {
 	if p == nil {
 		return map[string]any{}

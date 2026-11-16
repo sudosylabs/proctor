@@ -20,7 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// RequestScreenClipCommand is an Exam Manager's request for a range of a
+// RequestScreenClipCommand is a manager's request for a range of a
 // candidate's recorded screen. End may lie a little in the future; Desktop
 // then waits for it before cutting the clip.
 type RequestScreenClipCommand struct {
@@ -32,16 +32,15 @@ type RequestScreenClipCommand struct {
 	IdempotencyKey string
 }
 
-// RequestScreenClipResult is a committed request, without its private reason.
+// RequestScreenClipResult never carries the private reason.
 type RequestScreenClipResult struct {
 	Clip     store.ExamAttemptScreenClipView
 	Replayed bool
 }
 
-// RequestScreenClip authorizes the exact Sitting, audits the attempt, and
-// saves the request. It is refused when the Exam does not record the screen,
-// once the Attempt has ended, and beyond the per-Attempt limit. A request made
-// while the Attempt is suspended waits until the candidate resumes.
+// RequestScreenClip is refused when the exam does not record the screen, once
+// the attempt has ended, and beyond the per-attempt limit. A request made while
+// the attempt is suspended waits until the candidate resumes.
 func (s *Service) RequestScreenClip(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -80,8 +79,8 @@ func (s *Service) RequestScreenClip(
 		return RequestScreenClipResult{}, err
 	}
 	if management.Override {
-		// Only the Sitting's Exam Managers may ask for a candidate's screen;
-		// a management override does not reach it.
+		// Only the sitting's managers may ask for a candidate's screen; a
+		// management override does not reach it.
 		return RequestScreenClipResult{}, apperror.New("authorization.denied")
 	}
 	sitting, err := s.sittings.Resolve(ctx, command.SittingID)
@@ -122,9 +121,8 @@ func (s *Service) RequestScreenClip(
 	return RequestScreenClipResult{Clip: stored.Clip, Replayed: stored.Replayed}, nil
 }
 
-// publishScreenClipsRequested tells the candidate's Desktop to read its
-// pending clip requests now. It is a hint: Desktop also polls, so a lost hint
-// only delays the request, and a hint with nothing pending is harmless.
+// publishScreenClipsRequested is only a hint: Desktop also polls, so a lost
+// hint delays the request, and a hint with nothing pending is harmless.
 func (s *Service) publishScreenClipsRequested(
 	ctx context.Context,
 	sittingID model.ExamSittingID,
@@ -141,8 +139,7 @@ func (s *Service) publishScreenClipsRequested(
 	}
 }
 
-// PendingScreenClips returns the requests the candidate's Desktop has not
-// taken yet, through its live Connection.
+// PendingScreenClips returns the requests Desktop has not taken yet.
 func (s *Service) PendingScreenClips(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -160,8 +157,8 @@ func (s *Service) PendingScreenClips(
 	return clips, nil
 }
 
-// TakeScreenClip records that the candidate's Desktop took a request and is
-// recording what remains of its range. Taking it again changes nothing.
+// TakeScreenClip records that Desktop took a request; taking it again changes
+// nothing.
 func (s *Service) TakeScreenClip(
 	ctx context.Context,
 	inv invocation.Invocation,

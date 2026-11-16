@@ -34,9 +34,9 @@ import (
 	"github.com/sudosylabs/proctor/server/plugin"
 )
 
-// Settings is an OpenID Connect provider's settings document. Issuer
-// discovery is deliberate: it keeps the issuer consistent and lets a
-// standards-compliant provider rotate endpoints and signing keys.
+// Settings is an OpenID Connect provider's settings document. Endpoints come
+// from issuer discovery, not settings, so the provider can rotate endpoints
+// and signing keys without a configuration change.
 type Settings struct {
 	Issuer           string                    `json:"Issuer"`
 	ClientID         string                    `json:"ClientID"`
@@ -355,8 +355,8 @@ func (p *Provider) Complete(
 	}
 
 	if !request.AuthenticationStartedAt.IsZero() {
-		// OIDC Core requires auth_time with max_age. Issued-at is never
-		// accepted as substitute proof of a fresh end-user authentication.
+		// OIDC Core requires auth_time when max_age is sent; iat is not proof
+		// of a fresh authentication.
 		if len(claims["auth_time"]) == 0 ||
 			authenticatedAt < request.AuthenticationStartedAt.Truncate(time.Second).UnixMilli() ||
 			authenticatedAt > p.now().UnixMilli() {

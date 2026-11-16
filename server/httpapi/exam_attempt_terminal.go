@@ -126,7 +126,7 @@ type openTerminalRequest struct {
 	Rows int `json:"rows,omitempty"`
 }
 
-// terminalResponse describes one terminal on the Attempt's current machine.
+// terminalResponse describes one terminal on the attempt's current machine.
 type terminalResponse struct {
 	Number       int                                `json:"number"`
 	Tag          model.AttemptEnvironmentProcessTag `json:"tag"`
@@ -178,7 +178,6 @@ func terminalTag(request route.Request) (model.AttemptEnvironmentProcessTag, err
 	return environment.TerminalTag(number), nil
 }
 
-// terminalAccess is the candidate access a terminal route presents.
 func terminalAccess(request route.Request) (environment.CandidateAccess, error) {
 	access, err := candidateAccess(request)
 	if err != nil {
@@ -220,9 +219,9 @@ func (h examAttemptTerminalHandlers) open(request route.Request) (route.Result, 
 }
 
 // candidateEnvironmentResponse is the candidate's execution environment.
-// A Workspace entry whose last change is past projection_cursor is not in
+// A workspace entry whose last change is past projection_cursor is not in
 // the machine yet; paths lists the guest paths that are not in the
-// Workspace.
+// workspace.
 type candidateEnvironmentResponse struct {
 	State            model.AttemptEnvironmentState   `json:"state"`
 	Desired          model.AttemptEnvironmentDesired `json:"desired"`

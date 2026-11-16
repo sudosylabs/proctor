@@ -122,8 +122,8 @@ func sessionPurgeDescriptor(handler job.Handler) job.Descriptor {
 	return descriptor
 }
 
-// NewSessionPurge registers the purge of Sessions and credentials that have
-// been retired for longer than retention, proposed hourly.
+// NewSessionPurge registers the hourly purge of sessions and credentials
+// retired for longer than retention.
 func NewSessionPurge(
 	sessions store.SessionStore,
 	credentials store.SessionCredentialStore,

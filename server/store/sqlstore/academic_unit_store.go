@@ -42,8 +42,7 @@ type academicUnitRow struct {
 	Description   string         `db:"description"`
 }
 
-// academicUnitOutcome is the persisted outcome of an idempotent Academic Unit
-// creation: the unit as created.
+// academicUnitOutcome is the saved outcome of an idempotent creation.
 type academicUnitOutcome struct {
 	ID            string             `json:"id"`
 	CreatedAt     time.Time          `json:"created_at"`
@@ -237,7 +236,7 @@ func createAcademicUnit(
 	return candidate, nil
 }
 
-// Get returns the unarchived Academic Unit with id, or a not-found error.
+// Get returns a not-found error when the unit is absent or archived.
 func (s SQLAcademicUnitStore) Get(ctx context.Context, id model.AcademicUnitID) (*model.AcademicUnit, error) {
 	var row academicUnitRow
 	query := s.academicUnitsQuery.Where(sq.Eq{
@@ -294,7 +293,7 @@ func (s SQLAcademicUnitStore) ListAncestors(ctx context.Context, id model.Academ
 	return units, nil
 }
 
-// ListChildren returns the unarchived Academic Units of the Institution whose
+// ListChildren returns the unarchived academic units of the institution whose
 // parent is parentID, ordered by name; an empty parentID lists the root units.
 func (s SQLAcademicUnitStore) ListChildren(
 	ctx context.Context,
@@ -330,7 +329,7 @@ func (s SQLAcademicUnitStore) ListChildren(
 	return units, nil
 }
 
-// Search returns one page of unarchived Academic Units of the Institution
+// Search returns one page of unarchived academic units of the institution
 // selected and ordered by options.
 func (s SQLAcademicUnitStore) Search(
 	ctx context.Context,
@@ -364,7 +363,7 @@ func (s SQLAcademicUnitStore) Search(
 	return units, nil
 }
 
-// GetByName returns the unarchived Academic Unit of the Institution with the
+// GetByName returns the unarchived academic unit of the institution with the
 // exact name, or a not-found error.
 func (s SQLAcademicUnitStore) GetByName(ctx context.Context, institutionID model.InstitutionID, name string) (*model.AcademicUnit, error) {
 	if !institutionID.IsValid() || name == "" {
@@ -479,7 +478,7 @@ func (s SQLAcademicUnitStore) updateAcademicUnit(
 	})
 }
 
-// Archive archives the Academic Unit and completes its audit event. A positive
+// Archive archives the academic unit and completes its audit event. A positive
 // ExpectedRevision must match the stored revision, and active dependents make
 // it a conflict.
 func (s SQLAcademicUnitStore) Archive(

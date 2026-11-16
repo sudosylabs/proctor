@@ -15,8 +15,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// publicFailures presents every live-correction use-case failure: unexpected errors
-// become exam.sitting.correction.unavailable, and protected targets conceal denial and absence.
+// publicFailures turns unexpected errors into exam.sitting.correction.unavailable
+// and reports denial and absence alike as resource.not_found.
 var publicFailures = apperror.Concealment{
 	Unavailable: "exam.sitting.correction.unavailable",
 	Concealed:   []apperror.Code{"exam.sitting.correction.not_found"},

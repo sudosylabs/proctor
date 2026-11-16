@@ -31,8 +31,9 @@ const (
 
 var profilePictureSizes = [...]int{128, 256, 512}
 
-// NormalizeAndStoreProfilePicture validates and converts one bounded upload
-// into the complete canonical profile-picture rendition set.
+// NormalizeAndStoreProfilePicture converts one upload into every rendition
+// size. A size of -1 means unknown; invalid content fails with
+// user.ErrInvalidProfilePicture.
 func (c *Content) NormalizeAndStoreProfilePicture(
 	ctx context.Context,
 	revisionID model.FileRevisionID,
@@ -142,8 +143,8 @@ func (c *Content) NormalizeAndStoreProfilePicture(
 	return renditions, nil
 }
 
-// GenerateAndStoreDefaultProfilePicture stores deterministic default-picture
-// renditions for a stable per-user seed.
+// GenerateAndStoreDefaultProfilePicture stores the default picture for seed;
+// the same seed always gives the same image.
 func (c *Content) GenerateAndStoreDefaultProfilePicture(
 	ctx context.Context,
 	revisionID model.FileRevisionID,
@@ -208,7 +209,7 @@ func (c *Content) GenerateAndStoreDefaultProfilePicture(
 	return renditions, nil
 }
 
-// RenderDefaultProfilePicture renders an unpersisted deterministic fallback.
+// RenderDefaultProfilePicture renders the default picture without storing it.
 func (c *Content) RenderDefaultProfilePicture(ctx context.Context, seed string, size int) (*user.RenderedProfilePicture, error) {
 	if c == nil || c.filesystem == nil {
 		return nil, user.ErrInvalidProfilePicture
@@ -248,8 +249,8 @@ func (c *Content) RenderDefaultProfilePicture(ctx context.Context, seed string, 
 	}, nil
 }
 
-// RemoveProfilePictureRenditions idempotently removes an exact profile-picture
-// rendition manifest.
+// RemoveProfilePictureRenditions removes exactly the listed renditions,
+// ignoring ones already gone.
 func (c *Content) RemoveProfilePictureRenditions(
 	ctx context.Context,
 	revisionID model.FileRevisionID,

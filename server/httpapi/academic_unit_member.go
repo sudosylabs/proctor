@@ -28,7 +28,7 @@ type academicUnitMemberResponse struct {
 
 // academicUnitMemberListItemResponse is one listed membership with who the
 // member is and, for a caller holding role_binding.view on the unit, the
-// member's current Role Bindings scoped exactly to it.
+// member's current role bindings scoped exactly to it.
 type academicUnitMemberListItemResponse struct {
 	academicUnitMemberResponse
 	User academicUnitMemberUserResponse `json:"user"`
@@ -36,7 +36,7 @@ type academicUnitMemberListItemResponse struct {
 }
 
 // academicUnitMemberUserResponse names the member; email is present only for
-// Institution-wide user.view.
+// institution-wide user.view.
 type academicUnitMemberUserResponse struct {
 	DisplayName string `json:"display_name"`
 	Username    string `json:"username"`

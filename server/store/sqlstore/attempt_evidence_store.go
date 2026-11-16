@@ -38,11 +38,11 @@ func (row attemptEvidenceInventoryRow) value() (model.AttemptEvidenceInventory, 
 	return value, validatePersistedModel("attempt_evidence_inventory", value)
 }
 
-// AppendAttemptEvidence stores one Attempt evidence record through the
+// AppendAttemptEvidence stores one attempt evidence record through the
 // environment owner's current lease and incarnation, by that incarnation's
-// author. Concurrent appends for one Attempt serialize on
-// its inventory row; the seal takes the Attempt row for update, so no append
-// interleaves with it, and the schema refuses any record once the Submission
+// author. Concurrent appends for one attempt serialize on
+// its inventory row; the seal takes the attempt row for update, so no append
+// interleaves with it, and the schema refuses any record once the submission
 // exists.
 func (s *SQLExamAttemptWorkspaceStore) AppendAttemptEvidence(
 	ctx context.Context,
@@ -158,7 +158,7 @@ func appendAttemptEvidence(
 	return &store.ExamAttemptEvidenceAppendResult{Evidence: record}, nil
 }
 
-// lockAttemptEvidenceInventory creates the Attempt's empty inventory on
+// lockAttemptEvidenceInventory creates the attempt's empty inventory on
 // its first record and locks it. A sealed inventory accepts nothing.
 func lockAttemptEvidenceInventory(
 	ctx context.Context,
@@ -185,8 +185,8 @@ func lockAttemptEvidenceInventory(
 	return row.value()
 }
 
-// sealedAttemptEvidenceInventory returns the inventory the Attempt's
-// Submission seal fixed.
+// sealedAttemptEvidenceInventory returns the inventory the attempt's
+// submission seal fixed.
 func sealedAttemptEvidenceInventory(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -206,7 +206,7 @@ func sealedAttemptEvidenceInventory(
 	return row.value()
 }
 
-// ListAttemptEvidence pages a sealed Submission's Attempt evidence for
+// ListAttemptEvidence pages a sealed submission's attempt evidence for
 // review, in ID order.
 func (s *SQLExamIntegrityReviewStore) ListAttemptEvidence(
 	ctx context.Context,

@@ -64,16 +64,10 @@ const endedFocusLossAccessSelect = `SELECT a.exam_id, a.exam_sitting_id AS sitti
 	WHERE a.id = ?
 		AND a.candidate_user_id = ?`
 
-// ResolveEndedFocusLossTarget implements store.ExamFocusLossStore: it resolves
-// the audit scope for a Focus Loss report against an ended, sealed Submission
-// without mutating anything.
-//
-// It accepts only the exact candidate, Session, credential, Participation
-// generation, and Connection retained by a sealed Submission whose Attempt is
-// submitted and whose Participation and Connection are terminal. Voluntary
-// sealing records submitted; automatic sealing records sitting_closed for live
-// records and preserves any earlier terminal cause. It exists only to begin the
-// discrepancy audit.
+// ResolveEndedFocusLossTarget resolves the audit scope of a late report
+// against a sealed submission without mutating anything. It accepts only the
+// exact candidate, session, credential, generation and connection the
+// submission retained.
 func (s *SQLExamFocusLossStore) ResolveEndedFocusLossTarget(ctx context.Context,
 	access store.ExamAttemptFocusLossAccess,
 ) (*store.ExamAttemptFocusLossDiscrepancyTarget, error) {
@@ -110,16 +104,10 @@ func validateEndedFocusLoss(input *store.ExamAttemptFocusLossDiscrepancy) error 
 	return nil
 }
 
-// RecordEndedFocusLoss implements store.ExamFocusLossStore: it retains a late
-// Focus Loss report as a bounded Integrity Discrepancy on the sealed
-// Submission. A matching same-sequence report is a duplicate; a differing one
-// is a focus_loss_sequence conflict.
-//
-// It retains at most the bounded discrepancy maximum. It serializes on the
-// sealed Submission, accepts only a sequence above the submitted high-water and
-// prior discrepancy high-water, records explicit gaps, completes audit
-// atomically, and never mutates Submission integrity or a draft, finalized or
-// released Review. Exact same-sequence semantics replay.
+// RecordEndedFocusLoss keeps a late report as a bounded discrepancy on the
+// sealed submission. A matching same-sequence report is a duplicate; a
+// differing one is a focus_loss_sequence conflict. It serializes on the
+// submission and never changes submission integrity or a review.
 func (s *SQLExamFocusLossStore) RecordEndedFocusLoss(ctx context.Context,
 	input *store.ExamAttemptFocusLossDiscrepancy,
 ) (*store.ExamAttemptFocusLossDiscrepancyResult, error) {
@@ -239,7 +227,7 @@ func (s *SQLExamFocusLossStore) RecordEndedFocusLoss(ctx context.Context,
 
 			// A waiver binds the accepted discrepancy count, so a new late row
 			// invalidates it exactly as late Browser or native delivery does.
-			// Finalized and released Reviews stay unchanged by contract.
+			// Finalized and released reviews stay unchanged by contract.
 			if _, err = tx.Exec(
 				ctx,
 				`UPDATE submission_review_waivers SET inventory_invalidated = true WHERE submission_id = ?`,
@@ -269,7 +257,7 @@ func lockEndedFocusLossAccess(
 	mutating bool,
 ) (endedFocusLossAccessRow, error) {
 	var row endedFocusLossAccessRow
-	// Records completion and retirement lock the Sitting before its Submissions.
+	// Records completion and retirement lock the sitting before its submissions.
 	// Use that same order so late accepted data cannot race a completion check.
 	var sittingID string
 	if err := tx.Get(

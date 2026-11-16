@@ -34,8 +34,8 @@ type ReleaseRetentionHoldCommand struct {
 	IdempotencyKey   string
 }
 
-// ListRetentionHolds returns one page of Retention Holds within an Exam
-// records scope to a caller authorized to manage holds.
+// ListRetentionHolds returns one page of holds within a records scope; the
+// caller needs hold management permission.
 func (r *Records) ListRetentionHolds(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -74,8 +74,8 @@ func (r *Records) ListRetentionHolds(
 	return page, nil
 }
 
-// CreateRetentionHold idempotently places a Retention Hold on an Exam records
-// scope with a recorded reason.
+// CreateRetentionHold idempotently places a hold, with a reason, on a records
+// scope.
 func (r *Records) CreateRetentionHold(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -131,9 +131,9 @@ func (r *Records) CreateRetentionHold(
 	return result.Hold, nil
 }
 
-// ReleaseRetentionHold idempotently releases a Retention Hold, fenced by
-// ExpectedRevision. It requires strong and recent authentication and allows
-// no override.
+// ReleaseRetentionHold idempotently releases a hold, fenced by
+// ExpectedRevision. It requires strong, recent authentication and allows no
+// override.
 func (r *Records) ReleaseRetentionHold(
 	ctx context.Context,
 	inv invocation.Invocation,

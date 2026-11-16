@@ -47,8 +47,7 @@ type passwordParameters struct {
 	keyBytes    uint32
 }
 
-// PasswordHasherDependencies are the collaborators of PasswordHasher;
-// NewPasswordHasher validates them once and PasswordHasher keeps them in deps.
+// PasswordHasherDependencies configures NewPasswordHasher; Recorder may be nil.
 type PasswordHasherDependencies struct {
 	Settings PasswordPolicy
 	Recorder PasswordWorkRecorder
@@ -65,13 +64,13 @@ type PasswordHasher struct {
 	parameters    passwordParameters
 	dummyHash     string
 	work          chan struct{}
-	// hashHook, when set, replaces Hash. Only tests set it, to reach
-	// password work failures and fixed encodings the real derivation never
-	// returns. Production leaves it nil.
+	// hashHook replaces Hash in tests, to reach failures and fixed encodings
+	// the real derivation never returns. Nil in production.
 	hashHook func(context.Context, string) (string, error)
 }
 
-// NewPasswordHasher builds the hasher from the password policy.
+// NewPasswordHasher fails when the Argon2id settings fall outside what
+// parseArgon2id accepts.
 func NewPasswordHasher(deps PasswordHasherDependencies) (*PasswordHasher, error) {
 	settings := deps.Settings
 	if settings.MaximumConcurrentOperations <= 0 {
@@ -107,8 +106,8 @@ func NewPasswordHasher(deps PasswordHasherDependencies) (*PasswordHasher, error)
 	dummyHashes.Lock()
 	dummy := dummyHashes.values[hasher.parameters]
 	if dummy == "" {
-		// Startup completes before requests can use this hasher. The cached
-		// timing hash is neither admitted nor recorded as runtime work.
+		// This runs before any request can reach the hasher, so the timing
+		// hash is neither admitted nor recorded as runtime work.
 		var err error
 		dummy, err = hasher.hashUnchecked("proctor-dummy-password-never-used")
 		if err != nil {
@@ -284,7 +283,6 @@ func (h *PasswordHasher) NeedsRehash(encoded string) bool {
 		uint32(len(key)) != h.parameters.keyBytes //nolint:gosec // G115: parseArgon2id bounds the key to 16..64 bytes.
 }
 
-// maximumPasswordLength is the configured maximum password length in bytes.
 func (h *PasswordHasher) maximumPasswordLength() int {
 	return h.maximumLength
 }
@@ -365,8 +363,8 @@ func parseBoundedParameter(value, prefix string, minimum, maximum uint64) (uint6
 	return parsed, nil
 }
 
-// PasswordPolicy is the immutable password-hashing projection composition
-// supplies so password code does not import deployment config.
+// PasswordPolicy is the password-hashing configuration, kept apart so password
+// code does not import deployment config.
 type PasswordPolicy struct {
 	MinimumLength               int
 	MaximumLength               int

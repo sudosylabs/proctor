@@ -19,14 +19,10 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Node is this node's execution environment runtime: the cluster wake and
-// settle signals, the owner runtime and the execution host clients. It is
-// inert until Start. Close stops the owners, then the cluster senders, then
-// the host clients; machines keep running on their hosts for the next owner.
-//
-// Composition builds it in two steps because the application needs the
-// waker and settle signals before it exists, and the owners need the
-// Attempt service the application builds.
+// Node is this server node's execution environment runtime, inert until
+// Start. It is built in two steps, NewNode then Complete, because the
+// application needs the waker and settle signals before it exists, and the
+// owners need the attempt service the application builds.
 type Node struct {
 	waker   *clusterWaker
 	settles *ClusterSettles
@@ -35,8 +31,7 @@ type Node struct {
 	deps    NodeDependencies
 }
 
-// NodeHosts are the execution host clients the Node's owners and terminals
-// reach machines through. The Node closes them last.
+// NodeHosts are the execution host clients; the Node closes them last.
 type NodeHosts interface {
 	Hosts
 	Close() error
@@ -74,7 +69,7 @@ func NewNode(deps NodeDependencies) (*Node, error) {
 	return &Node{waker: waker, settles: settles, hosts: deps.Hosts, deps: deps}, nil
 }
 
-// Waker wakes an Attempt's owner here and on every peer.
+// Waker wakes an attempt's owner here and on every peer.
 func (n *Node) Waker() Waker { return n.waker }
 
 // Settles delivers the settles owners complete, here or on a peer, to the
@@ -90,7 +85,8 @@ func (n *Node) Report(attemptID model.ExamAttemptID, err error) {
 		logging.String("exam_attempt_id", attemptID.String()), logging.Err(err))
 }
 
-// Complete builds the owners and their runtime over the Attempt service.
+// Complete builds the owners and their runtime over the attempt service. It
+// must run before Start.
 func (n *Node) Complete(attempts *attempt.Service) error {
 	workspace, err := newAttemptWorkspace(attempts)
 	if err != nil {
@@ -133,7 +129,8 @@ func (n *Node) Start(ctx context.Context) error {
 	return n.runtime.Start(ctx)
 }
 
-// Close stops the owners, the cluster senders and the host clients.
+// Close stops the owners, then the cluster senders, then the host clients.
+// Machines keep running on their hosts for the next owner.
 func (n *Node) Close(ctx context.Context) error {
 	return errors.Join(n.runtime.Close(ctx), n.waker.Close(ctx), n.settles.Close(ctx), n.hosts.Close())
 }

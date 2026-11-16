@@ -17,9 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// claimLoop claims and runs Jobs of descriptor's type one at a time until ctx
-// ends, waiting for the poll interval or a Wake after a claim that found
-// nothing.
+// claimLoop runs one job of the descriptor's type at a time until ctx ends.
 func (r *Engine) claimLoop(ctx context.Context, descriptor Descriptor) {
 	defer r.wg.Done()
 	timer := time.NewTimer(0)

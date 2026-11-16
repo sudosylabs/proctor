@@ -26,14 +26,15 @@ const (
 	examSittingSealingMaximumWork = 1000
 )
 
-// ExamSittingSealingCheckpoint is the resumable checkpoint of the Exam Sitting sealing Job.
+// ExamSittingSealingCheckpoint is the resumable checkpoint of the sealing
+// job.
 type ExamSittingSealingCheckpoint struct {
 	AfterAttemptID model.ExamAttemptID `json:"after_attempt_id,omitempty"`
 	Processed      int64               `json:"processed"`
 	Sealed         int64               `json:"sealed"`
 }
 
-// ExamSittingSealingResult is the safe result of the Exam Sitting sealing Job.
+// ExamSittingSealingResult is the result of the sealing job.
 type ExamSittingSealingResult struct {
 	Processed int64                  `json:"processed"`
 	Sealed    int64                  `json:"sealed"`
@@ -77,11 +78,11 @@ func (h examSittingSealingHandler) Run(ctx context.Context, execution job.Execut
 		return job.PermanentFailure("job.checkpoint.invalid", errors.New("Exam Sitting sealing reservation and checkpoint disagree"))
 	}
 
-	// ReserveWork is durable and occurrence-wide, while a process can stop before
-	// it records the corresponding per-Attempt checkpoint. Burn that one
-	// uncertain unit before doing more work. This keeps the hard work cap true
-	// whether the domain transaction committed or not; an unsealed Attempt will
-	// simply consume a later unit (or a continuation Job) when it is seen again.
+	// ReserveWork is durable and occurrence-wide, but a process can stop
+	// before it records the matching checkpoint. Burn that one uncertain unit
+	// first, so the hard work cap holds whether or not the transaction
+	// committed; an unsealed attempt just takes a later unit (or a
+	// continuation job) when it is seen again.
 	if execution.Job.WorkReserved == int(checkpoint.Processed)+1 {
 		checkpoint.Processed++
 		if checkpointErr := checkpointExamSittingSealing(ctx, execution, checkpoint); checkpointErr != nil {
@@ -273,8 +274,6 @@ func (h examSittingSealingHandler) continuePass(
 	return job.Outcome{Kind: job.OutcomeSucceeded, Result: resultDocument}
 }
 
-// enqueueContinuation queues the next sealing pass for a Sitting whose
-// Attempts the bounded pass did not finish.
 func (h examSittingSealingHandler) enqueueContinuation(
 	ctx context.Context,
 	sittingID model.ExamSittingID,
@@ -308,9 +307,9 @@ func (h examSittingSealingHandler) enqueueContinuation(
 	return err
 }
 
-// examSittingSealingFailure fails permanently only for input the Store refused. A
-// database constraint rejection can come from a concurrent transition or clock
-// skew, so it stays retryable within the attempt budget.
+// examSittingSealingFailure fails permanently only for input the store
+// refused. A database constraint rejection can come from a concurrent
+// transition or clock skew, so it stays retryable within the attempt budget.
 func examSittingSealingFailure(err error) job.Outcome {
 	var invalid *store.ErrInvalidInput
 	if (errors.As(err, &invalid) && !store.IsConstraintViolation(err)) || store.IsNotFound(err) {
@@ -329,8 +328,8 @@ func examSittingSealingDescriptor(handler job.Handler) job.Descriptor {
 	return descriptor
 }
 
-// NewExamSittingSealing registers the automatic sealing of Exam
-// Attempts when a Sitting closes.
+// NewExamSittingSealing registers the automatic sealing of attempts when a
+// sitting closes.
 func NewExamSittingSealing(
 	sittings *sitting.Service,
 	attempts *attempt.Service,

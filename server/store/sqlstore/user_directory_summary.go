@@ -21,14 +21,14 @@ import (
 // maximumSummaryUsers bounds one summary read to the largest directory page.
 const maximumSummaryUsers = 200
 
-// validSummaryUserIDs reports whether a page's User IDs are canonical and
+// validSummaryUserIDs reports whether a page's user IDs are canonical and
 // within one page.
 func validSummaryUserIDs(ids []model.UserID) bool {
 	return len(ids) <= maximumSummaryUsers && validVisibilityIDs(ids)
 }
 
-// ListDirectorySummaries returns, for each listed User with any, the current
-// Affiliations and visible current Academic Units, each capped by its limit
+// ListDirectorySummaries returns, for each listed user with any, the current
+// affiliations and visible current academic units, each capped by its limit
 // and counted past it, in one statement.
 func (s SQLUserStore) ListDirectorySummaries(
 	ctx context.Context,
@@ -148,7 +148,7 @@ func (s SQLUserStore) ListDirectorySummaries(
 }
 
 // ListIdentities returns the username, display name and email of each listed
-// User that exists.
+// user that exists.
 func (s SQLUserStore) ListIdentities(ctx context.Context, ids []model.UserID) ([]store.UserIdentity, error) {
 	if !validSummaryUserIDs(ids) {
 		return nil, store.NewErrInvalidInput("user", "identity_ids", nil)

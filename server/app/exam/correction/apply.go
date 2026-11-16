@@ -22,23 +22,22 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// OptionalInstructions replaces the Exam instructions when Present; absent,
-// the correction keeps the current ones.
+// OptionalInstructions replaces the exam instructions only when Present.
+// Markdown must be empty otherwise.
 type OptionalInstructions struct {
 	Present  bool
 	Markdown string
 }
 
-// OptionalBrowserPolicy replaces the Browser Policy when Present; absent, the
-// correction keeps the current one.
+// OptionalBrowserPolicy replaces the browser policy only when Present. Policy
+// must be the zero value otherwise.
 type OptionalBrowserPolicy struct {
 	Present bool
 	Policy  model.BrowserPolicy
 }
 
-// ResourceManifestItem is one Exam Resource of the corrected Revision, in
-// manifest order. A valid StageID selects staged content for it; a zero
-// StageID keeps the content the Resource already has.
+// ResourceManifestItem is one resource of the corrected revision, in manifest
+// order. A zero StageID keeps the resource's current content.
 type ResourceManifestItem struct {
 	ResourceID          model.ExamResourceID
 	DisplayName         string
@@ -61,9 +60,8 @@ type ApplyCommand struct {
 	IdempotencyKey            string
 }
 
-// Result is the committed correction as the after-commit effects need it:
-// the AppliedCorrection facts plus whether candidates must acknowledge it and
-// whether the Store replayed an earlier outcome.
+// Result is AppliedCorrection plus the acknowledgement and replay facts that
+// only the after-commit effects use.
 type Result struct {
 	ExamID                  model.ExamID
 	SittingID               model.ExamSittingID
@@ -78,9 +76,8 @@ type Result struct {
 	Replayed                bool
 }
 
-// AppliedCorrection is the public result of applying a live correction. It
-// deliberately omits the replay and acknowledgement facts that only the
-// after-commit effects consume.
+// AppliedCorrection is what callers get back; it deliberately leaves out the
+// replay and acknowledgement facts.
 type AppliedCorrection struct {
 	ExamID               model.ExamID
 	SittingID            model.ExamSittingID
@@ -107,10 +104,9 @@ func (r Result) applied() AppliedCorrection {
 	}
 }
 
-// ApplyExamSittingCorrection idempotently applies a live correction to a
-// Sitting, publishing a new Exam Revision from changed Exam Instructions,
-// browser policy, or staged Exam Resources. It is fenced by
-// ExpectedSittingRevision and ExpectedCurrentRevisionID.
+// ApplyExamSittingCorrection publishes a new exam revision for the sitting,
+// fenced by ExpectedSittingRevision and ExpectedCurrentRevisionID. A replayed
+// outcome sends no events.
 func (s *Service) ApplyExamSittingCorrection(
 	ctx context.Context,
 	inv invocation.Invocation,

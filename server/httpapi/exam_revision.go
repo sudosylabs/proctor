@@ -23,7 +23,7 @@ type publishExamRevisionRequest struct {
 }
 
 // examRevisionResponse carries publication metadata only. Instructions,
-// canonical policy bytes, resource metadata, Starter Workspace paths and
+// canonical policy bytes, resource metadata, starter workspace paths and
 // content or object identities must never be added here.
 type examRevisionResponse struct {
 	ID                         string                     `json:"id"`

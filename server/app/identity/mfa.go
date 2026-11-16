@@ -41,8 +41,6 @@ const (
 	mfaTOTPWindow        = int64(1)
 )
 
-// mfaMechanicsDependencies are the collaborators of mfaMechanics;
-// newMFAMechanics validates them once and mfaMechanics keeps them in deps.
 type mfaMechanicsDependencies struct {
 	Settings MFAPolicy
 	Sealer   *secretseal.Sealer
@@ -96,8 +94,8 @@ type mfaFactorProof struct {
 	recoveryHash string
 }
 
-// Verification does not consume a factor. The owning aggregate commits replay
-// protection together with the Session transition and its required audit.
+// verifySecondFactor does not consume the factor: the caller commits replay
+// protection together with the session transition and its audit.
 func (s *mfaMechanics) verifySecondFactor(
 	ctx context.Context,
 	persistence store.MFAStore,
@@ -328,9 +326,8 @@ var mfaStoreErrors = apperror.StoreTable{
 		{Kind: apperror.StoreSentinel, Sentinel: store.ErrAuthenticationGenerationChanged, Code: "authentication.mfa.conflict"},
 		{Kind: apperror.StoreSentinel, Sentinel: store.ErrMFAReenrollmentRequired, Code: "authentication.mfa.conflict"},
 	},
-	// A secret sealed with a primary the key-ring fence has moved past means
-	// this node's MFA key configuration is stale: unavailable, not a conflict
-	// the User could resolve.
+	// A secret sealed with a primary the fence has moved past means this
+	// node's key configuration is stale, which the user cannot resolve.
 	Constraints: map[string]apperror.Code{"stale_primary_key": "authentication.mfa.unavailable"},
 	NotFound:    "authentication.mfa.not_found",
 	Conflict:    "authentication.mfa.conflict",
@@ -338,9 +335,9 @@ var mfaStoreErrors = apperror.StoreTable{
 }
 
 // validateMFASecretKeys fails startup when a stored TOTP secret is sealed with
-// a key the configured ring no longer holds. Without it, dropping an old key
-// from Authentication.MFA.DecryptionKeys silently strands every secret sealed
-// with that key until each affected User fails to sign in.
+// a key the configured ring no longer holds. Otherwise dropping a key from
+// Authentication.MFA.DecryptionKeys strands those secrets silently, until each
+// affected user fails to sign in.
 func validateMFASecretKeys(ctx context.Context, persistence store.MFAStore, sealer interface{ HasKey(string) bool }) error {
 	if persistence == nil {
 		return errors.New("MFA secret-key persistence is unavailable")
@@ -376,8 +373,7 @@ func validateMFASecretKeys(ctx context.Context, persistence store.MFAStore, seal
 	return nil
 }
 
-// MFAPolicy is the enrollment and verification policy for TOTP MFA. Key-ring
-// construction remains at the server composition root.
+// MFAPolicy configures TOTP enrollment and verification.
 type MFAPolicy struct {
 	Enabled           bool
 	Issuer            string

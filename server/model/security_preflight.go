@@ -15,9 +15,9 @@ import (
 	"time"
 )
 
-// Security preflight challenges, reports and results are canonical documents
-// of the native security agreement: reports are decoded closed and bound by
-// digest, and results are persisted as replay outcomes and returned verbatim.
+// Preflight challenges, reports and results are canonical documents of the
+// native security agreement: reports decode strictly and are bound by digest,
+// and results are stored as replay results and returned verbatim.
 
 const (
 	SecurityPreflightLifetime = 120 * time.Second
@@ -35,7 +35,7 @@ type SecurityReasonCode string
 const (
 	SecurityReasonPreflightExpired SecurityReasonCode = "preflight_expired"
 	// SecurityReasonNativeRuleUnmet: an enforced native rule is not met, or
-	// cannot be checked, on the state Desktop reported at Start.
+	// cannot be checked, on the state Desktop reported at start.
 	SecurityReasonNativeRuleUnmet SecurityReasonCode = "native_rule_unmet"
 )
 
@@ -66,9 +66,9 @@ func (c SecurityPreflightChallenge) Validate() error {
 }
 
 // SecurityPreflightReport is what Desktop reports when the candidate presses
-// Start: one fresh full state of every activated capability, in the policy's
-// activation order, and its own status for every readiness rule. The exam
-// stream continues from the same states.
+// start: one fresh full state of every activated capability, in activation
+// order, and its own status for every readiness rule. The exam stream
+// continues from the same states.
 type SecurityPreflightReport struct {
 	reportedAtSpelling string
 
@@ -158,9 +158,9 @@ func (r SecurityPreflightReport) Canonical() ([]byte, error) {
 	return encodeCanonicalExamDocument(r)
 }
 
-// EvaluateSecurityPreflight interprets minimized assertions against immutable
-// verified release meaning. It does not authenticate a Session or grant a lease;
-// the owning atomic Store operation must establish those current fences.
+// EvaluateSecurityPreflight interprets minimized assertions against the
+// verified release. It neither authenticates a session nor grants a lease; the
+// atomic store operation must establish those fences.
 func EvaluateSecurityPreflight(
 	challenge SecurityPreflightChallenge,
 	resolved ResolvedNativePolicy,

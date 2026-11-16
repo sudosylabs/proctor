@@ -33,7 +33,7 @@ type SQLRoleStore struct {
 	rolesQuery sq.SelectBuilder
 }
 
-// roleRow is the persisted Role column layout. Domain Role uses
+// roleRow is the persisted role column layout. Domain role uses
 // time.Time / OptionalTime; conversion is at this boundary.
 type roleRow struct {
 	ID          string         `db:"id"`
@@ -417,8 +417,8 @@ func (row roleRow) model() (*model.Role, error) {
 
 var _ store.RoleStore = (*SQLRoleStore)(nil)
 
-// SeedBuiltIn inserts the protected built-in Role without audit for conformance
-// and integration fixtures. Production creates that Role only through
+// SeedBuiltIn inserts the protected built-in role without audit for conformance
+// and integration fixtures. Production creates that role only through
 // InstallationStore.Bootstrap; an architecture test forbids production callers.
 func (s SQLRoleStore) SeedBuiltIn(ctx context.Context, role *model.Role) (*model.Role, error) {
 	if role == nil {
@@ -442,7 +442,7 @@ func (s SQLRoleStore) SeedBuiltIn(ctx context.Context, role *model.Role) (*model
 }
 
 // SeedUpdate is an unaudited fixture write that may also change what the
-// audited Update forbids (moving the owner, or editing a bound Role); production
+// audited Update forbids (moving the owner, or editing a bound role); production
 // code never calls it, which an architecture test enforces.
 func (s SQLRoleStore) SeedUpdate(ctx context.Context, role *model.Role) (*model.Role, error) {
 	if role == nil {

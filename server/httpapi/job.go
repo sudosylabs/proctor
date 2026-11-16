@@ -38,7 +38,7 @@ type jobResponse struct {
 	Progress        *jobProgressResponse `json:"progress,omitempty"`
 	Revision        int64                `json:"revision"`
 	// CreatedByUserID and CreatedByDisplayName name the operator who started
-	// the Job; both are omitted for recurring and system work.
+	// the job; both are omitted for recurring and system work.
 	CreatedByUserID      string `json:"created_by_user_id,omitempty"`
 	CreatedByDisplayName string `json:"created_by_display_name,omitempty"`
 	Subject              string `json:"subject,omitempty"`

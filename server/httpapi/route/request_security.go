@@ -16,9 +16,10 @@ import (
 	"github.com/sudosylabs/proctor/server/internal/weborigin"
 )
 
-// browserRequestPolicy protects unsafe requests, including public operations
-// that create cookies before a Session or double-submit CSRF proof exists.
-// Its authority is the configured public origin, never Host or proxy headers.
+// browserRequestPolicy protects unsafe requests, including public ones that
+// set cookies before a session or CSRF token exists. Its authority is the
+// configured public origin, never Host or proxy headers, which a client or
+// proxy can forge.
 type browserRequestPolicy struct {
 	origin string
 }

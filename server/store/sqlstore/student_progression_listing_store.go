@@ -19,7 +19,7 @@ import (
 )
 
 // studentProgressionSummaryRow is one listed progression with the display
-// names of its two Classes.
+// names of its two classes.
 type studentProgressionSummaryRow struct {
 	onboardingImportRow
 	SourceClassName      string `db:"source_class_name"`
@@ -27,19 +27,19 @@ type studentProgressionSummaryRow struct {
 }
 
 // studentProgressionColumns are the aggregate columns qualified by the
-// progression alias, so the Class joins cannot make them ambiguous.
+// progression alias, so the class joins cannot make them ambiguous.
 var studentProgressionColumns = "oi." + strings.ReplaceAll(onboardingImportColumns, ",", ",oi.")
 
 // studentProgressionListFrom joins each progression to its source and
-// destination Class; both references are mandatory for the mode, so the joins
+// destination class; both references are mandatory for the mode, so the joins
 // neither drop nor duplicate a progression.
 const studentProgressionListFrom = ` FROM onboarding_imports oi
 	JOIN classes sc ON sc.id = oi.source_class_id
 	JOIN classes dc ON dc.id = oi.destination_class_id`
 
 // ListStudentProgressions returns one keyset page of unexpired student
-// progressions whose source and destination Classes both lie inside the
-// visibility, newest first, each with its Classes' display names.
+// progressions whose source and destination classes both lie inside the
+// visibility, newest first, each with its classes' display names.
 func (s SQLInvitationStore) ListStudentProgressions(
 	ctx context.Context,
 	options store.StudentProgressionListOptions,
@@ -117,8 +117,8 @@ func (s SQLInvitationStore) CountStudentProgressions(
 }
 
 // studentProgressionListConditions is every ListStudentProgressions filter but
-// the keyset: the mode, expiry, visibility of both Classes, states, and the
-// exact Period and Class filters. List and Count share it so a total always
+// the keyset: the mode, expiry, visibility of both classes, states, and the
+// exact period and class filters. List and Count share it so a total always
 // counts the listed rows. The expiry test matches GetOnboardingImport, so a
 // listed progression can be read.
 func studentProgressionListConditions(options store.StudentProgressionListOptions) (string, []any, error) {

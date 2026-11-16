@@ -82,10 +82,8 @@ func (s *Service) beginPreflightAudit(
 	})
 }
 
-// PrepareExamSecurityPreflight idempotently starts a security preflight for
-// the caller's desktop against a Sitting, optionally for an existing Attempt,
-// and returns a fresh challenge bound to the reported registry, source
-// manifest, and configuration digests.
+// PrepareExamSecurityPreflight idempotently returns a fresh challenge bound to
+// the reported registry, source manifest and configuration digests.
 func (s *Service) PrepareExamSecurityPreflight(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -156,9 +154,9 @@ func (s *Service) PrepareExamSecurityPreflight(
 	return result, nil
 }
 
-// ReportExamSecurityPreflight idempotently records the desktop's report for a
-// prepared preflight and returns the server's evaluation. The preflight is
-// resolved only for the caller's own user and Session.
+// ReportExamSecurityPreflight idempotently records the report; the server's
+// own evaluation always decides. The preflight is resolved only for the
+// caller's own user and session.
 func (s *Service) ReportExamSecurityPreflight(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -227,8 +225,6 @@ func (s *Service) ReportExamSecurityPreflight(
 	return result, nil
 }
 
-// securityPreflightStoreErrors adds the native catalog sentinels to the
-// Attempt table.
 var securityPreflightStoreErrors = storeErrors.With(
 	apperror.StoreRule{Kind: apperror.StoreSentinel, Sentinel: model.ErrNativeCatalogUnavailable, Code: "exam.security.catalog_missing"},
 	apperror.StoreRule{
@@ -238,9 +234,8 @@ var securityPreflightStoreErrors = storeErrors.With(
 	},
 )
 
-// RecoverExamSecurityPolicy returns the frozen security policy, current
-// coverage, and source state of the caller's active Attempt to its registered
-// Session. It does not grant or renew a Participation Lease.
+// RecoverExamSecurityPolicy returns the frozen policy, coverage and source
+// state of the caller's active attempt. It does not grant or renew a lease.
 func (s *Service) RecoverExamSecurityPolicy(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -270,8 +265,7 @@ func (s *Service) RecoverExamSecurityPolicy(
 	return result, nil
 }
 
-// UpdateExamSecurityCommand is a security update sent on the candidate's live
-// Participation, fenced by its generation.
+// UpdateExamSecurityCommand is fenced by its participation generation.
 type UpdateExamSecurityCommand struct {
 	Access          CandidateAccess
 	ParticipationID model.AttemptParticipationID
@@ -279,10 +273,8 @@ type UpdateExamSecurityCommand struct {
 	Control         model.SecurityControl
 }
 
-// UpdateExamSecurity applies the security control reported on the
-// candidate's live Attempt Participation (its sequence, binding and delivery
-// watermarks), fenced by participation generation and checked against the
-// caller's desktop build.
+// UpdateExamSecurity applies the reported sequence, binding and delivery
+// watermarks, checked against the caller's desktop build.
 func (s *Service) UpdateExamSecurity(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -327,10 +319,9 @@ func (s *Service) UpdateExamSecurity(
 	return result, nil
 }
 
-// SecurityPolicyOverview resolves the Sitting's current policy for the
-// candidate's readiness overview, under the same eligibility checks as
-// preparation. It creates no preflight, records nothing, and grants nothing:
-// the preflight prepared at Start is still the binding check.
+// SecurityPolicyOverview applies preparation's eligibility checks but records
+// and grants nothing: the preflight prepared at start is still the binding
+// check.
 func (s *Service) SecurityPolicyOverview(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -351,8 +342,6 @@ func (s *Service) SecurityPolicyOverview(
 	return overview, nil
 }
 
-// preflightStatusDiscrepancies counts the readiness rules whose status
-// Desktop reported differently from the server's own.
 func preflightStatusDiscrepancies(desktop, server []model.NativeRuleReport) int64 {
 	decided := make(map[string]model.NativeRuleReport, len(server))
 	for _, status := range server {

@@ -18,11 +18,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Publication owns the authorization, audit, persistence and after-commit
-// effect recipe for freezing Drafts into immutable Exam Revisions.
+// Publication freezes drafts into immutable revisions.
 type Publication struct {
-	revisions store.ExamRevisionStore
-	// exams reads the Exam ownership a publication is authorized against.
+	revisions           store.ExamRevisionStore
 	exams               store.ExamAuthoringStore
 	academicUnitMembers store.AcademicUnitMemberStore
 
@@ -36,8 +34,7 @@ type Publication struct {
 	operational       operational.Recorder
 }
 
-// PublicationDependencies are the collaborators NewPublication validates once
-// and distributes to the Publication.
+// PublicationDependencies are the collaborators of NewPublication.
 type PublicationDependencies struct {
 	Persistence       store.ExamRevisionStore
 	Access            store.ExamAuthoringStore
@@ -48,8 +45,8 @@ type PublicationDependencies struct {
 	Now               func() time.Time
 	NewID             func() model.ExamRevisionID
 	InstitutionOrigin string
-	// ExecutionEnabled is whether Exams may publish with an execution
-	// environment.
+	// ExecutionEnabled is whether the installation allows publishing with an
+	// execution environment.
 	ExecutionEnabled bool
 	Operational      operational.Recorder
 }

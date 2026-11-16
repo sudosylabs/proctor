@@ -18,8 +18,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// liveDesktopSessionCondition selects the exact live Desktop Session bound to
-// a reauthentication, its active User and registered key. The caller supplies
+// liveDesktopSessionCondition selects the exact live desktop session bound to
+// a reauthentication, its active user and registered key. The caller supplies
 // the transition instant twice, followed by the access credential identifier
 // when one is required.
 const liveDesktopSessionCondition = `sessions.client_type = 'desktop'
@@ -43,7 +43,7 @@ const liveDesktopSessionCondition = `sessions.client_type = 'desktop'
 			AND registration.revoked_at IS NULL
 	)`
 
-// liveAccessCredentialCondition requires the Desktop Session's exact current
+// liveAccessCredentialCondition requires the desktop session's exact current
 // access credential. The caller supplies the credential and the instant.
 //
 //nolint:gosec // an SQL predicate over credential columns with bound parameters, not a credential
@@ -81,7 +81,7 @@ const desktopReauthenticationColumns = `id, created_at, expires_at, state, user_
 		password_credential_revision, authenticated_at`
 
 // CreateDesktopReauthentication starts a reauthentication handoff for the
-// caller's exact live Desktop Session, pinning that Session's own
+// caller's exact live desktop session, pinning that session's own
 // authentication method and provider as the only acceptable proof.
 func (s SQLBrowserAuthenticationStore) CreateDesktopReauthentication(
 	ctx context.Context,
@@ -176,8 +176,8 @@ func (s SQLBrowserAuthenticationStore) CreateDesktopReauthentication(
 	})
 }
 
-// getLiveDesktopReauthenticationSession reads and locks the exact live Desktop
-// Session a reauthentication refers to. A zero credential skips the access
+// getLiveDesktopReauthenticationSession reads and locks the exact live desktop
+// session a reauthentication refers to. A zero credential skips the access
 // credential check for steps that run in the browser rather than from Desktop.
 func getLiveDesktopReauthenticationSession(
 	ctx context.Context,
@@ -323,7 +323,7 @@ func validateDesktopReauthenticationAuthentication(input *store.DesktopReauthent
 
 // AuthenticateDesktopReauthentication records one fresh primary proof on a
 // bound reauthentication, or denies the transaction when the proof names
-// another account or another identity than the Desktop Session's own.
+// another account or another identity than the desktop session's own.
 func (s SQLBrowserAuthenticationStore) AuthenticateDesktopReauthentication(
 	ctx context.Context,
 	input *store.DesktopReauthenticationAuthentication,
@@ -388,8 +388,8 @@ func (s SQLBrowserAuthenticationStore) AuthenticateDesktopReauthentication(
 				return nil, err
 			}
 		} else {
-			// The provider must prove the Desktop Session's own identity; any
-			// other identity, even of the same User, is another account.
+			// The provider must prove the desktop session's own identity; any
+			// other identity, even of the same user, is another account.
 			if session.ExternalIdentityID.String != input.ExternalIdentityID.String() {
 				return denyDesktopReauthentication(ctx, tx, current)
 			}
@@ -443,7 +443,7 @@ func (s SQLBrowserAuthenticationStore) AuthenticateDesktopReauthentication(
 	})
 }
 
-// lockBoundDesktopReauthentication locks the Desktop Session owner's Session
+// lockBoundDesktopReauthentication locks the desktop session owner's session
 // fence and then the bound reauthentication itself.
 func lockBoundDesktopReauthentication(
 	ctx context.Context,
@@ -477,7 +477,7 @@ func lockBoundDesktopReauthentication(
 }
 
 // requireDesktopReauthenticationGeneration refuses a handoff started before
-// the User's last MFA reset or while re-enrollment is required.
+// the user's last MFA reset or while re-enrollment is required.
 func requireDesktopReauthenticationGeneration(ctx context.Context, tx *sqlxTxWrapper, userID model.UserID, createdAt time.Time) error {
 	recovery, err := getMFARecoveryState(ctx, tx, userID)
 	if err != nil {
@@ -536,7 +536,7 @@ func requireOneDesktopReauthenticationRow(result sql.Result, operation string) e
 }
 
 // IssueDesktopReauthenticationCode turns an authenticated reauthentication
-// into one short-lived single-use code while its Desktop Session is live.
+// into one short-lived single-use code while its desktop session is live.
 func (s SQLBrowserAuthenticationStore) IssueDesktopReauthenticationCode(
 	ctx context.Context,
 	input *store.DesktopReauthenticationCodeIssue,
@@ -624,9 +624,9 @@ func (s SQLBrowserAuthenticationStore) CancelDesktopReauthentication(
 	return requireOneDesktopReauthenticationRow(result, "cancel desktop reauthentication")
 }
 
-// CompleteDesktopReauthentication consumes one code for the exact Desktop
-// Session, Registration and key that started the handoff, rechecks the proof
-// and refreshes that Session's primary proof with its audit in one commit.
+// CompleteDesktopReauthentication consumes one code for the exact desktop
+// session, registration and key that started the handoff, rechecks the proof
+// and refreshes that session's primary proof with its audit in one commit.
 func (s SQLBrowserAuthenticationStore) CompleteDesktopReauthentication(
 	ctx context.Context,
 	input *store.DesktopReauthenticationCompletion,
@@ -745,7 +745,7 @@ func (s SQLBrowserAuthenticationStore) CompleteDesktopReauthentication(
 			return nil, store.ErrAuthenticationMethodDisabled
 		}
 
-		// The proof instant never precedes the Session's recorded history.
+		// The proof instant never precedes the session's recorded history.
 		proofAt := transitionInstant(current.AuthenticatedAt.Time, session.AuthenticatedAt, session.ReauthenticatedAt.Time)
 		return commitSessionReauthentication(ctx, tx, session, proofAt, input.AuditEventID)
 	})

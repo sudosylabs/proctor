@@ -15,9 +15,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// requireStrongRecentSessionAt reads assurance from the current Session.
+// requireStrongRecentSessionAt reads assurance from the current session.
 // Recency counts primary proof only; an MFA completion never refreshes it. The
-// caller must hold the Session lock, verify its current credential, and read at
+// caller must hold the session lock, verify its current credential, and read at
 // after acquiring the mutation's potentially waiting locks.
 func requireStrongRecentSessionAt(
 	ctx context.Context,

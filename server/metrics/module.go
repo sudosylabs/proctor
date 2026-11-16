@@ -6,8 +6,7 @@
 // ---------------------------------------------------------------------------------------------
 
 // Package metrics owns the node-local Prometheus registry and scrape listener.
-// Consumers receive narrow recorders; no application use case depends on this
-// package or on Prometheus types.
+// Consumers get narrow recorders, so no use case depends on Prometheus types.
 package metrics
 
 import (
@@ -43,8 +42,8 @@ type Sources struct {
 	ErrorLog *log.Logger
 }
 
-// Module is one deep observability module: it owns registration, exposure,
-// authentication, listener lifecycle, and all bounded metric instruments.
+// Module owns the registry, its instruments and the authenticated scrape
+// listener. Every label value it records comes from a closed set.
 type Module struct {
 	settings config.Metrics
 	registry *prometheus.Registry
@@ -180,7 +179,6 @@ func New(settings config.Metrics, build BuildInfo, sources Sources) (*Module, er
 	return module, nil
 }
 
-// registerCollectors registers the runtime, readiness, build and subsystem collectors in their fixed order.
 func (m *Module) registerCollectors(registry *prometheus.Registry, build BuildInfo) {
 	registry.MustRegister(
 		collectors.NewGoCollector(),

@@ -18,21 +18,21 @@ import (
 )
 
 // CandidateAccess is what a candidate presents for every terminal call: the
-// Attempt, its open Connection and the Connection's continuity credential.
+// attempt, its open connection and that connection's continuity credential.
 type CandidateAccess struct {
 	AttemptID            model.ExamAttemptID
 	ConnectionID         model.AttemptConnectionID
 	ContinuityCredential string
 }
 
-// CandidateAttempt is an Attempt whose candidate access is verified. Every
+// CandidateAttempt is an attempt whose candidate access is verified. Every
 // terminal a candidate opens is the candidate's.
 type CandidateAttempt struct {
 	AttemptID       model.ExamAttemptID
 	CandidateUserID model.UserID
 }
 
-// CandidateVerifier proves a candidate's live access to an Attempt and
+// CandidateVerifier proves a candidate's live access to an attempt and
 // writes nothing. A refusal carries its public code; exam.attempt.unavailable
 // is transient.
 type CandidateVerifier interface {
@@ -40,7 +40,7 @@ type CandidateVerifier interface {
 }
 
 // ErrTerminalAccessEnded reports that a session's access no longer holds:
-// the Attempt is sealed, the Participation ended, or the machine ended.
+// the attempt is sealed, the participation ended, or the machine ended.
 var ErrTerminalAccessEnded = errors.New("terminal access ended")
 
 // TerminalAttachment is one candidate session on a terminal. Write and
@@ -56,7 +56,6 @@ type TerminalAttachment interface {
 	// after it. Bytes the terminal already took are dropped; an offset past
 	// its input is an InputAheadError.
 	Write(ctx context.Context, offset uint64, data []byte) (uint64, error)
-	// Resize changes the terminal's window.
 	Resize(ctx context.Context, window Window) error
 	// Check reruns the candidate's access check and the environment's,
 	// and reports ErrTerminalAccessEnded once either no longer holds, so a
@@ -66,7 +65,7 @@ type TerminalAttachment interface {
 	Close(ctx context.Context)
 }
 
-// verify proves the candidate's live access to the Attempt.
+// verify refuses every call on a nil Terminals as environment_unavailable.
 func (t *Terminals) verify(ctx context.Context, inv invocation.Invocation, access CandidateAccess) (CandidateAttempt, error) {
 	if t == nil {
 		return CandidateAttempt{}, apperror.New("exam.attempt.environment_unavailable")
@@ -75,7 +74,7 @@ func (t *Terminals) verify(ctx context.Context, inv invocation.Invocation, acces
 }
 
 // GetEnvironment returns the candidate's execution environment: what its
-// machine does and how far the Workspace has reached it. A Workspace entry
+// machine does and how far the workspace has reached it. A workspace entry
 // whose last change is past ProjectionCursor is not in the machine yet.
 func (t *Terminals) GetEnvironment(
 	ctx context.Context,

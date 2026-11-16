@@ -19,10 +19,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// AuthorizedScopeConstraint is the bounded, persistence-ready result of an
-// Access Control evaluation for a list or search query. AcademicUnitRootIDs
-// mean the named subtrees; consumers must apply them in persistence rather
-// than load rows and filter them in application memory.
+// AuthorizedScopeConstraint is where a principal holds an action, for a list
+// or search query. AcademicUnitRootIDs mean whole subtrees; apply the
+// constraint in the store query, never by filtering loaded rows in memory.
 type AuthorizedScopeConstraint struct {
 	InstitutionID       model.InstitutionID
 	InstitutionWide     bool
@@ -30,10 +29,9 @@ type AuthorizedScopeConstraint struct {
 	ClassIDs            []model.ClassID
 }
 
-// AuthorizePreflight establishes that the principal has some current
-// authority for the action's resource family before a caller loads an opaque
-// child identifier whose owning scope is not yet known. Callers retain the
-// exact resource authorization after the bounded lookup.
+// AuthorizePreflight refuses a principal with no authority for the action's
+// resource family before the caller looks up an ID whose owning scope is not
+// yet known. It does not replace the exact authorization after the lookup.
 func (s *Authorizer) AuthorizePreflight(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -130,7 +128,7 @@ func (s *Authorizer) academicPeriodCoarseAuthority(
 	return false, resolved, nil
 }
 
-// AuthorizeAcademicPeriodList authorizes listing Academic Periods and returns the visibility the listing applies.
+// AuthorizeAcademicPeriodList returns the visibility the listing must apply.
 func (s *Authorizer) AuthorizeAcademicPeriodList(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -178,7 +176,7 @@ func (s *Authorizer) AuthorizeAcademicPeriodList(
 	return visibility, nil
 }
 
-// AuthorizeUserSearch authorizes a User directory search and returns the visibility the search applies.
+// AuthorizeUserSearch returns the visibility the search must apply.
 func (s *Authorizer) AuthorizeUserSearch(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -228,9 +226,9 @@ func (s *Authorizer) AuthorizeUserSearch(
 	return visibility, nil
 }
 
-// AuthorizeClassSearch returns the caller's class.view authority across every
-// scope as a persistence-ready Class visibility and records the collection
-// decision at the Institution, as the other list authorizations do.
+// AuthorizeClassSearch returns the visibility the search must apply and
+// records the decision at the institution, as the other list authorizations
+// do.
 func (s *Authorizer) AuthorizeClassSearch(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -273,13 +271,12 @@ func (s *Authorizer) AuthorizeClassSearch(
 	return visibility, nil
 }
 
-// AuthorizeExamList authorizes listing Exams and returns the visibility the
-// listing applies. A caller may list where it holds exam.view, as a current
-// Exam Manager and member of the Exam's Academic Unit, or exam.view.override,
-// with neither relationship; the Store applies both sets of scopes, so the
-// collection decision is recorded once at the Institution, under the override
-// Action when the caller holds it anywhere. Both grants are read at one
-// decision instant, which the Store also uses to check ordinary membership.
+// AuthorizeExamList returns both the exam.view scopes, which the store still
+// narrows to exams the caller manages and whose unit they belong to, and the
+// exam.view.override scopes, which need neither. The decision is recorded
+// once at the institution, under the override action when the caller holds it
+// anywhere. Both grants are read at one instant, which the store reuses for
+// the membership check.
 func (s *Authorizer) AuthorizeExamList(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -336,10 +333,9 @@ func (s *Authorizer) AuthorizeExamList(
 	}, nil
 }
 
-// GrantedUserVisibility reports the Users the principal can see now, as the
-// User directory applies it: user.view relationships and class.members.view
-// rosters. It records no decision; a caller shapes an already authorized
-// projection with it, such as naming the people an audit page refers to.
+// GrantedUserVisibility reports the users the principal can see now, as the
+// directory computes it. It records no decision, so use it only to shape an
+// already authorized projection, such as naming people on an audit page.
 func (s *Authorizer) GrantedUserVisibility(ctx context.Context, principal model.Principal) (store.UserVisibilityScope, error) {
 	return s.userVisibilityScope(ctx, principal)
 }
@@ -368,7 +364,7 @@ func (s *Authorizer) userVisibilityScope(
 	return visibility, nil
 }
 
-// GrantedScopes returns where the principal currently holds the action, without recording a decision.
+// GrantedScopes records no decision.
 func (s *Authorizer) GrantedScopes(
 	ctx context.Context,
 	principal model.Principal,
@@ -397,8 +393,8 @@ func (s *Authorizer) GrantedScopesAt(
 	return s.scopeConstraintFromBindings(ctx, principal, definition, active)
 }
 
-// authorizedScopeDefinition validates a scope query and reports whether the
-// principal's credential may exercise the action at all.
+// authorizedScopeDefinition reports false for an action a personal access
+// token may not exercise, so no role binding can widen a token.
 func authorizedScopeDefinition(
 	principal model.Principal,
 	action model.Action,
@@ -419,8 +415,7 @@ func authorizedScopeDefinition(
 	return definition, true, nil
 }
 
-// activeRoleBindings is the principal's active Role Bindings with the
-// permissions of each bound Role, loaded once for one decision time.
+// activeRoleBindings is loaded once per decision time.
 type activeRoleBindings struct {
 	bindings    []*model.RoleBinding
 	permissions map[model.RoleID][]string
@@ -430,7 +425,6 @@ func (a activeRoleBindings) grants(binding *model.RoleBinding, action model.Acti
 	return slices.Contains(a.permissions[binding.RoleID], string(action))
 }
 
-// scopeConstraintFromBindings accumulates the scopes of the active bindings whose Role grants the action.
 func (s *Authorizer) scopeConstraintFromBindings(
 	ctx context.Context,
 	principal model.Principal,
@@ -459,7 +453,6 @@ func (s *Authorizer) scopeConstraintFromBindings(
 	return constraint, nil
 }
 
-// loadActiveRoleBindings loads the principal's active Role Bindings and the permissions of their Roles.
 func (s *Authorizer) loadActiveRoleBindings(
 	ctx context.Context,
 	principal model.Principal,
@@ -491,7 +484,8 @@ func (s *Authorizer) loadActiveRoleBindings(
 	return activeRoleBindings{bindings: bindings, permissions: permissions}, nil
 }
 
-// accumulateBindingScope adds the scope of one granting Role Binding to the constraint within the principal's ceiling.
+// accumulateBindingScope drops a binding outside the principal's academic
+// unit ceiling.
 func (s *Authorizer) accumulateBindingScope(
 	ctx context.Context,
 	principal model.Principal,
@@ -559,28 +553,26 @@ func (s *Authorizer) accumulateBindingScope(
 	return nil
 }
 
-// CanViewInstitutionUsers derives Institution-wide user.view exactly as the
-// User directory does, without recording a decision.
+// CanViewInstitutionUsers reports institution-wide user.view, exactly as the
+// directory derives it, without recording a decision.
 func (s *Authorizer) CanViewInstitutionUsers(ctx context.Context, inv invocation.Invocation) (bool, error) {
 	constraint, err := s.GrantedScopes(ctx, inv.Principal(), model.ActionUserView, model.ResourceUser)
 	return constraint.InstitutionWide, err
 }
 
-// CanViewRoles derives Institution-wide role.view, the authority that lists
-// and reads Roles, without recording a decision.
+// CanViewRoles reports institution-wide role.view without recording a
+// decision.
 func (s *Authorizer) CanViewRoles(ctx context.Context, inv invocation.Invocation) (bool, error) {
 	constraint, err := s.GrantedScopes(ctx, inv.Principal(), model.ActionRoleView, model.ResourceInstitution)
 	return constraint.InstitutionWide, err
 }
 
-// CanViewClassMembers evaluates class.members.view on the Resource without
-// recording a decision.
+// CanViewClassMembers records no decision.
 func (s *Authorizer) CanViewClassMembers(ctx context.Context, inv invocation.Invocation, resource model.Resource) (bool, error) {
 	return s.Can(ctx, inv.Principal(), model.ActionClassMembersView, resource)
 }
 
-// CanViewRoleBindings evaluates role_binding.view on the Resource without
-// recording a decision.
+// CanViewRoleBindings records no decision.
 func (s *Authorizer) CanViewRoleBindings(ctx context.Context, inv invocation.Invocation, resource model.Resource) (bool, error) {
 	return s.Can(ctx, inv.Principal(), model.ActionRoleBindingView, resource)
 }

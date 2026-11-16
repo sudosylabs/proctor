@@ -26,9 +26,9 @@ type NativeActivation struct {
 	Categories []string           `json:"categories"`
 }
 
-// NativeCapabilityReadiness is one activated capability as Desktop found it
-// at Start: its full state, the envelope around it, and where its event
-// stream begins. The exam stream opens with this same state.
+// NativeCapabilityReadiness is one activated capability as Desktop found it at
+// start: its full state, envelope and where its event stream begins. The exam
+// stream opens with this same state.
 type NativeCapabilityReadiness struct {
 	Capability       NativeCapabilityID   `json:"capability"`
 	SourceInstanceID string               `json:"source_instance_id"`
@@ -172,7 +172,7 @@ func nativeApplicationFacts(state map[string]any) (NativeApplicationFacts, bool)
 }
 
 // evaluateNativeReadiness evaluates a policy's readiness rules on what
-// Desktop reported at Start. The report must name every activated capability
+// Desktop reported at start. The report must name every activated capability
 // once, in activation order. It returns the server's status for each
 // readiness rule, and whether an enforce rule that is not met, or unknown,
 // blocks admission.

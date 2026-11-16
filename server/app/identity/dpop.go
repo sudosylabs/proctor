@@ -72,8 +72,8 @@ type verifiedDPoPProof struct {
 	IssuedAt      time.Time
 }
 
-// dpopChallengeError carries only the replacement nonce needed by the HTTP
-// edge. The failed proof itself is never retained or logged.
+// dpopChallengeError carries only the replacement nonce; the failed proof is
+// never retained or logged.
 type dpopChallengeError struct {
 	nonce string
 	cause error
@@ -82,12 +82,10 @@ type dpopChallengeError struct {
 func (e *dpopChallengeError) Error() string { return "DPoP nonce is required" }
 func (e *dpopChallengeError) Unwrap() error { return e.cause }
 
-// DPoPNonce returns the replacement nonce the client must sign its next
-// proof with. The HTTP kernel finds it through this method.
+// DPoPNonce is the nonce the client must sign its next proof with; the HTTP
+// layer finds it through this method.
 func (e *dpopChallengeError) DPoPNonce() string { return e.nonce }
 
-// dpopSecurityDependencies are the collaborators of dpopSecurity;
-// newDPoPSecurity validates them once and dpopSecurity keeps them in deps.
 type dpopSecurityDependencies struct {
 	Cache  AuthenticationCache
 	Policy dpopPolicy

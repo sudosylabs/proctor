@@ -14,8 +14,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// ExamAuthoringSnapshot is the bounded authoring view returned by the Exam
-// aggregate store. Managers are counted but never hydrated as an unbounded set.
+// ExamAuthoringSnapshot is the authoring view of an exam. Managers are
+// counted, never loaded as an unbounded set.
 type ExamAuthoringSnapshot struct {
 	Exam                *model.Exam
 	Draft               *model.ExamDraft
@@ -27,38 +27,28 @@ type ExamAuthoringSnapshot struct {
 	HasStarterWorkspace bool
 }
 
-// Consistent reports whether the snapshot carries both the Exam and its Draft.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// Consistent reports whether both Exam and Draft are present.
 func (s *ExamAuthoringSnapshot) Consistent() bool {
 	return !(s == nil ||
 		s.Exam == nil ||
 		s.Draft == nil)
 }
 
-// ExamAccessSnapshot is the minimal projection needed to authorize an Exam
-// operation before authored Draft content is loaded.
+// ExamAccessSnapshot is what authorizing an exam operation needs, read before
+// any draft content is loaded.
 type ExamAccessSnapshot struct {
 	Exam           *model.Exam
 	ActorIsManager bool
 }
 
-// Consistent reports whether the projection carries its Exam. It is the base
-// check: it does not ask which Exam that is.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// Consistent reports whether Exam is present, without asking which exam.
 func (s *ExamAccessSnapshot) Consistent() bool {
 	return !(s == nil ||
 		s.Exam == nil)
 }
 
-// ConsistentWith reports whether the projection carries the Exam that was
-// asked for and that Exam belongs to the given Academic Unit.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether Exam is the one asked for, in the given
+// academic unit.
 func (s *ExamAccessSnapshot) ConsistentWith(examID model.ExamID, academicUnitID model.AcademicUnitID) bool {
 	return !(s == nil ||
 		s.Exam == nil ||
@@ -66,13 +56,8 @@ func (s *ExamAccessSnapshot) ConsistentWith(examID model.ExamID, academicUnitID 
 		s.Exam.AcademicUnitID != academicUnitID)
 }
 
-// ConsistentWithOwningUnit reports whether the projection carries the Exam
-// that was asked for and that Exam names an Academic Unit as its owner. Unlike
-// ConsistentWith, the caller has no Academic Unit to compare; this only
-// requires that one is named.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWithOwningUnit reports whether Exam is the one asked for and names
+// an owning unit, for a caller with no unit to compare.
 func (s *ExamAccessSnapshot) ConsistentWithOwningUnit(examID model.ExamID) bool {
 	return !(s == nil ||
 		s.Exam == nil ||
@@ -80,13 +65,8 @@ func (s *ExamAccessSnapshot) ConsistentWithOwningUnit(examID model.ExamID) bool 
 		!s.Exam.AcademicUnitID.IsValid())
 }
 
-// ConsistentAndValidWith reports whether the projection carries the Exam that
-// was asked for and that Exam passes its own validation. It is the only check
-// here that validates the Exam, and it asks nothing separate about the
-// Academic Unit.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentAndValidWith reports whether Exam is the one asked for and passes
+// its own validation; it is the only check here that validates it.
 func (s *ExamAccessSnapshot) ConsistentAndValidWith(examID model.ExamID) bool {
 	return !(s == nil ||
 		s.Exam == nil ||
@@ -99,12 +79,8 @@ type ExamAuthoringCommandResult struct {
 	Replayed bool
 }
 
-// ConsistentWithDraft reports whether the command outcome carries an Exam
-// authoring snapshot that includes the updated Draft. It does not require the
-// snapshot's Exam, which a Draft update does not read.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWithDraft reports whether the result carries the updated draft. It
+// does not require Exam, which a draft update does not read.
 func (r *ExamAuthoringCommandResult) ConsistentWithDraft() bool {
 	return !(r == nil ||
 		r.Value == nil ||
@@ -119,11 +95,10 @@ const (
 	ExamArchiveAll      ExamArchiveFilter = "all"
 )
 
-// ExamListVisibility is the bounded, persistence-ready result of current role
-// authorization. OrdinaryMembershipAt is the same authorization decision time
-// at which persistence must require the actor's current exact Academic Unit
-// membership and Exam Manager relationship. Override visibility requires
-// neither relationship and does not manufacture either one.
+// ExamListVisibility is the result of role authorization for a listing.
+// OrdinaryMembershipAt is the instant at which the store requires the actor's
+// current unit membership and manager relationship. Override visibility
+// requires neither and creates neither.
 type ExamListVisibility struct {
 	ActorUserID                 model.UserID
 	OrdinaryMembershipAt        time.Time
@@ -146,8 +121,8 @@ type ExamListOptions struct {
 	Visibility      ExamListVisibility
 }
 
-// ExamSummary is the bounded catalog projection. Authored Markdown, policy,
-// resources, and Starter Workspace state are deliberately absent.
+// ExamSummary is the catalog view of an exam; authored text, policy,
+// resources and starter workspace are deliberately absent.
 type ExamSummary struct {
 	ID                      model.ExamID
 	AcademicUnitID          model.AcademicUnitID
@@ -175,8 +150,8 @@ type ExamCatalogSittingSummary struct {
 	Revision         int64
 }
 
-// ExamManagerSummary is the bounded management projection. It deliberately
-// contains relationship provenance rather than a User profile.
+// ExamManagerSummary is who granted a manager relationship and when, never
+// the user's profile.
 type ExamManagerSummary struct {
 	Manager   model.ExamManager
 	IsCreator bool
@@ -190,8 +165,8 @@ type ExamManagerListOptions struct {
 	Limit           int
 }
 
-// ExamManagerMutation carries the common revision fence, authorization result,
-// and audit attempt for one named relationship or ownership transition.
+// ExamManagerMutation is the input of AddManager, RemoveManager and
+// TransferOwner.
 type ExamManagerMutation struct {
 	ExamID           model.ExamID
 	ActorUserID      model.UserID
@@ -204,9 +179,8 @@ type ExamManagerMutation struct {
 	Notices          []ExamManagerMail
 }
 
-// ExamManagerMail is one fully prepared direct notification inserted with an
-// Exam management transition. Ownership transfer carries exactly two entries;
-// addition and removal carry exactly one.
+// ExamManagerMail is one notice committed with a manager change. A transfer
+// carries exactly two; an addition or removal exactly one.
 type ExamManagerMail struct {
 	Occurrence *model.MailOccurrence
 	Delivery   *model.MailDelivery
@@ -234,8 +208,8 @@ type ExamArchiveCommandResult struct {
 	Replayed bool
 }
 
-// ExamAuthoringCreation is the complete first Exam aggregate and the durable
-// audit attempt that its successful transaction must complete.
+// ExamAuthoringCreation is a new exam with its draft and the audit attempt
+// the creation completes.
 type ExamAuthoringCreation struct {
 	Exam         *model.Exam
 	Draft        *model.ExamDraft
@@ -244,8 +218,7 @@ type ExamAuthoringCreation struct {
 	AuditAt      time.Time
 }
 
-// ExamDraftTextUpdate changes only the authored text fields of one Draft.
-// Presence is retained so later Draft fields remain outside this operation.
+// ExamDraftTextUpdate changes only the draft's text fields.
 type ExamDraftTextUpdate struct {
 	ExamID               model.ExamID
 	ActorUserID          model.UserID
@@ -258,9 +231,9 @@ type ExamDraftTextUpdate struct {
 	AuditAt              time.Time
 }
 
-// ExamDraftFocusLossUpdate replaces only the typed Focus Loss rule. The Store
-// reconstructs and validates the complete policy so Connection Loss cannot be
-// supplied or weakened by a caller.
+// ExamDraftFocusLossUpdate replaces only the focus loss rule. The store
+// rebuilds and validates the whole policy so a caller cannot supply or weaken
+// the connection loss rule.
 type ExamDraftFocusLossUpdate struct {
 	ExamID           model.ExamID
 	ActorUserID      model.UserID
@@ -272,10 +245,9 @@ type ExamDraftFocusLossUpdate struct {
 	AuditAt          time.Time
 }
 
-// ExamDraftExecutionUpdate replaces only the Draft's execution policy. An
-// enabled policy must name an environment profile that exists, is not
-// retired, and allows the policy's terminals; otherwise the update conflicts
-// with environment_profile_unusable.
+// ExamDraftExecutionUpdate replaces only the execution policy. An enabled
+// policy must name an unretired profile that allows its terminals, or the
+// update conflicts with environment_profile_unusable.
 type ExamDraftExecutionUpdate struct {
 	ExamID           model.ExamID
 	ActorUserID      model.UserID
@@ -287,8 +259,8 @@ type ExamDraftExecutionUpdate struct {
 	AuditAt          time.Time
 }
 
-// ExamDraftNativePolicyUpdate atomically replaces the exact native union under
-// current Manager and Draft revision fences, preserving Focus/Connection Loss.
+// ExamDraftNativePolicyUpdate replaces the native rules, keeping the focus
+// and connection loss rules.
 type ExamDraftNativePolicyUpdate struct {
 	ExamID           model.ExamID
 	ActorUserID      model.UserID
@@ -300,10 +272,11 @@ type ExamDraftNativePolicyUpdate struct {
 	AuditAt          time.Time
 }
 
-// ExamDraftBrowserPolicyUpdate replaces the complete canonical Browser Policy
-// value. Individual rules are never independently mutable Store entities.
+// ExamDraftBrowserPolicyUpdate replaces the whole browser policy; rules are
+// never changed one by one.
 type ExamDraftBrowserPolicyUpdate struct {
-	// InstitutionOrigin is installation configuration supplied by the application, never request data.
+	// InstitutionOrigin comes from installation configuration, never from the
+	// request.
 	InstitutionOrigin string
 	ExamID            model.ExamID
 	ActorUserID       model.UserID
@@ -315,14 +288,11 @@ type ExamDraftBrowserPolicyUpdate struct {
 	AuditAt           time.Time
 }
 
-// ExamAuthoringStore owns atomic Exam authoring mutations and bounded reads.
-// Create commits the Exam, its one Draft, creator-manager relation, audit
-// success, and retry outcome together. Draft updates recheck the current
-// manager relation unless an already-authorized override is explicit, reject
-// archived or stale/no-op Drafts, and atomically commit only their supported
-// fields, the Draft revision, audit success, and retry outcome. Exact replays
-// return the committed projection without repeating the mutation. Reads remain
-// bounded regardless of manager or future resource cardinality.
+// ExamAuthoringStore persists exams and their drafts. Create commits the exam,
+// its draft, the creator as manager and the audit together. Draft updates
+// recheck the manager relationship unless overridden, reject archived, stale
+// or no-op drafts, and commit only their own fields with the revision and
+// audit. Replays return the committed result without repeating the change.
 type ExamAuthoringStore interface {
 	Create(context.Context, *ExamAuthoringCreation, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftText(context.Context, *ExamDraftTextUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
@@ -330,32 +300,22 @@ type ExamAuthoringStore interface {
 	UpdateDraftExecution(context.Context, *ExamDraftExecutionUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftNativePolicy(context.Context, *ExamDraftNativePolicyUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftBrowserPolicy(context.Context, *ExamDraftBrowserPolicyUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
-	// List returns at most Limit summaries in descending (UpdatedAt, ExamID)
-	// order, strictly before the optional complete cursor pair. The adapter must
-	// apply exact-unit, archive-state, role-scope, current exact Academic Unit
-	// membership, and current Manager predicates inside the same bounded query;
-	// override scope is a separate branch that requires neither relationship and
-	// never creates one. Manager counts and Draft titles are part of that query,
-	// not follow-up reads. List never returns an unrestricted intermediate set.
+	// List orders by (UpdatedAt, ExamID) descending. Unit, archive state, role
+	// scope, membership and manager checks, manager counts and draft titles all
+	// belong in the one bounded query, so no unrestricted set is ever read.
+	// Override scope is a separate branch that needs no relationship.
 	List(context.Context, ExamListOptions) ([]ExamSummary, error)
-	// Archive first resolves a matching committed idempotent outcome. Otherwise
-	// one transaction locks the Exam, rechecks Manager membership unless an
-	// explicit override was authorized, rejects archived or stale state, records
-	// the immutable archive time and next revision without deleting rows,
-	// completes the supplied audit attempt, and commits the replayable outcome.
-	// Concurrent new commands yield one commit; losers return a stable conflict.
-	// Transient effects are outside this operation and run only after commit.
+	// Archive resolves a replay first. Otherwise it locks the exam, rechecks
+	// the manager relationship unless overridden, rejects archived or stale
+	// state, and records the archive time without deleting rows. Of concurrent
+	// new commands one commits and the rest get a conflict.
 	Archive(context.Context, *ExamArchive, *CommandIdempotency) (*ExamArchiveCommandResult, error)
-	// ListManagers returns at most Limit provenance-only relationships in
-	// descending (GrantedAt, UserID) order, strictly before the optional complete
-	// cursor pair.
+	// ListManagers orders by (GrantedAt, UserID) descending.
 	ListManagers(context.Context, ExamManagerListOptions) ([]ExamManagerSummary, error)
-	// AddManager, RemoveManager, and TransferOwner each lock the Exam and recheck
-	// its active state, revision, actor relationship unless override is explicit,
-	// and target eligibility where required. The relationship/owner transition,
-	// next Exam revision, successful audit, and replayable outcome commit in one
-	// transaction. Owner membership is also protected by a deferred database
-	// constraint. Exact replays do not repeat the transition.
+	// AddManager, RemoveManager and TransferOwner lock the exam and recheck its
+	// state, revision, the actor's relationship unless overridden, and the
+	// target's eligibility. A deferred constraint also keeps the owner a
+	// manager.
 	AddManager(context.Context, *ExamManagerMutation, *CommandIdempotency) (*ExamManagerCommandResult, error)
 	RemoveManager(context.Context, *ExamManagerMutation, *CommandIdempotency) (*ExamManagerCommandResult, error)
 	TransferOwner(context.Context, *ExamManagerMutation, *CommandIdempotency) (*ExamManagerCommandResult, error)

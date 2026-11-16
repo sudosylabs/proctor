@@ -44,7 +44,7 @@ type operation struct {
 	Result     json.RawMessage `json:"result,omitempty"`
 }
 
-// journal holds passwords, tokens, one-use Invitation claims and saved
+// journal holds passwords, tokens, one-use invitation claims and saved
 // requests. It must never be committed or attached to a diagnostic archive.
 type journal struct {
 	Server        string                `json:"server_url"`
@@ -192,9 +192,9 @@ func (r *runner) step(key, token, method, path string, body object, content []by
 		}
 	}
 
-	// Server command outcomes are retained for 24 hours. Use a deliberately
-	// shorter retry window when an authoritative read cannot prove completion;
-	// never turn an expired key into another blind create.
+	// The server keeps command outcomes for 24 hours. Retry for a much shorter
+	// window when no read can prove completion, so an expired key never turns
+	// into a second blind create.
 	if exists && (op.PreparedAt.IsZero() || time.Since(op.PreparedAt) > time.Hour) {
 		return nil, fmt.Errorf(
 			"seed step %s has an unresolved outcome older than the one-hour automatic retry window; inspect it before continuing",

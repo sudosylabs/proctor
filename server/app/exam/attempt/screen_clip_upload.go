@@ -18,8 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// UploadScreenClipChunkCommand is one chunk of a clip, sent by the candidate's
-// Desktop through its live Connection.
+// UploadScreenClipChunkCommand is one chunk of a clip.
 type UploadScreenClipChunkCommand struct {
 	Access CandidateAccess
 	ClipID model.ScreenClipID
@@ -28,17 +27,15 @@ type UploadScreenClipChunkCommand struct {
 	Size   int64
 }
 
-// BeginScreenClipUploadCommand declares the clip the candidate's Desktop is
-// about to upload.
+// BeginScreenClipUploadCommand declares a clip before its chunks arrive.
 type BeginScreenClipUploadCommand struct {
 	Access CandidateAccess
 	ClipID model.ScreenClipID
 	Upload model.ScreenClipUpload
 }
 
-// BeginScreenClipUpload records the clip the candidate's Desktop is about to
-// upload: its media type, size and the hash of every chunk. Declaring the
-// same clip again returns it unchanged.
+// BeginScreenClipUpload records the clip's media type, size and every chunk's
+// hash. Declaring the same clip again returns it unchanged.
 func (s *Service) BeginScreenClipUpload(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -62,8 +59,8 @@ func (s *Service) BeginScreenClipUpload(
 	return *clip, nil
 }
 
-// ScreenClipUploadStatus returns a clip and the chunks of it that arrived,
-// so Desktop resumes an interrupted upload with the rest.
+// ScreenClipUploadStatus returns the chunks that arrived, so Desktop resumes
+// an interrupted upload with the rest.
 func (s *Service) ScreenClipUploadStatus(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -80,15 +77,13 @@ func (s *Service) ScreenClipUploadStatus(
 		return store.ExamAttemptScreenClipUploadStatus{}, storeError(storeErrors, err)
 	}
 	if status.Clip.Upload == nil {
-		// Desktop has not declared the clip yet: there is no upload to read.
 		return store.ExamAttemptScreenClipUploadStatus{}, apperror.New("exam.attempt.state_conflict")
 	}
 	return *status, nil
 }
 
-// UploadScreenClipChunk stores one chunk, checked against the hash the clip
-// declared for it, and records it. Sending a stored chunk again changes
-// nothing.
+// UploadScreenClipChunk checks a chunk against its declared hash. Sending a
+// stored chunk again changes nothing.
 func (s *Service) UploadScreenClipChunk(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -129,7 +124,7 @@ func (s *Service) UploadScreenClipChunk(
 	return nil
 }
 
-// CompleteScreenClipUploadCommand finishes an upload: the clip's content digest and the
+// CompleteScreenClipUploadCommand carries the clip's content digest and the
 // installation key's ES256 signature over it.
 type CompleteScreenClipUploadCommand struct {
 	Access        CandidateAccess
@@ -138,8 +133,8 @@ type CompleteScreenClipUploadCommand struct {
 	Signature     string
 }
 
-// CompleteScreenClipUpload makes a clip whose every chunk arrived ready to
-// play, once the installation's signature over its content digest verifies.
+// CompleteScreenClipUpload makes a clip playable only once every chunk
+// arrived and the installation's signature verifies.
 func (s *Service) CompleteScreenClipUpload(
 	ctx context.Context,
 	inv invocation.Invocation,

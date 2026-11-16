@@ -15,21 +15,18 @@ import (
 	"github.com/sudosylabs/proctor/server/logging"
 )
 
-// Recurrence defines application-owned work proposed at UTC interval boundaries.
-// A zero Interval retains the daily schedule. Explicit intervals must divide a
-// day and range from one minute to one day. Each proposer durably deduplicates
-// its occurrence so restarts and multiple nodes can propose the same work.
-// A Recurrence does not name the Job type it schedules: only its Proposer,
-// which builds and enqueues the Job, knows which type that is.
+// Recurrence is work proposed at UTC interval boundaries. A zero Interval
+// means daily; any other must divide a day and lie between one minute and one
+// day. Its Proposer deduplicates each occurrence, so restarts and every node
+// may propose the same work, and only the Proposer knows the job type.
 type Recurrence struct {
 	Name     string
 	Proposer OccurrenceProposer
 	Interval time.Duration
 }
 
-// OccurrenceProposer enqueues the Job for one occurrence of a Recurrence. It
-// receives the UTC time at which the engine first proposed the occurrence,
-// and receives the same time again when a failed proposal is retried.
+// OccurrenceProposer enqueues the job for one occurrence. A retried proposal
+// receives the same occurrence time as the first.
 type OccurrenceProposer interface {
 	Propose(context.Context, time.Time) error
 }

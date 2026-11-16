@@ -170,7 +170,7 @@ func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, probes ...Nativ
 	require.NoError(t, before.NativeConditions.Validate(), "native finalization inventory is absent")
 	time.Sleep(time.Second) // Allow the real shared append allowance to refill.
 	// A fresh display state ends the gap: the rule is not met again, inside
-	// the occurrence already open, so no further Flag evidence.
+	// the occurrence already open, so no further flag evidence.
 	late, err := appendBatch(batch(6, secondDisplay(4, at.Add(5*time.Second))), "native-review-late")
 	require.NoError(t, err)
 	require.Empty(t, late.Flagged, "an occurrence still open raises no new evidence")
@@ -189,8 +189,8 @@ func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, probes ...Nativ
 
 }
 
-// TestNativeMaximumRecordStore covers legal wire values that exceed former
-// private per-record caps while remaining within aggregate delivery admission.
+// TestNativeMaximumRecordStore covers the largest legal wire values a record
+// may carry within aggregate delivery admission.
 func TestNativeMaximumRecordStore(t *testing.T, ss store.Store) {
 	ctx := t.Context()
 	fixture := newExamAttemptFixture(t, ctx, ss)
@@ -294,9 +294,9 @@ func nativeResetWithLongTimestamp(t *testing.T, reset model.NativeSourceReset, z
 }
 
 // TestNativeSuspensionStore covers a family whose outcome is
-// flag_and_suspend: its enforce occurrence raises the Flag and suspends the
-// Attempt as Focus Loss does, ending the Participation and closing its
-// Connection, with the Suspension linked to the Flag.
+// flag_and_suspend: its enforce occurrence raises the flag and suspends the
+// attempt as focus loss does, ending the participation and closing its
+// connection, with the suspension linked to the flag.
 func TestNativeSuspensionStore(t *testing.T, ss store.Store) {
 	ctx := context.Background()
 	fixture := newExamAttemptFixtureWithOptions(t, ctx, ss, nil, nil, model.ExamCapacityPolicy{}, false,

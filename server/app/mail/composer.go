@@ -5,7 +5,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// This file contains direct-mail composition.
 package mail
 
 import (
@@ -29,8 +28,8 @@ type directPreparation struct {
 	Presentation Presentation
 }
 
-// AccountTokenPreparation contains only the token facts a caller owns. Mail
-// chooses the occurrence meaning, delivery class, and template.
+// AccountTokenPreparation holds only the token facts a caller owns; mail
+// chooses the occurrence meaning, delivery class and template.
 type AccountTokenPreparation struct {
 	Recipient    *model.User
 	OccurrenceID model.MailOccurrenceID
@@ -41,8 +40,8 @@ type AccountTokenPreparation struct {
 	NewAddress string
 }
 
-// NoticePreparation contains the recipient and committed action time shared by
-// ordinary one-recipient notices.
+// NoticePreparation is the recipient and committed action time of an
+// ordinary one-recipient notice.
 type NoticePreparation struct {
 	Recipient *model.User
 	At        time.Time
@@ -73,7 +72,7 @@ type PersonalAccessTokenPreparation struct {
 }
 
 // ClassTransitionPreparation is the input of PrepareClassTransition.
-// TemplateKey and Details must agree, so a transfer names its previous Class.
+// TemplateKey and Details must agree, so a transfer names its previous class.
 type ClassTransitionPreparation struct {
 	Recipient    *model.User
 	OccurrenceID model.MailOccurrenceID
@@ -83,8 +82,9 @@ type ClassTransitionPreparation struct {
 }
 
 // SubmissionReceiptPreparation is the input of PrepareSubmissionReceiptMail.
-// TemplateKey says whether the candidate, a manager or the deadline sealed the
-// Submission.
+// SubmissionReceiptPreparation is the input of PrepareSubmissionReceiptMail.
+// TemplateKey says whether the candidate, a manager or the deadline sealed
+// the submission.
 type SubmissionReceiptPreparation struct {
 	Recipient    *model.User
 	OccurrenceID model.MailOccurrenceID
@@ -102,9 +102,9 @@ type ResultReleasePreparation struct {
 	ReleasedAt   time.Time
 }
 
-// RelationshipTransitionPreparation covers the generic Academic Unit
-// membership and Role Binding notices. Their templates intentionally contain
-// no privileged scope or role detail.
+// RelationshipTransitionPreparation covers the generic unit membership and
+// role binding notices. Their templates deliberately carry no privileged
+// scope or role detail.
 type RelationshipTransitionPreparation struct {
 	Recipient    *model.User
 	OccurrenceID model.MailOccurrenceID
@@ -112,25 +112,24 @@ type RelationshipTransitionPreparation struct {
 	ActionAt     time.Time
 }
 
-// ComposerDependencies are the collaborators of Composer;
-// NewComposer validates them once and Composer keeps them in deps.
+// ComposerDependencies are the collaborators of Composer, validated once by
+// NewComposer.
 type ComposerDependencies struct {
 	Renderer *TemplateRenderer
 	Sender   Sender
 	Sealer   *secretseal.Sealer
-	// Institution returns the current institution display name for message
-	// copy. It is optional; without it copy names "your institution".
+	// Institution is optional; without it copy says "your institution".
 	Institution func() string
 }
 
 // Composer freezes one-recipient mail: it renders, seals and records each
-// message with its delivery Job, so the Store commits it with the action that
+// message with its delivery job, so the store commits it with the action that
 // caused it.
 type Composer struct {
 	deps ComposerDependencies
 }
 
-// NewComposer validates deps once and constructs the direct mail composer.
+// NewComposer refuses invalid deps.
 func NewComposer(deps ComposerDependencies) (*Composer, error) {
 	if deps.Renderer == nil || deps.Sender == nil || deps.Sender.Enabled() && deps.Sealer == nil {
 		return nil, errors.New("mail composer dependencies are invalid")
@@ -212,9 +211,9 @@ func (p *Composer) PreparePasswordChanged(request NoticePreparation) (*store.Pre
 	return p.prepareNotice(request, model.MailTemplateIdentityPasswordChanged)
 }
 
-// PrepareEmailChangeWarning freezes the notice to the previous address of a
-// changed account. It carries the single-use undo link, so it is a credential
-// delivery whose occurrence is the undo token.
+// PrepareEmailChangeWarning freezes the notice to a changed account's
+// previous address. It carries the single-use undo link, so it is a
+// credential delivery whose occurrence is the undo token.
 func (p *Composer) PrepareEmailChangeWarning(request AccountTokenPreparation) (*store.PreparedMail, error) {
 	if !model.IsValidEmail(request.NewAddress) {
 		return nil, errors.New("email change warning requires the new address")
@@ -272,7 +271,7 @@ func (p *Composer) PrepareMFANotice(request NoticePreparation, kind MFANoticeKin
 }
 
 // PrepareInvitationAccepted freezes the notice to an account that it accepted
-// an Invitation.
+// an invitation.
 func (p *Composer) PrepareInvitationAccepted(request NoticePreparation) (*store.PreparedMail, error) {
 	return p.prepareNotice(request, model.MailTemplateAccessInvitationAccepted)
 }
@@ -283,9 +282,10 @@ func (p *Composer) PrepareOperatorTest(request NoticePreparation) (*store.Prepar
 	return p.prepareNotice(request, model.MailTemplateSystemTest)
 }
 
-// PrepareRetentionScheduled announces a durable grace notice. Its body contains
-// no private examination facts; exact categories and dates live in the notice.
-// Delivery stops at the earlier of the standard lifetime and retirement date.
+// PrepareRetentionScheduled announces a durable grace notice. The body holds
+// no private examination facts; categories and dates live in the notice.
+// Delivery stops at the earlier of the standard lifetime and the retirement
+// date.
 func (p *Composer) PrepareRetentionScheduled(request NoticePreparation, retireAfter time.Time) (*store.PreparedMail, error) {
 	deadline := request.At.Add(directMailLifetime)
 	if retireAfter.Before(deadline) {
@@ -320,9 +320,9 @@ func (p *Composer) prepareNotice(request NoticePreparation, key model.MailTempla
 	})
 }
 
-// PrepareInvitation freezes a pending Invitation's first message to its target
-// address, with actionURL as the claim link; the Invitation ID is its
-// occurrence. Unlike the notices, it fails when sending is disabled.
+// PrepareInvitation freezes a pending invitation's first message, with
+// actionURL as the claim link and the invitation ID as its occurrence.
+// Unlike the notices, it fails when sending is disabled.
 func (p *Composer) PrepareInvitation(invitation *model.Invitation, actionURL string) (*store.PreparedMail, error) {
 	if !p.Enabled() || invitation == nil || invitation.Validate() != nil || invitation.State != model.InvitationPending {
 		return nil, errors.New("invitation mail input is invalid")
@@ -350,11 +350,10 @@ func (p *Composer) PrepareInvitation(invitation *model.Invitation, actionURL str
 	)
 }
 
-// PrepareInvitationResend freezes another copy of a pending Invitation's
-// message for its target address, with actionURL as the claim link. Each
-// resend is a new mail occurrence recorded against actor, and its delivery
-// deadline remains the Invitation's expiry. It fails when mail sending is
-// disabled or at is not before that expiry.
+// PrepareInvitationResend freezes another copy of a pending invitation's
+// message. Each resend is a new occurrence recorded against actor, and its
+// deadline stays the invitation's expiry. It fails when sending is disabled
+// or at is not before that expiry.
 func (p *Composer) PrepareInvitationResend(
 	invitation *model.Invitation,
 	actionURL string,
@@ -393,9 +392,8 @@ func (p *Composer) PrepareInvitationResend(
 	)
 }
 
-// PrepareInvitationRevocation freezes the notice that tells an Invitation's
-// target address the Invitation was revoked. The Invitation must still be
-// pending when it is called, and the notice carries no action link. When mail
+// PrepareInvitationRevocation freezes the notice that an invitation was
+// revoked; the invitation must still be pending when it is called. When
 // sending is disabled it returns a suppressed delivery rather than an error.
 func (p *Composer) PrepareInvitationRevocation(
 	invitation *model.Invitation,
@@ -433,8 +431,8 @@ func (p *Composer) PrepareInvitationRevocation(
 	)
 }
 
-// InvitationTemplateKey maps an Invitation purpose to its template and fails
-// for a purpose that has none.
+// InvitationTemplateKey fails for an invitation purpose that has no
+// template.
 func InvitationTemplateKey(purpose model.InvitationPurpose) (model.MailTemplateKey, error) {
 	switch purpose {
 	case model.InvitationPurposeStudentClass:
@@ -559,9 +557,9 @@ func validClassTransition(key model.MailTemplateKey, value ClassTransitionDetail
 	}
 }
 
-// PrepareRelationshipTransition freezes an Academic Unit membership or Role
-// Binding notice. An inactive recipient gets a suppressed delivery rather than
-// an error.
+// PrepareRelationshipTransition freezes a unit membership or role binding
+// notice. An inactive recipient gets a suppressed delivery rather than an
+// error.
 func (p *Composer) PrepareRelationshipTransition(request RelationshipTransitionPreparation) (*store.PreparedMail, error) {
 	if request.Recipient == nil ||
 		request.Recipient.Validate() != nil ||
@@ -622,7 +620,7 @@ func isRelationshipTemplate(key model.MailTemplateKey) bool {
 	}
 }
 
-// PrepareManagerMail freezes the notice to one Exam Manager about a manager
+// PrepareManagerMail freezes the notice to one exam manager about a manager
 // relationship change.
 func (p *Composer) PrepareManagerMail(request exam.ManagerMailPreparation) (*store.ExamManagerMail, error) {
 	if request.Recipient == nil ||
@@ -675,7 +673,7 @@ func validManagerMeaning(key model.MailTemplateKey, relationship exam.ManagerMai
 	}
 }
 
-// PrepareSubmissionReceiptMail freezes the receipt of a sealed Submission. An
+// PrepareSubmissionReceiptMail freezes the receipt of a sealed submission. An
 // inactive recipient gets a suppressed delivery rather than an error.
 func (p *Composer) PrepareSubmissionReceiptMail(request SubmissionReceiptPreparation) (*store.PreparedMail, error) {
 	if request.Recipient == nil ||
@@ -781,9 +779,8 @@ func (p *Composer) PrepareResultReleaseMail(request ResultReleasePreparation) (*
 }
 
 // PreparePublicRegistrationVerification freezes the verify-email message for
-// an account created by public registration, with actionURL as its
-// verification link. Public registration passes the verification token's ID
-// as occurrenceID and the token's expiry as deadline.
+// a publicly registered account. Callers pass the verification token's ID as
+// occurrenceID and its expiry as deadline.
 func (p *Composer) PreparePublicRegistrationVerification(
 	recipient *model.User,
 	occurrenceID model.MailOccurrenceID,

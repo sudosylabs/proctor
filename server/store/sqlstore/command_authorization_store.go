@@ -263,14 +263,10 @@ func requireCurrentPrincipalCredential(ctx context.Context, tx *sqlxTxWrapper, p
 	return at, nil
 }
 
-// requirePrincipalActionAtScope rechecks, under the transaction's locks and at
-// the instant at, that the principal holds the Action at the scope: a
-// Personal Access Token must list the Action, and a current Role Binding must
-// grant it under the rule the application applied (see authority.go). Without
-// delegate that is access.Authorizer.Authorize, for an Action the principal
-// exercises; with delegate it is CanDelegateActionsAtScope, for an Action
-// handed on in a Role Binding, where a protected Action below the Institution
-// needs a grant from above the scope.
+// requirePrincipalActionAtScope rechecks, under the transaction's locks at the
+// instant at, that a token lists the action and a current binding grants it.
+// With delegate a protected action below the institution needs a grant from
+// above the scope.
 func requirePrincipalActionAtScope(
 	ctx context.Context,
 	tx *sqlxTxWrapper,

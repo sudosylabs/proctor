@@ -18,24 +18,12 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// An audit summary is one sentence the server writes for an audit row in the
-// request's locale, beside the row's stable codes. Its message is chosen by
-// the row's catalogue key alone, and its arguments are noun phrases: a
-// current name the application read for the caller, or a generic noun ("a
-// class", "a user") when the caller could not see that record now. A summary
-// therefore never says more than the row's own fields and the caller's
-// present visibility.
-//
-// The institution audit list keys a summary by action, or by action and
-// recorded operation where the self-history catalogue distinguishes
-// operations (model.AuditSelfEventKeys); a redacted academic row carries no
-// parameters, so it always reads the action's message and names no subject.
-// Self history keys a summary by event name, with one message for an event
-// about the caller's account and another for one the caller performed on
-// anyone or nothing else; its actor is a kind, never a person. The User the
-// caller acted on is named only when the caller can see that User now. A run
-// of similar rows reads one plural message per event and relation, counted
-// by its rows.
+// An audit summary is one localized sentence per row. Its arguments are a
+// name the caller may see now or a generic noun ("a class", "a user"), so a
+// summary never reveals more than the row's fields and the caller's present
+// visibility. A redacted academic row has no parameters and reads the
+// action's message alone. Self history never names the actor, and names the
+// user the caller acted on only while the caller can see them.
 const (
 	auditSummaryActorHidden = "audit.actor.hidden"
 	auditSummaryActorSystem = "audit.actor.system"
@@ -177,7 +165,7 @@ func auditSummary(request *http.Request, event *model.AuditEvent, names store.Au
 	return auditStatusSummary(request, event.Status, summary)
 }
 
-// auditResourceName is the current name of a User, Academic Unit, or Class
+// auditResourceName is the current name of a user, academic unit, or class
 // resource the caller may see, or the generic noun of its type.
 func auditResourceName(request *http.Request, resource model.Resource, names store.AuditNames) string {
 	var name string
@@ -212,8 +200,8 @@ func auditStatusSummary(request *http.Request, status model.AuditStatus, summary
 
 // selfAuditSummary writes the self history's sentence for one event. The
 // actor is "you", "an administrator", or "the system"; the resource is named
-// only where the projection kept it, the Role only when it was bound to the
-// caller, and the User the caller acted on only when the caller can see them.
+// only where the projection kept it, the role only when it was bound to the
+// caller, and the user the caller acted on only when the caller can see them.
 func selfAuditSummary(request *http.Request, event administration.SelfAuditEvent) string {
 	resource := event.ResourceName
 	if resource == "" {

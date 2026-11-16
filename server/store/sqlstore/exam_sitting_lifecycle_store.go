@@ -116,7 +116,7 @@ func insertExamSittingPrivateAction(
 	return nil
 }
 
-// Pause pauses an open Sitting at database time under command. The Sitting must
+// Pause pauses an open sitting at database time under command. The sitting must
 // be at ExpectedRevision and in a state that allows pausing; otherwise it is an
 // exam_sitting_revision or exam_sitting_state conflict.
 func (s SQLExamSittingStore) Pause(
@@ -138,7 +138,7 @@ func (s SQLExamSittingStore) Pause(
 	)
 }
 
-// Resume reopens a paused Sitting at database time under command, with the same
+// Resume reopens a paused sitting at database time under command, with the same
 // revision and state fencing as Pause.
 func (s SQLExamSittingStore) Resume(
 	ctx context.Context,
@@ -159,8 +159,8 @@ func (s SQLExamSittingStore) Resume(
 	)
 }
 
-// EarlyClose moves an open or paused Sitting into Closing with the
-// manager_closed reason under command and schedules its finalize Job, with the
+// EarlyClose moves an open or paused sitting into Closing with the
+// manager_closed reason under command and schedules its finalize job, with the
 // same revision and state fencing as Pause.
 func (s SQLExamSittingStore) EarlyClose(
 	ctx context.Context,
@@ -340,10 +340,10 @@ func examSittingManagerTransitionAllowed(state model.ExamSittingState, transitio
 	}
 }
 
-// Extend moves an open or paused Sitting's scheduled end to ScheduledEndAt
-// under command and reschedules its deadline Job. It conflicts when the Sitting
+// Extend moves an open or paused sitting's scheduled end to ScheduledEndAt
+// under command and reschedules its deadline job. It conflicts when the sitting
 // is not at ExpectedRevision, its deadline has already passed by database time,
-// or the new end leaves its Academic Period.
+// or the new end leaves its academic period.
 func (s SQLExamSittingStore) Extend(
 	ctx context.Context,
 	input *store.ExamSittingExtension,
@@ -520,8 +520,8 @@ func persistExamSittingLifecycle(ctx context.Context, tx *sqlxTxWrapper, sitting
 }
 
 // AdvanceDue applies whichever system lifecycle transition is due for the
-// Sitting at database time: opening or canceling a scheduled Sitting, entering
-// Closing at the scheduled end, or scheduling finalization. A Sitting with
+// sitting at database time: opening or canceling a scheduled sitting, entering
+// Closing at the scheduled end, or scheduling finalization. A sitting with
 // nothing due is returned unchanged.
 func (s SQLExamSittingStore) AdvanceDue(
 	ctx context.Context,
@@ -547,9 +547,7 @@ func (s SQLExamSittingStore) AdvanceDue(
 	return result, nil
 }
 
-// advanceDueExamSitting locks the Sitting's lifecycle, applies the due
-// transition at statement time, persists it with any finalization Job, and
-// audits the outcome inside the caller's transaction.
+// advanceDueExamSitting runs and audits inside the caller's transaction.
 func advanceDueExamSitting(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -624,9 +622,9 @@ func advanceDueExamSitting(
 	}, nil
 }
 
-// applyDueExamSittingTransition mutates the locked Sitting by the transition
-// due at now, validating the finalization Job where Closing is involved, and
-// reports the transition and whether the Sitting changed.
+// applyDueExamSittingTransition mutates the locked sitting by the transition
+// due at now, validating the finalization job where Closing is involved, and
+// reports the transition and whether the sitting changed.
 func applyDueExamSittingTransition(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -749,8 +747,8 @@ func isStaleExamSittingFinalizeJob(job *model.Job, current *model.ExamSitting) b
 	return err == nil && preparedRevision > 0 && preparedRevision != current.Revision+1
 }
 
-// FinishSealing closes a Closing Sitting once every Attempt is submitted with a
-// sealed Submission; otherwise the Sitting is returned unchanged.
+// FinishSealing closes a Closing sitting once every attempt is submitted with a
+// sealed submission; otherwise the sitting is returned unchanged.
 func (s SQLExamSittingStore) FinishSealing(
 	ctx context.Context,
 	input *store.ExamSittingFinishSealing,

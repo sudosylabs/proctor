@@ -48,7 +48,7 @@ func saveFixtureEnvironmentProfile(t *testing.T, ctx context.Context, ss store.S
 	return created.Profile.ID
 }
 
-// TestAttemptEnvironmentStore checks that facts create and steer an Attempt's
+// TestAttemptEnvironmentStore checks that facts create and steer an attempt's
 // environment, that runtime leases fence their owners, and that an owner
 // writes only under its current lease and the revision it read.
 func TestAttemptEnvironmentStore(t *testing.T, ss store.Store) {
@@ -87,7 +87,7 @@ func TestAttemptEnvironmentStore(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.Empty(t, repeated.Changed)
 
-	// The Sitting's managers see the environment on the board.
+	// The sitting's managers see the environment on the board.
 	board, err := ss.ExamAttempt().ListSittingCandidateStatuses(ctx, store.SittingCandidateStatusListOptions{
 		ExamID: fixture.examID, SittingID: sittingID, ExcludeCandidateUserID: fixture.manager.ID, Limit: 10})
 	require.NoError(t, err)
@@ -129,7 +129,7 @@ func TestAttemptEnvironmentStore(t *testing.T, ss store.Store) {
 		examCommand(fixture.candidate.ID, store.AttemptEnvironmentReplaceOperation, "replace-self", "replace-self"))
 	require.True(t, store.IsNotFound(err), "the candidate is no manager: %v", err)
 
-	// A Sitting fact reaches every environment in the Sitting.
+	// A sitting fact reaches every environment in the sitting.
 	paused, err := environments.ApplyFact(ctx, model.AttemptEnvironmentFact{Kind: model.AttemptEnvironmentFactSittingPaused,
 		SittingID: sittingID, OccurredAt: model.NowUTC()})
 	require.NoError(t, err)
@@ -238,7 +238,7 @@ func TestAttemptEnvironmentStore(t *testing.T, ss store.Store) {
 		EvidenceID: model.NewIntegrityEvidenceID(), ObservedAt: model.NowUTC()})
 	requireInvalidInput(t, err, "RecordSettleIncomplete(a settle nobody asked)")
 
-	// An older generation's end changes nothing; the Submission ends it, and
+	// An older generation's end changes nothing; the submission ends it, and
 	// an ended environment ignores later facts.
 	stale, err := environments.ApplyFact(ctx, fact(model.AttemptEnvironmentFactParticipationEnded, 0, model.AttemptParticipationEndLeaseExpired))
 	require.NoError(t, err)
@@ -267,7 +267,7 @@ func TestAttemptEnvironmentStore(t *testing.T, ss store.Store) {
 		require.NoError(t, leases.Release(ctx, &store.AttemptRuntimeLeaseRelease{Lease: claimed}))
 	}
 
-	// An Attempt whose Revision does not enable execution has none.
+	// An attempt whose revision does not enable execution has none.
 	plain := newExamAttemptFixture(t, ctx, ss)
 	plainConnected, _ := connectEnvironmentFixture(t, ctx, ss, plain, "attempt-environment-plain")
 	none, err := environments.ApplyFact(ctx, model.AttemptEnvironmentFact{Kind: model.AttemptEnvironmentFactParticipationStarted,

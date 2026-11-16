@@ -20,7 +20,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// externalProvisioning is the prepared auto-provisioning payload for an unlinked external identity.
 type externalProvisioning struct {
 	user              *model.User
 	defaultPictureJob *model.Job
@@ -28,7 +27,6 @@ type externalProvisioning struct {
 	audit             *model.AuditEvent
 }
 
-// prepareExternalProvisioning builds the User, settings, picture Job and audit event used when the provider auto-provisions.
 func (s *Service) prepareExternalProvisioning(
 	attempt externalCompletionAttempt, assertion *model.ExternalAuthenticationAssertion, nowTime time.Time,
 ) (externalProvisioning, error) {
@@ -68,7 +66,6 @@ func (s *Service) prepareExternalProvisioning(
 	return provisioning, nil
 }
 
-// resolveExternalIdentity resolves or provisions the linked User and rejects invalid provenance or inactive accounts.
 func (s *Service) resolveExternalIdentity(
 	ctx context.Context,
 	attempt externalCompletionAttempt,
@@ -130,9 +127,8 @@ func (s *Service) resolveExternalIdentity(
 	return resolution, nil
 }
 
-// identityResolutionFailure audits a failed identity resolution and maps it to the public error.
 // An unlinked subject gets the same answer whether policy is linked-only or
-// invitation-required, and a conflict never names the existing User, so the
+// invitation-required, and a conflict never names the existing user, so the
 // response reveals nothing about admission rules or other accounts.
 func (s *Service) identityResolutionFailure(ctx context.Context, attempt externalCompletionAttempt, err error) error {
 	var conflict *store.ErrConflict
@@ -159,8 +155,8 @@ func (s *Service) identityResolutionFailure(ctx context.Context, attempt externa
 	}
 }
 
-// ExternalUserCandidate proposes the User an External Identity assertion would
-// provision; Invitation acceptance reuses it.
+// ExternalUserCandidate proposes the user an external identity assertion would
+// provision; invitation acceptance reuses it.
 func ExternalUserCandidate(
 	assertion *model.ExternalAuthenticationAssertion,
 ) *model.User {

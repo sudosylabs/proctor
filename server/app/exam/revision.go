@@ -33,15 +33,15 @@ type ListRevisionsQuery struct {
 	Limit            int
 }
 
-// RevisionPage is one page of Exam Revisions, newest first; HasMore reports
-// that an older page exists.
+// RevisionPage is one page of revisions, newest first; HasMore reports that
+// an older page exists.
 type RevisionPage struct {
 	Items   []store.ExamRevisionSummary
 	HasMore bool
 }
 
-// PublishExamRevision idempotently publishes the current Exam Draft as a new
-// immutable Exam Revision, fenced by ExpectedDraftRevision.
+// PublishExamRevision idempotently publishes the current draft as a new
+// revision, fenced by ExpectedDraftRevision.
 func (p *Publication) PublishExamRevision(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -146,8 +146,8 @@ func (p *Publication) PublishExamRevision(
 	return *result.Revision, nil
 }
 
-// GetExamRevision returns the summary of one Exam Revision to a caller
-// authorized to view the Exam.
+// GetExamRevision returns one revision's summary; the caller needs view
+// permission on the exam.
 func (p *Publication) GetExamRevision(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -170,8 +170,8 @@ func (p *Publication) GetExamRevision(
 	return *revision, nil
 }
 
-// ListExamRevisions returns one page of an Exam's Exam Revisions, newest
-// first, to a caller authorized to view the Exam.
+// ListExamRevisions returns one page of an exam's revisions, newest first;
+// the caller needs view permission on the exam.
 func (p *Publication) ListExamRevisions(
 	ctx context.Context,
 	inv invocation.Invocation,

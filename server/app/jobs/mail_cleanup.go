@@ -32,13 +32,13 @@ const MailCleanupPageSize = mailCleanupPageSize
 // for.
 const MailCleanupMaximumPages = mailCleanupMaximumPages
 
-// MailCleanupCommand is the immutable command of the mail cleanup Job.
+// MailCleanupCommand is the immutable command of the mail cleanup job.
 type MailCleanupCommand struct {
 	PageSize int `json:"page_size"`
 	MaxPages int `json:"max_pages"`
 }
 
-// MailCleanupResult is the safe result of the mail cleanup Job.
+// MailCleanupResult is the result of the mail cleanup job.
 type MailCleanupResult struct {
 	FanoutsTerminalized        int `json:"fanouts_terminalized"`
 	FanoutDeliveriesSuppressed int `json:"fanout_deliveries_suppressed"`
@@ -150,8 +150,8 @@ func mailCleanupDescriptor(handler job.Handler) job.Descriptor {
 	return descriptor
 }
 
-// NewMailCleanup registers the bounded cleanup of terminal mail deliveries
-// and Sitting mail maintenance, proposed daily.
+// NewMailCleanup registers the daily cleanup of terminal mail deliveries and
+// sitting mail maintenance.
 func NewMailCleanup(
 	deliveries store.MailStore,
 	sittings store.ExamSittingStore,

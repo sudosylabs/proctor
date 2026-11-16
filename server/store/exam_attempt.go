@@ -25,11 +25,11 @@ const (
 )
 
 // ExamAttemptConnect carries proposed identities for an atomic first
-// admission. Persistence checks exact replay before it locks and materializes
-// the current Sitting Revision's Starter Workspace. It derives authoritative
-// membership, state, generation, database time, and bootstrap child identities.
-// The raw continuity credential never crosses this boundary: the caller
-// validates the canonical 32-byte base64url value and supplies only its digest.
+// admission. The store checks exact replay before it locks and materializes
+// the current sitting revision's starter workspace; membership, state,
+// generation and time come from the database. The raw continuity credential
+// never reaches the store: the caller validates the 32-byte base64url value
+// and passes only its digest.
 type ExamAttemptConnect struct {
 	Security                           model.ConnectSecurity
 	SittingID                          model.ExamSittingID
@@ -50,9 +50,9 @@ type ExamAttemptConnect struct {
 	AuditAt                            time.Time
 }
 
-// ExamAttemptConnectResult is the committed connection aggregate. Replayed
-// denotes an exact command replay; FirstAdmission denotes creation of the
-// stable Attempt and Workspace in this transaction.
+// ExamAttemptConnectResult is the committed connection. Replayed means an
+// exact command replay; FirstAdmission means this transaction created the
+// attempt and workspace.
 type ExamAttemptConnectResult struct {
 	Security            model.AdmittedSecurity
 	Attempt             *model.ExamAttempt
@@ -65,26 +65,23 @@ type ExamAttemptConnectResult struct {
 	BrowserPolicy       *CandidateBrowserPolicy
 	LiveCorrections     []model.CandidateLiveCorrection
 	FirstAdmission      bool
-	// ConnectionOpened is true only when this command committed a new durable
-	// Connection. It is false for exact replay and different-key convergence on
-	// an already-open same-Session Connection, so transient effects remain
-	// post-commit and non-duplicating.
+	// ConnectionOpened is true only when this command committed a new
+	// connection. It is false for an exact replay and for a different key
+	// converging on an already-open connection of the same session, so
+	// post-commit effects are not duplicated.
 	ConnectionOpened bool
-	// RevokedSessionIDs and RevokedAccessTokenDigests are bounded post-commit
-	// invalidation selectors for other interactive Sessions fenced when this
-	// Attempt entered active. Personal Access Tokens are never included.
+	// RevokedSessionIDs and RevokedAccessTokenDigests select the other
+	// interactive sessions fenced when this attempt became active, for
+	// post-commit invalidation. Personal access tokens are never included.
 	RevokedSessionIDs         []model.SessionID
 	RevokedAccessTokenDigests []string
 	Replayed                  bool
 }
 
-// ConsistentWith reports whether the outcome carries a valid Attempt, Attempt
-// Workspace, Participation and Connection that all belong to that one Attempt,
-// the Attempt is the candidate's in the Sitting and Class the command named,
-// and the Connection was opened by the given Session.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the outcome carries a valid attempt, attempt
+// workspace, participation and connection that all belong to that one attempt,
+// the attempt is the candidate's in the sitting and class the command named,
+// and the connection was opened by the given session.
 func (r *ExamAttemptConnectResult) ConsistentWith(
 	classID model.ClassID,
 	candidateID model.UserID,
@@ -111,16 +108,16 @@ func (r *ExamAttemptConnectResult) ConsistentWith(
 }
 
 // Connected is the application's postcondition on an admission: the
-// Participation it returns is in lifecycle order. The application checks the
-// admitted Attempt, Participation and Connection states itself.
+// participation it returns is in lifecycle order. The application checks the
+// admitted attempt, participation and connection states itself.
 func (r *ExamAttemptConnectResult) Connected() bool {
 	return r.Participation.LifecycleInOrder()
 }
 
 // ConfigurationConsistent reports whether the admitted security posture,
-// frozen Attempt configuration, runtime capabilities, browser policy and live
-// corrections are each valid and agree with the outcome's Attempt and
-// Participation. An outcome without its Attempt or Participation is
+// frozen attempt configuration, runtime capabilities, browser policy and live
+// corrections are each valid and agree with the outcome's attempt and
+// participation. An outcome without its attempt or participation is
 // inconsistent.
 func (r *ExamAttemptConnectResult) ConfigurationConsistent() bool {
 	return !(r == nil ||
@@ -136,8 +133,8 @@ func (r *ExamAttemptConnectResult) ConfigurationConsistent() bool {
 		!r.RuntimeCapabilities.ConsistentWithLiveCorrections(r.LiveCorrections))
 }
 
-// ExamAttemptParticipationView is safe for application results and command
-// outcomes. It deliberately omits the continuity credential hash.
+// ExamAttemptParticipationView is a participation without its continuity
+// credential hash, safe for results and command outcomes.
 type ExamAttemptParticipationView struct {
 	ID              model.AttemptParticipationID
 	AttemptID       model.ExamAttemptID
@@ -151,12 +148,9 @@ type ExamAttemptParticipationView struct {
 	EndReason       model.AttemptParticipationEndReason
 }
 
-// Consistent reports whether the view names its Participation and Attempt, its
+// Consistent reports whether the view names its participation and attempt, its
 // generation, renewal sequence and instants are in order, and its end instant
-// and end reason are present exactly when the Participation ended.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// and end reason are present exactly when the participation ended.
 func (v *ExamAttemptParticipationView) Consistent() bool {
 	return !(v == nil ||
 		!v.ID.IsValid() ||
@@ -170,7 +164,7 @@ func (v *ExamAttemptParticipationView) Consistent() bool {
 		!v.LifecycleInOrder())
 }
 
-// LifecycleInOrder is the application's postcondition on a Participation a
+// LifecycleInOrder is the application's postcondition on a participation a
 // transition returns: it was updated and leased no earlier than it started,
 // it is active or ended, and its end instant and end reason are present
 // exactly when it ended, the end falling within its started and updated
@@ -193,11 +187,9 @@ func (v *ExamAttemptParticipationView) LifecycleInOrder() bool {
 	return false
 }
 
-// ExamAttemptParticipationRenewal is the complete sensitive selector for one
-// application-level lease renewal. The application validates and hashes the
-// canonical continuity credential immediately; raw credential material never
-// crosses the Store seam. Generation and Sequence are client fences, while
-// PostgreSQL supplies the only authoritative decision time.
+// ExamAttemptParticipationRenewal selects one lease renewal. The raw
+// continuity credential never reaches the store, only its hash. Generation
+// and Sequence are client fences; PostgreSQL's clock decides.
 type ExamAttemptParticipationRenewal struct {
 	Security                           model.SecurityControl
 	DesktopBuild                       model.DesktopBuildTuple
@@ -214,10 +206,9 @@ type ExamAttemptParticipationRenewal struct {
 	DesktopCompatibilityPolicyRevision int64
 }
 
-// ExamAttemptParticipationRenewalResult is the bounded hash-free renewal
-// acknowledgement. Duplicate is true only when Sequence was already the
-// current accepted sequence; that case returns the existing authoritative
-// times without extending the lease.
+// ExamAttemptParticipationRenewalResult acknowledges a renewal. Duplicate is
+// true only when Sequence was already the accepted sequence; the lease is
+// then returned unchanged, not extended.
 type ExamAttemptParticipationRenewalResult struct {
 	Security         model.SecurityControlResult
 	AttemptID        model.ExamAttemptID
@@ -233,12 +224,9 @@ type ExamAttemptParticipationRenewalResult struct {
 }
 
 // ConsistentWith reports whether the renewal carries valid security coverage,
-// is the given candidate's Attempt, Participation and generation in a named
-// Exam and Sitting, accepted the given sequence, and grants a lease that ends
+// is the given candidate's attempt, participation and generation in a named
+// exam and sitting, accepted the given sequence, and grants a lease that ends
 // after the decision time and no later than one initial lease from it.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
 func (r *ExamAttemptParticipationRenewalResult) ConsistentWith(
 	attemptID model.ExamAttemptID,
 	participationID model.AttemptParticipationID,
@@ -268,10 +256,9 @@ func (r *ExamAttemptParticipationRenewalResult) Renewed(sequence int64) bool {
 		!r.LeaseExpiresAt.After(r.DatabaseTime.Add(model.AttemptParticipationInitialLease))
 }
 
-// ExamAttemptParticipationExpiryDue is a bounded, hash-free candidate from
-// the recurring database-time scan. LeaseExpiresAt is informational; only the
-// conditional ExpireParticipation operation decides that the generation is
-// still current and due.
+// ExamAttemptParticipationExpiryDue is one row of the recurring expiry scan.
+// LeaseExpiresAt is informational; only ExpireParticipation decides that the
+// generation is still current and due.
 type ExamAttemptParticipationExpiryDue struct {
 	ExamID          model.ExamID
 	SittingID       model.ExamSittingID
@@ -284,10 +271,7 @@ type ExamAttemptParticipationExpiryDue struct {
 }
 
 // ConsistentWith reports whether the expiry target is the given generation of
-// the given Attempt's Participation.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// the given attempt's participation.
 func (d *ExamAttemptParticipationExpiryDue) ConsistentWith(
 	attemptID model.ExamAttemptID,
 	participationID model.AttemptParticipationID,
@@ -299,9 +283,9 @@ func (d *ExamAttemptParticipationExpiryDue) ConsistentWith(
 		d.Generation != generation)
 }
 
-// ExamAttemptParticipationExpiry supplies proposed append-only identities for
-// the one conditional, atomic expiry outcome. PostgreSQL supplies decision and
-// record times; application-node clocks never decide expiry.
+// ExamAttemptParticipationExpiry carries proposed identities for the records
+// an expiry appends. PostgreSQL's clock decides expiry and stamps the
+// records; node clocks never do.
 type ExamAttemptParticipationExpiry struct {
 	AttemptID       model.ExamAttemptID
 	ParticipationID model.AttemptParticipationID
@@ -313,8 +297,8 @@ type ExamAttemptParticipationExpiry struct {
 	AuditAt         time.Time
 }
 
-// ExamAttemptSuspensionView excludes the manager's private reason while
-// retaining enough state to publish bounded post-commit manager events.
+// ExamAttemptSuspensionView is a suspension without the manager's private
+// reason.
 type ExamAttemptSuspensionView struct {
 	ID                model.AttemptSuspensionID
 	AttemptID         model.ExamAttemptID
@@ -327,23 +311,19 @@ type ExamAttemptSuspensionView struct {
 	StartedAt         time.Time
 	EndedAt           model.OptionalTime
 	ReallowedByUserID model.UserID
-	// SuspendedByUserID identifies the Exam Manager of a manual episode; a
+	// SuspendedByUserID identifies the manager of a manual episode; a
 	// policy episode has none and links FlagID instead.
 	SuspendedByUserID model.UserID
 }
 
 // ConsistentActiveOrAbsent reports whether the view is absent, or is the given
-// Attempt's active Suspension: it names its Participation and generation,
+// attempt's active suspension: it names its participation and generation,
 // carries the provenance of its source, has started, and has neither ended nor
 // been re-allowed.
 //
-// It is the one consistency check that answers true for a nil receiver. An
-// Attempt that is not suspended has no active Suspension view, so absence is a
-// consistent answer wherever this is asked; a caller that requires a
-// Suspension checks for nil itself.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// Unlike the other consistency checks it is true for a nil receiver, since
+// an attempt that is not suspended has none; a caller that requires a
+// suspension checks for nil itself.
 func (v *ExamAttemptSuspensionView) ConsistentActiveOrAbsent(attemptID model.ExamAttemptID) bool {
 	if v == nil {
 		return true
@@ -358,7 +338,7 @@ func (v *ExamAttemptSuspensionView) ConsistentActiveOrAbsent(attemptID model.Exa
 		!v.ActiveOrAbsent())
 }
 
-// ActiveOrAbsent is the application's postcondition on the Suspension a
+// ActiveOrAbsent is the application's postcondition on the suspension a
 // transition or snapshot reports as active: the view is absent, or it is
 // active and has neither ended nor been re-allowed.
 func (v *ExamAttemptSuspensionView) ActiveOrAbsent() bool {
@@ -368,14 +348,11 @@ func (v *ExamAttemptSuspensionView) ActiveOrAbsent() bool {
 			v.ReallowedByUserID.IsZero()
 }
 
-// ConsistentClosedBy reports whether the view is the given Attempt's closed
-// Suspension: it names its Participation and generation, carries the
+// ConsistentClosedBy reports whether the view is the given attempt's closed
+// suspension: it names its participation and generation, carries the
 // provenance of its source, ended no earlier than it started, and was
 // re-allowed by the given actor. Unlike ConsistentActiveOrAbsent, an absent
 // view is not consistent.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
 func (v *ExamAttemptSuspensionView) ConsistentClosedBy(attemptID model.ExamAttemptID, actorID model.UserID) bool {
 	return !(v == nil ||
 		!v.ID.IsValid() ||
@@ -388,7 +365,7 @@ func (v *ExamAttemptSuspensionView) ConsistentClosedBy(attemptID model.ExamAttem
 		!v.Closed())
 }
 
-// Closed is the application's postcondition on the Suspension a re-allow
+// Closed is the application's postcondition on the suspension a re-allow
 // closes: it is closed and ended no earlier than it started.
 func (v *ExamAttemptSuspensionView) Closed() bool {
 	return v.State == model.AttemptSuspensionClosed &&
@@ -396,9 +373,9 @@ func (v *ExamAttemptSuspensionView) Closed() bool {
 		!v.EndedAt.Time.Before(v.StartedAt)
 }
 
-// validProvenance accepts a policy episode that links its Flag or a manual
-// episode (an Exam Manager's kick) that links its suspending manager. Every
-// re-allowable episode passes it in both its active and closed state.
+// validProvenance accepts a policy episode that links its flag or a manual
+// episode (a manager's kick) that links its suspending manager, in either its
+// active or closed state.
 func (v *ExamAttemptSuspensionView) validProvenance() bool {
 	switch v.Source {
 	case model.AttemptSuspensionSourcePolicy:
@@ -412,16 +389,15 @@ func (v *ExamAttemptSuspensionView) validProvenance() bool {
 	}
 }
 
-// reallowableSuspensionReason names the policy suspension reasons a manager
-// may re-allow. Active and closed validation share it so the post-commit
-// check cannot reject an outcome the Store deliberately committed.
+// Active and closed validation share reallowableSuspensionReason so the
+// post-commit check cannot reject an outcome the store deliberately committed.
 func reallowableSuspensionReason(reason model.AttemptSuspensionCandidateReason) bool {
 	return reason.IsPolicy()
 }
 
-// ExamAttemptParticipationExpiryResult is the retained, safe committed
-// aggregate. Replayed means another caller already completed this generation's
-// exact expiry episode; callers publish transient effects only when false.
+// ExamAttemptParticipationExpiryResult is the committed expiry. Replayed
+// means another caller already expired this generation; publish post-commit
+// effects only when it is false.
 type ExamAttemptParticipationExpiryResult struct {
 	ExamID          model.ExamID
 	SittingID       model.ExamSittingID
@@ -430,9 +406,8 @@ type ExamAttemptParticipationExpiryResult struct {
 	Attempt         *model.ExamAttempt
 	Participation   *ExamAttemptParticipationView
 	Connection      *ExamAttemptManagerConnection
-	// ConnectionClosed reports whether this expiry transition closed an open
-	// Connection. It is false when transport teardown had already closed the
-	// latest Connection; the flag and suspension still commit and publish.
+	// ConnectionClosed is false when transport teardown had already closed
+	// the latest connection; the flag and suspension still commit and publish.
 	ConnectionClosed bool
 	Evidence         *model.IntegrityEvidence
 	Flag             *model.IntegrityFlag
@@ -441,10 +416,10 @@ type ExamAttemptParticipationExpiryResult struct {
 	Replayed         bool
 }
 
-// ExamAttemptReallow is one exact, revision-fenced manager decision. The
-// private trimmed UTF-8 reason is retained only with Suspension provenance; it
-// must not enter ordinary audit data, command outcomes, logs, or realtime.
-// PostgreSQL statement time stamps the closed episode and resumed Attempt.
+// ExamAttemptReallow is a revision-fenced manager decision. PrivateReason is
+// kept only with the suspension; it must not enter audit data, command
+// outcomes, logs or realtime events. PostgreSQL statement time stamps the
+// closed episode and resumed attempt.
 type ExamAttemptReallow struct {
 	ExamID           model.ExamID
 	SittingID        model.ExamSittingID
@@ -458,9 +433,8 @@ type ExamAttemptReallow struct {
 	AuditAt          time.Time
 }
 
-// ExamAttemptReallowResult deliberately uses the private-reason-free
-// Suspension view. Re-allow preserves all evidence and creates neither a new
-// Participation nor continuity credential.
+// ExamAttemptReallowResult is a committed re-allow. Re-allow keeps all
+// evidence and creates neither a participation nor a continuity credential.
 type ExamAttemptReallowResult struct {
 	ExamID          model.ExamID
 	SittingID       model.ExamSittingID
@@ -468,21 +442,17 @@ type ExamAttemptReallowResult struct {
 	CandidateUserID model.UserID
 	Attempt         *model.ExamAttempt
 	Suspension      *ExamAttemptSuspensionView
-	// FocusLossWindowReset is true when this decision closed a Focus Loss
-	// suspension and atomically consumed only that generation's pending causal
-	// evaluation bucket. Flags, evidence, diagnostics, and sequence history are
-	// append-preserving; later admission creates a new generation.
+	// FocusLossWindowReset is true when this decision closed a focus loss
+	// suspension and consumed only that generation's pending evaluation
+	// bucket. Flags, evidence, diagnostics and sequence history are kept.
 	FocusLossWindowReset bool
 	Replayed             bool
 }
 
-// ConsistentWith reports whether the outcome is the commanded Attempt, valid
-// and ready again at the next revision, in the commanded Exam, Sitting and
-// Class for one candidate, and its Suspension is the commanded episode,
+// ConsistentWith reports whether the outcome is the commanded attempt, valid
+// and ready again at the next revision, in the commanded exam, sitting and
+// class for one candidate, and its suspension is the commanded episode,
 // consistently closed by the acting manager.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
 func (r *ExamAttemptReallowResult) ConsistentWith(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -509,18 +479,18 @@ func (r *ExamAttemptReallowResult) ConsistentWith(
 		!r.Reallowed(expectedAttemptRevision))
 }
 
-// Reallowed is the application's postcondition on a re-allow: the Attempt is
-// ready again at the next revision and its Suspension is closed.
+// Reallowed is the application's postcondition on a re-allow: the attempt is
+// ready again at the next revision and its suspension is closed.
 func (r *ExamAttemptReallowResult) Reallowed(expectedAttemptRevision int64) bool {
 	return r.Attempt.State == model.ExamAttemptReady &&
 		r.Attempt.Revision == expectedAttemptRevision+1 &&
 		r.Suspension.Closed()
 }
 
-// ExamAttemptManualSuspension is one exact, revision-fenced Exam Manager kick
-// of an active Attempt. The private trimmed UTF-8 reason is retained only with
-// the Suspension episode; it must not enter ordinary audit data, command
-// outcomes, logs, or realtime. PostgreSQL statement time stamps the episode.
+// ExamAttemptManualSuspension is a revision-fenced manager kick of an active
+// attempt. PrivateReason is kept only with the suspension; it must not enter
+// audit data, command outcomes, logs or realtime events. PostgreSQL statement
+// time stamps the episode.
 type ExamAttemptManualSuspension struct {
 	ExamID           model.ExamID
 	SittingID        model.ExamSittingID
@@ -534,9 +504,9 @@ type ExamAttemptManualSuspension struct {
 	AuditAt          time.Time
 }
 
-// ExamAttemptManualSuspensionResult is the committed, private-reason-free
-// kick outcome. Connection is the generation's latest Connection, if any;
-// ConnectionClosed is true when this kick closed it.
+// ExamAttemptManualSuspensionResult is a committed kick. Connection is the
+// generation's latest connection, if any; ConnectionClosed is true when this
+// kick closed it.
 type ExamAttemptManualSuspensionResult struct {
 	ExamID           model.ExamID
 	SittingID        model.ExamSittingID
@@ -550,15 +520,12 @@ type ExamAttemptManualSuspensionResult struct {
 	Replayed         bool
 }
 
-// ConsistentWith reports whether the outcome is the commanded Attempt, valid
-// and suspended at the next revision, in the commanded Exam, Sitting and Class
-// for one candidate; its Participation ended as kicked; its Suspension is that
-// Attempt's active manual episode for that Participation and generation,
-// placed by the acting manager; and a Connection is reported exactly when one
+// ConsistentWith reports whether the outcome is the commanded attempt, valid
+// and suspended at the next revision, in the commanded exam, sitting and class
+// for one candidate; its participation ended as kicked; its suspension is that
+// attempt's active manual episode for that participation and generation,
+// placed by the acting manager; and a connection is reported exactly when one
 // was closed, as kicked.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
 func (r *ExamAttemptManualSuspensionResult) ConsistentWith(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -591,9 +558,9 @@ func (r *ExamAttemptManualSuspensionResult) ConsistentWith(
 }
 
 // Suspended is the application's postcondition on a manual suspension: the
-// Attempt is suspended at the next revision; its Participation ended in
-// order, as kicked; its Suspension is an active manual episode; and a
-// Connection is reported exactly when one was closed, closed as kicked.
+// attempt is suspended at the next revision; its participation ended in
+// order, as kicked; its suspension is an active manual episode; and a
+// connection is reported exactly when one was closed, closed as kicked.
 func (r *ExamAttemptManualSuspensionResult) Suspended(expectedAttemptRevision int64) bool {
 	return r.Attempt.State == model.ExamAttemptSuspended &&
 		r.Attempt.Revision == expectedAttemptRevision+1 &&
@@ -627,12 +594,9 @@ type ExamAttemptConnectionCloseResult struct {
 	Changed         bool
 }
 
-// ConsistentWith reports whether the outcome names an Exam and carries the
-// valid Connection that was asked to close, belonging to the given Attempt in
-// the given Sitting.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the outcome names an exam and carries the
+// valid connection that was asked to close, belonging to the given attempt in
+// the given sitting.
 func (r *ExamAttemptConnectionCloseResult) ConsistentWith(
 	attemptID model.ExamAttemptID,
 	sittingID model.ExamSittingID,
@@ -648,11 +612,11 @@ func (r *ExamAttemptConnectionCloseResult) ConsistentWith(
 		r.Connection.Validate() != nil)
 }
 
-// CandidateAttemptAccess is the sensitive selector shared by protected reads.
-// The application hashes the presented raw credential before calling Store.
-// Reads verify the owning Attempt, active unexpired Participation, open
-// Connection, and readable Sitting state. They do not continuously poll Class
-// membership after connection admission.
+// CandidateAttemptAccess is the selector protected candidate reads share. The
+// application hashes the raw credential before calling the store. Reads
+// verify the attempt, active unexpired participation, open connection and
+// readable sitting state, but not class membership, which is checked only at
+// admission.
 type CandidateAttemptAccess struct {
 	AttemptID                model.ExamAttemptID
 	CandidateUserID          model.UserID
@@ -664,8 +628,8 @@ type CandidateAttemptAccess struct {
 }
 
 // CandidateAttemptAccessTarget is what a verified CandidateAttemptAccess
-// resolves to: the Candidate's active Attempt, its Sitting and Class, and the
-// active Participation generation the open Connection belongs to.
+// resolves to: the candidate's active attempt, its sitting and class, and the
+// active participation generation the open connection belongs to.
 type CandidateAttemptAccessTarget struct {
 	AttemptID       model.ExamAttemptID
 	SittingID       model.ExamSittingID
@@ -675,8 +639,8 @@ type CandidateAttemptAccessTarget struct {
 	Generation      int64
 }
 
-// ConsistentWith reports whether the target is valid and names the Attempt
-// and Candidate of access.
+// ConsistentWith reports whether the target is valid and names the attempt
+// and candidate of access.
 func (t *CandidateAttemptAccessTarget) ConsistentWith(access CandidateAttemptAccess) bool {
 	return t != nil &&
 		t.AttemptID == access.AttemptID &&
@@ -706,12 +670,9 @@ type ExamAttemptCorrectionAcknowledgementTarget struct {
 	CurrentRevisionID    model.ExamRevisionID
 }
 
-// ConsistentWith reports whether the target is the given candidate's Attempt,
-// names the correction Revision being acknowledged and the expected current
-// Revision, and names its Sitting and Class.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the target is the given candidate's attempt,
+// names the correction revision being acknowledged and the expected current
+// revision, and names its sitting and class.
 func (t *ExamAttemptCorrectionAcknowledgementTarget) ConsistentWith(
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
@@ -737,12 +698,9 @@ type ExamAttemptCorrectionAcknowledgementResult struct {
 	Replayed             bool
 }
 
-// ConsistentWith reports whether the outcome is for the given Attempt, names
-// the acknowledged correction Revision and the expected current Revision, and
+// ConsistentWith reports whether the outcome is for the given attempt, names
+// the acknowledged correction revision and the expected current revision, and
 // records when the acknowledgement happened.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
 func (r *ExamAttemptCorrectionAcknowledgementResult) ConsistentWith(
 	attemptID model.ExamAttemptID,
 	correctionRevisionID model.ExamRevisionID,
@@ -766,10 +724,9 @@ type CandidateExamResource struct {
 	SHA256              string
 }
 
-// CandidateExamPresentation is the bounded protected projection resolved from
-// the Sitting's current Revision, except Capacity, which remains frozen to the
-// original admission Revision.
-// The projection deliberately omits policy JSON and object selectors.
+// CandidateExamPresentation is resolved from the sitting's current revision,
+// except Capacity, which stays frozen to the admission revision. It omits
+// policy JSON and object selectors.
 type CandidateExamPresentation struct {
 	AttemptID            model.ExamAttemptID
 	SittingID            model.ExamSittingID
@@ -785,11 +742,8 @@ type CandidateExamPresentation struct {
 
 // Consistent reports whether the presentation carries valid delivery capacity
 // and runtime capabilities, a browser policy and live corrections that agree
-// with those capabilities, and both the admission and the current Exam
-// Revision.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// with those capabilities, and both the admission and the current exam
+// revision.
 func (p *CandidateExamPresentation) Consistent() bool {
 	return !(p == nil ||
 		p.Capacity.Validate() != nil ||
@@ -831,8 +785,8 @@ type CandidateBrowserCapability struct {
 	PolicyDigest     string
 }
 
-// CandidateBrowserPolicy is the current policy and separately revisioned disclosure.
-// A pending browser correction withholds the policy until acknowledgement.
+// CandidateBrowserPolicy is the current policy and its separately revisioned
+// disclosure. A pending browser correction withholds it until acknowledged.
 type CandidateBrowserPolicy struct {
 	PolicyRevisionNumber      int64
 	BrowserActivityDisclosure model.BrowserActivityDisclosure
@@ -852,9 +806,9 @@ type CandidateDepartureCapability struct {
 	Reason  string
 }
 
-// CandidateRuntimeCapabilities is one authoritative active-runtime snapshot.
-// It deliberately contains no credential, placement, capacity, settings
-// provenance, or authored Browser Policy data.
+// CandidateRuntimeCapabilities is one snapshot of the active runtime. It
+// carries no credential, placement, capacity, settings provenance or authored
+// browser policy data.
 type CandidateRuntimeCapabilities struct {
 	SchemaVersion                 int
 	ServerTime                    time.Time
@@ -921,13 +875,10 @@ func (c CandidateRuntimeCapabilities) Validate() error {
 // ConsistentWithBrowserPolicy reports whether the delivered browser policy
 // agrees with these capabilities. While a browser correction awaits
 // acknowledgement no policy is delivered. Otherwise the policy is that of the
-// current Exam Revision, is valid with a disclosure that matches it, is
+// current exam revision, is valid with a disclosure that matches it, is
 // enabled exactly when the browser capability is not disabled, names the
 // capability's policy revision and digest when enabled, and carries its own
 // true digest.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
 func (c CandidateRuntimeCapabilities) ConsistentWithBrowserPolicy(policy *CandidateBrowserPolicy) bool {
 	if slices.Contains(c.PendingCorrectionCapabilities, model.CandidateCapabilityBrowser) {
 		return policy == nil
@@ -959,11 +910,8 @@ func (c CandidateRuntimeCapabilities) ConsistentWithBrowserPolicy(policy *Candid
 
 // ConsistentWithLiveCorrections reports whether the delivered live corrections
 // are each valid, ascend strictly by revision number, never name the admission
-// Revision, and leave pending exactly the capabilities these capabilities
+// revision, and leave pending exactly the capabilities these capabilities
 // report, with acknowledgement required exactly when any is pending.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
 func (c CandidateRuntimeCapabilities) ConsistentWithLiveCorrections(corrections []model.CandidateLiveCorrection) bool {
 	var previous int64
 	for _, correction := range corrections {
@@ -982,7 +930,7 @@ func (c CandidateRuntimeCapabilities) ConsistentWithLiveCorrections(corrections 
 		(len(pending) != 0) != c.ExamRevision.AcknowledgementRequired)
 }
 
-// CandidateAttemptWorkspaceItem is safe logical metadata; it exposes neither
+// CandidateAttemptWorkspaceItem is logical metadata; it exposes neither a
 // starter object identity nor a VFS key.
 type CandidateAttemptWorkspaceItem struct {
 	EntryID        model.AttemptWorkspaceEntryID
@@ -994,14 +942,13 @@ type CandidateAttemptWorkspaceItem struct {
 	SHA256         string
 }
 
-// CandidateWorkspaceListOptions defines one bounded manifest page. Results
-// sort ascending by (Path, EntryID), but the opaque public cursor contains only
-// ExpectedCursor and AfterEntryID: a Workspace Path must never enter a URL,
-// query, access log, or cursor. Persistence resolves AfterEntryID's path under
-// the exact expected aggregate cursor. ExpectedCursor=-1 and a zero
-// AfterEntryID capture the current cursor for the first page; subsequent pages
-// require a nonnegative exact ExpectedCursor and a valid AfterEntryID. An
-// advanced aggregate returns RefreshRequired with no Items. Limit is 1..200.
+// CandidateWorkspaceListOptions selects one manifest page. Results sort by
+// (path, EntryID), but the public cursor holds only ExpectedCursor and
+// AfterEntryID: a workspace path must never enter a URL, query, access log or
+// cursor. ExpectedCursor -1 with a zero AfterEntryID captures the current
+// cursor for the first page; later pages need the exact ExpectedCursor and a
+// valid AfterEntryID, and get RefreshRequired with no Items once the
+// workspace has moved on. Limit is 1..200.
 type CandidateWorkspaceListOptions struct {
 	Access         ExamAttemptWorkspaceReadAccess
 	ExpectedCursor int64
@@ -1017,12 +964,9 @@ type CandidateAttemptWorkspacePage struct {
 	RefreshRequired bool
 }
 
-// Consistent reports whether the page names its Attempt Workspace at a
+// Consistent reports whether the page names its attempt workspace at a
 // non-negative cursor, and a page that asks for a refresh carries no items and
 // no further page.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
 func (p *CandidateAttemptWorkspacePage) Consistent() bool {
 	return !(p == nil ||
 		!p.WorkspaceID.IsValid() ||
@@ -1030,19 +974,16 @@ func (p *CandidateAttemptWorkspacePage) Consistent() bool {
 		(p.RefreshRequired && (len(p.Items) != 0 || p.HasMore)))
 }
 
-// CandidateResourceContent is an internal, post-authorization selector for the
-// file service. API serializers must never expose its managed-file identities.
+// CandidateResourceContent is a post-authorization selector for the file
+// service. API serializers must never expose its managed-file identities.
 type CandidateResourceContent struct {
 	Resource       CandidateExamResource
 	FileRevisionID model.FileRevisionID
 	RenditionID    model.FileRenditionID
 }
 
-// ConsistentWith reports whether the selector is for the Resource that was
-// asked for and names the File Revision and rendition to serve.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the selector is for the resource that was
+// asked for and names the file revision and rendition to serve.
 func (c *CandidateResourceContent) ConsistentWith(resourceID model.ExamResourceID) bool {
 	return !(c == nil ||
 		c.Resource.ResourceID != resourceID ||
@@ -1050,8 +991,8 @@ func (c *CandidateResourceContent) ConsistentWith(resourceID model.ExamResourceI
 		!c.RenditionID.IsValid())
 }
 
-// CandidateWorkspaceContent is an internal, post-authorization selector for
-// the VFS service. API serializers must never expose either object identity.
+// CandidateWorkspaceContent is a post-authorization selector for the VFS
+// service. API serializers must never expose either object identity.
 type CandidateWorkspaceContent struct {
 	Entry           CandidateAttemptWorkspaceItem
 	StorageOrigin   model.AttemptWorkspaceObjectStorage
@@ -1068,8 +1009,8 @@ type ExamAttemptManagerConnection struct {
 	CloseReason model.AttemptConnectionCloseReason
 }
 
-// ExamAttemptManagerSnapshot is the bounded authoritative refetch projection
-// used after realtime hints. It contains no credential hash or authored data.
+// ExamAttemptManagerSnapshot is what a manager refetches after a realtime
+// hint. It carries no credential hash or authored data.
 type ExamAttemptManagerSnapshot struct {
 	Attempt             *model.ExamAttempt
 	Workspace           *model.ExamAttemptWorkspace
@@ -1078,13 +1019,10 @@ type ExamAttemptManagerSnapshot struct {
 	ActiveSuspension    *ExamAttemptSuspensionView
 }
 
-// ConsistentWith reports whether the snapshot carries a valid Attempt of the
-// given Exam, and its active Suspension, when present, is that Attempt's
-// consistent active Suspension. It does not ask which Sitting the Attempt is
+// ConsistentWith reports whether the snapshot carries a valid attempt of the
+// given exam, and its active suspension, when present, is that attempt's
+// consistent active suspension. It does not ask which sitting the attempt is
 // in.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
 func (s *ExamAttemptManagerSnapshot) ConsistentWith(examID model.ExamID) bool {
 	return !(s == nil ||
 		s.Attempt == nil ||
@@ -1094,11 +1032,8 @@ func (s *ExamAttemptManagerSnapshot) ConsistentWith(examID model.ExamID) bool {
 }
 
 // ConsistentWithExamAndSitting reports everything ConsistentWith does and also
-// that the Attempt is in the given Sitting. A Sitting-scoped listing asks it
+// that the attempt is in the given sitting. A sitting-scoped listing asks it
 // of each row.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
 func (s *ExamAttemptManagerSnapshot) ConsistentWithExamAndSitting(examID model.ExamID, sittingID model.ExamSittingID) bool {
 	return !(s == nil ||
 		s.Attempt == nil ||
@@ -1109,15 +1044,15 @@ func (s *ExamAttemptManagerSnapshot) ConsistentWithExamAndSitting(examID model.E
 }
 
 // SuspensionActiveOrAbsent is the application's postcondition on a manager
-// snapshot: its active Suspension, when present, is active and neither ended
+// snapshot: its active suspension, when present, is active and neither ended
 // nor re-allowed.
 func (s *ExamAttemptManagerSnapshot) SuspensionActiveOrAbsent() bool {
 	return s.ActiveSuspension.ActiveOrAbsent()
 }
 
-// ExamAttemptManagerListOptions is Sitting-scoped and keyset bounded. Results
-// sort descending by (CreatedAt, AttemptID). Limit accepts at most 201 for one
-// manager-page look-ahead row.
+// ExamAttemptManagerListOptions selects a keyset page of one sitting's
+// attempts, newest (CreatedAt, AttemptID) first. Limit is at most 201, one
+// more than a manager page, to look ahead.
 type ExamAttemptManagerListOptions struct {
 	ExamID                 model.ExamID
 	SittingID              model.ExamSittingID
@@ -1266,7 +1201,7 @@ type SittingCandidateSuspension struct {
 }
 
 // SittingCandidateEnvironment is a candidate's execution environment as
-// the Sitting's managers see it.
+// the sitting's managers see it.
 type SittingCandidateEnvironment struct {
 	State        model.AttemptEnvironmentState
 	Desired      model.AttemptEnvironmentDesired
@@ -1291,18 +1226,15 @@ type SittingCandidateStatusPage struct {
 	SittingID       model.ExamSittingID
 	SittingState    model.ExamSittingState
 	SittingRevision int64
-	// EnvironmentsWaitingCapacity counts the Sitting's environments waiting
+	// EnvironmentsWaitingCapacity counts the sitting's environments waiting
 	// for an execution host with room, across every page.
 	EnvironmentsWaitingCapacity int64
 	Items                       []SittingCandidateStatusItem
 }
 
-// ConsistentWith reports whether the page is for the given Exam and Sitting,
-// carries the server time it was read at, the Sitting's valid state and
+// ConsistentWith reports whether the page is for the given exam and sitting,
+// carries the server time it was read at, the sitting's valid state and
 // revision, and an item list, which may be empty but not absent.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
 func (p *SittingCandidateStatusPage) ConsistentWith(examID model.ExamID, sittingID model.ExamSittingID) bool {
 	return !(p == nil ||
 		p.ExamID != examID ||
@@ -1313,8 +1245,8 @@ func (p *SittingCandidateStatusPage) ConsistentWith(examID model.ExamID, sitting
 		p.Items == nil)
 }
 
-// ExamAttemptInvalidationTarget is the minimal post-commit projection for an
-// Attempt suspended by Session revocation.
+// ExamAttemptInvalidationTarget names an attempt suspended by session
+// revocation, for post-commit invalidation.
 type ExamAttemptInvalidationTarget struct {
 	ExamID          model.ExamID
 	SittingID       model.ExamSittingID
@@ -1322,7 +1254,7 @@ type ExamAttemptInvalidationTarget struct {
 }
 
 // ExamAttemptSecurityUpdate reports security coverage for the active
-// Participation generation over the Candidate's open Connection.
+// participation generation over the candidate's open connection.
 type ExamAttemptSecurityUpdate struct {
 	Access                             CandidateAttemptAccess
 	ParticipationID                    model.AttemptParticipationID
@@ -1332,28 +1264,26 @@ type ExamAttemptSecurityUpdate struct {
 	Control                            model.SecurityControl
 }
 
-// ExamAttemptStore persists the Attempt aggregate: a Candidate's admission
-// and Connection, the Participation lease, suspension and re-allow,
-// correction acknowledgement, and the Attempt as Exam Managers and the
-// Candidate read it. Each mutation is one atomic operation that commits its
-// audit, and its idempotent outcome where it takes a command, with the change.
+// ExamAttemptStore holds attempts and their participations, connections,
+// suspensions and screen clips. Each mutation commits its audit, and its
+// idempotent outcome where it takes a command, with the change.
 type ExamAttemptStore interface {
-	// Connect admits the Candidate to the Sitting, creating the Attempt and
-	// its Workspace on first admission, and opens a Connection under a new or
-	// continued Participation. A replayed command returns the stored outcome.
+	// Connect admits the candidate to the sitting, creating the attempt and
+	// its workspace on first admission, and opens a connection under a new or
+	// continued participation. A replayed command returns the stored outcome.
 	Connect(context.Context, *ExamAttemptConnect, *CommandIdempotency) (*ExamAttemptConnectResult, error)
-	// CloseConnection closes the Candidate's open Connection for the given
-	// reason. Closing a Connection that is already closed reports Changed false.
+	// CloseConnection closes the candidate's open connection for the given
+	// reason. Closing a connection that is already closed reports Changed false.
 	CloseConnection(context.Context, *ExamAttemptConnectionClose) (*ExamAttemptConnectionCloseResult, error)
 
-	// RenewParticipation extends the lease of the active Participation
+	// RenewParticipation extends the lease of the active participation
 	// generation for the next renewal sequence. Repeating the current sequence
 	// returns the existing lease; an expired generation is a conflict.
 	RenewParticipation(context.Context, *ExamAttemptParticipationRenewal) (*ExamAttemptParticipationRenewalResult, error)
-	// UpdateSecurity records the security control sent over the Candidate's
-	// open Connection without extending the Participation lease.
+	// UpdateSecurity records the security control sent over the candidate's
+	// open connection without extending the participation lease.
 	UpdateSecurity(context.Context, *ExamAttemptSecurityUpdate) (model.SecurityControlResult, error)
-	// ResolveParticipationExpiry returns the named active Participation
+	// ResolveParticipationExpiry returns the named active participation
 	// generation when its lease has expired, so the caller can begin the audit
 	// for ExpireParticipation. It changes nothing.
 	ResolveParticipationExpiry(
@@ -1363,37 +1293,37 @@ type ExamAttemptStore interface {
 		int64,
 	) (*ExamAttemptParticipationExpiryDue, error)
 	// ListExpiredParticipations returns up to limit (1..200) active
-	// Participation generations whose lease has expired, oldest expiry first.
+	// participation generations whose lease has expired, oldest expiry first.
 	ListExpiredParticipations(context.Context, int) ([]ExamAttemptParticipationExpiryDue, error)
-	// ExpireParticipation ends an expired Participation generation, closes its
-	// Connection, records Connection Loss evidence and its Flag, and suspends
-	// the Attempt. A later call for the same generation returns that outcome.
+	// ExpireParticipation ends an expired participation generation, closes its
+	// connection, records connection loss evidence and its flag, and suspends
+	// the attempt. A later call for the same generation returns that outcome.
 	ExpireParticipation(context.Context, *ExamAttemptParticipationExpiry) (*ExamAttemptParticipationExpiryResult, error)
 
-	// SuspendAttempt applies an Exam Manager's kick: it ends the active
-	// Participation, closes its Connection, and opens a manual Suspension on
-	// the Attempt at the expected revision.
+	// SuspendAttempt applies a manager's kick: it ends the active
+	// participation, closes its connection, and opens a manual suspension on
+	// the attempt at the expected revision.
 	SuspendAttempt(context.Context, *ExamAttemptManualSuspension, *CommandIdempotency) (*ExamAttemptManualSuspensionResult, error)
-	// ReallowAttempt closes the named active Suspension and returns the
-	// Attempt, at the expected revision, to a state the Candidate can reconnect
-	// from. It keeps all evidence and creates no Participation.
+	// ReallowAttempt closes the named active suspension and returns the
+	// attempt, at the expected revision, to a state the candidate can reconnect
+	// from. It keeps all evidence and creates no participation.
 	ReallowAttempt(context.Context, *ExamAttemptReallow, *CommandIdempotency) (*ExamAttemptReallowResult, error)
 
-	// RequestScreenClip saves an Exam Manager's request for a range of the
-	// candidate's recorded screen. It refuses a request when the Exam does not
-	// record the screen, when the Attempt has ended, and beyond the per-Attempt
-	// limit. A request made while the Attempt is suspended waits until the
+	// RequestScreenClip saves a manager's request for a range of the
+	// candidate's recorded screen. It refuses a request when the exam does not
+	// record the screen, when the attempt has ended, and beyond the per-attempt
+	// limit. A request made while the attempt is suspended waits until the
 	// candidate resumes.
 	RequestScreenClip(context.Context, *ExamAttemptScreenClipRequest, *CommandIdempotency) (*ExamAttemptScreenClipResult, error)
 	// ListPendingScreenClips returns, oldest first, the requests the Desktop of
-	// the live Connection has not taken yet. Private reasons are cleared.
+	// the live connection has not taken yet. Private reasons are cleared.
 	ListPendingScreenClips(context.Context, CandidateAttemptAccess) ([]ExamAttemptScreenClipView, error)
-	// DeliverScreenClip records that the Desktop of the live Connection took a
-	// request. Taking it again through the same Participation returns it
+	// DeliverScreenClip records that the Desktop of the live connection took a
+	// request. Taking it again through the same participation returns it
 	// unchanged.
 	DeliverScreenClip(context.Context, *ExamAttemptScreenClipDelivery) (*ExamAttemptScreenClipView, error)
 	// BeginScreenClipUpload records the clip Desktop is about to upload. It
-	// refuses a clip beyond the Attempt's byte limit. Declaring the same clip
+	// refuses a clip beyond the attempt's byte limit. Declaring the same clip
 	// again returns it unchanged.
 	BeginScreenClipUpload(context.Context, *ExamAttemptScreenClipUploadBegin) (*ExamAttemptScreenClipView, error)
 	// GetScreenClipUpload returns a clip and the chunks of it that arrived.
@@ -1407,10 +1337,10 @@ type ExamAttemptStore interface {
 	// Completing it again returns it unchanged.
 	CompleteScreenClipUpload(context.Context, *ExamAttemptScreenClipCompletion) (*ExamAttemptScreenClipView, error)
 	// ListAttemptScreenClips returns, newest first, every clip requested for
-	// an Attempt of the exact Exam and Sitting. Private reasons are cleared.
+	// an attempt of the exact exam and sitting. Private reasons are cleared.
 	ListAttemptScreenClips(context.Context, ExamAttemptClips) ([]ExamAttemptScreenClipView, error)
-	// GetAttemptScreenClip returns one clip of an Attempt of the exact Exam
-	// and Sitting.
+	// GetAttemptScreenClip returns one clip of an attempt of the exact exam
+	// and sitting.
 	GetAttemptScreenClip(context.Context, ExamAttemptClips, model.ScreenClipID) (*ExamAttemptScreenClipView, error)
 
 	// ResolveCorrectionAcknowledgementTarget validates an acknowledgement and
@@ -1419,38 +1349,38 @@ type ExamAttemptStore interface {
 		context.Context,
 		ExamAttemptCorrectionAcknowledgement,
 	) (*ExamAttemptCorrectionAcknowledgementTarget, error)
-	// AcknowledgeCorrection records that the Candidate acknowledged a live
-	// correction Revision of the Exam.
+	// AcknowledgeCorrection records that the candidate acknowledged a live
+	// correction revision of the exam.
 	AcknowledgeCorrection(
 		context.Context,
 		*ExamAttemptCorrectionAcknowledgement,
 		*CommandIdempotency,
 	) (*ExamAttemptCorrectionAcknowledgementResult, error)
 
-	// Get returns an Exam Manager's snapshot of one Attempt of the Exam.
+	// Get returns a manager's snapshot of one attempt of the exam.
 	Get(context.Context, model.ExamID, model.ExamAttemptID) (*ExamAttemptManagerSnapshot, error)
-	// List returns one page of a Sitting's Attempts for an Exam Manager,
+	// List returns one page of a sitting's attempts for a manager,
 	// newest first.
 	List(context.Context, ExamAttemptManagerListOptions) ([]ExamAttemptManagerSnapshot, error)
-	// ListSittingCandidateStatuses returns one page of a Sitting's Candidates
-	// with each one's Attempt, presence, suspension and integrity state.
+	// ListSittingCandidateStatuses returns one page of a sitting's candidates
+	// with each one's attempt, presence, suspension and integrity state.
 	ListSittingCandidateStatuses(context.Context, SittingCandidateStatusListOptions) (*SittingCandidateStatusPage, error)
-	// ListSessionRevocationInvalidationTargets returns the Exams and Sittings
-	// of the Candidate's Attempts that were suspended through a Participation
-	// bound to one of the given Sessions.
+	// ListSessionRevocationInvalidationTargets returns the exams and sittings
+	// of the candidate's attempts that were suspended through a participation
+	// bound to one of the given sessions.
 	ListSessionRevocationInvalidationTargets(context.Context, model.UserID, []model.SessionID) ([]ExamAttemptInvalidationTarget, error)
 
-	// ListCandidateActivity returns one page of the Candidate's Sittings with
-	// the state of their Attempt in each and what they may do next.
+	// ListCandidateActivity returns one page of the candidate's sittings with
+	// the state of their attempt in each and what they may do next.
 	ListCandidateActivity(context.Context, CandidateExamActivityListOptions) (*CandidateExamActivityPage, error)
-	// GetCandidatePresentation returns the Exam content, capacity and runtime
-	// capabilities the Candidate sees for their live Attempt.
+	// GetCandidatePresentation returns the exam content, capacity and runtime
+	// capabilities the candidate sees for their live attempt.
 	GetCandidatePresentation(context.Context, CandidateAttemptAccess) (*CandidateExamPresentation, error)
-	// ResolveCandidateAccess verifies the Candidate's live Attempt access
-	// and returns the Attempt, Sitting, Class and current Participation it
+	// ResolveCandidateAccess verifies the candidate's live attempt access
+	// and returns the attempt, sitting, class and current participation it
 	// resolves to.
 	ResolveCandidateAccess(context.Context, CandidateAttemptAccess) (*CandidateAttemptAccessTarget, error)
-	// ResolveCandidateResource returns the stored file behind an Exam Resource
-	// the Candidate's live Attempt may read.
+	// ResolveCandidateResource returns the stored file behind an exam resource
+	// the candidate's live attempt may read.
 	ResolveCandidateResource(context.Context, CandidateAttemptAccess, model.ExamResourceID) (*CandidateResourceContent, error)
 }

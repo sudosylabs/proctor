@@ -16,7 +16,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// AuthorizeRoleBindingPreflight checks that the caller holds the action at some scope before a Role Binding is loaded.
+// AuthorizeRoleBindingPreflight refuses, with a recorded denial, a caller who
+// holds action at no scope, before any role binding is loaded.
 func (s *Authorizer) AuthorizeRoleBindingPreflight(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -52,7 +53,7 @@ func (s *Authorizer) AuthorizeRoleBindingPreflight(
 	return DeniedError()
 }
 
-// AuthorizeRoleBindingScope authorizes the action on a Role Binding scope and returns that scope as a Resource.
+// AuthorizeRoleBindingScope returns the authorized scope as a Resource.
 func (s *Authorizer) AuthorizeRoleBindingScope(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -120,7 +121,7 @@ func (s *Authorizer) canDelegateActionsAtScope(
 	return true, nil
 }
 
-// CanDelegateActionsAtScope reports whether the principal may delegate every action at the scope, without recording a decision.
+// CanDelegateActionsAtScope records no decision.
 func (s *Authorizer) CanDelegateActionsAtScope(
 	ctx context.Context,
 	principal model.Principal,
@@ -131,27 +132,24 @@ func (s *Authorizer) CanDelegateActionsAtScope(
 	return s.canDelegateActionsAtScope(ctx, principal, actions, scopeType, scopeID)
 }
 
-// PersonalAccessTokenDelegation is where a principal may currently delegate
-// each Personal Access Token action. AcademicUnitRootIDs is the sorted union
-// of the Academic Units at which at least one action is delegable; an action
-// delegable at a root may also target any unit below it.
+// PersonalAccessTokenDelegation lists where a principal may delegate each
+// token action. AcademicUnitRootIDs is the sorted union of every action's
+// roots; an action delegable at a root may also target any unit below it.
 type PersonalAccessTokenDelegation struct {
 	Actions             []PersonalAccessTokenActionDelegation
 	AcademicUnitRootIDs []model.AcademicUnitID
 }
 
 // PersonalAccessTokenActionDelegation is one delegable action. InstitutionWide
-// means a token may carry the action with no Academic Unit boundary or with
-// any boundary; AcademicUnitIDs lists the roots at which it is delegable.
+// means a token may carry it with any academic unit boundary or none.
 type PersonalAccessTokenActionDelegation struct {
 	Action          model.Action
 	InstitutionWide bool
 	AcademicUnitIDs []model.AcademicUnitID
 }
 
-// PersonalAccessTokenDelegation evaluates every Personal Access Token action
-// with the same ceiling CanDelegateActionsAtScope applies at creation, so it
-// never reports a placement that creation would refuse. Actions delegable
+// PersonalAccessTokenDelegation applies the same ceiling as token creation, so
+// it never offers a placement creation would refuse. Actions delegable
 // nowhere are omitted.
 func (s *Authorizer) PersonalAccessTokenDelegation(
 	ctx context.Context,
@@ -227,7 +225,7 @@ func (s *Authorizer) PersonalAccessTokenDelegation(
 				false,
 			),
 		}
-		// Every candidate is an Academic Unit, where creation applies the
+		// Every candidate is an academic unit, where creation applies the
 		// strict-parent rule to protected actions.
 		strictParent := protectedDelegationAction(evaluation.definition.Action)
 		for index, id := range candidateIDs {

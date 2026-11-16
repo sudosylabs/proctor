@@ -363,9 +363,9 @@ func endExamAttemptByManager(
 	return outcome, nil
 }
 
-// lockManagerEndTarget guards the manager's Exam authority, locks the Attempt,
-// and requires it to be another candidate's unresolved Attempt in an open or
-// paused Sitting at the expected identity and revision.
+// lockManagerEndTarget guards the manager's exam authority, locks the attempt,
+// and requires it to be another candidate's unresolved attempt in an open or
+// paused sitting at the expected identity and revision.
 func lockManagerEndTarget(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamSubmissionManagerEnd,
 ) (automaticExamSubmissionRow, store.ExamSubmissionAutomaticSealTarget, error) {
 	var zeroRow automaticExamSubmissionRow
@@ -406,7 +406,7 @@ func lockManagerEndTarget(ctx context.Context, tx *sqlxTxWrapper, input *store.E
 }
 
 // recordManagerEndAction records the manager's end action and private reason
-// against the sealed Submission.
+// against the sealed submission.
 func recordManagerEndAction(
 	ctx context.Context,
 	tx *sqlxTxWrapper,

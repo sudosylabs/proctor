@@ -24,7 +24,7 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// workspaceError turns a refused Workspace read or write into what the
+// workspaceError turns a refused workspace read or write into what the
 // owner does next.
 func (o *owner) workspaceError(err error) error {
 	switch {
@@ -37,7 +37,7 @@ func (o *owner) workspaceError(err error) error {
 }
 
 // prepare initializes the projection of a new machine, or reads the
-// Workspace to continue one another owner started.
+// workspace to continue one another owner started.
 func (o *owner) prepare(ctx context.Context) error {
 	manifest, err := o.listManifest(ctx)
 	if err != nil {
@@ -70,19 +70,18 @@ const defaultIgnoreHeader = `# Paths that stay on the execution machine: they ar
 # editor. This file is saved and submitted itself.
 `
 
-// DefaultIgnoreFile is the IgnoreFile a new Attempt Workspace that uses
+// DefaultIgnoreFile is the IgnoreFile a new attempt workspace that uses
 // execution gets: the header and DefaultIgnorePatterns, one per line.
 func DefaultIgnoreFile() []byte {
 	return []byte(defaultIgnoreHeader + strings.Join(DefaultIgnorePatterns, "\n") + "\n")
 }
 
-// writeDefaultIgnore gives the Workspace the default IgnoreFile, as the
-// environment, when the first machine of an Attempt is first prepared and
-// the Workspace has none: a Starter's own copy, or one the candidate wrote,
-// is never replaced. Its idempotency key is the Attempt's, so an owner that
-// restarts before recording the projection replays the same write instead
-// of making another. A refusal, such as a candidate's file created
-// meanwhile or a full Workspace, leaves it out; the defaults apply anyway.
+// writeDefaultIgnore writes the default IgnoreFile when an attempt's first
+// machine is first prepared and the workspace has none; a starter's or the
+// candidate's copy is never replaced. The idempotency key is the attempt's,
+// so an owner that restarts before recording the projection replays the same
+// write. A refusal, such as a candidate file created meanwhile or a full
+// workspace, is ignored; the defaults apply anyway.
 func (o *owner) writeDefaultIgnore(ctx context.Context) (bool, error) {
 	body := DefaultIgnoreFile()
 	sum := sha256.Sum256(body)
@@ -110,7 +109,7 @@ func (o *owner) writeDefaultIgnore(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// listManifest reads the whole Workspace manifest at one cursor.
+// listManifest reads the whole workspace manifest at one cursor.
 func (o *owner) listManifest(ctx context.Context) (*tree, error) {
 	for range 8 {
 		result := newTree(0)
@@ -141,7 +140,7 @@ func (o *owner) listManifest(ctx context.Context) (*tree, error) {
 	return nil, errors.New("the Attempt Workspace kept changing while it was read")
 }
 
-// initialize projects the whole Workspace into a new machine, once.
+// initialize projects the whole workspace into a new machine, once.
 func (o *owner) initialize(ctx context.Context, manifest *tree) error {
 	o.ahead = manifest
 	items := slices.Collect(maps.Values(manifest.byID))
@@ -188,7 +187,7 @@ func (o *owner) initialize(ctx context.Context, manifest *tree) error {
 	return o.save(ctx)
 }
 
-// uploadEntry uploads a Workspace file's current content into the machine.
+// uploadEntry uploads a workspace file's current content into the machine.
 // A file that no longer exists uploads as empty: a later journal entry
 // removes it. When version is set and the file has moved past it, the
 // fallback observed content is uploaded instead, if any.
@@ -226,11 +225,10 @@ func (o *owner) aheadEntry(entryID model.AttemptWorkspaceEntryID) *entry {
 	return o.ahead.byID[entryID]
 }
 
-// errVersionMoved: the Workspace file no longer has the version asked for.
 var errVersionMoved = errors.New("the Workspace file moved past the version")
 
 // recordProjection copies the projection into the row, keeping only the
-// versions of files the Workspace still holds.
+// versions of files the workspace still holds.
 func (o *owner) recordProjection() {
 	versions := o.proj.Versions
 	if o.ahead != nil && o.ahead.Cursor == o.proj.Cursor {
@@ -250,7 +248,7 @@ func (o *owner) sync(ctx context.Context, settling bool) error {
 	drain := settling || o.drainNext
 	o.drainNext = false
 	now := o.deps.Now()
-	// The journal is read when a Workspace commit woke the owner, while
+	// The journal is read when a workspace commit woke the owner, while
 	// something is left to project, and on the idle backstop; never on
 	// every observation round.
 	var changes []model.AttemptWorkspaceJournalEntry
@@ -336,7 +334,7 @@ func (o *owner) diverging(ctx context.Context) error {
 }
 
 // readJournal returns the journal after the projected cursor and brings
-// the Workspace view up to date with it.
+// the workspace view up to date with it.
 func (o *owner) readJournal(ctx context.Context) ([]model.AttemptWorkspaceJournalEntry, error) {
 	o.journalReadAt = o.deps.Now()
 	var changes []model.AttemptWorkspaceJournalEntry
@@ -366,7 +364,7 @@ func (o *owner) readJournal(ctx context.Context) ([]model.AttemptWorkspaceJourna
 	return changes, nil
 }
 
-// refreshAhead brings the Workspace view up to the journal's end.
+// refreshAhead brings the workspace view up to the journal's end.
 func (o *owner) refreshAhead(ctx context.Context) error {
 	for range journalRound / journalPage {
 		page, err := o.deps.Workspace.Journal(ctx, o.access(), o.ahead.Cursor, journalPage)
@@ -523,7 +521,7 @@ func projectionMutationID(from, through, fence int64, apply int) string {
 }
 
 // changeContent uploads the body of a create or replace. A harvested
-// change's echo must carry the exact bytes the guest wrote: the Workspace's
+// change's echo must carry the exact bytes the guest wrote: the workspace's
 // file while it still has that version, else the observed content.
 func (o *owner) changeContent(ctx context.Context, change model.AttemptWorkspaceJournalEntry) (*ContentRef, error) {
 	known, harvested := o.echoes[change.Cursor]
@@ -554,14 +552,14 @@ func (o *owner) changeContent(ctx context.Context, change model.AttemptWorkspace
 	return &uploaded, nil
 }
 
-// ignoreCache holds the Workspace's own ignore file by version.
+// ignoreCache holds the workspace's own ignore file by version.
 type ignoreCache struct {
 	version model.WorkspaceContentVersion
 	body    []byte
 	present bool
 }
 
-// policy is the ignore decision of the Workspace's own copy of IgnoreFile,
+// policy is the ignore decision of the workspace's own copy of IgnoreFile,
 // or of the defaults while it has none that parses.
 func (o *owner) policy(ctx context.Context) (IgnorePolicy, error) {
 	item := o.ahead.byPath[IgnoreFile]

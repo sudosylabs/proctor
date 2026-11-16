@@ -32,17 +32,12 @@ const (
 )
 
 // inputRecorder records the input one session wrote to a terminal, on the
-// node that serves it and never through the guest. Output is never
-// recorded. Input is coalesced into records of at most InputFlush and
-// InputChunkBytes; a record's sequence is its first byte's input offset
-// plus one, so a resend, from this node or another, repeats a record rather
-// than adding one. Only bytes the terminal took after the session attached
-// and past what the session recorded are recorded: a resend of input
-// another session already sent is that session's.
-//
-// A window change is recorded with the input that follows it; one with no
-// input after it before the session ends is not kept, since no input reads
-// against it.
+// node that serves it and never through the guest; output is never recorded.
+// A record's sequence is its first byte's input offset plus one, so a resend
+// from any node repeats a record rather than adding one. Only bytes taken
+// after the session attached and past what it recorded count: a resend of
+// another session's input is that session's to record. A window change is
+// kept only when input follows it before the session ends.
 type inputRecorder struct {
 	terminals   *Terminals
 	attemptID   model.ExamAttemptID
@@ -132,7 +127,6 @@ func (r *inputRecorder) input(offset uint64, data []byte) {
 	}
 }
 
-// resize records a window change.
 func (r *inputRecorder) resize(window Window) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -206,7 +200,7 @@ func (r *inputRecorder) close(ctx context.Context) {
 	}
 }
 
-// store appends one record. A sealed Attempt, a newer incarnation, or a
+// store appends one record. A sealed attempt, a newer incarnation, or a
 // record another node already stored at that offset leave nothing to do.
 func (r *inputRecorder) store(ctx context.Context, chunk *inputChunk) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), inputFlushTimeout)

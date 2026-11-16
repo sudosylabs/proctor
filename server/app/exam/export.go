@@ -18,9 +18,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ExportArchiveInput is private byte-processing input owned by its consumer.
-// The content adapter writes the versioned portable representation, verifies
-// original bytes and the completed archive, and never chooses domain scope.
+// ExportArchiveInput is what ExportContent writes into an archive. The adapter
+// verifies the original bytes and the finished archive but never chooses what
+// is in scope.
 type ExportArchiveInput struct {
 	ExportID  model.ExamExportID
 	AttemptID model.JobAttemptID
@@ -28,35 +28,31 @@ type ExportArchiveInput struct {
 	Files     []ExportArchiveFile
 }
 
-// ExportArchiveFile names one sealed Submission file to include in an
-// Examination Export archive.
+// ExportArchiveFile names one sealed submission file to include in an archive.
 type ExportArchiveFile struct {
 	SubmissionID model.SubmissionID
 	Entry        model.ExamSubmissionManifestEntry
 }
 
-// ExportArchiveContent describes the verified archive bytes written by
-// ExportContent.
+// ExportArchiveContent describes the verified archive ExportContent wrote.
 type ExportArchiveContent struct {
 	SizeBytes int64
 	SHA256    string
 }
 
-// ExportContent writes, opens, and purges the stored archive bytes of an
-// Examination Export, keyed by export and Job attempt.
+// ExportContent stores export archives, keyed by export and job attempt.
 type ExportContent interface {
-	// An unsuccessful write whose backend outcome is still uncertain must
-	// return an error implementing ExamExportWriteUncertain(). Its durable
-	// artifact reservation remains necessary even after one absence check.
+	// A failed write whose backend outcome is unknown must return an error
+	// implementing ExamExportWriteUncertain(); its artifact reservation must
+	// stay even after one absence check.
 	BuildExamExport(context.Context, ExportArchiveInput) (*ExportArchiveContent, error)
 	OpenExamExport(context.Context, model.ExamExportID, model.JobAttemptID) (io.ReadCloser, error)
 	PurgeExamExport(context.Context, model.ExamExportID, model.JobAttemptID) error
 }
 
-// Exports requests, reads, and builds Examination Exports.
+// Exports requests, reads and builds examination exports.
 type Exports struct {
-	exports store.ExamExportStore
-	// exams reads the Exam ownership an export is authorized against.
+	exports             store.ExamExportStore
 	exams               store.ExamAuthoringStore
 	academicUnitMembers store.AcademicUnitMemberStore
 
@@ -68,8 +64,7 @@ type Exports struct {
 	newJobID   func() model.JobID
 }
 
-// ExportsDependencies are the collaborators NewExports validates once and
-// distributes to the Exports.
+// ExportsDependencies are the collaborators of NewExports.
 type ExportsDependencies struct {
 	Persistence store.ExamExportStore
 	Access      store.ExamAuthoringStore

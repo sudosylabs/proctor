@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	// ExamAttemptExpiryTaskName names the runtime task that settles expired
-	// Participations and abandoned deliveries; its scans record it as their
+	// ExamAttemptExpiryTaskName names the task that settles expired
+	// participations and abandoned deliveries; its scans record it as their
 	// system caller.
 	ExamAttemptExpiryTaskName = "exam-attempt-participation-expiry"
 	// ExamAttemptExpiryScanInterval is the pause between two scans on a node.
@@ -25,13 +25,13 @@ const (
 	examAttemptExpiryBatchLimit   = 200
 )
 
-// ExamAttemptExpiryRunner adapts the bounded application scan to the
-// generic non-durable runtime loop. Cross-node claiming and idempotency stay in
-// the named Store operation; this adapter creates no durable Job occurrence.
+// ExamAttemptExpiryRunner runs the attempt expiry scans as a non-durable
+// periodic task. Cross-node claiming and idempotency stay in the store
+// operation.
 type ExamAttemptExpiryRunner struct{ Attempts *attempt.Service }
 
-// Run scans expired Participations and then abandoned deliveries, each up to
-// one batch. A failed Participation scan ends the pass.
+// Run scans expired participations and then abandoned deliveries, one batch
+// each. A failed participation scan ends the pass.
 func (r ExamAttemptExpiryRunner) Run(ctx context.Context) error {
 	system := invocation.Task(ExamAttemptExpiryTaskName)
 	_, err := r.Attempts.ScanExpiredParticipations(ctx, system, examAttemptExpiryBatchLimit)
@@ -42,8 +42,7 @@ func (r ExamAttemptExpiryRunner) Run(ctx context.Context) error {
 	return err
 }
 
-// NewExamAttemptExpiryTask is the periodic runtime task that runs the Attempt
-// expiry scans on every node.
+// NewExamAttemptExpiryTask runs the attempt expiry scans on every node.
 func NewExamAttemptExpiryTask(attempts *attempt.Service) job.PeriodicTask {
 	return job.PeriodicTask{
 		Name:     ExamAttemptExpiryTaskName,

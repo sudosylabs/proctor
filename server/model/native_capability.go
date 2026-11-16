@@ -7,8 +7,8 @@
 
 package model
 
-// NativeCapabilityID names one capability Desktop reports facts for, such as
-// display_topology or process_application.
+// NativeCapabilityID names one capability the desktop reports facts for, such
+// as display_topology or process_application.
 type NativeCapabilityID string
 
 // isNativeIdentifier accepts a lowercase identifier of letters, digits and

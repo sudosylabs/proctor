@@ -179,8 +179,9 @@ func TestBrowserIntegrityStore(t *testing.T, ss store.Store) {
 	require.Equal(t, int64(2), flags.Items[0].OverflowCount, "overflow counted rejected bytes or replay")
 }
 
-// Exercise all 256 real groups across frozen policy revisions rather than
-// fabricating a full counter. The next qualifying event remains count-only.
+// TestBrowserIntegrityGroupCapacity fills all 256 real groups across frozen
+// policy revisions rather than fabricating a full counter. The next
+// qualifying event stays count-only.
 func TestBrowserIntegrityGroupCapacity(t *testing.T, ss store.Store) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
@@ -271,8 +272,9 @@ func TestBrowserIntegrityGroupCapacity(t *testing.T, ss store.Store) {
 	require.Equal(t, "group_capacity", snapshot.BrowserEvidenceOverflow.Reason)
 }
 
-// The probe advances only lifetime counters to an exact boundary. Public intake,
-// immutable copies, overflow, sealing and Review finalization remain real.
+// TestBrowserIntegrityCopyBoundaries lets seed advance only lifetime counters
+// to an exact boundary; intake, copies, overflow, sealing and review
+// finalization stay real.
 func TestBrowserIntegrityCopyBoundaries(t *testing.T, ss store.Store, seed func(*testing.T, context.Context, model.ExamAttemptID, int64, int64)) {
 	for caseIndex, mode := range []string{"record limit", "exact byte limit", "already full"} {
 		t.Run(mode, func(t *testing.T) {

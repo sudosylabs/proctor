@@ -30,8 +30,8 @@ type classResponse struct {
 	Description      string `json:"description"`
 }
 
-// classListItemResponse is one Class of a Class listing with its current
-// student count, present only for a caller who may view the Classes'
+// classListItemResponse is one class of a class listing with its current
+// student count, present only for a caller who may view the classes'
 // members. The count stops at 10,000 and then is a lower bound.
 type classListItemResponse struct {
 	classResponse
@@ -175,8 +175,8 @@ func (h classHandlers) list(request route.Request) (route.Result, error) {
 	return classListResult(page, pageQuery)
 }
 
-// classListResult presents one name-ordered Class page with its first-page
-// total and, when the application read them, each Class's student count.
+// classListResult presents one name-ordered class page with its first-page
+// total and, when the application read them, each class's student count.
 func classListResult(page academic.ClassPage, query paging.NameQuery) (route.Result, error) {
 	present := func(class *model.Class) classListItemResponse {
 		item := classListItemResponse{classResponse: classResponseFromModel(class)}

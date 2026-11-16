@@ -12,20 +12,20 @@ import (
 	"slices"
 )
 
-// This immutable manifest covers the current candidate shape and its meanings.
-// It is not a client-selected format or a complete editor settings registry.
+// The manifest describes the current candidate shape. It is not a
+// client-selected format or a registry of every editor setting.
 const attemptConfigurationSchemaJSON = `{"candidate_fields":["manifest_fingerprint","registry_fingerprint","desktop_build","desktop_target","user_settings_revision","presentation","approved_commands","approved_keybindings"],"digest":"sha256-of-complete-canonical-candidate","maximum_canonical_bytes":16384,"maximum_approved_commands":128,"maximum_approved_keybindings":128,"presentation":{"color_theme":["light","dark","hcLight","hcDark"],"prefer_high_contrast":"boolean","zoom_percent":{"minimum":80,"maximum":200,"default":100,"unit":"percent"},"editor_font_size_px":{"minimum":12,"maximum":24,"default":14,"unit":"pixels"},"editor_line_height_px":{"minimum":16,"maximum":40,"default":22,"unit":"independent-pixels"},"reduced_motion":"boolean","screen_reader_mode":["auto","on","off"],"announcement_mode":["auto","verbose","minimal"],"cursor_style":["line","block","underline"],"cursor_blinking":["blink","smooth","phase","expand","solid"]},"keybinding_selection":"catalog-ids-associated-with-selected-candidate-safe-commands"}`
 
-// AttemptCommandBinding associates a packaged keybinding identifier with its
-// Candidate-safe command. It never contains a key chord or executable command.
+// AttemptCommandBinding pairs a packaged keybinding ID with a candidate-safe
+// command. It never holds a key chord or an executable command.
 type AttemptCommandBinding struct {
 	CommandID    string `json:"command_id"`
 	KeybindingID string `json:"keybinding_id"`
 }
 
-// AttemptConfigurationManifest owns an immutable admitted command catalog.
-// Construct it only from trusted packaging data; user input cannot register IDs.
-// Private fields and defensive accessors prevent post-verification mutation.
+// AttemptConfigurationManifest is an immutable admitted command catalog. Build
+// it only from trusted packaging data; user input cannot register IDs. Its
+// fields are private so it cannot change after verification.
 type AttemptConfigurationManifest struct {
 	commands    []string
 	keybindings []AttemptCommandBinding
@@ -48,7 +48,7 @@ func NewAttemptConfigurationManifest(commands []string, keybindings []AttemptCom
 	}
 
 	var schema any
-	// This literal is owned and tested here; it contains only safe integer values.
+	// The literal holds only integer bounds and is tested here.
 	if err := json.Unmarshal([]byte(attemptConfigurationSchemaJSON), &schema); err != nil {
 		return nil, err
 	}
@@ -110,8 +110,8 @@ func (m *AttemptConfigurationManifest) ValidateSelection(commands, keybindings [
 	return nil
 }
 
-// EmptyAttemptConfigurationManifest is valid when a verified release approves
-// no command contributions. An empty release catalog still admits no builds.
+// EmptyAttemptConfigurationManifest is for a verified release that approves no
+// commands. An empty release catalog still admits no builds.
 func EmptyAttemptConfigurationManifest() *AttemptConfigurationManifest {
 	manifest, err := NewAttemptConfigurationManifest([]string{}, []AttemptCommandBinding{})
 	if err != nil {

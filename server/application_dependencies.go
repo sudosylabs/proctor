@@ -24,9 +24,8 @@ import (
 	"github.com/sudosylabs/proctor/server/secretseal"
 )
 
-// applicationDependencies projects platform capabilities and deployment
-// configuration into the explicit app.Dependencies bundle so package app never
-// imports platform.
+// applicationDependencies builds app.Dependencies from the platform and the
+// configuration, so package app never imports platform.
 func applicationDependencies(
 	capabilities constructionCapabilities,
 	cfg config.Config,
@@ -117,7 +116,6 @@ func applicationDependencies(
 	}, nil
 }
 
-// passwordPolicyFromConfig translates the configured password settings into the application password policy.
 func passwordPolicyFromConfig(auth config.Authentication) identity.PasswordPolicy {
 	return identity.PasswordPolicy{
 		MaximumConcurrentOperations: auth.Password.MaximumConcurrentOperations,
@@ -132,7 +130,6 @@ func passwordPolicyFromConfig(auth config.Authentication) identity.PasswordPolic
 	}
 }
 
-// sessionPolicyFromConfig translates the configured Session settings into the application Session policy.
 func sessionPolicyFromConfig(auth config.Authentication) identity.SessionPolicy {
 	return identity.SessionPolicy{
 		AccessTTL:              auth.Sessions.AccessTTL.Duration,
@@ -145,7 +142,6 @@ func sessionPolicyFromConfig(auth config.Authentication) identity.SessionPolicy 
 	}
 }
 
-// accountRecoveryPolicyFromConfig translates the configured account recovery settings into the application policy.
 func accountRecoveryPolicyFromConfig(auth config.Authentication) identity.AccountRecoveryPolicy {
 	return identity.AccountRecoveryPolicy{
 		EmailVerificationTTL: auth.AccountRecovery.EmailVerificationTTL.Duration,
@@ -159,7 +155,6 @@ func accountRecoveryPolicyFromConfig(auth config.Authentication) identity.Accoun
 	}
 }
 
-// externalAuthenticationPolicyFromConfig translates the configured external authentication settings into the application policy.
 func externalAuthenticationPolicyFromConfig(auth config.Authentication, publicURL, nodeID string) identity.ExternalAuthenticationPolicy {
 	return identity.ExternalAuthenticationPolicy{
 		PublicURL:     publicURL,
@@ -173,9 +168,8 @@ func externalAuthenticationPolicyFromConfig(auth config.Authentication, publicUR
 	}
 }
 
-// explicitLoopbackHTTPDevelopment projects the deliberately local HTTP
-// origin into the application without coupling app/model to deployment
-// configuration. Non-loopback HTTP never receives this capability.
+// explicitLoopbackHTTPDevelopment reports whether the public URL is plain
+// HTTP on loopback. Non-loopback HTTP never gets the development allowance.
 func explicitLoopbackHTTPDevelopment(raw string) bool {
 	parsed, err := url.Parse(raw)
 	return err == nil &&

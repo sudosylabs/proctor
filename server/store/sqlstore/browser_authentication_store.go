@@ -200,9 +200,9 @@ func (s SQLBrowserAuthenticationStore) GetDesktopAuthorizationContext(
 	return result, nil
 }
 
-// AuthenticateDesktopAuthorization records the User's fresh or Session-sourced
+// AuthenticateDesktopAuthorization records the user's fresh or session-sourced
 // authentication on a bound desktop authorization, or denies it while an active
-// Attempt locks the User's Sessions.
+// attempt locks the user's sessions.
 func (s SQLBrowserAuthenticationStore) AuthenticateDesktopAuthorization(
 	ctx context.Context,
 	input *store.DesktopAuthorizationAuthentication,
@@ -228,7 +228,6 @@ func (s SQLBrowserAuthenticationStore) AuthenticateDesktopAuthorization(
 	})
 }
 
-// authenticateDesktopAuthorization records the User's authentication on a bound desktop authorization inside its transaction.
 func authenticateDesktopAuthorization(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -271,7 +270,7 @@ func authenticateDesktopAuthorization(
 	return &store.DesktopAuthorizationAuthenticationResult{}, nil
 }
 
-// requireDesktopAuthorizationAuthenticationPath takes the authentication-path and Session locks and rejects a User awaiting MFA re-enrollment.
+// requireDesktopAuthorizationAuthenticationPath takes the authentication-path and session locks and rejects a user awaiting MFA re-enrollment.
 func requireDesktopAuthorizationAuthenticationPath(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -306,7 +305,7 @@ func requireDesktopAuthorizationAuthenticationPath(
 	return nil
 }
 
-// denyDesktopAuthorizationForActiveAttempt denies the bound desktop authorization because an active Attempt locks new Sessions.
+// denyDesktopAuthorizationForActiveAttempt denies the bound desktop authorization because an active attempt locks new sessions.
 func denyDesktopAuthorizationForActiveAttempt(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -353,9 +352,9 @@ func markDesktopAuthorizationAuthenticated(
 	selector, selectorValue string,
 ) error {
 	// Fresh local proof gets one database authentication instant. Provider
-	// history can only move back to that instant. A reused Session hands over
-	// its latest primary proof, so a recently reauthenticated Web Session does
-	// not give birth to a stale Desktop Session. An MFA completion that
+	// history can only move back to that instant. A reused session hands over
+	// its latest primary proof, so a recently reauthenticated web session does
+	// not give birth to a stale desktop session. An MFA completion that
 	// preceded that proof is recorded at the proof instant, never later.
 	authenticatedAt := model.TimeUTC(input.AuthenticatedAt)
 	mfaCompletedAt := input.MFACompletedAt.UTC()
@@ -370,7 +369,7 @@ func markDesktopAuthorizationAuthenticated(
 	}
 
 	freshPassword := source == nil && input.AuthenticationMethod == "password"
-	// A User row lock above may outlast a previously checked source proof.
+	// A user row lock above may outlast a previously checked source proof.
 	// Recheck all source deadlines against this same transition instant.
 	var authenticated browserAuthenticationRow
 	err := tx.Get(
@@ -558,8 +557,8 @@ func desktopAuthorizationCreationTransaction(
 	return candidate
 }
 
-// CreateInvitation is the named aggregate for hosted Invitation handoff. It
-// locks and rechecks the Invitation, derives every deadline from one
+// CreateInvitation is the named aggregate for hosted invitation handoff. It
+// locks and rechecks the invitation, derives every deadline from one
 // authoritative PostgreSQL timestamp, and creates the browser transaction in
 // the same commit.
 func (s SQLBrowserAuthenticationStore) CreateInvitation(
@@ -858,9 +857,9 @@ func (s SQLBrowserAuthenticationStore) IssueCode(
 		ctx context.Context,
 		tx *sqlxTxWrapper,
 	) (*store.DesktopAuthorizationCodeIssued, error) {
-		// Match User disablement's global-admin then per-User session lock order.
+		// Match user disablement's global-admin then per-user session lock order.
 		// Whichever mutation commits first is therefore authoritative: a later
-		// IssueCode observes the disabled User, while a later disablement follows
+		// IssueCode observes the disabled user, while a later disablement follows
 		// and invalidates the already-issued code path before exchange.
 		if err := lockSystemAdministratorAuthenticationPaths(ctx, tx); err != nil {
 			return nil, err
@@ -1101,7 +1100,7 @@ func (s SQLBrowserAuthenticationStore) ResolveDesktopAuthorizationExchange(ctx c
 	return &store.DesktopAuthorizationExchangeTarget{ID: id, UserID: userID}, nil
 }
 
-// The caller holds the per-User Session lock through the terminal transition.
+// The caller holds the per-user session lock through the terminal transition.
 // Session reuse derives current assurance from durable state, never a previously
 // resolved Principal. Direct password authentication instead supplies the exact
 // credential revision verified before entering this transaction.
@@ -1357,7 +1356,7 @@ func (row browserAuthenticationRow) model() (*model.BrowserAuthenticationTransac
 }
 
 // Maintain runs on every node; SKIP LOCKED row claims make concurrent passes
-// safe without a Job or ledger. Protocol writes deliberately leave expiry and
+// safe without a job or ledger. Protocol writes deliberately leave expiry and
 // purge to this pass instead of scanning opportunistically.
 func (s SQLBrowserAuthenticationStore) Maintain(ctx context.Context, limit int) (*store.BrowserAuthenticationMaintenanceResult, error) {
 	if limit < 1 || limit > 1000 {

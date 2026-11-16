@@ -17,11 +17,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// archivedExamSittingPage is how many Sittings of an archived Exam are read
-// at a time.
 const archivedExamSittingPage = 200
 
-// publishExamCreated tells everyone who may view the new Exam that it exists.
 func (a *Authoring) publishExamCreated(ctx context.Context, examID model.ExamID) error {
 	event, err := realtime.NewExamCreatedEvent(examID)
 	if err != nil {
@@ -31,8 +28,8 @@ func (a *Authoring) publishExamCreated(ctx context.Context, examID model.ExamID)
 	return a.publisher.Publish(ctx, event)
 }
 
-// publishDraftUpdated tells everyone who may view the Exam that its Draft
-// reached revision. The event carries no authored content or policy value.
+// publishDraftUpdated carries no authored content or policy value: viewers
+// refetch what they may see.
 func (a *Authoring) publishDraftUpdated(ctx context.Context, examID model.ExamID, revision int64) error {
 	event, err := realtime.NewExamDraftUpdatedEvent(examID, revision)
 	if err != nil {
@@ -42,9 +39,8 @@ func (a *Authoring) publishDraftUpdated(ctx context.Context, examID model.ExamID
 	return a.publisher.Publish(ctx, event)
 }
 
-// publishExamArchived announces the archive to the Exam's viewers, then
-// invalidates every collection the Exam's Sittings appear in. The archive
-// event failing does not stop the invalidations.
+// publishExamArchived still invalidates the sittings' collections when the
+// archive event fails.
 func (a *Authoring) publishExamArchived(
 	ctx context.Context,
 	examID model.ExamID,
@@ -59,10 +55,9 @@ func (a *Authoring) publishExamArchived(
 	return errors.Join(a.publisher.Publish(ctx, event), a.publishArchivedExamSittings(ctx, examID))
 }
 
-// publishArchivedExamSittings walks the Sittings of an archived Exam in pages
-// and, for each, invalidates its board and then the Exam activity of its
-// candidates. A failed publication never stops the rest; a failed read of the
-// Sittings ends the walk. Every failure is returned, joined in order.
+// publishArchivedExamSittings invalidates each sitting's board, then its
+// candidates' exam activity. A failed publication never stops the rest; a
+// failed read ends the walk. Failures are returned joined in order.
 func (a *Authoring) publishArchivedExamSittings(ctx context.Context, examID model.ExamID) error {
 	if a.sittings == nil || a.publisher == nil {
 		return errors.New("Exam collection invalidation dependencies are invalid")
@@ -92,7 +87,6 @@ func (a *Authoring) publishArchivedExamSittings(ctx context.Context, examID mode
 	}
 }
 
-// publishManagerAdded announces that userID became an Exam Manager.
 func (a *Authoring) publishManagerAdded(
 	ctx context.Context,
 	examID model.ExamID,
@@ -103,7 +97,6 @@ func (a *Authoring) publishManagerAdded(
 	return a.publishManagerChanged(ctx, examID, userID, true, revision, changedAt)
 }
 
-// publishManagerRemoved announces that userID stopped being an Exam Manager.
 func (a *Authoring) publishManagerRemoved(
 	ctx context.Context,
 	examID model.ExamID,
@@ -114,10 +107,8 @@ func (a *Authoring) publishManagerRemoved(
 	return a.publishManagerChanged(ctx, examID, userID, false, revision, changedAt)
 }
 
-// publishManagerChanged drops the User's cached authorization, because what
-// they may do to the Exam just changed, and then tells the Exam's viewers
-// whether the User is now a manager. Nothing happens unless the event can be
-// built.
+// publishManagerChanged drops the user's cached authorization before
+// announcing the change. Nothing happens unless the event can be built.
 func (a *Authoring) publishManagerChanged(
 	ctx context.Context,
 	examID model.ExamID,
@@ -135,7 +126,6 @@ func (a *Authoring) publishManagerChanged(
 	return a.publisher.Publish(ctx, event)
 }
 
-// publishOwnerTransferred tells the Exam's viewers who its Exam Owner now is.
 func (a *Authoring) publishOwnerTransferred(
 	ctx context.Context,
 	examID model.ExamID,
@@ -151,8 +141,6 @@ func (a *Authoring) publishOwnerTransferred(
 	return a.publisher.Publish(ctx, event)
 }
 
-// publishRevisionPublished tells the Exam's viewers that a Draft was frozen
-// into an Exam Revision: its number, policy digest, kind and instant.
 func (p *Publication) publishRevisionPublished(ctx context.Context, revision store.ExamRevisionSummary) error {
 	event, err := realtime.NewExamRevisionPublishedEvent(
 		revision.ID,

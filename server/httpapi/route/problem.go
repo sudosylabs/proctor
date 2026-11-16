@@ -21,8 +21,7 @@ import (
 // Problem is the RFC 9457 Problem Details body of every failure. Code is the
 // stable machine identifier and Type its documentation URI; Title and Detail
 // are localized prose; Fields carries only safe field names and reasons.
-// Delivery and the embedded capacity appear only on the Exam delivery failures
-// that carry bounded repair context.
+// Delivery and the embedded capacity appear only on exam delivery failures.
 type Problem struct {
 	Delivery *model.DeliveryRecovery `json:"delivery,omitempty"`
 	*model.DeliveryMetadataCapacity
@@ -53,9 +52,8 @@ func writeProblem(writer http.ResponseWriter, problem Problem) {
 	_ = json.NewEncoder(writer).Encode(problem)
 }
 
-// Kernel problem codes belong to the routing kernel rather than to any one
-// operation's declared application errors. error_catalog.yaml lists them as
-// problem codes.
+// Kernel problem codes are answered by the kernel itself, not by an
+// operation; error_catalog.yaml lists them as problem codes.
 const (
 	serverInternalCode        = "server.internal"
 	routeNotFoundCode         = "route.not_found"
@@ -98,8 +96,6 @@ func problemDocumentationBase(raw string) (string, error) {
 	return strings.TrimSuffix(raw, "/") + "/problems/", nil
 }
 
-// prepare attaches what every request needs before routing: its negotiated
-// locale and where its Problem Details link to.
 func (a *API) prepare(request *http.Request) *http.Request {
 	if a.problemDocumentation != "" {
 		request = request.WithContext(WithProblemDocumentation(request.Context(), a.problemDocumentation))

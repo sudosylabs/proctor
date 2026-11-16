@@ -45,9 +45,8 @@ type BootstrapInstallationCommand struct {
 	Source                   string
 }
 
-// AdministratorRecoveryCommand is accepted only by the host-level offline
-// capability. Password is private input and is replaced with an encoded hash
-// before the named Store aggregate is invoked.
+// AdministratorRecoveryCommand is accepted only by the offline host command;
+// Password is hashed before it reaches the store.
 type AdministratorRecoveryCommand struct {
 	InstitutionID    model.InstitutionID
 	UserID           model.UserID
@@ -62,15 +61,14 @@ type AdministratorRecoveryResult struct {
 	PasswordRotated   bool
 }
 
-// BootstrapProtectionPolicy is the immutable deployment-owned proof used by
-// the public one-time bootstrap command. The service retains only its digest.
+// BootstrapProtectionPolicy carries the secret the one-time bootstrap command
+// must prove; the Service keeps only its digest.
 type BootstrapProtectionPolicy struct {
 	Secret string
 }
 
-// RecoverAdministratorAccess is intentionally absent from every network
-// application interface. The module root borrows this method only for the
-// explicit offline host command.
+// RecoverAdministratorAccess serves only the offline host command and is
+// deliberately absent from every network interface.
 func (s *Service) RecoverAdministratorAccess(
 	ctx context.Context,
 	system invocation.System,
@@ -114,8 +112,8 @@ func (s *Service) RecoverAdministratorAccess(
 	}, nil
 }
 
-// ReconcileAdministratorRecovery records every completed offline recovery in
-// ordinary audit before this node starts workers or network transports.
+// ReconcileAdministratorRecovery audits every completed offline recovery; call
+// it before this node starts workers or network transports.
 func (s *Service) ReconcileAdministratorRecovery(ctx context.Context, system invocation.System) error {
 	if !system.Valid() {
 		return errors.New("reconcile offline administrator recovery: invalid system identity")
@@ -127,8 +125,8 @@ func (s *Service) ReconcileAdministratorRecovery(ctx context.Context, system inv
 	return nil
 }
 
-// ReconcileSystemAdministratorRole adds newly registered grantable actions to
-// the protected built-in Role before this node serves application traffic.
+// ReconcileSystemAdministratorRole adds newly registered actions to the
+// protected built-in role; call it before this node serves traffic.
 func (s *Service) ReconcileSystemAdministratorRole(ctx context.Context, system invocation.System) error {
 	if !system.Valid() {
 		return errors.New("reconcile protected system-administrator Role: invalid system identity")
@@ -172,9 +170,9 @@ func (s *Service) GetInstallationStatus(
 	return &model.InstallationStatus{Initialized: true}, nil
 }
 
-// BootstrapInstallation creates the Institution, its protected System
-// Administrator and the initial Access Policy once, for a caller that proves
-// the deployment bootstrap secret. Attempts are rate limited per source.
+// BootstrapInstallation creates the institution, its protected system
+// administrator and the initial access policy, once, for a caller that proves
+// the bootstrap secret. Attempts are rate limited per source.
 func (s *Service) BootstrapInstallation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -272,9 +270,9 @@ func (s *Service) BootstrapInstallation(
 			return nil, apperror.New("installation.already_initialized").Wrap(err)
 		}
 
-		// The commit boundary may be ambiguous. Repeating the proof- and
-		// fingerprint-fenced named aggregate either returns the retained exact
-		// outcome or proves that this attempt did not win.
+		// The commit may have landed before the error. The call is fenced by
+		// the secret and command fingerprint, so repeating it either returns
+		// the stored outcome or proves this attempt lost.
 		retried, retryErr := s.installations.Bootstrap(ctx, input)
 		if retryErr == nil {
 			return retried, nil
@@ -289,9 +287,8 @@ func (s *Service) BootstrapInstallation(
 	return result, nil
 }
 
-// fixBootstrapProtection keeps only the digest of the deployment bootstrap
-// secret, whether one is configured, and the bootstrap rate limit. New calls
-// it once.
+// fixBootstrapProtection keeps only the bootstrap secret's digest, never the
+// secret.
 func (s *Service) fixBootstrapProtection(rateLimit LoginRateLimitPolicy, protection BootstrapProtectionPolicy) {
 	s.bootstrapRateLimitWindow, s.bootstrapMaximumSourceAttempts = rateLimit.Window, rateLimit.MaximumSourceAttempts
 	s.bootstrapSecretDigest, s.bootstrapAvailable = digestBootstrapSecret(protection.Secret), protection.Secret != ""

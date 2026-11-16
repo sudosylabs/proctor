@@ -9,14 +9,10 @@ package realtime
 
 import "fmt"
 
-// message is one kind of event the server sends. The list is closed: every
-// event a constructor builds is declared here, Publish refuses a name nothing
-// declared, and each key is the AsyncAPI message in server/asyncapi that holds
-// the payload schema. Clients stay open and ignore a name they do not know.
-//
-// Two messages share a wire name when two audiences receive different
-// payloads or authorization for the same fact, as the candidate's own copy of
-// a submission does; their keys tell them apart.
+// message is one kind of event the server sends. The list is closed: Publish
+// refuses an undeclared name, and each key is an AsyncAPI message in
+// server/asyncapi. Two audiences of the same fact may share a wire name with
+// different keys, as the candidate's copy of a submission does.
 type message struct {
 	key  string
 	name string
@@ -27,8 +23,8 @@ var (
 	declaredNames    = map[string]struct{}{}
 )
 
-// declare records a message while the package initializes. A repeated key is
-// a programming error in this package, so it panics before the server starts.
+// declare panics on a repeated key, so the mistake fails before the server
+// starts.
 func declare(key, name string) message {
 	if _, exists := declaredMessages[key]; exists {
 		panic(fmt.Sprintf("realtime message %q is declared twice", key))

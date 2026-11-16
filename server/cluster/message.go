@@ -27,23 +27,21 @@ const (
 // Event is a typed inter-node event name.
 type Event string
 
-// Well-known cluster-owned event names. Application propagation names are
-// deliberately owned by their application modules and need no transport-level
-// duplicate declaration.
+// EventNone is never valid on the wire. Application events are declared by the
+// modules that own them, not here.
 const (
 	EventNone Event = "none"
 )
 
-// Message is the application-facing inter-node payload. Transports own wire
-// metadata such as protocol version, source, and target node.
-// Delivery is always best-effort; there is no durable/reliable send class.
+// Message is the payload a handler sees; the transport keeps protocol version,
+// source and target out of it. There is no reliable send class.
 type Message struct {
 	Event Event             `json:"event"`
 	Data  []byte            `json:"data,omitempty"`
 	Props map[string]string `json:"props,omitempty"`
 }
 
-// Clone returns a deep copy safe for concurrent handler delivery.
+// Clone returns a deep copy, so concurrent handlers cannot share Data or Props.
 func (m *Message) Clone() *Message {
 	if m == nil {
 		return nil
@@ -59,7 +57,7 @@ func (m *Message) Clone() *Message {
 	return &cloned
 }
 
-// Validate checks event naming and size bounds for untrusted content.
+// Validate checks names and size limits, which matter for messages from peers.
 func (m *Message) Validate() error {
 	if m == nil {
 		return errors.New("cluster message is nil")

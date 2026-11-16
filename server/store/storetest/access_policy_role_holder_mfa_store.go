@@ -21,8 +21,8 @@ import (
 
 // TestAccessPolicyRoleHolderMFAStore proves the role holder two-step verification
 // policy: who is covered, the preflight blocker and counts, revocation of
-// role holder single-factor Sessions when the policy is turned on, the enrollment
-// restriction applied at refresh, and its removal when the Session proves a
+// role holder single-factor sessions when the policy is turned on, the enrollment
+// restriction applied at refresh, and its removal when the session proves a
 // second factor. It needs a pristine installation.
 func TestAccessPolicyRoleHolderMFAStore(t *testing.T, ss store.Store) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

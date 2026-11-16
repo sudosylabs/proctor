@@ -55,7 +55,7 @@ type roleResponse struct {
 	Holders *roleHoldersResponse `json:"holders,omitempty"`
 }
 
-// roleHoldersResponse counts a Role's current Role Bindings the caller can
+// roleHoldersResponse counts a role's current role bindings the caller can
 // see, each stopped at 10,000 with its lower-bound flag.
 type roleHoldersResponse struct {
 	Bindings             int  `json:"bindings"`
@@ -66,7 +66,7 @@ type roleHoldersResponse struct {
 	ScopesIsLowerBound   bool `json:"scopes_is_lower_bound"`
 }
 
-// roleResponseFromResult presents a read Role with its holders, when the
+// roleResponseFromResult presents a read role with its holders, when the
 // application counted them.
 func roleResponseFromResult(request *http.Request, result administration.RoleResult) roleResponse {
 	response := roleResponseFromModel(request, result.Role)
@@ -236,7 +236,7 @@ func (h roleHandlers) list(request route.Request) (route.Result, error) {
 	return route.JSON(http.StatusOK, response), nil
 }
 
-// roleCursor continues the Role listing after the Role with Name and ID.
+// roleCursor continues the role listing after the role with Name and ID.
 type roleCursor struct {
 	Name string `json:"name"`
 	ID   string `json:"id"`

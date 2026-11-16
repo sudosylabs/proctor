@@ -23,24 +23,21 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// AuditorDependencies are the collaborators of Auditor;
-// NewAuditor validates them once and Auditor keeps them in deps.
+// AuditorDependencies configures NewAuditor.
 type AuditorDependencies struct {
 	Audits       store.AuditStore
 	Institutions store.InstitutionStore
 	NodeID       string
 }
 
-// Auditor writes the audit trail: attempts, terminal outcomes and authorization decisions.
+// Auditor writes attempts, terminal outcomes and authorization decisions.
 type Auditor struct {
 	deps AuditorDependencies
 
 	now func() time.Time
 }
 
-// UserSettingsAuditInput is the bounded, safe description of one User
-// Settings replacement that UserSettingsAuditAdapter turns into an audit
-// draft.
+// UserSettingsAuditInput records the source's size, never its contents.
 type UserSettingsAuditInput struct {
 	Invocation        invocation.Invocation
 	UserID            model.UserID
@@ -50,19 +47,20 @@ type UserSettingsAuditInput struct {
 	SourceBytes       int
 }
 
-// UserSettingsAuditAdapter prepares the audit event of a User Settings replacement.
+// UserSettingsAuditAdapter audits settings replacements.
 type UserSettingsAuditAdapter struct{ audit *Auditor }
 
-// MailAuditAdapter prepares and fails the audit events of mail delivery control.
+// MailAuditAdapter audits mail delivery control.
 type MailAuditAdapter struct{ audit *Auditor }
 
-// Fail completes a mail control attempt as failed with the error code.
+// Fail completes a mail control attempt as failed; errorCode is the public
+// error code.
 func (a MailAuditAdapter) Fail(ctx context.Context, auditID model.AuditEventID, errorCode string) error {
 	_, appErr := a.audit.CompleteCriticalAction(ctx, auditID, model.AuditStatusFail, errorCode, nil)
 	return appErr
 }
 
-// PrepareControl begins the audit attempt of canceling or retrying a delivery.
+// PrepareControl begins the attempt of canceling or retrying a delivery.
 func (a MailAuditAdapter) PrepareControl(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -97,7 +95,7 @@ func (a MailAuditAdapter) PrepareControl(
 	return event.ID, nil
 }
 
-// PrepareTest builds the audit event of sending a test message.
+// PrepareTest builds the audit event of a test message.
 func (a MailAuditAdapter) PrepareTest(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -143,7 +141,8 @@ func (a MailAuditAdapter) PrepareTest(
 	}, nil
 }
 
-// PrepareReplacement builds the audit event of a User Settings replacement.
+// PrepareReplacement returns an unpersisted event for the settings store to
+// insert in its own commit.
 func (a UserSettingsAuditAdapter) PrepareReplacement(
 	ctx context.Context,
 	input UserSettingsAuditInput,
@@ -197,7 +196,7 @@ func (a UserSettingsAuditAdapter) PrepareReplacement(
 	}, nil
 }
 
-// NewAuditor validates its dependencies and returns the Auditor.
+// NewAuditor fails when a store or the node ID is missing.
 func NewAuditor(deps AuditorDependencies) (*Auditor, error) {
 	if deps.Audits == nil {
 		return nil, errors.New("audit store is required")
@@ -211,7 +210,8 @@ func NewAuditor(deps AuditorDependencies) (*Auditor, error) {
 	return &Auditor{deps: deps, now: time.Now}, nil
 }
 
-// BeginAuthentication persists the attempt of an external login before a Session is issued.
+// BeginAuthentication records an external login attempt before any session is
+// issued.
 func (s *Auditor) BeginAuthentication(
 	ctx context.Context,
 	userID model.UserID,
@@ -265,9 +265,8 @@ func (s *Auditor) BeginAuthentication(
 	return saved, nil
 }
 
-// BeginLocalLogin persists the attempt for a password login whose credential
-// and second factor were proved, before any Session is issued. The event is
-// completed with the Session projection or the issuance failure.
+// BeginLocalLogin records a proved password login before any session is
+// issued; the event is completed with the session or the issuance failure.
 func (s *Auditor) BeginLocalLogin(
 	ctx context.Context,
 	userID model.UserID,
@@ -295,10 +294,10 @@ func (s *Auditor) BeginLocalLogin(
 	return saved, nil
 }
 
-// RecordLocalLoginFailure persists one terminal failed password login. The
-// failed caller never becomes an actor; a resolved account is recorded only as
-// the targeted resource so operators can see attacks against it without the
-// raw, user-controlled login identifier entering audit data.
+// RecordLocalLoginFailure never makes the failed caller an actor. A resolved
+// account is recorded only as the targeted resource, so operators can see
+// attacks on it without the raw, user-controlled login identifier entering
+// audit data.
 func (s *Auditor) RecordLocalLoginFailure(
 	ctx context.Context,
 	target model.UserID,
@@ -348,7 +347,8 @@ func localLoginAuditEvent(
 	}
 }
 
-// RecordExternalAuthenticationFailure persists one failed external login.
+// RecordExternalAuthenticationFailure records a terminal failed external
+// login.
 func (s *Auditor) RecordExternalAuthenticationFailure(
 	ctx context.Context,
 	providerID string,
@@ -395,9 +395,9 @@ func (s *Auditor) RecordExternalAuthenticationFailure(
 	return nil
 }
 
-// BeginCriticalAction persists an attempt before a security-sensitive mutation
-// is allowed to start. Callers must pass only bounded safe values or Auditable
-// projections; credentials and secrets are never acceptable audit parameters.
+// BeginCriticalAction must succeed before a security-sensitive mutation
+// starts. Pass only bounded safe values or Auditable projections, never
+// credentials or secrets.
 func (s *Auditor) BeginCriticalAction(
 	ctx context.Context,
 	principal model.Principal,
@@ -413,10 +413,9 @@ func (s *Auditor) BeginCriticalAction(
 	return s.BeginCriticalActionForSubject(ctx, principal, "", action, resource, metadata, parameters, priorState)
 }
 
-// BeginCriticalActionForSubject is BeginCriticalAction for a mutation whose
-// resource is not the affected User itself, such as a Role Binding at a
-// scope or a self-service change recorded against the Institution. A zero
-// subject leaves the User resource rule of model.AuditEvent to decide.
+// BeginCriticalActionForSubject is for a mutation whose resource is not the
+// affected user, such as a role binding. A zero subject leaves the decision to
+// model.AuditEvent's user resource rule.
 func (s *Auditor) BeginCriticalActionForSubject(
 	ctx context.Context,
 	principal model.Principal,
@@ -440,9 +439,8 @@ func (s *Auditor) BeginCriticalActionForSubject(
 	return s.beginCriticalActionAtScope(ctx, principal, subject, action, resource, scopeType, scopeID, metadata, parameters, priorState)
 }
 
-// resourceScope is the authorization scope a resource's audit is recorded
-// at when the caller names none: the resource itself, or the Institution for
-// a User.
+// resourceScope records a user's audit at the institution, since a user is
+// not a role binding scope.
 func (s *Auditor) resourceScope(ctx context.Context, resource model.Resource) (model.RoleScopeType, string, error) {
 	if resource.Type != model.ResourceUser {
 		return model.RoleScopeType(resource.Type), resource.ID, nil
@@ -454,10 +452,9 @@ func (s *Auditor) resourceScope(ctx context.Context, resource model.Resource) (m
 	return model.RoleScopeInstitution, institution.ID.String(), nil
 }
 
-// PrepareCriticalAction builds the bounded safe audit draft owned by a named
-// durable pre-mutation aggregate. The aggregate, rather than AuditStore, is
-// the pending attempt; it inserts exactly one terminal AuditEvent or no event
-// for an authoritative idempotent replay.
+// PrepareCriticalAction builds an unpersisted event for a store aggregate that
+// is itself the pending attempt. The aggregate inserts exactly one terminal
+// event, or none for an idempotent replay.
 func (s *Auditor) PrepareCriticalAction(
 	ctx context.Context,
 	principal model.Principal,
@@ -477,10 +474,8 @@ func (s *Auditor) PrepareCriticalAction(
 	return s.prepareCriticalActionAtScope(principal, "", action, resource, scopeType, scopeID, metadata, parameters, priorState)
 }
 
-// BeginCriticalActionAtScope records a mutation against its domain resource
-// while retaining the independently resolved authorization scope. This is
-// required for resources such as Exams whose identity is not itself a role
-// binding scope.
+// BeginCriticalActionAtScope keeps the resolved authorization scope beside the
+// resource, for resources such as exams that are not role binding scopes.
 func (s *Auditor) BeginCriticalActionAtScope(
 	ctx context.Context,
 	principal model.Principal,
@@ -501,9 +496,8 @@ func (s *Auditor) BeginCriticalActionAtScope(
 	return s.beginCriticalActionAtScope(ctx, principal, "", action, resource, scopeType, scopeID, metadata, parameters, priorState)
 }
 
-// BeginSystemCriticalActionAtScope persists an actor-less critical mutation
-// attempt for trusted durable work. It is intentionally distinct from the
-// principal-bearing path so Jobs never fabricate a user identity or silently
+// BeginSystemCriticalActionAtScope records trusted work with no actor. It is
+// separate from the principal path so jobs never fabricate a user or silently
 // bypass user authorization.
 func (s *Auditor) BeginSystemCriticalActionAtScope(
 	ctx context.Context,
@@ -539,12 +533,10 @@ func (s *Auditor) BeginSystemCriticalActionAtScope(
 	return saved, nil
 }
 
-// BeginOnBehalfAtScope persists a critical mutation attempt that trusted core
-// work performs on a User's behalf, outside any request of theirs. The User
-// is the actor; there is no Session, client or request identity. It is
-// distinct from both the principal-bearing path, so no Principal is
-// fabricated, and from the actorless system path, so the work is attributed
-// to the person whose work it is.
+// BeginOnBehalfAtScope records trusted work done for actor outside any request
+// of theirs. It is separate from the principal path, so no principal is
+// fabricated, and from the system path, so the work is attributed to the
+// person whose work it is.
 func (s *Auditor) BeginOnBehalfAtScope(
 	ctx context.Context,
 	actor model.UserID,
@@ -583,17 +575,17 @@ func (s *Auditor) BeginOnBehalfAtScope(
 	return saved, nil
 }
 
-// AccountAuditActor is the proved account behind an authentication handoff
-// whose request carries no Principal yet, such as Desktop approval or code
-// exchange. It is never fabricated from user-controlled input.
+// AccountAuditActor is the proved account behind a request with no principal
+// yet, such as desktop approval or code exchange. Never build it from
+// user-controlled input.
 type AccountAuditActor struct {
 	UserID     model.UserID
 	SessionID  model.SessionID
 	ClientType model.SessionClientType
 }
 
-// BeginAccountActionAtScope persists a critical attempt performed for a proved
-// account outside an authenticated Principal, retaining the request identity.
+// BeginAccountActionAtScope records an attempt for a proved account that has
+// no principal yet, keeping the request identity.
 func (s *Auditor) BeginAccountActionAtScope(
 	ctx context.Context,
 	actor AccountAuditActor,
@@ -703,11 +695,11 @@ func (s *Auditor) prepareCriticalActionAtScope(
 	return event, nil
 }
 
-// CompleteCriticalAction records the terminal outcome. If this fails after the
-// mutation committed, the durable attempt remains for operator reconciliation
-// and the use case must return the audit failure instead of reporting success.
-// The write ignores cancellation of ctx: a client that disconnects must not
-// leave the attempt unresolved, and the Store's query timeout still bounds it.
+// CompleteCriticalAction records the terminal outcome. If it fails after the
+// mutation committed, the attempt stays for operator reconciliation and the
+// use case must return the audit failure, not success. It ignores ctx
+// cancellation so a disconnecting client cannot leave the attempt unresolved;
+// the store's query timeout still bounds it.
 func (s *Auditor) CompleteCriticalAction(
 	ctx context.Context,
 	eventID model.AuditEventID,
@@ -733,7 +725,8 @@ func (s *Auditor) CompleteCriticalAction(
 	return event, nil
 }
 
-// RecordAuthorizationDecision persists one allowed or denied authorization decision.
+// RecordAuthorizationDecision fails with authorization.unavailable when the
+// decision cannot be recorded, so the request stays unauthorized.
 func (s *Auditor) RecordAuthorizationDecision(
 	ctx context.Context,
 	principal model.Principal,
@@ -747,9 +740,8 @@ func (s *Auditor) RecordAuthorizationDecision(
 	return s.recordDecision(ctx, principal, string(action), resource, scopeType, scopeID, metadata, allowed)
 }
 
-// RecordUserSearchDecision records collection-level User search without
-// introducing a permission action. Authority comes from user.view and
-// class.members.view grants.
+// RecordUserSearchDecision records a directory search without a permission
+// action of its own; authority comes from user.view and class.members.view.
 func (s *Auditor) RecordUserSearchDecision(
 	ctx context.Context,
 	principal model.Principal,
@@ -804,8 +796,8 @@ func (s *Auditor) recordDecision(
 		UserAgent:  metadata.UserAgent,
 		ErrorCode:  errorCode,
 	}
-	// An authorization decision that cannot be recorded leaves the request
-	// unauthorized, so it is presented as the authorization step failing.
+	// A decision that cannot be recorded leaves the request unauthorized, so it
+	// fails as the authorization step.
 	if s.deps.Audits == nil {
 		return apperror.New("authorization.unavailable").Wrap(store.NewErrNotFound("audit_store", ""))
 	}
@@ -816,7 +808,8 @@ func (s *Auditor) recordDecision(
 	return nil
 }
 
-// List reads audit events institution-wide for the query.
+// List applies institution-wide visibility, so the caller must already be
+// authorized for that.
 func (s *Auditor) List(
 	ctx context.Context,
 	query model.AuditQuery,
@@ -849,7 +842,7 @@ func (s *Auditor) List(
 	return events, nil
 }
 
-// AuditUnavailable reports that an audit event could not be written.
+// AuditUnavailable reports an audit store failure.
 func AuditUnavailable(err error) error {
 	return apperror.New("audit.unavailable").Wrap(err)
 }
@@ -859,22 +852,22 @@ func (s *Auditor) NodeID() string {
 	return s.deps.NodeID
 }
 
-// MutationAudit returns the Invocation-shaped mutation audit view.
+// MutationAudit returns the view for principal-attributed mutations.
 func (s *Auditor) MutationAudit() MutationAuditAdapter {
 	return MutationAuditAdapter{audit: s}
 }
 
-// SystemAudit returns the actorless audit view for Jobs and runtime tasks.
+// SystemAudit returns the actorless view for jobs and periodic tasks.
 func (s *Auditor) SystemAudit() SystemAuditAdapter {
 	return SystemAuditAdapter{audit: s}
 }
 
-// MailAudit returns the mail delivery audit view.
+// MailAudit returns the mail delivery view.
 func (s *Auditor) MailAudit() MailAuditAdapter {
 	return MailAuditAdapter{audit: s}
 }
 
-// UserSettingsAudit returns the User Settings replacement audit view.
+// UserSettingsAudit returns the settings replacement view.
 func (s *Auditor) UserSettingsAudit() UserSettingsAuditAdapter {
 	return UserSettingsAuditAdapter{audit: s}
 }

@@ -22,10 +22,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// RunInvitationBatch runs one Invitation operation over up to
-// MaximumInvitationBatchItems rows after one batch authorization at the scope.
-// Each row goes through the single-Invitation use case with its own checks and
-// commits independently, so a later failure never rolls back earlier rows.
+// RunInvitationBatch authorizes once at the scope, then runs each row through
+// the single-invitation use case. Rows commit independently, so a later
+// failure never rolls back earlier rows.
 func (s *Service) RunInvitationBatch(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -72,8 +71,8 @@ func (s *Service) RunInvitationBatch(
 			continue
 		}
 
-		// A repeated item key makes the row identity ambiguous on retry, so
-		// every row sharing it fails rather than one of them running.
+		// A repeated item key makes the row ambiguous on retry, so every row
+		// sharing it fails rather than one of them running.
 		if itemKeyCounts[item.IdempotencyKey] != 1 {
 			outcome.Status, outcome.ErrorCode = InvitationBatchItemFailed, "request.invalid"
 			result.append(outcome)
@@ -346,9 +345,8 @@ func (s *Service) recoverInvitationAdministrationOutcome(
 	return view, true, nil
 }
 
-// InvitationBatchErrorCodes is the closed catalogue of safe failure codes an
-// Invitation batch item reports. Any other failure is reported as
-// invitation.unavailable.
+// InvitationBatchErrorCodes is the closed set of codes a batch item reports;
+// any other failure is reported as invitation.unavailable.
 func InvitationBatchErrorCodes() []string {
 	return []string{
 		"request.invalid",
@@ -373,14 +371,10 @@ func InvitationBatchErrorCodes() []string {
 	}
 }
 
-// invitationRowProgressionErrorCodes are the further codes an onboarding
-// import row keeps when its frozen progression target changed; Invitation use
-// cases never mint them, so a batch item cannot report them.
+// invitationRowProgressionErrorCodes are recorded only by import rows whose
+// frozen progression target changed; invitation use cases never mint them.
 var invitationRowProgressionErrorCodes = []string{"student_progression.conflict", "student_progression.target_conflict"}
 
-// invitationRowErrorCodes are the codes an onboarding import row of an
-// Invitation batch may record: the batch catalogue plus the progression
-// target codes.
 func invitationRowErrorCodes() []string {
 	return append(InvitationBatchErrorCodes(), invitationRowProgressionErrorCodes...)
 }

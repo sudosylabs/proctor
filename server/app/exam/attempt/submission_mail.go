@@ -15,10 +15,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// SubmissionReceiptMail prepares the candidate's Submission receipt. It
-// reads the candidate, the Sitting and the published Exam title the receipt
-// shows, and has the mail composer freeze the receipt for that candidate
-// alone.
+// SubmissionReceiptMail prepares the candidate's receipt, frozen for that
+// candidate alone.
 type SubmissionReceiptMail struct {
 	Composer  *mail.Composer
 	Users     store.UserStore
@@ -26,11 +24,8 @@ type SubmissionReceiptMail struct {
 	Revisions store.ExamRevisionStore
 }
 
-// PrepareSubmissionReceipt prepares the receipt whose wording follows how the
-// Submission was sealed: by the candidate, by a manager ending the Attempt,
-// or by the Sitting closing. The Submission itself identifies the mail
-// occurrence, and the result carries the revision of the candidate the
-// receipt was prepared from.
+// PrepareSubmissionReceipt words the receipt by how the submission was
+// sealed. The submission itself identifies the mail occurrence.
 func (m SubmissionReceiptMail) PrepareSubmissionReceipt(
 	ctx context.Context,
 	request SubmissionMailPreparation,

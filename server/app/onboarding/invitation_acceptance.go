@@ -22,8 +22,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// AcceptStudentClassInvitation accepts a student Class Invitation by its raw claim,
-// creating the local account and Class Membership it grants.
+// AcceptStudentClassInvitation accepts by raw claim, creating the local
+// account and its class membership.
 func (s *Service) AcceptStudentClassInvitation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -176,8 +176,8 @@ func (s *Service) acceptStudentClassByClaimHash(
 	}, nil
 }
 
-// AcceptTeacherAcademicUnitInvitation accepts a teacher Academic Unit Invitation by its raw
-// claim, creating the local account, membership and Role Binding it grants.
+// AcceptTeacherAcademicUnitInvitation accepts by raw claim, creating the
+// local account, its unit membership and role binding.
 func (s *Service) AcceptTeacherAcademicUnitInvitation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -333,8 +333,7 @@ func (s *Service) acceptTeacherAcademicUnitByClaimHash(
 	}, nil
 }
 
-// AcceptAcademicUnitRoleInvitation accepts an Academic Unit Role Invitation by its raw claim
-// for the caller.
+// AcceptAcademicUnitRoleInvitation binds the invited role to the caller.
 func (s *Service) AcceptAcademicUnitRoleInvitation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -343,8 +342,7 @@ func (s *Service) AcceptAcademicUnitRoleInvitation(
 	return s.acceptScopedRole(ctx, inv, command.Claim, command.Source, model.InvitationPurposeAcademicUnitRole)
 }
 
-// AcceptInstitutionRoleInvitation accepts an Institution Role Invitation by its raw claim
-// for the caller.
+// AcceptInstitutionRoleInvitation binds the invited role to the caller.
 func (s *Service) AcceptInstitutionRoleInvitation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -353,10 +351,9 @@ func (s *Service) AcceptInstitutionRoleInvitation(
 	return s.acceptScopedRole(ctx, inv, command.Claim, command.Source, model.InvitationPurposeInstitutionRole)
 }
 
-// acceptScopedRole binds the Role to the Session's own User. The claim proves
-// mailbox control only; an account email that matches the recipient must
-// never select or change a User, and acceptance touches no profile, email,
-// membership or credential.
+// acceptScopedRole binds the role to the session's own user. The claim
+// proves mailbox control only: a matching account email must never select or
+// change a user, and acceptance touches no profile, email or credential.
 func (s *Service) acceptScopedRole(
 	ctx context.Context,
 	inv invocation.Invocation,

@@ -28,86 +28,41 @@ import (
 	"github.com/sudosylabs/proctor/server/app/user"
 )
 
-// App is the long-lived application surface. It names each focused service
-// that owns public use cases in its own field and embeds nothing, so it
-// declares no use case of its own. Construction receives only the explicit
-// Dependencies bundle; infrastructure getters and platform location are not
-// part of the public surface.
+// App is the application's public surface: one field per service, nothing
+// embedded, so every use case is a method on the service that owns it.
 type App struct {
-	// Identity holds sign-in, Session, MFA, token, Desktop authorization,
-	// account recovery, account state and bootstrap use cases.
-	Identity *identity.Service
-	// Onboarding brings people in: Invitations, browser Invitation handoff,
-	// public registration, academic administration batches, onboarding
-	// imports and Student Progression.
-	Onboarding *onboarding.Service
-	// Administration holds the institution administrator's access and
-	// retention controls: Roles, Role Bindings, the Access Policy and access
-	// discovery, retention, and the audit listings.
-	Administration *administration.Service
-	// Academic holds the Institution, Academic Unit, Programme, Academic
-	// Period, Class, membership and Affiliation use cases.
-	Academic *academic.Service
-	// ExamAuthoring holds the Exam catalog: creating, listing and archiving
-	// Exams, editing their Draft, and managing Exam Managers.
-	ExamAuthoring *exam.Authoring
-	// ExamPublication publishes immutable Exam Revisions and lists them.
+	Identity        *identity.Service
+	Onboarding      *onboarding.Service
+	Administration  *administration.Service
+	Academic        *academic.Service
+	ExamAuthoring   *exam.Authoring
 	ExamPublication *exam.Publication
-	// ExamRecords completes a Sitting's records, waives Submission reviews
-	// and manages retention holds.
-	ExamRecords *exam.Records
-	// ExamExports builds and serves Exam exports.
-	ExamExports *exam.Exports
-	// Sittings schedules Exam Sittings and moves them through their
-	// lifecycle.
-	Sittings *sitting.Service
-	// Attempts holds the candidate side, from joining a Sitting to sealing a
-	// Submission, plus manager inspection of Attempts.
-	Attempts *attempt.Service
-	// Terminals serves a candidate's terminals in the Attempt's execution
-	// environment; it is nil when the installation runs none.
+	ExamRecords     *exam.Records
+	ExamExports     *exam.Exports
+	Sittings        *sitting.Service
+	Attempts        *attempt.Service
+	// Terminals is nil when the installation runs no execution environments.
 	Terminals *environment.Terminals
-	// Reviews holds post-Submission Integrity review and result release; it
-	// does not grade.
-	Reviews *review.Service
-	// Resources manages the Exam Resources of an Exam Draft.
-	Resources *resource.Service
-	// Corrections changes an Open or Paused Sitting's instructions, browser
-	// policy or Resources by publishing a new Exam Revision.
-	Corrections *correction.Service
-	// StarterWorkspaces manages the Starter Workspace of an Exam Draft.
+	// Reviews covers integrity review and result release; it does not grade.
+	Reviews           *review.Service
+	Resources         *resource.Service
+	Corrections       *correction.Service
 	StarterWorkspaces *workspace.Service
-	// Users holds the User directory, profile, settings and profile-picture
-	// use cases.
-	Users *user.Service
-	// Search finds Exams, Classes and Users within the caller's own list
-	// visibility for each type.
-	Search *search.Service
-	// Counts summarizes the administration work waiting on the caller:
-	// pending Invitations, failed Jobs and mail deliveries, and open
-	// onboarding imports.
-	Counts *administration.Counts
-	// Realtime delivers committed events locally and to peers, unbinds
-	// Attempt Connections, propagates Session revocation and authentication
-	// or authorization invalidation, and receives the WebSocket sink and
-	// cluster fan-out that composition attaches.
-	Realtime *realtime.Service
-	// RealtimeAdmission revalidates a WebSocket connection's principal and
-	// authorizes each of its subscriptions.
+	Users             *user.Service
+	Search            *search.Service
+	Counts            *administration.Counts
+	Realtime          *realtime.Service
 	RealtimeAdmission *RealtimeAdmission
-	// Jobs lists, inspects, cancels and retries Jobs and lists their attempts
-	// for operators; it is nil when the graph has no Job store.
+	// Jobs is nil when the graph has no job store.
 	Jobs *job.Operations
-	// Mail holds the operator mail controls: deliveries, metrics, test mail
-	// and payload-key rotation; it is nil when the graph has no Job or mail
-	// store.
+	// Mail is nil when the graph has no job or mail store.
 	Mail *mail.Operations
 
 	jobEngine *job.Engine
 }
 
-// JobEngine returns the root-owned durable Job runtime, or nil for lifecycle-only
-// test graphs that intentionally provide no Job store.
+// JobEngine returns the durable job runtime, or nil for test graphs built
+// without a job store.
 func (a *App) JobEngine() *job.Engine {
 	if a == nil {
 		return nil

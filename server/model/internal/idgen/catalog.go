@@ -13,9 +13,8 @@ type idSpec struct {
 	constructorSubject string
 }
 
-// entityIDs is the explicit source of truth for generated typed-ID mechanics.
-// Type declarations and their domain documentation remain handwritten in
-// model/id.go so adding an identifier is still a deliberate domain decision.
+// entityIDs drives the generated ID functions. The type declarations stay
+// handwritten in model/id.go so adding an ID remains a deliberate choice.
 var entityIDs = []idSpec{
 	{typeName: "InstitutionID", fieldName: "institution_id", constructorSubject: "institution"},
 	{typeName: "AccessPolicyID", fieldName: "access_policy_id", constructorSubject: "access-policy"},

@@ -39,7 +39,8 @@ type EndAffiliationCommand struct {
 	Batch          batchitem.Item
 }
 
-// ListAffiliations lists Affiliations after authorizing the caller.
+// ListAffiliations lists a user's affiliations; the caller must be able to
+// read the user.
 func (s *Service) ListAffiliations(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -63,7 +64,7 @@ func (s *Service) ListAffiliations(
 	return affiliations, nil
 }
 
-// CreateAffiliation creates an Affiliation after authorizing the caller.
+// CreateAffiliation needs user.manage.
 func (s *Service) CreateAffiliation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -146,7 +147,8 @@ func (s *Service) CreateAffiliation(
 	return result, nil
 }
 
-// EndAffiliation ends an Affiliation after authorizing the caller.
+// EndAffiliation needs user.manage, and refuses to end a student affiliation
+// while an open-ended enrollment remains.
 func (s *Service) EndAffiliation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -174,7 +176,6 @@ func (s *Service) EndAffiliation(
 		}
 
 		for _, enrollment := range enrollments {
-			// Open-ended enrollment (EndsAt absent) blocks ending a student affiliation.
 			if enrollment != nil && !enrollment.EndsAt.Valid {
 				return nil, apperror.New("affiliation.student_has_active_enrollment")
 			}
@@ -249,8 +250,8 @@ func (s *Service) authorizeUser(ctx context.Context, inv invocation.Invocation, 
 	return resource, nil
 }
 
-// AffiliationStoreErrors translates Affiliation Store failures; onboarding
-// imports present them the same way.
+// AffiliationStoreErrors maps affiliation store failures; onboarding imports
+// use it too.
 var AffiliationStoreErrors = apperror.AdministrationStoreTable(
 	"affiliation",
 	"affiliation.conflict",

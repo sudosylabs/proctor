@@ -22,9 +22,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// SetDisabled disables or re-enables the User, fenced on ExpectedRevision, and
-// enqueues the account Notice mail. Disabling revokes the User's Sessions and
-// refuses to remove the last System Administrator. A change to the current
+// SetDisabled disables or re-enables the user, fenced on ExpectedRevision, and
+// enqueues the account notice mail. Disabling revokes the user's sessions and
+// refuses to remove the last system administrator. A change to the current
 // state is a conflict without input.Command, and an audited no-op under a
 // command idempotency key.
 func (s SQLUserStore) SetDisabled(
@@ -56,7 +56,6 @@ type userDisabledStatePlan struct {
 	payloadKeyID     string
 }
 
-// planUserDisabledStateChange validates a disabled-state change and its prepared Notice mail.
 func planUserDisabledStateChange(input *store.UserDisabledStateChange) (userDisabledStatePlan, error) {
 	if input == nil ||
 		!input.ID.IsValid() ||
@@ -103,7 +102,6 @@ func planUserDisabledStateChange(input *store.UserDisabledStateChange) (userDisa
 	return plan, nil
 }
 
-// setDisabledIdempotently runs the disabled-state change under its command idempotency key.
 func (s SQLUserStore) setDisabledIdempotently(
 	ctx context.Context,
 	input *store.UserDisabledStateChange,
@@ -153,7 +151,6 @@ func (s SQLUserStore) setDisabledIdempotently(
 	return result.Value.Value, nil
 }
 
-// changeUserDisabledState applies the disabled-state change inside its transaction.
 func changeUserDisabledState(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -222,7 +219,7 @@ func changeUserDisabledState(
 	return &userDisabledMutationResult{Value: result}, nil
 }
 
-// lockUserDisabledStatePaths checks the mail key and takes the authentication-path, Session and User locks in order.
+// lockUserDisabledStatePaths checks the mail key and takes the authentication-path, session and user locks in order.
 func lockUserDisabledStatePaths(ctx context.Context, tx *sqlxTxWrapper, input *store.UserDisabledStateChange, payloadKeyID string) error {
 	if payloadKeyID != "" {
 		if err := requireMailPayloadPrimary(ctx, tx, payloadKeyID); err != nil {
@@ -230,16 +227,16 @@ func lockUserDisabledStatePaths(ctx context.Context, tx *sqlxTxWrapper, input *s
 		}
 	}
 	// Security-sensitive account disablement takes the installation-wide
-	// authentication-path fence before any User row. User eligibility changes
-	// then follow the shared User -> mail-eligibility singleton order.
+	// authentication-path fence before any user row. User eligibility changes
+	// then follow the shared user -> mail-eligibility singleton order.
 	if input.Disabled {
 		if err := lockSystemAdministratorAuthenticationPaths(ctx, tx); err != nil {
 			return err
 		}
-		// Match every authentication and Session mutation: after the
-		// installation-wide path fence, serialize this User's Sessions before
-		// taking the User row. Reversing these two locks can deadlock with a
-		// concurrent Desktop code exchange that already owns the Session fence.
+		// Match every authentication and session mutation: after the
+		// installation-wide path fence, serialize this user's sessions before
+		// taking the user row. Reversing these two locks can deadlock with a
+		// concurrent Desktop code exchange that already owns the session fence.
 		if err := lockUserSessions(ctx, tx, input.ID.String()); err != nil {
 			return err
 		}
@@ -251,7 +248,7 @@ func lockUserDisabledStatePaths(ctx context.Context, tx *sqlxTxWrapper, input *s
 	return nil
 }
 
-// requireRemainingSystemAdministrator refuses to disable the last System Administrator with a usable authentication path.
+// requireRemainingSystemAdministrator refuses to disable the last system administrator with a usable authentication path.
 func requireRemainingSystemAdministrator(ctx context.Context, tx *sqlxTxWrapper, input *store.UserDisabledStateChange) error {
 	policy, err := getAccessPolicy(ctx, tx, "FOR SHARE")
 	if err != nil {
@@ -281,7 +278,7 @@ func requireRemainingSystemAdministrator(ctx context.Context, tx *sqlxTxWrapper,
 	return nil
 }
 
-// persistUserDisabledState advances the mail eligibility revision and writes the User's new disabled state.
+// persistUserDisabledState advances the mail eligibility revision and writes the user's new disabled state.
 func persistUserDisabledState(ctx context.Context, tx *sqlxTxWrapper, input *store.UserDisabledStateChange) (*model.User, error) {
 	var disabledAt time.Time
 	if input.Disabled {
@@ -306,7 +303,6 @@ func persistUserDisabledState(ctx context.Context, tx *sqlxTxWrapper, input *sto
 	return row.model()
 }
 
-// revokeDisabledUserSessions revokes every Session of a disabled User and records them on result.
 func revokeDisabledUserSessions(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -336,7 +332,6 @@ func revokeDisabledUserSessions(
 	return nil
 }
 
-// completeUserDisabledStateAudit completes the attempted audit event with the changed User.
 func completeUserDisabledStateAudit(ctx context.Context, tx *sqlxTxWrapper, input *store.UserDisabledStateChange, user *model.User) error {
 	encoded, appErr := model.EncodeAuditData(user.Auditable())
 	if appErr != nil {

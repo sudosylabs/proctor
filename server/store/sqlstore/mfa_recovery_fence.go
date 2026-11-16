@@ -65,7 +65,7 @@ func getMFARecoveryState(ctx context.Context, executor sqlxExecutor, userID mode
 	return state, nil
 }
 
-// All authority-creating callers hold the per-User Session fence before this
+// All authority-creating callers hold the per-user session fence before this
 // read. Reset holds that same fence and advances a generation permanently.
 func requireSessionAuthenticationGeneration(ctx context.Context, executor sqlxExecutor, session *model.Session) error {
 	state, err := getMFARecoveryState(ctx, executor, session.UserID)
@@ -145,7 +145,7 @@ func requireSessionIssuanceRecovery(
 }
 
 // currentSessionRecoveryPredicate is included in authoritative access and
-// refresh resolution. A recovery Session remains distinguishable and can only
+// refresh resolution. A recovery session remains distinguishable and can only
 // reach explicitly recovery-aware operations; a stale generation never resolves.
 const currentSessionRecoveryPredicate = `sessions.authentication_generation = COALESCE((
 		SELECT generation
@@ -158,8 +158,8 @@ const currentSessionRecoveryPredicate = `sessions.authentication_generation = CO
 		WHERE user_id = sessions.user_id
 	), false)`
 
-// Legacy PAT audit preparations carry their source Session rather than a raw
-// access credential. Once recovery exists, that Session must still belong to
+// Legacy PAT audit preparations carry their source session rather than a raw
+// access credential. Once recovery exists, that session must still belong to
 // the current generation; an old request cannot create new PAT authority after
 // reenrollment clears the restriction.
 func requireMFARecoveryPATSource(ctx context.Context, executor sqlxExecutor, userID, sessionID string, at time.Time) error {
@@ -203,9 +203,9 @@ func requireMFARecoveryPATSource(ctx context.Context, executor sqlxExecutor, use
 }
 
 // Authentication-method commands already reserve an audit carrying their
-// source Session. After any reset, that Session must still have current
+// source session. After any reset, that session must still have current
 // authority, even if the old request reserved its audit after the reset.
-// The caller holds the User Session fence until the credential write commits.
+// The caller holds the user session fence until the credential write commits.
 func requireMFARecoveryAuthenticationMethodSource(
 	ctx context.Context,
 	executor sqlxExecutor,

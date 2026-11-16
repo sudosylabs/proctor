@@ -29,15 +29,15 @@ type ListQuery struct {
 	Limit                  int
 }
 
-// Page is one page of Sittings, latest scheduled start first; HasMore reports
+// Page is one page of sittings, latest scheduled start first; HasMore reports
 // that an earlier page exists.
 type Page struct {
 	Items   []store.ExamSittingSnapshot
 	HasMore bool
 }
 
-// GetExamSitting returns one Sitting to a caller authorized to view it,
-// directly or through an override.
+// GetExamSitting returns one sitting to a caller allowed to view it, directly
+// or through an override.
 func (s *Service) GetExamSitting(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -78,8 +78,8 @@ func (s *Service) GetExamSitting(
 	return value, nil
 }
 
-// ListExamSittings returns one page of an Exam's Sittings, optionally
-// filtered by state, to a caller authorized to view the Exam.
+// ListExamSittings returns one page of an exam's sittings to a caller allowed
+// to view the exam.
 func (s *Service) ListExamSittings(ctx context.Context, inv invocation.Invocation, query ListQuery) (_ Page, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	query.States = append([]model.ExamSittingState(nil), query.States...)

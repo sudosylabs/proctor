@@ -83,28 +83,24 @@ func prepareSchema(ctx context.Context, persistence *sqlstore.SQLStore, policy s
 	return &migration, nil
 }
 
-// ownedInfrastructure is the sole owner of infrastructure while the root is
-// acquiring and decorating it. resources is exactly what transfers to the
-// Platform boundary, as one unit; the metrics and tracing modules stay with
-// the root, which closes them itself. Before the transfer, release is the
-// only cleanup path.
+// ownedInfrastructure is the sole owner of infrastructure until
+// acceptPlatform. resources moves to the platform as one unit; metrics and
+// tracing stay with the root, which closes them itself. Before the transfer,
+// release is the only cleanup path.
 type ownedInfrastructure struct {
 	resources platform.OwnedResources
 	migration *sqlstore.MigrationResult
 	metrics   *metrics.Module
 	tracing   *tracing.Module
-	// plugins are activated once persistence and telemetry exist, so that
-	// what they register is ready before anything that uses it is built.
-	plugins *pluginhost.Host
+	plugins   *pluginhost.Host
 	// pluginSettingsCount is the saved-settings change count the plugins
 	// were activated with; the reconciler continues from it.
 	pluginSettingsCount int64
 }
 
-// constructionCapabilities is a short-lived, non-owning projection used only
-// while the root assembles consumers. It has no lifecycle operations and must
-// not escape composeNode; Platform owns every referenced capability after
-// acceptance.
+// constructionCapabilities is a non-owning view used only while the root
+// builds consumers. It must not escape composeNode; after acceptance the
+// platform owns everything it references.
 type constructionCapabilities struct {
 	logger                 *logging.Logger
 	persistence            store.Catalog
@@ -195,7 +191,6 @@ func openRuntimeInfrastructure(
 	return result, nil
 }
 
-// acquireConfigurationAndLogger opens the configuration and then the logger unless overrides supplied them.
 func (i *ownedInfrastructure) acquireConfigurationAndLogger(ctx context.Context, configPath string) error {
 	if i.resources.Configuration == nil {
 		configuration, err := config.Open(ctx, configPath)
@@ -219,7 +214,6 @@ func (i *ownedInfrastructure) acquireConfigurationAndLogger(ctx context.Context,
 	return checkAcquisitionContext(ctx, "acquire logger")
 }
 
-// acquirePersistence opens the SQL store and prepares its schema unless overrides supplied a store.
 func (i *ownedInfrastructure) acquirePersistence(ctx context.Context, cfg config.Config, schema schemaPolicy) error {
 	if i.resources.Persistence == nil {
 		persistence, err := sqlstore.New(ctx, sqlstore.SettingsFromConfig(cfg.Database))
@@ -236,7 +230,6 @@ func (i *ownedInfrastructure) acquirePersistence(ctx context.Context, cfg config
 	return checkAcquisitionContext(ctx, "acquire persistence")
 }
 
-// constructTelemetry builds the metrics and then the tracing module over the acquired store and logger and records each for release.
 func (i *ownedInfrastructure) constructTelemetry(cfg config.Config) (*metrics.Module, *tracing.Module, error) {
 	var databaseStats func() sql.DBStats
 	if source, ok := i.resources.Persistence.(interface{ Stats() sql.DBStats }); ok {
@@ -273,7 +266,6 @@ func (i *ownedInfrastructure) constructTelemetry(cfg config.Config) (*metrics.Mo
 	return metricsModule, tracingModule, nil
 }
 
-// decoratePersistenceWithRetryAndTiming wraps the store in the retry layer and then the timing layer.
 func (i *ownedInfrastructure) decoratePersistenceWithRetryAndTiming(
 	ctx context.Context,
 	cfg config.Config,
@@ -327,7 +319,6 @@ func (i *ownedInfrastructure) decoratePersistenceWithRetryAndTiming(
 	return checkAcquisitionContext(ctx, "decorate persistence with timing")
 }
 
-// acquireCacheMailerAndVFS opens the cache, mail transport and VFS in order, measuring each when metrics are enabled.
 func (i *ownedInfrastructure) acquireCacheMailerAndVFS(ctx context.Context, cfg config.Config, metricsModule *metrics.Module) error {
 	if i.resources.Cache == nil {
 		cache, err := newCache(cfg.Cache)
@@ -377,7 +368,6 @@ func (i *ownedInfrastructure) acquireCacheMailerAndVFS(ctx context.Context, cfg 
 	return checkAcquisitionContext(ctx, "acquire VFS")
 }
 
-// acquireCluster opens the cluster transport unless overrides supplied one, measuring it when metrics are enabled.
 func (i *ownedInfrastructure) acquireCluster(ctx context.Context, cfg config.Config, metricsModule *metrics.Module) error {
 	if i.resources.Cluster == nil {
 		var discovery store.ClusterDiscoveryStore
@@ -403,7 +393,6 @@ func (i *ownedInfrastructure) acquireCluster(ctx context.Context, cfg config.Con
 	return checkAcquisitionContext(ctx, "acquire cluster transport")
 }
 
-// decoratePersistenceWithLocalCache wraps the store in the cluster-invalidated local cache layer.
 func (i *ownedInfrastructure) decoratePersistenceWithLocalCache(
 	ctx context.Context,
 	overrides TestingOverrides,

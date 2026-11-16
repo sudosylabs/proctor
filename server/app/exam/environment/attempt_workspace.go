@@ -24,14 +24,12 @@ import (
 // environmentTask names the runtime task the owners' Workspace calls run as.
 const environmentTask = "execution"
 
-// attemptWorkspace is the owners' Workspace over the Attempt service's
-// environment use cases, which fence every call by the owner's lease.
+// attemptWorkspace is the owners' Workspace over the attempt service, which
+// fences every call by the owner's lease.
 type attemptWorkspace struct {
 	attempts *attempt.Service
 }
 
-// newAttemptWorkspace returns the Workspace the owners read and write the
-// Attempt Workspace through.
 func newAttemptWorkspace(attempts *attempt.Service) (Workspace, error) {
 	if attempts == nil {
 		return nil, errors.New("the environment Workspace needs the Attempt service")
@@ -128,8 +126,8 @@ type batchContent func(ctx context.Context) (io.Reader, error)
 
 func (c batchContent) Next(ctx context.Context) (io.Reader, error) { return c(ctx) }
 
-// environmentAccessError recognizes the refusals of the owner itself: a
-// stale lease or incarnation, and a sealed Attempt.
+// environmentAccessError recognizes refusals of the owner itself: a stale
+// lease or incarnation, or a sealed attempt.
 func environmentAccessError(err error) error {
 	var conflict *store.ErrConflict
 	if errors.As(err, &conflict) {
@@ -153,8 +151,8 @@ func environmentReadError(err error) error {
 	return err
 }
 
-// environmentWriteError presents a refused batch with its public code and
-// the mutation that refused it.
+// environmentWriteError reports a refused batch with its public code and the
+// index of the mutation that refused it, or -1.
 func environmentWriteError(err error) error {
 	if refused := environmentAccessError(err); refused != nil {
 		return refused

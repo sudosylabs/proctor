@@ -130,8 +130,6 @@ type examAttemptRenewRequest struct {
 	ContinuityCredential string                `json:"continuity_credential"`
 }
 
-// securityControlResponse reports how the server processed Desktop's
-// security control.
 type securityControlResponse struct {
 	ProcessedControlSequence    int64                                `json:"processed_control_sequence"`
 	ProcessedControlDigest      *string                              `json:"processed_control_digest"`

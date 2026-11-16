@@ -26,12 +26,11 @@ const (
 	servingNodeLeaseStopMargin      = 5 * time.Second
 )
 
-// ServingLease owns one process incarnation's installation-wide
-// serving proof. A transient renewal failure is retried while the last proven
-// lease still leaves room for one bounded attempt plus the stop margin. A
-// rejected incarnation, invalid persisted state, or exhausted slack is
-// terminal: the server observes Failures and force-stops HTTP serving before the
-// already-committed lease can expire.
+// ServingLease keeps this process's serving lease renewed. A transient renewal
+// failure is retried while the last lease still leaves room for one attempt
+// plus the stop margin. A rejected lease, invalid stored state or exhausted
+// slack is terminal: the server reads Failures and force-stops HTTP serving
+// before the committed lease can expire.
 type ServingLease struct {
 	store           store.ServingNodeLeaseStore
 	claim           store.ServingNodeLeaseClaim

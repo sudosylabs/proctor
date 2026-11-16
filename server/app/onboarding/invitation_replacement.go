@@ -20,8 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ReplaceInvitation revokes a pending Invitation and issues its corrected replacement,
-// reauthorizing the replacement's target.
+// ReplaceInvitation revokes a pending invitation and issues a corrected one,
+// authorizing the replacement's target afresh.
 func (s *Service) ReplaceInvitation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -172,7 +172,6 @@ func (s *Service) prepareReplacement(
 	return value, rawClaim, nil
 }
 
-// invitationReplacementDraft carries the purpose-independent replacement values shared by every purpose step.
 type invitationReplacementDraft struct {
 	purpose  model.InvitationPurpose
 	at       time.Time
@@ -183,7 +182,6 @@ type invitationReplacementDraft struct {
 	lifetime time.Duration
 }
 
-// prepareStudentClassReplacement authorizes the Class target and builds the replacement Student Class Invitation.
 func (s *Service) prepareStudentClassReplacement(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -246,8 +244,6 @@ func (s *Service) prepareStudentClassReplacement(
 	return value, nil
 }
 
-// prepareAcademicUnitReplacement authorizes the Academic Unit target and delegated Role and builds the replacement
-// Teacher Academic Unit or Academic Unit Role Invitation.
 func (s *Service) prepareAcademicUnitReplacement(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -352,8 +348,7 @@ func (s *Service) prepareAcademicUnitReplacement(
 	return value, nil
 }
 
-// prepareInstitutionRoleReplacement requires recent strong authentication, authorizes the Institution target and
-// delegated Role, and builds the replacement Institution Role Invitation.
+// prepareInstitutionRoleReplacement requires recent strong authentication.
 func (s *Service) prepareInstitutionRoleReplacement(
 	ctx context.Context,
 	inv invocation.Invocation,

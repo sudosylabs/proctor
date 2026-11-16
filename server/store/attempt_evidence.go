@@ -14,10 +14,9 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// ExamAttemptEvidenceAppend appends one Attempt evidence record through the
-// environment access Access names; the record's author is that access's
-// author. EvidenceID is the proposed identity of a new record. Sequence
-// numbers the author's stream of Kind.
+// ExamAttemptEvidenceAppend appends one attempt evidence record authored by
+// Access's author. EvidenceID is the proposed identity of a new record;
+// Sequence numbers the author's stream of Kind.
 type ExamAttemptEvidenceAppend struct {
 	Access     ExamAttemptWorkspaceEnvironmentAccess
 	EvidenceID model.IntegrityEvidenceID
@@ -27,10 +26,10 @@ type ExamAttemptEvidenceAppend struct {
 	ObservedAt time.Time
 }
 
-// ExamAttemptEvidenceAppendResult is the stored record, or, when
-// Refused, nothing stored: the append was over the Attempt's bounds and only
-// counted. Repeated reports that the same claim was already stored, and
-// Evidence is that record.
+// ExamAttemptEvidenceAppendResult is the stored record. Refused means the
+// append was over the attempt's bounds and was only counted, not stored.
+// Repeated means the same claim was already stored and Evidence is that
+// record.
 type ExamAttemptEvidenceAppendResult struct {
 	Evidence model.AttemptEvidence
 	Repeated bool
@@ -38,8 +37,8 @@ type ExamAttemptEvidenceAppendResult struct {
 }
 
 // Consistent reports whether the result answers input: a refusal carries no
-// record, and a stored or repeated record is valid, names the Attempt, the
-// access's author, the kind and sequence, and repeats the claim.
+// record, and a stored or repeated record is valid, names the attempt, and
+// repeats the claim.
 func (r *ExamAttemptEvidenceAppendResult) Consistent(input *ExamAttemptEvidenceAppend) bool {
 	if r == nil || input == nil {
 		return false
@@ -71,7 +70,7 @@ type ExamAttemptTerminalInputAppend struct {
 	ObservedAt  time.Time
 }
 
-// Author is the record's author: the incarnation and the terminal.
+// Author is the incarnation and the terminal's tag.
 func (a *ExamAttemptTerminalInputAppend) Author() model.AttemptWorkspaceAuthor {
 	return model.NewEnvironmentWorkspaceAuthor(a.Incarnation, a.Tag)
 }
@@ -83,19 +82,19 @@ func (a *ExamAttemptTerminalInputAppend) Valid() bool {
 		!a.ObservedAt.IsZero()
 }
 
-// AttemptEvidenceListOptions selects one page of a sealed Submission's
-// Attempt evidence for review.
+// AttemptEvidenceListOptions selects one page of a sealed submission's
+// attempt evidence for review.
 type AttemptEvidenceListOptions struct {
 	SubmissionID model.SubmissionID
 	AfterID      model.IntegrityEvidenceID
 	Limit        int
 }
 
-// AttemptEvidencePage is one page of Attempt evidence in ID order.
+// AttemptEvidencePage is one page of attempt evidence in ID order.
 type AttemptEvidencePage struct {
 	Items   []model.AttemptEvidence
 	HasMore bool
 }
 
-// AttemptEvidenceReviewMaximum bounds one review page.
+// AttemptEvidenceReviewMaximum is the largest Limit a review page accepts.
 const AttemptEvidenceReviewMaximum = 100

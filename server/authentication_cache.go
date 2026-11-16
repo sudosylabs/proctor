@@ -16,7 +16,8 @@ import (
 	"github.com/sudosylabs/proctor/server/platform"
 )
 
-// platformAuthenticationCache adapts platform.Cache to app.authenticationCache.
+// platformAuthenticationCache maps the platform cache's sentinels to
+// identity's.
 type platformAuthenticationCache struct {
 	cache platform.Cache
 }

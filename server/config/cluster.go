@@ -28,10 +28,9 @@ type ClusterMemberlist struct {
 	AllowPublicBind    bool     `json:"AllowPublicBind"`
 }
 
-// Cluster selects the inter-node transport and gives this process its stable
-// runtime identity. "local" is the single-node degenerate transport.
-// "memberlist" is the built-in multi-node backend and requires Redis so
-// installation-wide disposable security counters remain coherent.
+// Cluster selects the inter-node transport and this node's stable ID.
+// "memberlist" requires the Redis cache so security counters stay coherent
+// across nodes.
 type Cluster struct {
 	Backend    string            `json:"Backend"`
 	NodeID     string            `json:"NodeID"`

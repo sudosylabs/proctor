@@ -26,8 +26,6 @@ import (
 	"github.com/sudosylabs/proctor/server/secretseal"
 )
 
-// examServices are the Exam area's services, together with the Sitting mail
-// composition that the Sitting service and the Sitting mail Jobs share.
 type examServices struct {
 	authoring              *exam.Authoring
 	publication            *exam.Publication
@@ -43,10 +41,6 @@ type examServices struct {
 	sittingMailPreparation sitting.ScheduleMail
 }
 
-// newExamServices builds the Exam area in dependency order: authoring and
-// publication, Sittings, the Attempts and reviews that run inside them, the
-// Draft content services, then records and exports. desktopBuilds resolves
-// Desktop builds for Attempt admission.
 func newExamServices(
 	deps Dependencies,
 	shared sharedMechanics,
@@ -129,8 +123,8 @@ func newSittingMail(deps Dependencies) (*mail.SittingComposer, error) {
 	)
 }
 
-// newSittingMailPreparer builds the Sitting mail composer over an explicit
-// clock, so its tests freeze time.
+// newSittingMailPreparer takes an explicit clock so its tests can freeze
+// time.
 func newSittingMailPreparer(
 	renderer *mail.TemplateRenderer,
 	sender mail.Sender,
@@ -358,7 +352,7 @@ func newExamExports(deps Dependencies, shared sharedMechanics, authorizer *acces
 // execution environment to settle.
 const attemptEnvironmentSettleBudget = 5 * time.Second
 
-// sittingLifecycleJobs delays a closing Sitting's sealing Job by the settle
+// sittingLifecycleJobs delays a closing sitting's sealing job by the settle
 // budget when the installation runs execution environments.
 func sittingLifecycleJobs(deps Dependencies) jobs.ExamSittingLifecycleJobFactory {
 	factory := jobs.NewExamSittingLifecycleJobFactory(time.Now, model.NewJobID)
@@ -368,8 +362,6 @@ func sittingLifecycleJobs(deps Dependencies) jobs.ExamSittingLifecycleJobFactory
 	return factory
 }
 
-// environmentSettler settles execution environments before their seals when
-// the installation runs them; otherwise nothing settles.
 func environmentSettler(deps Dependencies) attempt.EnvironmentSettler {
 	if !deps.ExecutionEnabled || deps.Store.AttemptEnvironment() == nil || deps.EnvironmentSettles == nil {
 		return nil
@@ -388,8 +380,8 @@ func environmentSettler(deps Dependencies) attempt.EnvironmentSettler {
 	return settler
 }
 
-// newTerminals builds the candidates' terminals, or nil when the
-// installation runs no execution environments.
+// newTerminals returns nil when the installation runs no execution
+// environments.
 func newTerminals(deps Dependencies, attempts *attempt.Service) (*environment.Terminals, error) {
 	if deps.EnvironmentHosts == nil || deps.Store.AttemptEnvironment() == nil || attempts == nil {
 		return nil, nil

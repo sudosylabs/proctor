@@ -14,9 +14,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// publishSettingsChanged tells the User's live sessions to refetch their
-// settings document after a committed replacement. The event carries the new
-// revision, format and instant, never the document.
+// publishSettingsChanged tells live sessions to refetch; the event never
+// carries the document itself.
 func (s *Service) publishSettingsChanged(
 	ctx context.Context,
 	userID model.UserID,
@@ -34,9 +33,6 @@ func (s *Service) publishSettingsChanged(
 	return s.publisher.Publish(ctx, event)
 }
 
-// publishProfilePictureChanged tells the User's live sessions which File
-// Entry is now their profile picture, with the User revision and the instant
-// of the committed change.
 func (s *Service) publishProfilePictureChanged(
 	ctx context.Context,
 	user *model.User,

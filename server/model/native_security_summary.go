@@ -6,23 +6,23 @@
 // ---------------------------------------------------------------------------------------------
 package model
 
-// NativeSecuritySummary excludes facts, source-instance and application
+// NativeSecuritySummary leaves out facts and source-instance and application
 // identities. Health is live coverage, never evidence of misconduct.
 type NativeSecuritySummary struct {
 	RetainedConditionRecords int64
-	// LiveCoverageAvailable reports whether a Participation is live, so the
+	// LiveCoverageAvailable reports whether a participation is live, so the
 	// rules below are current.
 	LiveCoverageAvailable bool
-	// Rules are the live Participation's enforce rules as the server
-	// evaluates them, by rule ID. Contained reports whether Desktop says it
-	// is containing the candidate window right now.
+	// Rules are the live participation's enforce rules as the server evaluates
+	// them, ordered by rule ID. Contained reports whether Desktop says it is
+	// containing the candidate window right now.
 	Rules     []NativeRuleStanding
 	Contained bool
-	// ScreenClips counts the Attempt's screen clips by state.
+	// ScreenClips counts the attempt's screen clips by state.
 	ScreenClips ScreenClipCounts
 }
 
-// ScreenClipCounts counts an Attempt's screen clips in each state.
+// ScreenClipCounts counts an attempt's screen clips in each state.
 type ScreenClipCounts struct {
 	Requested, Recording, Uploading, Ready, Failed int
 }
@@ -60,8 +60,7 @@ func (c ScreenClipCounts) valid() bool {
 	return total <= ScreenClipManagerRequestLimit+ScreenClipIncidentRequestLimit
 }
 
-// EnforceStandings keeps the enforce rules of standings, the ones the board
-// shows.
+// EnforceStandings keeps only the enforce rules, the ones the board shows.
 func EnforceStandings(standings []NativeRuleStanding) []NativeRuleStanding {
 	enforce := []NativeRuleStanding{}
 	for _, standing := range standings {

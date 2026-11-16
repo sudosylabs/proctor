@@ -25,15 +25,15 @@ import (
 )
 
 // SQLAffiliationStore implements store.AffiliationStore on the affiliations
-// table. It refuses to end a student Affiliation while the user still has an
-// active Class enrollment.
+// table. It refuses to end a student affiliation while the user still has an
+// active class enrollment.
 type SQLAffiliationStore struct {
 	*SQLStore
 	query sq.SelectBuilder
 }
 
 // affiliationRow is the legacy integer-millisecond column layout. Domain
-// Affiliation uses time.Time / OptionalTime; conversion is at this boundary.
+// affiliation uses time.Time / OptionalTime; conversion is at this boundary.
 type affiliationRow struct {
 	ID         string                `db:"id"`
 	CreatedAt  time.Time             `db:"created_at"`
@@ -243,7 +243,7 @@ func (s SQLAffiliationStore) Save(
 	})
 }
 
-// Get returns the unarchived Affiliation with id, or a not-found error.
+// Get returns the unarchived affiliation with id, or a not-found error.
 func (s SQLAffiliationStore) Get(ctx context.Context, id model.AffiliationID) (*model.Affiliation, error) {
 	var row affiliationRow
 	if err := s.GetMaster().GetBuilder(ctx, &row, s.query.Where(sq.Eq{
@@ -256,7 +256,7 @@ func (s SQLAffiliationStore) Get(ctx context.Context, id model.AffiliationID) (*
 	return row.model()
 }
 
-// ListByUser returns every unarchived Affiliation of userID, ended or not,
+// ListByUser returns every unarchived affiliation of userID, ended or not,
 // newest start first.
 func (s SQLAffiliationStore) ListByUser(ctx context.Context, userID model.UserID) ([]*model.Affiliation, error) {
 	return s.selectAffiliations(ctx, s.query.Where(sq.Eq{
@@ -265,7 +265,7 @@ func (s SQLAffiliationStore) ListByUser(ctx context.Context, userID model.UserID
 	}).OrderBy("affiliations.start_at DESC", "affiliations.id"))
 }
 
-// ListActiveByUser returns the unarchived Affiliations of userID active at at.
+// ListActiveByUser returns the unarchived affiliations of userID active at at.
 func (s SQLAffiliationStore) ListActiveByUser(ctx context.Context, userID model.UserID, at time.Time) ([]*model.Affiliation, error) {
 	activeAt := model.TimeUTC(at)
 	return s.selectAffiliations(ctx, s.query.Where(sq.Eq{
@@ -276,8 +276,8 @@ func (s SQLAffiliationStore) ListActiveByUser(ctx context.Context, userID model.
 		OrderBy("affiliations.kind", "affiliations.id"))
 }
 
-// End ends the Affiliation at input.EndAt, fenced on ExpectedRevision, and
-// completes its audit event. Ending an already-ended Affiliation is a conflict
+// End ends the affiliation at input.EndAt, fenced on ExpectedRevision, and
+// completes its audit event. Ending an already-ended affiliation is a conflict
 // without input.Command, and an audited no-op (input.NoOp set) under a command
 // idempotency key.
 func (s SQLAffiliationStore) End(ctx context.Context, input *store.AffiliationEnd) (*model.Affiliation, error) {

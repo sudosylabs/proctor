@@ -204,7 +204,7 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	require.Equal(t, store.ExamCorrectionResourceStageReady, readyAfterNoChange.State)
 
 	// Override authority does not transfer the actor ownership of a staged
-	// upload. This also proves a failed Apply leaves the Sitting unchanged.
+	// upload. This also proves a failed Apply leaves the sitting unchanged.
 	otherActor := saveUser(t, ctx, ss)
 	wrongActor := *noChange
 	wrongActor.RevisionID, wrongActor.ActorUserID, wrongActor.ManagerOverride = model.NewExamRevisionID(), otherActor.ID, true
@@ -279,8 +279,8 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 		examCommand(fixture.actor.ID, "exam.correction.apply", "correction-over-count-apply", "correction-over-count-apply-command"))
 	requireConflictConstraint(t, err, "exam_correction_resource_limit")
 
-	// Omission from the next complete manifest removes only the new Revision's
-	// relationship. Older immutable Revision snapshots remain exact.
+	// Omission from the next complete manifest removes only the new revision's
+	// relationship. Older immutable revision snapshots remain exact.
 	removeAudit := saveExamSittingAudit(t, ctx, ss, fixture.actor.ID, fixture.examID, fixture.unitID)
 	removeApply := &store.ExamCorrectionApplication{RevisionID: model.NewExamRevisionID(), ExamID: fixture.examID, SittingID: sitting.ID,
 		CurrentRevisionID: secondResult.Revision.ID, ExpectedSittingRevision: secondResult.Sitting.Sitting.Revision, ActorUserID: fixture.actor.ID,
@@ -320,7 +320,7 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	require.Equal(t, fixture.revisionID, scheduledAfter.Sitting.ExamRevisionID)
 	require.Equal(t, int64(1), scheduledAfter.Sitting.Revision)
 
-	// A stale current Revision/Sitting fence fails before interpreting a later
+	// A stale current revision/sitting fence fails before interpreting a later
 	// desired snapshot.
 	stale := *secondApply
 	stale.RevisionID = model.NewExamRevisionID()
@@ -330,7 +330,7 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	requireConflictConstraint(t, err, "exam_sitting_revision")
 
 	// A database uniqueness failure after all guards but before retarget rolls
-	// back the prospective Revision, Sitting, audit completion, and outcome.
+	// back the prospective revision, sitting, audit completion, and outcome.
 	rollbackInstructions := "Must roll back"
 	rollbackAudit := saveExamSittingAudit(t, ctx, ss, fixture.actor.ID, fixture.examID, fixture.unitID)
 	rollback := &store.ExamCorrectionApplication{RevisionID: result.Revision.ID, ExamID: fixture.examID, SittingID: sitting.ID,
@@ -351,7 +351,7 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	require.Equal(t, model.AuditStatusAttempt, rollbackAuditState.Status)
 
 	// Two distinct keys racing the same optimistic fences serialize under the
-	// Exam/Sitting locks: exactly one immutable Revision and retarget wins.
+	// exam/sitting locks: exactly one immutable revision and retarget wins.
 	current, err := ss.ExamSitting().Get(ctx, fixture.examID, sitting.ID)
 	require.NoError(t, err)
 	racedSnapshot, err := ss.ExamRevision().GetSnapshot(ctx, fixture.examID, current.Sitting.ExamRevisionID)

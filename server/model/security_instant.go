@@ -13,14 +13,13 @@ import (
 	"time"
 )
 
-// Validate millisecond precision lexically: time.Parse truncates fractional
-// digits beyond nanoseconds, which must not hide a nonzero submillisecond tail.
+// Millisecond precision is checked lexically: time.Parse truncates digits
+// beyond nanoseconds, which must not hide a nonzero sub-millisecond tail.
 var securityInstantPattern = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,3}0*)?(Z|[+-]00:00)$`)
 
-// securityJSONInstant preserves timestamp strings in hashed agreement documents.
-// The spelling is immutable value state, so copying a domain record is safe.
-// Domain logic continues to compare time.Time values; changing that value causes
-// serialization to use its new spelling rather than stale received bytes.
+// securityJSONInstant keeps the received timestamp spelling in hashed
+// agreement documents. Logic still compares the time.Time; changing it makes
+// serialization use the new spelling, not stale received bytes.
 type securityJSONInstant struct {
 	time.Time
 	spelling string

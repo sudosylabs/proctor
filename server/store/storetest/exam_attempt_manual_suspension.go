@@ -18,9 +18,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// TestExamAttemptManualSuspensionStore verifies an Exam Manager's kick: one
-// revision-fenced manual episode without an Integrity Flag that ends the live
-// generation and Connection as kicked, replays exactly, conceals self-access,
+// TestExamAttemptManualSuspensionStore verifies an exam manager's kick: one
+// revision-fenced manual episode without an integrity flag that ends the live
+// generation and connection as kicked, replays exactly, conceals self-access,
 // and is closed by the ordinary re-allow decision.
 func TestExamAttemptManualSuspensionStore(t *testing.T, ss store.Store) {
 	t.Helper()
@@ -102,7 +102,7 @@ func TestExamAttemptManualSuspensionStore(t *testing.T, ss store.Store) {
 	require.Equal(t, model.AttemptSuspensionCandidateReasonManagerSuspended, statuses.Items[0].Suspension.CandidateReason)
 	require.True(t, statuses.Items[0].Suspension.ReallowAvailable)
 	require.Equal(t, store.SittingCandidateSuspended, statuses.Items[0].Presence.State)
-	// Revoking the kicked generation's Session refreshes the same projections
+	// Revoking the kicked generation's session refreshes the same projections
 	// as revoking a policy-suspended one.
 	targets, err := ss.ExamAttempt().ListSessionRevocationInvalidationTargets(ctx, fixture.candidate.ID,
 		[]model.SessionID{fixture.session.ID})
@@ -151,7 +151,7 @@ func TestExamAttemptManualSuspensionStore(t *testing.T, ss store.Store) {
 }
 
 // ExamAttemptManualSuspensionSQLProbe moves PostgreSQL-owned instants that
-// the shared contract cannot reach: one generation's lease and one Sitting's
+// the shared contract cannot reach: one generation's lease and one sitting's
 // scheduled end.
 type ExamAttemptManualSuspensionSQLProbe struct {
 	SetParticipationLeaseExpired func(*testing.T, context.Context, model.AttemptParticipationID)
@@ -160,7 +160,7 @@ type ExamAttemptManualSuspensionSQLProbe struct {
 
 // TestExamAttemptManualSuspensionBounds verifies that PostgreSQL time bounds a
 // kick: a lapsed lease is refused without ending the generation, so the
-// expiry transition still records Connection Loss for it, and a Sitting past
+// expiry transition still records connection loss for it, and a sitting past
 // its scheduled end refuses the kick.
 func TestExamAttemptManualSuspensionBounds(t *testing.T, ss store.Store, probe ExamAttemptManualSuspensionSQLProbe) {
 	t.Helper()
@@ -228,14 +228,14 @@ func TestExamAttemptManualSuspensionBounds(t *testing.T, ss store.Store, probe E
 	requireUnkicked(late, connected)
 }
 
-// ExamAttemptManagementLockSQLProbe holds the Attempt and Sitting locks that a
+// ExamAttemptManagementLockSQLProbe holds the attempt and sitting locks that a
 // kick or re-allow takes while contender runs, and returns contender's result.
 type ExamAttemptManagementLockSQLProbe func(t *testing.T, ctx context.Context, input *store.ExamAttemptReallow,
 	contender func(context.Context) error) error
 
 // TestExamAttemptManagementLockAdmitsSittingRenewals verifies that a kick or
-// re-allow of one Attempt does not queue renewals of other Attempts in the
-// same Sitting: it locks the Sitting row only against state changes.
+// re-allow of one attempt does not queue renewals of other attempts in the
+// same sitting: it locks the sitting row only against state changes.
 func TestExamAttemptManagementLockAdmitsSittingRenewals(t *testing.T, ss store.Store, hold ExamAttemptManagementLockSQLProbe) {
 	t.Helper()
 	ctx := context.Background()

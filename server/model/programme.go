@@ -11,9 +11,9 @@ import (
 	"time"
 )
 
-// Programme is a course of study owned by one AcademicUnit, such as Bachelor
-// of Computer Science. It describes the curriculum independently of academic
-// years and concrete student rosters.
+// Programme is a course of study owned by one academic unit, such as Bachelor
+// of Computer Science. It describes the curriculum apart from academic years
+// and rosters.
 type Programme struct {
 	ID             ProgrammeID
 	CreatedAt      time.Time
@@ -26,7 +26,8 @@ type Programme struct {
 	Description    string
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
+// PrepareCreate stamps the ID and creation time and clears archive state; it
+// does nothing on nil.
 func (p *Programme) PrepareCreate(id ProgrammeID, at time.Time) {
 	if p == nil {
 		return
@@ -42,7 +43,7 @@ func (p *Programme) PrepareCreate(id ProgrammeID, at time.Time) {
 	sanitizeNamed(&p.Name, &p.DisplayName, &p.Description)
 }
 
-// PrepareUpdate applies the application-selected transition time.
+// PrepareUpdate stamps the update time and bumps the revision.
 func (p *Programme) PrepareUpdate(at time.Time) {
 	if p == nil {
 		return
@@ -55,7 +56,7 @@ func (p *Programme) PrepareUpdate(at time.Time) {
 	sanitizeNamed(&p.Name, &p.DisplayName, &p.Description)
 }
 
-// Archive marks the programme archived.
+// Archive sets ArchivedAt and bumps the revision; archiving twice fails.
 func (p *Programme) Archive(at time.Time) error {
 	if p == nil {
 		return invalidModelError("Programme.Archive", "programme", "", "programme is nil", "")
@@ -73,12 +74,13 @@ func (p *Programme) Archive(at time.Time) error {
 	return p.Validate()
 }
 
-// IsArchived reports whether the programme is archived.
+// IsArchived reports whether ArchivedAt is set; a nil programme is not
+// archived.
 func (p *Programme) IsArchived() bool {
 	return p != nil && p.ArchivedAt.Valid
 }
 
-// Validate checks rehydrated programme state.
+// Validate checks the programme's fields, for new and stored values alike.
 func (p *Programme) Validate() error {
 	const where = "Programme.Validate"
 	if p == nil {
@@ -109,7 +111,7 @@ func (p *Programme) Validate() error {
 	return validateNamed(where, "programme", p.ID.String(), p.Name, p.DisplayName, p.Description)
 }
 
-// Auditable returns a deliberately safe audit projection.
+// Auditable returns the fields that are safe to record in the audit log.
 func (p *Programme) Auditable() map[string]any {
 	if p == nil {
 		return map[string]any{}
@@ -126,7 +128,7 @@ func (p *Programme) Auditable() map[string]any {
 	}
 }
 
-// ResourceID returns the string form used by authorization Resource contracts.
+// ResourceID returns the ID in the form authorization resources use.
 func (p *Programme) ResourceID() string {
 	if p == nil {
 		return ""

@@ -48,15 +48,15 @@ type userProfileResponse struct {
 	ProfilePictureKind      string  `json:"profile_picture_kind"`
 }
 
-// userDirectoryEntryResponse is one User directory item: the profile the
+// userDirectoryEntryResponse is one user directory item: the profile the
 // caller may read and its bounded summary.
 type userDirectoryEntryResponse struct {
 	userProfileResponse
 	Summary *userDirectorySummaryResponse `json:"summary,omitempty"`
 }
 
-// userDirectorySummaryResponse names a User's current Affiliations and, for
-// a caller holding role_binding.view, the visible current Role Bindings.
+// userDirectorySummaryResponse names a user's current affiliations and, for
+// a caller holding role_binding.view, the visible current role bindings.
 type userDirectorySummaryResponse struct {
 	Affiliations     []userDirectoryAffiliationResponse `json:"affiliations"`
 	AffiliationsMore int                                `json:"affiliations_more"`
@@ -752,8 +752,8 @@ func (h userProfileHandlers) search(request route.Request) (route.Result, error)
 }
 
 // userDirectoryEntryResponseFromApplication presents one directory row. Each
-// Affiliation carries the User's visible current Academic Units, since a
-// membership is not tied to one Affiliation kind.
+// affiliation carries the user's visible current academic units, since a
+// membership is not tied to one affiliation kind.
 func userDirectoryEntryResponseFromApplication(entry user.UserDirectoryEntry) userDirectoryEntryResponse {
 	units := make([]userDirectoryAcademicUnitResponse, 0, len(entry.Memberships.AcademicUnits))
 	for _, unit := range entry.Memberships.AcademicUnits {
@@ -792,7 +792,7 @@ func userDirectoryEntryResponseFromApplication(entry user.UserDirectoryEntry) us
 }
 
 // userDirectoryFilters reads the repeatable affiliation filter and the single
-// academic_unit_id filter of the User directory.
+// academic_unit_id filter of the user directory.
 func userDirectoryFilters(values url.Values) ([]model.AffiliationKind, model.AcademicUnitID, error) {
 	var kinds []model.AffiliationKind
 	for _, raw := range values["affiliation"] {
@@ -875,7 +875,7 @@ func userDirectoryAccountFilters(values url.Values, query *user.SearchUsersQuery
 	return nil
 }
 
-// userDirectorySorts is the User directory's closed sort set; username, the
+// userDirectorySorts is the user directory's closed sort set; username, the
 // default, keeps the directory's historical order.
 var userDirectorySorts = []string{
 	string(store.UserOrderUsername),
@@ -884,10 +884,10 @@ var userDirectorySorts = []string{
 	string(store.UserOrderLastActive),
 }
 
-// userDirectoryCursor continues the User directory in one order. Key is the
-// last User's key in that order: the username, or the RFC 3339 creation or
-// last-activity instant; it is empty for the name order, which the Store
-// resumes from the User itself, and for a User who was never active.
+// userDirectoryCursor continues the user directory in one order. Key is the
+// last user's key in that order: the username, or the RFC 3339 creation or
+// last-activity instant; it is empty for the name order, which the store
+// resumes from the user itself, and for a user who was never active.
 type userDirectoryCursor struct {
 	Sort string `json:"sort"`
 	Dir  string `json:"dir"`

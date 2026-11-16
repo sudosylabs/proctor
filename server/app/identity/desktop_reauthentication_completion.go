@@ -19,8 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// CompleteDesktopReauthenticationCommand redeems a reauthentication code from
-// the Desktop Session that started it.
+// CompleteDesktopReauthenticationCommand must come from the desktop session
+// that started the reauthentication.
 type CompleteDesktopReauthenticationCommand struct {
 	Code         string
 	CodeVerifier string
@@ -28,14 +28,14 @@ type CompleteDesktopReauthenticationCommand struct {
 	Source       string
 }
 
-// DesktopReauthenticationResult reports how long the refreshed Desktop
-// Session counts as recently authenticated.
+// DesktopReauthenticationResult reports how long the refreshed session counts
+// as recently authenticated.
 type DesktopReauthenticationResult struct {
 	RecentlyAuthenticatedUntil time.Time
 }
 
 // ApproveDesktopReauthentication issues the one-use code and the loopback
-// redirect that hands it to the Desktop.
+// redirect that hands it to the desktop app.
 func (s *Service) ApproveDesktopReauthentication(
 	ctx context.Context,
 	_ invocation.Invocation,
@@ -92,9 +92,9 @@ func (s *Service) CancelDesktopReauthentication(
 	return nil
 }
 
-// CompleteDesktopReauthentication redeems the code from the same Desktop
-// Session and key that started the handoff and refreshes that Session's
-// primary proof. No Session is created and the Registration is unchanged.
+// CompleteDesktopReauthentication redeems the code from the same session and
+// key that started the handoff. No session is created and the registration is
+// unchanged.
 func (s *Service) CompleteDesktopReauthentication(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -158,7 +158,6 @@ func (s *Service) CompleteDesktopReauthentication(
 	return &DesktopReauthenticationResult{RecentlyAuthenticatedUntil: latest.Add(s.recentAuthenticationTTL)}, nil
 }
 
-// desktopReauthenticationOperation names the audited proof path.
 func desktopReauthenticationOperation(method string) string {
 	if method == "password" {
 		return "desktop_password"
@@ -166,8 +165,6 @@ func desktopReauthenticationOperation(method string) string {
 	return "desktop_external"
 }
 
-// desktopReauthenticationRejection names who proved what against which
-// Desktop Session's account.
 type desktopReauthenticationRejection struct {
 	actor         model.UserID
 	target        model.UserID
@@ -176,9 +173,8 @@ type desktopReauthenticationRejection struct {
 	errorCode     string
 }
 
-// recordRejectedDesktopReauthentication records, as a failed
-// reauthentication, a browser proof of another account: the proving account
-// is the actor and the Desktop Session's account the resource.
+// recordRejectedDesktopReauthentication audits a proof of another account: the
+// proving account is the actor, the desktop session's account the resource.
 func (s *Service) recordRejectedDesktopReauthentication(
 	ctx context.Context,
 	inv invocation.Invocation,

@@ -20,9 +20,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Content opens and stages the bytes behind Exam Resources, Starter
-// Workspace objects and Attempt Workspace objects. The Store decides which
-// object a candidate or manager may reach; this port only moves bytes.
+// Content opens and stages the bytes behind exam resources and starter and
+// attempt workspace objects. It never checks access: the store decides which
+// object a candidate or manager may reach.
 type Content interface {
 	OpenExamResource(context.Context, model.FileRevisionID, model.FileRenditionID) (io.ReadCloser, error)
 	OpenStarterWorkspaceObject(context.Context, model.StarterWorkspaceObjectID) (io.ReadCloser, error)
@@ -41,9 +41,9 @@ type Content interface {
 	OpenScreenClipChunk(context.Context, model.ScreenClipID, int, int64, int64) (io.ReadCloser, error)
 }
 
-// SubmissionMailPreparation contains only the safe identity needed to freeze
-// a candidate receipt. The preparer resolves recipient and published Exam
-// title without exposing them to the Attempt use cases.
+// SubmissionMailPreparation carries only the safe identity needed to freeze a
+// candidate receipt; the preparer resolves the recipient and exam title so the
+// attempt use cases never see them.
 type SubmissionMailPreparation struct {
 	CandidateUserID model.UserID
 	ExamID          model.ExamID
@@ -54,16 +54,16 @@ type SubmissionMailPreparation struct {
 	Provenance      model.ExamSubmissionProvenance
 }
 
-// PreparedSubmissionMail is a frozen receipt notice together with the
-// recipient User revision it was prepared against, which the Store operation
-// that seals the Submission receives as its fence.
+// PreparedSubmissionMail is a frozen receipt notice and the recipient's user
+// revision it was prepared against, which the sealing store operation uses as
+// its fence.
 type PreparedSubmissionMail struct {
 	Notice                    *store.PreparedMail
 	ExpectedRecipientRevision int64
 }
 
-// DesktopBuildResolution is the Desktop build resolved for a Principal and
-// the Desktop compatibility policy revision it was resolved under.
+// DesktopBuildResolution is the Desktop build resolved for a principal and the
+// compatibility policy revision it was resolved under.
 type DesktopBuildResolution struct {
 	Build                       model.DesktopBuildTuple
 	CompatibilityPolicyRevision int64
@@ -78,15 +78,14 @@ type NativeDeliveryBuildIdentity struct {
 	TargetTuple  string
 }
 
-// DesktopBuildResolver maps a Principal, or the build identity a native
+// DesktopBuildResolver maps a principal, or the build identity a native
 // delivery source declares, to a known Desktop build.
 type DesktopBuildResolver interface {
 	ResolveNativeDeliveryBuild(context.Context, NativeDeliveryBuildIdentity) (model.DesktopBuildTuple, error)
 	ResolveAttemptDesktopBuild(context.Context, model.Principal) (DesktopBuildResolution, error)
 }
 
-// Dependencies are the collaborators New validates once and distributes to
-// the Service.
+// Dependencies are the collaborators New validates once.
 type Dependencies struct {
 	Persistence         store.ExamAttemptStore
 	FocusLoss           store.ExamFocusLossStore
@@ -119,46 +118,39 @@ type Dependencies struct {
 	NewSubmission       func() model.SubmissionID
 	NewReceiptCode      func() model.SubmissionReceiptCode
 	// NewDomainEvent and NewJob propose the exam.attempt.submitted outbox row
-	// and its dispatch Job that a fresh voluntary, automatic or manager seal
-	// commits with the Submission.
+	// and its dispatch job, committed with every fresh seal.
 	NewDomainEvent func() model.DomainEventID
 	NewJob         func() model.JobID
 	Operational    operational.Recorder
-	// EnvironmentWaker wakes the owner of an Attempt's execution environment
-	// after a candidate changes its Workspace. It is optional: without one,
-	// the owner's backstop finds the change.
+	// EnvironmentWaker is optional: without one, the environment owner's
+	// backstop finds a candidate's workspace change.
 	EnvironmentWaker EnvironmentWaker
-	// EnvironmentSettler brings an execution environment's last guest
-	// changes into the Workspace before a voluntary, manager or automatic
-	// seal. It is optional: without one, nothing is settled.
+	// EnvironmentSettler is optional: without one, nothing is settled before
+	// a seal.
 	EnvironmentSettler EnvironmentSettler
-	// Environments are the Attempt Environments a manager replaces. It is
-	// optional: without it, no Attempt has one.
+	// Environments is optional: without it, no attempt has an environment.
 	Environments store.AttemptEnvironmentStore
 }
 
-// EnvironmentSettler settles an Attempt's execution environment before its
-// seal: the owner harvests every change the guest made. Settle asks for a
-// settle and returns once it is done or its bounded budget is spent;
-// AwaitPendingSettle asks for none and waits, within what is left of its
-// budget, for the settle a closing Sitting already asked. An incomplete
-// settle is recorded as an execution gap, never returned as a refusal, so
-// the seal always goes ahead. An Attempt without an environment, or with
-// nothing pending, settles at once.
+// EnvironmentSettler harvests the guest's changes into an attempt's workspace
+// before its seal. Settle returns once the settle is done or its bounded budget
+// is spent; AwaitPendingSettle only waits, within what is left of the budget,
+// for a settle a closing sitting already asked for. An incomplete settle is
+// recorded as an execution gap, never returned as a refusal, so the seal always
+// goes ahead.
 type EnvironmentSettler interface {
 	Settle(ctx context.Context, attemptID model.ExamAttemptID)
 	AwaitPendingSettle(ctx context.Context, attemptID model.ExamAttemptID)
 }
 
-// EnvironmentWaker wakes the owner of an Attempt's execution environment,
+// EnvironmentWaker wakes the owner of an attempt's execution environment,
 // wherever it runs. It never blocks.
 type EnvironmentWaker interface {
 	Wake(attemptID model.ExamAttemptID)
 }
 
-// Service holds every Attempt use case, from admission to the sealed
-// Submission. liveControls and deliveryControls are the per-node admission
-// lanes that rate-limit control commands by User.
+// Service holds every attempt use case. liveControls and deliveryControls
+// rate-limit control commands by user, per node.
 type Service struct {
 	attempts          store.ExamAttemptStore
 	focusLoss         store.ExamFocusLossStore
@@ -171,13 +163,10 @@ type Service struct {
 
 	sittings store.ExamSittingStore
 	managers SittingManagerAuthorizer
-	// auditor brackets each audited mutation and read a Principal makes,
-	// and builds the event a Store operation inserts with its change.
-	auditor access.MutationAuditAdapter
-	// systemAuditor audits trusted core work that has no Principal: periodic
-	// continuity enforcement records no actor, and an execution environment
-	// writing a candidate's Workspace names that candidate. Neither
-	// manufactures a User Principal.
+	auditor  access.MutationAuditAdapter
+	// systemAuditor audits trusted work that has no principal: continuity
+	// enforcement records no actor, and an environment writing a candidate's
+	// workspace names that candidate. Neither manufactures a user principal.
 	systemAuditor access.SystemAuditAdapter
 	publisher     realtime.Publisher
 	content       Content
@@ -187,7 +176,7 @@ type Service struct {
 	operational   operational.Recorder
 	environments  EnvironmentWaker
 	settler       EnvironmentSettler
-	// environmentStore holds the Attempt Environments; nil when none exist.
+	// environmentStore is nil when no attempt has an environment.
 	environmentStore store.AttemptEnvironmentStore
 
 	newAttemptID         func() model.ExamAttemptID
@@ -212,8 +201,8 @@ type Service struct {
 	workspaceBudget  *workspaceWriteBudget
 }
 
-// New builds the Service, or fails when a required collaborator is missing.
-// Operational is the only optional one.
+// New fails when a required collaborator is missing. Operational and the
+// three environment collaborators are optional.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Persistence == nil ||
 		deps.FocusLoss == nil ||

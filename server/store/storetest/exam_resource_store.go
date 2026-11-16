@@ -140,7 +140,7 @@ func TestExamResourceStore(t *testing.T, ss store.Store) {
 	// A validation failure or an unknown VFS/write acknowledgement after the
 	// durable reservation deliberately leaves a pending revision. It must stay
 	// invisible during the safety window and then enter the shared claimed
-	// revision-prefix cleanup flow without an Exam Resource-specific object key.
+	// revision-prefix cleanup flow without an exam resource-specific object key.
 	abandonedAt := model.NowUTC().Add(-27 * time.Hour)
 	abandoned := reserveExamResource(t, ctx, ss, examID, creator.ID, model.NewExamResourceID(), "Abandoned", 1, 7, abandonedAt, model.ExamResourceMediaText, nil)
 	visible, err := ss.ExamResource().List(ctx, examID)

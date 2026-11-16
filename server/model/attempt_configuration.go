@@ -23,9 +23,9 @@ const (
 
 var errAttemptConfiguration = errors.New("attempt configuration is invalid")
 
-// AttemptConfigurationPresentation is the closed, reproducible presentation
-// subset. Pixel line height is independent of font size. Stronger accessibility
-// constraints affect a runtime projection, never this frozen source.
+// AttemptConfigurationPresentation is the reproducible presentation subset.
+// Line height is in pixels, independent of font size. Stronger accessibility
+// settings change a runtime projection, never this frozen value.
 type AttemptConfigurationPresentation struct {
 	ColorTheme         string `json:"color_theme"`
 	PreferHighContrast bool   `json:"prefer_high_contrast"`
@@ -57,8 +57,8 @@ func (p AttemptConfigurationPresentation) Validate() error {
 	return nil
 }
 
-// AttemptConfigurationCandidate includes the exact first-admission provenance.
-// Neither catalog identifiers nor a fingerprint supplied by a client confer trust.
+// AttemptConfigurationCandidate records the provenance of the first admission.
+// Neither catalog IDs nor a client-supplied fingerprint confer trust.
 type AttemptConfigurationCandidate struct {
 	ManifestFingerprint  string                           `json:"manifest_fingerprint"`
 	RegistryFingerprint  string                           `json:"registry_fingerprint"`
@@ -70,16 +70,17 @@ type AttemptConfigurationCandidate struct {
 	ApprovedKeybindings  []string                         `json:"approved_keybindings"`
 }
 
-// AttemptConfiguration is frozen once by the owning admission transaction.
-// Its digest covers the complete candidate, excluding only the server revision
-// and digest. Re-entry preserves this original provenance.
+// AttemptConfiguration is frozen once, by the admission transaction. Its digest
+// covers the whole candidate but not the server revision or the digest itself;
+// re-entry keeps the original provenance.
 type AttemptConfiguration struct {
 	AttemptConfigurationCandidate
 	Revision string `json:"attempt_configuration_revision"`
 	Digest   string `json:"digest"`
 }
 
-// IsValidAgreementID recognizes bounded ASCII catalog and agreement identifiers.
+// IsValidAgreementID reports whether value is a bounded ASCII catalog or
+// agreement ID.
 func IsValidAgreementID(value string) bool {
 	if len(value) == 0 || len(value) > 128 {
 		return false
@@ -131,8 +132,8 @@ func (c AttemptConfigurationCandidate) Validate() error {
 	return nil
 }
 
-// ValidateForBuild is for a new freeze only. Existing configurations instead
-// compare reproducibility with the current manifest, retaining original build metadata.
+// ValidateForBuild is for a new freeze only. An existing configuration is
+// instead compared with the current manifest and keeps its original build.
 func (c AttemptConfigurationCandidate) ValidateForBuild(build DesktopBuildTuple) error {
 	if c.Validate() != nil ||
 		build.Validate() != nil ||
@@ -187,7 +188,7 @@ func (c AttemptConfiguration) Validate() error {
 	return nil
 }
 
-// CanonicalAdmission returns the one persisted frozen representation.
+// CanonicalAdmission returns the one encoding that is persisted and digested.
 func (c AttemptConfiguration) CanonicalAdmission() ([]byte, error) {
 	if c.Validate() != nil {
 		return nil, errAttemptConfiguration

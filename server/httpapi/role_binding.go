@@ -170,8 +170,8 @@ func (h roleBindingHandlers) list(request route.Request) (route.Result, error) {
 }
 
 // listByRoles pages the current holders of the repeatable role_id, newest
-// first. Its cursor is bound to the requested Role set, so it cannot continue
-// a listing of other Roles.
+// first. Its cursor is bound to the requested role set, so it cannot continue
+// a listing of other roles.
 func (h roleBindingHandlers) listByRoles(request route.Request, values url.Values) (route.Result, error) {
 	page, err := request.Page()
 	if err != nil {
@@ -233,8 +233,8 @@ func (h roleBindingHandlers) listByRoles(request route.Request, values url.Value
 	return route.JSON(http.StatusOK, response), nil
 }
 
-// roleHolderCursor continues a Role holder listing after the binding created
-// at CreatedAt with ID. Roles is the digest of the Role set it lists.
+// roleHolderCursor continues a role holder listing after the binding created
+// at CreatedAt with ID. Roles is the digest of the role set it lists.
 type roleHolderCursor struct {
 	Roles     string `json:"roles"`
 	CreatedAt string `json:"created_at"`
@@ -260,7 +260,7 @@ func roleHolderCursorSpec() route.CursorSpec[roleHolderCursor] {
 // roleSetDigestLength is the length of an encoded roleSetDigest.
 var roleSetDigestLength = base64.RawURLEncoding.EncodedLen(sha256.Size)
 
-// roleSetDigest names a set of Roles independently of order and repeats, so a
+// roleSetDigest names a set of roles independently of order and repeats, so a
 // cursor binds to the set a client asked for rather than to its spelling.
 func roleSetDigest(ids []model.RoleID) string {
 	set := make([]string, 0, len(ids))

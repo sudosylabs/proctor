@@ -17,7 +17,7 @@ import (
 )
 
 // retainNativeTransitions keeps each rule status change one delivery record
-// caused, under the Attempt fence. Batch 0 is the state Desktop reported at
+// caused, under the attempt fence. Batch 0 is the state Desktop reported at
 // Start. Existing receipt and retained-record quotas bound the copies.
 func retainNativeTransitions(
 	ctx context.Context,

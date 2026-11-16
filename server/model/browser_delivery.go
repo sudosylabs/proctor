@@ -13,11 +13,10 @@ import (
 	"time"
 )
 
-// The types in this file are documents of the browser delivery agreement.
-// Batches and start transitions are decoded closed; receipts, progress and
-// source status are persisted as replay outcomes and returned verbatim. Their
-// json tags are that one canonical spelling (see the package documentation on
-// serialization).
+// These are documents of the browser delivery agreement, so their json tags
+// are the one canonical spelling. Batches and start transitions decode
+// strictly; receipts, progress and source status are stored as replay results
+// and returned verbatim.
 
 const BrowserCorrectionStartLimit = 32
 const BrowserRuntimeResetStartLimit = 16
@@ -240,8 +239,8 @@ func (v BrowserSourceStatus) Validate() error {
 }
 
 // ValidateBrowserPolicyEvent separates verified navigation consequences from a
-// missing prior hop. An unresolved redirect is retained as uncertainty, never
-// converted into validated integrity evidence by guessing its source rule.
+// missing prior hop. An unresolved redirect stays uncertain; its source rule
+// is never guessed to turn it into integrity evidence.
 func ValidateBrowserPolicyEvent(event BrowserActivityEvent, policy BrowserPolicy, prior *BrowserActivityEvent) (bool, error) {
 	if event.ValidateClientRecord() != nil || policy.Validate() != nil || !policy.Enabled {
 		return false, ErrDeliveryInvalid
@@ -399,7 +398,8 @@ func (v *BrowserActivityBatch) UnmarshalJSON(raw []byte) error {
 	return nil
 }
 
-// BrowserDeliveryGapResult preserves the declaration receipt alongside current progress.
+// BrowserDeliveryGapResult keeps the declaration receipt beside the current
+// progress.
 type BrowserDeliveryGapResult struct {
 	Receipt DeliveryGapReceipt
 	Status  BrowserSourceStatus

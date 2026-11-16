@@ -32,8 +32,7 @@ type SearchAcademicUnitsQuery struct {
 	paging.NameQuery
 }
 
-// GetAcademicUnit returns one academic unit after authorizing
-// academic_unit.view on that unit.
+// GetAcademicUnit needs academic_unit.view on the unit.
 func (s *Service) GetAcademicUnit(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -58,8 +57,8 @@ func (s *Service) GetAcademicUnit(
 	return unit, nil
 }
 
-// ListAcademicUnits lists direct children under ParentID, or root units when
-// ParentID is empty.
+// ListAcademicUnits lists the direct children of ParentID, or the root units
+// when it is empty.
 func (s *Service) ListAcademicUnits(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -114,8 +113,7 @@ func (s *Service) ListAcademicUnits(
 	return paging.New(units, limit), nil
 }
 
-// SearchAcademicUnits searches units by name through institution-scoped
-// academic_unit.view.
+// SearchAcademicUnits needs institution-wide academic_unit.view.
 func (s *Service) SearchAcademicUnits(
 	ctx context.Context,
 	inv invocation.Invocation,

@@ -97,7 +97,7 @@ func validateNativeBatchRecords(resolved model.ResolvedNativePolicy, records []m
 // advances the server's evaluation of the policy's native rules, and every
 // rule status change is retained as condition evidence. A position that will
 // never arrive puts every capability in a gap until its next full state.
-// It returns the native Flags the interpreted records raised.
+// It returns the native flags the interpreted records raised.
 func advanceNativeInterpretation(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -194,7 +194,7 @@ func advanceNativeInterpretation(
 }
 
 // interpretNativeRecords advances the stored interpretation over rows. A
-// Participation whose interpretation was retired, or whose integrity record
+// participation whose interpretation was retired, or whose integrity record
 // is retired, keeps its delivery bookkeeping only.
 func interpretNativeRecords(
 	ctx context.Context,
@@ -289,7 +289,7 @@ func interpretNativeRecords(
 }
 
 // nativeInterpretationEffects is what one interpretation pass did that the
-// application acts on: the Flags it raised, and how often Desktop's own rule
+// application acts on: the flags it raised, and how often Desktop's own rule
 // status disagreed with the server's.
 type nativeInterpretationEffects struct {
 	Flagged             []store.NativeIntegrityFlagged

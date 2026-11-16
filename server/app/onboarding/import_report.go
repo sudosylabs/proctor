@@ -20,7 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// OnboardingImportReport writes a finished onboarding import's row report.
+// OnboardingImportReport writes the row report of a finished import.
 func (s *Service) OnboardingImportReport(
 	ctx context.Context,
 	inv invocation.Invocation,

@@ -17,9 +17,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// CandidateAccess names the Attempt and Connection a candidate request acts
-// through and carries the continuity credential that proves it; only the
-// credential's hash reaches the Store.
+// CandidateAccess names the attempt and connection a candidate request acts
+// through, with the continuity credential that proves it. Only the
+// credential's hash reaches the store.
 type CandidateAccess struct {
 	AttemptID            model.ExamAttemptID
 	ConnectionID         model.AttemptConnectionID
@@ -49,10 +49,8 @@ func candidateSelector(inv invocation.Invocation, candidateAccess CandidateAcces
 	}, nil
 }
 
-// VerifiedCandidateAccess is what VerifyCandidateAttemptAccess proved: the
-// candidate's active Attempt, its Sitting and Class, and the current
-// Participation generation the Connection belongs to. It carries no
-// credential.
+// VerifiedCandidateAccess is what VerifyCandidateAttemptAccess proved. It
+// carries no credential.
 type VerifiedCandidateAccess struct {
 	AttemptID       model.ExamAttemptID
 	SittingID       model.ExamSittingID
@@ -62,13 +60,9 @@ type VerifiedCandidateAccess struct {
 	Generation      int64
 }
 
-// VerifyCandidateAttemptAccess runs the checks every candidate Attempt read
-// runs, and nothing else: a Desktop Session with its registered key, the
-// Attempt's open Connection and continuity credential, an active
-// Participation with an unexpired lease, an active Attempt and a Sitting
-// that is open or paused before its end. It writes nothing. The candidate's
-// terminals call it before they act, and again while a terminal socket
-// stays open, so a sealed Attempt or an ended Participation ends them.
+// VerifyCandidateAttemptAccess runs the checks every candidate attempt read
+// runs, and writes nothing. Terminals call it again while a socket stays open,
+// so a sealed attempt or an ended participation ends them.
 func (s *Service) VerifyCandidateAttemptAccess(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -99,8 +93,8 @@ func (s *Service) VerifyCandidateAttemptAccess(
 }
 
 // screenClipUploadSelector is candidateSelector for a clip upload, which may
-// also continue without the Attempt credential and Connection once the
-// Participation that took the clip has closed. The Store decides whether it
+// continue without the attempt credential and connection once the
+// participation that took the clip has closed. The store decides whether it
 // may; omitting both never grants that by itself.
 func screenClipUploadSelector(inv invocation.Invocation, candidateAccess CandidateAccess) (store.CandidateAttemptAccess, error) {
 	if candidateAccess.ConnectionID != "" || candidateAccess.ContinuityCredential != "" {

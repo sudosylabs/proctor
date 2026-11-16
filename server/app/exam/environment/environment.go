@@ -5,27 +5,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package environment owns Attempt Environments: one isolated execution
-// machine per Attempt whose Revision enables execution, kept in step with
-// the Attempt and its Workspace.
-//
-// Committed Attempt and Sitting facts reach it through the domain-event
-// outbox and set what each environment should be (Facts). One node at a time
-// owns an environment, under a fenced runtime lease that the Runtime claims,
-// renews and releases; the owner it runs acts on the execution host and
-// writes back through the Store, carrying the lease. Workspace commits and
-// facts wake the owner; a slow backstop claims what nobody holds.
-//
-// Terminals serves the candidate's terminals from any node, without a
-// lease, proving the candidate's access through a port on every call.
-//
-// Node runs all of it on one server node and carries wakes and settles to
-// the other nodes over the cluster.
-//
-// The package holds no execution-host client. The owner and the terminals
-// reach a host through a port that the composition root implements. The
-// Workspace and candidate ports are implemented here over the Attempt
-// service.
+// Package environment owns the execution machine of each attempt whose
+// revision enables execution, kept in step with the attempt and its workspace.
+// One node at a time owns an environment under a fenced runtime lease, and
+// every write back carries that lease. Terminals are served from any node
+// without a lease, so each call re-proves candidate access. Wakes can be lost;
+// a slow backstop claims environments nobody holds. The execution host is
+// reached only through a port the composition root implements.
 package environment
 
 import (
@@ -37,21 +23,21 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Waker wakes the owner of an Attempt's environment, wherever it runs. It
-// never blocks and never fails: a lost wake is caught by the backstop.
+// Waker wakes the owner of an attempt's environment, wherever it runs. It
+// never blocks and never fails; the backstop catches a lost wake.
 type Waker interface {
 	Wake(attemptID model.ExamAttemptID)
 }
 
-// Facts applies committed Attempt and Sitting facts to environments. It is
-// a domain-event handler: delivery is at least once and in any order, and
-// the Store applies each fact idempotently.
+// Facts applies committed attempt and sitting facts to environments.
+// Delivery is at least once and in any order; the store applies each fact
+// idempotently.
 type Facts struct {
 	environments store.AttemptEnvironmentStore
 	waker        Waker
 }
 
-// NewFacts returns the fact handler. waker may be nil until the runtime
+// NewFacts returns the fact handler; waker may be nil until the runtime
 // exists.
 func NewFacts(environments store.AttemptEnvironmentStore, waker Waker) (*Facts, error) {
 	if environments == nil {
@@ -79,7 +65,7 @@ func (f *Facts) HandleEvent(ctx context.Context, event model.DomainEvent) error 
 	return nil
 }
 
-// Topics are the domain-event topics Facts handles.
+// Topics returns the domain-event topics Facts handles.
 func Topics() []model.DomainEventTopic {
 	return []model.DomainEventTopic{
 		model.DomainEventTopicExamAttemptParticipationStarted,

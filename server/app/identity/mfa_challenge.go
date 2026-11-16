@@ -26,12 +26,12 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ChallengeMFACommand upgrades the current session to multi-factor assurance.
+// ChallengeMFACommand carries a TOTP or recovery code.
 type ChallengeMFACommand struct {
 	Code string
 }
 
-// ChallengeMFA upgrades the caller's Session to multi-factor assurance with a
+// ChallengeMFA upgrades the caller's session to multi-factor assurance with a
 // TOTP or recovery code.
 func (s *Service) ChallengeMFA(
 	ctx context.Context,
@@ -39,9 +39,9 @@ func (s *Service) ChallengeMFA(
 	command ChallengeMFACommand,
 ) (*model.Session, error) {
 	principal := inv.Principal()
-	// A Session the Access Policy restricts to MFA enrollment may satisfy the
-	// policy with a challenge, for example after an external sign-in by a
-	// User who already has a local second factor. Assisted recovery may not.
+	// A session restricted to MFA enrollment may satisfy the policy with a
+	// challenge, e.g. after an external sign-in by a user who already has a
+	// local second factor. Assisted recovery may not.
 	if principal.MFARecoveryRequired {
 		return nil, apperror.New("authentication.session_required")
 	}
@@ -106,9 +106,8 @@ func (s *Service) ChallengeMFA(
 	return result.Session, nil
 }
 
-// verifyLoginMFA verifies and consumes the second factor of a local
-// password sign-in. A User without an active credential signs in with one
-// factor.
+// verifyLoginMFA consumes the second factor of a password sign-in. A user
+// without an active credential signs in with one factor.
 func (s *Service) verifyLoginMFA(
 	ctx context.Context,
 	userID string,
@@ -137,7 +136,6 @@ func (s *Service) verifyLoginMFA(
 	return model.AuthenticationMultiFactor, at.UnixMilli(), nil
 }
 
-// consumeLoginSecondFactor consumes the sign-in factor against the MFA Store.
 func (s *Service) consumeLoginSecondFactor(
 	ctx context.Context,
 	userID string,
@@ -147,8 +145,6 @@ func (s *Service) consumeLoginSecondFactor(
 	return s.mfa.consumeSecondFactor(ctx, s.mfaCredentials, userID, code, now)
 }
 
-// mfaRecoveryState is the two-step verification recovery state sign-in and
-// external authentication read for a User before issuing a Session.
 func (s *Service) mfaRecoveryState(ctx context.Context, userID model.UserID) (*model.UserMFARecovery, error) {
 	state, err := s.mfaCredentials.GetRecoveryState(ctx, userID)
 	if err != nil {

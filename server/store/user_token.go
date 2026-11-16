@@ -27,9 +27,8 @@ type PasswordResetResult struct {
 	RevokedAccessHashes []string
 }
 
-// UserTokenMailIssue is the named aggregate that replaces an active
-// purpose-specific token and commits its successful audit and frozen recovery
-// delivery intent as one durable transition.
+// UserTokenMailIssue replaces the user's active token of that purpose and
+// commits it with its audit and mail in one transaction.
 type UserTokenMailIssue struct {
 	Token      *model.UserToken
 	Occurrence *model.MailOccurrence
@@ -38,17 +37,13 @@ type UserTokenMailIssue struct {
 	AuditEvent *model.AuditEvent
 }
 
-// UserEmailChange is the named transition that replaces the account address,
-// invalidates prior verification credentials, and commits the new verification
-// credential, the undo credential for the previous address, and both frozen
-// credential deliveries atomically. UndoToken targets the previous address,
-// the warning occurrence is the undo token, and both the undo token and the
-// warning delivery live for WarningLifetime. Earlier undo tokens stay usable,
-// so every address in a chain of changes can still restore itself.
-// New credential, mail, and Job timestamps and deadlines use one database
-// instant. Existing User and superseded token lifecycle timestamps never move
-// backward; their creation times and superseded token expiries are preserved.
-// Those lifecycle bounds do not shift the new credential or delivery deadlines.
+// UserEmailChange replaces the account email, invalidates earlier
+// verification tokens, and commits the new verification token, an undo token
+// for the previous address and both mails atomically. The undo token and its
+// warning mail live for WarningLifetime. Earlier undo tokens stay usable, so
+// every address in a chain of changes can still restore itself. New times
+// come from one database instant; existing user and superseded token times
+// never move backward, and they do not shift the new deadlines.
 type UserEmailChange struct {
 	UserID                                    model.UserID
 	ExpectedRevision                          int64
@@ -70,15 +65,12 @@ type UserEmailChangeResult struct {
 	UndoToken *model.UserToken
 }
 
-// EmailChangeUndo is the named aggregate that redeems one email-change undo
-// credential. In one transaction it takes the per-User Session lock, rechecks
-// the token against the database clock, restores the token's target as the
-// User's verified address, archives outstanding verification and reset
-// credentials and suppresses their unsent mail, consumes every outstanding
-// undo credential of the User, revokes all of the User's Sessions with
-// RevocationReason, and inserts the success audit. An unknown, expired,
-// consumed, or archived token, or an inactive User, returns ErrNotFound; a
-// target address another active User now holds returns a conflict.
+// EmailChangeUndo redeems an undo token. In one transaction, under the
+// per-user session lock, it restores the token's address as verified,
+// archives outstanding verification and reset tokens and suppresses their
+// unsent mail, consumes every undo token of the user, and revokes all the
+// user's sessions. An unusable token or inactive user is ErrNotFound; an
+// address another active user now holds is a conflict.
 type EmailChangeUndo struct {
 	TokenHash        string
 	RevocationReason model.SessionRevocationReason
@@ -91,8 +83,8 @@ type EmailChangeUndoResult struct {
 	RevokedAccessHashes []string
 }
 
-// PrivilegedEmailVerification records a high-assurance administrator override
-// and its frozen user notice in one transaction.
+// PrivilegedEmailVerification is an administrator marking a user's email
+// verified; the user's notice commits with it.
 type PrivilegedEmailVerification struct {
 	UserID           model.UserID
 	ExpectedRevision int64
@@ -103,9 +95,8 @@ type PrivilegedEmailVerification struct {
 	AuditAt          time.Time
 }
 
-// PasswordResetCompletion is the named aggregate that consumes one reset
-// credential, changes the password, revokes Sessions, completes the security
-// audit, and records the password-changed notification atomically.
+// PasswordResetCompletion consumes a reset token, changes the password,
+// revokes sessions, and records the audit and notice atomically.
 type PasswordResetCompletion struct {
 	TokenHash        string
 	PasswordHash     string
@@ -118,9 +109,9 @@ type PasswordResetCompletion struct {
 	Job              *model.Job
 }
 
-// UserTokenStore owns issuance and single-use consumption of purpose-specific
-// account credentials. Consumption methods include their account mutation,
-// session revocation where applicable, and terminal audit in one transaction.
+// UserTokenStore issues and consumes single-use account tokens. Each Consume
+// method commits its account change, any session revocation and the audit in
+// one transaction.
 type UserTokenStore interface {
 	Issue(
 		context.Context,

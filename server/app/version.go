@@ -29,8 +29,7 @@ type BuildInfo struct {
 	GoVersion string `json:"go_version"`
 }
 
-// CurrentBuildInfo reads the link-time build variables and the Go runtime
-// version.
+// CurrentBuildInfo reads the link-time variables and the Go runtime version.
 func CurrentBuildInfo() BuildInfo {
 	return BuildInfo{
 		Version:   Version,

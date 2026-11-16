@@ -25,9 +25,8 @@ const (
 	ServerTLSModeLetsEncrypt ServerTLSMode = "lets_encrypt"
 )
 
-// ServerTLS configures the client-facing listener. Mode is one of disabled,
-// static, or lets_encrypt. HTTP forwarding is owned by the same runtime so
-// ACME HTTP-01 challenges and redirects share one lifecycle.
+// ServerTLS configures the client-facing listener. HTTP forwarding runs in the
+// same runtime so ACME HTTP-01 challenges and redirects share one lifecycle.
 type ServerTLS struct {
 	Mode               ServerTLSMode     `json:"Mode"`
 	CertificateFile    string            `json:"CertificateFile"`
@@ -40,9 +39,9 @@ type ServerTLS struct {
 	StrictTransportSecurityMaxAge Duration `json:"StrictTransportSecurityMaxAge"`
 }
 
-// ServerLetsEncrypt configures ACME issuance. AcceptTermsOfService records
-// the operator's explicit agreement to the Let's Encrypt Subscriber Agreement;
-// lets_encrypt mode is invalid until it is true.
+// ServerLetsEncrypt configures ACME issuance. lets_encrypt mode is invalid
+// until the operator sets AcceptTermsOfService to agree to the Let's Encrypt
+// Subscriber Agreement.
 type ServerLetsEncrypt struct {
 	Email                string `json:"Email"`
 	CacheDirectory       string `json:"CacheDirectory"`
@@ -53,10 +52,9 @@ type ServerLetsEncrypt struct {
 // mistaken value cannot pin browsers to HTTPS indefinitely.
 const maximumStrictTransportSecurityMaxAge = 2 * 365 * 24 * time.Hour
 
-// StrictTransportSecurity returns the Strict-Transport-Security header value
-// for responses served by this listener, or empty when the listener does not
-// terminate TLS or HSTS is disabled. A reverse proxy that terminates TLS owns
-// HSTS for its own origin.
+// StrictTransportSecurity returns the HSTS header value, or empty when this
+// listener does not terminate TLS (a terminating proxy owns HSTS) or HSTS is
+// disabled.
 func (s Server) StrictTransportSecurity() string {
 	maxAge := s.TLS.StrictTransportSecurityMaxAge.Duration
 	if s.TLS.Mode == ServerTLSModeDisabled || maxAge <= 0 {
@@ -137,9 +135,8 @@ func validateServerTLS(server Server, cluster Cluster, add func(string, string))
 	}
 }
 
-// LetsEncryptHostname returns the canonical exact DNS hostname eligible for
-// automatic certificate issuance, or an empty string when PublicURL cannot
-// identify one safely.
+// LetsEncryptHostname returns the PublicURL hostname eligible for certificate
+// issuance, or empty when PublicURL does not name one safely.
 func (s Server) LetsEncryptHostname() string {
 	parsed, err := url.Parse(s.PublicURL)
 	if err != nil {

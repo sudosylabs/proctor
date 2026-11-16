@@ -24,7 +24,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Logout revokes the caller's current Session.
+// Logout revokes the caller's current session.
 func (s *Service) Logout(ctx context.Context, inv invocation.Invocation) (resultErr error) {
 	defer func() { operational.Record(s.operational, "authentication", "logout", resultErr) }()
 	principal := inv.Principal()

@@ -18,8 +18,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ManagerMailRelationship is the relationship an Exam Manager notice tells its
-// recipient they now have to the Exam.
+// ManagerMailRelationship is what a manager notice tells its recipient they now
+// are to the exam.
 type ManagerMailRelationship string
 
 // The relationships a manager notice can announce.
@@ -46,22 +46,18 @@ type ManagerMailPreparer interface {
 	PrepareManagerMail(ManagerMailPreparation) (*store.ExamManagerMail, error)
 }
 
-// Authoring owns Exam creation, Exam Draft editing, the Exam catalog,
-// archival, and Exam Manager membership.
+// Authoring owns exam creation, draft editing, the catalog, archiving and
+// manager membership.
 type Authoring struct {
 	exams               store.ExamAuthoringStore
 	academicUnitMembers store.AcademicUnitMemberStore
-	// users reads a prospective Exam Manager and the recipients of manager
-	// notices.
-	users store.UserStore
-	// sittings finds the Sitting boards an archived Exam refreshes.
-	sittings store.ExamSittingStore
+	users               store.UserStore
+	sittings            store.ExamSittingStore
 
 	mail       ManagerMailPreparer
 	authorizer *access.Authorizer
-	// auditor opens the attempt of each mutation and fails it when the
-	// mutation does not commit; the Store completes a committed attempt in
-	// the mutation's own transaction.
+	// auditor fails an audit attempt whose mutation does not commit; the store
+	// completes a committed one in the mutation's own transaction.
 	auditor           access.MutationAuditAdapter
 	publisher         realtime.Publisher
 	now               func() time.Time
@@ -70,8 +66,7 @@ type Authoring struct {
 	operational       operational.Recorder
 }
 
-// AuthoringDependencies are the collaborators NewAuthoring validates once and
-// distributes to the Authoring.
+// AuthoringDependencies are the collaborators of NewAuthoring.
 type AuthoringDependencies struct {
 	Persistence       store.ExamAuthoringStore
 	Memberships       store.AcademicUnitMemberStore

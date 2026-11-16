@@ -134,7 +134,7 @@ type candidateWorkspaceJournalEntryResponse struct {
 	Author         workspaceAuthorResponse `json:"author"`
 }
 
-// workspaceAuthorResponse is who made a Workspace change: its kind and a
+// workspaceAuthorResponse is who made a workspace change: its kind and a
 // reference within it.
 type workspaceAuthorResponse struct {
 	Kind string `json:"kind"`
@@ -150,7 +150,7 @@ type candidateWorkspaceJournalResponse struct {
 }
 
 // candidateWorkspaceJournalCursor continues the change journal after the
-// last Workspace Cursor of the previous page.
+// last workspace cursor of the previous page.
 type candidateWorkspaceJournalCursor struct {
 	After int64 `json:"after_workspace_cursor"`
 }
@@ -374,7 +374,7 @@ func (h examAttemptHandlers) openWorkspaceFile(request route.Request) (route.Pro
 	return candidateAttemptContentResult(request, opened, `"`+opened.ContentVersion.String()+`"`, untrustedWorkspaceContentHeaders)
 }
 
-// untrustedWorkspaceContentHeaders keeps Workspace bytes, whose media type an
+// untrustedWorkspaceContentHeaders keeps workspace bytes, whose media type an
 // author chose, from rendering as an application page. A media type that a
 // browser renders as an active document (HTML, XML, or SVG) is served as plain
 // text, and the sandbox policy gives any rendering an opaque origin with no

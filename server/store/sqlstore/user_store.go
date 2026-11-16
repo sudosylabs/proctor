@@ -320,7 +320,7 @@ func insertUser(ctx context.Context, executor sqlxExecutor, user *model.User) er
 	return nil
 }
 
-// Get returns the unarchived User with id, or a not-found error.
+// Get returns the unarchived user with id, or a not-found error.
 func (s SQLUserStore) Get(ctx context.Context, id model.UserID) (*model.User, error) {
 	return s.get(ctx, s.usersQuery.Where(sq.Eq{
 		"users.id":          id,
@@ -344,7 +344,7 @@ func (s SQLUserStore) GetByEmail(ctx context.Context, email string) (*model.User
 	}), email)
 }
 
-// List returns a page of unarchived Users in options.Order (username by
+// List returns a page of unarchived users in options.Order (username by
 // default) then ID, restricted to the input visibility and search term.
 func (s SQLUserStore) List(
 	ctx context.Context,
@@ -405,8 +405,8 @@ func (s SQLUserStore) Count(ctx context.Context, options store.UserListOptions, 
 }
 
 // filterUserList applies every List filter but the keyset: archived and
-// disabled Users, the exact ID, visibility, search, Affiliation, Academic
-// Unit, Role, and last activity. List and Count share it so a total always
+// disabled users, the exact ID, visibility, search, affiliation, academic
+// unit, role, and last activity. List and Count share it so a total always
 // counts the listed rows.
 func filterUserList(query sq.SelectBuilder, options store.UserListOptions) (sq.SelectBuilder, error) {
 	query = query.Where(sq.Eq{"users.archived_at": nil})
@@ -478,7 +478,6 @@ func validUserListContinuation(options store.UserListOptions) bool {
 	}
 }
 
-// validUserListOptions reports whether the list page size, cursor and visibility bounds are acceptable.
 func validUserListOptions(options store.UserListOptions) bool {
 	return !(options.Limit < 1 ||
 		options.Limit > 201 ||
@@ -494,8 +493,8 @@ func validUserListOptions(options store.UserListOptions) bool {
 		!validVisibilityIDs(options.Visibility.ClassMemberAcademicUnitRootIDs))
 }
 
-// validUserListMembershipFilters reports whether the Affiliation and Academic
-// Unit filters are canonical and carry the instant they are evaluated at.
+// validUserListMembershipFilters reports whether the affiliation and academic
+// unit filters are canonical and carry the instant they are evaluated at.
 func validUserListMembershipFilters(options store.UserListOptions) bool {
 	if len(options.AffiliationKinds) == 0 && options.AcademicUnitID == "" {
 		return true
@@ -513,7 +512,7 @@ func validUserListMembershipFilters(options store.UserListOptions) bool {
 	return true
 }
 
-// filterUserListAffiliations keeps Users holding a current Affiliation of one
+// filterUserListAffiliations keeps users holding a current affiliation of one
 // of the requested kinds.
 func filterUserListAffiliations(query sq.SelectBuilder, options store.UserListOptions) sq.SelectBuilder {
 	if len(options.AffiliationKinds) == 0 {
@@ -534,8 +533,8 @@ func filterUserListAffiliations(query sq.SelectBuilder, options store.UserListOp
 	)`, pq.Array(kinds), activeAt, activeAt)
 }
 
-// filterUserListAcademicUnit keeps Users with a current membership in the
-// requested Academic Unit or one of its unarchived descendants. A scoped
+// filterUserListAcademicUnit keeps users with a current membership in the
+// requested academic unit or one of its unarchived descendants. A scoped
 // visibility first requires the unit inside its own user.view subtrees, so an
 // out-of-scope unit answers an empty page rather than its membership.
 func filterUserListAcademicUnit(query sq.SelectBuilder, options store.UserListOptions) sq.SelectBuilder {
@@ -560,8 +559,8 @@ func filterUserListAcademicUnit(query sq.SelectBuilder, options store.UserListOp
 	)`, activeAt, activeAt, root)
 }
 
-// validUserListRoleFilter reports whether the Role filter names at most
-// MaximumUserListRoles canonical Roles, carries its instant, and bounds its
+// validUserListRoleFilter reports whether the role filter names at most
+// MaximumUserListRoles canonical roles, carries its instant, and bounds its
 // role_binding.view scope like a visibility.
 func validUserListRoleFilter(options store.UserListOptions) bool {
 	scope := options.RoleBindingVisibility
@@ -576,10 +575,10 @@ func validUserListRoleFilter(options store.UserListOptions) bool {
 		validVisibilityIDs(scope.ClassIDs)
 }
 
-// filterUserListRoles keeps Users holding a current Role Binding of a listed
-// unarchived Role inside the role_binding.view scope: Institution-wide, or
-// bound at a unit of its subtrees, at a Class of a Programme in them, or at
-// one of its Classes. A scope that sees no binding matches nothing.
+// filterUserListRoles keeps users holding a current role binding of a listed
+// unarchived role inside the role_binding.view scope: institution-wide, or
+// bound at a unit of its subtrees, at a class of a programme in them, or at
+// one of its classes. A scope that sees no binding matches nothing.
 func filterUserListRoles(query sq.SelectBuilder, options store.UserListOptions) sq.SelectBuilder {
 	if len(options.RoleIDs) == 0 {
 		return query
@@ -618,7 +617,7 @@ func filterUserListRoles(query sq.SelectBuilder, options store.UserListOptions) 
 }
 
 // validUserListActivityFilter reports whether the last-activity filters are
-// read only Institution-wide and are coherent: no bound beside NeverSignedIn,
+// read only institution-wide and are coherent: no bound beside NeverSignedIn,
 // and an after bound that precedes the before bound.
 func validUserListActivityFilter(options store.UserListOptions) bool {
 	after, before := options.LastActivityAfter, options.LastActivityBefore
@@ -630,7 +629,7 @@ func validUserListActivityFilter(options store.UserListOptions) bool {
 		(after.IsZero() || before.IsZero() || after.Before(before))
 }
 
-// filterUserListActivity keeps Users never signed in (no last activity), or
+// filterUserListActivity keeps users never signed in (no last activity), or
 // whose last activity is at or after LastActivityAfter and before
 // LastActivityBefore.
 func filterUserListActivity(query sq.SelectBuilder, options store.UserListOptions) sq.SelectBuilder {
@@ -646,7 +645,6 @@ func filterUserListActivity(query sq.SelectBuilder, options store.UserListOption
 	return query
 }
 
-// filterUserListVisibility restricts a User listing to the Users visible through a scoped visibility.
 func filterUserListVisibility(query sq.SelectBuilder, visibility store.UserVisibilityScope) (sq.SelectBuilder, error) {
 	if visibility.InstitutionWide {
 		return query, nil
@@ -713,7 +711,7 @@ func filterUserListVisibility(query sq.SelectBuilder, visibility store.UserVisib
 	return query, nil
 }
 
-// filterUserListSearch restricts a User listing to the trimmed search term,
+// filterUserListSearch restricts a user listing to the trimmed search term,
 // matching email only institution-wide. A scoped search may match only fields
 // its projection shows, or a hidden email address becomes a lookup oracle.
 func filterUserListSearch(query sq.SelectBuilder, options store.UserListOptions) sq.SelectBuilder {
@@ -736,8 +734,8 @@ func filterUserListSearch(query sq.SelectBuilder, options store.UserListOptions)
 	return query
 }
 
-// GetCurrentContext returns the active User's identity, available product
-// areas, at most scopeLimit-1 management scopes and any unresolved Attempt.
+// GetCurrentContext returns the active user's identity, available product
+// areas, at most scopeLimit-1 management scopes and any unresolved attempt.
 func (s SQLUserStore) GetCurrentContext(ctx context.Context, userID model.UserID, scopeLimit int) (*store.CurrentUserContext, error) {
 	if !userID.IsValid() || scopeLimit < 1 || scopeLimit > 51 {
 		return nil, store.NewErrInvalidInput("user", "current_context", nil)
@@ -794,7 +792,6 @@ func (s SQLUserStore) GetCurrentContext(ctx context.Context, userID model.UserID
 	return result, nil
 }
 
-// currentUserProductAreas reads the current User's identity and the product areas their access opens.
 func (s SQLUserStore) currentUserProductAreas(
 	ctx context.Context,
 	userID model.UserID,
@@ -903,7 +900,7 @@ func (s SQLUserStore) currentUserProductAreas(
 	return result, nil
 }
 
-// loadCurrentUserManagementScopes adds the bounded list of institution and Academic Unit scopes the User can navigate to manage.
+// loadCurrentUserManagementScopes adds the bounded list of institution and academic unit scopes the user can navigate to manage.
 func (s SQLUserStore) loadCurrentUserManagementScopes(
 	ctx context.Context,
 	result *store.CurrentUserContext,
@@ -971,7 +968,7 @@ func (s SQLUserStore) loadCurrentUserManagementScopes(
 	return nil
 }
 
-// loadCurrentUserUnresolvedAttempt adds the User's most recently updated unresolved Attempt, when one exists.
+// loadCurrentUserUnresolvedAttempt adds the user's most recently updated unresolved attempt, when one exists.
 func (s SQLUserStore) loadCurrentUserUnresolvedAttempt(ctx context.Context, result *store.CurrentUserContext, userID model.UserID) error {
 	var attempt struct {
 		AttemptID string `db:"attempt_id"`
@@ -1030,8 +1027,8 @@ func validVisibilityIDs[T interface{ IsValid() bool }](ids []T) bool {
 }
 
 // MatchVisibility returns the highest-priority scope in visibility through
-// which the active User is visible at visibility.ActiveAt. A zero match means
-// the User is not visible; institution-wide visibility is invalid input because
+// which the active user is visible at visibility.ActiveAt. A zero match means
+// the user is not visible; institution-wide visibility is invalid input because
 // it needs no match.
 func (s SQLUserStore) MatchVisibility(
 	ctx context.Context,
@@ -1079,7 +1076,7 @@ func (s SQLUserStore) MatchVisibility(
 }
 
 // userVisibilityMatchQuery selects the highest-priority scope through which an
-// active User is visible at the bound instant.
+// active user is visible at the bound instant.
 const userVisibilityMatchQuery = `
 		WITH RECURSIVE input AS (
 			SELECT ?::varchar AS user_id, ?::timestamptz AS active_at
@@ -1191,8 +1188,8 @@ func (s SQLUserStore) get(
 	return row.model()
 }
 
-// UpdateProfile applies input.Changes to the User as revision
-// ExpectedRevision+1 in one audited transaction. A User no longer at
+// UpdateProfile applies input.Changes to the user as revision
+// ExpectedRevision+1 in one audited transaction. A user no longer at
 // ExpectedRevision is a user_changed conflict.
 func (s SQLUserStore) UpdateProfile(ctx context.Context, input *store.UserProfileUpdate) (*model.User, error) {
 	if input == nil ||
@@ -1315,7 +1312,7 @@ func requireUserRevisionAffected(ctx context.Context, executor sqlxExecutor, res
 	return store.NewErrNotFound("user", id).Wrap(sql.ErrNoRows)
 }
 
-// UpdateLastLogin advances the User's last login and activity times to at
+// UpdateLastLogin advances the user's last login and activity times to at
 // without moving them backwards.
 func (s SQLUserStore) UpdateLastLogin(ctx context.Context, input *store.UserLastLoginUpdate) error {
 	id := input.ID
@@ -1340,7 +1337,7 @@ func (s SQLUserStore) UpdateLastLogin(ctx context.Context, input *store.UserLast
 	return requireAffected(result, "user", id.String())
 }
 
-// ListDisplayNames reads the presentable name of each given unarchived User.
+// ListDisplayNames reads the presentable name of each given unarchived user.
 func (s SQLUserStore) ListDisplayNames(ctx context.Context, userIDs []model.UserID) ([]store.UserDisplayName, error) {
 	ids, err := distinctIdentifiers(userIDs, store.MaximumUserDisplayNames)
 	if err != nil {
@@ -1409,9 +1406,9 @@ func (s SQLUserStore) ListVisibleDisplayNames(
 }
 
 // visibleUserNamesQuery selects the presentable names of the listed
-// unarchived Users visible through visibility as the User directory applies
-// it, so a scoped visibility never names a disabled User. The audit page
-// names and the mail delivery recipients read Users through it.
+// unarchived users visible through visibility as the user directory applies
+// it, so a scoped visibility never names a disabled user. The audit page
+// names and the mail delivery recipients read users through it.
 func visibleUserNamesQuery(ids []string, visibility store.UserVisibilityScope) (sq.SelectBuilder, error) {
 	query, err := filterUserListVisibility(sq.Select(
 		"users.id",

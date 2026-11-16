@@ -14,8 +14,8 @@ import (
 	"time"
 )
 
-// ProviderAdmissionMode is the closed policy vocabulary for one configured
-// external provider. An absent provider entry is disabled.
+// ProviderAdmissionMode says who may sign in through one configured external
+// provider. A provider with no entry is disabled.
 type ProviderAdmissionMode string
 
 const (
@@ -26,12 +26,11 @@ const (
 
 const (
 	AccessPolicyTransitionHistoryLimit = 100
-	// AccessPolicyTransitionFieldMaxCount bounds the changed field names one
-	// transition records: every replaceable setting and revoke_existing_sessions.
+	// AccessPolicyTransitionFieldMaxCount is every replaceable setting plus
+	// revoke_existing_sessions.
 	AccessPolicyTransitionFieldMaxCount = 10
-	// AccessPolicySessionMinutesMaximum bounds a Session length the policy
-	// can store, a little over a year; deployment configuration bounds it
-	// further.
+	// AccessPolicySessionMinutesMaximum is the longest storable session length,
+	// a little over a year; deployment configuration bounds it further.
 	AccessPolicySessionMinutesMaximum = 527040
 )
 
@@ -40,9 +39,8 @@ var (
 	ErrAccessPolicyInvalidTransition = errors.New("access policy transition is invalid")
 )
 
-// AccessPolicy is the singleton institution application policy selecting the
-// authentication and account-admission capabilities currently available.
-// Deployment protocol material and secrets never belong here.
+// AccessPolicy is the institution's single policy choosing which sign-in and
+// admission paths are open. Protocol material and secrets never belong here.
 type AccessPolicy struct {
 	ID                               AccessPolicyID
 	Revision                         int64
@@ -54,19 +52,17 @@ type AccessPolicy struct {
 	InvitationLocalCredentialEnabled bool
 	DesktopAuthorizationEnabled      bool
 	ProviderAdmissions               map[string]ProviderAdmissionMode
-	// RoleHolderMFARequired requires two-step verification of every role holder:
-	// a User holding a current Role Binding at any scope, system
-	// administrators included.
+	// RoleHolderMFARequired requires two-step verification of every user holding
+	// a current role binding at any scope, system administrators included.
 	RoleHolderMFARequired bool
-	// SessionIdleMinutes and SessionAbsoluteMinutes shorten the idle and
-	// absolute Session lifetimes; zero keeps the deployment default, which is
-	// also the ceiling.
+	// Zero keeps the deployment default, which is also the ceiling; the policy
+	// can only shorten a session.
 	SessionIdleMinutes     int
 	SessionAbsoluteMinutes int
 }
 
-// AccessPolicySettings is the complete replaceable portion of AccessPolicy.
-// A complete value keeps policy updates explicit as new capabilities are added.
+// AccessPolicySettings is the whole replaceable part of AccessPolicy; updates
+// always send every field so a new setting is never silently left unset.
 type AccessPolicySettings struct {
 	LocalLoginEnabled                bool
 	PublicRegistrationEnabled        bool
@@ -79,9 +75,9 @@ type AccessPolicySettings struct {
 	SessionAbsoluteMinutes           int
 }
 
-// SessionLengthLimits are the deployment bounds of the Access Policy Session
-// lengths in whole minutes. A default is the length a Session gets when the
-// policy leaves it unset; the policy may only shorten it, down to the minimum.
+// SessionLengthLimits are the deployment bounds on session lengths, in whole
+// minutes. A default applies when the policy leaves a length unset; the policy
+// may only shorten it, down to the minimum.
 type SessionLengthLimits struct {
 	IdleMinimumMinutes     int
 	IdleDefaultMinutes     int
@@ -91,9 +87,9 @@ type SessionLengthLimits struct {
 	AbsoluteMaximumMinutes int
 }
 
-// Validate reports limits that cannot describe a deployment: every bound is
-// positive, a maximum never exceeds its default or the storable cap, and the
-// idle default never exceeds the absolute default.
+// Validate fails unless every bound is positive, each maximum is at most its
+// default and the storable cap, and the idle default is at most the absolute
+// default.
 func (l SessionLengthLimits) Validate() error {
 	if l.IdleMinimumMinutes < 1 ||
 		l.AbsoluteMinimumMinutes < 1 ||
@@ -114,8 +110,8 @@ type AccessPolicyTransitionOutcome string
 
 const AccessPolicyTransitionApplied AccessPolicyTransitionOutcome = "applied"
 
-// AccessPolicyTransition is the bounded, secret-free history fact retained for
-// a successful policy replacement. Failed attempts remain in durable audit.
+// AccessPolicyTransition is the secret-free history record of one successful
+// replacement. Failed attempts are kept only in the audit log.
 type AccessPolicyTransition struct {
 	PolicyID      AccessPolicyID
 	FromRevision  int64
@@ -126,8 +122,9 @@ type AccessPolicyTransition struct {
 	Outcome       AccessPolicyTransitionOutcome
 }
 
-// NewInitialAccessPolicy returns the conservative policy established by the
-// one-time installation bootstrap.
+// NewInitialAccessPolicy returns the conservative policy the one-time
+// installation bootstrap creates: local login and invitations on, no
+// registration or providers.
 func NewInitialAccessPolicy(id AccessPolicyID, at time.Time) *AccessPolicy {
 	at = TimeUTC(at)
 	return &AccessPolicy{
@@ -239,9 +236,8 @@ func (s AccessPolicySettings) Validate() error {
 	return nil
 }
 
-// ValidateSessionLengths checks the Session lengths against the deployment
-// limits. A set idle length lies within its bounds and within the effective
-// absolute length; a set absolute length lies within its bounds. The returned
+// ValidateSessionLengths checks the session lengths against limits; a set idle
+// length must also fit within the effective absolute length. The
 // ValidationError names the offending field.
 func (s AccessPolicySettings) ValidateSessionLengths(limits SessionLengthLimits) error {
 	const where = "AccessPolicySettings.ValidateSessionLengths"
@@ -277,9 +273,8 @@ func (s AccessPolicySettings) ValidateSessionLengths(limits SessionLengthLimits)
 	return nil
 }
 
-// EffectiveSessionMinutes returns the idle and absolute Session lengths a new
-// Session gets: each set length, otherwise its deployment default, with the
-// idle length never longer than the absolute one.
+// EffectiveSessionMinutes returns the idle and absolute lengths a new session
+// gets, falling back to deployment defaults and capping idle at absolute.
 func (s AccessPolicySettings) EffectiveSessionMinutes(limits SessionLengthLimits) (idle, absolute int) {
 	idle, absolute = limits.IdleDefaultMinutes, limits.AbsoluteDefaultMinutes
 	if s.SessionIdleMinutes != 0 && s.SessionIdleMinutes < idle {
@@ -308,8 +303,9 @@ func (p *AccessPolicy) Settings() AccessPolicySettings {
 	}
 }
 
-// Replace applies one complete, revision-fenced policy replacement and returns
-// the only safe history fields that persistence may retain.
+// Replace applies a complete replacement fenced on expectedRevision and returns
+// the only history fields persistence may keep. A stale revision returns
+// ErrAccessPolicyRevisionConflict.
 func (p *AccessPolicy) Replace(
 	expectedRevision int64,
 	settings AccessPolicySettings,
@@ -385,8 +381,7 @@ func (t *AccessPolicyTransition) Validate() error {
 	return nil
 }
 
-// accessPolicyTransitionFields are the only names a transition may record:
-// each replaceable setting, plus the one-shot revoke_existing_sessions choice.
+// A transition may record only these names.
 var accessPolicyTransitionFields = []string{
 	"desktop_authorization_enabled",
 	"invitation_admission_enabled",

@@ -35,16 +35,15 @@ type localProof struct {
 	failures                 authenticationFailureSubject
 }
 
-// localSubject reports how far a failed local authentication
-// progressed: whether it was admitted by rate limiting and, when known, which
-// account it targeted.
+// localSubject records how far a failed local sign-in got: past the rate
+// limit, and which account it targeted when known.
 type localSubject struct {
 	admitted bool
 	userID   model.UserID
 }
 
-// authenticateLocal proves a local identity without deciding which
-// purpose-bound credential or Session will consume that proof.
+// authenticateLocal only proves the identity; the caller decides which
+// credential or session consumes the proof.
 func (s *Service) authenticateLocal(
 	ctx context.Context,
 	command LoginCommand,
@@ -117,8 +116,9 @@ func (s *Service) proveLocalSubject(
 		return nil, s.recordLoginFailure(ctx, failures)
 	}
 
-	// Recovery state exists only for active Users. Do equivalent password work
-	// before rejecting disabled accounts, without consulting their MFA state.
+	// Do the same password work for a disabled account so timing doesn't
+	// reveal it. Its MFA state is not consulted: recovery state exists only
+	// for active users.
 	if !account.IsActive() {
 		if dummyErr := s.hasher.VerifyDummy(ctx, command.Password); dummyErr != nil {
 			return nil, passwordWorkError(dummyErr, "authentication.internal")
@@ -177,7 +177,8 @@ func (s *Service) proveLocalSubject(
 	}, nil
 }
 
-// admitLocalLogin rejects a disallowed or malformed local login after equivalent dummy password work.
+// admitLocalLogin does dummy password work before refusing, so a refused
+// login takes as long as a wrong password.
 func (s *Service) admitLocalLogin(ctx context.Context, command LoginCommand) error {
 	localLoginAllowed, err := s.accessPolicy.AllowsLocalLogin(ctx)
 	if err != nil {
@@ -208,7 +209,6 @@ func (s *Service) findLoginUser(ctx context.Context, loginID string) (*model.Use
 	return s.users.GetByUsername(ctx, loginID)
 }
 
-// applyLocalRehash stores a prepared password hash upgrade guarded by the verified credential revision.
 func (s *Service) applyLocalRehash(ctx context.Context, credential *model.PasswordCredential, rehashed string) error {
 	if rehashed != "" {
 		if rehashErr := s.passwords.Rehash(ctx, &store.PasswordCredentialRehash{

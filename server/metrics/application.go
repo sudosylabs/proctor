@@ -30,7 +30,7 @@ func (m *Module) RecordOperationalEvent(event operational.Event) {
 
 var _ operational.Recorder = (*Module)(nil)
 
-// JobRecorder returns the Job engine's recorder over m.
+// JobRecorder adapts m to the job engine's recorder port.
 func (m *Module) JobRecorder() job.Recorder { return jobRecorder{metrics: m} }
 
 type jobRecorder struct{ metrics *Module }
@@ -56,7 +56,7 @@ type mailRecorder struct {
 	queues  map[mailQueueMetricIdentity]struct{}
 }
 
-// MailRecorder returns the mail delivery recorder over m.
+// MailRecorder adapts m to the mail delivery recorder port.
 func (m *Module) MailRecorder() mail.DeliveryRecorder {
 	return &mailRecorder{metrics: m, queues: make(map[mailQueueMetricIdentity]struct{})}
 }

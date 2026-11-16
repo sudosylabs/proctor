@@ -50,13 +50,11 @@ func withTestPlugins(builtin, extra []plugin.Plugin) []plugin.Plugin {
 	return plugins
 }
 
-// ActivateBuiltin activates the built-in plugins, then any a test adds,
-// with the settings an administrator saved and the secrets in the Plugins
-// configuration section. It returns the host and the settings change count
-// it read, from which the reconciler continues. A plugin that fails to
-// activate is logged and left out; a configuration mistake, such as secrets
-// for a plugin that is not compiled in, or unreadable saved settings, fails
-// construction.
+// ActivateBuiltin activates the built-in plugins, then any a test adds, and
+// returns the host with the settings change count it read, which the
+// reconciler continues from. A plugin that fails to activate is left out;
+// secrets for a plugin that is not compiled in, or unreadable saved settings,
+// fail construction.
 func ActivateBuiltin(
 	ctx context.Context,
 	cfg config.Config,
@@ -89,8 +87,8 @@ func ActivateBuiltin(
 }
 
 // readSavedPluginSettings reads the change count, then the saved settings; a
-// change between the two is picked up by the next reconcile. A graph without
-// persistence has none.
+// change between the two is picked up by the next reconcile. saved is nil
+// without persistence.
 func readSavedPluginSettings(ctx context.Context, saved store.PluginSettingsStore) (int64, []*model.PluginSettings, error) {
 	if saved == nil {
 		return 0, nil, nil
@@ -134,7 +132,6 @@ func desiredPlugins(
 	return desired
 }
 
-// pluginIDSet is the set of plugin IDs among items.
 func pluginIDSet[T any](items []T, id func(T) string) map[string]struct{} {
 	set := make(map[string]struct{}, len(items))
 	for _, item := range items {

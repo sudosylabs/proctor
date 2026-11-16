@@ -13,16 +13,12 @@ import (
 	"strings"
 )
 
-// ValidationError is a transport-neutral domain validation failure. It carries
-// a stable machine code and an explicitly safe field name, but no HTTP status,
-// localization state, or request correlation.
-//
-// It is the one error type the model constructs inline, always through
-// invalidModelError. Field is empty when the failure concerns the whole value,
-// such as a nil receiver, a refused transition, or a malformed document. A
-// non-empty Field reaches clients as a safe Problem Details field, so naming
-// one is a deliberate public change. Conditions that callers match with
-// errors.Is are package-level sentinels instead.
+// ValidationError is a transport-neutral validation failure with a stable code
+// and a safe field name, but no HTTP status, localization or request context.
+// The model builds it only through invalidModelError. Field is empty when the
+// failure concerns the whole value. A non-empty Field reaches clients as a
+// Problem Details field, so naming one is a public change. Conditions callers
+// match with errors.Is are package sentinels instead.
 type ValidationError struct {
 	Code    string
 	Field   string
@@ -55,7 +51,7 @@ func (e *ValidationError) Error() string {
 	return b.String()
 }
 
-// Unwrap returns the underlying failure that a wrapping validation reported.
+// Unwrap returns the failure a wrapping validation reported, or nil.
 func (e *ValidationError) Unwrap() error {
 	if e == nil {
 		return nil
@@ -71,7 +67,7 @@ func (e *ValidationError) ErrorCode() string {
 	return e.Code
 }
 
-// SafeFields returns explicitly client-safe structured context.
+// SafeFields returns the structured context that is safe to show clients.
 func (e *ValidationError) SafeFields() map[string]string {
 	if e == nil || e.Field == "" {
 		return nil
@@ -80,7 +76,7 @@ func (e *ValidationError) SafeFields() map[string]string {
 }
 
 // invalidModelError builds every inline model failure. where names the
-// reporting function for call-site readability and is not serialized.
+// reporting function for readability and is never serialized.
 func invalidModelError(where, modelName, field, reason, details string) *ValidationError {
 	_ = where
 	code := fmt.Sprintf("model.%s.is_valid.%s.app_error", modelName, field)
@@ -96,9 +92,8 @@ func invalidModelError(where, modelName, field, reason, details string) *Validat
 	}
 }
 
-// wrap records cause as the underlying failure. A whole-value failure adopts
-// the field of a wrapped ValidationError, so wrapping never hides the safe
-// field the inner validation reported.
+// wrap records cause. A whole-value failure takes the field of a wrapped
+// ValidationError, so wrapping never hides the inner safe field.
 func (e *ValidationError) wrap(cause error) *ValidationError {
 	e.cause = cause
 	var inner *ValidationError

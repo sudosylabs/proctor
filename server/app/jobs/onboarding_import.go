@@ -27,9 +27,8 @@ type onboardingImportJobCommand struct {
 	ImportID string `json:"import_id"`
 }
 
-// OnboardingImportService is the onboarding import use cases the import Jobs
-// run: parse, preview a Student progression, resolve an academic
-// administration filter preview, execute, read and fail an import.
+// OnboardingImportService is the onboarding import use cases the import jobs
+// run.
 type OnboardingImportService interface {
 	PreviewProgression(context.Context, model.OnboardingImportID) (string, error)
 	ResolveAcademicAdministrationPreview(context.Context, model.OnboardingImportID) (string, error)
@@ -66,10 +65,9 @@ func (h studentProgressionPreviewHandler) Run(ctx context.Context, execution job
 
 type academicAdministrationPreviewResolveHandler struct{ service OnboardingImportService }
 
-// Run resolves an academic administration filter preview. A terminal
-// failure (lost authority, a changed target, too many matching Users) fails
-// the preview with its code so its creator reads why; any other failure is
-// retried.
+// Run fails the preview with its code on a terminal failure (lost authority,
+// a changed target, too many matching users) so its creator can read why;
+// any other failure is retried.
 func (h academicAdministrationPreviewResolveHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
 	command, err := decodeOnboardingImportJob(execution, model.JobTypeAcademicAdministrationPreviewResolve)
 	if err != nil || h.service == nil {
@@ -189,26 +187,25 @@ func onboardingImportExecuteDescriptor(handler job.Handler) job.Descriptor {
 }
 
 // NewOnboardingImportParse registers the parsing and validation of an
-// uploaded onboarding import through its application use case.
+// uploaded onboarding import.
 func NewOnboardingImportParse(service OnboardingImportService) job.Registration {
 	return job.Registration{Descriptor: onboardingImportParseDescriptor(onboardingImportParseHandler{service: service})}
 }
 
-// NewStudentProgressionPreview registers the preview of a Student progression
-// through the onboarding import use case.
+// NewStudentProgressionPreview registers the preview of a student
+// progression.
 func NewStudentProgressionPreview(service OnboardingImportService) job.Registration {
 	return job.Registration{Descriptor: studentProgressionPreviewDescriptor(studentProgressionPreviewHandler{service: service})}
 }
 
 // NewAcademicAdministrationPreviewResolve registers the resolution of an
-// academic administration filter preview through the onboarding import use
-// case.
+// academic administration filter preview.
 func NewAcademicAdministrationPreviewResolve(service OnboardingImportService) job.Registration {
 	return job.Registration{Descriptor: academicAdministrationPreviewResolveDescriptor(academicAdministrationPreviewResolveHandler{service: service})}
 }
 
 // NewOnboardingImportExecute registers execution of a confirmed onboarding
-// import through its application use case.
+// import.
 func NewOnboardingImportExecute(service OnboardingImportService) job.Registration {
 	return job.Registration{Descriptor: onboardingImportExecuteDescriptor(onboardingImportExecuteHandler{service: service})}
 }

@@ -21,7 +21,7 @@ import (
 )
 
 // SQLExamAttemptWorkspaceStore is the PostgreSQL adapter for acknowledged
-// candidate Workspace state and attempt-owned staged content metadata.
+// candidate workspace state and attempt-owned staged content metadata.
 type SQLExamAttemptWorkspaceStore struct {
 	*SQLStore
 	attempts *SQLExamAttemptStore
@@ -110,11 +110,11 @@ func validAttemptWorkspaceWriteAccess(access store.ExamAttemptWorkspaceWriteAcce
 }
 
 // lockAttemptWorkspaceMutationTarget is the one write-access check of every
-// batch step. The editor is proved by Session, key, Connection and
-// credential, and also needs current membership, an Open Sitting, an Active
-// Attempt and Participation and no pending correction. The environment owner
-// is proved by its current lease and incarnation and needs only an Attempt
-// with no Submission.
+// batch step. The editor is proved by session, key, connection and
+// credential, and also needs current membership, an Open sitting, an Active
+// attempt and participation and no pending correction. The environment owner
+// is proved by its current lease and incarnation and needs only an attempt
+// with no submission.
 func lockAttemptWorkspaceMutationTarget(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -170,8 +170,8 @@ func lockAttemptWorkspaceMutationTarget(
 	return target, databaseNow, err
 }
 
-// lockAttemptWorkspaceEnrollmentFence resolves the Attempt's Academic Period
-// and locks the Candidate and their Class enrollment in that period.
+// lockAttemptWorkspaceEnrollmentFence resolves the attempt's academic period
+// and locks the candidate and their class enrollment in that period.
 func lockAttemptWorkspaceEnrollmentFence(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -205,9 +205,9 @@ func lockAttemptWorkspaceEnrollmentFence(
 	return lockClassEnrollment(ctx, tx, candidateID.String(), periodID)
 }
 
-// lockAttemptWorkspaceEditorRow locks the Attempt, its Participation,
-// Connection and Workspace, and share-locks the Sitting, Session, Desktop
-// registration, User and academic structure behind them.
+// lockAttemptWorkspaceEditorRow locks the attempt, its participation,
+// connection and workspace, and share-locks the sitting, session, Desktop
+// registration, user and academic structure behind them.
 func lockAttemptWorkspaceEditorRow(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -275,8 +275,8 @@ func lockAttemptWorkspaceEditorRow(
 	return row, nil
 }
 
-// lockAttemptWorkspaceEnvironmentRow locks the Attempt and its Workspace and
-// share-locks the Sitting. The owner's lease and incarnation are checked
+// lockAttemptWorkspaceEnvironmentRow locks the attempt and its workspace and
+// share-locks the sitting. The owner's lease and incarnation are checked
 // after, under their own share locks.
 func lockAttemptWorkspaceEnvironmentRow(
 	ctx context.Context,
@@ -309,7 +309,7 @@ func lockAttemptWorkspaceEnvironmentRow(
 	return row, nil
 }
 
-// lockAttemptWorkspaceMembership share-locks the Candidate's Class membership
+// lockAttemptWorkspaceMembership share-locks the candidate's class membership
 // history, reads the decision instant, and requires exactly one current
 // membership at that instant.
 func lockAttemptWorkspaceMembership(
@@ -356,9 +356,9 @@ func lockAttemptWorkspaceMembership(
 }
 
 // checkAttemptWorkspaceMutationAccess requires the editor's current
-// Participation generation, credential, open Connection and active Session,
-// live Attempt and Sitting states, no pending Workspace correction
-// acknowledgement, and an active User and academic structure.
+// participation generation, credential, open connection and active session,
+// live attempt and sitting states, no pending workspace correction
+// acknowledgement, and an active user and academic structure.
 func checkAttemptWorkspaceMutationAccess(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -425,7 +425,7 @@ func checkAttemptWorkspaceMutationAccess(
 }
 
 // lockAttemptWorkspaceReadGuard checks live read access for the candidate's
-// Desktop or for the owner of the Attempt's environment.
+// Desktop or for the owner of the attempt's environment.
 func lockAttemptWorkspaceReadGuard(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -725,7 +725,7 @@ const attemptWorkspaceEntryMutationSelect = `SELECT e.id, e.workspace_id, e.admi
 	LEFT JOIN exam_attempt_workspace_objects o ON o.id = e.current_object_id
 		AND o.workspace_id = e.workspace_id`
 
-// attemptWorkspaceMutationEffect carries what one Workspace operation changed
+// attemptWorkspaceMutationEffect carries what one workspace operation changed
 // into its journal entry and outcome.
 type attemptWorkspaceMutationEffect struct {
 	entry     *store.CandidateAttemptWorkspaceItem
@@ -736,7 +736,7 @@ type attemptWorkspaceMutationEffect struct {
 	protected []string
 }
 
-// attemptWorkspaceMutationScope is the locked Workspace one operation acts on.
+// attemptWorkspaceMutationScope is the locked workspace one operation acts on.
 type attemptWorkspaceMutationScope struct {
 	workspaceID  model.ExamAttemptWorkspaceID
 	revisionID   model.ExamRevisionID
@@ -846,7 +846,7 @@ func createAttemptWorkspaceDirectory(
 }
 
 // replaceAttemptWorkspaceFile points a file entry at the expected version's
-// replacement object and retires the Attempt-owned object it replaced.
+// replacement object and retires the attempt-owned object it replaced.
 func replaceAttemptWorkspaceFile(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -1131,7 +1131,7 @@ func ensureAttemptWorkspaceParent(ctx context.Context, tx *sqlxTxWrapper, worksp
 	return nil
 }
 
-// ensureAttemptWorkspaceCapacity checks the Workspace as it stands inside
+// ensureAttemptWorkspaceCapacity checks the workspace as it stands inside
 // the batch transaction against the admission Revision's capacity policy.
 func ensureAttemptWorkspaceCapacity(
 	ctx context.Context,
@@ -1390,7 +1390,7 @@ func appendAttemptWorkspaceJournal(
 		return nil, fmt.Errorf("append Attempt Workspace journal: %w", err)
 	}
 
-	// The entry keeps the author of its last change, which a Submission seals.
+	// The entry keeps the author of its last change, which a submission seals.
 	// A deleted entry has no row left to update.
 	if operation != model.AttemptWorkspaceMutationDeleteEntry {
 		if _, err := tx.Exec(
@@ -1412,7 +1412,7 @@ func appendAttemptWorkspaceJournal(
 
 // trimAttemptWorkspaceJournal drops the journal entries no reader needs.
 // It keeps the last AttemptWorkspaceJournalRetention entries, and while the
-// Attempt's execution environment has not ended, every entry after its
+// attempt's execution environment has not ended, every entry after its
 // projection cursor too, so a busy build never pushes the projection past
 // the window; never more than AttemptWorkspaceJournalCeiling entries. A
 // reader past what is kept refreshes from the manifest.

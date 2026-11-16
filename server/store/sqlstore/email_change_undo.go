@@ -18,8 +18,8 @@ import (
 )
 
 // ConsumeEmailChangeUndo restores the previous address an undo credential
-// names, revokes every Session of the User, and audits the undo in one
-// transaction. The per-User Session lock is taken before the token and User
+// names, revokes every session of the user, and audits the undo in one
+// transaction. The per-user session lock is taken before the token and user
 // rows, matching password reset.
 func (s SQLUserTokenStore) ConsumeEmailChangeUndo(ctx context.Context, input *store.EmailChangeUndo) (*store.EmailChangeUndoResult, error) {
 	if input == nil || !model.IsValidTokenHash(input.TokenHash) || !input.RevocationReason.IsValid() || input.AuditEvent == nil {

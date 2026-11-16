@@ -23,9 +23,8 @@ const queueDelayThreshold = 5 * time.Minute
 type deliveryProber interface{ Probe(context.Context) error }
 
 // MaintenanceMonitor is the periodic mail maintenance task. Each run
-// suppresses outstanding deliveries while mail is disabled, probes the sender,
-// decides the Health code from the probe and the age of the queue, and
-// records the health and queue metrics.
+// suppresses outstanding deliveries while mail is disabled, probes the
+// sender, sets Health from the probe and the queue's age, and records metrics.
 type MaintenanceMonitor struct {
 	Mail     store.MailStore
 	Sender   Sender
@@ -107,7 +106,7 @@ func (m MaintenanceMonitor) Run(ctx context.Context) error {
 }
 
 // RecordMaintenanceDeliveries records each delivery a maintenance operation
-// suppressed or expired. The monitor and the mail cleanup Job share it.
+// suppressed or expired. The monitor and the mail cleanup job share it.
 func RecordMaintenanceDeliveries(ctx context.Context, recorder DeliveryRecorder, result *store.MailMaintenanceResult) {
 	if recorder == nil || result == nil {
 		return

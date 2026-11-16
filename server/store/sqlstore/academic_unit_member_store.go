@@ -32,8 +32,6 @@ type SQLAcademicUnitMemberStore struct {
 	query sq.SelectBuilder
 }
 
-// academicUnitMemberRow maps native PostgreSQL timestamps and nullable lifecycle
-// fields onto a validated domain Academic Unit Member.
 type academicUnitMemberRow struct {
 	ID             string       `db:"id"`
 	CreatedAt      time.Time    `db:"created_at"`
@@ -260,8 +258,7 @@ func (s SQLAcademicUnitMemberStore) Save(
 	})
 }
 
-// Get returns the unarchived Academic Unit membership with id, or a not-found
-// error.
+// Get returns a not-found error when the membership is absent or archived.
 func (s SQLAcademicUnitMemberStore) Get(ctx context.Context, id model.AcademicUnitMemberID) (*model.AcademicUnitMember, error) {
 	var row academicUnitMemberRow
 	if err := s.GetMaster().GetBuilder(ctx, &row, s.query.Where(sq.Eq{
@@ -273,7 +270,7 @@ func (s SQLAcademicUnitMemberStore) Get(ctx context.Context, id model.AcademicUn
 	return row.model()
 }
 
-// ListByUser returns every unarchived Academic Unit membership of userID, ended
+// ListByUser returns every unarchived academic unit membership of userID, ended
 // or not, newest start first.
 func (s SQLAcademicUnitMemberStore) ListByUser(ctx context.Context, userID model.UserID) ([]*model.AcademicUnitMember, error) {
 	return s.selectMembers(ctx, s.query.Where(sq.Eq{
@@ -303,7 +300,7 @@ func (s SQLAcademicUnitMemberStore) ListByAcademicUnit(
 	return s.selectMembers(ctx, query.OrderBy("academic_unit_members.user_id", "academic_unit_members.id"))
 }
 
-// ListActiveByUser returns the unarchived Academic Unit memberships of userID
+// ListActiveByUser returns the unarchived academic unit memberships of userID
 // that are active at at.
 func (s SQLAcademicUnitMemberStore) ListActiveByUser(
 	ctx context.Context,
@@ -319,8 +316,8 @@ func (s SQLAcademicUnitMemberStore) ListActiveByUser(
 		OrderBy("academic_unit_members.academic_unit_id", "academic_unit_members.id"))
 }
 
-// End ends the Academic Unit membership at input.EndAt, fenced on
-// ExpectedRevision, and may enqueue an assignment-ended Notice mail in the same
+// End ends the academic unit membership at input.EndAt, fenced on
+// ExpectedRevision, and may enqueue an assignment-ended notice mail in the same
 // transaction. Ending an already-ended membership is a conflict without
 // input.Command, and an audited no-op (input.NoOp set) under a command
 // idempotency key.

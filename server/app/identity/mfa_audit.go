@@ -43,10 +43,9 @@ func (s *Service) failMFAMutation(
 	return mapped
 }
 
-// beginMFAAudit records the attempt of an MFA mutation. Self-service MFA
-// mutations are audited against the Institution, with the acting User as
-// their subject. An administrator reset names the target User as its
-// resource, which is its own subject.
+// beginMFAAudit audits self-service mutations against the institution with the
+// acting user as subject. An administrator reset names the target user as the
+// resource, which is then its own subject.
 func (s *Service) beginMFAAudit(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -80,8 +79,8 @@ func (s *Service) beginMFAAudit(
 	return event.ID, nil
 }
 
-// completeMFAAudit records the terminal outcome of an MFA mutation the
-// Service itself, rather than its atomic Store operation, ends.
+// completeMFAAudit is for outcomes the service decides itself; a store
+// operation that ends the action completes its own audit.
 func (s *Service) completeMFAAudit(
 	ctx context.Context,
 	auditID model.AuditEventID,

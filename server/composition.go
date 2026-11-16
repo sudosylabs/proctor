@@ -47,41 +47,38 @@ type compositionInput struct {
 	// startup migration with a strict schema version check.
 	schema    schemaPolicy
 	overrides TestingOverrides
-	// observeRelease receives the release record of a failed consumer
-	// composition before its owners are closed. The real hub and transport
-	// close without an observable effect, so
-	// TestConsumerConstructionFailuresUnwindExactlyOnce sets it to prove which
-	// consumers each failing phase had registered. Production leaves it nil.
+	// observeRelease sees a failed composition's release record before its
+	// owners close. Closing the real hub and transport has no observable
+	// effect, so TestConsumerConstructionFailuresUnwindExactlyOnce uses it.
+	// Production leaves it nil.
 	observeRelease func(compositionRelease)
 }
 
 var errDurableJobRuntimeUnavailable = errors.New("application Job runtime is unavailable")
 
 // compositionResult is the assembled node. server owns every lifecycle;
-// application and handler are borrowed behavioral handles that only
-// NewForTesting hands out, and production construction discards them.
+// application and handler are borrowed handles that only NewForTesting hands
+// out.
 type compositionResult struct {
 	server      *Server
 	application *app.App
 	handler     http.Handler
 }
 
-// composeNode is the sole construction recipe for production and tests. Each
-// phase completes before the next becomes observable; construction remains
-// inert and transfers all lifecycle authority into the returned Server.
+// composeNode is the one construction path for production and tests. It
+// stays inert and hands every lifecycle to the returned Server.
 func composeNode(ctx context.Context, input compositionInput) (*compositionResult, error) {
 	if !input.serviceEnvironment.valid() {
 		return nil, errors.New("invalid service environment")
 	}
 
-	// 1. Acquire and decorate infrastructure under one temporary owner.
 	infrastructure, err := openRuntimeInfrastructure(ctx, input.configPath, input.overrides, input.schema)
 	if err != nil {
 		return nil, fmt.Errorf("acquire infrastructure: %w", err)
 	}
 
-	// 2. Atomically transfer ownership to Platform and capture one immutable
-	// construction snapshot plus a lifecycle-free capability projection.
+	// Ownership moves to the platform in one step; capabilities carry no
+	// lifecycle of their own.
 	applicationPlatform, snapshot, capabilities, err := infrastructure.acceptPlatform(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("accept platform ownership: %w", err)
@@ -93,8 +90,8 @@ func composeNode(ctx context.Context, input compositionInput) (*compositionResul
 		logging.Bool("desktop_compatibility_enforced", input.serviceEnvironment != ServiceEnvironmentDev),
 	)
 
-	// 3. Construct consumers in dependency order. A failure releases only the
-	// consumers already built, followed by Platform.
+	// From here a failure releases only the consumers already built, then the
+	// platform.
 	release := compositionRelease{
 		platform:        applicationPlatform,
 		shutdownTimeout: snapshot.Server.ShutdownTimeout.Duration,
@@ -112,7 +109,7 @@ func composeNode(ctx context.Context, input compositionInput) (*compositionResul
 	return result, nil
 }
 
-// composeConsumers constructs every consumer of the accepted Platform and
+// composeConsumers constructs every consumer of the accepted platform and
 // assembles the inert Server. It records each closable consumer in release as
 // soon as it is built; the caller releases them when composeConsumers fails.
 func composeConsumers(
@@ -228,8 +225,8 @@ func composeConsumers(
 		return nil, fmt.Errorf("construct serving node lease: %w", err)
 	}
 
-	// 4. Assemble one inert lifecycle owner. No listener, goroutine, readiness,
-	// or transport lifecycle operation runs during composition.
+	// No listener, goroutine, readiness or transport lifecycle operation runs
+	// during composition.
 	node := &Server{components: runtimeComponents{
 		platform:              applicationPlatform,
 		reconciler:            application.Identity,
@@ -286,8 +283,6 @@ func composeEnvironments(
 	return node, nil
 }
 
-// composeLocalization opens the embedded catalogs and templates and constructs
-// the localizer and the mail renderer that translates through it.
 func composeLocalization(snapshot config.Config) (*localization.Localizer, *mail.TemplateRenderer, error) {
 	catalogFiles, err := runtimeAssetDirectory("i18n")
 	if err != nil {
@@ -316,7 +311,6 @@ func composeLocalization(snapshot config.Config) (*localization.Localizer, *mail
 	return localizer, mailRenderer, nil
 }
 
-// composeApplicationDependencies constructs File Content and projects the application dependencies with telemetry and bootstrap protection.
 func composeApplicationDependencies(
 	ctx context.Context,
 	snapshot config.Config,
@@ -364,7 +358,6 @@ func composeApplicationDependencies(
 	return applicationDeps, nil
 }
 
-// attachApplicationTelemetry wires Job, operational, password-work and mail delivery recorders and the Job tracer into the dependencies.
 func attachApplicationTelemetry(
 	applicationDeps *app.Dependencies,
 	capabilities constructionCapabilities,
@@ -395,7 +388,6 @@ func attachApplicationTelemetry(
 	}
 }
 
-// composeReadiness builds readiness over a live, bounded probe of the mandatory platform dependencies.
 func composeReadiness(applicationPlatform *platform.Service) (*app.Health, error) {
 	// Readiness requires both the lifecycle flag and a live, bounded probe of
 	// the mandatory platform dependencies (PostgreSQL, cache, cluster, VFS).
@@ -411,7 +403,6 @@ func composeReadiness(applicationPlatform *platform.Service) (*app.Health, error
 	return readiness, nil
 }
 
-// resolveBuildInfo returns the overridden build information or, when none is set, this binary's own.
 func resolveBuildInfo(buildInfo httpapi.BuildInfo) httpapi.BuildInfo {
 	if buildInfo == (httpapi.BuildInfo{}) {
 		current := app.CurrentBuildInfo()
@@ -426,7 +417,6 @@ func resolveBuildInfo(buildInfo httpapi.BuildInfo) httpapi.BuildInfo {
 	return buildInfo
 }
 
-// httpAPISettings projects readiness, the WebSocket hub, the localizer and server settings into the HTTP API settings.
 func httpAPISettings(
 	readiness *app.Health,
 	buildInfo httpapi.BuildInfo,
@@ -471,7 +461,6 @@ func httpAPISettings(
 	}, nil
 }
 
-// composeRootTransport constructs the hosted webapp and wraps it with the HTTP API in the root transport.
 func composeRootTransport(
 	httpAPI *route.API,
 	buildInfo httpapi.BuildInfo,
@@ -498,10 +487,9 @@ func composeRootTransport(
 	return rootTransport, nil
 }
 
-// compositionRelease records the owners a failed composition must release:
-// the HTTP transport and WebSocket hub once built, then metrics and Platform.
-// A later transport, such as the root HTTP transport that owns the API
-// transport, replaces the one it wraps.
+// compositionRelease records the owners a failed composition must close. A
+// later transport, such as the root transport that owns the API, replaces the
+// one it wraps.
 type compositionRelease struct {
 	platform        runtimeComponent
 	shutdownTimeout time.Duration
@@ -512,9 +500,8 @@ type compositionRelease struct {
 	plugins         *pluginhost.Host
 }
 
-// fail joins cause with the release of every owner built so far, closing the
-// transport, the WebSocket hub, metrics, tracing, and Platform in that order
-// under one fresh shutdown budget; a failed composition has spent none of it.
+// fail joins cause with closing every owner built so far, under a fresh
+// shutdown budget; a failed composition has spent none of it.
 func (r compositionRelease) fail(cause error) error {
 	budget, cancel := context.WithTimeout(context.Background(), r.shutdownTimeout)
 	defer cancel()

@@ -93,7 +93,7 @@ func (s SQLPluginSettingsStore) ChangeCount(ctx context.Context) (int64, error) 
 	return count, nil
 }
 
-// Replace saves one plugin's settings for an active System Administrator.
+// Replace saves one plugin's settings for an active system administrator.
 func (s SQLPluginSettingsStore) Replace(
 	ctx context.Context,
 	input *store.PluginSettingsReplacement,
@@ -141,8 +141,8 @@ func (s SQLPluginSettingsStore) Replace(
 	}, nil
 }
 
-// replacePluginSettings locks the plugin's row, requires an active System
-// Administrator and the expected revision, saves the change at PostgreSQL
+// replacePluginSettings locks the plugin's row, requires an active system
+// administrator and the expected revision, saves the change at PostgreSQL
 // time, and completes the audit.
 func replacePluginSettings(
 	ctx context.Context,
@@ -211,7 +211,7 @@ func replacePluginSettings(
 
 // getPluginSettingsForUpdate locks and returns a plugin's saved settings.
 // saved is false when none are saved. A first save is serialized by the
-// System Administrator authentication lock taken before it.
+// system administrator authentication lock taken before it.
 func getPluginSettingsForUpdate(
 	ctx context.Context,
 	tx *sqlxTxWrapper,

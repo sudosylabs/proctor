@@ -24,10 +24,7 @@ import (
 )
 
 // An academic administration filter preview is an onboarding import whose
-// rows are the Users a User directory filter matched when its preview
-// resolved. This file holds what only that mode needs: its persisted filter
-// document, the checks on its frozen rows, the PostgreSQL guards on each row
-// it executes, and its grouped and visibility-filtered row reads.
+// rows are the users a directory filter matched when the preview resolved.
 
 // academicAdministrationFilterQueryMaximumRunes bounds the directory search
 // term a filter preview keeps.
@@ -195,7 +192,7 @@ func validAcademicAdministrationFilter(scopeType model.RoleScopeType, filter *st
 
 // validAcademicAdministrationFilterRows reports whether frozen filter preview
 // rows are at most AcademicAdministrationPreviewMaximumRows, each name a
-// distinct User through the preview's own operation and scope, and each row
+// distinct user through the preview's own operation and scope, and each row
 // held back from execution carries the reason it was.
 func validAcademicAdministrationFilterRows(value *store.OnboardingImport, rows []store.OnboardingImportRow) bool {
 	if value == nil || value.Filter == nil || len(rows) > store.AcademicAdministrationPreviewMaximumRows {
@@ -242,11 +239,10 @@ func countOnboardingImportNoChangeRows(ctx context.Context, tx *sqlxTxWrapper, i
 	return count, nil
 }
 
-// requireAcademicAdministrationFilterRowTarget refuses, inside the row's
-// own transaction, a filter preview row whose User is the acting User, and
-// a disable or Session revocation of a User who is a System Administrator
-// at the PostgreSQL instant at. A preview skipped both kinds; this keeps
-// them out even when the target changed after the preview froze.
+// requireAcademicAdministrationFilterRowTarget refuses, inside the row's own
+// transaction, a row targeting the acting user, and a disable or session
+// revocation of a user who is a system administrator at the instant at. The
+// preview skipped both, but the target may have changed since it froze.
 func requireAcademicAdministrationFilterRowTarget(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -281,7 +277,7 @@ const academicAdministrationPreviewClassSQL = `CASE
 
 // CountAcademicAdministrationPreviewGroups counts one filter preview's rows
 // by class and, for skipped rows, reason: every frozen row, or through a
-// Visibility only the rows ListAcademicAdministrationPreviewRows would show.
+// visibility only the rows ListAcademicAdministrationPreviewRows would show.
 func (s SQLInvitationStore) CountAcademicAdministrationPreviewGroups(
 	ctx context.Context,
 	options store.AcademicAdministrationPreviewGroupCountOptions,
@@ -326,8 +322,8 @@ func (s SQLInvitationStore) CountAcademicAdministrationPreviewGroups(
 }
 
 // ListAcademicAdministrationPreviewRows reads one page of a filter preview's
-// rows of one class whose User the reader's directory visibility reaches
-// now. The visibility predicate is the User directory's own, so a reader
+// rows of one class whose user the reader's directory visibility reaches
+// now. The visibility predicate is the user directory's own, so a reader
 // never sees a row the directory would not show them.
 func (s SQLInvitationStore) ListAcademicAdministrationPreviewRows(
 	ctx context.Context,
@@ -400,7 +396,7 @@ func (s SQLInvitationStore) ListAcademicAdministrationPreviewRows(
 }
 
 // validAcademicAdministrationPreviewVisibility reports whether a reader's
-// User directory visibility is bounded and well formed.
+// user directory visibility is bounded and well formed.
 func validAcademicAdministrationPreviewVisibility(visibility store.UserVisibilityScope) bool {
 	return len(visibility.ClassIDs)+len(visibility.AcademicUnitRootIDs)+len(visibility.ClassMemberAcademicUnitRootIDs) <= 256 &&
 		validVisibilityIDs(visibility.ClassIDs) &&
@@ -408,11 +404,9 @@ func validAcademicAdministrationPreviewVisibility(visibility store.UserVisibilit
 		validVisibilityIDs(visibility.ClassMemberAcademicUnitRootIDs)
 }
 
-// filterAcademicAdministrationPreviewRowVisibility keeps only the filter
-// preview rows (aliased r) whose User the reader's directory shows now: an
-// unarchived User, enabled unless the visibility is Institution-wide, inside
-// the User directory's own visibility predicate. The rows read and the
-// summary count apply the same filter, so the counts match the rows shown.
+// filterAcademicAdministrationPreviewRowVisibility keeps only rows (aliased r)
+// whose user the reader's directory shows now. The row read and the summary
+// count share this filter so the counts match the rows shown.
 func filterAcademicAdministrationPreviewRowVisibility(
 	query sq.SelectBuilder,
 	visibility store.UserVisibilityScope,

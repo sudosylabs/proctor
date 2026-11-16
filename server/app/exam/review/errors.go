@@ -15,8 +15,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// publicFailures presents every Integrity Review use-case failure: unexpected errors
-// become exam.integrity_review.unavailable, and protected targets conceal denial and absence.
+// publicFailures turns unexpected errors into exam.integrity_review.unavailable,
+// and reports denial as not_found so callers can't probe for submissions.
 var publicFailures = apperror.Concealment{
 	Unavailable: "exam.integrity_review.unavailable",
 	Concealed:   []apperror.Code{"exam.integrity_review.not_found"},

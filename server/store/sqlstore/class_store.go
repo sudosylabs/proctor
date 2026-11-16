@@ -28,7 +28,7 @@ import (
 )
 
 // SQLClassStore implements store.ClassStore on the classes table, resolving
-// each Class's programme level, programme and academic-unit lineage.
+// each class's programme level, programme and academic-unit lineage.
 type SQLClassStore struct {
 	*SQLStore
 	classesQuery sq.SelectBuilder
@@ -130,7 +130,7 @@ func (s SQLClassStore) createClass(ctx context.Context, candidate *model.Class, 
 	})
 }
 
-// Get returns the unarchived Class with id, or a not-found error.
+// Get returns the unarchived class with id, or a not-found error.
 func (s SQLClassStore) Get(ctx context.Context, id model.ClassID) (*model.Class, error) {
 	var row classRow
 	query := s.classesQuery.Where(sq.Eq{
@@ -143,8 +143,8 @@ func (s SQLClassStore) Get(ctx context.Context, id model.ClassID) (*model.Class,
 	return row.model()
 }
 
-// GetByName returns the unarchived Class with name in the given Programme Level
-// and Academic Period, or a not-found error.
+// GetByName returns the unarchived class with name in the given programme level
+// and academic period, or a not-found error.
 func (s SQLClassStore) GetByName(
 	ctx context.Context,
 	programmeLevelID model.ProgrammeLevelID,
@@ -166,8 +166,8 @@ func (s SQLClassStore) GetByName(
 	return row.model()
 }
 
-// ListByProgrammeLevel returns one page of the Programme Level's unarchived
-// Classes ordered by name then identity.
+// ListByProgrammeLevel returns one page of the programme level's unarchived
+// classes ordered by name then identity.
 func (s SQLClassStore) ListByProgrammeLevel(
 	ctx context.Context,
 	programmeLevelID model.ProgrammeLevelID,
@@ -181,8 +181,8 @@ func (s SQLClassStore) ListByProgrammeLevel(
 	return s.selectClasses(ctx, query, "list classes by programme level")
 }
 
-// ListByAcademicPeriod returns the unarchived Classes of the Academic Period,
-// ordered by Programme Level and name.
+// ListByAcademicPeriod returns the unarchived classes of the academic period,
+// ordered by programme level and name.
 func (s SQLClassStore) ListByAcademicPeriod(ctx context.Context, academicPeriodID model.AcademicPeriodID) ([]*model.Class, error) {
 	query := s.classesQuery.
 		Where(sq.Eq{
@@ -193,8 +193,8 @@ func (s SQLClassStore) ListByAcademicPeriod(ctx context.Context, academicPeriodI
 	return s.selectClasses(ctx, query, "list classes by academic period")
 }
 
-// SearchByAcademicUnit returns one page of unarchived Classes under the
-// Academic Unit's unarchived Programmes selected and ordered by options.
+// SearchByAcademicUnit returns one page of unarchived classes under the
+// academic unit's unarchived programmes selected and ordered by options.
 func (s SQLClassStore) SearchByAcademicUnit(
 	ctx context.Context,
 	academicUnitID model.AcademicUnitID,
@@ -208,9 +208,9 @@ func (s SQLClassStore) SearchByAcademicUnit(
 	return s.selectClasses(ctx, query, "search classes by academic unit")
 }
 
-// SearchVisible returns up to options.Limit unarchived Classes within the
-// caller's class.view visibility. The Academic Unit subtrees expand in the
-// same statement, so no Class outside the scope is ever loaded.
+// SearchVisible returns up to options.Limit unarchived classes within the
+// caller's class.view visibility. The academic unit subtrees expand in the
+// same statement, so no class outside the scope is ever loaded.
 func (s SQLClassStore) SearchVisible(ctx context.Context, options store.ClassSearchOptions) ([]*model.Class, error) {
 	visibility := options.Visibility
 	if options.Limit < 1 ||
@@ -232,9 +232,9 @@ func (s SQLClassStore) SearchVisible(ctx context.Context, options store.ClassSea
 }
 
 // filterClassVisibility restricts a selection from classes to the unarchived
-// Classes, under unarchived Programme Levels and Programmes, inside a
-// class.view visibility. The Academic Unit subtrees expand in the same
-// statement, so no Class outside the scope is ever loaded.
+// classes, under unarchived programme levels and programmes, inside a
+// class.view visibility. The academic unit subtrees expand in the same
+// statement, so no class outside the scope is ever loaded.
 func filterClassVisibility(query sq.SelectBuilder, visibility store.ClassVisibilityScope) sq.SelectBuilder {
 	return query.
 		Prefix(`WITH RECURSIVE class_visible_units AS (
@@ -266,8 +266,8 @@ func filterClassVisibility(query sq.SelectBuilder, visibility store.ClassVisibil
 		)
 }
 
-// GetAcademicUnitID returns the Academic Unit that owns the Class through its
-// Programme Level and Programme, or a not-found error when any link is absent
+// GetAcademicUnitID returns the academic unit that owns the class through its
+// programme level and programme, or a not-found error when any link is absent
 // or archived.
 func (s SQLClassStore) GetAcademicUnitID(ctx context.Context, id model.ClassID) (model.AcademicUnitID, error) {
 	var academicUnitID string
@@ -310,7 +310,7 @@ func (s SQLClassStore) selectClasses(
 }
 
 // Update writes input.Class as revision ExpectedRevision+1 in one audited
-// transaction. The Class must still be at ExpectedRevision and owned by
+// transaction. The class must still be at ExpectedRevision and owned by
 // ExpectedAcademicUnitID; otherwise the update conflicts or is not found.
 func (s SQLClassStore) Update(ctx context.Context, input *store.ClassUpdate) (*model.Class, error) {
 	if input == nil ||
@@ -404,7 +404,7 @@ func (s SQLClassStore) updateClass(
 	})
 }
 
-// Archive archives the Class at input.ArchiveAt and completes its audit event,
+// Archive archives the class at input.ArchiveAt and completes its audit event,
 // fenced on ExpectedRevision and ExpectedAcademicUnitID.
 func (s SQLClassStore) Archive(ctx context.Context, input *store.ClassArchive) (*model.Class, error) {
 	if input == nil ||
@@ -716,13 +716,13 @@ func (s SQLClassStore) CountByAcademicUnit(
 	return countAcademicNamePage(ctx, s.GetMaster(), rows, "classes", options, maximum)
 }
 
-// classesInLevel keeps the Programme Level's unarchived Classes.
+// classesInLevel keeps the programme level's unarchived classes.
 func classesInLevel(query sq.SelectBuilder, programmeLevelID model.ProgrammeLevelID) sq.SelectBuilder {
 	return query.Where(sq.Eq{"classes.programme_level_id": programmeLevelID, "classes.archived_at": nil})
 }
 
-// classesInUnit keeps the unarchived Classes under the unit's unarchived
-// Programmes and Programme Levels.
+// classesInUnit keeps the unarchived classes under the unit's unarchived
+// programmes and programme levels.
 func classesInUnit(query sq.SelectBuilder, academicUnitID model.AcademicUnitID) sq.SelectBuilder {
 	return query.
 		Join("programme_levels ON programme_levels.id = classes.programme_level_id").

@@ -68,8 +68,9 @@ func (h mailDeliveryHandler) Run(ctx context.Context, execution job.Execution) j
 		return job.RetryableFailure("mail.delivery.unavailable", err)
 	}
 
-	// Rate waiting may span a concurrent operator or maintenance transition.
-	// Re-read and repeat deadline/relevance fencing immediately before Start.
+	// Rate waiting may span a concurrent operator or maintenance transition,
+	// so re-read and repeat the deadline and relevance checks right before
+	// Start.
 	delivery, err = h.deliveries.GetDelivery(ctx, command.DeliveryID)
 	if err != nil {
 		return mailDeliveryDependencyOutcome(err)
@@ -92,8 +93,8 @@ func (h mailDeliveryHandler) Run(ctx context.Context, execution job.Execution) j
 
 	if delivery.State == model.MailDeliverySending && delivery.AttemptCount >= model.MailMaximumAttempts {
 		// The last send attempt lost its worker mid-send. Its outcome is
-		// unknown and no attempt remains, so the delivery fails visibly for an
-		// operator instead of waiting Sending for its deadline.
+		// unknown and no attempt remains, so fail visibly for an operator
+		// instead of waiting in Sending until the deadline.
 		return h.failAt(ctx, delivery, model.MailTransportAcceptanceUncertainCode, errors.New("mail delivery attempts are exhausted"), now)
 	}
 
@@ -111,8 +112,9 @@ func (h mailDeliveryHandler) Run(ctx context.Context, execution job.Execution) j
 	return h.send(ctx, execution, sending)
 }
 
-// fence expires, suppresses as disabled, or suppresses as obsolete a delivery that must not be sent now; settled
-// reports whether outcome ends the run, and now is the instant the checks used.
+// fence expires or suppresses a delivery that must not be sent now. settled
+// reports whether outcome ends the run, and now is the instant the checks
+// used.
 func (h mailDeliveryHandler) fence(ctx context.Context, delivery *model.MailDelivery) (now time.Time, outcome job.Outcome, settled bool) {
 	now = model.TimeUTC(h.now())
 	if !now.Before(delivery.Deadline) {
@@ -131,8 +133,6 @@ func (h mailDeliveryHandler) fence(ctx context.Context, delivery *model.MailDeli
 	return now, job.Outcome{}, false
 }
 
-// send opens the started delivery's sealed message, hands it to the transport, and records acceptance or the
-// transport failure.
 func (h mailDeliveryHandler) send(ctx context.Context, execution job.Execution, sending *model.MailDelivery) job.Outcome {
 	h.recordAttempt(ctx, sending)
 	message, err := mail.OpenDelivery(h.sealer, sending)
@@ -165,7 +165,6 @@ func (h mailDeliveryHandler) send(ctx context.Context, execution job.Execution, 
 	return mailDeliverySucceeded(accepted)
 }
 
-// transportFailed expires, fails, or requeues the sending delivery after a transport error.
 func (h mailDeliveryHandler) transportFailed(
 	ctx context.Context,
 	execution job.Execution,
@@ -183,8 +182,8 @@ func (h mailDeliveryHandler) transportFailed(
 		h.health.Set(mail.HealthSMTPOutage)
 	}
 
-	// The delivery and its Job count attempts separately. On the Job's last
-	// attempt a requeued delivery would be left Queued with no Job, so it
+	// The delivery and its job count attempts separately. On the job's last
+	// attempt a requeued delivery would be left queued with no job, so it
 	// fails now and stays available to an operator retry.
 	lastJobAttempt := execution.Job.AttemptCount >= execution.Job.MaximumAttempts
 	if classification == mail.TransportPermanent || sending.AttemptCount >= model.MailMaximumAttempts || lastJobAttempt {
@@ -404,8 +403,8 @@ func newMailDeliveryDescriptor(jobType model.JobType, concurrency int, handler j
 	return descriptor
 }
 
-// MailDeliveryDependencies are the collaborators of the mail delivery Jobs.
-// The ordinary and credential pools share them.
+// MailDeliveryDependencies are shared by the ordinary and credential
+// delivery pools.
 type MailDeliveryDependencies struct {
 	Deliveries store.MailStore
 	Sender     mail.Sender
@@ -428,14 +427,14 @@ func (d MailDeliveryDependencies) handler() mailDeliveryHandler {
 	}
 }
 
-// NewMailDelivery registers durable delivery of one frozen mail
-// message through the ordinary pool.
+// NewMailDelivery registers delivery of one frozen message through the
+// ordinary pool.
 func NewMailDelivery(deps MailDeliveryDependencies) job.Registration {
 	return job.Registration{Descriptor: mailDeliveryDescriptor(deps.handler())}
 }
 
-// NewMailCredentialDelivery registers durable delivery of one
-// frozen credential mail message through the dedicated credential pool.
+// NewMailCredentialDelivery registers delivery of one frozen credential
+// message through its own pool.
 func NewMailCredentialDelivery(deps MailDeliveryDependencies) job.Registration {
 	return job.Registration{Descriptor: mailCredentialDeliveryDescriptor(deps.handler())}
 }

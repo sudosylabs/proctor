@@ -43,9 +43,8 @@ func (a identityProviderSource) Provider(
 	return identityProvider{provider: provider}, true
 }
 
-// identityProvider runs a configured provider's plugin protocol for
-// identity: it carries identity's requests to the plugin contract and the
-// plugin's failures to identity's sentinels.
+// identityProvider adapts a configured provider to identity and maps plugin
+// failures to identity's sentinels.
 type identityProvider struct {
 	provider *externalauth.Provider
 }

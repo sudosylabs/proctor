@@ -73,9 +73,8 @@ type emailChangeUndoInspectionResponse struct {
 	ChangedAt          string `json:"changed_at"`
 }
 
-// authenticationResponse is the transport-owned login/refresh success body.
-// Field names match the historical v1 envelope so cookie and bearer clients
-// keep working while domain models no longer serialize directly.
+// authenticationResponse is the login and refresh success body. Its field
+// names are the v1 envelope's, which cookie and bearer clients depend on.
 type authenticationResponse struct {
 	User    *userProfileResponse          `json:"user,omitempty"`
 	Session *sessionResponse              `json:"session"`

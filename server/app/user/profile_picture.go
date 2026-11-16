@@ -28,24 +28,22 @@ const maximumProfilePictureBytes int64 = 5 << 20
 // is not an acceptable image; the service maps it to profile_picture.invalid.
 var ErrInvalidProfilePicture = errors.New("invalid profile picture")
 
-// ErrDefaultProfilePictureUserNotFound reports that the User whose default
-// profile picture is being created does not exist.
+// ErrDefaultProfilePictureUserNotFound means the user no longer exists when
+// the default-picture job runs.
 var ErrDefaultProfilePictureUserNotFound = errors.New("default profile-picture user not found")
 
-// ErrDefaultProfilePictureInvariant reports that a default profile picture
-// record failed its model invariants.
+// ErrDefaultProfilePictureInvariant wraps a model invariant failure while
+// building the default picture's records.
 var ErrDefaultProfilePictureInvariant = errors.New("default profile-picture invariant failed")
 
-// PictureFiles stores, opens and renders profile-picture bytes. It is the
-// port to file content, which lives outside the application.
+// PictureFiles is the port to profile-picture bytes, which live outside the
+// application.
 type PictureFiles interface {
 	NormalizeAndStoreProfilePicture(context.Context, model.FileRevisionID, io.Reader, int64, time.Time) ([]model.FileRendition, error)
 	RemoveProfilePictureRenditions(context.Context, model.FileRevisionID, []model.FileRendition) error
 	OpenProfilePictureRendition(context.Context, model.FileRevisionID, model.FileRenditionID) (io.ReadCloser, error)
 	// RenderDefaultProfilePicture renders a default picture without storing it.
 	RenderDefaultProfilePicture(context.Context, string, int) (*RenderedProfilePicture, error)
-	// GenerateAndStoreDefaultProfilePicture stores the complete default
-	// rendition set for the durable generation job.
 	GenerateAndStoreDefaultProfilePicture(context.Context, model.FileRevisionID, string, time.Time) ([]model.FileRendition, error)
 }
 
@@ -84,8 +82,8 @@ type ProfilePictureContent struct {
 	ETag      string
 }
 
-// UploadProfilePicture normalizes the image into private renditions and then
-// publishes them as the User's custom profile picture in one audited step.
+// UploadProfilePicture stores the renditions before publishing, so the
+// picture and its audit event commit together.
 func (s *Service) UploadProfilePicture(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -154,15 +152,14 @@ func (s *Service) UploadProfilePicture(
 	return s.publishProfilePicture(ctx, inv, current, staged, renditions, at)
 }
 
-// stagedProfilePictureUpload is the pending file entry, revision and upload lease staged for one upload.
 type stagedProfilePictureUpload struct {
 	entryID  model.FileEntryID
 	revision *model.FileRevision
 	lease    *model.UploadLease
 }
 
-// checkProfilePicturePrecondition verifies the caller's If-Match checksum against the active profile picture and
-// returns the active state, or nil when the user has no profile picture.
+// checkProfilePicturePrecondition returns nil state when the user has no
+// profile picture.
 func (s *Service) checkProfilePicturePrecondition(
 	ctx context.Context,
 	command UploadProfilePictureCommand,
@@ -194,8 +191,6 @@ func (s *Service) checkProfilePicturePrecondition(
 	return currentState, nil
 }
 
-// stageProfilePictureUpload creates the pending revision and upload lease, with a new custom file entry when the user
-// has none yet.
 func (s *Service) stageProfilePictureUpload(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -243,7 +238,6 @@ func (s *Service) stageProfilePictureUpload(
 	return stagedProfilePictureUpload{entryID: entryID, revision: revision, lease: lease}, nil
 }
 
-// profilePictureNormalizationError maps a normalization failure to its application error.
 func profilePictureNormalizationError(err error) error {
 	var capacity apperror.WorkCapacityExceeded
 	if errors.As(err, &capacity) {
@@ -255,8 +249,6 @@ func profilePictureNormalizationError(err error) error {
 	return apperror.New("profile_picture.unavailable").Wrap(err)
 }
 
-// publishProfilePicture publishes the staged renditions as the user's custom profile picture under audit and reports
-// the change effect.
 func (s *Service) publishProfilePicture(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -305,8 +297,8 @@ func (s *Service) publishProfilePicture(
 		profilePictureStoreErrors.Translate,
 	)
 	if err != nil {
-		// Publication may have committed even when the commit acknowledgement was
-		// lost. Leave staged bytes for authoritative reconciliation/lease cleanup.
+		// The commit may have succeeded with its acknowledgement lost, so leave the
+		// staged bytes to reconciliation and lease cleanup.
 		return nil, err
 	}
 
@@ -361,8 +353,7 @@ func sameNormalizedProfilePicture(state *store.ProfilePictureState, renditions [
 	return len(currentByName) == 0
 }
 
-// RemoveProfilePicture removes the User's custom profile picture, which
-// reverts to the default one.
+// RemoveProfilePicture reverts the user to their default picture.
 func (s *Service) RemoveProfilePicture(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -437,8 +428,8 @@ func (s *Service) RemoveProfilePicture(
 	return updated, nil
 }
 
-// GetProfilePicture opens one rendition of the User's profile picture, or
-// renders the default one and proposes its durable generation.
+// GetProfilePicture renders a not-yet-stored default picture on the fly and
+// proposes its durable generation. Size must be 128, 256 or 512.
 func (s *Service) GetProfilePicture(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -495,10 +486,8 @@ func (s *Service) GetProfilePicture(
 	return &ProfilePictureContent{Body: body, MediaType: rendition.MediaType, Size: rendition.Size, ETag: `"` + rendition.SHA256 + `"`}, nil
 }
 
-// EnsureDefaultProfilePicture is the system-owned application use case used by
-// the durable handler. It is idempotent across retries and publishes the
-// complete default relationship in one named persistence operation. system
-// names the durable Job execution.
+// EnsureDefaultProfilePicture is the durable job's use case; system must name
+// the job. It is idempotent across retries.
 func (s *Service) EnsureDefaultProfilePicture(
 	ctx context.Context,
 	system invocation.System,
@@ -556,9 +545,8 @@ func (s *Service) ensureDefaultProfilePicture(ctx context.Context, userID model.
 		return "", err
 	}
 
-	// Publication is the non-cancelable atomic commit section. A cancellation
-	// observed before it prevents entry; once entered, the transaction reaches
-	// one authoritative outcome and is never partially interrupted.
+	// Cancellation is honored up to here; once publication starts it runs to
+	// one outcome rather than being cut off mid-commit.
 	commitCtx, cancelCommit := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancelCommit()
 	published, err := s.files.PublishDefaultProfilePicture(commitCtx, &store.DefaultProfilePicturePublication{

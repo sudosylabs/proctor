@@ -19,8 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// CreateAcademicUnitCommand contains caller-controlled Academic Unit fields.
-// Installation ownership and persistence lifecycle fields are not inputs.
+// CreateAcademicUnitCommand holds only caller-controlled fields; ownership
+// and lifecycle fields are not inputs.
 type CreateAcademicUnitCommand struct {
 	ParentID       model.AcademicUnitID
 	Name           string
@@ -45,8 +45,8 @@ type ArchiveAcademicUnitCommand struct {
 	ID               model.AcademicUnitID
 }
 
-// CreateAcademicUnit creates a root or child Academic Unit through one
-// application-owned authorization and one atomic durable mutation.
+// CreateAcademicUnit creates a root or child unit; it needs
+// academic_unit.manage.
 func (s *Service) CreateAcademicUnit(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -143,8 +143,8 @@ func (s *Service) CreateAcademicUnit(
 		return nil, err
 	}
 
-	// The unit and success audit are committed before transient fan-out.
-	// Publication remains best effort so callers do not retry committed work.
+	// Publication is best effort after commit, so callers never retry work
+	// that already committed.
 	if !saved.Replayed {
 		if err := s.publishAcademicUnitCreated(ctx, saved.Value.ID); err != nil {
 			s.publisher.Report(ctx, "academic_unit_created", err)
@@ -154,7 +154,7 @@ func (s *Service) CreateAcademicUnit(
 	return saved.Value, nil
 }
 
-// UpdateAcademicUnit updates an Academic Unit after authorizing the caller.
+// UpdateAcademicUnit needs academic_unit.manage.
 func (s *Service) UpdateAcademicUnit(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -259,7 +259,7 @@ func (s *Service) UpdateAcademicUnit(
 	return updated, nil
 }
 
-// ArchiveAcademicUnit archives an Academic Unit after authorizing the caller.
+// ArchiveAcademicUnit needs academic_unit.manage.
 func (s *Service) ArchiveAcademicUnit(
 	ctx context.Context,
 	inv invocation.Invocation,

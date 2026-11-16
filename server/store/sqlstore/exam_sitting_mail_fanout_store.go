@@ -132,7 +132,7 @@ func insertExamSittingMailFanout(
 }
 
 // validateExamSittingMailFanout checks that the prepared fan-out matches the
-// Sitting's change kind, template, actor and expansion Job contract.
+// sitting's change kind, template, actor and expansion job contract.
 func validateExamSittingMailFanout(
 	input *store.ExamSittingMailFanout,
 	sitting *model.ExamSitting,
@@ -234,7 +234,7 @@ func insertExamSittingMailFanoutBundle(
 }
 
 // recordDisabledExamSittingMailConvergence records the reconciliation actor
-// and the Sitting, audience and eligibility revisions a disabled-mail
+// and the sitting, audience and eligibility revisions a disabled-mail
 // suppression converged at.
 func recordDisabledExamSittingMailConvergence(
 	ctx context.Context,
@@ -281,8 +281,8 @@ func recordDisabledExamSittingMailConvergence(
 }
 
 // lockDisabledExamSittingMailChronology establishes the canonical ordering for
-// a disabled-mail terminal fan-out: active Manager User, installation mail
-// eligibility singleton, then (at the caller) Class and hierarchy. The
+// a disabled-mail terminal fan-out: active manager user, installation mail
+// eligibility singleton, then (at the caller) class and hierarchy. The
 // captured revision is persisted only after those later authority checks.
 func lockDisabledExamSittingMailChronology(
 	ctx context.Context,

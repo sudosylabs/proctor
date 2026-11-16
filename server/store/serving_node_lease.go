@@ -21,9 +21,9 @@ const (
 	ServingNodeLeaseMaximumLifetime = 5 * time.Minute
 )
 
-// ServingNodeLease is the PostgreSQL-clocked proof that one application node
-// may still serve this installation. It is disposable runtime state, not a
-// membership, discovery, or application-event record.
+// ServingNodeLease is proof, on the database clock, that a node may still
+// serve this installation. It is disposable runtime state, not a membership,
+// discovery or event record.
 type ServingNodeLease struct {
 	NodeID    string
 	LeaseID   string
@@ -39,17 +39,17 @@ func (l *ServingNodeLease) Validate() error {
 	return nil
 }
 
-// ServingNodeLeaseClaim is one process incarnation's exact renewable claim.
-// LeaseID prevents an old process from renewing or deleting a successor that
-// intentionally reuses the stable configured NodeID after expiry.
+// ServingNodeLeaseClaim is one process's renewable claim. LeaseID stops an old
+// process from renewing or deleting the lease of a successor that reuses the
+// same NodeID after expiry.
 type ServingNodeLeaseClaim struct {
 	NodeID   string
 	LeaseID  string
 	Lifetime time.Duration
 }
 
-// ServingNodeLeaseStore owns the all-backend serving fence. Upsert and Delete
-// serialize with offline administrator recovery.
+// ServingNodeLeaseStore holds the serving fence every backend checks. Upsert
+// and Delete serialize with offline administrator recovery.
 type ServingNodeLeaseStore interface {
 	Upsert(context.Context, *ServingNodeLeaseClaim) (*ServingNodeLease, error)
 	Delete(context.Context, *ServingNodeLeaseDeletion) error

@@ -20,13 +20,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// requireDesktopReauthentication refuses a Service whose Desktop
-// reauthentication collaborators or policy are incomplete. Desktop
-// reauthentication lets a Desktop Session refresh its primary proof in the
-// system browser. It never creates a Session, never accepts a browser Web
-// Session as proof, and accepts only the Desktop Session's own authentication
-// method for that Session's own User. New calls it once, after Desktop
-// authorization is set up.
+// Desktop reauthentication refreshes a desktop session's primary proof in the
+// system browser. It never creates a session, never accepts a web session as
+// proof, and accepts only the desktop session's own method for its own user.
 func (s *Service) requireDesktopReauthentication() error {
 	if s.browserAuthentications == nil ||
 		s.institutions == nil ||
@@ -61,8 +57,8 @@ func (s *Service) requireDesktopReauthentication() error {
 	return nil
 }
 
-// StartDesktopReauthenticationCommand carries the Desktop's loopback callback,
-// state and S256 PKCE challenge, validated like Desktop Authorization start.
+// StartDesktopReauthenticationCommand is validated like a desktop
+// authorization start.
 type StartDesktopReauthenticationCommand struct {
 	CallbackURL   string
 	State         string
@@ -70,27 +66,26 @@ type StartDesktopReauthenticationCommand struct {
 	Source        string
 }
 
-// DesktopReauthenticationStart is the hosted page the Desktop opens in the
+// DesktopReauthenticationStart is the hosted page the desktop app opens in the
 // system browser, valid until ExpiresAt.
 type DesktopReauthenticationStart struct {
 	AuthorizationURL string
 	ExpiresAt        time.Time
 }
 
-// DesktopReauthenticationBrowserContext is the safe projection the hosted
-// page renders: whose Desktop Session it is and the one proof it accepts.
+// DesktopReauthenticationBrowserContext is what the hosted page shows: whose
+// session it is and the one proof it accepts.
 type DesktopReauthenticationBrowserContext struct {
 	State       model.BrowserAuthenticationState
 	DisplayName string
-	// AuthenticationMethod is "password" or the provider protocol type of the
-	// Desktop Session's own authentication.
+	// AuthenticationMethod is "password" or the provider's protocol type.
 	AuthenticationMethod string
-	// Provider is the Desktop Session's identity provider; nil for password.
+	// Provider is nil for password.
 	Provider  *model.ExternalAuthenticationProvider
 	ExpiresAt time.Time
 }
 
-// requireDesktopDPoPSession accepts only a Desktop Session whose current
+// requireDesktopDPoPSession accepts only a desktop session whose current
 // request passed DPoP verification with its registered key.
 func requireDesktopDPoPSession(principal model.Principal) (model.SessionCredentialID, error) {
 	if principal.Validate() != nil ||
@@ -110,7 +105,7 @@ func requireDesktopDPoPSession(principal model.Principal) (model.SessionCredenti
 }
 
 // StartDesktopReauthentication begins a browser reauthentication for the
-// calling Desktop Session and returns the hosted page to open.
+// calling desktop session, which must present a DPoP-verified request.
 func (s *Service) StartDesktopReauthentication(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -213,8 +208,8 @@ func (s *Service) BindDesktopReauthentication(
 	return &DesktopAuthorizationBinding{Binding: binding, ExpiresAt: bound.ExpiresAt.UnixMilli()}, nil
 }
 
-// DesktopReauthenticationContext projects the bound reauthentication: the
-// Desktop Session's account and the single proof it accepts.
+// DesktopReauthenticationContext returns the session's account and the one
+// proof it accepts.
 func (s *Service) DesktopReauthenticationContext(
 	ctx context.Context,
 	_ invocation.Invocation,
@@ -271,8 +266,8 @@ func (s *Service) configuredProvider(id string) (model.ExternalAuthenticationPro
 	return model.ExternalAuthenticationProvider{}, false
 }
 
-// hostedDesktopURL is the hosted page at path carrying the one-use handle and
-// state in its query and the browser proof only in its fragment.
+// hostedDesktopURL puts the browser proof only in the fragment, so it never
+// reaches a server or a Referer header.
 func hostedDesktopURL(issuer, path, handle, proof, state string) (string, error) {
 	parsed, err := url.Parse(issuer)
 	if err != nil || parsed.Host == "" {

@@ -17,7 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// UpdateDraftExecution replaces the Draft's execution policy behind the
+// UpdateDraftExecution replaces the draft's execution policy behind the
 // manager, archive and revision fences.
 func (s SQLExamAuthoringStore) UpdateDraftExecution(
 	ctx context.Context,

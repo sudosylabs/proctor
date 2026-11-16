@@ -26,7 +26,8 @@ type RetentionExpirySystemAuditor interface {
 	PrepareRetentionCleanupAudit(context.Context, model.InstitutionID) (*model.AuditEvent, error)
 }
 
-// RetentionExpiryCommand is the immutable command of the retention expiry Job.
+// RetentionExpiryCommand is the immutable command of the retention expiry
+// job.
 type RetentionExpiryCommand struct {
 	CleanupAudit bool                      `json:"cleanup_audit,omitempty"`
 	Kind         model.RetentionExpiryKind `json:"kind"`
@@ -35,7 +36,8 @@ type RetentionExpiryCommand struct {
 	Before       time.Time                 `json:"before,omitempty"`
 }
 
-// RetentionExpiryCheckpoint is the resumable checkpoint of the retention expiry Job.
+// RetentionExpiryCheckpoint is the resumable checkpoint of the retention
+// expiry job.
 type RetentionExpiryCheckpoint struct {
 	AfterID  string    `json:"after_id,omitempty"`
 	Before   time.Time `json:"before,omitempty"`
@@ -129,7 +131,7 @@ func (h retentionExpiryHandler) Run(ctx context.Context, e job.Execution) job.Ou
 	}
 
 	// Persist the finite scan boundary before reserving or mutating a record.
-	// If this checkpoint is uncertain, retry may establish a new boundary only
+	// If this checkpoint is uncertain, a retry may set a new boundary only
 	// while no work was spent; an exhausted parent cannot silently widen it.
 	if cp.Before.IsZero() {
 		cp.Before = page.Before
@@ -149,8 +151,6 @@ func (h retentionExpiryHandler) Run(ctx context.Context, e job.Execution) job.Ou
 	return h.expiryRecordBatch(ctx, e, command, cp, control.InstitutionID, page)
 }
 
-// expiryRecordBatch reserves work for, reconciles and checkpoints each listed expiry record in order, then finishes
-// the run.
 func (h retentionExpiryHandler) expiryRecordBatch(
 	ctx context.Context,
 	e job.Execution,
@@ -355,8 +355,7 @@ func (h retentionExpiryHandler) cleanupAuditBatch(
 	return h.finish(ctx, e.Job, command, cp)
 }
 
-// NewRetentionExpiry registers the expiry of retention records, proposed
-// hourly.
+// NewRetentionExpiry registers the hourly expiry of retention records.
 func NewRetentionExpiry(
 	records store.RetentionStore,
 	audit RetentionExpirySystemAuditor,

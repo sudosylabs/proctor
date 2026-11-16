@@ -187,7 +187,7 @@ func (m *Module) AddWebSocketSubscriptions(delta int) {
 
 var _ timerlayer.Recorder = (*Module)(nil)
 
-// StoreCacheRecorder projects only the existing cache-layer recorder seam.
+// StoreCacheRecorder adapts m to the store cache layer's recorder.
 func (m *Module) StoreCacheRecorder() localcachelayer.Recorder {
 	return localcachelayer.RecorderFunc(m.ObserveStoreCache)
 }

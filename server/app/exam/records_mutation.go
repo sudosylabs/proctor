@@ -36,8 +36,8 @@ func (r *Records) authorizeScope(
 		return nil, "", examRecordsStoreErrors.Translate(err)
 	}
 
-	// The caller is authorized on scope, and the mutation is built from the
-	// resolved scope, so the two must be the same records.
+	// The caller was authorized on scope but the mutation is built from the
+	// resolved scope, so the two must name the same records.
 	if !resolved.ConsistentWith(scope) {
 		return nil, "", apperror.New("exam.unavailable").Wrap(errors.New("Exam records scope projection is incomplete"))
 	}

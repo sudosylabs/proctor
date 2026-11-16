@@ -5,12 +5,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package safemarkdown cleans the Markdown candidates see: protected Exam
-// text in attempt and released student remarks in review. Sanitize keeps
-// ordinary formatting and removes raw HTML, unsafe link schemes and anything
-// that would load remote content. It does not render Markdown, so clients must
-// still render the result with HTML disabled. It uses only the standard
-// library.
+// Package safemarkdown cleans the Markdown candidates see: exam text and
+// released review remarks. It removes raw HTML, unsafe link schemes and
+// anything that would load remote content, but it does not render, so clients
+// must still render the result with HTML disabled.
 package safemarkdown
 
 import (
@@ -21,10 +19,8 @@ import (
 	"unicode"
 )
 
-// Sanitize preserves inert Markdown formatting while
-// removing constructs that can execute active HTML, navigate through unsafe
-// schemes, or automatically fetch remote content. Candidate clients must
-// still render Markdown in a sandboxed, HTML-disabled mode.
+// Sanitize keeps inert Markdown formatting and removes anything that can run
+// HTML, navigate to an unsafe scheme, or fetch remote content on its own.
 func Sanitize(value string) string {
 	value, code := protectMarkdownCode(value)
 	value = removeActiveHTMLElements(value)

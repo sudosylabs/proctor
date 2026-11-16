@@ -25,7 +25,7 @@ const (
 	MFARecoveryCodeMaxCount     = 20
 )
 
-// MFAState is the durable enrollment phase of an MFA credential.
+// MFAState is the enrollment phase of an MFA credential.
 type MFAState string
 
 const (
@@ -34,9 +34,7 @@ const (
 )
 
 // MFACredential is one encrypted TOTP enrollment for a user. EncryptedSecret
-// and EncryptionKeyID must never be serialized, logged, or audited.
-//
-// Domain time is UTC time.Time. Optional lifecycle instants use OptionalTime.
+// and EncryptionKeyID must never be serialized, logged or audited.
 type MFACredential struct {
 	ID               MFACredentialID
 	CreatedAt        time.Time
@@ -51,7 +49,8 @@ type MFACredential struct {
 	LastUsedTimeStep int64 `json:"-"`
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
+// PrepareCreate stamps the ID and creation time, clears archive state and
+// normalizes times to UTC; it does nothing on nil.
 func (m *MFACredential) PrepareCreate(id MFACredentialID, at time.Time) {
 	if m == nil {
 		return
@@ -71,8 +70,8 @@ func (m *MFACredential) PrepareCreate(id MFACredentialID, at time.Time) {
 	}
 }
 
-// PrepareUpdate applies the application-selected transition time and
-// normalizes encryption material fields.
+// PrepareUpdate stamps the update time and normalizes times to UTC; there is
+// no revision to bump.
 func (m *MFACredential) PrepareUpdate(at time.Time) {
 	if m == nil {
 		return
@@ -88,7 +87,7 @@ func (m *MFACredential) PrepareUpdate(at time.Time) {
 	}
 }
 
-// Validate checks rehydrated MFA credential state.
+// Validate checks the credential's fields, for new and stored values alike.
 func (m *MFACredential) Validate() error {
 	const where = "MFACredential.Validate"
 	if m == nil {
@@ -162,8 +161,8 @@ func (m *MFACredential) IsActive() bool {
 	return m != nil && !m.ArchivedAt.Valid && m.State == MFAStateActive
 }
 
-// Auditable returns a deliberately safe audit projection. Encrypted secrets
-// and key identifiers are never included.
+// Auditable returns the fields safe to audit; encrypted secrets and key IDs are
+// never included.
 func (m *MFACredential) Auditable() map[string]any {
 	if m == nil {
 		return map[string]any{}
@@ -181,7 +180,7 @@ func (m *MFACredential) Auditable() map[string]any {
 }
 
 // MFARecoveryCode is one hashed single-use recovery credential. CodeHash is
-// deliberately excluded from JSON. Soft archive uses ArchivedAt.
+// never in JSON.
 type MFARecoveryCode struct {
 	ID         MFARecoveryCodeID
 	CreatedAt  time.Time
@@ -192,7 +191,8 @@ type MFARecoveryCode struct {
 	ConsumedAt OptionalTime
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
+// PrepareCreate stamps the ID and creation time and clears archive state; it
+// does nothing on nil.
 func (c *MFARecoveryCode) PrepareCreate(id MFARecoveryCodeID, at time.Time) {
 	if c == nil {
 		return
@@ -207,7 +207,7 @@ func (c *MFARecoveryCode) PrepareCreate(id MFARecoveryCodeID, at time.Time) {
 	}
 }
 
-// PrepareUpdate applies the application-selected transition time.
+// PrepareUpdate stamps the update time; there is no revision to bump.
 func (c *MFARecoveryCode) PrepareUpdate(at time.Time) {
 	if c == nil {
 		return
@@ -218,7 +218,7 @@ func (c *MFARecoveryCode) PrepareUpdate(at time.Time) {
 	}
 }
 
-// Validate checks rehydrated MFA recovery-code state.
+// Validate checks the code's fields, for new and stored values alike.
 func (c *MFARecoveryCode) Validate() error {
 	const where = "MFARecoveryCode.Validate"
 	if c == nil {
@@ -249,8 +249,7 @@ func (c *MFARecoveryCode) Validate() error {
 	return nil
 }
 
-// Auditable returns a deliberately safe audit projection. Code hashes are
-// never included.
+// Auditable returns the fields safe to audit; code hashes are never included.
 func (c *MFARecoveryCode) Auditable() map[string]any {
 	if c == nil {
 		return map[string]any{}

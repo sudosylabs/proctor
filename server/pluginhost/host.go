@@ -5,18 +5,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package pluginhost runs the plugins compiled into the server.
-//
-// Activate turns on every enabled plugin once, in the order given, and keeps
-// what each one registers. Close turns them off again in reverse order. A
-// plugin whose Activate fails or panics is marked failed and left out; the
-// server starts without it. Every call the server later makes into a plugin
-// goes through the plugin's guard, which turns a panic into an error and,
-// after PanicLimit panics, marks the plugin failed so that its capabilities
-// answer plugin.ErrUnavailable until the server restarts.
-//
-// The package knows nothing about the application. The module-root server
-// package hands what plugins registered to the components that use them.
+// Package pluginhost runs the plugins compiled into the server. Every call
+// into a plugin goes through a guard that turns a panic into an error; after
+// PanicLimit panics the plugin is marked failed and its capabilities answer
+// plugin.ErrUnavailable until its settings change or the server restarts. A
+// plugin that fails to activate is left out and the server starts without it.
+// The package knows nothing about the application; the module-root server
+// package wires what plugins register into the components that use them.
 package pluginhost
 
 import (
@@ -205,10 +200,9 @@ func (h *Host) AddChangeListener(listener func()) {
 }
 
 // Reconcile brings every plugin to what desired wants, in order, and calls
-// the change listeners when anything changed. A plugin desired leaves out gets its
-// defaults; an ID desired names that is not compiled in is ignored, because
-// saved settings can outlive a plugin. It does nothing once the host is
-// closed.
+// the change listeners when anything changed. A plugin desired leaves out
+// gets its defaults; an unknown ID is ignored, because saved settings can
+// outlive a plugin. It does nothing once the host is closed.
 func (h *Host) Reconcile(ctx context.Context, desired map[string]Settings) {
 	h.lifecycle.Lock()
 	changed := false
@@ -226,7 +220,7 @@ func (h *Host) Reconcile(ctx context.Context, desired map[string]Settings) {
 	}
 }
 
-// resolve turns settings into what the plugin should be.
+// resolve applies the manifest default and keeps a required plugin on.
 func (e *entry) resolve(settings Settings) wanted {
 	enabled := e.manifest.EnabledByDefault
 	if settings.Enable != nil {

@@ -13,21 +13,19 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// NewAcademicUnitCreatedEvent tells everyone who may view the Academic Unit
-// that it was created. Like its update and archive siblings it carries no
-// payload: subscribers refetch the Academic Unit.
+// NewAcademicUnitCreatedEvent carries no payload, like its update and archive
+// siblings: subscribers refetch the academic unit.
 func NewAcademicUnitCreatedEvent(unitID model.AcademicUnitID) (Event, error) {
 	return newAcademicUnitEvent(academicUnitCreatedMessage, unitID)
 }
 
-// NewAcademicUnitUpdatedEvent tells everyone who may view the Academic Unit
-// that it changed.
+// NewAcademicUnitUpdatedEvent tells academic unit viewers that it changed.
 func NewAcademicUnitUpdatedEvent(unitID model.AcademicUnitID) (Event, error) {
 	return newAcademicUnitEvent(academicUnitUpdatedMessage, unitID)
 }
 
-// NewAcademicUnitArchivedEvent tells everyone who may view the Academic Unit
-// that it was archived.
+// NewAcademicUnitArchivedEvent tells academic unit viewers that it was
+// archived.
 func NewAcademicUnitArchivedEvent(unitID model.AcademicUnitID) (Event, error) {
 	return newAcademicUnitEvent(academicUnitArchivedMessage, unitID)
 }

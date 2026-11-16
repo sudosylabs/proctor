@@ -14,15 +14,12 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// candidateWriteRate bounds how fast a candidate's editor may change one
-// Attempt's Workspace. A bucket refills at the rate and holds at most the
-// burst, so ordinary work never meets it and a runaway writer is slowed
-// instead of flooding storage. Each author kind has its own bucket: an
-// editor's budget suits a person, while a build in the environment can write
-// hundreds of files in a second without starving the candidate's own saves.
-//
-// Every byte burst exceeds one maximum batch request, so a single large file
-// always fits from a full bucket.
+// candidateWriteRate is sized so ordinary editing never meets it and a
+// runaway writer is slowed instead of flooding storage. Each author kind has
+// its own bucket, so a build in the environment writing hundreds of files a
+// second never starves the candidate's own saves. Every byte burst exceeds
+// one maximum batch request, so a single large file always fits from a full
+// bucket.
 var candidateWriteRate = workspaceWriteRate{
 	mutationsPerSecond: 32,
 	mutationBurst:      512,
@@ -30,8 +27,7 @@ var candidateWriteRate = workspaceWriteRate{
 	byteBurst:          128 << 20,
 }
 
-// The environment's write rate per CPU core of its profile, and the cores
-// it counts.
+// The environment's write rate per CPU core, and the core count's clamp.
 const (
 	environmentMutationsPerCore = 128
 	environmentMutationBurst    = 2048
@@ -41,12 +37,9 @@ const (
 	environmentMaximumCores     = 8
 )
 
-// environmentWriteRate sizes an environment's budget by its profile: a
-// machine with more CPU runs bigger builds that write more. With cores the
-// profile's CPU in whole cores, held from 1 to 8, it allows 128 mutations
-// and 16 MiB a second per core, with bursts of 2,048 mutations and 256 MiB
-// per core, and never a byte burst below one maximum batch request. A
-// two-core profile gets 256 mutations and 32 MiB a second.
+// environmentWriteRate scales with the profile's CPU, because a machine with
+// more CPU runs bigger builds that write more. The byte burst never drops
+// below one maximum batch request.
 func environmentWriteRate(resources model.EnvironmentResources) workspaceWriteRate {
 	cores := min(max(float64(resources.CPUMillis)/1000, environmentMinimumCores), environmentMaximumCores)
 	return workspaceWriteRate{
@@ -57,8 +50,8 @@ func environmentWriteRate(resources model.EnvironmentResources) workspaceWriteRa
 	}
 }
 
-// workspaceWriteRateFor is the rate of an author kind; the environment's
-// comes from its profile's resources. A kind without one is refused.
+// workspaceWriteRateFor reports false for an author kind without a rate,
+// which is then refused.
 func workspaceWriteRateFor(kind model.AttemptWorkspaceAuthorKind, resources model.EnvironmentResources) (workspaceWriteRate, bool) {
 	switch kind {
 	case model.AttemptWorkspaceAuthorCandidate:
@@ -73,8 +66,8 @@ func workspaceWriteRateFor(kind model.AttemptWorkspaceAuthorKind, resources mode
 	}
 }
 
-// workspaceBudgetSweepSize is the number of tracked buckets past which full,
-// idle buckets are forgotten; a forgotten bucket is the same as a full one.
+// workspaceBudgetSweepSize is the tracked-bucket count past which full idle
+// buckets are forgotten; a forgotten bucket is the same as a full one.
 const workspaceBudgetSweepSize = 4096
 
 type workspaceWriteRate struct {
@@ -84,9 +77,9 @@ type workspaceWriteRate struct {
 	byteBurst          float64
 }
 
-// workspaceWriteBudget holds one bucket per Attempt and author kind on this
+// workspaceWriteBudget holds one bucket per attempt and author kind on this
 // node. Nodes do not share buckets: the limit protects each node's storage
-// traffic and is not an exact cluster-wide quota.
+// traffic and is not a cluster-wide quota.
 type workspaceWriteBudget struct {
 	rate    func(model.AttemptWorkspaceAuthorKind, model.EnvironmentResources) (workspaceWriteRate, bool)
 	mu      sync.Mutex
@@ -99,8 +92,8 @@ type workspaceBudgetKey struct {
 }
 
 type workspaceWriteBucket struct {
-	// rate is the rate the bucket was last spent at, which a sweep refills
-	// it by.
+	// rate is the rate the bucket was last spent at, which a sweep refills it
+	// by.
 	rate      workspaceWriteRate
 	mutations float64
 	bytes     float64
@@ -113,9 +106,7 @@ func newWorkspaceWriteBudget(
 	return &workspaceWriteBudget{rate: rate, buckets: make(map[workspaceBudgetKey]*workspaceWriteBucket)}
 }
 
-// spend takes mutations and bytes from the bucket of the Attempt and author
-// kind, at the kind's rate for resources (the environment's profile; zero
-// for other kinds). It takes nothing and reports false when either would go
+// spend takes nothing and reports false when mutations or bytes would go
 // below zero, or when the kind has no rate.
 func (b *workspaceWriteBudget) spend(
 	attemptID model.ExamAttemptID,
@@ -164,7 +155,6 @@ func refill(bucket *workspaceWriteBucket, rate workspaceWriteRate, now time.Time
 	bucket.at = now
 }
 
-// sweep forgets every bucket that has refilled completely.
 func (b *workspaceWriteBudget) sweep(now time.Time) {
 	for key, bucket := range b.buckets {
 		rate := bucket.rate

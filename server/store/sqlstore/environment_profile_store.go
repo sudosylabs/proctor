@@ -128,7 +128,7 @@ func decodeEnvironmentProfileOutcome(encoded []byte) (environmentProfileOutcome,
 	return outcome, nil
 }
 
-// Create saves a new profile for an active System Administrator.
+// Create saves a new profile for an active system administrator.
 func (s SQLEnvironmentProfileStore) Create(
 	ctx context.Context,
 	input *store.EnvironmentProfileCreation,
@@ -195,7 +195,7 @@ func createEnvironmentProfile(
 	return outcome, nil
 }
 
-// Retire retires one profile for an active System Administrator.
+// Retire retires one profile for an active system administrator.
 func (s SQLEnvironmentProfileStore) Retire(
 	ctx context.Context,
 	input *store.EnvironmentProfileRetirement,
@@ -261,8 +261,8 @@ func retireEnvironmentProfile(
 	return outcome, nil
 }
 
-// requireSystemAdministrator serializes with System Administrator changes
-// and returns PostgreSQL's time once actor is an active System Administrator.
+// requireSystemAdministrator serializes with system administrator changes
+// and returns PostgreSQL's time once actor is an active system administrator.
 func requireSystemAdministrator(ctx context.Context, tx *sqlxTxWrapper, actor model.UserID) (time.Time, error) {
 	if err := lockSystemAdministratorAuthenticationPaths(ctx, tx); err != nil {
 		return time.Time{}, err

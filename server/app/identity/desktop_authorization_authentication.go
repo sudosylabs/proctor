@@ -27,8 +27,8 @@ type AuthenticateDesktopAuthorizationLocallyCommand struct {
 	Source   string
 }
 
-// AuthenticateDesktopAuthorizationSession records the calling browser Web
-// Session as the proof of the bound Desktop authorization.
+// AuthenticateDesktopAuthorizationSession uses the caller's web session as the
+// proof for the bound desktop authorization.
 func (s *Service) AuthenticateDesktopAuthorizationSession(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -64,9 +64,9 @@ func (s *Service) AuthenticateDesktopAuthorizationSession(
 	return s.DesktopAuthorizationContext(ctx, inv, command.Binding)
 }
 
-// AuthenticateDesktopAuthorizationLocally proves a local password, and a
-// second factor when one is required, for the bound Desktop authorization
-// without creating a Web Session.
+// AuthenticateDesktopAuthorizationLocally proves a password, and a second
+// factor when required, for the bound desktop authorization without creating
+// a web session.
 func (s *Service) AuthenticateDesktopAuthorizationLocally(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -133,10 +133,9 @@ func (s *Service) recordDesktopAuthorizationProof(
 	return result, nil
 }
 
-// requireDesktopMFAByPolicy refuses a single-factor Desktop sign-in of a
-// User the Access Policy requires to use two-step verification. A Desktop
-// Session cannot be restricted to enrollment, so the person sets up two-step
-// verification in the browser and signs in again.
+// requireDesktopMFAByPolicy refuses a single-factor desktop sign-in when the
+// policy requires two-step verification. A desktop session can't be limited
+// to enrollment, so the person enrolls in the browser and signs in again.
 func (s *Service) requireDesktopMFAByPolicy(ctx context.Context, userID model.UserID, strength model.AuthenticationStrength) error {
 	if strength == model.AuthenticationMultiFactor {
 		return nil
@@ -215,8 +214,8 @@ func (s *Service) authenticateExternal(
 	return nil
 }
 
-// ResetDesktopAuthorizationAccount forgets the account the bound Desktop
-// authorization authenticated so another can sign in.
+// ResetDesktopAuthorizationAccount forgets the authenticated account so a
+// different one can sign in.
 func (s *Service) ResetDesktopAuthorizationAccount(ctx context.Context, _ invocation.Invocation, binding string) error {
 	if !model.IsValidCredentialToken(binding) {
 		return apperror.New("authentication.desktop_authorization.invalid")

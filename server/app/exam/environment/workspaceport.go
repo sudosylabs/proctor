@@ -16,11 +16,11 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// WorkspaceAccess is how the owner proves itself to the Attempt Workspace:
+// WorkspaceAccess is how the owner proves itself to the attempt workspace:
 // its runtime lease fence and the incarnation it acts for. Both must be
-// current, and the Attempt must have no Submission. Tag, when set, names
-// the started process whose changes a batch carries, so the journal's
-// author is the incarnation and that tag; it is no part of the proof.
+// current, and the attempt must not be submitted. Tag, when set, names the
+// started process whose changes a batch carries and joins the incarnation as
+// the journal's author; it is not part of the proof.
 type WorkspaceAccess struct {
 	AttemptID   model.ExamAttemptID
 	Incarnation int64
@@ -30,13 +30,13 @@ type WorkspaceAccess struct {
 
 // The failures a Workspace port reports beside a WorkspaceRefusal.
 var (
-	// ErrWorkspaceOwnerStale: the lease or incarnation is no longer
-	// current. The owner stops acting and rereads its environment.
+	// ErrWorkspaceOwnerStale means the lease or incarnation is no longer
+	// current; the owner stops acting and rereads its environment.
 	ErrWorkspaceOwnerStale = errors.New("attempt workspace refuses a stale environment owner")
-	// ErrWorkspaceSealed: the Attempt has its Submission; nothing more is
+	// ErrWorkspaceSealed means the attempt is submitted; nothing more is
 	// accepted.
 	ErrWorkspaceSealed = errors.New("attempt workspace is sealed")
-	// ErrWorkspaceEntryNotFound: the file no longer exists.
+	// ErrWorkspaceEntryNotFound means the file no longer exists.
 	ErrWorkspaceEntryNotFound = errors.New("attempt workspace entry not found")
 )
 
@@ -102,9 +102,9 @@ type WorkspaceMutation struct {
 	Size                   int64
 }
 
-// WorkspaceBatch is one batch the environment writes. Content returns the body of each
-// file mutation, in order; the Workspace reads each before asking for the
-// next.
+// WorkspaceBatch is one batch the environment writes. Content returns the
+// body of each file mutation in order; the Workspace reads each before asking
+// for the next.
 type WorkspaceBatch struct {
 	Mutations      []WorkspaceMutation
 	ExpectedCursor *int64
@@ -115,15 +115,13 @@ type WorkspaceBatch struct {
 	Resources model.EnvironmentResources
 }
 
-// Workspace is the owner's port to the Attempt Workspace: the environment
-// use cases, keyed by the owner's access.
+// Workspace is the owner's port to the attempt workspace, keyed by the
+// owner's access.
 type Workspace interface {
 	// List returns one manifest page; expectedCursor -1 starts at the
 	// current cursor.
 	List(ctx context.Context, access WorkspaceAccess, expectedCursor int64, after model.AttemptWorkspaceEntryID, limit int) (WorkspacePage, error)
-	// Journal returns the journal entries after afterCursor.
 	Journal(ctx context.Context, access WorkspaceAccess, afterCursor int64, limit int) (WorkspaceJournal, error)
-	// Open opens one file's current content.
 	Open(ctx context.Context, access WorkspaceAccess, entryID model.AttemptWorkspaceEntryID) (WorkspaceFile, error)
 	// Apply writes one batch on the candidate's behalf and returns the
 	// journal entry of each mutation, in order.

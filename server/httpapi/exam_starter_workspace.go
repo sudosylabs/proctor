@@ -265,7 +265,7 @@ func (h examStarterWorkspaceHandlers) list(request route.Request) (route.Result,
 		return route.Result{}, err
 	}
 
-	// The Exam Capacity Policy bounds the Starter Workspace, so the complete
+	// The exam capacity policy bounds the starter workspace, so the complete
 	// set is paged in canonical path order.
 	response, err := route.BoundedList(
 		request,

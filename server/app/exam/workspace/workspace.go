@@ -19,9 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Content stages and opens the bytes of a Starter Workspace object. The
-// object is opaque to the file store: paths and entries live only in the
-// Store.
+// Content stages and opens object bytes. Objects are opaque to the file
+// store: paths and entries live only in the database.
 type Content interface {
 	StageStarterWorkspaceObject(
 		context.Context,
@@ -33,16 +32,15 @@ type Content interface {
 	OpenStarterWorkspaceObject(context.Context, model.StarterWorkspaceObjectID) (io.ReadCloser, error)
 }
 
-// Service manages the Starter Workspace of an Exam Draft.
+// Service manages exam draft starter workspaces; build it with New.
 type Service struct {
-	workspaces store.ExamStarterWorkspaceStore
-	// exams reads the Exam ownership a command is authorized against.
+	workspaces          store.ExamStarterWorkspaceStore
 	exams               store.ExamAuthoringStore
 	academicUnitMembers store.AcademicUnitMemberStore
 
 	authorizer *access.Authorizer
-	// auditor records the attempt and failure of each audited command; the
-	// Store completes the attempt with the change it commits.
+	// auditor only begins and fails audits; the store completes them in the
+	// same transaction as the change.
 	auditor     access.MutationAuditAdapter
 	content     Content
 	publisher   realtime.Publisher
@@ -52,8 +50,7 @@ type Service struct {
 	newVersion  func() model.WorkspaceContentVersion
 }
 
-// Dependencies are the collaborators New validates once and distributes to
-// the Service.
+// Dependencies are the Service's collaborators; New requires every field.
 type Dependencies struct {
 	Persistence store.ExamStarterWorkspaceStore
 	Access      store.ExamAuthoringStore
@@ -68,8 +65,7 @@ type Dependencies struct {
 	NewVersion  func() model.WorkspaceContentVersion
 }
 
-// New returns a Starter Workspace Service, or an error when a required
-// dependency is missing.
+// New returns an error when any dependency is nil.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Persistence == nil ||
 		deps.Access == nil ||

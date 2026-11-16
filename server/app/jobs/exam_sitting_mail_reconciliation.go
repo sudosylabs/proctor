@@ -23,9 +23,7 @@ const (
 	sittingMailReconciliationInterval     = time.Minute
 )
 
-// sittingMailReconciliationRunner prepares a fresh schedule notice for each
-// Sitting the Store reports as due for mail reconciliation and has the Store
-// reconcile it. A pass reads a bounded number of pages.
+// sittingMailReconciliationRunner reads a bounded number of pages per pass.
 type sittingMailReconciliationRunner struct {
 	sittings store.ExamSittingStore
 	mail     sitting.ScheduleMail
@@ -86,10 +84,9 @@ func (r sittingMailReconciliationRunner) Run(ctx context.Context) error {
 	return nil
 }
 
-// NewSittingMailReconciliationTask is the periodic runtime task that
-// reconciles Sitting schedule mail on every node. A Sitting that changed or
-// disappeared since it was listed is skipped; a later pass lists it again if
-// it is still due.
+// NewSittingMailReconciliationTask reconciles sitting schedule mail on every
+// node. A sitting that changed or disappeared since it was listed is skipped;
+// a later pass lists it again if it is still due.
 func NewSittingMailReconciliationTask(sittings store.ExamSittingStore, mail sitting.ScheduleMail) job.PeriodicTask {
 	return job.PeriodicTask{
 		Name:     sittingMailReconciliationTaskName,

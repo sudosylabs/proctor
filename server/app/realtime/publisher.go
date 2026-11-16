@@ -14,27 +14,22 @@ import (
 )
 
 // Publisher delivers committed changes to connected clients and peer nodes.
-// An application area holds one and builds its own events beside the use case
-// that causes them; Service is the production implementation and
-// realtimetest.Publisher the recording one.
-// Every method is called only after the change it announces has committed.
+// Call every method only after the change it announces has committed.
 type Publisher interface {
 	// Publish delivers the event locally first, then to peers.
 	Publish(ctx context.Context, event Event) error
-	// UnbindExamAttemptConnection unbinds one Attempt Connection on every
-	// node and leaves its WebSocket open.
+	// UnbindExamAttemptConnection unbinds one attempt connection on every
+	// node and leaves its socket open.
 	UnbindExamAttemptConnection(ctx context.Context, connectionID model.AttemptConnectionID) error
-	// SessionsRevoked closes the User's revoked Sessions and drops the
-	// cached authentication of the access tokens whose hashes are given.
+	// SessionsRevoked closes the revoked sessions and drops the cached
+	// authentication of the given access token hashes.
 	SessionsRevoked(ctx context.Context, userID model.UserID, sessionIDs []model.SessionID, accessTokenHashes []string)
 	// AuthenticationCacheInvalidated drops the cached authentication of the
-	// access tokens whose hashes are given and leaves the Sessions open.
+	// given access token hashes and leaves the sessions open.
 	AuthenticationCacheInvalidated(ctx context.Context, userID model.UserID, accessTokenHashes []string)
-	// InvalidateAuthorization drops one User's cached authorization, or every
-	// User's when the identifier is empty.
+	// InvalidateAuthorization drops one user's cached authorization, or
+	// everyone's when userID is empty.
 	InvalidateAuthorization(ctx context.Context, userID model.UserID)
-	// InvalidateCurrentUserContext tells the User's clients to refetch their
-	// current-user context.
 	InvalidateCurrentUserContext(ctx context.Context, userID model.UserID) error
 	// Report records an effect that failed after commit. The use case that
 	// calls it still succeeds; operation names what failed.

@@ -33,19 +33,17 @@ func NewID() string {
 		panic("model: operating system random source failed: " + err.Error())
 	}
 
-	// Mark the random bytes as an RFC 4122 version 4 UUID before encoding,
-	// matching Mattermost's identifier generation semantics.
+	// Mark the bytes as an RFC 4122 version 4 UUID before encoding, as
+	// Mattermost does.
 	value[6] = (value[6] & 0x0f) | 0x40
 	value[8] = (value[8] & 0x3f) | 0x80
 	return idEncoding.EncodeToString(value)
 }
 
-// IsValidOpaqueID reports whether value has the canonical opaque identifier
-// form. Entity identifiers are validated through their typed ID (for example
-// UserID.IsValid or ParseUserID); this predicate is reserved for references
-// whose entity type is chosen at runtime, such as Role scopes, Resources,
-// mixed-kind cursors and delivery selectors, and for runtime tokens that are
-// not domain entities.
+// IsValidOpaqueID reports whether value has the canonical opaque ID form. Use
+// it only where the entity type is chosen at runtime (role scopes, resources,
+// mixed-kind cursors, delivery selectors) or for tokens that are not entities;
+// otherwise use the typed ID's IsValid.
 func IsValidOpaqueID(value string) bool {
 	if len(value) != IDLength {
 		return false
@@ -68,8 +66,8 @@ func GetMillisForTime(value time.Time) int64 {
 	return value.UnixMilli()
 }
 
-// SanitizeUnicode removes Unicode code points that are unsuitable for storage
-// or may alter the visual ordering of identifiers and audit output.
+// SanitizeUnicode removes code points unsuitable for storage or that can
+// reorder how IDs and audit output display.
 func SanitizeUnicode(value string) string {
 	return strings.Map(filterBlocklist, value)
 }

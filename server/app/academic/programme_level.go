@@ -49,7 +49,7 @@ type ArchiveProgrammeLevelCommand struct {
 	ID               model.ProgrammeLevelID
 }
 
-// GetProgrammeLevel reads one Programme Level after authorizing the caller.
+// GetProgrammeLevel needs programme_level.view.
 func (s *Service) GetProgrammeLevel(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -76,7 +76,8 @@ func (s *Service) GetProgrammeLevel(
 	return level, nil
 }
 
-// ListProgrammeLevels lists Programme Levels after authorizing the caller.
+// ListProgrammeLevels lists a programme's levels; it needs
+// programme_level.view on the programme.
 func (s *Service) ListProgrammeLevels(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -127,7 +128,7 @@ func (s *Service) ListProgrammeLevels(
 	return page, nil
 }
 
-// CreateProgrammeLevel creates a Programme Level after authorizing the caller.
+// CreateProgrammeLevel needs programme_level.manage.
 func (s *Service) CreateProgrammeLevel(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -186,7 +187,7 @@ func (s *Service) CreateProgrammeLevel(
 	)
 }
 
-// UpdateProgrammeLevel updates a Programme Level after authorizing the caller.
+// UpdateProgrammeLevel needs programme_level.manage.
 func (s *Service) UpdateProgrammeLevel(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -243,7 +244,7 @@ func (s *Service) UpdateProgrammeLevel(
 	)
 }
 
-// ArchiveProgrammeLevel archives a Programme Level after authorizing the caller.
+// ArchiveProgrammeLevel needs programme_level.manage.
 func (s *Service) ArchiveProgrammeLevel(ctx context.Context, inv invocation.Invocation, command ArchiveProgrammeLevelCommand) error {
 	current, scopeType, scopeID, err := s.levelForMutation(ctx, inv, command.ID)
 	if err != nil {

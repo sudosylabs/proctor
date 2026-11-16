@@ -17,18 +17,18 @@ import (
 )
 
 var (
-	// ErrCancelUnsupported reports that the Job's type is not Cancelable, or
-	// that Cancel was given a target not prepared for cancellation or an
-	// incomplete audit reference.
+	// ErrCancelUnsupported reports that the job's type is not cancelable, or
+	// that Cancel was given an unprepared target or an incomplete audit
+	// reference.
 	ErrCancelUnsupported = errors.New("job cancellation is unsupported")
-	// ErrRetryUnsupported reports that the Job's type does not allow an
-	// operator retry from the Job's status, or that Retry was given a target
-	// not prepared for retry or an incomplete audit reference.
+	// ErrRetryUnsupported reports that the job's type allows no operator
+	// retry from its status, or that Retry was given an unprepared target or
+	// an incomplete audit reference.
 	ErrRetryUnsupported = errors.New("job retry is unsupported")
 )
 
-// ControlTarget is an engine-validated transition target. Its transition kind
-// and optimistic-concurrency revision cannot be constructed by callers.
+// ControlTarget is an engine-validated transition target. Callers cannot
+// construct its transition kind or revision.
 type ControlTarget struct {
 	Projection View
 	id         model.JobID
@@ -36,7 +36,7 @@ type ControlTarget struct {
 	kind       controlKind
 }
 
-// View returns a copy of the Job as it was when the target was prepared, for
+// View returns a copy of the job as it was when the target was prepared, for
 // the caller's audit record.
 func (t ControlTarget) View() View { return cloneView(t.Projection) }
 
@@ -47,15 +47,15 @@ const (
 	controlRetry  controlKind = "retry"
 )
 
-// AuditReference identifies the durable audit attempt committed atomically by
-// the Job Store transition.
+// AuditReference identifies the audit attempt the store completes in the
+// same transaction as the job transition.
 type AuditReference struct {
 	EventID model.AuditEventID
 	At      time.Time
 }
 
-// PrepareCancellation reads an operator-visible Job and, when its type is
-// Cancelable, returns the target Cancel applies. It changes nothing.
+// PrepareCancellation returns the target Cancel applies when the job's type
+// is cancelable. It changes nothing.
 func (r *Engine) PrepareCancellation(ctx context.Context, id model.JobID) (ControlTarget, error) {
 	record, err := r.operatorJob(ctx, id)
 	if err != nil {
@@ -68,9 +68,8 @@ func (r *Engine) PrepareCancellation(ctx context.Context, id model.JobID) (Contr
 	return ControlTarget{Projection: projectJob(record), id: record.ID, revision: record.Revision, kind: controlCancel}, nil
 }
 
-// PrepareRetry reads an operator-visible Job and, when its type allows an
-// operator retry from the Job's current status, returns the target Retry
-// applies. It changes nothing.
+// PrepareRetry returns the target Retry applies when the job's type allows an
+// operator retry from its current status. It changes nothing.
 func (r *Engine) PrepareRetry(ctx context.Context, id model.JobID) (ControlTarget, error) {
 	record, err := r.operatorJob(ctx, id)
 	if err != nil {
@@ -83,9 +82,9 @@ func (r *Engine) PrepareRetry(ctx context.Context, id model.JobID) (ControlTarge
 	return ControlTarget{Projection: projectJob(record), id: record.ID, revision: record.Revision, kind: controlRetry}, nil
 }
 
-// Cancel applies a target from PrepareCancellation. The store cancels the Job
-// only if its revision is still the prepared one, and completes the audit
-// attempt audit names in the same transaction.
+// Cancel applies a target from PrepareCancellation only if the job's revision
+// is still the prepared one, completing the audit attempt in the same
+// transaction.
 func (r *Engine) Cancel(ctx context.Context, target ControlTarget, audit AuditReference) (View, error) {
 	if target.kind != controlCancel || !validAuditReference(audit) {
 		return View{}, ErrCancelUnsupported
@@ -105,9 +104,9 @@ func (r *Engine) Cancel(ctx context.Context, target ControlTarget, audit AuditRe
 	return projectJob(record), nil
 }
 
-// Retry applies a target from PrepareRetry. The store retries the Job only
-// if its revision is still the prepared one, and completes the audit attempt
-// audit names in the same transaction.
+// Retry applies a target from PrepareRetry only if the job's revision is
+// still the prepared one, completing the audit attempt in the same
+// transaction.
 func (r *Engine) Retry(ctx context.Context, target ControlTarget, audit AuditReference) (View, error) {
 	if target.kind != controlRetry || !validAuditReference(audit) {
 		return View{}, ErrRetryUnsupported

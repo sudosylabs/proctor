@@ -14,13 +14,11 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// PluginSettingsReplaceOperation is the idempotent command operation that
-// saves one plugin's settings.
+// PluginSettingsReplaceOperation is the command operation name of Replace.
 const PluginSettingsReplaceOperation = "plugin_settings.replace"
 
-// PluginSettingsReplacement is the named atomic mutation that saves one
-// plugin's settings and completes its audit. ExpectedRevision is 0 when the
-// plugin has no saved settings yet.
+// PluginSettingsReplacement saves one plugin's settings. ExpectedRevision is
+// 0 when none are saved yet.
 type PluginSettingsReplacement struct {
 	ActorID          model.UserID
 	PluginID         model.PluginID
@@ -30,22 +28,21 @@ type PluginSettingsReplacement struct {
 	AuditAt          time.Time
 }
 
-// PluginSettingsReplacementResult reports the saved settings and whether
-// this invocation changed them or replayed an earlier one.
+// PluginSettingsReplacementResult is the saved settings; Changed is false for
+// a no-op and Replayed true for a replayed command.
 type PluginSettingsReplacementResult struct {
 	Settings *model.PluginSettings
 	Changed  bool
 	Replayed bool
 }
 
-// PluginSettingsStore owns the administrator's saved plugin settings.
+// PluginSettingsStore persists the administrator's plugin settings.
 type PluginSettingsStore interface {
-	// List returns every saved plugin's settings, ordered by plugin ID.
+	// List returns saved settings ordered by plugin ID.
 	List(context.Context) ([]*model.PluginSettings, error)
 	// ChangeCount grows whenever any plugin's settings change, so a node can
 	// notice a change cheaply and reload the list.
 	ChangeCount(context.Context) (int64, error)
-	// Replace saves the change behind the revision and idempotency fences.
 	Replace(context.Context, *PluginSettingsReplacement, *CommandIdempotency) (*PluginSettingsReplacementResult, error)
 }
 

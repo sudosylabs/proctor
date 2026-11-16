@@ -22,14 +22,11 @@ const (
 	PersonalAccessTokenScopeMaxCount       = 128
 )
 
-// PersonalAccessToken is a long-lived, explicitly scoped credential for human
-// CLI and automation use. It is not a Session and never stores the raw token.
-// AcademicUnitID optionally narrows every scope to one unit and its authorized
-// descendants.
-//
-// Domain time is UTC time.Time. Optional lifecycle instants use OptionalTime.
-// Soft archive uses ArchivedAt. TokenHash is excluded from
-// JSON and must never be logged or audited.
+// PersonalAccessToken is a long-lived, explicitly scoped credential for CLI and
+// automation use by a person. It is not a session and never stores the raw
+// token. AcademicUnitID optionally narrows every scope to one unit and its
+// authorized descendants. TokenHash is never in JSON and must never be logged
+// or audited.
 type PersonalAccessToken struct {
 	ID             PersonalAccessTokenID
 	CreatedAt      time.Time
@@ -46,14 +43,15 @@ type PersonalAccessToken struct {
 	RevokedAt      OptionalTime
 }
 
-// PersonalAccessTokenCreation contains the raw credential returned exactly
-// once. Credential must never be persisted, logged, or audited.
+// PersonalAccessTokenCreation holds the raw credential, returned exactly once.
+// Never persist, log or audit Credential.
 type PersonalAccessTokenCreation struct {
 	Token      *PersonalAccessToken
 	Credential string `json:"-"`
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
+// PrepareCreate stamps the ID and creation time, clears archive state and
+// normalizes the description, scopes and times; it does nothing on nil.
 func (t *PersonalAccessToken) PrepareCreate(id PersonalAccessTokenID, at time.Time) {
 	if t == nil {
 		return
@@ -77,8 +75,8 @@ func (t *PersonalAccessToken) PrepareCreate(id PersonalAccessTokenID, at time.Ti
 	}
 }
 
-// PrepareUpdate applies the application-selected transition time and normalizes
-// description and scopes.
+// PrepareUpdate stamps the update time and normalizes the description and
+// scopes; there is no revision to bump.
 func (t *PersonalAccessToken) PrepareUpdate(at time.Time) {
 	if t == nil {
 		return
@@ -88,7 +86,7 @@ func (t *PersonalAccessToken) PrepareUpdate(at time.Time) {
 	t.Scopes = cloneStrings(t.Scopes)
 }
 
-// Validate checks rehydrated personal-access-token state.
+// Validate checks the token's fields, for new and stored values alike.
 func (t *PersonalAccessToken) Validate() error {
 	const where = "PersonalAccessToken.Validate"
 	if t == nil {
@@ -154,7 +152,6 @@ func (t *PersonalAccessToken) Validate() error {
 	return t.validateLifecycle(details)
 }
 
-// validateScopes checks that the scopes are a bounded set of distinct valid actions.
 func (t *PersonalAccessToken) validateScopes(details string) error {
 	const where = "PersonalAccessToken.Validate"
 	if len(t.Scopes) == 0 || len(t.Scopes) > PersonalAccessTokenScopeMaxCount {
@@ -195,7 +192,6 @@ func (t *PersonalAccessToken) validateScopes(details string) error {
 	return nil
 }
 
-// validateLifecycle checks expiry, last use, archive, revocation and disablement times.
 func (t *PersonalAccessToken) validateLifecycle(details string) error {
 	const where = "PersonalAccessToken.Validate"
 	if !t.ExpiresAt.After(t.CreatedAt) {
@@ -246,7 +242,8 @@ func (t *PersonalAccessToken) validateLifecycle(details string) error {
 	return nil
 }
 
-// IsActiveAt reports whether the token is usable at now.
+// IsActiveAt reports whether the token is usable at now: not archived,
+// revoked, disabled or expired.
 func (t *PersonalAccessToken) IsActiveAt(now time.Time) bool {
 	if t == nil {
 		return false
@@ -258,8 +255,7 @@ func (t *PersonalAccessToken) IsActiveAt(now time.Time) bool {
 		now.Before(t.ExpiresAt)
 }
 
-// Auditable returns a deliberately safe audit projection. The token hash is
-// never included.
+// Auditable returns the fields safe to audit; the hash is never included.
 func (t *PersonalAccessToken) Auditable() map[string]any {
 	if t == nil {
 		return map[string]any{}

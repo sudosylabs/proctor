@@ -43,7 +43,6 @@ func (c pluginCatalog) Plugins() []administration.PluginDescriptor {
 	return descriptors
 }
 
-// ValidatePluginSettings asks the plugin whether settings are acceptable.
 func (c pluginCatalog) ValidatePluginSettings(ctx context.Context, id model.PluginID, settings json.RawMessage) error {
 	return c.host.ValidateSettings(ctx, id.String(), settings)
 }

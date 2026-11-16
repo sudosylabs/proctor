@@ -55,8 +55,8 @@ type auditEventResponse struct {
 	// receive it; academic-scoped readers never do because their projection
 	// drops parameters.
 	Reason string `json:"reason,omitempty"`
-	// Other parameters, prior_state, and result remain application/operator-only
-	// and are intentionally omitted from the public audit list projection.
+	// prior_state, result and the other parameters are operator-only and
+	// deliberately left out.
 }
 
 type auditResourceResponse struct {

@@ -7,13 +7,12 @@
 
 package model
 
-// ScreenRecordingDisclosure tells the candidate, before Start, what the
-// screen recorder does when the Exam records the screen: Desktop records the
-// whole session on the device and deletes it at submission, uploads only the
-// ranges the Sitting's Exam Managers ask for or a Flag asks for, and the
-// uploaded clips are kept as integrity evidence. Desktop words it from these
-// identifiers. Like the Browser activity notice, it is neither consent nor a
-// grant of access. Zero days denotes no configured automatic expiry.
+// ScreenRecordingDisclosure tells the candidate before start what the recorder
+// does: Desktop records the whole session on the device and deletes it at
+// submission, uploads only the ranges the sitting's managers or a flag ask
+// for, and those clips are kept as integrity evidence. Desktop words it from
+// these IDs. Like the browser activity notice it is neither consent nor a
+// grant of access. Zero days means no automatic expiry is configured.
 type ScreenRecordingDisclosure struct {
 	NoticeID                string `json:"notice_id"`
 	Audience                string `json:"audience"`
@@ -32,9 +31,9 @@ const (
 	screenRecordingAnchor         = "eligible_closed_sitting_records_completion"
 )
 
-// NewScreenRecordingDisclosure returns the notice for an Exam whose policy
-// records the screen, or nil when it does not. Clips are integrity evidence,
-// so they follow the integrity retention period.
+// NewScreenRecordingDisclosure returns the notice for an exam that records the
+// screen, or nil when it does not. Clips are integrity evidence, so they
+// follow the integrity retention period.
 func NewScreenRecordingDisclosure(recording NativeScreenRecordingPolicy, retention *RetentionPolicy) (*ScreenRecordingDisclosure, error) {
 	if retention == nil || retention.Validate() != nil {
 		return nil, errRetentionPolicyInvalid

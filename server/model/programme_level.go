@@ -11,9 +11,8 @@ import (
 	"time"
 )
 
-// ProgrammeLevel is a curriculum stage within a Programme, such as Foundation,
-// Year 1, or Year 2. It is reusable across academic periods and is distinct
-// from the concrete Class roster into which students enroll.
+// ProgrammeLevel is a stage of a programme, such as Foundation or Year 1. It is
+// reused across academic periods; students enroll in classes, not levels.
 type ProgrammeLevel struct {
 	ID          ProgrammeLevelID
 	CreatedAt   time.Time
@@ -26,7 +25,7 @@ type ProgrammeLevel struct {
 	Description string
 }
 
-// NewProgrammeLevel constructs a level with application-supplied identity and clock.
+// NewProgrammeLevel builds a level at revision 1 and validates it.
 func NewProgrammeLevel(
 	id ProgrammeLevelID,
 	programmeID ProgrammeID,
@@ -51,7 +50,8 @@ func NewProgrammeLevel(
 	return level, nil
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
+// PrepareCreate stamps the ID and creation time and clears archive state; it
+// does nothing on nil.
 func (pl *ProgrammeLevel) PrepareCreate(id ProgrammeLevelID, at time.Time) {
 	if pl == nil {
 		return
@@ -67,7 +67,7 @@ func (pl *ProgrammeLevel) PrepareCreate(id ProgrammeLevelID, at time.Time) {
 	sanitizeNamed(&pl.Name, &pl.DisplayName, &pl.Description)
 }
 
-// PrepareUpdate applies the application-selected transition time.
+// PrepareUpdate stamps the update time and bumps the revision.
 func (pl *ProgrammeLevel) PrepareUpdate(at time.Time) {
 	if pl == nil {
 		return
@@ -80,7 +80,7 @@ func (pl *ProgrammeLevel) PrepareUpdate(at time.Time) {
 	sanitizeNamed(&pl.Name, &pl.DisplayName, &pl.Description)
 }
 
-// Archive marks the programme level archived.
+// Archive sets ArchivedAt and bumps the revision; archiving twice fails.
 func (pl *ProgrammeLevel) Archive(at time.Time) error {
 	if pl == nil {
 		return invalidModelError("ProgrammeLevel.Archive", "programme_level", "", "programme level is nil", "")
@@ -98,12 +98,12 @@ func (pl *ProgrammeLevel) Archive(at time.Time) error {
 	return pl.Validate()
 }
 
-// IsArchived reports whether the level is archived.
+// IsArchived reports whether ArchivedAt is set; a nil level is not archived.
 func (pl *ProgrammeLevel) IsArchived() bool {
 	return pl != nil && pl.ArchivedAt.Valid
 }
 
-// Validate checks rehydrated programme-level state.
+// Validate checks the level's fields, for new and stored values alike.
 func (pl *ProgrammeLevel) Validate() error {
 	const where = "ProgrammeLevel.Validate"
 	if pl == nil {
@@ -134,7 +134,7 @@ func (pl *ProgrammeLevel) Validate() error {
 	return validateNamed(where, "programme_level", pl.ID.String(), pl.Name, pl.DisplayName, pl.Description)
 }
 
-// Auditable returns a deliberately safe audit projection.
+// Auditable returns the fields that are safe to record in the audit log.
 func (pl *ProgrammeLevel) Auditable() map[string]any {
 	if pl == nil {
 		return map[string]any{}
@@ -151,7 +151,7 @@ func (pl *ProgrammeLevel) Auditable() map[string]any {
 	}
 }
 
-// ResourceID returns the string form used by authorization Resource contracts.
+// ResourceID returns the ID in the form authorization resources use.
 func (pl *ProgrammeLevel) ResourceID() string {
 	if pl == nil {
 		return ""

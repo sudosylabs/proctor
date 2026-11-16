@@ -7,9 +7,9 @@
 
 package model
 
-// RequestMetadata is transport-neutral, bounded context for security auditing.
-// IPAddress is the direct peer address; forwarded headers are intentionally not
-// trusted until deployment configuration defines trusted proxies.
+// RequestMetadata is bounded, transport-neutral context for security audit.
+// IPAddress is the direct peer; forwarded headers are not trusted until
+// deployment configuration names trusted proxies.
 type RequestMetadata struct {
 	RequestID string
 	IPAddress string

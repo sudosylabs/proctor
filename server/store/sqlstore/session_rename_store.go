@@ -16,8 +16,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Rename sets the device name of the User's live Web or CLI Session and
-// completes the audit. PostgreSQL time decides whether the Session is live.
+// Rename sets the device name of the user's live Web or CLI session and
+// completes the audit. PostgreSQL time decides whether the session is live.
 func (s SQLSessionStore) Rename(ctx context.Context, input *store.SessionRename) (*model.Session, error) {
 	if input == nil ||
 		!input.SessionID.IsValid() ||

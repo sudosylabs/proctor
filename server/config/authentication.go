@@ -22,8 +22,8 @@ type Password struct {
 	ArgonParallelism            int `json:"ArgonParallelism"`
 	ArgonSaltBytes              int `json:"ArgonSaltBytes"`
 	ArgonKeyBytes               int `json:"ArgonKeyBytes"`
-	// HistoryCount is how many of a User's most recent passwords a new
-	// password must differ from; zero disables the check and keeps no history.
+	// HistoryCount is how many recent passwords a new one must differ from.
+	// Zero disables the check and keeps no history.
 	HistoryCount int `json:"HistoryCount"`
 }
 
@@ -34,15 +34,14 @@ type Sessions struct {
 	AbsoluteTTL            Duration `json:"AbsoluteTTL"`
 	ActivityUpdateInterval Duration `json:"ActivityUpdateInterval"`
 	MaximumPerUser         int      `json:"MaximumPerUser"`
-	// RetiredRetention is how long a revoked or expired Session, or a
+	// RetiredRetention is how long a revoked or expired session, or a
 	// superseded credential, is kept before maintenance deletes it.
 	RetiredRetention Duration `json:"RetiredRetention"`
 }
 
-// LoginRateLimit bounds local login attempts in fixed windows by account and
-// source together and by source alone. Failed password verifications against
-// one account from every source slow further attempts against it by a delay
-// that starts after AccountFailuresBeforeDelay failures and doubles up to
+// LoginRateLimit bounds local logins per fixed window, by account and source
+// and by source alone. Failures against one account from any source add a
+// delay that starts after AccountFailuresBeforeDelay and doubles up to
 // MaximumAccountFailureDelay; the delay never refuses a correct password.
 type LoginRateLimit struct {
 	Window                     Duration `json:"Window"`
@@ -76,16 +75,16 @@ type PersonalAccessTokens struct {
 	MaximumPerUser         int      `json:"MaximumPerUser"`
 }
 
-// Bootstrap protects the one-time public installation initialization route.
-// DevelopmentMode permits process-generated secret material only while the
-// installation is pristine and both listener and public origin are loopback-only.
+// Bootstrap protects the one-time public installation route. DevelopmentMode
+// lets the process generate the secret, only while the installation is pristine
+// and both the listener and public URL are loopback.
 type Bootstrap struct {
 	Secret          string `json:"Secret"`
 	DevelopmentMode bool   `json:"DevelopmentMode"`
 }
 
-// MFA contains operator-owned enrollment policy and an independent key ring
-// projected into the server's versioned secret-sealing module.
+// MFA configures enrollment and the key ring that seals MFA secrets, which
+// must not share keys with any other ring.
 type MFA struct {
 	Enabled           bool     `json:"Enabled"`
 	Issuer            string   `json:"Issuer"`
@@ -107,7 +106,6 @@ type Authentication struct {
 	External                ExternalAuthentication `json:"External"`
 }
 
-// defaultAuthentication returns the default authentication settings.
 func defaultAuthentication() Authentication {
 	return Authentication{
 		Bootstrap: Bootstrap{DevelopmentMode: true},
@@ -179,7 +177,6 @@ func validateAuthentication(authentication Authentication, add func(string, stri
 	validateExternalAuthentication(authentication.External, add)
 }
 
-// validateAuthenticationPassword reports invalid password length and hashing settings.
 func validateAuthenticationPassword(password Password, add func(string, string)) {
 	if password.MaximumConcurrentOperations < 1 {
 		add("authentication.password.maximum_concurrent_operations", "must be greater than zero")
@@ -210,7 +207,6 @@ func validateAuthenticationPassword(password Password, add func(string, string))
 	}
 }
 
-// validateAuthenticationSessions reports invalid Session lifetimes, limits and the recent authentication window.
 func validateAuthenticationSessions(authentication Authentication, add func(string, string)) {
 	sessions := authentication.Sessions
 	for _, item := range []struct {
@@ -264,7 +260,6 @@ func validateAuthenticationSessions(authentication Authentication, add func(stri
 	}
 }
 
-// validateAuthenticationLoginRateLimit reports invalid login throttling settings.
 func validateAuthenticationLoginRateLimit(rateLimit LoginRateLimit, add func(string, string)) {
 	validateAuthenticationRateLimit(
 		"authentication.login_rate_limit", AttemptRateLimit{
@@ -283,7 +278,6 @@ func validateAuthenticationLoginRateLimit(rateLimit LoginRateLimit, add func(str
 	}
 }
 
-// validateAuthenticationAccountRecovery reports invalid account recovery lifetimes and throttling settings.
 func validateAuthenticationAccountRecovery(recovery AccountRecovery, add func(string, string)) {
 	if recovery.EmailVerificationTTL.Duration < 5*time.Minute ||
 		recovery.EmailVerificationTTL.Duration > 30*24*time.Hour {
@@ -313,7 +307,6 @@ func validateAuthenticationAccountRecovery(recovery AccountRecovery, add func(st
 	)
 }
 
-// validateAuthenticationPersonalAccessTokens reports invalid personal access token lifetimes and limits.
 func validateAuthenticationPersonalAccessTokens(tokens PersonalAccessTokens, add func(string, string)) {
 	if tokens.MinimumLifetime.Duration < 5*time.Minute ||
 		tokens.MinimumLifetime.Duration > 24*time.Hour {
@@ -344,7 +337,6 @@ func validateAuthenticationPersonalAccessTokens(tokens PersonalAccessTokens, add
 	}
 }
 
-// validateAuthenticationMFA reports invalid MFA issuer, setup, recovery code and key settings.
 func validateAuthenticationMFA(mfa MFA, add func(string, string)) {
 	if len(mfa.Issuer) == 0 ||
 		len(mfa.Issuer) > 128 ||

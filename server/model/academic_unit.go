@@ -11,9 +11,8 @@ import (
 	"time"
 )
 
-// AcademicUnit is one node in the institution's organizational tree, such as a
-// college, school, or another institution-defined unit. ParentID is zero for a
-// root unit and points to another AcademicUnit for a nested unit.
+// AcademicUnit is one node in the institution's tree of faculties, schools and
+// departments. ParentID is zero for a root unit.
 type AcademicUnit struct {
 	ID            AcademicUnitID
 	CreatedAt     time.Time
@@ -27,7 +26,7 @@ type AcademicUnit struct {
 	Description   string
 }
 
-// NewAcademicUnit constructs a unit with application-supplied identity and clock.
+// NewAcademicUnit builds a unit at revision 1 and validates it.
 func NewAcademicUnit(
 	id AcademicUnitID,
 	institutionID InstitutionID,
@@ -54,7 +53,8 @@ func NewAcademicUnit(
 	return unit, nil
 }
 
-// PrepareCreate applies explicit identity and time chosen by the application.
+// PrepareCreate stamps the ID and creation time and clears archive state; it
+// does nothing on nil.
 func (au *AcademicUnit) PrepareCreate(id AcademicUnitID, at time.Time) {
 	if au == nil {
 		return
@@ -70,7 +70,7 @@ func (au *AcademicUnit) PrepareCreate(id AcademicUnitID, at time.Time) {
 	sanitizeNamed(&au.Name, &au.DisplayName, &au.Description)
 }
 
-// PrepareUpdate applies the application-selected transition time.
+// PrepareUpdate stamps the update time and bumps the revision.
 func (au *AcademicUnit) PrepareUpdate(at time.Time) {
 	if au == nil {
 		return
@@ -83,7 +83,8 @@ func (au *AcademicUnit) PrepareUpdate(at time.Time) {
 	sanitizeNamed(&au.Name, &au.DisplayName, &au.Description)
 }
 
-// Update mutates profile/parent fields with revision increment.
+// Update replaces the parent and names and bumps the revision. A non-zero
+// expectedRevision must match, and an archived unit cannot be updated.
 func (au *AcademicUnit) Update(
 	expectedRevision int64,
 	parentID AcademicUnitID,
@@ -117,7 +118,7 @@ func (au *AcademicUnit) Update(
 	return au.Validate()
 }
 
-// Archive marks the unit archived.
+// Archive sets ArchivedAt and bumps the revision; archiving twice fails.
 func (au *AcademicUnit) Archive(at time.Time) error {
 	if au == nil {
 		return invalidModelError("AcademicUnit.Archive", "academic_unit", "", "academic unit is nil", "")
@@ -135,12 +136,13 @@ func (au *AcademicUnit) Archive(at time.Time) error {
 	return au.Validate()
 }
 
-// IsArchived reports whether the unit is archived.
+// IsArchived reports whether ArchivedAt is set; a nil unit is not archived.
 func (au *AcademicUnit) IsArchived() bool {
 	return au != nil && au.ArchivedAt.Valid
 }
 
-// Validate checks rehydrated academic-unit state.
+// Validate checks the unit's own fields; cycles in the tree need stored state
+// and are checked by app and the store.
 func (au *AcademicUnit) Validate() error {
 	const where = "AcademicUnit.Validate"
 	if au == nil {
@@ -179,7 +181,7 @@ func (au *AcademicUnit) Validate() error {
 	return validateNamed(where, "academic_unit", au.ID.String(), au.Name, au.DisplayName, au.Description)
 }
 
-// Auditable returns a deliberately safe audit projection.
+// Auditable returns the fields that are safe to record in the audit log.
 func (au *AcademicUnit) Auditable() map[string]any {
 	if au == nil {
 		return map[string]any{}
@@ -197,7 +199,7 @@ func (au *AcademicUnit) Auditable() map[string]any {
 	}
 }
 
-// ResourceID returns the string form used by authorization Resource contracts.
+// ResourceID returns the ID in the form authorization resources use.
 func (au *AcademicUnit) ResourceID() string {
 	if au == nil {
 		return ""

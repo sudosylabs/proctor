@@ -6,8 +6,8 @@
 // ---------------------------------------------------------------------------------------------
 
 // Package accesstest builds a real access.Authorizer and access.Auditor over
-// in-memory stores. Tests grant a caller Roles instead of faking the
-// authorization decision, so they exercise the same code production runs.
+// in-memory stores. Tests grant a caller roles instead of faking the
+// decision, so they exercise the same code production runs.
 package accesstest
 
 import (
@@ -23,8 +23,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Grant gives a User the actions at one scope. A zero ScopeType grants them
-// Institution-wide.
+// Grant gives a user the actions at one scope. A zero ScopeType grants them
+// institution-wide.
 type Grant struct {
 	UserID    model.UserID
 	Actions   []model.Action
@@ -32,29 +32,25 @@ type Grant struct {
 	ScopeID   string
 }
 
-// Options describe the world the authorizer decides in.
+// Options describe the records the authorizer decides over.
 type Options struct {
 	Grants []Grant
-	// Units are the Academic Units grants and resources may name. A unit
-	// with no Institution joins the fixture's Institution, and a grant at an
-	// Academic Unit that is not listed creates that unit as a root.
+	// Units are the academic units grants and resources may name. A unit
+	// with no institution joins the fixture's, and a grant at an unlisted
+	// unit creates it as a root.
 	Units []*model.AcademicUnit
-	// Users resolves User resources. Pass the test's own User store so the
-	// authorizer and the service under test see the same Users; nil means
-	// no User resolves.
+	// Users should be the test's own user store, so the authorizer and the
+	// service under test see the same users; nil means no user resolves.
 	Users store.UserStore
-	// Classes, AcademicPeriods, Programmes and ProgrammeLevels resolve the
-	// resources of those types. Pass the test's own stores so the authorizer
-	// and the service under test see the same records. A nil Classes or
-	// AcademicPeriods resolves nothing; nil Programmes or ProgrammeLevels
-	// leaves those resources unavailable, as production does without them.
+	// These should be the test's own stores as well. A nil Classes or AcademicPeriods
+	// resolves nothing; a nil Programmes or ProgrammeLevels leaves those
+	// resources unavailable, as production does without them.
 	Classes         store.ClassStore
 	AcademicPeriods store.AcademicPeriodStore
 	Programmes      store.ProgrammeStore
 	ProgrammeLevels store.ProgrammeLevelStore
-	// Exams, Sittings and Submissions resolve Exam, Exam Sitting and
-	// Submission resources through their Resolve methods. Pass the test's own
-	// stores so both sides see the same ownership; nil resolves nothing.
+	// Exams, Sittings and Submissions resolve through their Resolve methods;
+	// nil resolves nothing.
 	Exams       store.ExamAuthoringStore
 	Sittings    store.ExamSittingStore
 	Submissions store.ExamSubmissionStore
@@ -62,7 +58,7 @@ type Options struct {
 	Now func() time.Time
 	// Observe, when set, is told what the authorizer and auditor do, in
 	// order, so a test can place them in the log its other fakes share:
-	//   "grants"                    the caller's Role Bindings were read
+	//   "grants"                    the caller's role bindings were read
 	//   "decision:<action>:<status>" a decision was recorded
 	//   "audit-begin:<action>"       a mutation attempt was recorded
 	//   "audit-<status>"             an attempt was completed
@@ -77,7 +73,7 @@ type Fixture struct {
 	Audits      *Audits
 }
 
-// New builds the Fixture.
+// New fails t on a setup error.
 func New(t testing.TB, options Options) *Fixture {
 	t.Helper()
 
@@ -235,7 +231,8 @@ func (a *Audits) Decisions() []*model.AuditEvent {
 	return decisions
 }
 
-// Save keeps the event, refusing a mutation attempt after FailAttempts.
+// Save refuses an attempt after FailAttempts and a decision after
+// FailDecisions.
 func (a *Audits) Save(_ context.Context, event *model.AuditEvent) (*model.AuditEvent, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -342,7 +339,7 @@ type roleBindingStore struct {
 	bindings []*model.RoleBinding
 }
 
-// ListActiveByUser returns every binding of the User; test grants never end.
+// ListActiveByUser ignores the time because test grants never end.
 func (s *roleBindingStore) ListActiveByUser(_ context.Context, userID model.UserID, _ time.Time) ([]*model.RoleBinding, error) {
 	s.observe("grants")
 	var bindings []*model.RoleBinding

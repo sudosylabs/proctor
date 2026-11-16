@@ -9,13 +9,12 @@ package access
 
 import "github.com/sudosylabs/proctor/server/app/apperror"
 
-// InvalidTokenAppError reports a Principal, credential or token that is not a
-// valid caller. It is the one definition of that failure: the identity and
-// onboarding areas and the parent app package return it too.
+// InvalidTokenAppError is the one definition of authentication.token_invalid,
+// shared by every area that rejects a caller's principal or token.
 func InvalidTokenAppError() error {
 	return apperror.New("authentication.token_invalid")
 }
 
-// InstitutionStoreErrors translates Institution Store failures. The academic
-// Institution use cases translate through it too.
+// InstitutionStoreErrors presents institution store failures; the academic
+// institution use cases share it.
 var InstitutionStoreErrors = apperror.AdministrationStoreTable("institution", "institution.conflict", "institution.invalid", nil)

@@ -20,22 +20,21 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// DefaultProfilePictureJobsDependencies are the collaborators of DefaultProfilePictureJobs;
-// NewDefaultProfilePictureJobs validates them once and DefaultProfilePictureJobs keeps them in deps.
+// DefaultProfilePictureJobsDependencies are the collaborators of
+// DefaultProfilePictureJobs.
 type DefaultProfilePictureJobsDependencies struct {
 	Jobs store.JobStore
 }
 
-// DefaultProfilePictureJobs enqueues the Job that generates a User's default
-// profile picture and wakes the engine once one is enqueued.
+// DefaultProfilePictureJobs enqueues default profile picture generation and
+// wakes the engine once one is enqueued.
 type DefaultProfilePictureJobs struct {
 	deps DefaultProfilePictureJobsDependencies
 
 	wake func()
 }
 
-// NewDefaultProfilePictureJobs enqueues default profile picture generation
-// through the Job Store.
+// NewDefaultProfilePictureJobs has no wake until SetWake is called.
 func NewDefaultProfilePictureJobs(deps DefaultProfilePictureJobsDependencies) *DefaultProfilePictureJobs {
 	return &DefaultProfilePictureJobs{deps: deps}
 }
@@ -44,7 +43,7 @@ func NewDefaultProfilePictureJobs(deps DefaultProfilePictureJobsDependencies) *D
 func (p *DefaultProfilePictureJobs) SetWake(wake func()) { p.wake = wake }
 
 // PrepareUserDefaultProfilePictureJob returns a copy of account prepared for
-// creation, with the Job that generates its default profile picture.
+// creation, with the job that generates its default profile picture.
 func PrepareUserDefaultProfilePictureJob(account *model.User, at time.Time) (*model.User, *model.Job, error) {
 	if account == nil {
 		return nil, nil, errors.New("user is missing")
@@ -128,8 +127,8 @@ func (h defaultProfilePictureHandler) Run(ctx context.Context, execution job.Exe
 	return defaultProfilePictureJobSucceeded(entryID)
 }
 
-// classifyDefaultProfilePictureError names the public Job error code of a
-// failure the user area reports permanently, or "" for a retryable one.
+// classifyDefaultProfilePictureError returns the public job error code of a
+// permanent failure, or "" for a retryable one.
 func classifyDefaultProfilePictureError(err error) string {
 	switch {
 	case errors.Is(err, user.ErrDefaultProfilePictureUserNotFound):
@@ -163,8 +162,8 @@ func defaultProfilePictureDescriptor(handler job.Handler) job.Descriptor {
 	return descriptor
 }
 
-// NewDefaultProfilePicture registers generation of a User's default
-// profile picture.
+// NewDefaultProfilePicture registers generation of a user's default profile
+// picture.
 func NewDefaultProfilePicture(users *user.Service) job.Registration {
 	return job.Registration{Descriptor: defaultProfilePictureDescriptor(defaultProfilePictureHandler{users: users})}
 }

@@ -34,8 +34,8 @@ func (key MailTemplateKey) IsValid() bool {
 	return ok
 }
 
-// OccurrenceKind returns the one durable occurrence meaning permitted for the
-// template key.
+// OccurrenceKind returns the one occurrence kind the template key allows;
+// false means the key is unknown.
 func (key MailTemplateKey) OccurrenceKind() (MailOccurrenceKind, bool) {
 	switch key {
 	case MailTemplateSystemTest:
@@ -177,9 +177,8 @@ const (
 	MailPayloadUnavailableCode           = "mail.payload.unavailable"
 )
 
-// MailPublicFailureCodes is the closed, sorted catalogue of safe failure
-// categories a Mail Delivery may record. A Delivery with any other failure
-// code is invalid.
+// MailPublicFailureCodes returns the closed, sorted list of safe failure codes
+// a delivery may record; any other code makes it invalid.
 func MailPublicFailureCodes() []string {
 	return []string{
 		MailDeliveryCanceledCode,
@@ -267,7 +266,7 @@ var (
 	mailMaskedPattern    = regexp.MustCompile(`^(?:\*{3}|[^*@\s]\*{1,3})@[^*@\s]+$`)
 )
 
-// MailOccurrence is the immutable durable identity of one logical notification.
+// MailOccurrence is the immutable identity of one logical notification.
 type MailOccurrence struct {
 	ID          MailOccurrenceID
 	Kind        MailOccurrenceKind
@@ -293,8 +292,8 @@ func validMailOccurrenceMeaning(kind MailOccurrenceKind, key MailTemplateKey) bo
 	return ok && kind == want
 }
 
-// MailDelivery contains only bounded routing metadata plus an opaque encrypted
-// frozen payload. Ciphertext must never be projected through logs, audits, or APIs.
+// MailDelivery holds bounded routing metadata and an opaque encrypted frozen
+// payload. The ciphertext must never reach logs, audit or APIs.
 type MailDelivery struct {
 	ID                 MailDeliveryID
 	OccurrenceID       MailOccurrenceID
@@ -318,9 +317,9 @@ type MailDelivery struct {
 	Revision           int64
 }
 
-// MailFanoutBundle is one encrypted, release-frozen render set shared by all
-// recipients expanded from a bounded fan-out occurrence. The bundle identity
-// equals its occurrence identity so it cannot be attached to another fact.
+// MailFanoutBundle is one encrypted, release-frozen render set shared by every
+// recipient of a bounded fan-out occurrence. Its ID equals the occurrence's so
+// it cannot be attached to another fact.
 type MailFanoutBundle struct {
 	ID               MailOccurrenceID
 	EncryptedPayload json.RawMessage
@@ -469,8 +468,8 @@ func (d *MailDelivery) Accept(at time.Time) (*MailDelivery, error) {
 	return result, result.Validate()
 }
 
-// Expire terminates unsent or retryable delivery work at its immutable
-// deadline and destroys the recoverable payload in the same state change.
+// Expire ends unsent or retryable work at its fixed deadline and destroys the
+// recoverable payload in the same change.
 func (d *MailDelivery) Expire(at time.Time) (*MailDelivery, error) {
 	at = TimeUTC(at)
 	if d == nil ||
@@ -489,9 +488,8 @@ func (d *MailDelivery) Expire(at time.Time) (*MailDelivery, error) {
 	return result, result.Validate()
 }
 
-// Suppress terminates delivery work that must no longer be sent. It is valid
-// for queued, currently claimed, or failed-but-still-recoverable work and
-// destroys the encrypted payload in the same transition.
+// Suppress ends work that must no longer be sent: queued, claimed, or failed
+// but still recoverable. It destroys the encrypted payload in the same change.
 func (d *MailDelivery) Suppress(publicCode string, at time.Time) (*MailDelivery, error) {
 	at = TimeUTC(at)
 	if d == nil ||
@@ -515,8 +513,8 @@ func (d *MailDelivery) Suppress(publicCode string, at time.Time) (*MailDelivery,
 	return result, result.Validate()
 }
 
-// Cancel terminates queued delivery work and destroys the recoverable payload.
-// It preserves the delivery identity and stable Message-ID for operator history.
+// Cancel ends queued work and destroys the recoverable payload, keeping the
+// delivery ID and Message-ID for operator history.
 func (d *MailDelivery) Cancel(at time.Time) (*MailDelivery, error) {
 	at = TimeUTC(at)
 	if d == nil || d.State != MailDeliveryQueued || at.Before(d.UpdatedAt) {
@@ -531,13 +529,10 @@ func (d *MailDelivery) Cancel(at time.Time) (*MailDelivery, error) {
 	return result, result.Validate()
 }
 
-// OperatorRetry requeues a failed delivery in place. A Queued or Sending
-// delivery whose Job already failed (its Job attempts ran out before its
-// delivery attempts, or its worker died mid-send) is requeued the same way;
-// the caller proves the Job failed. The immutable recipient, payload and
-// Message-ID remain frozen; the prior public failure stays in Job attempt
-// history while a delivery that was attempted records a closed operator-retry
-// marker.
+// OperatorRetry requeues a failed delivery in place, or a queued or sending one
+// whose job already failed (the caller proves that). Recipient, payload and
+// Message-ID stay frozen; the earlier failure stays in the job's attempt
+// history, and a delivery that was attempted records an operator-retry marker.
 func (d *MailDelivery) OperatorRetry(at time.Time) (*MailDelivery, error) {
 	at = TimeUTC(at)
 	if d == nil ||
@@ -571,7 +566,7 @@ func (d *MailDelivery) Clone() *MailDelivery {
 	return &copy
 }
 
-// Auditable is deliberately payload-free and recipient-free.
+// Auditable returns the fields safe to audit, with no payload or recipient.
 func (d *MailDelivery) Auditable() map[string]any {
 	if d == nil {
 		return map[string]any{}

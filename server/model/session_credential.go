@@ -16,13 +16,10 @@ const (
 	SessionCredentialRefresh SessionCredentialKind = "refresh"
 )
 
-// SessionCredential is one hashed opaque credential for a Session. Refresh
-// credentials form a rotation family: UsedAt, ParentID, and ReplacedByID allow
-// the application to detect replay and revoke the entire family.
-//
-// Domain time is UTC time.Time. Optional lifecycle instants use OptionalTime.
-// Soft archive uses ArchivedAt. TokenHash is excluded from
-// JSON and must never be logged or audited.
+// SessionCredential is one hashed opaque credential of a session. Refresh
+// credentials form a rotation family: UsedAt, ParentID and ReplacedByID let
+// app detect replay and revoke the whole family. TokenHash is never in JSON
+// and must never be logged or audited.
 type SessionCredential struct {
 	ID           SessionCredentialID
 	CreatedAt    time.Time
@@ -39,8 +36,8 @@ type SessionCredential struct {
 	RevokedAt    OptionalTime
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
-// Refresh credentials without a family receive a fresh family identifier.
+// PrepareCreate stamps the ID and creation time and gives a refresh credential
+// without a family a fresh FamilyID; it does nothing on nil.
 func (sc *SessionCredential) PrepareCreate(id SessionCredentialID, at time.Time) {
 	if sc == nil {
 		return
@@ -62,7 +59,7 @@ func (sc *SessionCredential) PrepareCreate(id SessionCredentialID, at time.Time)
 	}
 }
 
-// PrepareUpdate applies the application-selected transition time.
+// PrepareUpdate stamps the update time; credentials have no revision.
 func (sc *SessionCredential) PrepareUpdate(at time.Time) {
 	if sc == nil {
 		return
@@ -70,7 +67,7 @@ func (sc *SessionCredential) PrepareUpdate(at time.Time) {
 	sc.UpdatedAt = TimeUTC(at)
 }
 
-// Validate checks rehydrated session-credential state.
+// Validate checks the credential's fields, for new and stored values alike.
 func (sc *SessionCredential) Validate() error {
 	const where = "SessionCredential.Validate"
 	if sc == nil {
@@ -135,7 +132,6 @@ func (sc *SessionCredential) Validate() error {
 	return nil
 }
 
-// validateRefreshRotation checks the rotation lineage fields of a refresh credential.
 func (sc *SessionCredential) validateRefreshRotation(details string) error {
 	const where = "SessionCredential.Validate"
 	if !IsValidOpaqueID(sc.FamilyID) {
@@ -208,8 +204,7 @@ func (sc *SessionCredential) IsExpiredAt(now time.Time) bool {
 	return sc.ArchivedAt.Valid || sc.RevokedAt.Valid || !now.Before(sc.ExpiresAt)
 }
 
-// Auditable returns a deliberately safe audit projection. The token hash is
-// never included.
+// Auditable returns the fields safe to audit; the hash is never included.
 func (sc *SessionCredential) Auditable() map[string]any {
 	if sc == nil {
 		return map[string]any{}

@@ -52,8 +52,8 @@ type ExamIntegrityReviewSQLProbe struct {
 }
 
 // TestExamIntegrityReviewStore verifies post-seal evidence inspection, the
-// revision-fenced Review lifecycle, and the deliberately narrow released
-// student projection through the public Store contract.
+// revision-fenced review lifecycle, and the deliberately narrow released
+// student projection through the public store contract.
 func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.ExamIntegrityReviewStore,
 	probes ...ExamIntegrityReviewSQLProbe,
 ) {

@@ -19,16 +19,13 @@ const (
 	ExamAttemptFocusLossDiscrepancyOperation = "exam.attempt.focus_loss.discrepancy"
 )
 
-// ExamAttemptFocusLossAccess is the complete hash-only selector for one
-// trusted-client Focus Loss claim. Persistence rechecks the established
-// Attempt/candidate, an Open or Paused Sitting, the exact active unexpired
-// Participation generation, and owning Session-bound open Connection before
-// accepting a new sequence or disabled-policy diagnostic. Established Focus
-// monitoring does not continuously re-poll Class membership; connect/reconnect
-// owns that check. The sole closed-selector exception is an exact retry of the
-// accepted claim whose own FlagAndSuspend transition closed this causal
-// Participation and Connection; that retry must still prove the retained
-// generation, hash, candidate, Session, Connection, and scope.
+// ExamAttemptFocusLossAccess selects one focus loss claim by credential hash.
+// The store rechecks the attempt, an open or paused sitting, the active
+// unexpired participation generation and the session's open connection before
+// accepting a sequence. Class membership is checked at connect, not here. The
+// one exception for a closed selector is an exact retry of a claim whose own
+// FlagAndSuspend closed the participation and connection; it must still match
+// the retained generation, hash, candidate, session, connection and scope.
 type ExamAttemptFocusLossAccess struct {
 	AttemptID                model.ExamAttemptID
 	ParticipationID          model.AttemptParticipationID
@@ -39,13 +36,10 @@ type ExamAttemptFocusLossAccess struct {
 	ContinuityCredentialHash string
 }
 
-// ExamAttemptFocusLossTarget is the bounded preflight projection used to begin
-// one Class-scoped audit. It carries no credential, Session, client source,
-// duration, policy document, evidence, or private state. It may resolve the
-// exact retained policy_suspended causal selector solely so the caller can
-// begin audit for a possible duplicate; RecordFocusLoss decides that only the
-// identical retained claim may pass that exception and otherwise rechecks the
-// complete selector and scope under its transaction locks.
+// ExamAttemptFocusLossTarget is the scope a focus loss audit begins under. It
+// may resolve a policy_suspended selector only so a possible duplicate can be
+// audited; RecordFocusLoss lets only the identical retained claim through and
+// rechecks everything else under its locks.
 type ExamAttemptFocusLossTarget struct {
 	ExamID          model.ExamID
 	SittingID       model.ExamSittingID
@@ -56,11 +50,10 @@ type ExamAttemptFocusLossTarget struct {
 	Generation      int64
 }
 
-// ExamAttemptFocusLossSignal carries one bounded claim plus server-proposed
-// append identities. The client supplies only sequence,
-// duration, and optional closed source classification; it cannot select an
-// outcome, severity, receipt time, flag state, or guilt finding. Unused
-// proposed identities are harmless. Sequence is the natural idempotency key.
+// ExamAttemptFocusLossSignal carries one claim plus proposed identities. The
+// client supplies only sequence, duration and source; it cannot choose an
+// outcome, severity, receipt time or flag state. Sequence is the idempotency
+// key; unused proposed identities are harmless.
 type ExamAttemptFocusLossSignal struct {
 	Access               ExamAttemptFocusLossAccess
 	SignalID             model.FocusLossSignalID
@@ -74,21 +67,20 @@ type ExamAttemptFocusLossSignal struct {
 	AuditAt              time.Time
 }
 
-// ExamAttemptFocusLossResult is the safe retained decision for one accepted
-// sequence. Duplicate is true only for an exact same-sequence duration/source
-// repeat; the remaining fields reproduce the prior result so callers can
-// acknowledge it while suppressing transient effects. MissingBefore records a
-// forward gap without inventing observations. DiagnosticCount is the bounded
-// generation aggregate used only while collection is disabled.
+// ExamAttemptFocusLossResult is the retained decision for one accepted
+// sequence. Duplicate is true only for an exact repeat of sequence, duration
+// and source; the other fields then reproduce the prior result so the caller
+// can acknowledge it without repeating effects. MissingBefore records a
+// forward gap without inventing observations. DiagnosticCount is used only
+// while collection is disabled.
 //
-// A qualifying signal enters the receipt-time rolling bucket. A crossing
-// consumes the whole bucket immediately and resets WindowIncidentCount to zero.
-// The first crossing creates the one open Focus Loss Flag for this
-// Attempt/generation; later crossings retain evidence without another Flag.
-// CandidateWarningCreated is possible once per generation only for
-// FlagAndWarn. ManagerNotificationRequired is true only when the Flag is first
-// created. FlagAndSuspend atomically ends Participation and Connection as
-// policy_suspended, suspends the Attempt, and returns the safe episode views.
+// A threshold crossing consumes the whole rolling window and resets
+// WindowIncidentCount to zero. The first crossing creates the one open flag
+// for the generation; later crossings only retain evidence. The candidate
+// warning is created at most once per generation, and
+// ManagerNotificationRequired is true only when the flag is created.
+// FlagAndSuspend ends the participation and connection as policy_suspended
+// and suspends the attempt in the same transaction.
 type ExamAttemptFocusLossResult struct {
 	ExamID                model.ExamID
 	SittingID             model.ExamSittingID
@@ -111,8 +103,8 @@ type ExamAttemptFocusLossResult struct {
 	DiagnosticCount       int64
 	Flag                  *model.IntegrityFlag
 	FlagCreated           bool
-	// ScreenClipRequested reports that the created Flag asked Desktop for
-	// the minute either side of it, because the Attempt records its screen.
+	// ScreenClipRequested reports that the created flag asked Desktop for
+	// the minute either side of it, because the attempt records its screen.
 	ScreenClipRequested         bool
 	CandidateWarningCreated     bool
 	ManagerNotificationRequired bool
@@ -125,14 +117,10 @@ type ExamAttemptFocusLossResult struct {
 }
 
 // ConsistentWith reports whether the outcome carries a valid signal, names the
-// resolved target's Exam, Sitting and Class and the reporting candidate,
-// Attempt, Participation and generation, repeats the reported sequence,
+// resolved target's exam, sitting and class and the reporting candidate,
+// attempt, participation and generation, repeats the reported sequence,
 // duration and source, was decided at the instant the signal was received, and
-// carries counts within their bounds. It reads target, which the caller has
-// already checked.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// carries counts within their bounds. The caller has already checked target.
 func (r *ExamAttemptFocusLossResult) ConsistentWith(
 	target *ExamAttemptFocusLossTarget,
 	focusLossAccess ExamAttemptFocusLossAccess,
@@ -165,24 +153,23 @@ func (r *ExamAttemptFocusLossResult) ConsistentWith(
 		r.DiagnosticCount < 0)
 }
 
-// Accepted is the application's postcondition on a live Focus Loss report:
+// Accepted is the application's postcondition on a live focus loss report:
 // it accepted the reported sequence and was decided at the instant the
 // signal was received.
 func (r *ExamAttemptFocusLossResult) Accepted(sequence int64) bool {
 	return r.AcceptedSequence == sequence && r.DatabaseTime.Equal(r.Signal.ReceivedAt)
 }
 
-// ExamAttemptFocusLossDiscrepancyTarget is the safe scope for one claim that
-// reached the server only after Submission sealing ended integrity collection.
-// It is not authority to reopen the Attempt or mutate its settled/gapped state.
+// ExamAttemptFocusLossDiscrepancyTarget is the scope of a claim that arrived
+// after sealing ended integrity collection. It is not authority to reopen the
+// attempt or change its settled or gapped state.
 type ExamAttemptFocusLossDiscrepancyTarget struct {
 	ExamAttemptFocusLossTarget
 	SubmissionID model.SubmissionID
 }
 
-// ExamAttemptFocusLossDiscrepancy carries the exact ended-generation selector,
-// bounded client claim, proposed immutable identities, and a pre-created safe
-// audit attempt. Sequence is the natural idempotency fence.
+// ExamAttemptFocusLossDiscrepancy records a late claim against an ended
+// generation. Sequence is the idempotency key.
 type ExamAttemptFocusLossDiscrepancy struct {
 	Access               ExamAttemptFocusLossAccess
 	DiscrepancyID        model.IntegrityDiscrepancyID
@@ -200,15 +187,11 @@ type ExamAttemptFocusLossDiscrepancyResult struct {
 	Duplicate   bool
 }
 
-// ConsistentWith reports whether the outcome carries a valid Discrepancy for
-// the resolved target and its Submission, bound to the reporting Attempt,
-// Participation and generation, repeating the reported sequence, duration and
-// source, and using the proposed Discrepancy and signal IDs unless it is a
-// duplicate of an earlier report. It reads target, which the caller has
-// already checked.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the outcome carries a valid discrepancy for
+// the resolved target and its submission, bound to the reporting attempt,
+// participation and generation, repeating the reported sequence, duration and
+// source, and using the proposed discrepancy and signal IDs unless it is a
+// duplicate of an earlier report. The caller has already checked target.
 func (r *ExamAttemptFocusLossDiscrepancyResult) ConsistentWith(
 	target *ExamAttemptFocusLossDiscrepancyTarget,
 	selector ExamAttemptFocusLossAccess,
@@ -232,24 +215,18 @@ func (r *ExamAttemptFocusLossDiscrepancyResult) ConsistentWith(
 		(!r.Duplicate && (r.Discrepancy.ID != discrepancyID || r.Discrepancy.SignalID != signalID)))
 }
 
-// ExamFocusLossStore persists the Focus Loss a Candidate's trusted client
-// reports for an Attempt: while the Participation is live it evaluates each
-// report against the Exam's policy, and after the Submission is sealed it
-// retains a late report as an Integrity Discrepancy.
+// ExamFocusLossStore evaluates focus loss reports against the exam's policy
+// while the participation is live, and keeps a report that arrives after
+// sealing as an integrity discrepancy.
 type ExamFocusLossStore interface {
-	// ResolveFocusLossTarget returns the scope a live Focus Loss report is
-	// audited under. It evaluates and changes nothing.
+	// ResolveFocusLossTarget evaluates and changes nothing.
 	ResolveFocusLossTarget(context.Context, ExamAttemptFocusLossAccess) (*ExamAttemptFocusLossTarget, error)
-	// RecordFocusLoss accepts the next reported sequence, evaluates it against
-	// the Exam's Focus Loss policy, and applies the Flag, warning or suspension
-	// the policy calls for. An exact repeat of the latest sequence returns the
-	// retained result.
+	// RecordFocusLoss applies the flag, warning or suspension the policy calls
+	// for. An exact repeat of the latest sequence returns the retained result.
 	RecordFocusLoss(context.Context, *ExamAttemptFocusLossSignal) (*ExamAttemptFocusLossResult, error)
-	// ResolveEndedFocusLossTarget returns the scope a Focus Loss report is
-	// audited under once the Attempt's Submission is sealed. It changes nothing.
+	// ResolveEndedFocusLossTarget is ResolveFocusLossTarget for a sealed
+	// submission. It changes nothing.
 	ResolveEndedFocusLossTarget(context.Context, ExamAttemptFocusLossAccess) (*ExamAttemptFocusLossDiscrepancyTarget, error)
-	// RecordEndedFocusLoss retains a Focus Loss report that arrived after
-	// sealing as an Integrity Discrepancy on the Submission, without changing
-	// the Submission or its Review.
+	// RecordEndedFocusLoss never changes the submission or its review.
 	RecordEndedFocusLoss(context.Context, *ExamAttemptFocusLossDiscrepancy) (*ExamAttemptFocusLossDiscrepancyResult, error)
 }

@@ -42,8 +42,8 @@ type authorizationInvalidationMessage struct {
 	UserID string `json:"user_id,omitempty"`
 }
 
-// SessionsRevoked applies local cache and connection effects before
-// best-effort peer propagation. Invalid input is rejected without effects.
+// SessionsRevoked applies local effects before best-effort peer propagation.
+// Invalid input is rejected without effects.
 func (s *Delivery) SessionsRevoked(
 	ctx context.Context,
 	userID model.UserID,
@@ -69,8 +69,8 @@ func (s *Delivery) SessionsRevoked(
 	)
 }
 
-// AuthenticationCacheInvalidated clears the available local authentication
-// cache entries before best-effort peer propagation without closing sockets.
+// AuthenticationCacheInvalidated clears local cache entries before
+// best-effort peer propagation, without closing sockets.
 func (s *Delivery) AuthenticationCacheInvalidated(
 	ctx context.Context,
 	userID model.UserID,
@@ -225,7 +225,6 @@ func validateSessionRevocation(message sessionRevocationMessage) error {
 	return nil
 }
 
-// sessionIDsFrom types the Session IDs of a validated peer message.
 func sessionIDsFrom(spelled []string) []model.SessionID {
 	if len(spelled) == 0 {
 		return nil
@@ -237,7 +236,6 @@ func sessionIDsFrom(spelled []string) []model.SessionID {
 	return ids
 }
 
-// sessionIDStrings spells Session IDs for the cluster peer message.
 func sessionIDStrings(ids []model.SessionID) []string {
 	if len(ids) == 0 {
 		return nil

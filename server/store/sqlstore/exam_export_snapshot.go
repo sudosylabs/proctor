@@ -33,7 +33,7 @@ type examExportSnapshotBudget struct{ rows, bytes int }
 func (b *examExportSnapshotBudget) collect(ctx context.Context, tx *sqlxTxWrapper, query string, args ...any) ([]json.RawMessage, error) {
 	remaining := model.ExamExportMaximumRecords - b.rows
 	// Every selected column is bounded by its owning record contract. A LIMIT
-	// applies before JSON aggregation, so a large Sitting cannot build an
+	// applies before JSON aggregation, so a large sitting cannot build an
 	// unbounded PostgreSQL aggregate or application slice.
 	query = `SELECT row_to_json(r) FROM (` + query + ` LIMIT ?) r`
 	args = append(args, remaining+1)
@@ -103,7 +103,7 @@ func captureExamExportSnapshot(
 	return encoded, nil
 }
 
-// captureExamExportSubmission refuses a Submission whose selected categories
+// captureExamExportSubmission refuses a submission whose selected categories
 // have retired and captures its header and selected category records.
 func captureExamExportSubmission(
 	ctx context.Context,
@@ -181,7 +181,7 @@ func captureExamExportSubmission(
 	return record, nil
 }
 
-// captureExamExportWork captures the Submission manifest and its portable
+// captureExamExportWork captures the submission manifest and its portable
 // entries, counting files and source bytes against the export limits.
 func captureExamExportWork(
 	ctx context.Context,
@@ -228,7 +228,7 @@ func captureExamExportWork(
 	return map[string]any{"manifest": work[0], "entries": portable}, nil
 }
 
-// captureExamExportIntegrity captures the Submission's integrity, review
+// captureExamExportIntegrity captures the submission's integrity, review
 // and suspension records.
 func captureExamExportIntegrity(
 	ctx context.Context,
@@ -263,10 +263,10 @@ func captureExamExportIntegrity(
 			FROM integrity_evidence
 			WHERE exam_attempt_id = ?
 			ORDER BY id`, a.AttemptID.String()},
-		// Attempt evidence raises no Flag. Its records and the inventory
+		// Attempt evidence raises no flag. Its records and the inventory
 		// the seal fixed travel together, so a reader can check the counts
-		// and see refused appends. The model's per-Attempt bounds (4,096
-		// records, 8 MiB) keep one Submission within the export's limits.
+		// and see refused appends. The model's per-attempt bounds (4,096
+		// records, 8 MiB) keep one submission within the export's limits.
 		{"attempt_evidence", `SELECT convert_from(canonical, 'UTF8')::jsonb AS record
 			FROM exam_attempt_evidence
 			WHERE exam_attempt_id = ?
@@ -356,7 +356,7 @@ func captureExamExportIntegrity(
 	return integrity, nil
 }
 
-// captureExamExportBrowserActivity captures the Attempt's Browser activity
+// captureExamExportBrowserActivity captures the attempt's Browser activity
 // history and settlement.
 func captureExamExportBrowserActivity(
 	ctx context.Context,

@@ -30,9 +30,9 @@ const (
 	maxNotedChanges = 16
 )
 
-// The refusal codes that mean a guest change lost to a newer Workspace
+// The refusal codes that mean a guest change lost to a newer workspace
 // state, so journal order decided against it. Every other refusal is the
-// Workspace's own rule, such as a quota.
+// workspace's own rule, such as a quota.
 var losingCodes = map[string]bool{
 	"exam.attempt.workspace.content_conflict":    true,
 	"exam.attempt.workspace.entry_conflict":      true,
@@ -50,7 +50,7 @@ var wholeBatchCodes = map[string]bool{
 	"exam.attempt.invalid":                   true,
 }
 
-// coalesce drops guest changes the Workspace never needs: every write of a
+// coalesce drops guest changes the workspace never needs: every write of a
 // file but the last before its next other change, and every change of a
 // file created and deleted within the same harvest.
 func coalesce(observations []Observation) []Observation {
@@ -95,7 +95,7 @@ func coalesce(observations []Observation) []Observation {
 
 // discardedCode is the code an overwritten record names for a guest change
 // the journal's projection replaced in place before it was harvested: it
-// lost to a newer Workspace version, as a refused stale write does.
+// lost to a newer workspace version, as a refused stale write does.
 const discardedCode = "exam.attempt.workspace.content_conflict"
 
 // plannedChange is one mutation of a harvest batch and the guest change it
@@ -126,7 +126,7 @@ type harvestNotes struct {
 	paths       []string
 }
 
-// harvester plans and commits one harvest against the Workspace view.
+// harvester plans and commits one harvest against the workspace view.
 type harvester struct {
 	owner  *owner
 	policy IgnorePolicy
@@ -144,15 +144,15 @@ type batchOutcome uint8
 
 const (
 	batchCommitted batchOutcome = iota
-	// batchDropped: one change was refused or its content went stale, and
+	// batchDropped means one change was refused or its content went stale, and
 	// the rest are planned again without it.
 	batchDropped
-	// batchSplit: the whole batch was refused; its changes are tried one
+	// batchSplit means the whole batch was refused; its changes are tried one
 	// at a time.
 	batchSplit
 )
 
-// harvest stores every pending guest change in the Attempt Workspace, or
+// harvest stores every pending guest change in the attempt workspace, or
 // records why it could not. The observations are acknowledged by sync once
 // the owner's cursors are saved.
 func (o *owner) harvest(ctx context.Context) error {
@@ -200,7 +200,7 @@ func (o *owner) harvest(ctx context.Context) error {
 
 // planBatch plans the next batch from observations and says how many it
 // went through. A batch ends before a change that needs an entry the batch
-// is still creating, so the Workspace gives that entry its ID first, and
+// is still creating, so the workspace gives that entry its ID first, and
 // before a change by another writer: one batch has one author.
 func (h *harvester) planBatch(observations []Observation) ([]plannedChange, int) {
 	var batch []plannedChange
@@ -235,7 +235,7 @@ func (h *harvester) planBatch(observations []Observation) ([]plannedChange, int)
 	return batch, len(observations)
 }
 
-// plan maps one guest change to a Workspace mutation. skip leaves it out;
+// plan maps one guest change to a workspace mutation. skip leaves it out;
 // needsID asks for the batch to be committed first.
 func (h *harvester) plan(observation Observation) (plannedChange, bool, bool) {
 	item := h.sim.byPath[observation.Path]
@@ -248,7 +248,7 @@ func (h *harvester) plan(observation Observation) (plannedChange, bool, bool) {
 		if item != nil {
 			if !item.pending && directory == (item.Kind == kindDirectory) &&
 				(directory || (observation.Content != nil && item.SHA256 == observation.Content.SHA256)) {
-				// Already in the Workspace.
+				// Already in the workspace.
 				return plannedChange{}, true, false
 			}
 			h.lose(observation, "exam.attempt.workspace.path_conflict")
@@ -261,7 +261,7 @@ func (h *harvester) plan(observation Observation) (plannedChange, bool, bool) {
 		}
 		if parent := path.Dir(observation.Path); parent != "." {
 			if container := h.sim.byPath[parent]; container == nil || container.Kind != kindDirectory {
-				// Under a directory the Workspace does not hold.
+				// Under a directory the workspace does not hold.
 				h.ignored[observation.NodeIdentity] = true
 				h.status(observation.Path, model.AttemptEnvironmentPathIgnored, model.AttemptEnvironmentIgnoredByParent)
 				return plannedChange{}, true, false
@@ -286,7 +286,7 @@ func (h *harvester) plan(observation Observation) (plannedChange, bool, bool) {
 					return plannedChange{}, true, false
 				}
 			}
-			// A guest file the Workspace does not hold, such as one an
+			// A guest file the workspace does not hold, such as one an
 			// earlier harvest could not store: offer it as new.
 			return plannedChange{mutation: createFile(observation), source: observation, content: observation.Content}, false, false
 		}
@@ -307,7 +307,7 @@ func (h *harvester) plan(observation Observation) (plannedChange, bool, bool) {
 		}), false, false
 	case ObserveMove:
 		if item == nil {
-			// A path the Workspace never held moved away.
+			// A path the workspace never held moved away.
 			h.owner.row.ClearSyncPath(observation.Path)
 			return plannedChange{}, true, false
 		}
@@ -324,7 +324,7 @@ func (h *harvester) plan(observation Observation) (plannedChange, bool, bool) {
 		}), false, false
 	case ObserveDelete:
 		if item == nil {
-			// A path the Workspace never held is gone.
+			// A path the workspace never held is gone.
 			h.owner.row.ClearSyncPath(observation.Path)
 			return plannedChange{}, true, false
 		}
@@ -361,7 +361,7 @@ func baseVersion(observation Observation, item *entry) model.WorkspaceContentVer
 	return item.Version
 }
 
-// simulate applies a planned mutation to the plan's view of the Workspace.
+// simulate applies a planned mutation to the plan's view of the workspace.
 func (h *harvester) simulate(mutation WorkspaceMutation) {
 	switch mutation.Operation {
 	case model.AttemptWorkspaceMutationCreateFile:
@@ -386,7 +386,7 @@ func (h *harvester) simulate(mutation WorkspaceMutation) {
 }
 
 // commit writes one batch, confirms each outcome to the machine and brings
-// the Workspace view up to date. A refused or stale change is noted and
+// the workspace view up to date. A refused or stale change is noted and
 // dropped, and the caller plans the rest again.
 func (h *harvester) commit(ctx context.Context, batch []plannedChange) (batchOutcome, error) {
 	o := h.owner
@@ -529,7 +529,7 @@ func (r *staleReader) Read(buffer []byte) (int, error) {
 	return n, err
 }
 
-// note records a change the Workspace refused, and drops it from the plan.
+// note records a change the workspace refused, and drops it from the plan.
 func (h *harvester) note(observation Observation, code string) {
 	if losingCodes[code] {
 		h.lose(observation, code)
@@ -544,7 +544,7 @@ func (h *harvester) note(observation Observation, code string) {
 	}
 }
 
-// lose records a guest change that lost to a newer Workspace state. The
+// lose records a guest change that lost to a newer workspace state. The
 // journal's version stays; the projection brings it back to the machine.
 func (h *harvester) lose(observation Observation, code string) {
 	h.dropped[observation.HostSequence] = true

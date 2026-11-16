@@ -15,9 +15,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// publishDraftUpdated tells everyone who may view the Exam that its Draft
-// reached draftRevision. An Exam Resource change is announced as a Draft
-// update: the event names neither the Resource nor what was done to it.
+// publishDraftUpdated deliberately names neither the resource nor the change:
+// viewers only learn that the draft reached draftRevision.
 func (s *Service) publishDraftUpdated(ctx context.Context, examID model.ExamID, draftRevision int64) error {
 	event, err := realtime.NewExamDraftUpdatedEvent(examID, draftRevision)
 	if err != nil {
@@ -27,9 +26,8 @@ func (s *Service) publishDraftUpdated(ctx context.Context, examID model.ExamID, 
 	return s.publisher.Publish(ctx, event)
 }
 
-// publishChanged announces a committed Exam Resource command unless the
-// Store replayed an earlier outcome. A failed publication is reported and the
-// command still succeeds.
+// publishChanged skips replayed outcomes. A failed publication is reported and
+// the command still succeeds.
 func (s *Service) publishChanged(ctx context.Context, result *store.ExamResourceCommandResult) {
 	if result.Replayed || result.Value == nil {
 		return

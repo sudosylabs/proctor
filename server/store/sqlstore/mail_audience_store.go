@@ -12,9 +12,9 @@ import (
 	"fmt"
 )
 
-// advanceUserMailEligibilityRevision serializes every User eligibility change
-// against disabled Sitting watermarks. Callers stamp the returned revision on
-// the same User update in this transaction.
+// advanceUserMailEligibilityRevision serializes every user eligibility change
+// against disabled sitting watermarks. Callers stamp the returned revision on
+// the same user update in this transaction.
 func advanceUserMailEligibilityRevision(ctx context.Context, tx *sqlxTxWrapper) (int64, error) {
 	var revision int64
 	if err := tx.Get(ctx, &revision, `UPDATE mail_audience_states

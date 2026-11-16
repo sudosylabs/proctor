@@ -13,7 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// newWorkCollectors creates the expensive-work pool collectors and pre-creates each pool's series.
+// newWorkCollectors pre-creates each pool's series so they export zero before first use.
 func (m *Module) newWorkCollectors() {
 	m.workActive = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -50,14 +50,14 @@ func (m *Module) newWorkCollectors() {
 	}
 }
 
-// WorkStarted records admission to one of the two fixed node-local work pools.
+// WorkStarted records admission to a pool; an unknown pool is ignored.
 func (m *Module) WorkStarted(pool string) {
 	if validWorkPool(pool) {
 		m.workActive.WithLabelValues(pool).Inc()
 	}
 }
 
-// WorkFinished releases the active count after synchronous work has returned.
+// WorkFinished must follow a WorkStarted for the same pool.
 func (m *Module) WorkFinished(pool string, duration time.Duration) {
 	if validWorkPool(pool) {
 		m.workActive.WithLabelValues(pool).Dec()
@@ -65,9 +65,8 @@ func (m *Module) WorkFinished(pool string, duration time.Duration) {
 	}
 }
 
-// WorkRejected records immediate refusal, without user, file, or error labels.
-// A full pool is load, not a fault: refusals are counted here rather than
-// logged per request, and they never change readiness.
+// WorkRejected counts a refusal by a full pool. A full pool is load, not a
+// fault: refusals are counted rather than logged, and never change readiness.
 func (m *Module) WorkRejected(pool string) {
 	if validWorkPool(pool) {
 		m.workRejected.WithLabelValues(pool).Inc()
@@ -76,9 +75,8 @@ func (m *Module) WorkRejected(pool string) {
 
 func validWorkPool(pool string) bool { return pool == "password" || pool == "file_content" }
 
-// WorkRecorder reports one of the fixed work pools to the consumer that runs
-// it. The pool is chosen by composition, never derived from requests or
-// errors.
+// WorkRecorder reports one pool. The pool is chosen at composition, never
+// derived from a request or an error.
 type WorkRecorder struct {
 	module *Module
 	pool   string

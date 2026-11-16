@@ -20,7 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// CreateRoleCommand creates a custom Role with the given permissions.
+// CreateRoleCommand creates a custom role with the given permissions.
 type CreateRoleCommand struct {
 	Name        string
 	DisplayName string
@@ -28,7 +28,7 @@ type CreateRoleCommand struct {
 	Permissions []string
 }
 
-// UpdateRoleCommand patches a custom Role; a nil field is left unchanged.
+// UpdateRoleCommand patches a custom role; a nil field is left unchanged.
 type UpdateRoleCommand struct {
 	ID          model.RoleID
 	DisplayName *string
@@ -36,24 +36,22 @@ type UpdateRoleCommand struct {
 	Permissions *[]string
 }
 
-// ListRolesQuery pages the Roles ascending by name then identity.
+// ListRolesQuery pages roles ascending by name then identity.
 type ListRolesQuery struct {
 	paging.NameQuery
 }
 
-// RoleResult is one Role with the current holders of its Role Bindings the
-// caller can see. Holders is nil when the caller holds role_binding.view
-// nowhere, so it cannot see who holds any Role.
+// RoleResult is one role with the holders the caller can see. Holders is nil
+// when the caller holds role_binding.view nowhere.
 type RoleResult struct {
 	Role    *model.Role
 	Holders *RoleHolders
 }
 
-// RoleHolders counts a Role's current Role Bindings inside the caller's
-// role_binding.view visibility: the bindings, their distinct Users, and their
-// distinct scopes. Bindings stops at store.MaximumListCount and is then a
-// lower bound; Users and Scopes are counted among those bindings, never
-// exceed them, and so are lower bounds exactly when Bindings is.
+// RoleHolders counts a role's current bindings inside the caller's
+// role_binding.view visibility, with their distinct users and scopes.
+// Bindings stops at store.MaximumListCount; Users and Scopes are counted
+// among those bindings, so they are lower bounds exactly when Bindings is.
 type RoleHolders struct {
 	Bindings             int
 	Users                int
@@ -63,8 +61,8 @@ type RoleHolders struct {
 	ScopesIsLowerBound   bool
 }
 
-// ListRoles pages the Roles for a caller with Institution-wide role.view, each
-// with its holders counted in one read for the page.
+// ListRoles needs institution-wide role.view and counts holders in one read
+// for the page.
 func (s *Service) ListRoles(ctx context.Context, inv invocation.Invocation, query ListRolesQuery) (paging.Page[RoleResult], error) {
 	limit, _, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
@@ -101,8 +99,7 @@ func (s *Service) ListRoles(ctx context.Context, inv invocation.Invocation, quer
 	return paging.Page[RoleResult]{Items: results, HasMore: page.HasMore}, nil
 }
 
-// GetRole returns one Role with its holders to a caller with
-// Institution-wide role.view.
+// GetRole needs institution-wide role.view.
 func (s *Service) GetRole(ctx context.Context, inv invocation.Invocation, id model.RoleID) (RoleResult, error) {
 	if !id.IsValid() {
 		return RoleResult{}, apperror.New("request.invalid").WithField("field", "role_id")
@@ -121,8 +118,7 @@ func (s *Service) GetRole(ctx context.Context, inv invocation.Invocation, id mod
 	return results[0], nil
 }
 
-// compareRoleNames orders Roles ascending by name then identity, the order a
-// Role page cursor continues.
+// compareRoleNames is the order a role page cursor continues.
 func compareRoleNames(a, b *model.Role) int {
 	if order := strings.Compare(a.Name, b.Name); order != 0 {
 		return order
@@ -130,11 +126,9 @@ func compareRoleNames(a, b *model.Role) int {
 	return strings.Compare(a.ID.String(), b.ID.String())
 }
 
-// roleResults pairs each Role with its holders inside the caller's
-// role_binding.view visibility, read in one count for all of them. The
-// visibility is derived without recording a decision, because it only narrows
-// what the already authorized Role read shows; a caller without
-// role_binding.view anywhere gets no holders.
+// roleResults derives the role_binding.view visibility without recording a
+// decision, because it only narrows what the already authorized role read
+// shows.
 func (s *Service) roleResults(ctx context.Context, inv invocation.Invocation, roles []*model.Role) ([]RoleResult, error) {
 	results := make([]RoleResult, 0, len(roles))
 	for _, role := range roles {
@@ -189,8 +183,8 @@ func (s *Service) roleResults(ctx context.Context, inv invocation.Invocation, ro
 	return results, nil
 }
 
-// CreateRole creates a custom Role. The caller needs Institution-wide
-// role.manage and must be able to delegate every permission it grants.
+// CreateRole needs institution-wide role.manage, and the caller must be able
+// to delegate every permission it grants.
 func (s *Service) CreateRole(ctx context.Context, inv invocation.Invocation, command CreateRoleCommand) (*model.Role, error) {
 	resource, err := s.authorizeRoles(ctx, inv, model.ActionRoleManage)
 	if err != nil {
@@ -240,9 +234,8 @@ func (s *Service) CreateRole(ctx context.Context, inv invocation.Invocation, com
 	)
 }
 
-// UpdateRole patches a custom Role, refusing a built-in one. Added
-// permissions must be delegable by the caller; a committed change drops every
-// User's cached authorization.
+// UpdateRole refuses a built-in role. Added permissions must be delegable by
+// the caller; a committed change drops every user's cached authorization.
 func (s *Service) UpdateRole(ctx context.Context, inv invocation.Invocation, command UpdateRoleCommand) (*model.Role, error) {
 	id := command.ID
 	if !id.IsValid() {
@@ -332,8 +325,8 @@ func addedRolePermissions(current, candidate []string) []string {
 	return added
 }
 
-// ArchiveRole archives a custom Role, refusing a built-in one, then drops
-// every User's cached authorization.
+// ArchiveRole refuses a built-in role, and drops every user's cached
+// authorization after commit.
 func (s *Service) ArchiveRole(ctx context.Context, inv invocation.Invocation, id model.RoleID) error {
 	if !id.IsValid() {
 		return apperror.New("request.invalid").WithField("field", "role_id")
@@ -382,8 +375,6 @@ func (s *Service) ArchiveRole(ctx context.Context, inv invocation.Invocation, id
 	return nil
 }
 
-// authorizeRoles authorizes a Role Action on the singleton Institution and
-// returns that Resource.
 func (s *Service) authorizeRoles(ctx context.Context, inv invocation.Invocation, action model.Action) (model.Resource, error) {
 	institution, err := s.institutions.GetSingleton(ctx)
 	if err != nil {
@@ -396,8 +387,6 @@ func (s *Service) authorizeRoles(ctx context.Context, inv invocation.Invocation,
 	return resource, nil
 }
 
-// authorizeActionDelegation refuses unless the caller may grant every Action
-// at the scope.
 func (s *Service) authorizeActionDelegation(
 	ctx context.Context,
 	inv invocation.Invocation,

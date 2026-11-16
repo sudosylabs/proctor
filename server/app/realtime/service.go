@@ -18,26 +18,23 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Dependencies are the collaborators of Service; New validates them once and
-// Service keeps them in deps.
+// Dependencies are the collaborators New requires.
 type Dependencies struct {
 	Delivery    *Delivery
 	Diagnostics *logging.Logger
-	// Attempts finds the Attempts whose Candidate and Sitting board must hear
-	// that some of the Candidate's Sessions were revoked. Service only reads it.
+	// Attempts finds the attempts whose candidate and sitting board must hear
+	// of a session revocation. It is only read.
 	Attempts store.ExamAttemptStore
 }
 
-// Service is the Publisher the application areas hold. It translates
-// Delivery's publication failures into application errors and adds the
-// Attempt and current-user invalidations that follow a Session revocation or
-// an authorization change.
+// Service is the production Publisher. It turns delivery failures into
+// application errors and adds the attempt and current-user notices a session
+// revocation or authorization change owes.
 type Service struct {
 	deps Dependencies
 }
 
-// New constructs the Publisher over a Delivery that composition attaches its
-// sink and cluster fan-out to.
+// New returns a Service whose sink and cluster fan-out are attached later.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Delivery == nil {
 		return nil, errors.New("realtime delivery is required")
@@ -51,22 +48,19 @@ func New(deps Dependencies) (*Service, error) {
 	return &Service{deps: deps}, nil
 }
 
-// AttachClusterFanout wires the composition-owned cluster transport and
-// registers peer handlers. It must be called once before the node becomes
-// ready. Peer handlers apply only local effects so Broadcast never loops.
+// AttachClusterFanout must be called once before the node becomes ready. Peer
+// handlers apply only local effects, so a broadcast never loops.
 func (s *Service) AttachClusterFanout(fanout cluster.Transport) error {
 	return s.deps.Delivery.SetClusterFanout(fanout)
 }
 
-// AttachSink wires the composition-owned local WebSocket sink. It must
-// be called once before the node becomes ready.
+// AttachSink must be called once before the node becomes ready.
 func (s *Service) AttachSink(sink Sink) error {
 	return s.deps.Delivery.SetSink(sink)
 }
 
-// Publish delivers a transport-neutral event locally first, then
-// fans it out to peers best-effort. Callers must invoke this only after
-// durable commit.
+// Publish delivers locally first, then to peers best effort. Call it only
+// after the change has committed.
 func (s *Service) Publish(ctx context.Context, event Event) error {
 	err := s.deps.Delivery.Publish(ctx, event)
 	if err == nil {
@@ -79,8 +73,8 @@ func (s *Service) Publish(ctx context.Context, event Event) error {
 	return internalRealtimeError(err)
 }
 
-// UnbindExamAttemptConnection unbinds one Attempt Connection locally and then
-// on peers, leaving its WebSocket open.
+// UnbindExamAttemptConnection unbinds one attempt connection locally and then
+// on peers, leaving its socket open.
 func (s *Service) UnbindExamAttemptConnection(ctx context.Context, connectionID model.AttemptConnectionID) error {
 	err := s.deps.Delivery.UnbindExamAttemptConnection(ctx, connectionID)
 	if err == nil {
@@ -93,8 +87,8 @@ func (s *Service) UnbindExamAttemptConnection(ctx context.Context, connectionID 
 	return internalRealtimeError(err)
 }
 
-// Report records an effect that failed after commit, for the use case that
-// still succeeds. operation names what failed.
+// Report records an effect that failed after commit; the use case still
+// succeeds.
 func (s *Service) Report(ctx context.Context, operation string, err error) {
 	if s.deps.Diagnostics == nil {
 		return
@@ -106,10 +100,9 @@ func (s *Service) Report(ctx context.Context, operation string, err error) {
 	s.deps.Diagnostics.ErrorContext(ctx, "transient realtime publication failed", fields...)
 }
 
-// SessionsRevoked propagates revoked Sessions and access tokens, tells the
-// User's remaining connections that their Session list changed, then tells
-// the affected Attempts' candidate and Sitting board that their activity
-// changed. Publication failures are reported, not returned.
+// SessionsRevoked also tells the user's remaining connections and the
+// affected attempts' candidate and sitting board. Publication failures are
+// reported, not returned.
 func (s *Service) SessionsRevoked(
 	ctx context.Context,
 	userID model.UserID,
@@ -127,8 +120,8 @@ func (s *Service) SessionsRevoked(
 		return
 	}
 
-	// The revoked Sessions' connections are already closed, so only the
-	// User's other connections hear this.
+	// The revoked sessions' connections are already closed, so only the
+	// user's other connections hear this.
 	sessionsEvent, err := NewCurrentUserSessionsChangedEvent(userID)
 	if err == nil {
 		err = s.Publish(ctx, sessionsEvent)
@@ -170,8 +163,8 @@ func (s *Service) SessionsRevoked(
 	}
 }
 
-// AuthenticationCacheInvalidated clears a User's cached authentications
-// locally and then on peers, without closing sockets.
+// AuthenticationCacheInvalidated clears cached authentications locally and
+// then on peers, without closing sockets.
 func (s *Service) AuthenticationCacheInvalidated(
 	ctx context.Context,
 	userID model.UserID,
@@ -180,9 +173,9 @@ func (s *Service) AuthenticationCacheInvalidated(
 	s.deps.Delivery.AuthenticationCacheInvalidated(ctx, userID, accessTokenHashes)
 }
 
-// InvalidateAuthorization propagates a change to a User's authorization and
-// tells their clients to refresh their activity and current-user context.
-// Publication failures are reported, not returned.
+// InvalidateAuthorization also tells the user's clients to refresh their
+// activity and current-user context. Publication failures are reported, not
+// returned.
 func (s *Service) InvalidateAuthorization(ctx context.Context, userID model.UserID) {
 	s.deps.Delivery.InvalidateAuthorization(ctx, userID)
 	if userID == "" {
@@ -201,8 +194,8 @@ func (s *Service) InvalidateAuthorization(ctx context.Context, userID model.User
 	}
 }
 
-// InvalidateCurrentUserContext tells a User's clients that their current-user
-// context changed.
+// InvalidateCurrentUserContext tells the user's clients to refetch their
+// current-user context.
 func (s *Service) InvalidateCurrentUserContext(ctx context.Context, userID model.UserID) error {
 	event, err := NewCurrentUserContextChangedEvent(userID)
 	if err != nil {

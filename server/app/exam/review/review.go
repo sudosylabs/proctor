@@ -17,8 +17,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ResultReleaseMailPreparation is the safe identity of one result release;
-// the preparer resolves the recipient and what the notice shows.
+// ResultReleaseMailPreparation identifies one result release; the preparer
+// resolves the recipient and what the notice shows.
 type ResultReleaseMailPreparation struct {
 	ExpectedReviewRevision int64
 	CandidateUserID        model.UserID
@@ -28,16 +28,15 @@ type ResultReleaseMailPreparation struct {
 	ReleasedAt             time.Time
 }
 
-// PreparedResultReleaseMail is a frozen release notice together with the
-// recipient User revision it was prepared against, which the releasing Store
-// operation receives as its fence.
+// PreparedResultReleaseMail is a frozen release notice and the recipient's
+// user revision it was prepared against, which the store release fences on.
 type PreparedResultReleaseMail struct {
 	Notice                    *store.PreparedMail
 	ExpectedRecipientRevision int64
 }
 
-// Dependencies are the collaborators New validates once and distributes to
-// the Service.
+// Dependencies are what New needs. New checks only Authorizer.Sittings; the
+// authorizer's other fields are checked on each call.
 type Dependencies struct {
 	Persistence   store.ExamIntegrityReviewStore
 	Authorizer    SittingManagerAuthorizer
@@ -49,15 +48,14 @@ type Dependencies struct {
 	NewDecisionID func() model.IntegrityReviewDecisionID
 }
 
-// Service holds the Integrity Review use cases: recording decisions,
-// finalizing a Review, releasing the result, and the manager and candidate
-// reads.
+// Service holds the integrity review use cases and their manager and
+// candidate reads.
 type Service struct {
 	reviews store.ExamIntegrityReviewStore
 
 	authorizer SittingManagerAuthorizer
-	// auditor records the attempt and failure of each audited Review
-	// mutation; the Store completes the attempt with the change it commits.
+	// auditor begins and fails mutation audits; the store completes them with
+	// the change it commits.
 	auditor       access.MutationAuditAdapter
 	publisher     realtime.Publisher
 	mail          ResultReleaseMail
@@ -66,7 +64,7 @@ type Service struct {
 	newDecisionID func() model.IntegrityReviewDecisionID
 }
 
-// New builds the Service, or fails when a collaborator is missing.
+// New fails when a required dependency is missing.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Persistence == nil ||
 		deps.Authorizer.Sittings == nil ||

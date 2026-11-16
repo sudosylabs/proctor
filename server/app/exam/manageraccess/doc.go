@@ -5,13 +5,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package manageraccess decides which action a caller needs for an Exam: the
-// ordinary action, for a current Exam Manager who is also a current member
-// of the Exam's own Academic Unit, or the explicit override action for anyone
-// else. Being an Exam Manager grants no permission by itself, and using an
-// override never makes someone a manager.
-//
-// SelectAction only picks the action. The caller still authorizes it, and
-// keeps error handling, audit and any mutation. The package imports only
-// model and store and caches nothing.
+// Package manageraccess picks which action a caller needs for an exam: the
+// ordinary one for a current manager who is also a current member of the
+// exam's own academic unit, the override one for anyone else. Being a manager
+// grants no permission by itself, and picking an action authorizes nothing;
+// the caller still authorizes it.
 package manageraccess

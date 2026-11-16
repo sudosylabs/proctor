@@ -5,11 +5,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package localcachelayer caches a small handwritten allowlist of disposable
-// store reads in bounded process-local memory. PostgreSQL remains authoritative.
-// The package depends inward only on store and model contracts; it does not own
-// PostgreSQL, cluster transport, application workflow caches, or security-state
-// caching.
+// Package localcachelayer caches a handwritten allowlist of store reads in
+// bounded process memory. PostgreSQL stays authoritative: a cache failure is
+// a miss, and security state is never cached here.
 //
 //go:generate go run ../storetest/layergen -layer localcache -source .. -output forwarding_gen.go
 package localcachelayer

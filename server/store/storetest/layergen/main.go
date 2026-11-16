@@ -5,13 +5,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Command layergen writes forwarding_gen.go for the three Store layers
-// (store/timerlayer, store/retrylayer and store/localcachelayer). It reads the
-// contracts in package store. For the timing layer it emits a timed method
-// for every contract method; for the retry and cache layers it emits wrappers
-// that embed each contract, so those layers hand-write only the methods they
-// retry or cache. Each layer's doc.go carries the go:generate line, and
-// make -C server generate runs them all.
+// Command layergen writes forwarding_gen.go for the timer, retry and local
+// cache store layers from the contracts in package store. The retry and cache
+// layers get embedding wrappers, so they hand-write only the methods they
+// retry or cache; the timer layer gets a timed method for every contract
+// method.
 package main
 
 import (
@@ -139,9 +137,8 @@ func parseInterfaces(path string) ([]interfaceSpec, map[string]struct{}, error) 
 	return orderInterfaces(interfaces), storeTypes, nil
 }
 
-// interfaceMethods returns the methods of the named contract in declaration
-// order, expanding interfaces embedded from the same package (such as the
-// Catalog view embedded by Store).
+// interfaceMethods expands interfaces embedded from the same package, such as
+// the Catalog view embedded by Store, keeping declaration order.
 func interfaceMethods(name string, contracts map[string]*ast.InterfaceType, storeTypes map[string]struct{}, visiting map[string]bool) ([]methodSpec, error) {
 	if visiting[name] {
 		return nil, fmt.Errorf("%s embeds itself", name)
@@ -184,10 +181,9 @@ func interfaceMethods(name string, contracts map[string]*ast.InterfaceType, stor
 	return methods, nil
 }
 
-// orderInterfaces puts the root Store first and every model store in the
-// order of the root accessors, so generated output does not depend on how
-// the contracts are split across files. Stores without an accessor follow by
-// name.
+// orderInterfaces puts the root Store first and every model store in root
+// accessor order, so the output does not depend on how contracts are split
+// across files. Stores without an accessor follow by name.
 func orderInterfaces(interfaces []interfaceSpec) []interfaceSpec {
 	position := make(map[string]int)
 	for _, spec := range interfaces {

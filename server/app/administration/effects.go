@@ -15,10 +15,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// publishAccessPolicyChanged propagates a committed Access Policy
-// replacement: it closes the Sessions the replacement revoked, drops the
-// cached authentication of the Sessions whose deadlines it shortened, and
-// then tells everyone who may view the policy to refetch it.
+// publishAccessPolicyChanged closes the sessions a replacement revoked, drops
+// the cached authentication of those it shortened, and then tells everyone
+// who may view the policy to refetch it.
 func (s *Service) publishAccessPolicyChanged(
 	ctx context.Context,
 	institutionID model.InstitutionID,
@@ -27,8 +26,8 @@ func (s *Service) publishAccessPolicyChanged(
 	for _, revocation := range replacement.SessionRevocations {
 		s.publisher.SessionsRevoked(ctx, revocation.UserID, revocation.SessionIDs, revocation.AccessTokenHashes)
 	}
-	// Shortened Sessions stay live, so cached authentication is dropped
-	// rather than the Sessions revoked.
+	// Shortened sessions stay live, so only their cached authentication is
+	// dropped.
 	for _, deadline := range replacement.SessionDeadlineChanges {
 		s.publisher.AuthenticationCacheInvalidated(ctx, deadline.UserID, deadline.AccessTokenHashes)
 	}

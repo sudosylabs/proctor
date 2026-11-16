@@ -35,7 +35,7 @@ type selfAuditEventResponse struct {
 	IPAddress  string                    `json:"ip_address,omitempty"`
 	UserAgent  string                    `json:"user_agent,omitempty"`
 	// Summary is one sentence describing the event in the request's locale.
-	// It never names who acted on the caller, and names the User the caller
+	// It never names who acted on the caller, and names the user the caller
 	// acted on only while the caller can see them.
 	Summary string `json:"summary"`
 }
@@ -76,7 +76,7 @@ func selfAuditEventResponseFromApplication(request *http.Request, event administ
 
 // selfAuditListResponse is the collection envelope plus the page's runs and
 // the history size, which only the first page carries. The count is bounded
-// per User, so the total is exact below store.MaximumAuditSelfCount and a
+// per user, so the total is exact below store.MaximumAuditSelfCount and a
 // lower bound at it.
 type selfAuditListResponse struct {
 	Items             []selfAuditEventResponse `json:"items"`

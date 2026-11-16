@@ -19,10 +19,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// FileContent stores, opens and removes the bytes of one Resource rendition.
-// StoreExamResource returns the rendition it wrote, whose checksum the use
-// case compares with the one the caller declared; RemoveExamResource discards
-// a rendition that never became visible.
+// FileContent holds the bytes of resource renditions. StoreExamResource
+// returns the rendition it wrote so the caller can check the declared
+// checksum; RemoveExamResource discards a rendition that never became visible.
 type FileContent interface {
 	StoreExamResource(
 		context.Context,
@@ -36,17 +35,15 @@ type FileContent interface {
 	RemoveExamResource(context.Context, model.FileRevisionID, model.FileRenditionID) error
 }
 
-// Service manages the Exam Resources of an Exam Draft.
+// Service manages exam draft resources; build it with New.
 type Service struct {
-	resources store.ExamResourceStore
-	// exams reads the Exam ownership and Draft a command is authorized and
-	// fenced against.
+	resources           store.ExamResourceStore
 	exams               store.ExamAuthoringStore
 	academicUnitMembers store.AcademicUnitMemberStore
 
 	authorizer *access.Authorizer
-	// auditor records the attempt and failure of each audited command; the
-	// Store completes the attempt with the change it commits.
+	// auditor only begins and fails audits; the store completes them in the
+	// same transaction as the change.
 	auditor       access.MutationAuditAdapter
 	publisher     realtime.Publisher
 	content       FileContent
@@ -57,8 +54,7 @@ type Service struct {
 	newLeaseID    func() model.UploadLeaseID
 }
 
-// Dependencies are the collaborators New validates once and distributes to
-// the Service.
+// Dependencies are the Service's collaborators; New requires every field.
 type Dependencies struct {
 	Persistence   store.ExamResourceStore
 	Access        store.ExamAuthoringStore
@@ -74,8 +70,7 @@ type Dependencies struct {
 	NewLeaseID    func() model.UploadLeaseID
 }
 
-// New returns an Exam Resource Service, or an error when a required
-// dependency is missing.
+// New returns an error when any dependency is nil.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Persistence == nil ||
 		deps.Access == nil ||

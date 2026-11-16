@@ -16,12 +16,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// announcingImports is the onboarding import Store the Service holds. Each
-// named operation that moves an administrative import to a state returns
-// only after it commits, so its override then publishes
-// onboarding_import.changed; reads and per-row progress pass through. Every
-// transition, from upload and its Jobs to commit and cancellation, goes
-// through these operations, so none can be committed unannounced.
+// announcingImports publishes onboarding_import.changed after each state
+// transition commits. Every transition goes through these overrides, so none
+// can commit unannounced.
 type announcingImports struct {
 	store.OnboardingImportStore
 	service *Service
@@ -75,8 +72,6 @@ func (a announcingImports) FailOnboardingImport(
 	return a.announced(ctx, value, err)
 }
 
-// announced publishes value when the operation that returned it committed,
-// and returns the operation's result unchanged.
 func (a announcingImports) announced(
 	ctx context.Context,
 	value *store.OnboardingImport,
@@ -88,12 +83,10 @@ func (a announcingImports) announced(
 	return value, err
 }
 
-// publishImportChanged tells the onboarding_batch.view subscribers of the
-// import's scope and of every scope enclosing it that the import entered its
-// current state. A Student Progression is authorized per Class pair rather
-// than by onboarding_batch.view, so it is not announced. It is best effort:
-// when the enclosing scopes cannot be read, the import's own scope still
-// hears of it.
+// publishImportChanged notifies the import's scope and every enclosing scope.
+// Student progressions are authorized per class pair, not by
+// onboarding_batch.view, so they are not announced. Best effort: if the
+// enclosing scopes cannot be read, the import's own scope still hears of it.
 func (s *Service) publishImportChanged(ctx context.Context, value *store.OnboardingImport) {
 	if value == nil || value.Mode == model.OnboardingImportStudentProgression {
 		return
@@ -117,12 +110,8 @@ func (s *Service) publishImportChanged(ctx context.Context, value *store.Onboard
 	}
 }
 
-// importAudience is the import's own scope followed by each scope that
-// encloses it: the Academic Units above it, nearest first, then the
-// Institution. A subscriber at any of them may view the import. It always
-// returns the import's own scope, with the error that stopped the walk.
-// publishCreatorImportChanged announces a filter preview to its creator alone,
-// because only the creator may read it.
+// publishCreatorImportChanged announces a filter preview to its creator
+// alone, because only the creator may read it.
 func (s *Service) publishCreatorImportChanged(ctx context.Context, value *store.OnboardingImport) {
 	event, err := realtime.NewCreatorOnboardingImportChangedEvent(value.ActorUserID, value.ID, value.State)
 	if err == nil {
@@ -166,9 +155,7 @@ func (s *Service) importAudience(ctx context.Context, scopeType model.RoleScopeT
 	return audience, nil
 }
 
-// publishInvitationChanged tells the User who issued an Invitation that it
-// reached its current state. An Invitation without a recorded inviter has
-// no one to tell. It is best effort.
+// publishInvitationChanged notifies the inviter, best effort.
 func (s *Service) publishInvitationChanged(ctx context.Context, invitation *model.Invitation, operation string) {
 	if invitation == nil || invitation.InviterUserID.IsZero() {
 		return

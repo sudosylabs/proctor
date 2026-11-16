@@ -25,14 +25,14 @@ type revokeSessionRequest struct {
 	SessionID string `json:"session_id"`
 }
 
-// renameSessionRequest names one of the caller's browser or CLI Sessions.
+// renameSessionRequest names one of the caller's browser or CLI sessions.
 type renameSessionRequest struct {
 	DeviceName string `json:"device_name"`
 }
 
-// currentUserSessionResponse is one item of the caller's own Session list.
-// A Desktop Session also carries the name of its Desktop Registration, which
-// is the name the User gives that device.
+// currentUserSessionResponse is one item of the caller's own session list.
+// A Desktop session also carries the name the user gave its desktop
+// registration.
 type currentUserSessionResponse struct {
 	sessionResponse
 	DesktopRegistrationDisplayName string `json:"desktop_registration_display_name,omitempty"`
@@ -164,8 +164,8 @@ func (h sessionHandlers) rename(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 
-	// Only a browser or CLI Session can be renamed, so no Desktop
-	// Registration name accompanies it.
+	// Only a browser or CLI session can be renamed, so no desktop
+	// registration name accompanies it.
 	return route.JSON(http.StatusOK, currentUserSessionResponseFromModel(request, renamed, nil)).
 		WithHeaders(noStoreHeaders()), nil
 }
@@ -219,7 +219,7 @@ func (h sessionHandlers) revokeAll(request route.Request) (route.Result, error) 
 	return result, nil
 }
 
-// revokeOthers keeps the requesting Session, so its cookies stay in place.
+// revokeOthers keeps the requesting session, so its cookies stay in place.
 func (h sessionHandlers) revokeOthers(request route.Request) (route.Result, error) {
 	result, err := h.app.RevokeOtherSessions(
 		request.Context,

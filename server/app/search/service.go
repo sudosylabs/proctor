@@ -26,11 +26,11 @@ import (
 type Type string
 
 const (
-	// TypeExam matches Exams by their current Draft title.
+	// TypeExam matches exams by their current draft title.
 	TypeExam Type = "exam"
-	// TypeClass matches Classes by name or display name.
+	// TypeClass matches classes by name or display name.
 	TypeClass Type = "class"
-	// TypeUser matches Users by their visible directory fields.
+	// TypeUser matches users by their visible directory fields.
 	TypeUser Type = "user"
 )
 
@@ -60,8 +60,7 @@ type Result struct {
 }
 
 // Dependencies are the collaborators of Service. Exams and Users are the
-// Exam catalog and User directory use cases themselves, so each type is
-// authorized, audited and scoped exactly as its own list is.
+// list use cases themselves, which is what keeps search scoped like each list.
 type Dependencies struct {
 	Exams              *exam.Authoring
 	Users              *user.Service
@@ -69,23 +68,21 @@ type Dependencies struct {
 	Classes            store.ClassStore
 }
 
-// Service finds Exams, Classes and Users within the caller's own list
-// visibility for each type.
+// Service searches across types within the caller's own list visibility for
+// each.
 type Service struct {
 	deps Dependencies
 }
 
-// New builds the search Service over the services that own each searched
-// type.
+// New builds a Service from deps.
 func New(deps Dependencies) *Service {
 	return &Service{deps: deps}
 }
 
-// Search finds Exams by Draft title, Classes by name or display name, and
-// Users by directory fields. Each requested type runs its own list
-// authorization; a type the caller may not list contributes no matches, and
-// the search is denied only when the caller may list none of the requested
-// types. The query text never enters logs or audit records.
+// Search runs each requested type's own list authorization; a type the caller
+// may not list contributes no matches, and the search is denied only when
+// the caller may list none of them. The query text never enters logs or
+// audit records.
 func (s *Service) Search(ctx context.Context, inv invocation.Invocation, query Query) (Result, error) {
 	term, types, limit, err := validateQuery(query)
 	if err != nil {
@@ -149,8 +146,8 @@ func (s *Service) searchClasses(
 	return classes, nil
 }
 
-// classSearchStoreErrors presents every Class search Store failure as
-// unavailable: the search reads no single Class whose absence or conflict a
+// classSearchStoreErrors maps every class search store failure to
+// unavailable: the search reads no single class whose absence or conflict a
 // caller could act on.
 var classSearchStoreErrors = apperror.StoreTable{Unavailable: "administration.unavailable"}
 

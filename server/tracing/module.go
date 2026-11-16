@@ -6,14 +6,12 @@
 // ---------------------------------------------------------------------------------------------
 
 // Package tracing owns the node's opt-in OpenTelemetry tracer provider and
-// its OTLP/HTTP exporter. Consumers receive narrow ports from composition; no
-// application use case depends on this package or on OpenTelemetry types, and
-// the package never installs a process-global tracer provider.
+// OTLP/HTTP exporter. It never installs a process-global provider.
 //
-// Span names and attributes come only from route templates, closed store
-// operation names, registered Job types, bounded methods and outcomes, and
-// server-generated request IDs. Credentials, User data, exam content, raw
-// paths, query strings, SQL, and error text never enter a span.
+// Span names and attributes come only from closed sets (route templates, store
+// operations, job types, outcomes) and server-generated request IDs.
+// Credentials, user data, exam content, raw paths, SQL and error text never
+// enter a span.
 package tracing
 
 import (
@@ -42,17 +40,16 @@ import (
 	"github.com/sudosylabs/proctor/server/store/timerlayer"
 )
 
-// instrumentationName identifies Proctor's own instrumentation scope.
 const instrumentationName = "github.com/sudosylabs/proctor/server"
 
-// Identity names this node's service resource.
+// Identity becomes the service resource attributes of every span.
 type Identity struct {
 	Version string
 	NodeID  string
 }
 
-// Module is the node's tracing lifecycle owner. A disabled Module starts no
-// exporter and hands out spans that record nothing.
+// Module owns the tracer provider. A disabled Module starts no exporter and
+// hands out spans that record nothing.
 type Module struct {
 	settings config.Tracing
 	provider *sdktrace.TracerProvider
@@ -65,8 +62,8 @@ type Module struct {
 	closeErr  error
 }
 
-// New constructs the tracing module. When tracing is disabled no exporter,
-// goroutine, or connection is created. errorLog receives exporter failures.
+// New creates no exporter, goroutine or connection when tracing is disabled.
+// errorLog receives exporter failures.
 func New(settings config.Tracing, identity Identity, errorLog *log.Logger) (*Module, error) {
 	if !settings.Enabled {
 		return &Module{settings: settings, tracer: noop.NewTracerProvider().Tracer(instrumentationName)}, nil
@@ -126,19 +123,17 @@ func (m *Module) Close(ctx context.Context) error {
 	return m.closeErr
 }
 
-// HTTPRequest is one inbound request's server span.
+// HTTPRequest is one inbound request's server span; End is safe to call twice.
 type HTTPRequest struct {
 	span   trace.Span
 	method string
 	once   sync.Once
 }
 
-// StartRequest begins the server span for an inbound request, for the HTTP
-// transport. Its W3C trace context is continued only when ContinueParent is
-// true, which the transport sets solely for a trusted proxy peer; an
-// untrusted client can neither choose the trace identity nor force sampling.
-// Method must already be bounded; RequestID is the server-assigned
-// correlation ID.
+// StartRequest continues the caller's W3C trace context only when
+// ContinueParent is set, which the transport does only for a trusted proxy, so
+// an untrusted client cannot choose the trace or force sampling. Method must
+// already be bounded.
 func (m *Module) StartRequest(ctx context.Context, request route.TracedRequest) (context.Context, route.RequestSpan) {
 	method, requestID := request.Method, request.RequestID
 	if request.ContinueParent && m.Enabled() {
@@ -156,7 +151,7 @@ func (m *Module) StartRequest(ctx context.Context, request route.TracedRequest) 
 	return ctx, &HTTPRequest{span: span, method: method}
 }
 
-// SetRoute names the span by its sealed route template, never the raw path.
+// SetRoute names the span by its route template, never the raw path.
 func (r *HTTPRequest) SetRoute(route string) {
 	if r == nil || route == "" {
 		return
@@ -165,8 +160,8 @@ func (r *HTTPRequest) SetRoute(route string) {
 	r.span.SetAttributes(attribute.String("http.route", route))
 }
 
-// End records the response status and ends the span once; later calls,
-// such as after a protocol upgrade already ended it, are ignored.
+// End records the status and ends the span; later calls, such as after a
+// protocol upgrade, are ignored.
 func (r *HTTPRequest) End(status int) {
 	if r == nil {
 		return
@@ -180,11 +175,9 @@ func (r *HTTPRequest) End(status int) {
 	})
 }
 
-// StartOperation begins an internal span for one store operation, for the
-// store timing layer. It records only when the context already carries a
-// recording span, so background polling never creates root traces. The
-// span carries only the closed aggregate.operation name; arguments, SQL and
-// rows never reach it.
+// StartOperation records only under an existing recording span, so background
+// polling never creates root traces. The span carries the operation name only,
+// never arguments, SQL or rows.
 func (m *Module) StartOperation(ctx context.Context, operation timerlayer.Operation) (context.Context, func(timerlayer.Outcome)) {
 	if !trace.SpanFromContext(ctx).IsRecording() {
 		return ctx, func(timerlayer.Outcome) {}
@@ -202,10 +195,9 @@ func (m *Module) StartOperation(ctx context.Context, operation timerlayer.Operat
 	}
 }
 
-// StartExecution begins the root span of one claimed Job execution, for the
-// Job engine. Only the registered Job type and the closed outcome are
-// recorded, never payloads or identifiers. A canceled, relinquished or
-// shut-down execution is not a failure: the Job runs again elsewhere.
+// StartExecution starts a new root span for a claimed job, recording only its
+// type and outcome. A canceled, relinquished or shut-down execution is not an
+// error: the job runs again elsewhere.
 func (m *Module) StartExecution(ctx context.Context, jobType model.JobType) (context.Context, func(job.ExecutionOutcome)) {
 	ctx, span := m.tracer.Start(
 		trace.ContextWithSpanContext(ctx, trace.SpanContext{}),

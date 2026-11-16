@@ -67,10 +67,9 @@ func (r workReader) Read(body []byte) (int, error) {
 	return r.reader.Read(body)
 }
 
-// Validators may rewind their private spool and request large reads. Cap each
-// read so cancellation is observed between bounded amounts of input, including
-// when a parser buffers one large value. CPU work inside a synchronous codec
-// remains non-interruptible, and the caller still owns the processing permit.
+// Validators may rewind their spool and ask for large reads, so each read is
+// capped to observe cancellation between bounded amounts of input. CPU work
+// inside a codec is still not interruptible, and the caller keeps the slot.
 type workReadSeeker struct {
 	ctx    context.Context
 	reader io.ReadSeeker

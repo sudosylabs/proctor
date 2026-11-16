@@ -5,16 +5,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package asyncapidoc compiles the human-authored AsyncAPI source tree for the
-// realtime protocol into the reviewed JSON artifact the documentation site and
-// the conformance tests read.
+// Package asyncapidoc compiles the AsyncAPI source tree for the realtime
+// protocol into the JSON artifact the docs site and conformance tests read.
 //
-// The source is a base document and fragments, as for OpenAPI. Payload shapes
-// live once, as JSON Schema files in schemas/realtime, and fragments point at
-// them with relative $ref paths. Compile copies each referenced file into
-// components.schemas, so the artifact is self-contained, and then validates
-// it: against the official AsyncAPI 3.0 schema, every $ref, and every message
-// example against its message payload.
+// Payload shapes live once, as JSON Schema files in schemas/realtime, and are
+// copied into components.schemas so the artifact is self-contained. The result
+// is validated against the AsyncAPI 3.0 schema, every $ref, and every example.
 package asyncapidoc
 
 import (
@@ -83,8 +79,7 @@ var schemaKeywords = map[string]struct{}{
 }
 
 // Compile reads source (the AsyncAPI source directory) and SchemaDirectory
-// from root, merges and bundles them, validates the result, and returns its
-// deterministic JSON representation.
+// from root and returns the validated document as deterministic JSON.
 func Compile(root fs.FS, source string) ([]byte, error) {
 	if root == nil {
 		return nil, errors.New("AsyncAPI root filesystem is required")

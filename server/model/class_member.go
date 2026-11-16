@@ -16,12 +16,10 @@ import (
 	"time"
 )
 
-// ClassMember is a student's enrollment in one Class and AcademicPeriod.
-// AcademicPeriodID deliberately duplicates Class.AcademicPeriodID so the store
-// can enforce at most one active class membership per user and period with a
-// database constraint. The application/store must verify that both period IDs
-// match. Teachers and staff reach classes through role inheritance or an
-// explicit class RoleBinding; they are not ClassMember records.
+// ClassMember is a student's enrollment in one class. AcademicPeriodID
+// duplicates the class's period so a database constraint can allow one active
+// membership per user and period; app and the store must check the two match.
+// Teachers and staff reach classes through role bindings, not ClassMember.
 type ClassMember struct {
 	ID               ClassMemberID
 	CreatedAt        time.Time
@@ -35,7 +33,8 @@ type ClassMember struct {
 	EndsAt           OptionalTime
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
+// PrepareCreate stamps the ID and creation time and defaults StartsAt to it;
+// it does nothing on nil.
 func (cm *ClassMember) PrepareCreate(id ClassMemberID, at time.Time) {
 	if cm == nil {
 		return
@@ -55,7 +54,7 @@ func (cm *ClassMember) PrepareCreate(id ClassMemberID, at time.Time) {
 	}
 }
 
-// PrepareUpdate applies the application-selected transition time.
+// PrepareUpdate stamps the update time and bumps the revision.
 func (cm *ClassMember) PrepareUpdate(at time.Time) {
 	if cm == nil {
 		return
@@ -67,7 +66,7 @@ func (cm *ClassMember) PrepareUpdate(at time.Time) {
 	cm.Revision++
 }
 
-// Validate checks rehydrated enrollment state.
+// Validate checks the enrollment's fields, for new and stored values alike.
 func (cm *ClassMember) Validate() error {
 	const where = "ClassMember.Validate"
 	if cm == nil {
@@ -98,7 +97,8 @@ func (cm *ClassMember) Validate() error {
 	return validateEffectiveInterval(where, "class_member", details, cm.StartsAt, cm.EndsAt)
 }
 
-// IsActiveAt reports whether the enrollment covers the given instant.
+// IsActiveAt reports whether now falls in [StartsAt, EndsAt) of an unarchived
+// enrollment.
 func (cm *ClassMember) IsActiveAt(now time.Time) bool {
 	if cm == nil || cm.IsArchived() {
 		return false
@@ -113,12 +113,14 @@ func (cm *ClassMember) IsActiveAt(now time.Time) bool {
 	return true
 }
 
-// IsArchived reports soft archive state.
+// IsArchived reports whether ArchivedAt is set; a nil enrollment is not
+// archived.
 func (cm *ClassMember) IsArchived() bool {
 	return cm != nil && cm.ArchivedAt.Valid
 }
 
-// End closes an open-ended enrollment at the exclusive end time.
+// End sets the exclusive end time of an open-ended enrollment; ending it twice
+// fails.
 func (cm *ClassMember) End(at time.Time) error {
 	if cm == nil {
 		return invalidModelError("ClassMember.End", "class_member", "", "class member is nil", "")
@@ -133,7 +135,7 @@ func (cm *ClassMember) End(at time.Time) error {
 	return cm.Validate()
 }
 
-// Auditable returns a deliberately safe audit projection.
+// Auditable returns the fields that are safe to record in the audit log.
 func (cm *ClassMember) Auditable() map[string]any {
 	if cm == nil {
 		return map[string]any{}

@@ -13,9 +13,9 @@ import (
 	hashimemberlist "github.com/hashicorp/memberlist"
 )
 
-// seedReconciler is private transport machinery. It serializes bounded join
-// batches inside the discovery-maintenance goroutine and rotates through
-// unavailable candidates so one bad static seed cannot starve later peers.
+// seedReconciler joins a few seeds per run and rotates through them, so one
+// bad static seed cannot starve later peers. Only the discovery goroutine
+// calls it, so it needs no lock.
 type seedReconciler struct {
 	list *hashimemberlist.Memberlist
 	next int

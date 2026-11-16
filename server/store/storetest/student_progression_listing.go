@@ -23,8 +23,8 @@ import (
 
 // testStudentProgressionListing proves the student progression listing:
 // newest first with identity breaking ties, a stable keyset, each filter, the
-// scope predicate that requires both Classes inside one
-// academic_progression.manage scope, the Class names read with each row, the
+// scope predicate that requires both classes inside one
+// academic_progression.manage scope, the class names read with each row, the
 // exclusion of expired progressions, and a count equal to every page together.
 func testStudentProgressionListing(t *testing.T, ss store.Store) {
 	t.Helper()
@@ -200,7 +200,7 @@ func testStudentProgressionListing(t *testing.T, ss store.Store) {
 				options := store.StudentProgressionListOptions{Visibility: test.visibility}
 				require.Equal(t, test.want, list(t, options), test.reason)
 				if len(test.visibility.ClassIDs) > 0 || slices.Contains(test.visibility.AcademicUnitRootIDs, child.ID) {
-					// Only scopes confined to this test's Classes count stably
+					// Only scopes confined to this test's classes count stably
 					// against a database other tests share.
 					requireCountMatchesPages(t, options)
 				}

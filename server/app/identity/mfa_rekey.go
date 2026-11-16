@@ -30,9 +30,8 @@ type MFASecretKeyUsageView struct {
 	Configured  bool
 }
 
-// MFAKeyStateView is the operator projection of the MFA key ring: this node's
-// configured primary, the durable fence every writer must honor, the rekey
-// that installed it, and the live secrets per sealing key.
+// MFAKeyStateView reports this node's primary beside RequiredPrimaryKeyID, the
+// durable fence every writer must honor.
 type MFAKeyStateView struct {
 	PrimaryKeyID         string
 	RequiredPrimaryKeyID string
@@ -40,8 +39,7 @@ type MFAKeyStateView struct {
 	Active               []MFASecretKeyUsageView
 }
 
-// StartMFARekeyCommand re-seals every live TOTP secret under the configured
-// primary so that RetiringKeyID can leave the ring.
+// StartMFARekeyCommand names the key to retire once every secret is re-sealed.
 type StartMFARekeyCommand struct {
 	RetiringKeyID string
 }
@@ -68,9 +66,9 @@ type MFARekeyProofView struct {
 	RetirementSafe       bool
 }
 
-// MFARekeyStatusView is the safe, typed operator projection of one MFA rekey
-// Job. It excludes the raw command, checkpoint, credential identities,
-// ciphertext, and key material.
+// MFARekeyStatusView is the operator view of one rekey job. It deliberately
+// omits the raw command, checkpoint, credential identities, ciphertext and key
+// material.
 type MFARekeyStatusView struct {
 	JobID           model.JobID
 	Status          model.JobStatus
@@ -88,8 +86,6 @@ type MFARekeyStatusView struct {
 	Proof           *MFARekeyProofView
 }
 
-// requireMFARekey checks the collaborators of the MFA key ring use cases,
-// which exist only when the catalog has Job and MFA stores.
 func (s *Service) requireMFARekey() error {
 	if s.mfaCredentials == nil || s.jobs == nil || s.authorizer == nil || s.now == nil || s.mfaRekeyWake == nil {
 		return errors.New("MFA key service dependencies are incomplete")
@@ -97,9 +93,8 @@ func (s *Service) requireMFARekey() error {
 	return nil
 }
 
-// authorizeMFARekey authorizes mfa.rekey on the installation's Institution for
-// a strong, recent Session and returns that Resource for the audit. Without
-// Job and MFA stores the key ring is unavailable.
+// authorizeMFARekey requires a strong, recent session and returns the
+// institution resource for the audit.
 func (s *Service) authorizeMFARekey(ctx context.Context, inv invocation.Invocation) (model.Resource, error) {
 	if !s.mfaRekeyEnabled {
 		return model.Resource{}, apperror.New("authentication.mfa.unavailable")
@@ -153,9 +148,9 @@ func (s *Service) GetMFAKeyState(ctx context.Context, inv invocation.Invocation)
 	return view, nil
 }
 
-// StartMFARekey fences the MFA key ring on this node's configured primary and
-// queues the Job that re-seals every live TOTP secret under it. The retiring
-// key must be another key of the configured ring.
+// StartMFARekey fences the key ring on this node's primary and queues the job
+// that re-seals every live secret under it. The retiring key must be another
+// key of the configured ring.
 func (s *Service) StartMFARekey(ctx context.Context, inv invocation.Invocation, command StartMFARekeyCommand) (MFARekeyView, error) {
 	resource, err := s.authorizeMFARekey(ctx, inv)
 	if err != nil {
@@ -231,9 +226,8 @@ func (s *Service) StartMFARekey(ctx context.Context, inv invocation.Invocation, 
 	}, nil
 }
 
-// GetMFARekeyStatus reports the safe progress and retirement proof of one MFA
-// rekey Job. Another Job type is not found, so the caller learns nothing about
-// unrelated Jobs.
+// GetMFARekeyStatus reports a rekey job's progress and retirement proof. A job
+// of another type is reported as not found, so it leaks nothing.
 func (s *Service) GetMFARekeyStatus(
 	ctx context.Context,
 	inv invocation.Invocation,

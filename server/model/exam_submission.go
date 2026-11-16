@@ -49,12 +49,11 @@ func (p ExamSubmissionProvenance) IsValid() bool {
 		p == ExamSubmissionSittingClosed
 }
 
-// ExamSubmissionManifestEntry pins one acknowledged logical Workspace entry.
-// File content remains in its original opaque VFS object; directories have no
-// content selector. Path is retained as immutable protected Submission data,
-// never as an object key, authorization selector, cursor, or audit field.
-// Author is who made the entry's last change; it is zero for an entry
-// unchanged since the Starter Workspace.
+// ExamSubmissionManifestEntry pins one acknowledged workspace entry. File
+// content stays in its original VFS object; directories have none. Path is
+// protected submission data, never an object key, authorization selector,
+// cursor or audit field. Author made the last change, and is zero for an entry
+// unchanged since the starter workspace.
 type ExamSubmissionManifestEntry struct {
 	EntryID         AttemptWorkspaceEntryID
 	Kind            StarterWorkspaceEntryKind
@@ -163,10 +162,10 @@ func (e ExamSubmissionManifestEntry) Validate() error {
 	return nil
 }
 
-// ExamSubmissionManifest is the canonical, immutable description of an exact
-// acknowledged Workspace state. Entries are byte-sorted by stable Entry ID.
-// SHA256 covers a domain-separated, versioned, length-framed binary encoding;
-// it is independent of JSON, SQL row order, and database rendering.
+// ExamSubmissionManifest describes one exact acknowledged workspace state.
+// Entries are byte-sorted by entry ID. SHA256 covers a domain-separated,
+// versioned, length-framed binary encoding, independent of JSON, SQL row order
+// and database rendering.
 type ExamSubmissionManifest struct {
 	SchemaVersion   int
 	WorkspaceCursor int64
@@ -279,10 +278,10 @@ type ExamSubmissionSpecification struct {
 	SubmittedAt              time.Time
 }
 
-// ExamSubmission is the immutable aggregate header for the single seal of an
-// Attempt. Manifest entries remain separately pageable; the header retains the
-// exact canonical manifest summary. Retiring integrity preserves its explicit
-// retirement time while removing the original collection state and counters.
+// ExamSubmission is the immutable header of an attempt's single seal. Manifest
+// entries are paged separately; the header keeps the manifest summary.
+// Retiring integrity keeps the retirement time and removes the original
+// collection state and counters.
 type ExamSubmission struct {
 	ID                       SubmissionID
 	ReceiptCode              SubmissionReceiptCode
@@ -395,11 +394,10 @@ func (s *ExamSubmission) Validate() error {
 	return nil
 }
 
-// SubmitExamAttempt applies the coordinated voluntary terminal lifecycle to a
-// validated active Attempt, its exact active Participation, and its owning open
-// Connection. It mutates none of them unless every ownership and transition
-// check succeeds. Persistence commits this transition with the immutable
-// Submission, manifest, integrity terminal, audit, and command outcome.
+// SubmitExamAttempt applies the candidate's own submission to an active
+// attempt, its exact active participation and its open connection, mutating
+// none of them unless every check passes. Persistence commits it with the
+// submission, manifest, integrity close, audit and command outcome.
 func SubmitExamAttempt(attempt *ExamAttempt, participation *AttemptParticipation, connection *AttemptConnection, at time.Time) error {
 	if attempt == nil ||
 		participation == nil ||
@@ -417,11 +415,11 @@ func SubmitExamAttempt(attempt *ExamAttempt, participation *AttemptParticipation
 	}
 
 	at = TimeUTC(at)
-	// The voluntary seal time is read from PostgreSQL before the sealing
-	// transaction and truncated to milliseconds, so a renewal committed in
-	// between can leave live records updated after it. That is not a reason
-	// to refuse the candidate's Submission, but the terminal transition must
-	// neither precede the episode it ends nor move an updated_at backwards.
+	// The seal time is read from PostgreSQL before the sealing transaction and
+	// truncated to milliseconds, so a renewal committed in between can leave
+	// live records updated after it. That is no reason to refuse the
+	// submission, but the transition must neither precede the episode it ends
+	// nor move an updated_at backwards.
 	if at.IsZero() || at.Before(participation.StartedAt) || at.Before(connection.OpenedAt) {
 		return invalidModelError("SubmitExamAttempt", "exam_submission", "", "invalid Exam Submission time", "")
 	}
@@ -457,12 +455,10 @@ func laterTime(current, candidate time.Time) time.Time {
 	return candidate
 }
 
-// SealExamAttemptForSittingClose applies the coordinated terminal lifecycle
-// when bounded Sitting finalization seals an unfinished Attempt without a
-// cooperative candidate. Existing Participation and Connection fences retain
-// their original causes; only still-active/open records receive the
-// sitting_closed cause. No input is mutated unless the complete aggregate is
-// valid and every required transition succeeds.
+// SealExamAttemptForSittingClose seals an unfinished attempt when the sitting
+// closes without the candidate. Participations and connections that already
+// ended keep their cause; only live ones get sitting_closed. Nothing is mutated
+// unless every transition succeeds.
 func SealExamAttemptForSittingClose(
 	attempt *ExamAttempt,
 	participation *AttemptParticipation,
@@ -519,11 +515,9 @@ func SealExamAttemptForSittingClose(
 	return nil
 }
 
-// EndExamAttemptByManager applies the coordinated terminal lifecycle for an
-// authorized manager decision. It preserves an already-ended continuity cause
-// for ready or suspended Attempts and gives still-live continuity records the
-// explicit manager-ended cause. It does not encode an integrity or academic
-// judgment.
+// EndExamAttemptByManager ends an attempt on an authorized manager's decision.
+// An already-ended participation keeps its cause; live ones get the
+// manager-ended cause. It implies no integrity or academic judgment.
 func EndExamAttemptByManager(
 	attempt *ExamAttempt,
 	participation *AttemptParticipation,

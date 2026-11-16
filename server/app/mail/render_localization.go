@@ -43,8 +43,6 @@ type templateCopy struct {
 	labels       commonLabels
 }
 
-// commonLabels are the shared fact labels and closed values used by the
-// presentation families.
 type commonLabels struct {
 	Exam, Class, PreviousClass, FromClass, ToClass, When, WasScheduled        string
 	EnrolledFrom, EnrolledUntil, NoEnd, YourRole, Since, Token, Access        string

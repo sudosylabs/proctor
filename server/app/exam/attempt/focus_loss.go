@@ -31,12 +31,10 @@ type FocusLossCommand struct {
 	ContinuityCredential string
 }
 
-// FocusLossEvaluation is the safe application result of one accepted claim.
-// It deliberately excludes claim duration/source, credential material, Session
-// identity, evidence content, raw thresholds, and disabled diagnostic counts.
-// Decision booleans describe the accepted sequence and therefore survive an
-// exact duplicate; Duplicate suppresses post-commit effects, not the replayed
-// acknowledgement.
+// FocusLossEvaluation deliberately excludes claim duration and source,
+// credentials, session identity, evidence content and raw thresholds. Its
+// decisions survive an exact duplicate; Duplicate suppresses post-commit
+// effects, not the replayed acknowledgement.
 type FocusLossEvaluation struct {
 	ExamID                      model.ExamID
 	SittingID                   model.ExamSittingID
@@ -70,11 +68,8 @@ type FocusLossEvaluation struct {
 	DiscrepancyRecorded         bool
 }
 
-// EvaluateExamAttemptFocusLoss records one Focus Loss claim from the
-// candidate's live Attempt Participation and applies the frozen policy, which
-// may raise an Integrity Flag and open an Attempt Suspension. A claim that
-// arrives after the Attempt or Sitting ended is evaluated without changing
-// the Attempt.
+// EvaluateExamAttemptFocusLoss applies the frozen policy to one claim. A claim
+// that arrives after the attempt or sitting ended leaves the attempt unchanged.
 func (s *Service) EvaluateExamAttemptFocusLoss(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -155,8 +150,8 @@ func (s *Service) EvaluateExamAttemptFocusLoss(
 		}
 	}
 	if !result.Duplicate && result.ScreenClipRequested {
-		// The Flag asked for the minute either side of it; Desktop reads its
-		// clip requests when told there are some.
+		// The flag asked for the minute either side of it; Desktop reads its clip
+		// requests only when told there are some.
 		s.publishScreenClipsRequested(ctx, result.SittingID, result.AttemptID, result.CandidateUserID, result.ReceivedAt)
 	}
 

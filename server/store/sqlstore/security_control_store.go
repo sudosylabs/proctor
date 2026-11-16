@@ -26,7 +26,7 @@ type nativeControlOwnerRow struct {
 	SummaryOnly  bool   `db:"summary_only"`
 }
 
-// securityControlBudget is the locked Attempt delivery budget a security
+// securityControlBudget is the locked attempt delivery budget a security
 // control charges.
 type securityControlBudget struct {
 	Metadata    int64 `db:"control_metadata_bytes"`
@@ -34,8 +34,8 @@ type securityControlBudget struct {
 	SummaryOnly bool  `db:"native_summary_only"`
 }
 
-// processSecurityControl runs under the existing Attempt/Participation/Session
-// locks. It deliberately does not renew or expire the Participation lease.
+// processSecurityControl runs under the existing attempt/Participation/Session
+// locks. It deliberately does not renew or expire the participation lease.
 // It checks the control against the admitted policy, replays a processed
 // control, and applies the delivery watermarks.
 func (s *SQLExamAttemptStore) processSecurityControl(
@@ -98,7 +98,7 @@ func (s *SQLExamAttemptStore) processSecurityControl(
 	return projectSecurityControl(ctx, tx, input.ParticipationID, admitted.DeliveryStreamID, ledger, &outcome, owner.Allowed, sittingOpen)
 }
 
-// lockSecurityControlOwner locks the Attempt delivery budget and the security
+// lockSecurityControlOwner locks the attempt delivery budget and the security
 // owner and checks the control against the owner's admitted binding.
 func lockSecurityControlOwner(
 	ctx context.Context,
@@ -435,8 +435,8 @@ func projectSecurityControl(
 	return result, nil
 }
 
-// UpdateSecurity records the security control sent over the Candidate's
-// open Connection, applying the same Participation, Connection, and
+// UpdateSecurity records the security control sent over the candidate's
+// open connection, applying the same participation, connection, and
 // credential checks as RenewParticipation without extending the lease.
 func (s *SQLExamAttemptStore) UpdateSecurity(
 	ctx context.Context,
@@ -508,7 +508,7 @@ func recoverNativeControl(
 }
 
 // lockSecurityInteraction is called only by mutation owners, after
-// their Attempt lock. Recovery, monitoring, and renewal never use this gate.
+// their attempt lock. Recovery, monitoring, and renewal never use this gate.
 func lockSecurityInteraction(ctx context.Context, tx *sqlxTxWrapper, attemptID model.ExamAttemptID) error {
 	var allowed bool
 	err := tx.Get(

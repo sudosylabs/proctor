@@ -5,9 +5,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package mailtest builds the production mail template renderer for tests.
-// It lives beside package mail rather than below it, because the import
-// policy refuses application children that import their parent.
+// Package mailtest builds the production mail renderer for tests. It sits
+// beside package mail rather than below it because the import policy refuses
+// application children that import their parent.
 package mailtest
 
 import (
@@ -22,17 +22,17 @@ import (
 	"github.com/sudosylabs/proctor/server/localization"
 )
 
-// NewRenderer returns the renderer production uses, over the server's own
-// templates and English-default message catalogs, so a test sees the subject
-// and body a recipient would get. It finds them from this file's location so
-// that any package's test can call it.
+// NewRenderer returns the production renderer over the server's own
+// templates and English-default catalogs, so a test sees what a recipient
+// would get. It locates them from this file, so any package's test can call
+// it.
 func NewRenderer(tb testing.TB) *mail.TemplateRenderer {
 	tb.Helper()
 	return NewRendererWithPolicy(tb, mail.RendererPolicy{})
 }
 
-// NewRendererWithPolicy is NewRenderer under policy, for a test whose
-// installation the composition would give one, such as a loopback HTTP origin.
+// NewRendererWithPolicy is NewRenderer under policy, such as a loopback HTTP
+// origin.
 func NewRendererWithPolicy(tb testing.TB, policy mail.RendererPolicy) *mail.TemplateRenderer {
 	tb.Helper()
 	_, file, _, ok := runtime.Caller(0)

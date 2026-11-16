@@ -27,18 +27,16 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// The cookies and the header of the browser credential transport. The web and
-// Desktop clients depend on these names.
+// Browser credential cookie and header names. The web and Desktop clients
+// depend on them.
 const (
-	BrowserAccessCookieName               = "PROCTOR_ACCESS"
-	BrowserRefreshCookieName              = "PROCTOR_REFRESH"
-	BrowserCSRFBindingCookieName          = "PROCTOR_CSRF_BINDING"
-	BrowserCSRFCookieName                 = "PROCTOR_CSRF"
-	BrowserExternalLoginCookieName        = "PROCTOR_EXTERNAL_LOGIN"
-	BrowserInvitationProofCookieName      = "PROCTOR_INVITATION_PROOF"
-	BrowserDesktopAuthorizationCookieName = "PROCTOR_DESKTOP_AUTHORIZATION"
-	// BrowserDesktopReauthenticationCookieName carries the opaque binding of
-	// one hosted Desktop reauthentication, scoped to its route family.
+	BrowserAccessCookieName                  = "PROCTOR_ACCESS"
+	BrowserRefreshCookieName                 = "PROCTOR_REFRESH"
+	BrowserCSRFBindingCookieName             = "PROCTOR_CSRF_BINDING"
+	BrowserCSRFCookieName                    = "PROCTOR_CSRF"
+	BrowserExternalLoginCookieName           = "PROCTOR_EXTERNAL_LOGIN"
+	BrowserInvitationProofCookieName         = "PROCTOR_INVITATION_PROOF"
+	BrowserDesktopAuthorizationCookieName    = "PROCTOR_DESKTOP_AUTHORIZATION"
 	BrowserDesktopReauthenticationCookieName = "PROCTOR_DESKTOP_REAUTHENTICATION"
 	BrowserCSRFHeader                        = "X-Proctor-CSRF-Token"
 )
@@ -106,14 +104,14 @@ func (c Cookies) ClearDesktopAuthorizationBinding(writer http.ResponseWriter) {
 	c.expire(writer, BrowserDesktopAuthorizationCookieName, c.desktopAuthorizationPath, true)
 }
 
-// AttachInvitationProof stores the second proof of a browser Invitation
-// acceptance until expiresAt, in Unix milliseconds, scoped to the browser
-// Invitation routes so no script and no other route can read it.
+// AttachInvitationProof stores the second proof of a browser invitation
+// acceptance until expiresAt, in Unix milliseconds, scoped to the invitation
+// routes so no script and no other route can read it.
 func (c Cookies) AttachInvitationProof(writer http.ResponseWriter, proof string, expiresAt int64) {
 	c.set(writer, BrowserInvitationProofCookieName, proof, c.invitationPath, expiresAt, true)
 }
 
-// ClearInvitationProof expires the Invitation proof once it is redeemed or
+// ClearInvitationProof expires the invitation proof once it is redeemed or
 // refused.
 func (c Cookies) ClearInvitationProof(writer http.ResponseWriter) {
 	c.expire(writer, BrowserInvitationProofCookieName, c.invitationPath, true)
@@ -148,7 +146,7 @@ func (c Cookies) ClearExternalLoginBinding(writer http.ResponseWriter) {
 	)
 }
 
-// Attach stores a Session's access and refresh credentials and a fresh CSRF
+// Attach stores a session's access and refresh credentials and a fresh CSRF
 // pair. The refresh cookie is scoped to the refresh route, and the CSRF token
 // is the only cookie a script can read. Nil tokens write nothing.
 func (c Cookies) Attach(

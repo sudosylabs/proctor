@@ -24,17 +24,16 @@ import (
 
 var ErrStoreClosed = errors.New("configuration store is closed")
 
-// Listener applies a configuration change to one dynamically reconfigurable
-// consumer. It returns an error, leaving its consumer on old, when it cannot
-// apply current; the store then restores old on every listener that already
-// applied the change and keeps old in force. A Listener runs while the change
-// is pending and must not call Set or Reload.
+// Listener applies a configuration change to one consumer. On error it must
+// leave its consumer on old; the store then rolls back the listeners that
+// already applied the change. It runs while the change is pending and must not
+// call Set or Reload.
 type Listener func(old, current Config) error
 
-// ReloadResult describes a successful Reload.
+// ReloadResult reports what a successful Reload could not apply.
 type ReloadResult struct {
-	// RestartRequired lists, by configuration path, the changed settings that
-	// Reload left at their running values because they apply only at startup.
+	// RestartRequired are the paths of changed settings that apply only at
+	// startup and so kept their running values.
 	RestartRequired []string
 }
 
@@ -103,14 +102,10 @@ func (s *Store) Describe() string {
 	return s.backing.String()
 }
 
-// Reload re-reads and validates the backing source. Only the sections that
-// running consumers reconfigure dynamically (Log and
-// Authentication.External) take the new values; every other changed setting
-// keeps its running value and is named in RestartRequired. The change is
-// committed only after every listener has applied it; a failing listener
-// rolls the others back, Reload returns the failure, and the running
-// configuration stays in force, so a later Reload of the same source tries
-// again.
+// Reload re-reads the backing source. Only Log and Authentication.External
+// take new values; other changes are named in RestartRequired. The change is
+// committed only after every listener applies it, so after a failure the
+// running configuration stays and a later Reload tries again.
 func (s *Store) Reload(ctx context.Context) (ReloadResult, error) {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
@@ -150,8 +145,6 @@ func (s *Store) Reload(ctx context.Context) (ReloadResult, error) {
 	return result, nil
 }
 
-// reloadable returns running with the dynamically reconfigurable sections of
-// candidate applied.
 func reloadable(running, candidate Config) Config {
 	effective := running.Clone()
 	effective.Log = candidate.Clone().Log
@@ -159,8 +152,6 @@ func reloadable(running, candidate Config) Config {
 	return effective
 }
 
-// load reads, decodes, and validates the backing source and applies the
-// environment overrides.
 func (s *Store) load(ctx context.Context) (Config, Config, appliedEnvironment, error) {
 	data, err := s.backing.Load(ctx)
 	if err != nil {
@@ -186,9 +177,8 @@ func (s *Store) load(ctx context.Context) (Config, Config, appliedEnvironment, e
 	return persisted, current, overrides.clone(), nil
 }
 
-// Set validates and persists candidate as the complete configuration. Every
-// listener applies the change before it is saved; a listener or save failure
-// restores the previous configuration on the listeners that applied it.
+// Set persists candidate as the complete configuration. Listeners apply the
+// change before it is saved, and a listener or save failure rolls them back.
 func (s *Store) Set(ctx context.Context, candidate Config) (Config, Config, error) {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
@@ -287,9 +277,8 @@ func (s *Store) copyListenersLocked() []Listener {
 	return listeners
 }
 
-// applyListeners applies old->current to each listener in registration
-// order. When one fails, the listeners that already applied the change are
-// restored to old in reverse order and the joined failure is returned.
+// applyListeners runs in registration order; on failure it rolls back the
+// listeners that already applied the change, in reverse order.
 func applyListeners(listeners []Listener, old, current Config) error {
 	for index, listener := range listeners {
 		if err := listener(old.Clone(), current.Clone()); err != nil {
@@ -302,7 +291,6 @@ func applyListeners(listeners []Listener, old, current Config) error {
 	return nil
 }
 
-// rollbackListeners restores old on listeners that applied old->current.
 func rollbackListeners(applied []Listener, old, current Config) error {
 	var result error
 	for index := len(applied) - 1; index >= 0; index-- {

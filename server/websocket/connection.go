@@ -189,9 +189,8 @@ func (c *connectionRuntime) cancelFinalization() {
 	}
 }
 
-// acquire retains the runtime for one Hub-selected operation. The Hub calls it
-// while holding the shard read lock, so unregister cannot detach and finalize
-// the runtime between selection and retention.
+// acquire is called under the shard read lock, so unregister cannot detach
+// and finalize the runtime between selection and retention.
 func (c *connectionRuntime) acquire() bool {
 	c.activityMu.Lock()
 	defer c.activityMu.Unlock()

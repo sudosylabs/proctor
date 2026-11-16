@@ -18,8 +18,8 @@ import (
 )
 
 // GetStudentExamResult returns the caller's own released result for an
-// Attempt, with sanitized student remarks. Until release the result is not
-// found rather than withheld, so a candidate cannot tell a Review exists.
+// attempt, with sanitized remarks. Before release it reports not found rather
+// than withheld, so a candidate cannot tell a review exists.
 func (s *Service) GetStudentExamResult(
 	ctx context.Context,
 	inv invocation.Invocation,

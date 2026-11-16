@@ -21,22 +21,22 @@ const (
 	AttemptWorkspaceMaximumPathBytes    = 1024
 	AttemptWorkspaceMaximumFileBytes    = ExamWorkspaceMaximumFileBytes
 	AttemptWorkspaceMaximumTotalBytes   = ExamWorkspaceMaximumTotalBytes
-	// AttemptWorkspaceJournalRetention is how many journal entries an
-	// Attempt Workspace keeps at least. While its execution environment has
-	// not ended, the journal also reaches back to the environment's
-	// projection cursor, up to AttemptWorkspaceJournalCeiling entries; a
-	// reader past what is kept refreshes from the manifest.
+	// AttemptWorkspaceJournalRetention is the fewest journal entries a
+	// workspace keeps. While its execution environment runs, the journal also
+	// reaches back to the environment's projection cursor, up to
+	// AttemptWorkspaceJournalCeiling; a reader behind that refreshes from the
+	// manifest.
 	AttemptWorkspaceJournalRetention = 4096
 	AttemptWorkspaceJournalCeiling   = 65536
-	// AttemptWorkspaceBatchMaximumMutations bounds one atomic Workspace batch,
-	// the only way Workspace content changes. It matches the execution
-	// environment's journal batch, so one harvest is at most one batch.
+	// AttemptWorkspaceBatchMaximumMutations bounds one atomic batch, the only
+	// way workspace content changes. It matches the environment's journal
+	// batch, so one harvest is at most one batch.
 	AttemptWorkspaceBatchMaximumMutations = 128
 	// AttemptWorkspaceBatchManifestMaximumBytes bounds the JSON manifest of
 	// one batch: 128 mutations with two maximal paths each fit.
 	AttemptWorkspaceBatchManifestMaximumBytes = 512 << 10
-	// AttemptWorkspaceBatchMaximumRequestBytes bounds one batch request: its
-	// manifest and, together, the bodies of its files.
+	// AttemptWorkspaceBatchMaximumRequestBytes bounds one batch request: the
+	// manifest plus all its file bodies.
 	AttemptWorkspaceBatchMaximumRequestBytes = AttemptWorkspaceMaximumFileBytes + AttemptWorkspaceBatchManifestMaximumBytes
 	AttemptWorkspaceJournalReadMaximum       = 200
 	AttemptWorkspaceStageLifetime            = time.Hour
@@ -54,24 +54,24 @@ const (
 	AttemptWorkspaceObjectClaimed     AttemptWorkspaceObjectState = "claimed"
 )
 
-// AttemptWorkspaceContent is verified bounded metadata derived while the
-// private object is streamed. It contains no logical path or storage selector.
+// AttemptWorkspaceContent is verified metadata derived while the private
+// object streams. It holds no logical path or storage selector.
 type AttemptWorkspaceContent struct {
 	MediaType string
 	SizeBytes int64
 	SHA256    string
 }
 
-// NormalizeAttemptWorkspacePath accepts an already-canonical, case-sensitive
-// POSIX-relative logical path. Workspace Paths are PostgreSQL metadata, never
-// VFS object keys or authorization selectors.
+// NormalizeAttemptWorkspacePath accepts an already-canonical, case-sensitive,
+// relative POSIX path. Workspace paths are PostgreSQL metadata, never VFS
+// object keys or authorization selectors.
 func NormalizeAttemptWorkspacePath(value string) (string, error) {
 	return NormalizeStarterWorkspacePath(value)
 }
 
-// NewStagedAttemptWorkspaceObject reserves invisible attempt-owned object
-// metadata before bytes are sent to VFS. Staged objects are never selectable
-// by a visible Workspace Entry.
+// NewStagedAttemptWorkspaceObject reserves invisible object metadata before
+// the bytes are sent to VFS. No visible workspace entry can select a staged
+// object.
 func NewStagedAttemptWorkspaceObject(
 	id AttemptWorkspaceObjectID,
 	workspaceID ExamAttemptWorkspaceID,
@@ -348,8 +348,8 @@ func (o *AttemptWorkspaceObject) ReleaseCleanup(token string, at time.Time) erro
 	return nil
 }
 
-// NewCandidateAttemptWorkspaceFile creates a file with no Starter Workspace
-// provenance while retaining the Attempt's admission Revision provenance.
+// NewCandidateAttemptWorkspaceFile creates a file with no starter provenance
+// that still records the attempt's admission revision.
 func NewCandidateAttemptWorkspaceFile(
 	id AttemptWorkspaceEntryID,
 	workspaceID ExamAttemptWorkspaceID,
@@ -380,8 +380,8 @@ func NewCandidateAttemptWorkspaceFile(
 	return entry, nil
 }
 
-// NewCandidateAttemptWorkspaceDirectory creates metadata-only empty directory
-// state with no Starter Workspace provenance.
+// NewCandidateAttemptWorkspaceDirectory creates an empty directory with no
+// starter provenance; directories have no content.
 func NewCandidateAttemptWorkspaceDirectory(
 	id AttemptWorkspaceEntryID,
 	workspaceID ExamAttemptWorkspaceID,
@@ -410,9 +410,9 @@ func NewCandidateAttemptWorkspaceDirectory(
 	return entry, nil
 }
 
-// AdvanceCursor appends exactly one acknowledged mutation to the ordered
-// Workspace stream. Persistence supplies the expected cursor while holding
-// the aggregate lock; callers do not use it to serialize unrelated entries.
+// AdvanceCursor appends exactly one acknowledged mutation to the workspace
+// stream. Persistence passes the expected cursor while holding the aggregate
+// lock; it is not for serializing unrelated entries.
 func (w *ExamAttemptWorkspace) AdvanceCursor(expected int64, at time.Time) error {
 	if w == nil || expected != w.Cursor || expected == math.MaxInt64 {
 		return invalidModelError("ExamAttemptWorkspace.AdvanceCursor", "exam_attempt_workspace", "", "stale Attempt Workspace cursor", "")
@@ -452,16 +452,16 @@ func (k AttemptWorkspaceMutationKind) IsValid() bool {
 	}
 }
 
-// AttemptWorkspaceAuthorKind names the kind of actor that made a Workspace
-// change. Every kind writes on behalf of the candidate; the kind decides only
-// how the writer is proved. A new actor is a new kind, never a new write path.
+// AttemptWorkspaceAuthorKind is the kind of actor that made a workspace
+// change. Every kind writes for the candidate and differs only in how the
+// writer is proved; a new actor is a new kind, never a new write path.
 type AttemptWorkspaceAuthorKind string
 
 const (
 	// AttemptWorkspaceAuthorCandidate is the candidate's own editor, writing
-	// through one Attempt Connection.
+	// through one attempt connection.
 	AttemptWorkspaceAuthorCandidate AttemptWorkspaceAuthorKind = "candidate"
-	// AttemptWorkspaceAuthorEnvironment is the Attempt's execution
+	// AttemptWorkspaceAuthorEnvironment is the attempt's execution
 	// environment, writing back what its programs changed.
 	AttemptWorkspaceAuthorEnvironment AttemptWorkspaceAuthorKind = "environment"
 )
@@ -470,20 +470,19 @@ func (k AttemptWorkspaceAuthorKind) IsValid() bool {
 	return k == AttemptWorkspaceAuthorCandidate || k == AttemptWorkspaceAuthorEnvironment
 }
 
-// AttemptWorkspaceAuthorRefMaximumBytes bounds an author reference.
+// AttemptWorkspaceAuthorRefMaximumBytes bounds an author reference, in bytes.
 const AttemptWorkspaceAuthorRefMaximumBytes = 96
 
-// AttemptWorkspaceAuthor is who made one Workspace change: a kind and a
-// reference within it. A candidate's reference is the Attempt Connection the
-// editor wrote through. An environment's is its incarnation, in decimal,
-// followed by a slash and the tag of the process that wrote the path when
-// that is known.
+// AttemptWorkspaceAuthor is who made one workspace change. A candidate's
+// reference is the attempt connection the editor wrote through; an
+// environment's is its decimal incarnation, then a slash and the writing
+// process's tag when known.
 type AttemptWorkspaceAuthor struct {
 	Kind AttemptWorkspaceAuthorKind `json:"kind"`
 	Ref  string                     `json:"ref"`
 }
 
-// NewCandidateWorkspaceAuthor names the candidate's editor on one Connection.
+// NewCandidateWorkspaceAuthor names the candidate's editor on one connection.
 func NewCandidateWorkspaceAuthor(connectionID AttemptConnectionID) AttemptWorkspaceAuthor {
 	return AttemptWorkspaceAuthor{Kind: AttemptWorkspaceAuthorCandidate, Ref: connectionID.String()}
 }
@@ -539,9 +538,9 @@ func (t AttemptEnvironmentProcessTag) IsValid() bool {
 	return true
 }
 
-// AttemptWorkspaceJournalEntry is one safe acknowledged change in the
-// Attempt-scoped ordered recovery stream. It contains logical metadata only:
-// no object selector, backend revision, credential, Session, or content body.
+// AttemptWorkspaceJournalEntry is one acknowledged change in the attempt's
+// ordered recovery stream. It holds logical metadata only: no object
+// selector, backend revision, credential, session or content body.
 type AttemptWorkspaceJournalEntry struct {
 	WorkspaceID    ExamAttemptWorkspaceID
 	Cursor         int64

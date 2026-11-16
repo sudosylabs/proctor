@@ -15,7 +15,7 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// Interpretation runs once per source/sequence under the Attempt fence. Its
+// Interpretation runs once per source/sequence under the attempt fence. Its
 // state transition, copy, budget and overflow count commit in one transaction.
 func retainBrowserIntegrity(
 	ctx context.Context,
@@ -244,7 +244,7 @@ func retainBrowserIntegrity(
 }
 
 // browserIntegrityEvidence is one retained Browser navigation as evidence for
-// its group's Flag.
+// its group's flag.
 func browserIntegrityEvidence(
 	attempt model.ExamAttemptID,
 	participation, flag string,

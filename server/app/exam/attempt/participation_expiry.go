@@ -18,19 +18,16 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ExpiryScanResult counts one bounded expiry scan: the items found due, those
-// whose expiry committed, and how many of the committed were replays of an
-// expiry already recorded.
+// ExpiryScanResult counts one bounded expiry scan; replays are counted among
+// the committed.
 type ExpiryScanResult struct {
 	Due       int
 	Completed int
 	Replayed  int
 }
 
-// ParticipationExpiry is the durable outcome of one Connection Loss: the
-// suspended Attempt, its expired Attempt Participation and latest Attempt
-// Connection, and the Integrity Evidence, Integrity Flag, and policy Attempt
-// Suspension recorded for it, decided at DatabaseTime.
+// ParticipationExpiry is the durable outcome of one connection loss, decided
+// at DatabaseTime.
 type ParticipationExpiry struct {
 	ExamID           model.ExamID
 	SittingID        model.ExamSittingID
@@ -47,9 +44,9 @@ type ParticipationExpiry struct {
 	Replayed         bool
 }
 
-// ScanExpiredParticipations performs one bounded runtime maintenance pass.
-// Every listed candidate is rechecked by the named conditional Store
-// operation; PostgreSQL, never this loop or its clock, decides expiry.
+// ScanExpiredParticipations performs one bounded pass. Each listed item is
+// rechecked by a conditional store operation; the database, never this loop
+// or its clock, decides expiry.
 func (s *Service) ScanExpiredParticipations(ctx context.Context, system invocation.System, limit int) (ExpiryScanResult, error) {
 	if !system.Valid() || limit < 1 || limit > 200 {
 		return ExpiryScanResult{}, apperror.Invalid("exam.attempt.invalid", "expiry_limit")
@@ -131,12 +128,11 @@ func (s *Service) expireParticipation(ctx context.Context, due store.ExamAttempt
 	return result, nil
 }
 
-// expireLapsedParticipation completes the expiry transition for a generation
-// whose lapse a Store operation refused to act on (a late renewal, a kick),
-// so Connection Loss is recorded exactly as the scanner would record it
-// rather than waiting for its next pass. It returns the caller's stable
-// connection_lost failure once the transition is durable, or once another
-// path already ended the generation.
+// expireLapsedParticipation records connection loss exactly as the scanner
+// would for a generation whose lapse a store operation refused to act on (a
+// late renewal, a kick), rather than waiting for the next pass. It returns
+// connection_lost once the transition is durable or another path already
+// ended the generation.
 func (s *Service) expireLapsedParticipation(
 	ctx context.Context,
 	attemptID model.ExamAttemptID,
@@ -199,22 +195,17 @@ func projectExpiry(
 	}, nil
 }
 
-// expiredAttemptMatches reports whether the Attempt is suspended.
 func expiredAttemptMatches(attempt *model.ExamAttempt) bool {
 	return attempt.State == model.ExamAttemptSuspended
 }
 
-// expiredParticipationMatches reports whether the generation ended in order,
-// as lease_expired.
 func expiredParticipationMatches(participation *store.ExamAttemptParticipationView) bool {
 	return participation.LifecycleInOrder() &&
 		participation.State == model.AttemptParticipationEnded &&
 		participation.EndReason == model.AttemptParticipationEndLeaseExpired
 }
 
-// expiryConnectionClosed reports whether the generation's latest Connection
-// is closed in order, and closedByExpiry is true exactly when the expiry
-// itself closed it.
+// closedByExpiry is true exactly when the expiry itself closed the connection.
 func expiryConnectionClosed(connection *store.ExamAttemptManagerConnection, closedByExpiry bool) bool {
 	return connection.State == model.AttemptConnectionClosed &&
 		connection.ClosedAt.Valid &&
@@ -222,8 +213,6 @@ func expiryConnectionClosed(connection *store.ExamAttemptManagerConnection, clos
 		closedByExpiry == (connection.CloseReason == model.AttemptConnectionCloseLeaseExpired)
 }
 
-// connectionLossSuspensionMatches reports whether the episode is an active,
-// unreallowed Connection Loss policy suspension.
 func connectionLossSuspensionMatches(suspension *store.ExamAttemptSuspensionView) bool {
 	return suspension.State == model.AttemptSuspensionActive &&
 		suspension.Source == model.AttemptSuspensionSourcePolicy &&
@@ -232,8 +221,6 @@ func connectionLossSuspensionMatches(suspension *store.ExamAttemptSuspensionView
 		suspension.ReallowedByUserID.IsZero()
 }
 
-// expiryDecidedAfterLease reports whether PostgreSQL decided the expiry at or
-// after the lease deadline.
 func expiryDecidedAfterLease(databaseTime time.Time, due store.ExamAttemptParticipationExpiryDue) bool {
 	return !databaseTime.Before(due.LeaseExpiresAt)
 }

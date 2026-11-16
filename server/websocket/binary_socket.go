@@ -23,7 +23,7 @@ import (
 // The close codes a binary socket ends with besides the standard ones.
 const (
 	// CloseBinaryAccessEnded closes a binary socket whose access no longer
-	// holds, such as an Attempt that ended.
+	// holds, such as an attempt that ended.
 	CloseBinaryAccessEnded = 4003
 	// binarySocketPingInterval is how often the server pings a binary
 	// socket; the client must answer within pongWait.
@@ -34,9 +34,8 @@ const (
 // a text message, which a binary socket refuses.
 var ErrBinarySocketText = errors.New("binary socket received a text message")
 
-// BinarySocket is one upgraded WebSocket that carries binary messages only,
-// for a protocol other than the realtime one, such as a candidate's terminal.
-// It is not a Hub connection: it has no subscriptions, events or replay.
+// BinarySocket is an upgraded WebSocket carrying binary messages only, such as
+// a candidate's terminal. It has no subscriptions, events or replay.
 type BinarySocket struct {
 	conn    *gorilla.Conn
 	cancel  context.CancelFunc
@@ -114,16 +113,11 @@ const (
 	BinarySocketFailed
 )
 
-// ServeBinary upgrades an already-authenticated request to a binary socket
-// and runs serve on it until serve returns, then closes it. The socket's
-// context ends when the request's does, when the client stops answering
-// pings or a read or write fails, and when the Hub closes. Messages are at
-// most maxMessageBytes.
-//
-// It applies the same origin rule as Accept. An error it returns describes
-// a pre-upgrade refusal (websocket.unavailable, websocket.origin.invalid or
-// request.invalid) and leaves the response uncommitted; once the upgrade
-// succeeds it returns nil.
+// ServeBinary upgrades an authenticated request and runs serve until it
+// returns. The socket's context ends with the request, a missed pong, a failed
+// read or write, or the hub closing. It applies Accept's origin rule. An error
+// is a pre-upgrade refusal and leaves the response uncommitted, so the caller
+// can still answer with Problem Details.
 func (h *Hub) ServeBinary(
 	writer http.ResponseWriter,
 	request *http.Request,

@@ -14,13 +14,13 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 )
 
-// attemptCandidates verifies a terminal's candidate through the Attempt
-// service's candidate access check, which every terminal call repeats.
+// attemptCandidates checks a terminal's candidate through the attempt
+// service; every terminal call repeats the check.
 type attemptCandidates struct {
 	attempts *attempt.Service
 }
 
-// AttemptCandidates returns the CandidateVerifier over the Attempt service.
+// AttemptCandidates returns the CandidateVerifier backed by the attempt service.
 func AttemptCandidates(attempts *attempt.Service) CandidateVerifier {
 	return attemptCandidates{attempts: attempts}
 }

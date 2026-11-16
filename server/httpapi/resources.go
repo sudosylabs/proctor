@@ -16,9 +16,8 @@ import (
 	"github.com/sudosylabs/proctor/server/websocket"
 )
 
-// productionResources is the single, visible and policy-free inventory of HTTP
-// resource modules, each built over the application service that owns its use
-// cases. Preserve this order: it is part of route-catalog review.
+// productionResources lists every resource of the production API. Keep the
+// order: route-catalog review reads it.
 func productionResources(
 	application *app.App,
 	health *app.Health,

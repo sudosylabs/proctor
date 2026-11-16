@@ -24,7 +24,7 @@ import (
 // sealing and immutable manager inspection.
 type SQLExamSubmissionStore struct{ *SQLStore }
 
-// NewSQLExamSubmissionStore constructs an independently usable Submission
+// NewSQLExamSubmissionStore constructs an independently usable submission
 // adapter for root registration and multi-node conformance tests.
 func NewSQLExamSubmissionStore(sqlStore *SQLStore) store.ExamSubmissionStore {
 	return &SQLExamSubmissionStore{SQLStore: sqlStore}
@@ -172,8 +172,8 @@ func lockExamSubmissionSealAccess(
 	return row, integrityTail, databaseNow, nil
 }
 
-// lockExamSubmissionEnrollmentFence resolves the Attempt's Academic Period and
-// takes the candidate and Class enrollment locks before the causal row lock.
+// lockExamSubmissionEnrollmentFence resolves the attempt's academic period and
+// takes the candidate and class enrollment locks before the causal row lock.
 func lockExamSubmissionEnrollmentFence(ctx context.Context, tx *sqlxTxWrapper, access store.ExamSubmissionSealAccess) error {
 	var periodID string
 	if err := tx.Get(
@@ -201,8 +201,8 @@ func lockExamSubmissionEnrollmentFence(ctx context.Context, tx *sqlxTxWrapper, a
 	return lockClassEnrollment(ctx, tx, access.CandidateUserID.String(), periodID)
 }
 
-// lockExamSubmissionCausalAccessRow locks the Attempt, Participation,
-// Connection and Workspace with their causal context and rejects retired work.
+// lockExamSubmissionCausalAccessRow locks the attempt, participation,
+// connection and workspace with their causal context and rejects retired work.
 func lockExamSubmissionCausalAccessRow(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -272,7 +272,7 @@ func lockExamSubmissionCausalAccessRow(
 	return row, nil
 }
 
-// examSubmissionMembershipRow is one locked Class membership interval of the
+// examSubmissionMembershipRow is one locked class membership interval of the
 // sealing candidate.
 type examSubmissionMembershipRow struct {
 	StartAt    time.Time    `db:"start_at"`
@@ -281,7 +281,7 @@ type examSubmissionMembershipRow struct {
 }
 
 // verifyExamSubmissionCandidateAccess requires exactly one current membership,
-// a live Session and academic chain, and the presented Participation credential.
+// a live session and academic chain, and the presented participation credential.
 func verifyExamSubmissionCandidateAccess(
 	row examSubmissionSealAccessRow,
 	memberships []examSubmissionMembershipRow,
@@ -322,8 +322,8 @@ func verifyExamSubmissionCandidateAccess(
 	return nil
 }
 
-// verifyCommittedExamSubmissionCausal locks the sealed Submission of an
-// already submitted Attempt and requires it to match the presented causal access.
+// verifyCommittedExamSubmissionCausal locks the sealed submission of an
+// already submitted attempt and requires it to match the presented causal access.
 func verifyCommittedExamSubmissionCausal(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -377,8 +377,8 @@ func verifyCommittedExamSubmissionCausal(
 	return nil
 }
 
-// verifyActiveExamSubmissionSealAccess requires an open Connection, active
-// Participation, open Sitting and active Attempt, takes the security interaction
+// verifyActiveExamSubmissionSealAccess requires an open connection, active
+// participation, open sitting and active attempt, takes the security interaction
 // lock, and checks the revision selection, pending acknowledgements and cursor.
 func verifyActiveExamSubmissionSealAccess(
 	ctx context.Context,
@@ -443,7 +443,7 @@ func verifyActiveExamSubmissionSealAccess(
 }
 
 // requireNoCandidateChangesAfter accepts a voluntary seal's expected cursor
-// when every journaled change after it, up to the Workspace's current
+// when every journaled change after it, up to the workspace's current
 // cursor, was made by the execution environment. A candidate change after
 // it, an expected cursor past the current one, or a change no longer
 // journaled conflicts with attempt_workspace_cursor.
@@ -794,7 +794,7 @@ func sealExamSubmission(ctx context.Context, tx *sqlxTxWrapper, input *store.Exa
 	return outcome, nil
 }
 
-// checkExamSubmissionSealPreconditions checks the final Focus Loss sequence,
+// checkExamSubmissionSealPreconditions checks the final focus loss sequence,
 // seal time and receipt recipient revision, validates the receipt mail, and
 // requires its payload key to be primary, returning the seal time and key.
 func checkExamSubmissionSealPreconditions(
@@ -837,8 +837,8 @@ func checkExamSubmissionSealPreconditions(
 	return sealAt, payloadKeyID, nil
 }
 
-// insertVoluntaryExamSubmissionHeader inserts the unsealed Submission header
-// bound to the presented Participation generation and Connection.
+// insertVoluntaryExamSubmissionHeader inserts the unsealed submission header
+// bound to the presented participation generation and connection.
 func insertVoluntaryExamSubmissionHeader(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -880,7 +880,7 @@ func insertVoluntaryExamSubmissionHeader(
 }
 
 // insertVoluntaryExamSubmissionManifest inserts each canonical manifest Entry
-// in order, requiring it to match the authoritative Workspace row.
+// in order, requiring it to match the authoritative workspace row.
 func insertVoluntaryExamSubmissionManifest(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -931,8 +931,8 @@ func insertVoluntaryExamSubmissionManifest(
 	return nil
 }
 
-// settleVoluntaryExamSubmissionFocusLoss charges the Focus Loss tail to the
-// current evaluation and clears the generation's pending Focus Loss window.
+// settleVoluntaryExamSubmissionFocusLoss charges the focus loss tail to the
+// current evaluation and clears the generation's pending focus loss window.
 func settleVoluntaryExamSubmissionFocusLoss(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -1522,7 +1522,7 @@ func (s *SQLExamSubmissionStore) ResolveAttempt(ctx context.Context, attemptID m
 }
 
 // resolveSubmission reads the authorization projection of the sealed
-// Submission whose column equals value.
+// submission whose column equals value.
 func (s *SQLExamSubmissionStore) resolveSubmission(ctx context.Context, column, value string) (*store.ExamSubmissionAuthorization, error) {
 	var row struct {
 		SubmissionID    string `db:"submission_id"`

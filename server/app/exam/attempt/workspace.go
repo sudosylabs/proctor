@@ -21,15 +21,15 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// WorkspaceMutationAccess is CandidateAccess fenced to one Participation
-// generation, so a superseded Participation cannot change the Workspace.
+// WorkspaceMutationAccess is CandidateAccess fenced to one participation
+// generation, so a superseded participation cannot change the workspace.
 type WorkspaceMutationAccess struct {
 	CandidateAccess
 	ParticipationID model.AttemptParticipationID
 	Generation      int64
 }
 
-// WorkspaceBatchMutation is one change in a Workspace batch.
+// WorkspaceBatchMutation is one change in a workspace batch.
 //
 //   - create_file: DestinationPath, MediaType, SHA256 and Size; the batch's
 //     content supplies the body.
@@ -67,8 +67,8 @@ type WorkspaceBatchContent interface {
 	Next(context.Context) (io.Reader, error)
 }
 
-// ApplyWorkspaceBatchCommand changes the candidate's Attempt Workspace with
-// 1..AttemptWorkspaceBatchMaximumMutations mutations, all or nothing.
+// ApplyWorkspaceBatchCommand carries 1..AttemptWorkspaceBatchMaximumMutations
+// mutations, applied all or nothing.
 type ApplyWorkspaceBatchCommand struct {
 	Access                  WorkspaceMutationAccess
 	Mutations               []WorkspaceBatchMutation
@@ -77,9 +77,8 @@ type ApplyWorkspaceBatchCommand struct {
 	IdempotencyKey          string
 }
 
-// WorkspaceBatchResult is the journal change each mutation recorded, in
-// order, at consecutive cursors. Replayed is true when an exact retry returned
-// the stored result.
+// WorkspaceBatchResult holds one journal change per mutation, at consecutive
+// cursors. Replayed is true when an exact retry returned the stored result.
 type WorkspaceBatchResult struct {
 	AttemptID       model.ExamAttemptID
 	SittingID       model.ExamSittingID
@@ -90,10 +89,8 @@ type WorkspaceBatchResult struct {
 }
 
 // ApplyCandidateExamWorkspaceBatch is the candidate's own write from the
-// editor. It checks write access once, stages every file body, verifies each
-// against its declared SHA-256, then applies every mutation in one
-// transaction, fenced by Participation generation. A failure names the
-// mutation that refused the batch in the "item" field, and nothing changes.
+// editor. A failure names the refusing mutation in the "item" field, and
+// nothing changes.
 func (s *Service) ApplyCandidateExamWorkspaceBatch(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -128,19 +125,16 @@ func (s *Service) ApplyCandidateExamWorkspaceBatch(
 }
 
 // workspaceWriter is who writes a batch. Both kinds write as the candidate;
-// they differ only in how the Store proves them, which candidate they name
-// before the Store resolves one (zero for the environment), and how the audit
-// attempt records the candidate as actor.
+// they differ in how the store proves them and how the audit records the
+// candidate. The environment names no candidate until the store resolves one.
 type workspaceWriter struct {
 	access    store.ExamAttemptWorkspaceWriteAccess
 	candidate model.UserID
-	// resources are the environment's profile, which size its budget; zero
-	// for the editor.
+	// resources size the budget; zero for the editor.
 	resources  model.EnvironmentResources
 	beginAudit func(context.Context, *store.ExamAttemptWorkspaceMutationTarget, map[string]any) (model.AuditEventID, error)
 }
 
-// workspaceWrite is the batch a writer asks for.
 type workspaceWrite struct {
 	Mutations               []WorkspaceBatchMutation
 	ExpectedWorkspaceCursor *int64
@@ -148,8 +142,7 @@ type workspaceWrite struct {
 	IdempotencyKey          string
 }
 
-// applyWorkspaceWrite is the one batch write path, for every writer: it
-// validates, spends the Attempt's budget, reserves, stages and applies.
+// applyWorkspaceWrite is the one batch write path for every writer.
 func (s *Service) applyWorkspaceWrite(ctx context.Context, writer workspaceWriter, write workspaceWrite) (WorkspaceBatchResult, error) {
 	attemptID := writer.access.WorkspaceAttemptID()
 	if len(write.Mutations) == 0 || len(write.Mutations) > model.AttemptWorkspaceBatchMaximumMutations {
@@ -179,8 +172,8 @@ func (s *Service) applyWorkspaceWrite(ctx context.Context, writer workspaceWrite
 		return WorkspaceBatchResult{}, apperror.New("idempotency.key_required")
 	}
 
-	// The budget is spent before anything is reserved or staged, so a writer
-	// that outruns it costs storage nothing. An exact retry spends again.
+	// Spend the budget before reserving or staging, so a writer that outruns
+	// it costs storage nothing. An exact retry spends again.
 	if !s.workspaceBudget.spend(attemptID, writer.access.WorkspaceAuthor().Kind, writer.resources, len(write.Mutations),
 		bytes, s.now()) {
 		return WorkspaceBatchResult{}, apperror.New("exam.attempt.workspace.rate_limited")
@@ -243,15 +236,12 @@ func (s *Service) applyWorkspaceWrite(ctx context.Context, writer workspaceWrite
 	return result, nil
 }
 
-// workspaceBatchObject is the identity chosen for one file mutation's body.
 type workspaceBatchObject struct {
 	Index    int
 	ObjectID model.AttemptWorkspaceObjectID
 	Version  model.WorkspaceContentVersion
 }
 
-// identifyWorkspaceBatch chooses the EntryID of every create and the object
-// and content version of every file body, and builds the store mutations.
 func (s *Service) identifyWorkspaceBatch(
 	commands []WorkspaceBatchMutation,
 ) ([]store.ExamAttemptWorkspaceMutation, []workspaceBatchObject, error) {
@@ -289,8 +279,6 @@ func (s *Service) identifyWorkspaceBatch(
 	return mutations, objects, nil
 }
 
-// stageWorkspaceBatch streams every file body to its reserved object, checks
-// each against its declared size and SHA-256, and records them all ready.
 func (s *Service) stageWorkspaceBatch(
 	ctx context.Context,
 	workspaceAccess store.ExamAttemptWorkspaceWriteAccess,
@@ -403,7 +391,6 @@ func validateWorkspaceBatchMutation(mutation WorkspaceBatchMutation) error {
 	return nil
 }
 
-// workspaceBatchItemError names the mutation that refused the batch.
 func workspaceBatchItemError(err error, index int) error {
 	var fault *apperror.Error
 	if errors.As(err, &fault) {
@@ -412,8 +399,6 @@ func workspaceBatchItemError(err error, index int) error {
 	return err
 }
 
-// workspaceBatchStoreError maps a store failure and, when one mutation caused
-// it, names that mutation.
 func workspaceBatchStoreError(err error) error {
 	var item *store.ErrAttemptWorkspaceBatchItem
 	if errors.As(err, &item) {

@@ -34,9 +34,8 @@ const (
 	EventResync EventType = "resync_required"
 )
 
-// Event is a wire event delivered to one or more subscribed connections.
-// Sequence is assigned independently by each owning connection and is never
-// serialized through the cluster transport.
+// Event is a wire event. Each connection stamps its own Sequence, which never
+// crosses the cluster transport.
 type Event struct {
 	ID       string          `json:"id"`
 	Event    string          `json:"event"`
@@ -47,9 +46,8 @@ type Event struct {
 	Data     json.RawMessage `json:"data,omitempty"`
 }
 
-// Resource is the WebSocket wire projection of a domain authorization
-// resource. Keeping this DTO here prevents domain field names from silently
-// changing the versioned protocol.
+// Resource is the wire form of an authorization resource. It is a separate
+// type so a domain field rename cannot change the versioned protocol.
 type Resource struct {
 	Type model.ResourceType `json:"type"`
 	ID   string             `json:"id"`

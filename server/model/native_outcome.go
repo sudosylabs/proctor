@@ -12,26 +12,24 @@ import (
 	"time"
 )
 
-// NativeFlagEvidenceLimit bounds the evidence one native Flag retains, one
-// piece per occurrence, as Focus Loss bounds its episodes.
+// NativeFlagEvidenceLimit bounds the evidence one native flag keeps, one
+// piece per occurrence, as focus loss bounds its episodes.
 const NativeFlagEvidenceLimit = 100
 
 // NativeIntegrityPolicyKind is the policy kind of a native capability's
-// Flags, such as native.display.
+// flags, such as native.display.
 func NativeIntegrityPolicyKind(capability NativeCapabilityID) IntegrityPolicyKind {
 	return IntegrityPolicyKind(NativeIntegrityPolicyNamespace + "." + string(capability))
 }
 
-// RaisesFlag reports whether a transition raises a Flag: an enforce rule's
-// occurrence opened. Observe rules only record, and an unknown status never
-// opens an occurrence.
+// RaisesFlag reports whether a transition raises a flag, which is when an
+// enforce rule's occurrence opens. Observe rules only record, and an unknown
+// status never opens an occurrence.
 func (t NativeRuleTransition) RaisesFlag() bool {
 	return t.Mode == NativeRuleEnforce && t.Event == NativeOccurrenceOpened
 }
 
-// nativeFlagDetail is what a native Flag's evidence says about the
-// occurrence: the rule, its reason and when it stopped being met. It never
-// carries the facts themselves.
+// nativeFlagDetail never carries the facts themselves.
 type nativeFlagDetail struct {
 	RuleID     string `json:"rule_id"`
 	Reason     string `json:"reason"`
@@ -40,8 +38,8 @@ type nativeFlagDetail struct {
 }
 
 // NewNativeRuleEvidence is the evidence an opened enforce occurrence adds to
-// its capability's Flag. The device time is kept in the detail; the evidence
-// is observed no later than the server recorded it.
+// its capability's flag. The device time stays in the detail; the evidence is
+// observed no later than the server recorded it.
 func NewNativeRuleEvidence(
 	id IntegrityEvidenceID,
 	attemptID ExamAttemptID,

@@ -18,8 +18,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// requireDesktopRegistration refuses a Service whose Desktop Registration
-// collaborators are incomplete. New calls it once, with the account services.
 func (s *Service) requireDesktopRegistration() error {
 	if s.desktopRegistrations == nil || s.publisher == nil || s.recentAuthenticationTTL <= 0 || s.now == nil {
 		return errors.New("Desktop Registration dependencies are invalid")
@@ -27,7 +25,8 @@ func (s *Service) requireDesktopRegistration() error {
 	return nil
 }
 
-// ListDesktopRegistrations lists the calling User's Desktop Registrations.
+// ListDesktopRegistrations lists the caller's registrations, revoked ones
+// included.
 func (s *Service) ListDesktopRegistrations(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -43,8 +42,8 @@ func (s *Service) ListDesktopRegistrations(
 	return registrations, nil
 }
 
-// RevokeDesktopRegistration revokes one of the calling User's Desktop
-// Registrations and the Sessions it holds, from a recent interactive Session.
+// RevokeDesktopRegistration revokes one of the caller's registrations and its
+// sessions; it requires a recently authenticated interactive session.
 func (s *Service) RevokeDesktopRegistration(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -101,11 +100,9 @@ type RenameDesktopRegistrationCommand struct {
 	DisplayName    string
 }
 
-// RenameDesktopRegistration gives one of the calling User's active Desktop
-// Registrations the name they chose. The name labels the device in the
-// User's own lists and survives later Desktop sign-ins with the same key. A
-// rename changes no key, Session, or credential, so any interactive Session
-// may make it; it needs no recent authentication.
+// RenameDesktopRegistration renames one of the caller's active registrations.
+// A rename changes no key, session or credential, so it needs no recent
+// authentication.
 func (s *Service) RenameDesktopRegistration(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -150,7 +147,7 @@ func (s *Service) RenameDesktopRegistration(
 	if err != nil {
 		return nil, err
 	}
-	// A Desktop Session is listed under its registration's name.
+	// Desktop sessions are listed under their registration's name.
 	s.publishSessionsChanged(ctx, principal.UserID, "desktop_registration.renamed")
 	return renamed, nil
 }
@@ -160,7 +157,7 @@ var desktopRegistrationStoreErrors = apperror.StoreTable{
 	Unavailable: "desktop_registration.unavailable",
 }
 
-// A revoked registration stays in the User's list as security history, so
+// A revoked registration stays in the user's list as security history, so
 // renaming it is refused rather than concealed.
 var desktopRegistrationRenameStoreErrors = apperror.StoreTable{
 	NotFound:    "resource.not_found",

@@ -11,11 +11,10 @@ import (
 	"time"
 )
 
-// SuspendExamAttemptByManager applies an Exam Manager's kick to an active
-// Attempt and its exact active Participation: the Attempt becomes Suspended,
-// the generation ends as kicked, and an open Connection, when present, closes
-// as kicked. A reconnecting candidate has no open Connection to close. No
-// input is mutated unless every ownership and transition check succeeds.
+// SuspendExamAttemptByManager applies an exam manager's kick to an active
+// attempt and its exact active participation: the attempt is suspended, the
+// generation ends as kicked, and any open connection closes as kicked. Nothing
+// is mutated unless every ownership and transition check passes.
 func SuspendExamAttemptByManager(
 	attempt *ExamAttempt,
 	participation *AttemptParticipation,

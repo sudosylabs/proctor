@@ -16,9 +16,8 @@ import (
 // mfaMaximumPlaintextBytes bounds a TOTP secret, far below the mail limit.
 const mfaMaximumPlaintextBytes = 128
 
-// mailSettings is the sole projection of deployment-owned mail keys into
-// sealing settings. An absent ring projects to nothing, so mail runs without
-// sealing; a configured ring is validated when the server is built.
+// mailSettings reports false when no ring is configured, so mail runs
+// without sealing. A configured ring is validated when the server is built.
 func mailSettings(mailConfig config.Mail) (Settings, bool) {
 	keys := mailConfig.SecretSealing
 	if keys.EncryptionKey == "" && len(keys.DecryptionKeys) == 0 {
@@ -45,8 +44,7 @@ func NewMailSealer(mailConfig config.Mail) (*Sealer, error) {
 	return sealer, nil
 }
 
-// mfaSettings projects the independent MFA key ring, so the application
-// never sees deployment configuration.
+// mfaSettings uses a key ring separate from mail's.
 func mfaSettings(mfaConfig config.MFA) (Settings, bool) {
 	if mfaConfig.EncryptionKey == "" && len(mfaConfig.DecryptionKeys) == 0 {
 		return Settings{}, false

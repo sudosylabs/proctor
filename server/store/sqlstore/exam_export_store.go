@@ -27,8 +27,8 @@ import (
 // it is published or fails.
 type SQLExamExportStore struct{ *SQLStore }
 
-// ListBuildTitles reads the sealed Exam revision title behind each given
-// export build Job. The revision a Sitting runs is immutable, so the title
+// ListBuildTitles reads the sealed exam revision title behind each given
+// export build job. The revision a sitting runs is immutable, so the title
 // cannot change under an export.
 func (s *SQLExamExportStore) ListBuildTitles(ctx context.Context, jobIDs []model.JobID) ([]store.ExamExportBuildTitle, error) {
 	ids, err := distinctIdentifiers(jobIDs, store.MaximumExamExportBuildTitles)
@@ -66,7 +66,7 @@ func (s *SQLExamExportStore) ListBuildTitles(ctx context.Context, jobIDs []model
 	return result, nil
 }
 
-// examExportOutcome is the persisted outcome of an Exam export creation: the
+// examExportOutcome is the persisted outcome of an exam export creation: the
 // export a replay rehydrates.
 type examExportOutcome struct {
 	ExportID model.ExamExportID `json:"export_id"`

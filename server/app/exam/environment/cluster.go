@@ -20,9 +20,9 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// wakeEvent tells every node that an Attempt's facts or Workspace changed,
-// so whichever node owns its environment acts at once. It carries only the
-// Attempt ID; a lost message is caught by the runtime's backstop.
+// wakeEvent tells every node that an attempt's facts or workspace changed,
+// so whichever node owns its environment acts at once. A lost message is
+// caught by the runtime's backstop.
 const wakeEvent cluster.Event = "exam.attempt.environment.wake"
 
 const (
@@ -34,14 +34,13 @@ const (
 	broadcastTimeout = 2 * time.Second
 )
 
-// clusterMessage is every environment cluster message: only the Attempt ID
-// travels.
+// clusterMessage carries only the attempt ID between nodes.
 type clusterMessage struct {
 	AttemptID string `json:"attempt_id"`
 }
 
-// attemptBroadcast sends one event naming an Attempt to every peer from one
-// sender, never blocking the caller, and hands each valid message a peer
+// attemptBroadcast sends attempt IDs to every peer from a single sender
+// goroutine, never blocking the caller, and hands each valid message a peer
 // sends to deliver.
 type attemptBroadcast struct {
 	cluster cluster.Transport
@@ -81,7 +80,7 @@ func newAttemptBroadcast(
 	return b, nil
 }
 
-// Start begins broadcasting queued messages. It runs once.
+// Start starts the sender; later calls do nothing.
 func (b *attemptBroadcast) Start(context.Context) error {
 	b.start.Do(func() {
 		b.started.Store(true)
@@ -160,9 +159,8 @@ func (b *attemptBroadcast) fail(err error) {
 	}
 }
 
-// clusterWaker is the Waker across the cluster: it wakes the owner on this
-// node, once the runtime is attached, and broadcasts the wake to peers,
-// never blocking the caller.
+// clusterWaker wakes the owner on this node, once a runtime is attached, and
+// broadcasts the wake to peers.
 type clusterWaker struct {
 	*attemptBroadcast
 	runtime atomic.Pointer[Runtime]
@@ -178,7 +176,6 @@ func newClusterWaker(transport cluster.Transport, report func(error)) (*clusterW
 	return w, nil
 }
 
-// attach makes runtime the local owner runtime that wakes reach.
 func (w *clusterWaker) attach(runtime *Runtime) {
 	w.runtime.Store(runtime)
 }

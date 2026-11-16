@@ -16,7 +16,7 @@ func IncidentScreenClipRange(at time.Time) ScreenClipRange {
 }
 
 // NewIncidentScreenClip records the server's request around the moment an
-// Integrity Flag opened.
+// integrity flag opened.
 func NewIncidentScreenClip(id ScreenClipID, attemptID ExamAttemptID, flagID IntegrityFlagID, at time.Time) (*ScreenClip, error) {
 	return newScreenClip(ScreenClip{
 		ID: id, AttemptID: attemptID, Source: ScreenClipSourceIncident, FlagID: flagID,

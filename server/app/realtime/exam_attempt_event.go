@@ -113,11 +113,9 @@ type candidateExamAttemptSubmittedData struct {
 	SubmittedAt     string `json:"submitted_at"`
 }
 
-// NewExamAttemptSubmittedEvent tells Sitting viewers that an Attempt was
-// submitted; provenance says whether the candidate submitted, a manager ended
-// the Attempt, or the Sitting closed. Unlike the candidate event of the same
-// wire name, its payload identifies the candidate. manifestDigest must be a
-// lowercase hex SHA-256.
+// NewExamAttemptSubmittedEvent tells sitting viewers that an attempt was
+// submitted. Unlike the candidate event of the same wire name, its payload
+// identifies the candidate. manifestDigest must be a lowercase hex SHA-256.
 func NewExamAttemptSubmittedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -162,10 +160,9 @@ func NewExamAttemptSubmittedEvent(
 	}, nil
 }
 
-// NewCandidateExamAttemptSubmittedEvent is the candidate's own copy of the
-// submission fact. It is addressed to candidateID alone, is authorized under
-// the participation action rather than the view action, and leaves the
-// candidate identity out of the payload.
+// NewCandidateExamAttemptSubmittedEvent is the candidate's own copy, authorized
+// under the participation action rather than view, with no candidate identity
+// in the payload.
 func NewCandidateExamAttemptSubmittedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -218,10 +215,8 @@ func validEventSHA256(value string) bool {
 	return err == nil && len(decoded) == 32
 }
 
-// NewCandidateExamAttemptFocusLossWarningEvent warns the candidate alone that
-// their Focus Loss crossed the policy threshold under a flag-and-warn
-// outcome. The payload carries a fixed warning code and no counts,
-// thresholds, or evidence.
+// NewCandidateExamAttemptFocusLossWarningEvent carries a fixed warning code and
+// no counts, thresholds or evidence.
 func NewCandidateExamAttemptFocusLossWarningEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -251,10 +246,8 @@ func NewCandidateExamAttemptFocusLossWarningEvent(
 	}, nil
 }
 
-// NewCandidateScreenClipsRequestedEvent tells the candidate's Desktop that
-// its Attempt has screen clip requests to take. It carries none of them:
-// Desktop lists its pending requests, which only its live Participation
-// sees.
+// NewCandidateScreenClipsRequestedEvent carries no requests: Desktop lists
+// them, and only its live participation may see them.
 func NewCandidateScreenClipsRequestedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -283,10 +276,8 @@ func NewCandidateScreenClipsRequestedEvent(
 	}, nil
 }
 
-// NewExamAttemptIntegrityFlaggedEvent tells Sitting viewers that an Integrity
-// Flag was raised on an Attempt. The payload gives the policy that raised it,
-// its outcome, and how many evidence episodes were retained and how many
-// overflowed, not the evidence itself.
+// NewExamAttemptIntegrityFlaggedEvent gives the policy, outcome and evidence
+// episode counts, never the evidence itself.
 func NewExamAttemptIntegrityFlaggedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -339,10 +330,9 @@ func NewExamAttemptIntegrityFlaggedEvent(
 	}, nil
 }
 
-// NewCandidateExamAttemptWorkspaceChangedEvent publishes one targeted refetch
-// hint per committed batch, naming the cursors it took. Logical paths, content
-// metadata, object selectors, continuity selectors, and mutation bodies remain
-// confined to protected HTTP responses.
+// NewCandidateExamAttemptWorkspaceChangedEvent is one refetch hint per
+// committed batch, naming only its cursors. Paths, metadata and bodies stay in
+// the authorized HTTP responses.
 func NewCandidateExamAttemptWorkspaceChangedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -379,9 +369,8 @@ func NewCandidateExamAttemptWorkspaceChangedEvent(
 	}, nil
 }
 
-// NewCandidateExamAttemptSuspendedEvent tells the candidate their Attempt is
-// suspended with the safe reason that belongs to the episode's source: a
-// policy reason for automatic enforcement, manager_suspended for a kick.
+// NewCandidateExamAttemptSuspendedEvent gives a policy reason for automatic
+// enforcement and manager_suspended for a kick.
 func NewCandidateExamAttemptSuspendedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -408,9 +397,8 @@ func NewCandidateExamAttemptSuspendedEvent(
 	)
 }
 
-// NewCandidateExamAttemptReallowedEvent tells the candidate alone that their
-// suspended Attempt was re-allowed and is ready again. Unlike the suspension
-// event it carries no reason code.
+// NewCandidateExamAttemptReallowedEvent carries no reason code, unlike the
+// suspension event.
 func NewCandidateExamAttemptReallowedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -465,10 +453,8 @@ func newCandidateExamAttemptAccessEvent(
 	}, nil
 }
 
-// NewExamAttemptPolicySuspendedEvent announces an automatic policy
-// suspension (Connection Loss or Focus Loss) to Sitting viewers. Policy
-// enforcement always links its Integrity Flag and the Connection the
-// enforced generation held, so both are required.
+// NewExamAttemptPolicySuspendedEvent requires both the integrity flag and the
+// connection, because policy enforcement always links them.
 func NewExamAttemptPolicySuspendedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -485,10 +471,9 @@ func NewExamAttemptPolicySuspendedEvent(
 	return newExamAttemptSuspendedEvent(sittingID, attemptID, candidateID, connectionID, flagID, suspensionID, revision, changedAt)
 }
 
-// NewExamAttemptKickedEvent announces an Exam Manager's kick to Sitting
-// viewers. A kick is a manager control, not suspicion, so it links no
-// Integrity Flag; connectionID is zero when the kicked generation had no
-// open Connection (a reconnecting candidate).
+// NewExamAttemptKickedEvent links no integrity flag, because a kick is a
+// manager control, not suspicion. connectionID is zero when the candidate had
+// no open connection.
 func NewExamAttemptKickedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -504,9 +489,8 @@ func NewExamAttemptKickedEvent(
 	return newExamAttemptSuspendedEvent(sittingID, attemptID, candidateID, connectionID, "", suspensionID, revision, changedAt)
 }
 
-// newExamAttemptSuspendedEvent builds the exam_attempt_suspended payload;
-// attempt_connection_id and integrity_flag_id are omitted when absent, as the
-// source-specific constructors allow.
+// newExamAttemptSuspendedEvent omits attempt_connection_id and
+// integrity_flag_id when absent.
 func newExamAttemptSuspendedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -548,10 +532,8 @@ func newExamAttemptSuspendedEvent(
 	}, nil
 }
 
-// NewExamAttemptReallowedEvent tells Sitting viewers that an Attempt
-// Suspension was closed and the Attempt returned to active. It names the
-// closed suspension and the Attempt's revision after the change; the
-// manager's private reason is not included.
+// NewExamAttemptReallowedEvent names the closed suspension and the attempt's
+// new revision, never the manager's private reason.
 func NewExamAttemptReallowedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -589,9 +571,8 @@ func NewExamAttemptReallowedEvent(
 	}, nil
 }
 
-// NewExamAttemptConnectionOpenedEvent tells Sitting viewers that a candidate's
-// desktop was admitted to the Sitting and now holds an open Attempt
-// Connection. It is addressed to viewers of the Sitting, not to the candidate.
+// NewExamAttemptConnectionOpenedEvent is for sitting viewers, not the
+// candidate.
 func NewExamAttemptConnectionOpenedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -611,11 +592,8 @@ func NewExamAttemptConnectionOpenedEvent(
 	)
 }
 
-// NewExamAttemptConnectionClosedEvent tells Sitting viewers that an Attempt
-// Connection closed and why: reason separates, for example, a dropped
-// transport or expired lease from a policy suspension, a kick, a submission,
-// or the Sitting closing. It is addressed to viewers of the Sitting, not to
-// the candidate.
+// NewExamAttemptConnectionClosedEvent is for sitting viewers, not the
+// candidate; reason says why the connection closed.
 func NewExamAttemptConnectionClosedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,

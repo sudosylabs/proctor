@@ -21,7 +21,7 @@ import (
 )
 
 // SQLSecurityPreflightStore is the PostgreSQL store.SecurityPreflightStore. It
-// serializes on the same Candidate eligibility locks as Attempt admission.
+// serializes on the same candidate eligibility locks as attempt admission.
 type SQLSecurityPreflightStore struct{ *SQLStore }
 
 func newSQLSecurityPreflightStore(sqlStore *SQLStore) store.SecurityPreflightStore {
@@ -65,8 +65,8 @@ func (s *SQLSecurityPreflightStore) lockPreflightEligibility(
 }
 
 // PrepareSecurityPreflight issues a security preflight challenge for the
-// Candidate's desktop build against the Sitting's current policy under command.
-// A replay returns the original challenge with a refreshed Browser Activity
+// candidate's desktop build against the sitting's current policy under command.
+// A replay returns the original challenge with a refreshed browser activity
 // disclosure, and a policy change since preparation is a policy_changed
 // conflict.
 func (s *SQLSecurityPreflightStore) PrepareSecurityPreflight(
@@ -285,7 +285,7 @@ func (s *SQLSecurityPreflightStore) prepareSecurityPreflight(
 }
 
 // preflightFrozenConfiguration returns the frozen configuration of the
-// Candidate's ready Attempt, or nil when the preflight precedes admission.
+// candidate's ready attempt, or nil when the preflight precedes admission.
 func preflightFrozenConfiguration(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -337,8 +337,8 @@ func preflightFrozenConfiguration(
 	return frozen, nil
 }
 
-// resolvePreflightPolicy resolves the Sitting's current native policy for the
-// preflight's admission or Attempt scope and returns it with its revision.
+// resolvePreflightPolicy resolves the sitting's current native policy for the
+// preflight's admission or attempt scope and returns it with its revision.
 func resolvePreflightPolicy(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -716,7 +716,7 @@ func completeSecurityPreflightAudit(
 }
 
 // ResolveSecurityPreflightSitting reveals only a stable resource selector owned
-// by this User and Session. Reporting rechecks current eligibility and fences.
+// by this user and session. Reporting rechecks current eligibility and fences.
 func (s *SQLSecurityPreflightStore) ResolveSecurityPreflightSitting(
 	ctx context.Context,
 	id string,
@@ -744,7 +744,7 @@ func (s *SQLSecurityPreflightStore) ResolveSecurityPreflightSitting(
 // records nothing; only its readiness digest is compared later.
 const readinessOverviewScope = "readiness-overview"
 
-// ReadSecurityPolicyOverview resolves the Sitting's policy for the readiness
+// ReadSecurityPolicyOverview resolves the sitting's policy for the readiness
 // overview without creating a preflight.
 func (s *SQLSecurityPreflightStore) ReadSecurityPolicyOverview(
 	ctx context.Context,

@@ -28,8 +28,8 @@ func (p ExamSittingLifecycleJobPhase) IsValid() bool {
 }
 
 // ExamSittingLifecycleDedupeKey identifies one revision-fenced lifecycle
-// occurrence. Rescheduling leaves old active work harmlessly stale while a new
-// resulting Sitting revision receives distinct authoritative work.
+// occurrence. Rescheduling leaves old queued work harmlessly stale, and the new
+// sitting revision gets its own work.
 func ExamSittingLifecycleDedupeKey(id ExamSittingID, phase ExamSittingLifecycleJobPhase, revision int64) (string, error) {
 	if !id.IsValid() || !phase.IsValid() || revision < 1 {
 		return "", invalidModelError(
@@ -44,9 +44,9 @@ func ExamSittingLifecycleDedupeKey(id ExamSittingID, phase ExamSittingLifecycleJ
 	return "exam-sitting:" + id.String() + ":" + string(phase) + ":" + strconv.FormatInt(revision, 10), nil
 }
 
-// ExamSittingLifecycleCommand identifies the authoritative Sitting that a
-// delayed lifecycle Job must reread. Mutable state, revision, and schedule are
-// deliberately absent so stale work converges through PostgreSQL state.
+// ExamSittingLifecycleCommand names the sitting a delayed lifecycle job must
+// reread. State, revision and schedule are left out on purpose so stale work
+// converges on what PostgreSQL holds.
 type ExamSittingLifecycleCommand struct {
 	ExamSittingID ExamSittingID `json:"exam_sitting_id"`
 }

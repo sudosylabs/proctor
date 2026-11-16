@@ -21,11 +21,11 @@ import (
 // Limits on screen clips. A request is refused rather than trimmed.
 const (
 	// ScreenClipManagerRequestLimit and ScreenClipIncidentRequestLimit bound
-	// each kind of request per Attempt, across every Participation.
+	// each kind of request per attempt, across every participation.
 	ScreenClipManagerRequestLimit  = 10
 	ScreenClipIncidentRequestLimit = 10
 	// ScreenClipMaxBytes bounds one clip, and ScreenClipAttemptMaxBytes all of
-	// an Attempt's clips together.
+	// an attempt's clips together.
 	ScreenClipMaxBytes        int64 = 3 << 30
 	ScreenClipAttemptMaxBytes int64 = 6 << 30
 	// ScreenClipMaxRange bounds an explicit range. A range from the start of
@@ -34,7 +34,7 @@ const (
 	// ScreenClipIncidentMargin is how much an incident clip records before and
 	// after the moment it is about.
 	ScreenClipIncidentMargin = time.Minute
-	// ScreenClipPrivateReasonMaximumRunes bounds a manager's reason.
+	// ScreenClipPrivateReasonMaximumRunes bounds a manager's reason, in runes.
 	ScreenClipPrivateReasonMaximumRunes = 1000
 	// ScreenClipChunkBytes is the size of every chunk but the last, which
 	// holds the rest. Chunks are stored as they arrive and never joined, so a
@@ -61,7 +61,7 @@ type ScreenClipUpload struct {
 	ChunkSHA256 []string
 }
 
-// Validate checks the declaration is bounded and has one hash per chunk.
+// Validate checks that the declaration is bounded and has one hash per chunk.
 func (u *ScreenClipUpload) Validate() error {
 	if u == nil || !slices.Contains(screenClipMediaTypes, u.MediaType) ||
 		u.SizeBytes < 1 || u.SizeBytes > ScreenClipMaxBytes || len(u.ChunkSHA256) != u.ChunkCount() {
@@ -107,7 +107,7 @@ func (u *ScreenClipUpload) Digest() string {
 	return hex.EncodeToString(sum[:])
 }
 
-// Clone isolates the chunk list.
+// Clone returns a copy that does not share the chunk hash slice.
 func (u *ScreenClipUpload) Clone() *ScreenClipUpload {
 	if u == nil {
 		return nil
@@ -133,11 +133,11 @@ func isLowerHexSHA256(value string) bool {
 type ScreenClipSource string
 
 const (
-	// ScreenClipSourceManager is an Exam Manager's request, with a private
+	// ScreenClipSourceManager is an exam manager's request, with a private
 	// reason only managers see.
 	ScreenClipSourceManager ScreenClipSource = "manager"
 	// ScreenClipSourceIncident is the server's own request around the moment
-	// an Integrity Flag opened, linked to that Flag.
+	// an integrity flag opened, linked to that flag.
 	ScreenClipSourceIncident ScreenClipSource = "incident"
 )
 
@@ -146,7 +146,7 @@ type ScreenClipState string
 
 const (
 	// ScreenClipRequested waits for Desktop to take the request. While the
-	// Attempt has no current Participation it stays here, queued.
+	// attempt has no current participation it stays here, queued.
 	ScreenClipRequested ScreenClipState = "requested"
 	// ScreenClipRecording means Desktop has the request and is waiting for
 	// the part of the range still in the future.
@@ -163,7 +163,7 @@ const (
 type ScreenClipFailure string
 
 const (
-	// ScreenClipFailureAttemptEnded: the Attempt ended before Desktop took or
+	// ScreenClipFailureAttemptEnded: the attempt ended before Desktop took or
 	// finished the request, and its local recording is deleted.
 	ScreenClipFailureAttemptEnded ScreenClipFailure = "attempt_ended"
 	// ScreenClipFailureNotRecorded: Desktop holds no recording for the range.
@@ -183,7 +183,7 @@ type ScreenClipRange struct {
 	End              time.Time
 }
 
-// Validate checks the range is whole and bounded.
+// Validate checks that the range is whole and within ScreenClipMaxRange.
 func (r ScreenClipRange) Validate() error {
 	valid := !r.End.IsZero() && (r.FromSessionStart && r.Start.IsZero() ||
 		!r.FromSessionStart && !r.Start.IsZero() && r.Start.Before(r.End) && r.End.Sub(r.Start) <= ScreenClipMaxRange)
@@ -209,21 +209,21 @@ type ScreenClip struct {
 	State       ScreenClipState
 	Failure     ScreenClipFailure // set only when State is failed
 	RequestedAt time.Time
-	// DeliveredParticipationID is the Participation whose Desktop took the
+	// DeliveredParticipationID is the participation whose Desktop took the
 	// request.
 	DeliveredParticipationID AttemptParticipationID
 	// Upload is Desktop's declaration, set once it starts uploading.
 	Upload *ScreenClipUpload
 	// Signature is the installation key's ES256 signature over the upload's
-	// content digest, set when the clip is complete. With the clip's chunks
-	// and record alone, a reviewer can check later that the clip is the one
-	// that installation recorded.
+	// content digest, set when the clip is complete. With only the chunks and
+	// this record, a reviewer can later check the clip is the one that
+	// installation recorded.
 	Signature string
 	UpdatedAt time.Time
 	Revision  int64
 }
 
-// NewManagerScreenClip records an Exam Manager's request.
+// NewManagerScreenClip records an exam manager's request.
 func NewManagerScreenClip(
 	id ScreenClipID,
 	attemptID ExamAttemptID,
@@ -248,7 +248,7 @@ func newScreenClip(clip ScreenClip, at time.Time) (*ScreenClip, error) {
 	return &clip, nil
 }
 
-// Validate checks the clip's invariants.
+// Validate checks the clip's fields and that they fit its state.
 func (c *ScreenClip) Validate() error {
 	if c == nil || !c.ID.IsValid() || !c.AttemptID.IsValid() || c.Range.Validate() != nil ||
 		c.RequestedAt.IsZero() || c.UpdatedAt.Before(c.RequestedAt) || c.Revision < 1 ||
@@ -320,8 +320,8 @@ func (c *ScreenClip) BeginUpload(upload *ScreenClipUpload, at time.Time) error {
 }
 
 // Complete makes an uploaded clip ready to play, with the installation's
-// signature over its content digest. The caller has checked every chunk
-// arrived and the signature verifies.
+// signature over its content digest. The caller must already have checked
+// that every chunk arrived and the signature verifies.
 func (c *ScreenClip) Complete(signature string, at time.Time) error {
 	if c.State != ScreenClipUploading || len(signature) != DesktopSignatureLength {
 		return invalidModelError("ScreenClip.Complete", "screen_clip", "state", "is not uploading", "")
@@ -352,8 +352,8 @@ func (c *ScreenClip) advance(change func(*ScreenClip), at time.Time) error {
 	return nil
 }
 
-// validScreenClipReason holds a manager's reason to the rule a manager's
-// suspension reason follows: trimmed, 1 to 1000 characters.
+// validScreenClipReason holds a manager's reason to the same rule as a
+// suspension reason: trimmed, 1 to 1000 characters.
 func validScreenClipReason(reason string) bool {
 	return utf8.ValidString(reason) &&
 		reason == strings.TrimSpace(reason) &&

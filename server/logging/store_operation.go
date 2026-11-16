@@ -16,10 +16,8 @@ import (
 
 var _ timerlayer.SlowRecorder = (*Logger)(nil)
 
-// ObserveSlow writes one warning for a store operation that reached the
-// store's slow-operation threshold. The record carries only the closed
-// operation name and its duration, never SQL, arguments, rows or error text,
-// because store arguments carry personal data.
+// ObserveSlow warns about a slow store operation with only its name and
+// duration, never SQL, arguments, rows or error text: those carry personal data.
 func (l *Logger) ObserveSlow(ctx context.Context, operation timerlayer.Operation, duration time.Duration) {
 	l.WarnContext(
 		ctx,

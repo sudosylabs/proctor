@@ -21,9 +21,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// SQLExamSittingStore owns the PostgreSQL representation of scheduled Exam
+// SQLExamSittingStore owns the PostgreSQL representation of scheduled exam
 // delivery. Its mutations deliberately acquire the academic lifecycle locks
-// in the same global order as the catalog Stores before locking Exam rows.
+// in the same global order as the catalog Stores before locking exam rows.
 type SQLExamSittingStore struct{ *SQLStore }
 
 func newSQLExamSittingStore(sqlStore *SQLStore) store.ExamSittingStore {
@@ -104,8 +104,8 @@ func (row examSittingRow) model() (*model.ExamSitting, error) {
 	return sitting, nil
 }
 
-// Resolve returns the minimal Sitting snapshot needed to map an authorization
-// resource to its Exam, or a not-found error.
+// Resolve returns the minimal sitting snapshot needed to map an authorization
+// resource to its exam, or a not-found error.
 func (s SQLExamSittingStore) Resolve(ctx context.Context, id model.ExamSittingID) (*store.ExamSittingSnapshot, error) {
 	if !id.IsValid() {
 		return nil, store.NewErrInvalidInput("exam_sitting", "id", nil)
@@ -118,7 +118,7 @@ func (s SQLExamSittingStore) Resolve(ctx context.Context, id model.ExamSittingID
 	return examSittingSnapshot(row)
 }
 
-// Get returns the Sitting of examID with id, or a not-found error.
+// Get returns the sitting of examID with id, or a not-found error.
 func (s SQLExamSittingStore) Get(ctx context.Context, examID model.ExamID, id model.ExamSittingID) (*store.ExamSittingSnapshot, error) {
 	if !examID.IsValid() || !id.IsValid() {
 		return nil, store.NewErrInvalidInput("exam_sitting", "identity", nil)
@@ -144,8 +144,8 @@ func examSittingSnapshot(row examSittingRow) (*store.ExamSittingSnapshot, error)
 	return &store.ExamSittingSnapshot{Sitting: sitting, AcademicUnitID: unitID}, nil
 }
 
-// List returns up to Limit (at most 201) Sittings of the Exam in descending
-// scheduled start order, optionally filtered by Class, state, overlap window,
+// List returns up to Limit (at most 201) sittings of the exam in descending
+// scheduled start order, optionally filtered by class, state, overlap window,
 // and the Before keyset cursor.
 func (s SQLExamSittingStore) List(ctx context.Context, options store.ExamSittingListOptions) ([]store.ExamSittingSnapshot, error) {
 	if err := validateExamSittingListOptions(options); err != nil {
@@ -199,8 +199,8 @@ func (s SQLExamSittingStore) List(ctx context.Context, options store.ExamSitting
 	return items, nil
 }
 
-// ListInvalidationTargetsByClass returns up to limit (1..201) Exam and Sitting
-// selectors of the Class's Sittings, ordered by Sitting ID after the exclusive
+// ListInvalidationTargetsByClass returns up to limit (1..201) exam and sitting
+// selectors of the class's sittings, ordered by sitting ID after the exclusive
 // afterSittingID cursor.
 func (s SQLExamSittingStore) ListInvalidationTargetsByClass(
 	ctx context.Context,
@@ -247,8 +247,8 @@ func (s SQLExamSittingStore) ListInvalidationTargetsByClass(
 	return targets, nil
 }
 
-// ListInvalidationTargetsByExam returns up to limit (1..201) Sitting selectors
-// of the Exam, ordered by Sitting ID after the exclusive afterSittingID cursor.
+// ListInvalidationTargetsByExam returns up to limit (1..201) sitting selectors
+// of the exam, ordered by sitting ID after the exclusive afterSittingID cursor.
 func (s SQLExamSittingStore) ListInvalidationTargetsByExam(
 	ctx context.Context,
 	examID model.ExamID,
@@ -295,8 +295,8 @@ func (s SQLExamSittingStore) ListInvalidationTargetsByExam(
 }
 
 // ListCandidateInvalidationTargetsBySitting returns up to limit (1..201)
-// distinct Users whose candidate activity can include the Sitting, meaning any
-// historical Class Member or Candidate with an Attempt, ordered by User ID
+// distinct users whose candidate activity can include the sitting, meaning any
+// historical class member or candidate with an attempt, ordered by user ID
 // after afterUserID.
 func (s SQLExamSittingStore) ListCandidateInvalidationTargetsBySitting(
 	ctx context.Context,
@@ -347,7 +347,7 @@ func (s SQLExamSittingStore) ListCandidateInvalidationTargetsBySitting(
 	return targets, nil
 }
 
-// ListLifecycleDue returns up to Limit (1..201) Sittings whose next lifecycle
+// ListLifecycleDue returns up to Limit (1..201) sittings whose next lifecycle
 // transition is due, with the instant it became due, after the optional keyset
 // cursor.
 func (s SQLExamSittingStore) ListLifecycleDue(
@@ -453,7 +453,7 @@ func validateExamSittingListOptions(options store.ExamSittingListOptions) error 
 	return nil
 }
 
-// Schedule creates a scheduled Sitting under command and returns the retained
+// Schedule creates a scheduled sitting under command and returns the retained
 // result on replay.
 func (s SQLExamSittingStore) Schedule(
 	ctx context.Context,
@@ -514,7 +514,7 @@ func prepareExamSittingSchedule(input *store.ExamSittingSchedule) error {
 	return nil
 }
 
-// UpdateSchedule changes a scheduled Sitting's Exam Revision, Class, or
+// UpdateSchedule changes a scheduled sitting's exam revision, class, or
 // schedule under command, fenced on ExpectedRevision, and returns the retained
 // result on replay.
 func (s SQLExamSittingStore) UpdateSchedule(
@@ -580,7 +580,7 @@ func prepareExamSittingUpdate(input *store.ExamSittingScheduleUpdate) error {
 	return nil
 }
 
-// Cancel cancels a scheduled Sitting at database time under command, fenced on
+// Cancel cancels a scheduled sitting at database time under command, fenced on
 // ExpectedRevision, and returns the retained result on replay.
 func (s SQLExamSittingStore) Cancel(
 	ctx context.Context,
@@ -950,7 +950,7 @@ func newExamSittingDocument(sitting *model.ExamSitting) examSittingDocument {
 	}
 }
 
-// model returns the validated Sitting the document spells.
+// model returns the validated sitting the document spells.
 func (d examSittingDocument) model() (*model.ExamSitting, error) {
 	sitting := &model.ExamSitting{
 		ID:               d.ID,
@@ -977,8 +977,8 @@ func (d examSittingDocument) model() (*model.ExamSitting, error) {
 	return sitting, nil
 }
 
-// examSittingOutcome is the persisted outcome of an idempotent Sitting
-// schedule or lifecycle command: the Sitting as committed.
+// examSittingOutcome is the persisted outcome of an idempotent sitting
+// schedule or lifecycle command: the sitting as committed.
 type examSittingOutcome struct {
 	Sitting examSittingDocument `json:"sitting"`
 }
@@ -1071,9 +1071,9 @@ func examSittingStructureStatus(
 	return status.SameUnit, status.Contained, status.Future, nil
 }
 
-// ListNoShows returns up to Limit (1..201) Class Members of a Closing or Closed
-// Sitting who were members when it opened but never started an Attempt, ordered
-// by User ID after AfterCandidateUserID.
+// ListNoShows returns up to Limit (1..201) class members of a Closing or Closed
+// sitting who were members when it opened but never started an attempt, ordered
+// by user ID after AfterCandidateUserID.
 func (s SQLExamSittingStore) ListNoShows(
 	ctx context.Context,
 	options store.ExamSittingNoShowListOptions,
@@ -1121,8 +1121,8 @@ func (s SQLExamSittingStore) ListNoShows(
 }
 
 // snapshotFromCommittedOutcome preserves the exact mutation value stored in
-// the idempotency outcome. Only the Exam's immutable Academic Unit identity is
-// resolved after commit; re-reading the Sitting here would allow a concurrent
+// the idempotency outcome. Only the exam's immutable academic unit identity is
+// resolved after commit; re-reading the sitting here would allow a concurrent
 // later transition to replace the command's own result.
 func (s SQLExamSittingStore) snapshotFromCommittedOutcome(
 	ctx context.Context,
@@ -1355,7 +1355,7 @@ func encodeExamSittingAudit(sitting *model.ExamSitting, replayed bool, originalA
 
 // examSittingStatementTime is the authoritative time for manager schedule
 // and cancellation decisions, matching the system lifecycle transitions so
-// an application node's clock never stamps durable Sitting state.
+// an application node's clock never stamps durable sitting state.
 func examSittingStatementTime(ctx context.Context, tx *sqlxTxWrapper) (time.Time, error) {
 	var now time.Time
 	if err := tx.Get(ctx, &now, `SELECT statement_timestamp()`); err != nil {

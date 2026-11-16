@@ -17,10 +17,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// The route-path vocabulary is deliberately private. Resource modules write
-// a path template in endpoint.Path; the kernel parses it into these values,
-// and gorilla/mux syntax remains an implementation detail of the catalog
-// compiler.
+// The route-path vocabulary is private so gorilla/mux syntax never leaks into
+// endpoint declarations.
 
 type parameterKind uint8
 
@@ -100,15 +98,11 @@ func (p pathParameter) compile() (string, string, error) {
 	return "{" + p.name + ":" + pattern + "}", "{" + normalized + "}", nil
 }
 
-// routePath is a canonical route path. The kernel parses it from an
-// endpoint's Path, a readable template such as
-// "/programme-levels/{programme_level_id}/classes".
 type routePath struct {
 	parts       []pathPart
 	rootMounted bool
-	// err records a malformed template. The catalog compiler reports it when
-	// the route is compiled, so a bad template fails New rather than package
-	// initialisation.
+	// err is reported at compile time, so a bad template fails New rather
+	// than package initialisation.
 	err error
 }
 
@@ -116,8 +110,7 @@ type routePath struct {
 // with "/" and has no trailing slash. A plain segment is a canonical literal;
 // "{name}" is a canonical identifier parameter; "{name:uuid}",
 // "{name:sequence}" and "{name:provider}" select a canonical UUID, a positive
-// sequence number and a provider identifier. Malformed templates are reported
-// by the catalog compiler.
+// sequence number and a provider identifier.
 func path(template string) routePath {
 	parts, err := parsePathTemplate(template)
 	return routePath{parts: parts, err: err}

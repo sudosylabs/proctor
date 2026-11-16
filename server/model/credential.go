@@ -16,8 +16,8 @@ import (
 
 const TokenHashLength = sha256.Size * 2
 
-// NewCredentialToken returns a 256-bit opaque bearer credential. The raw value
-// must be shown only when required and must never be persisted or logged.
+// NewCredentialToken returns a 256-bit opaque bearer credential. Show the raw
+// value only when required; never persist or log it.
 func NewCredentialToken() string {
 	value := make([]byte, 32)
 	if _, err := rand.Read(value); err != nil {
@@ -26,9 +26,8 @@ func NewCredentialToken() string {
 	return base64.RawURLEncoding.EncodeToString(value)
 }
 
-// HashToken produces the persistent representation of a high-entropy opaque
-// credential. This unsalted SHA-256 digest is appropriate for random bearer
-// tokens; human passwords require a password hashing algorithm instead.
+// HashToken returns the stored form of a high-entropy random token. Unsalted
+// SHA-256 is enough for random bearer tokens; passwords need a password hash.
 func HashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])

@@ -36,10 +36,7 @@ type systemdNotificationConnection interface {
 	Close() error
 }
 
-// systemdSupervisor reports the node's lifecycle to systemd over the
-// notification socket: readiness, shutdown, reloads, and watchdog
-// keep-alives. A nil supervisor reports nothing, for a process that systemd
-// does not supervise.
+// A nil systemdSupervisor means systemd does not supervise the process.
 type systemdSupervisor struct {
 	notify func(context.Context, string) error
 	// watchdogInterval is how often systemd expects a keep-alive; zero when
@@ -49,10 +46,9 @@ type systemdSupervisor struct {
 	stopping         atomic.Bool
 }
 
-// newSystemdSupervisor returns the supervisor systemd's environment asks for,
-// or nil when NOTIFY_SOCKET is absent. The watchdog applies only when
-// WATCHDOG_USEC is a positive interval and WATCHDOG_PID, when set, names this
-// process.
+// newSystemdSupervisor returns nil when NOTIFY_SOCKET is absent. As
+// sd_watchdog_enabled(3) specifies, the watchdog applies only when
+// WATCHDOG_PID, if set, names this process.
 func newSystemdSupervisor(lookup func(string) string, pid int) *systemdSupervisor {
 	socketPath := lookup("NOTIFY_SOCKET")
 	if socketPath == "" {
@@ -71,23 +67,21 @@ func newSystemdSupervisor(lookup func(string) string, pid int) *systemdSuperviso
 	return supervisor
 }
 
-// ready reports that startup, or a reload, has finished.
 func (s *systemdSupervisor) ready(ctx context.Context) error {
 	return s.notify(ctx, systemdReadyMessage)
 }
 
-// beginStopping reports that shutdown has begun. From now on the watchdog
-// keeps the bounded drain alive; systemd's stop timeout, not the watchdog,
-// limits shutdown.
+// beginStopping keeps the watchdog fed through the drain, so systemd's stop
+// timeout, not the watchdog, limits shutdown.
 func (s *systemdSupervisor) beginStopping(ctx context.Context) error {
 	s.stopping.Store(true)
 	return s.notify(ctx, systemdStoppingMessage)
 }
 
-// reload brackets one configuration reload with RELOADING=1 and READY=1, as
-// Type=notify-reload requires. READY=1 follows even a failed reload, which
-// keeps the running configuration in force. Notification failures are
-// best-effort and never block the reload.
+// reload brackets the reload with RELOADING=1 and READY=1, as
+// Type=notify-reload requires. READY=1 follows even a failed reload, since the
+// running configuration stays in force. Notification failures never block the
+// reload.
 func (s *systemdSupervisor) reload(ctx context.Context, reload func(context.Context) error) error {
 	if s == nil {
 		return reload(ctx)
@@ -108,12 +102,11 @@ func (s *systemdSupervisor) reloadingMessage() (string, error) {
 	return fmt.Sprintf("RELOADING=1\nMONOTONIC_USEC=%d", now.Microseconds()), nil
 }
 
-// keepAlive sends WATCHDOG=1 every half watchdog interval until done closes,
-// but only when the node reported ready at least once since the previous
-// keep-alive, or is shutting down. Readiness is sampled several times per
-// interval so a short dependency blip does not miss a keep-alive, while a node
-// that stays unready, or whose readiness check wedges, stops the keep-alives
-// and lets systemd restart it.
+// keepAlive sends WATCHDOG=1 every half interval, but only if the node was
+// ready at some sample since the previous keep-alive, or is stopping. Sampling
+// several times per interval rides out a short dependency blip; a node that
+// stays unready, or whose readiness check wedges, goes quiet and systemd
+// restarts it.
 func (s *systemdSupervisor) keepAlive(done <-chan struct{}, ready func() bool) {
 	if s == nil || s.watchdogInterval <= 0 {
 		return
@@ -146,21 +139,17 @@ func (s *systemdSupervisor) keepAlive(done <-chan struct{}, ready func() bool) {
 	}
 }
 
-// watchdogGate decides each keep-alive: one is due when the node was ready
-// at any sample since the previous keep-alive, or is shutting down.
 type watchdogGate struct {
 	observedReady bool
 }
 
-// sample records one readiness check; once the node has been seen ready in
-// this interval, further checks are skipped until the next keep-alive.
 func (g *watchdogGate) sample(ready func() bool) {
 	if !g.observedReady && ready() {
 		g.observedReady = true
 	}
 }
 
-// due reports whether to send this keep-alive and starts a new interval.
+// due also resets the gate for the next interval.
 func (g *watchdogGate) due(stopping bool) bool {
 	due := g.observedReady || stopping
 	g.observedReady = false

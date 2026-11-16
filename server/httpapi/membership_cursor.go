@@ -14,12 +14,10 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// Membership continuation is a transport envelope. The application receives
-// typed keyset selectors and authorizes the resource independently on every page.
-// Sort and Dir record the page order; AfterStartAt continues the start order
-// and AfterUserID the name order, so exactly one is set. The cursor holds the
-// member, not its name: pages are a live view, and a name page resumes from
-// that member's current name.
+// membershipPageCursor records the page order in Sort and Dir; exactly one of
+// AfterStartAt (start order) and AfterUserID (name order) is set. It holds the
+// member, not its name, because pages are a live view. The application
+// authorizes the scope again on every page, so a cursor grants nothing.
 type membershipPageCursor struct {
 	ScopeType    model.ResourceType `json:"scope_type"`
 	ScopeID      string             `json:"scope_id"`

@@ -16,25 +16,23 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// Access-key deletion retains the peer invalidation contract and clears
-// snapshots left by an older process. Current authentication never reads or
-// writes positive entries in this namespace.
+// Only deletes use this prefix: they keep the peer invalidation contract and
+// clear snapshots an older process left. Nothing reads or writes entries here.
 const authenticationCachePrefix = "authentication/access/"
 
-// CacheInvalidatorDependencies are the collaborators of CacheInvalidator;
-// NewCacheInvalidator validates them once and CacheInvalidator keeps them in deps.
+// CacheInvalidatorDependencies configures NewCacheInvalidator; Cache is required.
 type CacheInvalidatorDependencies struct {
 	Cache       AuthenticationCache
 	Diagnostics *logging.Logger
 }
 
-// CacheInvalidator deletes cached access credentials and Session activity; it
+// CacheInvalidator deletes cached access credentials and session activity; it
 // never writes a positive entry.
 type CacheInvalidator struct {
 	deps CacheInvalidatorDependencies
 }
 
-// NewCacheInvalidator builds the invalidator over the authentication cache.
+// NewCacheInvalidator fails without a cache.
 func NewCacheInvalidator(deps CacheInvalidatorDependencies) (*CacheInvalidator, error) {
 	if deps.Cache == nil {
 		return nil, errors.New("authentication cache is required")
@@ -62,7 +60,7 @@ func (i *CacheInvalidator) InvalidateAccessCredentials(
 	}
 }
 
-// InvalidateSessionActivity deletes the debounced activity of each Session.
+// InvalidateSessionActivity deletes the debounced activity of each session.
 func (i *CacheInvalidator) InvalidateSessionActivity(
 	ctx context.Context,
 	sessionIDs []model.SessionID,
@@ -97,10 +95,9 @@ func (s *Service) sessionsRevoked(
 	s.publisher.SessionsRevoked(ctx, userID, sessionIDs, hashes)
 }
 
-// publishSessionsChanged tells the User's connections to refetch their
-// Session list after a change that ends no Session, such as a rename; a
-// revocation announces itself through SessionsRevoked. It is best effort, and
-// operation names what failed.
+// publishSessionsChanged is for changes that end no session, such as a rename;
+// a revocation announces itself through SessionsRevoked. It is best effort, and
+// operation names what failed in the log.
 func (s *Service) publishSessionsChanged(ctx context.Context, userID model.UserID, operation string) {
 	event, err := realtime.NewCurrentUserSessionsChangedEvent(userID)
 	if err == nil {

@@ -70,12 +70,9 @@ const (
 	hubStopped
 )
 
-// Hub owns only connections attached to this process. Application
-// events arrive through PublishLocal after the application has performed the
-// local-first/cluster-peer publication flow.
-//
-// Construction is inert: Start owns the replay reaper; Close is idempotent and
-// drains connections when the hub was started.
+// Hub owns only this process's connections; events reach it through
+// PublishLocal after the application has published to cluster peers.
+// Construction is inert until Start; Close is idempotent.
 type Hub struct {
 	admission    *app.RealtimeAdmission
 	attempts     *attempt.Service
@@ -114,13 +111,12 @@ type shard struct {
 	mu     sync.RWMutex
 	conns  map[string]*connectionRuntime
 	replay map[string]*replayState
-	// budgets holds the inbound frame budget of each Session or User with a
-	// connection on this node, kept briefly after its last connection closes.
+	// budgets outlive their last connection briefly, so reconnecting does not
+	// reset a spent budget.
 	budgets map[string]*sharedFrameBudget
 }
 
-// NewHub constructs an inert hub. Call Start before Accept; Close drains its
-// connections and background work within the shutdown budget it is handed.
+// NewHub returns an inert hub; call Start before Accept.
 func NewHub(
 	admission *app.RealtimeAdmission,
 	attempts *attempt.Service,
@@ -201,9 +197,8 @@ func (h *Hub) OriginAllowed(origin string, allowMissingOrigin bool) bool {
 	return ok && serialized == h.publicOrigin
 }
 
-// Accept upgrades an already-authenticated HTTP request to a WebSocket
-// connection. Callers must enforce session authentication before Accept.
-// The hub must be Start'ed; construction alone does not accept connections.
+// Accept upgrades a request the caller has already authenticated with a
+// session. It refuses until Start has succeeded.
 func (h *Hub) Accept(
 	writer http.ResponseWriter,
 	request *http.Request,
@@ -361,7 +356,6 @@ func (h *Hub) register(
 	return connection, resume.resumed
 }
 
-// replayResume is the connection identity and replay state a registration starts from.
 type replayResume struct {
 	connectionID  string
 	nextSequence  int64
@@ -371,7 +365,6 @@ type replayResume struct {
 	resumed       bool
 }
 
-// connectionLimitReachedLocked reports whether the principal's user or Session already holds the maximum connections in the locked shard.
 func connectionLimitReachedLocked(shard *shard, principal model.Principal) bool {
 	var userConnections, sessionConnections int
 	for _, connection := range shard.conns {
@@ -386,7 +379,8 @@ func connectionLimitReachedLocked(shard *shard, principal model.Principal) bool 
 		sessionConnections >= maximumPerSession
 }
 
-// takeReplayResumeLocked claims the principal's retained replay state when the requested sequence is still covered, or starts a fresh connection.
+// takeReplayResumeLocked starts a fresh connection unless the retained replay
+// state still covers the requested sequence.
 func takeReplayResumeLocked(
 	shard *shard,
 	principal model.Principal,
@@ -422,7 +416,6 @@ func takeReplayResumeLocked(
 	return resume
 }
 
-// attachFrameBudgetLocked shares the principal's inbound frame budget from the locked shard with the connection.
 func attachFrameBudgetLocked(shard *shard, connection *connectionRuntime, principal model.Principal) {
 	budgetKey := frameBudgetKey(principal)
 	budget := shard.budgets[budgetKey]
@@ -478,8 +471,8 @@ func (h *Hub) PublishLocal(_ context.Context, event realtime.Event) {
 }
 
 // UnbindExamAttemptConnection implements realtime.Sink. It clears only the
-// matching durable Attempt Connection binding and its protected subscription;
-// the generic WebSocket remains available for unrelated actions.
+// matching attempt binding and its subscription; the socket stays open for
+// other actions.
 func (h *Hub) UnbindExamAttemptConnection(connectionID model.AttemptConnectionID) {
 	if !connectionID.IsValid() {
 		return
@@ -619,11 +612,10 @@ func (h *Hub) closeMatching(
 	}
 }
 
-// Close stops admission, closes sockets, and waits for active connection work,
-// including durable Attempt Connection finalization, until ctx, the caller's
-// shutdown budget, ends. Its deadline bounds every connection's finalization.
-// An ended ctx cancels finalization and returns an error retained for
-// concurrent and repeated callers. Closing a never-started hub succeeds.
+// Close stops admission, closes sockets and waits for connection work,
+// including attempt connection finalization, until ctx ends; ctx's deadline
+// bounds every finalization. An ended ctx cancels finalization and its error
+// is returned to concurrent and repeated callers too.
 func (h *Hub) Close(ctx context.Context) error {
 	h.closeOnce.Do(func() { h.closeErr = h.shutdown(ctx) })
 	return h.closeErr
@@ -676,7 +668,7 @@ func (h *Hub) shutdown(ctx context.Context) error {
 		}
 
 		// Every close frame shares the same short deadline. A slow peer cannot
-		// spend another full write budget for each connection in the Hub.
+		// spend another full write budget for each connection in the hub.
 		controlDeadline := time.Now().Add(shutdownControlWait)
 		if bounded {
 			controlDeadline = minTime(deadline, controlDeadline)

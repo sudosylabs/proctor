@@ -211,8 +211,8 @@ type examIntegrityReviewMutationResponse struct {
 	Decision        *examIntegrityReviewDecisionResponse `json:"decision,omitempty"`
 }
 
-// browserIntegrityGroupResponse identifies the Browser Activity rule group
-// behind an Integrity Flag.
+// browserIntegrityGroupResponse identifies the browser activity rule group
+// behind an integrity flag.
 type browserIntegrityGroupResponse struct {
 	ParticipationID         model.AttemptParticipationID `json:"participation_id"`
 	PolicyRevisionID        model.ExamRevisionID         `json:"policy_revision_id"`
@@ -234,8 +234,8 @@ func browserIntegrityGroupFrom(value *model.BrowserIntegrityGroup) *browserInteg
 	}
 }
 
-// browserIntegrityOverflowResponse counts validated Browser Activity events
-// that exceeded retained Integrity Evidence.
+// browserIntegrityOverflowResponse counts validated browser activity events
+// that exceeded retained integrity evidence.
 type browserIntegrityOverflowResponse struct {
 	ValidatedEventCount int64     `json:"validated_event_count"`
 	FirstReceivedAt     time.Time `json:"first_received_at"`
@@ -1052,8 +1052,8 @@ type attemptEvidenceListResponse struct {
 	NextCursor string                  `json:"next_cursor,omitempty"`
 }
 
-// listAttemptEvidence pages the Attempt evidence sealed with the
-// Submission. Each item is the stored record, Detail included.
+// listAttemptEvidence pages the attempt evidence sealed with the
+// submission. Each item is the stored record, Detail included.
 func (h examIntegrityReviewHandlers) listAttemptEvidence(request route.Request) (route.Result, error) {
 	submissionID, err := reviewSubmissionID(request)
 	if err != nil {

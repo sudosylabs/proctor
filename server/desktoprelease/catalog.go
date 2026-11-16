@@ -13,15 +13,13 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// VerifiedCatalog is the Desktop builds this server admits. It is empty
-// until coordinated activation supplies signed Desktop target artifacts and
-// capability matrices. Server releases must embed exact verified tuples
-// here, so configuration and Institution policy cannot invent compatible
-// released builds. Development skips login compatibility checks instead of
-// changing this catalog.
+// VerifiedCatalog returns the Desktop builds this server admits. It is compiled
+// in so neither configuration nor institution policy can add a build, and it
+// is empty until signed releases exist; development skips the login check
+// instead of changing it.
 func VerifiedCatalog() ([]model.DesktopBuildTuple, error) {
-	// Real activation must add verified target artifacts and the admitted release
-	// public keys together. Synthetic certification belongs only in tests.
+	// Add release artifacts and their public keys together. Synthetic
+	// certification belongs only in tests.
 	return verifyReleases([]admittedRelease{}, map[string]ed25519.PublicKey{})
 }
 

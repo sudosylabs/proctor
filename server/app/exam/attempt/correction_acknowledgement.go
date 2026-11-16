@@ -25,9 +25,8 @@ type AcknowledgeCorrectionCommand struct {
 	IdempotencyKey            string
 }
 
-// CorrectionAcknowledgementResult reports the acknowledged correction, the
-// Attempt's current Exam Revision, and the runtime capabilities the candidate
-// may now use.
+// CorrectionAcknowledgementResult carries the runtime capabilities the
+// candidate may use after the correction.
 type CorrectionAcknowledgementResult struct {
 	CorrectionRevisionID model.ExamRevisionID
 	CurrentRevisionID    model.ExamRevisionID
@@ -35,10 +34,9 @@ type CorrectionAcknowledgementResult struct {
 	RuntimeCapabilities  store.CandidateRuntimeCapabilities
 }
 
-// AcknowledgeExamAttemptCorrection idempotently records that the candidate's
-// live Attempt Participation has received a Sitting correction. It is fenced
-// by the participation generation and by ExpectedCurrentRevisionID matching
-// the Attempt's current Exam Revision.
+// AcknowledgeExamAttemptCorrection idempotently records that the live
+// participation received a sitting correction, fenced by the participation
+// generation and by ExpectedCurrentRevisionID.
 func (s *Service) AcknowledgeExamAttemptCorrection(
 	ctx context.Context,
 	inv invocation.Invocation,

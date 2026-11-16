@@ -21,32 +21,30 @@ type StartBrowserInvitationCommand struct {
 	Source string
 }
 
-// BrowserInvitationRequirement says what the browser must present before it
-// can accept an Invitation.
+// BrowserInvitationRequirement is what the browser must present before it
+// can accept an invitation.
 type BrowserInvitationRequirement string
 
-// Student Class and teacher Academic Unit Invitations may create the account
-// that accepts them; role Invitations require an existing signed-in Session.
+// Student class and teacher academic unit invitations may create the
+// accepting account; role invitations require an existing signed-in session.
 const (
 	BrowserInvitationRequirementAccount BrowserInvitationRequirement = "account"
 	BrowserInvitationRequirementSession BrowserInvitationRequirement = "session"
 )
 
-// BrowserInvitationStart is what a browser receives after presenting a valid
-// claim for a pending Invitation: a transaction handle and proof to continue
-// with, and the only Invitation facts it may show.
+// BrowserInvitationStart holds the handle and proof to continue with, and
+// the only invitation facts the browser may show.
 type BrowserInvitationStart struct {
 	Handle       string
 	BrowserProof string
 	Purpose      model.InvitationPurpose
 	Requirement  BrowserInvitationRequirement
 	ExpiresAt    int64
-	// Email is the Invitation's normalized target address, the mailbox the
-	// claim was delivered to. Acceptance never takes an address from the browser.
+	// Email is the mailbox the claim was delivered to. Acceptance never takes
+	// an address from the browser.
 	Email string
-	// ClassDisplayName names the Class of a student Class Invitation and is
-	// empty for every other purpose. Academic Unit and Role names are never
-	// presented, matching the Invitation and membership mail.
+	// ClassDisplayName is empty for every purpose but a student class
+	// invitation. Unit and role names are never shown, matching the mail.
 	ClassDisplayName string
 }
 
@@ -58,8 +56,8 @@ type BrowserInvitationSessionAcceptanceCommand struct {
 	Handle, BrowserProof, Source string
 }
 
-// StartBrowserInvitation exchanges a raw Invitation claim for a hashed browser handle
-// and proof bound to the pending Invitation, after counting the claim attempt.
+// StartBrowserInvitation exchanges a raw claim for a browser handle and
+// proof bound to the pending invitation; the attempt is counted first.
 func (s *Service) StartBrowserInvitation(
 	ctx context.Context,
 	_ invocation.Invocation,
@@ -148,8 +146,8 @@ func (s *Service) StartBrowserInvitation(
 	}, nil
 }
 
-// AcceptBrowserInvitation accepts a student Class or teacher Academic Unit Invitation
-// through its browser handle and proof, creating the local account.
+// AcceptBrowserInvitation accepts a student class or teacher academic unit
+// invitation, creating the local account.
 func (s *Service) AcceptBrowserInvitation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -196,8 +194,8 @@ func (s *Service) AcceptBrowserInvitation(
 	return accepted, nil
 }
 
-// AcceptBrowserInvitationWithSession accepts a scoped Role Invitation through its browser
-// handle and proof for the caller's web Session.
+// AcceptBrowserInvitationWithSession accepts a role invitation for the
+// caller's signed-in web session.
 func (s *Service) AcceptBrowserInvitationWithSession(
 	ctx context.Context,
 	inv invocation.Invocation,

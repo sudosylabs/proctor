@@ -45,25 +45,23 @@ const (
 )
 
 const (
-	// manifestPage and journalPage bound one Workspace read.
+	// manifestPage and journalPage bound one workspace read.
 	manifestPage = 200
 	journalPage  = model.AttemptWorkspaceJournalReadMaximum
 	// journalRound bounds the journal entries one round projects.
 	journalRound = 4 * MaxProjectionMutations
 	// divergedLimit is how many rounds the projection may stay refused,
-	// overwriting included, without new guest activity before the machine
-	// is replaced. A refused projection is retried with Overwrite, which
-	// replaces a lost guest change in place; execenv still refuses one where
-	// the guest moved a path into or out of the overwritten subtree, or
-	// removed its parent directory, and only such a machine is replaced.
+	// overwrite included, without new guest activity before the machine is
+	// replaced. Only a guest move across the overwritten subtree's boundary,
+	// or a removed parent directory, defeats Overwrite in execenv.
 	divergedLimit = 3
 )
 
-// IgnoreFile is the Attempt Workspace file that names the guest paths kept
+// IgnoreFile is the attempt workspace file that names the guest paths kept
 // on the machine. The machine knows it only because the owner names it.
 const IgnoreFile = ".proctorignore"
 
-// DefaultIgnorePatterns apply while the Workspace has no IgnoreFile, or one
+// DefaultIgnorePatterns apply while the workspace has no IgnoreFile, or one
 // that does not parse: dependency installs and build output stay on the
 // machine.
 var DefaultIgnorePatterns = []string{
@@ -103,10 +101,11 @@ func (t OwnerTiming) withDefaults() OwnerTiming {
 	}
 }
 
-// OwnerDependencies is what NewOwners needs.
+// OwnerDependencies configures NewOwners; Environments, Evidence, Workspace
+// and Hosts are required.
 type OwnerDependencies struct {
 	Environments store.AttemptEnvironmentStore
-	// Evidence stores Attempt evidence through the owner's access.
+	// Evidence stores attempt evidence through the owner's access.
 	Evidence  store.ExamAttemptWorkspaceStore
 	Workspace Workspace
 	Hosts     Hosts
@@ -121,8 +120,8 @@ type OwnerDependencies struct {
 	Timing OwnerTiming
 }
 
-// NewOwners validates dependencies and returns the factory the Runtime runs
-// owners from.
+// NewOwners returns the factory the Runtime runs owners from. It fails when
+// the hosts cannot compile the default ignore rules.
 func NewOwners(dependencies OwnerDependencies) (OwnerFactory, error) {
 	if dependencies.Environments == nil || dependencies.Evidence == nil || dependencies.Workspace == nil ||
 		dependencies.Hosts == nil {
@@ -152,18 +151,18 @@ var (
 	errDone = errors.New("attempt environment is done")
 	// errLeaseLost ends Run: another owner may act now.
 	errLeaseLost = errors.New("attempt environment lease lost")
-	// errWaitCapacity: no host can take the machine now.
+	// errWaitCapacity means no host can take the machine now.
 	errWaitCapacity = errors.New("no execution host has capacity")
-	// errSealed: the Attempt has its Submission; the fact that ends the
+	// errSealed means the attempt is submitted; the fact that ends the
 	// environment follows.
 	errSealed = errors.New("the Attempt is sealed")
-	// errProjectionConflict: a guest change stands in the way of the
+	// errProjectionConflict means a guest change stands in the way of the
 	// projection.
 	errProjectionConflict = errors.New("the projection is refused by a guest change")
 )
 
-// owner acts on one Attempt's environment while its node holds the lease.
-// It is driven by its environment row and woken by facts, Workspace commits
+// owner acts on one attempt's environment while its node holds the lease.
+// It is driven by its environment row and woken by facts, workspace commits
 // and the machine's state; everything another owner needs to continue is in
 // the row.
 type owner struct {
@@ -189,7 +188,7 @@ type owner struct {
 	proj       projected
 	ahead      *tree
 	hostCursor uint64
-	// journalDue says a Workspace commit may wait to be projected.
+	// journalDue says a workspace commit may wait to be projected.
 	journalDue    bool
 	journalReadAt time.Time
 	echoes        map[int64]echo
@@ -309,7 +308,7 @@ func (o *owner) step(ctx context.Context) (time.Duration, error) {
 		return 0, o.teardown(ctx)
 	}
 	if o.row.ReplacePending() {
-		// A manager asked for a new machine built from the Workspace.
+		// A manager asked for a new machine built from the workspace.
 		return 0, restartError{reason: "manager"}
 	}
 	if o.machine == nil {
@@ -369,7 +368,7 @@ func (o *owner) step(ctx context.Context) (time.Duration, error) {
 }
 
 // nextRound is how long a running owner waits before its next round
-// unless something wakes it: a change the guest made, a Workspace commit,
+// unless something wakes it: a change the guest made, a workspace commit,
 // a fact or the machine's state. Only work already in hand shortens it.
 func (o *owner) nextRound() time.Duration {
 	switch {
@@ -405,10 +404,10 @@ func (o *owner) stopObserving() {
 	}
 }
 
-// settle brings everything the guest wrote into the Workspace and freezes
+// settle brings everything the guest wrote into the workspace and freezes
 // it: one complete observation, a harvest of all of it, its confirmation
 // and acknowledgement, then the freeze. The machine serves no observation
-// once it is frozen, so the drain comes first. The seal's settle reuses it.
+// once it is frozen, so the drain comes first.
 func (o *owner) settle(ctx context.Context) error {
 	if o.control == ControlRunning && o.ready {
 		if err := o.sync(ctx, true); err != nil && !errors.Is(err, errProjectionConflict) {
@@ -420,7 +419,7 @@ func (o *owner) settle(ctx context.Context) error {
 
 // completeSettle answers every settle asked before a seal. A running
 // machine drains: one complete observation is harvested, confirmed and
-// acknowledged, so the Workspace holds everything the guest wrote. A frozen
+// acknowledged, so the workspace holds everything the guest wrote. A frozen
 // machine drained when it froze, and one not yet projected wrote nothing.
 func (o *owner) completeSettle(ctx context.Context) error {
 	if o.control == ControlRunning && o.ready {
@@ -445,7 +444,7 @@ func machineSpec(row *model.AttemptEnvironment) MachineSpec {
 	return MachineSpec{Image: row.Image, Network: row.Network, Resources: row.Resources, IdleSuspend: row.IdleWindow}
 }
 
-// grantOf is the machine an environment row names.
+// grantOf is the grant an environment row names.
 func grantOf(row *model.AttemptEnvironment) GrantRef {
 	return GrantRef{Host: row.Host, GrantID: row.GrantID}
 }
@@ -639,7 +638,7 @@ func (o *owner) machineError(err error) error {
 }
 
 // restart replaces the machine with a new incarnation, built from the
-// Workspace, and records the gap.
+// workspace, and records the gap.
 func (o *owner) restart(ctx context.Context, reason string) error {
 	if o.machine != nil {
 		_ = o.machine.Revoke(ctx)
@@ -653,7 +652,7 @@ func (o *owner) restart(ctx context.Context, reason string) error {
 	o.row.Host, o.row.GrantID, o.row.Epoch = "", "", ""
 	o.row.State, o.row.ControlFence, o.row.EvidenceSequence = model.AttemptEnvironmentLost, 0, 0
 	o.row.ProjectionCursor, o.row.ObservationCursor, o.row.ProcessCursor, o.row.ProjectedVersions = 0, 0, 0, nil
-	// A new machine holds only the Workspace.
+	// A new machine holds only the workspace.
 	o.row.SyncPaths = nil
 	if err := o.save(ctx); err != nil {
 		return err
@@ -752,7 +751,7 @@ func copyOwnerState(to, from *model.AttemptEnvironment) {
 	}
 }
 
-// access is the owner's proof to the Workspace and evidence.
+// access is the owner's proof to the workspace and evidence.
 func (o *owner) access() WorkspaceAccess {
 	return WorkspaceAccess{AttemptID: o.attemptID, Incarnation: o.row.Incarnation, Fence: o.lease.Fence}
 }
@@ -792,7 +791,7 @@ func (o *owner) evidence(ctx context.Context, kind model.AttemptEvidenceKind, se
 		var conflict *store.ErrConflict
 		switch {
 		case appendErr == nil:
-			// A refusal over the Attempt's bounds is counted by the store.
+			// A refusal over the attempt's bounds is counted by the store.
 			if own {
 				o.row.EvidenceSequence = sequence
 			}
@@ -803,7 +802,7 @@ func (o *owner) evidence(ctx context.Context, kind model.AttemptEvidenceKind, se
 			}
 			o.row.EvidenceSequence = sequence
 		case errors.As(appendErr, &conflict) && conflict.Constraint == "exam_attempt_state":
-			// The Attempt is sealed: nothing more is recorded.
+			// The attempt is sealed: nothing more is recorded.
 			return nil
 		case errors.As(appendErr, &conflict) && conflict.Constraint == "attempt_environment_owner":
 			return errLeaseLost

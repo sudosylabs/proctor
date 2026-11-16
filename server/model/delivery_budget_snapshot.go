@@ -90,8 +90,9 @@ func (s StopDeliveryDetails) Validate() error {
 	return nil
 }
 
-// Exactly one family's affected status collection is populated. Both keys are
-// present so the response remains closed and its ownership can be validated.
+// StopDeliveryDetailsResult fills exactly one family's status collection. Both
+// keys are always present so the response stays closed and its owner can be
+// validated.
 type StopDeliveryDetailsResult struct {
 	Budget  DeliveryBudgetSnapshot      `json:"budget"`
 	Native  *NativeSecurityStreamStatus `json:"native"`

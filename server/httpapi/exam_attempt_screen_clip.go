@@ -329,9 +329,9 @@ func (h examAttemptHandlers) playScreenClip(request route.Request) (route.Protoc
 	return route.BinaryDownload(body, byteRange.Length).WithHeaders(headers), nil
 }
 
-// screenClipUploadAccess reads the candidate access of an upload. The Attempt
-// credential and Connection headers come together while the Participation
-// that took the clip is live; after it closes they are omitted, and the Store
+// screenClipUploadAccess reads the candidate access of an upload. The attempt
+// credential and connection headers come together while the participation
+// that took the clip is live; after it closes they are omitted, and the store
 // decides from the recorded closure whether the upload may continue.
 func screenClipUploadAccess(request route.Request) (attempt.CandidateAccess, error) {
 	attemptID, err := route.PathID[model.ExamAttemptID](request, "exam_attempt_id")

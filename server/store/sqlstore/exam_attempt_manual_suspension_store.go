@@ -19,7 +19,7 @@ import (
 )
 
 // examAttemptManualSuspensionOutcome retains only stable identities. The
-// committed episode, ended Participation, and closed Connection are immutable,
+// committed episode, ended participation, and closed connection are immutable,
 // so replay rehydrates the original result from them.
 type examAttemptManualSuspensionOutcome struct {
 	ExamID           string `json:"exam_id"`
@@ -35,23 +35,12 @@ type examAttemptManualSuspensionOutcome struct {
 
 func (examAttemptManualSuspensionOutcome) outcomeDocument() {}
 
-// SuspendAttempt implements store.ExamAttemptStore: it applies an Exam
-// Manager's kick to the Attempt under an ExamAttemptSuspendOperation command,
-// and returns the retained result with Replayed set on exact retries.
-//
-// It locks the Attempt and Sitting, rechecks current Exam management authority
-// unless an authorized override is explicit, requires the expected revision of
-// an Active Attempt in an Open or Paused Sitting, ends the active Participation
-// as kicked, closes its open Connection as kicked, closes native delivery,
-// opens one manual Suspension episode without an Integrity Flag, and commits
-// audit and the idempotent outcome atomically using PostgreSQL time. Exact
-// retries return the retained result after current authority is rechecked.
-// Stable conflicts are exam_attempt_revision, exam_attempt_state,
-// exam_sitting_state, exam_sitting_deadline_reached when PostgreSQL time has
-// reached the Sitting's scheduled end, and attempt_participation_expired when
-// the active generation's lease has lapsed: that generation is Connection Loss,
-// never a kick, and the caller records it through ExpireParticipation. The
-// candidate's own Attempt and a missing manager relationship are not found.
+// SuspendAttempt applies a manager's kick under command: it ends the active
+// participation and connection as kicked, closes native delivery and opens a
+// manual suspension with no flag. A lapsed generation is connection loss, not
+// a kick, and conflicts as attempt_participation_expired so the caller records
+// it through ExpireParticipation. The candidate's own attempt and a missing
+// manager relationship are not found.
 func (s *SQLExamAttemptStore) SuspendAttempt(
 	ctx context.Context,
 	input *store.ExamAttemptManualSuspension,
@@ -240,9 +229,9 @@ func participationView(participation *model.AttemptParticipation) *store.ExamAtt
 	}
 }
 
-// suspendExamAttemptByManager runs after the Attempt and Sitting are locked
+// suspendExamAttemptByManager runs after the attempt and sitting are locked
 // and current authority is rechecked. Lock order follows expiry: Attempt, then
-// Participation, then Connection.
+// participation, then connection.
 func suspendExamAttemptByManager(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -274,9 +263,9 @@ func suspendExamAttemptByManager(
 	if err = tx.Get(ctx, &at, `SELECT statement_timestamp()`); err != nil {
 		return zero, fmt.Errorf("read Exam Attempt manual suspension time: %w", err)
 	}
-	// PostgreSQL time decides both bounds, as it does for renewal and Focus
-	// Loss: a kick never suspends past the Sitting's scheduled end, and it
-	// never ends a lapsed generation as kicked. The lapse is Connection Loss,
+	// PostgreSQL time decides both bounds, as it does for renewal and focus
+	// loss: a kick never suspends past the sitting's scheduled end, and it
+	// never ends a lapsed generation as kicked. The lapse is connection loss,
 	// which only the expiry transition may record; the caller runs it.
 	if !at.Before(attemptRow.ScheduledEndAt) {
 		return zero, store.NewErrConflict("exam_sitting", "exam_sitting_deadline_reached", nil)
@@ -403,8 +392,8 @@ func suspendExamAttemptByManager(
 	return outcome, nil
 }
 
-// lockKickedParticipation locks the Attempt's active Participation, then its
-// open Connection when it has one.
+// lockKickedParticipation locks the attempt's active participation, then its
+// open connection when it has one.
 func lockKickedParticipation(ctx context.Context, tx *sqlxTxWrapper, attemptID model.ExamAttemptID,
 ) (*model.AttemptParticipation, *model.AttemptConnection, error) {
 	var participationRow manualSuspensionParticipationRow
@@ -486,7 +475,7 @@ func completeExamAttemptManualSuspensionAudit(
 }
 
 // loadExamAttemptManualSuspensionResult rehydrates the committed kick from
-// its immutable episode start, ended generation, and closed Connection, so an
+// its immutable episode start, ended generation, and closed connection, so an
 // exact replay returns the original result even after a later re-allow.
 func (s *SQLExamAttemptStore) loadExamAttemptManualSuspensionResult(ctx context.Context,
 	value examAttemptManualSuspensionOutcome,

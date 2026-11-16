@@ -14,9 +14,9 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// RequireStrongRecentSession is the application-layer assurance guard for
-// sensitive administrative operations. Transport declarations remain an
-// early rejection only; every owning use case calls this guard itself.
+// RequireStrongRecentSession guards sensitive administrative use cases. The
+// transport's check is only an early rejection; each use case must call this
+// itself.
 func RequireStrongRecentSession(
 	principal model.Principal,
 	now time.Time,

@@ -18,10 +18,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// BuildFromJob builds and publishes the archive for one queued Examination
-// Export on behalf of its build Job. An export that is already ready is a
-// no-op, and the build is bounded by the source expiry. system names that
-// Job execution and must match the claimed build.
+// BuildFromJob builds and publishes the archive for one queued export. A
+// ready export is a no-op, and the build is bounded by the source expiry.
+// system must match the job execution that claimed the build.
 func (s *Exports) BuildFromJob(ctx context.Context, system invocation.System, input store.ExamExportBuild) (err error) {
 	if !system.Valid() || system.Task != "" || system.JobID != input.JobID || system.AttemptID != input.AttemptID {
 		return apperror.New("exam.export.unavailable").Wrap(errors.New("Exam export build Job identity is invalid"))
@@ -38,8 +37,8 @@ func (s *Exports) BuildFromJob(ctx context.Context, system invocation.System, in
 		return nil
 	}
 
-	// Publication may have an unknown outcome. Cleanup consults durable ready
-	// metadata; this path never guesses whether it is safe to delete bytes.
+	// Publication may have an unknown outcome, so cleanup trusts only the stored
+	// ready state and never guesses whether deleting bytes is safe.
 	defer func() {
 		var uncertain interface{ ExamExportWriteUncertain() }
 		if errors.As(err, &uncertain) {

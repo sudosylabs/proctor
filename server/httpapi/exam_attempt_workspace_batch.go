@@ -21,7 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// applyWorkspaceBatch is the one Workspace write route. Its multipart body is
+// applyWorkspaceBatch is the one workspace write route. Its multipart body is
 // a strict JSON "manifest" part, then one "content" part for each create_file
 // and replace_file mutation, in manifest order, and nothing else.
 func (h examAttemptHandlers) applyWorkspaceBatch(request route.Request) (route.ProtocolResult, error) {

@@ -21,30 +21,30 @@ import (
 
 const maxAllowedTTL = 5 * time.Minute
 
-// Cache is the process-local byte-cache contract consumed by the store layer.
-// Implementations bound retained state, copy mutable bytes at their boundary,
-// honor context cancellation, and return failures without panicking. Layer
-// treats cache failures as misses so PostgreSQL remains authoritative.
+// Cache is a process-local byte cache. Implementations bound what they hold,
+// copy bytes at the boundary, honor cancellation and never panic. Layer
+// treats every cache failure as a miss.
 type Cache interface {
 	Get(context.Context, string) ([]byte, bool, error)
 	Set(context.Context, string, []byte, time.Duration) error
 	Delete(context.Context, string) error
 }
 
-// Policy bounds the lifetime of every cached store value.
+// Policy bounds the lifetime of every cached value; TTL is at most five
+// minutes.
 type Policy struct {
 	TTL time.Duration
 }
 
-// DefaultPolicy returns the conservative production cache policy.
+// DefaultPolicy caches for 30 seconds.
 func DefaultPolicy() Policy { return Policy{TTL: 30 * time.Second} }
 
-// Operation is a closed, low-cardinality cache operation label.
+// Operation is a cache metric label; only this package creates them.
 type Operation struct{ name string }
 
 func (o Operation) String() string { return o.name }
 
-// Outcome is the bounded cache lookup result.
+// Outcome is a lookup's hit or miss.
 type Outcome string
 
 const (
@@ -52,8 +52,8 @@ const (
 	OutcomeMiss Outcome = "miss"
 )
 
-// Recorder consumes argument-free cache observations. Layer isolates recorder
-// panics so observability cannot change persistence results.
+// Recorder observes cache lookups without their arguments. Layer recovers
+// recorder panics so metrics cannot change store results.
 type Recorder interface{ Observe(Operation, Outcome) }
 
 // RecorderFunc adapts a function to Recorder.
@@ -66,14 +66,14 @@ type NopRecorder struct{}
 
 func (NopRecorder) Observe(Operation, Outcome) {}
 
-// InvalidationFanout carries best-effort academic-period invalidations between
-// nodes. Delivery failures are advisory because TTL expiry restores authority.
+// InvalidationFanout carries best-effort academic period invalidations
+// between nodes. A lost message is tolerated because the TTL bounds staleness.
 type InvalidationFanout interface {
 	RegisterAcademicPeriod(func(context.Context, string) error) error
 	BroadcastAcademicPeriod(context.Context, string) error
 }
 
-// NopInvalidationFanout is the single-node/test invalidation boundary.
+// NopInvalidationFanout is for a single node or a test.
 type NopInvalidationFanout struct{}
 
 func (NopInvalidationFanout) RegisterAcademicPeriod(func(context.Context, string) error) error {
@@ -81,8 +81,8 @@ func (NopInvalidationFanout) RegisterAcademicPeriod(func(context.Context, string
 }
 func (NopInvalidationFanout) BroadcastAcademicPeriod(context.Context, string) error { return nil }
 
-// Layer is a safe-by-default local-cache decorator. Only handwritten methods
-// cache values; all promoted store methods remain authoritative pass-throughs.
+// Layer caches only its handwritten methods; every promoted store method
+// passes straight through.
 type Layer struct {
 	store.Store
 	cache        Cache
@@ -94,7 +94,7 @@ type Layer struct {
 	stores       localCacheStores
 }
 
-// New constructs a constrained process-local cache layer around next.
+// New wraps next and registers for academic period invalidations.
 func New(
 	next store.Store,
 	cache Cache,

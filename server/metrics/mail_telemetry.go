@@ -32,10 +32,9 @@ type mailDeliveryMetricAggregate struct {
 	maximumLatency    time.Duration
 }
 
-// operationalMailTelemetry is the production bounded metrics collector and
-// structured-log adapter. Its dimensions come only from closed template,
-// state, and public outcome vocabularies; it never retains identifiers,
-// recipients, or message content.
+// operationalMailTelemetry aggregates delivery metrics and logs them. Its keys
+// come only from closed template, state and outcome sets; it never keeps
+// identifiers, recipients or message content.
 type operationalMailTelemetry struct {
 	log *logging.Logger
 
@@ -56,8 +55,7 @@ func NewMailTelemetry(log *logging.Logger, first ...mail.DeliveryRecorder) (mail
 		queues:       make(map[mailDeliveryMetricKey]mail.QueueMetric),
 		queueBuckets: make(map[mailDeliveryMetricKey]string),
 	}
-	// A recorder that is absent, such as metrics that are switched off, is
-	// left out.
+	// A nil recorder means metrics are switched off.
 	recorders := make(mailDeliveryRecorders, 0, len(first)+1)
 	for _, recorder := range first {
 		if recorder != nil {
@@ -246,7 +244,6 @@ func mailQueueAgeBucket(age time.Duration) string {
 	return "gte_24h"
 }
 
-// mailDeliveryRecorders reports every observation to each recorder in order.
 type mailDeliveryRecorders []mail.DeliveryRecorder
 
 func (r mailDeliveryRecorders) RecordMailDelivery(ctx context.Context, metric mail.DeliveryMetric) {

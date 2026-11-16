@@ -13,11 +13,10 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// DesktopAuthorizationCodeIssue is the complete, hash-only input for turning
-// one browser-authentication proof into one short-lived Proctor code. The
-// Store rechecks the current AccessPolicy, exact configured provider
-// capability, active User, expiry, purpose, and every pinned proof atomically.
-// CodeLifetime is applied to the Store's authoritative database timestamp.
+// DesktopAuthorizationCodeIssue turns one browser-authentication proof into a
+// short-lived code. It carries hashes only. The store atomically rechecks the
+// access policy, provider capability, active user, expiry, purpose and every
+// pinned proof, and starts CodeLifetime from the database clock.
 type DesktopAuthorizationCodeIssue struct {
 	BindingHash    string
 	StateHash      string
@@ -34,9 +33,8 @@ type DesktopAuthorizationCancellation struct {
 	StateHash   string
 }
 
-// DesktopAuthorizationExchangeProof resolves the exact still-live
-// authorization represented by an exchange request without consuming it.
-// The atomic Exchange operation repeats every check before committing.
+// DesktopAuthorizationExchangeProof resolves the live authorization behind an
+// exchange request without consuming it; Exchange repeats every check.
 type DesktopAuthorizationExchangeProof struct {
 	CodeHash                string
 	StateHash               string
@@ -50,10 +48,9 @@ type DesktopAuthorizationExchangeProof struct {
 	DesktopRealtimeProtocol int
 }
 
-// DesktopAuthorizationExchangeTarget identifies the still-live authorization
-// an exchange proof resolves to and the User whose account approved it. The
-// User of an issued code is fixed by IssueCode and cannot change before the
-// atomic Exchange consumes it.
+// DesktopAuthorizationExchangeTarget is the authorization an exchange proof
+// resolves to and the user who approved it. IssueCode fixes the user, so it
+// cannot change before Exchange consumes the code.
 type DesktopAuthorizationExchangeTarget struct {
 	ID     model.BrowserAuthenticationTransactionID
 	UserID model.UserID
@@ -64,9 +61,9 @@ type DesktopAuthorizationCodeIssued struct {
 	CodeExpiresAt time.Time
 }
 
-// DesktopAuthorizationExchange atomically consumes one code and creates an
-// ordinary Desktop Session and its initial access/refresh credentials. All
-// lifetimes are applied to one authoritative database timestamp.
+// DesktopAuthorizationExchange consumes one code and creates a Desktop session
+// with its first access and refresh credentials, atomically. Every lifetime
+// starts from one database timestamp.
 type DesktopAuthorizationExchange struct {
 	CodeHash                           string
 	StateHash                          string
@@ -89,7 +86,8 @@ type DesktopAuthorizationExchange struct {
 	MaximumActive                      int
 	Capabilities                       AccessDeploymentCapabilities
 	// MFARequiredByPolicy refuses a single-factor authorization with
-	// ErrMFAEnrollmentRequired: a Desktop Session cannot carry the restriction.
+	// ErrMFAEnrollmentRequired, because a Desktop session cannot carry the
+	// enrollment restriction.
 	MFARequiredByPolicy bool
 	AuditEventID        model.AuditEventID
 	AuditAt             time.Time

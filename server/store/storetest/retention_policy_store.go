@@ -155,7 +155,7 @@ func testRetentionPolicyCurrentCredentialAndAssurance(t *testing.T, ctx context.
 			}
 			saved, credentials, saveErr := SaveSession(ctx, stores, testSessionCreation(t, ctx, stores, session, credentials, 10))
 			require.NoError(t, saveErr)
-			// Keep the request snapshot strong and fresh. The stored Session and
+			// Keep the request snapshot strong and fresh. The stored session and
 			// exact credential must decide even when a caller has stale facts.
 			stale := principal
 			stale.SessionID, stale.CredentialID = saved.ID, model.PrincipalCredentialID(credentials[0].ID)

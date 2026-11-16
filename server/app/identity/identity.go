@@ -5,16 +5,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package identity owns who a caller is and how they prove it: local and
-// external sign-in, Sessions and their assurance, two-step verification,
-// personal access tokens, Desktop authorization and reauthentication, account
-// recovery, authentication methods, account state, email addresses and
-// installation bootstrap. Service holds every one of these use cases.
-// Start with identity.go for the Service and its collaborators, then open the
-// file named for the flow you are changing: login.go, session_refresh.go,
-// mfa_enrollment.go, desktop_authorization_exchange.go and so on. The parent
-// app package builds the PasswordHasher, AttemptAccounting and CacheInvalidator
-// once and shares them with the onboarding area.
+// Package identity owns who a caller is and how they prove it: sign-in,
+// sessions, two-step verification, tokens, desktop authorization, account
+// recovery and installation bootstrap. The parent app package builds the
+// PasswordHasher, AttemptAccounting and CacheInvalidator once and shares them
+// with onboarding.
 package identity
 
 import (
@@ -33,18 +28,16 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ErrAuthenticationCacheMiss and ErrAuthenticationCacheNotStored are the
-// transport-neutral sentinels authentication uses for disposable cache
-// outcomes. Composition adapters translate infrastructure cache errors into
-// these values so authentication never imports platform.
+// ErrAuthenticationCacheMiss and ErrAuthenticationCacheNotStored are the cache
+// outcomes adapters must translate platform errors into, so this package never
+// imports platform.
 var (
 	ErrAuthenticationCacheMiss      = errors.New("authentication cache: key not found")
 	ErrAuthenticationCacheNotStored = errors.New("authentication cache: conditional write not applied")
 )
 
-// AuthenticationCache is the disposable cache authentication, DPoP and attempt
-// accounting share. Composition adapts the platform cache to it and translates
-// its outcomes into ErrAuthenticationCacheMiss and ErrAuthenticationCacheNotStored.
+// AuthenticationCache is the disposable cache shared by sign-in, DPoP and
+// attempt accounting.
 type AuthenticationCache interface {
 	Get(context.Context, string) ([]byte, error)
 	SetAlways(context.Context, string, []byte, time.Duration) error
@@ -53,10 +46,8 @@ type AuthenticationCache interface {
 	Add(context.Context, string, int64, time.Duration) (int64, error)
 }
 
-// Dependencies are the collaborators New distributes to the Service. Hasher,
-// Attempts and Invalidator are the shared mechanics the parent builds once
-// with NewPasswordHasher, NewAttemptAccounting and NewCacheInvalidator.
-// MFARekeyWake is required only when the Store catalog has Jobs.
+// Dependencies are the collaborators New hands to the Service; MFARekeyWake is
+// required only when the store catalog has jobs.
 type Dependencies struct {
 	Store        store.Catalog
 	Cache        AuthenticationCache
@@ -71,8 +62,7 @@ type Dependencies struct {
 	Invalidator  *CacheInvalidator
 	Invitations  InvitationAcceptor
 	Operational  operational.Recorder
-	// MFASecretSealer seals TOTP secrets; it is nil until the MFA ring is
-	// configured.
+	// MFASecretSealer is nil until the MFA key ring is configured.
 	MFASecretSealer *secretseal.Sealer
 	MFARekeyWake    func()
 
@@ -96,12 +86,7 @@ type Dependencies struct {
 	RecoveryDiagnostics       *logging.Logger
 }
 
-// Service holds every identity use case: sign-in, Sessions, Desktop
-// authorization, reauthentication, registration and compatibility, two-step
-// verification and the MFA key ring, account tokens and email changes,
-// personal access tokens, external authentication, authentication methods,
-// account state and installation bootstrap. Its fields are the Store
-// contracts those use cases call and one of each collaborator.
+// Service holds every identity use case; build it with New.
 type Service struct {
 	users                        store.UserStore
 	passwords                    store.PasswordCredentialStore
@@ -120,57 +105,43 @@ type Service struct {
 	externalIdentities           store.ExternalIdentityStore
 	installations                store.InstallationStore
 
-	// accessPolicy is the one *currentAuthenticationAccessPolicy every flow
-	// shares; dpop is the one DPoP nonce and replay guard, shared with
-	// Desktop authorization.
 	accessPolicy *currentAuthenticationAccessPolicy
 	dpop         *dpopSecurity
 	cache        AuthenticationCache
 	capabilities *DeploymentCapabilities
 	attempts     *AttemptAccounting
-	// hasher is the one shared *PasswordHasher; it is nil when composition
-	// supplies none, and construction then refuses.
-	hasher     *PasswordHasher
-	authorizer *access.Authorizer
-	auditor    access.MutationAuditAdapter
-	// securityAudit records the security actions proved outside an
-	// authenticated mutation: sign-in, the Desktop handoffs, two-step
-	// verification transitions and personal access token changes. It is nil
-	// when composition supplies no Auditor, and those flows then fail closed
-	// with the audit unavailable.
+	hasher       *PasswordHasher
+	authorizer   *access.Authorizer
+	auditor      access.MutationAuditAdapter
+	// securityAudit records security actions outside an authenticated
+	// mutation (sign-in, desktop handoffs, two-step changes, token changes).
+	// When nil those flows fail closed rather than run unaudited.
 	securityAudit *access.Auditor
 	mail          *mail.Composer
 	publisher     realtime.Publisher
-	// invalidator is the shared *CacheInvalidator; external reauthentication
-	// drops the cached access credentials it replaces.
-	invalidator realtime.AuthenticationInvalidator
-	// mfa is the TOTP and recovery-code mechanics, which own secret sealing.
-	mfa         *mfaMechanics
-	operational operational.Recorder
-	diagnostics *logging.Logger
+	invalidator   realtime.AuthenticationInvalidator
+	mfa           *mfaMechanics
+	operational   operational.Recorder
+	diagnostics   *logging.Logger
 	// recoveryDiagnostics logs account recovery failures hidden from callers.
 	recoveryDiagnostics *logging.Logger
 
-	// externalProviders is the configured provider registry. invitations
-	// admits an External Identity through its Invitation; composition binds
-	// it to the onboarding area after the Service is built.
+	// invitations is bound to onboarding by composition after the Service is
+	// built, so it can be nil during construction.
 	externalProviders ExternalProviderSource
 	invitations       InvitationAcceptor
 
-	// desktopBuilds is the immutable verified Desktop build catalog;
-	// skipDesktopBuildChecks admits any well-formed build in development.
+	// skipDesktopBuildChecks admits any well-formed build; development only.
 	desktopBuilds          *desktopBuildCatalog
 	skipDesktopBuildChecks bool
 
-	// mfaRekeyEnabled is set only when the catalog has Job and MFA stores;
-	// without it the MFA key ring use cases are unavailable. mfaRekeyWake
-	// wakes the Job engine after a rekey is queued.
+	// mfaRekeyEnabled is false when the catalog lacks job or MFA stores, and
+	// the key ring use cases are then unavailable.
 	mfaRekeyEnabled bool
 	mfaRekeyWake    func()
 
-	// bootstrapSecretDigest is the only form of the deployment bootstrap
-	// secret the Service keeps; bootstrapAvailable is false when no secret is
-	// configured. They and the bootstrap rate limit are fixed by New.
+	// bootstrapSecretDigest is the only form of the bootstrap secret kept in
+	// memory; bootstrapAvailable is false when none is configured.
 	bootstrapSecretDigest          [sha256.Size]byte
 	bootstrapAvailable             bool
 	bootstrapRateLimitWindow       time.Duration
@@ -191,7 +162,8 @@ type Service struct {
 	wait func(context.Context, time.Duration) error
 }
 
-// New builds the Service and checks every collaborator its use cases need.
+// New builds the Service and fails if any collaborator a use case needs is
+// missing.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Store == nil {
 		return nil, errors.New("identity store catalog is required")
@@ -236,9 +208,6 @@ func New(deps Dependencies) (*Service, error) {
 	return service, nil
 }
 
-// constructSessionAuthentication builds DPoP and the authentication access
-// policy, and sets and checks the Service's two-step verification, sign-in,
-// Session and Desktop authorization and reauthentication collaborators.
 func (s *Service) constructSessionAuthentication(deps Dependencies, mfa *mfaMechanics) error {
 	dpop, err := newDPoPSecurity(dpopSecurityDependencies{Cache: deps.Cache, Policy: dpopPolicy{
 		Origin:        deps.PublicURL,
@@ -290,9 +259,6 @@ func (s *Service) constructSessionAuthentication(deps Dependencies, mfa *mfaMech
 	return s.requireDesktopReauthentication()
 }
 
-// constructAccountServices sets and checks the account token and personal
-// access token administration collaborators and checks the Desktop
-// Registration collaborators.
 func (s *Service) constructAccountServices(deps Dependencies) error {
 	s.userTokens, s.academicUnits = deps.Store.UserToken(), deps.Store.AcademicUnit()
 	s.recoveryDiagnostics, s.accountRecoveryPolicy = deps.RecoveryDiagnostics, deps.AccountRecovery
@@ -306,9 +272,8 @@ func (s *Service) constructAccountServices(deps Dependencies) error {
 	return s.requireDesktopRegistration()
 }
 
-// constructExternalAuthentication sets and checks the external
-// authentication and authentication method collaborators. The external
-// policy's public URL, node and rate limit default to the Service's own.
+// The external policy's public URL, node and rate limit default to the
+// Service's own.
 func (s *Service) constructExternalAuthentication(deps Dependencies) error {
 	externalPolicy := deps.ExternalAuth
 	if externalPolicy.PublicURL == "" {
@@ -329,9 +294,6 @@ func (s *Service) constructExternalAuthentication(deps Dependencies) error {
 	return s.requireAuthenticationMethods()
 }
 
-// constructAdministration fixes the bootstrap secret digest and rate limit
-// and, when the catalog has Jobs and MFA credentials, enables the MFA key
-// ring.
 func (s *Service) constructAdministration(deps Dependencies) error {
 	s.installations = deps.Store.Installation()
 	s.fixBootstrapProtection(deps.LoginRateLimit, deps.BootstrapProtection)

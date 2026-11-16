@@ -14,24 +14,21 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// RoleCreation is the durable input for creating a custom role under an
-// already-persisted audit attempt.
+// RoleCreation creates a custom role and completes its recorded audit attempt.
 type RoleCreation struct {
 	Role         *model.Role
 	AuditEventID model.AuditEventID
 	AuditAt      time.Time
 }
 
-// RoleUpdate is the durable input for updating a custom role under an
-// already-persisted audit attempt.
+// RoleUpdate updates a custom role and completes its recorded audit attempt.
 type RoleUpdate struct {
 	Role         *model.Role
 	AuditEventID model.AuditEventID
 	AuditAt      time.Time
 }
 
-// RoleArchive is the durable input for archiving a custom role under an
-// already-persisted audit attempt.
+// RoleArchive archives a custom role and completes its recorded audit attempt.
 type RoleArchive struct {
 	ID           model.RoleID
 	ArchiveAt    time.Time
@@ -39,7 +36,7 @@ type RoleArchive struct {
 	AuditAt      time.Time
 }
 
-// RoleStore persists reusable permission sets independently of their scopes.
+// RoleStore persists permission sets; scopes belong to role bindings.
 type RoleStore interface {
 	Save(context.Context, *RoleCreation) (*model.Role, error)
 	Get(context.Context, model.RoleID) (*model.Role, error)
@@ -49,15 +46,16 @@ type RoleStore interface {
 	List(context.Context) ([]*model.Role, error)
 	Update(context.Context, *RoleUpdate) (*model.Role, error)
 	Archive(context.Context, *RoleArchive) (*model.Role, error)
-	// SeedBuiltIn inserts the protected built-in Role for fixtures only;
-	// production creates it through InstallationStore.Bootstrap.
+	// SeedBuiltIn inserts the built-in role for test fixtures only; production
+	// creates it through InstallationStore.Bootstrap.
 	SeedBuiltIn(context.Context, *model.Role) (*model.Role, error)
-	// SeedUpdate is an unaudited fixture write; production code never calls it.
+	// SeedUpdate is an unaudited test fixture write; production code never
+	// calls it.
 	SeedUpdate(context.Context, *model.Role) (*model.Role, error)
 }
 
-// RoleBindingCreation is the durable input for creating a binding under an
-// already-persisted audit attempt.
+// RoleBindingCreation creates a binding and completes its recorded audit
+// attempt.
 type RoleBindingCreation struct {
 	Binding                   *model.RoleBinding
 	ExpectedRoleUpdatedAt     time.Time
@@ -71,8 +69,7 @@ type RoleBindingCreation struct {
 	NoOp                      bool
 }
 
-// RoleBindingEnd is the durable input for ending a binding under an
-// already-persisted audit attempt.
+// RoleBindingEnd ends a binding and completes its recorded audit attempt.
 type RoleBindingEnd struct {
 	ID                        model.RoleBindingID
 	EndAt                     time.Time
@@ -86,12 +83,11 @@ type RoleBindingEnd struct {
 	NoOp                      bool
 }
 
-// RoleBindingSummaryOptions selects the current Role Bindings of one page of
-// Users whose scope lies within Visibility, as ListVisibleByUser defines it,
-// at most Limit for each User. Current means effective at
-// Visibility.ActiveAt, which is required, with an unarchived Role and scope.
-// A binding outside Visibility is neither returned nor counted. A non-empty
-// ScopeType with ScopeID further keeps only bindings on exactly that scope.
+// RoleBindingSummaryOptions selects, for a page of users, up to Limit current
+// bindings each whose scope lies within Visibility (as ListVisibleByUser
+// defines it). Current means effective at Visibility.ActiveAt, which is
+// required, with an unarchived role and scope. A binding outside Visibility is
+// neither returned nor counted. ScopeType with ScopeID narrows to one scope.
 type RoleBindingSummaryOptions struct {
 	UserIDs    []model.UserID
 	Visibility UserVisibilityScope
@@ -100,16 +96,16 @@ type RoleBindingSummaryOptions struct {
 	Limit      int
 }
 
-// UserRoleBindingSummary is one User's visible current Role Bindings ordered
-// by start then ID; More counts the visible bindings past the limit.
+// UserRoleBindingSummary is one user's visible current bindings, by start then
+// ID; More counts the visible bindings past the limit.
 type UserRoleBindingSummary struct {
 	UserID   model.UserID
 	Bindings []RoleBindingSummary
 	More     int
 }
 
-// RoleBindingSummary names one Role Binding: the Role's display name and the
-// display name of the Institution, Academic Unit or Class it is scoped to.
+// RoleBindingSummary is a binding's role name and the name of the
+// institution, academic unit or class it is scoped to.
 type RoleBindingSummary struct {
 	RoleID      model.RoleID
 	DisplayName string
@@ -118,17 +114,14 @@ type RoleBindingSummary struct {
 	ScopeName   string
 }
 
-// MaximumRoleBindingListRoles bounds the Roles one Role Binding listing by
-// Role names.
+// MaximumRoleBindingListRoles is the most roles one ListCurrentByRoles call
+// accepts.
 const MaximumRoleBindingListRoles = 16
 
-// RoleBindingRoleListOptions selects the current Role Bindings of any of
-// RoleIDs whose scope lies within Visibility, as ListVisibleByUser defines it.
-// Current means as RoleBindingSummaryOptions defines it: effective at
-// Visibility.ActiveAt, which is required, with an unarchived Role and scope.
-// The listing is ordered newest first by created_at then ID; BeforeCreatedAt
-// and BeforeID, both set or both zero, continue after the previous page's
-// last binding. Limit (1 to 201) is the probe size the caller reads.
+// RoleBindingRoleListOptions selects the visible current bindings (as
+// RoleBindingSummaryOptions defines both) of any of RoleIDs, newest first by
+// created_at then ID. BeforeCreatedAt and BeforeID are both set or both zero.
+// Limit (1 to 201) includes the one-row look-ahead.
 type RoleBindingRoleListOptions struct {
 	RoleIDs         []model.RoleID
 	Visibility      UserVisibilityScope
@@ -137,20 +130,18 @@ type RoleBindingRoleListOptions struct {
 	Limit           int
 }
 
-// RoleHolderCountOptions counts, for each of RoleIDs (at most 200), the
-// current Role Bindings inside Visibility, current as
-// RoleBindingSummaryOptions defines it. Maximum (1 to MaximumListCount) stops
-// each Role's count.
+// RoleHolderCountOptions counts, for each of up to 200 RoleIDs, the visible
+// current bindings (as RoleBindingSummaryOptions defines both). Maximum (1 to
+// MaximumListCount) caps each role's count.
 type RoleHolderCountOptions struct {
 	RoleIDs    []model.RoleID
 	Visibility UserVisibilityScope
 	Maximum    int
 }
 
-// RoleHolderCount is one Role's visible current holders. Bindings stops at
-// the count's Maximum, where more may exist; Users (distinct holders) and
-// Scopes (distinct scope type and ID pairs) are counted among those bindings
-// only, so they are lower bounds whenever Bindings reached Maximum.
+// RoleHolderCount is one role's visible current holders. Bindings is capped
+// at Maximum; Users and Scopes count distinct holders and scopes among those
+// bindings only, so they are lower bounds when Bindings reached Maximum.
 type RoleHolderCount struct {
 	RoleID   model.RoleID
 	Bindings int
@@ -159,28 +150,26 @@ type RoleHolderCount struct {
 }
 
 // RoleBindingStore persists time-bounded role assignments. Scope references
-// are validated transactionally because PostgreSQL cannot express a foreign
+// are checked in the transaction because PostgreSQL cannot express a foreign
 // key whose target table depends on scope_type.
 type RoleBindingStore interface {
 	Save(context.Context, *RoleBindingCreation) (*model.RoleBinding, error)
 	Get(context.Context, model.RoleBindingID) (*model.RoleBinding, error)
 	ListByUser(context.Context, model.UserID) ([]*model.RoleBinding, error)
 	ListVisibleByUser(context.Context, model.UserID, UserVisibilityScope) ([]*model.RoleBinding, error)
-	// ListVisibleSummariesByUsers reads the visible current bindings of every
-	// listed User in one statement. A User with none has no entry.
+	// ListVisibleSummariesByUsers omits a user with no visible current
+	// binding.
 	ListVisibleSummariesByUsers(context.Context, RoleBindingSummaryOptions) ([]UserRoleBindingSummary, error)
 	ListByScope(context.Context, model.RoleScopeType, string) ([]*model.RoleBinding, error)
-	// ListCurrentByRoles reads one keyset page of the visible current
-	// bindings of the listed Roles; CountCurrentByRoles counts the same
-	// bindings, ignoring the keyset and limit, stopping at maximum (see
+	// CountCurrentByRoles counts what ListCurrentByRoles would return across
+	// every page, ignoring the keyset and limit, capped at maximum (see
 	// MaximumListCount).
 	ListCurrentByRoles(context.Context, RoleBindingRoleListOptions) ([]*model.RoleBinding, error)
 	CountCurrentByRoles(context.Context, RoleBindingRoleListOptions, int) (int, error)
-	// CountHoldersByRoles counts every listed Role's visible current holders
-	// in one statement. A Role with none has no entry.
+	// CountHoldersByRoles omits a role with no visible current holder.
 	CountHoldersByRoles(context.Context, RoleHolderCountOptions) ([]RoleHolderCount, error)
-	// ListActiveByUser uses UTC microsecond precision and the interval [start, end).
-	// Archived bindings are excluded; no active bindings is an empty list.
+	// ListActiveByUser compares at UTC microsecond precision over [start, end)
+	// and excludes archived bindings.
 	ListActiveByUser(context.Context, model.UserID, time.Time) ([]*model.RoleBinding, error)
 	End(context.Context, *RoleBindingEnd) (*model.RoleBinding, error)
 }

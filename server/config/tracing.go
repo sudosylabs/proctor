@@ -19,16 +19,14 @@ import (
 )
 
 const (
-	// maximumTracingHeaders bounds the exporter headers an operator may set.
 	maximumTracingHeaders = 16
-	// maximumTracingHeaderNameBytes and maximumTracingHeaderValueBytes bound
-	// one exporter header so a malformed secret cannot inflate every export.
+	// The per-header bounds stop a malformed secret from inflating every export.
 	maximumTracingHeaderNameBytes  = 256
 	maximumTracingHeaderValueBytes = 8 << 10
 )
 
-// reservedTracingHeaders are set by the HTTP client or the OTLP exporter
-// itself; overriding them would break framing or encoding of every export.
+// reservedTracingHeaders are set by the HTTP client or the exporter;
+// overriding one would break the framing or encoding of every export.
 var reservedTracingHeaders = map[string]struct{}{
 	"Connection":        {},
 	"Content-Encoding":  {},
@@ -43,21 +41,19 @@ var reservedTracingHeaders = map[string]struct{}{
 	"Upgrade":           {},
 }
 
-// Tracing configures opt-in OpenTelemetry tracing exported over OTLP/HTTP.
-// Spans carry route templates, closed operation names, and bounded outcomes;
-// never credentials, User data, exam content, or raw request paths.
+// Tracing configures opt-in OpenTelemetry tracing over OTLP/HTTP. Spans carry
+// route templates, operation names and outcomes, never credentials, user
+// data, exam content or raw request paths.
 type Tracing struct {
 	Enabled bool `json:"Enabled"`
-	// EndpointURL is the complete OTLP/HTTP traces URL, normally a local
-	// collector's http://host:4318/v1/traces.
+	// EndpointURL is the full traces URL, such as http://host:4318/v1/traces.
 	EndpointURL string `json:"EndpointURL"`
 	// SampleRatio is the fraction of new root traces recorded, from 0 to 1.
 	// A trace continued from a trusted proxy follows the proxy's decision.
 	SampleRatio float64 `json:"SampleRatio"`
-	// Headers are sent with every export request, typically a hosted
-	// backend's API key. Values are secrets: they are redacted from every
-	// configuration display and never logged. Headers require an https
-	// endpoint unless the collector is on loopback.
+	// Headers are sent with every export, typically an API key. Values are
+	// secrets: always redacted, never logged, and refused over plain http
+	// unless the collector is on loopback.
 	Headers         map[string]string `json:"Headers"`
 	ExportTimeout   Duration          `json:"ExportTimeout"`
 	ShutdownTimeout Duration          `json:"ShutdownTimeout"`
@@ -92,8 +88,7 @@ func validateTracing(tracing Tracing, add func(string, string)) {
 	}
 }
 
-// validateTracingHeaders checks exporter header names and values. Messages
-// never repeat a name or value because values are credentials.
+// Messages never repeat a header name or value: the values are credentials.
 func validateTracingHeaders(headers map[string]string, plaintextRemoteEndpoint bool, add func(string, string)) {
 	if len(headers) == 0 {
 		return
@@ -136,10 +131,9 @@ var errMalformedTracingHeaders = errors.New(
 	"must be comma-separated name=value pairs with percent-encoded values",
 )
 
-// parseTracingHeaders reads the OTEL_EXPORTER_OTLP_HEADERS list format:
-// comma-separated name=value pairs whose values are percent-decoded, with
-// surrounding whitespace trimmed. Like the OpenTelemetry SDK, it skips empty
-// list members, so an empty input clears every header.
+// parseTracingHeaders reads the OTEL_EXPORTER_OTLP_HEADERS format:
+// comma-separated name=value pairs with percent-encoded values. Like the
+// OpenTelemetry SDK it skips empty members, so empty input clears every header.
 func parseTracingHeaders(input string) (map[string]string, error) {
 	headers := map[string]string{}
 	for _, pair := range strings.Split(input, ",") {

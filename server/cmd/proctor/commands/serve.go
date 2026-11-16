@@ -66,12 +66,10 @@ type servingNode interface {
 	Ready() bool
 }
 
-// serveNode constructs and runs one node, forwarding SIGHUP to its Reload,
-// escalating repeated stop signals, and keeping a supervising systemd's
-// watchdog fed while the node is ready. Both signal handlers are registered
-// before construction: the default SIGHUP action terminates the process, and
-// construction applies database migrations. A reload requested before the
-// node exists is held and runs once it does.
+// serveNode registers both signal handlers before construction, because the
+// default SIGHUP action terminates the process and construction applies
+// database migrations. A SIGHUP received before the node exists is held and
+// runs once it does.
 func serveNode(ctx context.Context, supervisor *systemdSupervisor, construct func(context.Context) (servingNode, error)) error {
 	reloadSignals := make(chan os.Signal, 1)
 	signal.Notify(reloadSignals, syscall.SIGHUP)
@@ -140,19 +138,15 @@ func serveNode(ctx context.Context, supervisor *systemdSupervisor, construct fun
 // immediateExitCode is the status of a process ended by a third stop signal.
 const immediateExitCode = 1
 
-// stopEscalation is what successive stop signals do.
 type stopEscalation struct {
-	// stop requests graceful shutdown.
 	stop func()
 	// force ends a graceful drain at once; Run then reports the forced stop.
 	force func()
-	// exit terminates the process without waiting for shutdown.
-	exit func()
+	exit  func()
 }
 
-// escalateStopSignals handles SIGINT and SIGTERM until done closes. The first
-// signal requests graceful shutdown, a second during the drain forces an
-// immediate bounded close, and a third exits at once.
+// escalateStopSignals: the first SIGINT or SIGTERM drains gracefully, a second
+// forces a bounded close, and a third exits at once.
 func escalateStopSignals(done <-chan struct{}, signals <-chan os.Signal, escalation stopEscalation) {
 	received := 0
 	for {
@@ -177,9 +171,8 @@ func escalateStopSignals(done <-chan struct{}, signals <-chan os.Signal, escalat
 // reloadSignalTimeout bounds one SIGHUP-triggered reload.
 const reloadSignalTimeout = 30 * time.Second
 
-// forwardReloadSignals runs one bounded reload per received signal until ctx
-// ends. The server logs each reload outcome; a failed reload keeps the
-// running configuration and certificates in force.
+// forwardReloadSignals drops reload errors: the server logs each outcome, and
+// a failed reload keeps the running configuration and certificates in force.
 func forwardReloadSignals(ctx context.Context, signals <-chan os.Signal, reload func(context.Context) error) {
 	for {
 		select {

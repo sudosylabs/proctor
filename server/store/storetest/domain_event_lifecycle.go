@@ -18,7 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// LifecycleDomainEvent is one outbox row and the dispatch Job written with
+// LifecycleDomainEvent is one outbox row and the dispatch job written with
 // it.
 type LifecycleDomainEvent struct {
 	Event *model.DomainEvent
@@ -30,10 +30,10 @@ type LifecycleDomainEvent struct {
 // so only the adapter can find rows it wrote by itself.
 type LifecycleDomainEventFinder func(t *testing.T, ctx context.Context, topic model.DomainEventTopic, member, value string) []LifecycleDomainEvent
 
-// TestLifecycleDomainEvents verifies that a Participation generation
-// starting and ending, and a Sitting pausing, resuming and entering Closing,
-// each commit one identifier-only event with its dispatch Job, including
-// when the generation ends through the Session revocation fence.
+// TestLifecycleDomainEvents verifies that a participation generation
+// starting and ending, and a sitting pausing, resuming and entering Closing,
+// each commit one identifier-only event with its dispatch job, including
+// when the generation ends through the session revocation fence.
 func TestLifecycleDomainEvents(t *testing.T, ss store.Store, find LifecycleDomainEventFinder) {
 	t.Helper()
 	ctx := context.Background()
@@ -67,8 +67,8 @@ func TestLifecycleDomainEvents(t *testing.T, ss store.Store, find LifecycleDomai
 	require.NoError(t, err)
 	requireOneLifecycleEvent(t, ctx, ss, find, model.DomainEventTopicExamSittingResumed, "sitting_id", fixture.sitting.ID.String(), sittingData)
 
-	// Revoking the candidate's Session ends the generation in SQL, through
-	// the revocation fence, not through any Store operation of the Attempt.
+	// Revoking the candidate's session ends the generation in SQL, through
+	// the revocation fence, not through any store operation of the attempt.
 	_, err = RevokeAllUserSessions(ctx, ss, fixture.candidate.ID, model.NowUTC())
 	require.NoError(t, err)
 	endedData := map[string]any{"reason": string(model.AttemptParticipationEndPolicySuspended)}
@@ -94,7 +94,7 @@ func TestLifecycleDomainEvents(t *testing.T, ss store.Store, find LifecycleDomai
 }
 
 // requireOneLifecycleEvent asserts that exactly one event of topic names
-// value, that its Data is exactly want, and that its dispatch Job is the one
+// value, that its Data is exactly want, and that its dispatch job is the one
 // model.NewDomainEventDispatchJob would build.
 func requireOneLifecycleEvent(t *testing.T, ctx context.Context, ss store.Store, find LifecycleDomainEventFinder,
 	topic model.DomainEventTopic, member, value string, want map[string]any,

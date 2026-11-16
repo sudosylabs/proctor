@@ -19,15 +19,15 @@ import (
 )
 
 // A command carrying a CommandAuthorization has its authority rechecked
-// inside the Store transaction. These cases call the Store directly, without
+// inside the store transaction. These cases call the store directly, without
 // the application's decision in front, so the recheck alone must refuse what
-// the application refuses: a Role Binding at a scope the Action's definition
-// does not inherit from, and a Personal Access Token used outside its
-// Academic Unit ceiling.
+// the application refuses: a role binding at a scope the action's definition
+// does not inherit from, and a personal access token used outside its
+// academic unit ceiling.
 
-// testCommandAuthorityFollowsActionInheritance delegates Roles in Role
-// Binding batch commands. user.manage inherits only Institution scope, and
-// exam.manage accepts no Class resource, so an actor's Academic Unit or Class
+// testCommandAuthorityFollowsActionInheritance delegates roles in role
+// binding batch commands. user.manage inherits only institution scope, and
+// exam.manage accepts no class resource, so an actor's academic unit or class
 // binding cannot hand either on (access.Authorizer.CanDelegateActionsAtScope).
 func testCommandAuthorityFollowsActionInheritance(t *testing.T, ss store.Store) {
 	ctx := context.Background()
@@ -79,9 +79,9 @@ func testCommandAuthorityFollowsActionInheritance(t *testing.T, ss store.Store) 
 		return err
 	}
 
-	// The actor administers Role Bindings from the parent unit and from the
-	// Class, and also holds user.manage at the unit and exam.manage at the
-	// Class, where neither Action can be granted.
+	// The actor administers role bindings from the parent unit and from the
+	// class, and also holds user.manage at the unit and exam.manage at the
+	// class, where neither action can be granted.
 	bind(saveRole("inheritance-unit-authority", model.ActionOnboardingBatchManage, model.ActionRoleBindingManage,
 		model.ActionUserManage, model.ActionAcademicUnitView), model.RoleScopeAcademicUnit, parent.ID.String())
 	bind(saveRole("inheritance-class-authority", model.ActionOnboardingBatchManage, model.ActionRoleBindingManage,
@@ -113,11 +113,11 @@ func testCommandAuthorityFollowsActionInheritance(t *testing.T, ss store.Store) 
 	})
 }
 
-// testCommandAuthorityAppliesTokenCeiling runs Academic Unit membership and
-// Affiliation batch commands under Personal Access Tokens. A token with an
-// Academic Unit ceiling acts only on resources within that unit
-// (access.personalAccessTokenAllows): never on the Institution, never on a
-// unit outside it, whichever unit the User's binding is at.
+// testCommandAuthorityAppliesTokenCeiling runs academic unit membership and
+// affiliation batch commands under personal access tokens. A token with an
+// academic unit ceiling acts only on resources within that unit
+// (access.personalAccessTokenAllows): never on the institution, never on a
+// unit outside it, whichever unit the user's binding is at.
 func testCommandAuthorityAppliesTokenCeiling(t *testing.T, ss store.Store) {
 	ctx := context.Background()
 	institution := saveInstitution(t, ctx, ss)
@@ -197,7 +197,7 @@ func testCommandAuthorityAppliesTokenCeiling(t *testing.T, ss store.Store) {
 }
 
 // requireCommandAuthorityRefused requires the error the recheck returns when
-// no current Role Binding grants an Action.
+// no current role binding grants an action.
 func requireCommandAuthorityRefused(t *testing.T, err error) {
 	t.Helper()
 	var conflict *store.ErrConflict
@@ -213,8 +213,8 @@ func commandAuthoritySessionPrincipal(t *testing.T, ctx context.Context, ss stor
 		ClientType: session.ClientType, AuthenticatedAt: session.AuthenticatedAt}
 }
 
-// commandAuthorityTokenPrincipal creates a Personal Access Token listing the
-// Actions, with the Academic Unit ceiling unless it is empty, and returns the
+// commandAuthorityTokenPrincipal creates a personal access token listing the
+// actions, with the academic unit ceiling unless it is empty, and returns the
 // principal authentication would build from it.
 func commandAuthorityTokenPrincipal(
 	t *testing.T,

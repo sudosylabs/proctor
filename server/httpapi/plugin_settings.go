@@ -18,7 +18,7 @@ import (
 )
 
 // pluginSettingsRequest carries the settings document as JSON text, as the
-// User Settings API carries its source, so the server receives it exactly.
+// user settings API carries its source, so the server receives it exactly.
 type pluginSettingsRequest struct {
 	ExpectedRevision int64                  `json:"expected_revision"`
 	Enabled          route.Optional[bool]   `json:"enabled"`

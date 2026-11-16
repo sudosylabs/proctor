@@ -15,9 +15,9 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// AdministratorMFAResetCommand identifies the exact existing administrator
-// whose factor access the host operator is resetting. It contains no proof,
-// password, alternate identity, or authentication-policy change.
+// AdministratorMFAResetCommand names the administrator whose MFA the host
+// operator is resetting. It deliberately carries no proof, password or policy
+// change.
 type AdministratorMFAResetCommand struct {
 	InstitutionID string
 	UserID        string
@@ -28,8 +28,9 @@ type AdministratorMFAResetResult struct {
 	ReenrollmentRequired bool
 }
 
-// ResetAdministratorMFA constructs and closes an inert graph without starting
-// workers or transports. Its named Store aggregate rejects live serving nodes.
+// ResetAdministratorMFA builds an inert node, runs the reset and closes it
+// without starting workers or transports. The store refuses the reset while a
+// serving node is live.
 func ResetAdministratorMFA(
 	ctx context.Context,
 	configPath string,
@@ -49,8 +50,8 @@ func ResetAdministratorMFA(
 	return node.ResetAdministratorMFA(ctx, command)
 }
 
-// ResetAdministratorMFA permanently becomes unavailable when this Server
-// begins running. Host authority never appears as an impersonated Principal.
+// ResetAdministratorMFA works only on an inert Server and is gone for good
+// once Run starts. It runs as a task, never as an impersonated principal.
 func (s *Server) ResetAdministratorMFA(ctx context.Context, command AdministratorMFAResetCommand) (*AdministratorMFAResetResult, error) {
 	if s == nil {
 		return nil, errors.New("server is nil")

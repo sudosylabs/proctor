@@ -22,11 +22,11 @@ import (
 
 const maximumRevisionObjects = 100
 
-// ErrPurgeLimit indicates that an abandoned revision exceeded the bounded
-// cleanup contract and was left untouched for operator investigation.
+// ErrPurgeLimit means an abandoned revision holds more objects than one purge
+// removes; it is left untouched for an operator to investigate.
 var ErrPurgeLimit = errors.New("file content: abandoned revision exceeds purge limit")
 
-// Content stores and opens immutable File Revision renditions over VFS.
+// Content stores and opens immutable file content in VFS.
 type Content struct {
 	filesystem       vfs.FileSystem
 	work             chan struct{}
@@ -38,10 +38,8 @@ type Content struct {
 // It limits concurrent operations, not their aggregate memory consumption.
 type Policy struct {
 	MaximumConcurrentOperations int
-	// ExamExportFormat returns the format that encodes Exam exports,
-	// normally the zip format the built-in export.zip plugin offers, looked
-	// up on each export. When it or its result is nil, building an Exam
-	// export fails as unavailable.
+	// ExamExportFormat is looked up on each exam export. When it or its
+	// result is nil, the export fails as unavailable.
 	ExamExportFormat func() plugin.ExportFormat
 }
 
@@ -53,8 +51,8 @@ type WorkRecorder interface {
 	Rejected()
 }
 
-// New constructs File Content over a root-owned VFS with an independent,
-// non-queueing processing limit shared by its expensive content pipelines.
+// New returns a Content whose expensive pipelines share one non-queueing limit
+// of policy.MaximumConcurrentOperations.
 func New(filesystem vfs.FileSystem, policy Policy, recorder WorkRecorder) (*Content, error) {
 	if filesystem == nil {
 		return nil, errors.New("file content VFS is required")
@@ -88,8 +86,8 @@ func (c *Content) storeRendition(
 	return sanitize("stage rendition", err)
 }
 
-// OpenProfilePictureRendition opens one exact rendition selected by
-// authoritative profile-picture metadata.
+// OpenProfilePictureRendition opens the rendition named by the profile
+// picture's stored metadata.
 func (c *Content) OpenProfilePictureRendition(
 	ctx context.Context,
 	revisionID model.FileRevisionID,
@@ -127,8 +125,8 @@ func (c *Content) removeRenditions(ctx context.Context, revisionID model.FileRev
 	return joined
 }
 
-// RemoveFileRevisionRenditions idempotently removes an exact authoritative
-// rendition manifest without discovering sibling content.
+// RemoveFileRevisionRenditions removes exactly the listed renditions, ignoring
+// ones already gone. It never lists the revision for other objects.
 func (c *Content) RemoveFileRevisionRenditions(
 	ctx context.Context,
 	revisionID model.FileRevisionID,
@@ -137,8 +135,8 @@ func (c *Content) RemoveFileRevisionRenditions(
 	return c.removeRenditions(ctx, revisionID, renditionIDs)
 }
 
-// PurgeAbandonedFileRevision bounds discovery and deletion to one revision
-// prefix whose expired upload lease has been durably claimed.
+// PurgeAbandonedFileRevision deletes everything under one revision whose
+// expired upload lease the caller has durably claimed, or returns ErrPurgeLimit.
 func (c *Content) PurgeAbandonedFileRevision(ctx context.Context, revisionID model.FileRevisionID) error {
 	return c.purgeAbandonedRevision(ctx, revisionID)
 }
@@ -217,14 +215,14 @@ func IsNotFound(err error) bool {
 	return hasKind(err, errorNotFound)
 }
 
-// IsConflict reports whether immutable content already occupies the selected
-// storage identity or a backend concurrency condition rejected the operation.
+// IsConflict reports whether content already exists at the key or the backend
+// rejected a concurrent write.
 func IsConflict(err error) bool {
 	return hasKind(err, errorConflict)
 }
 
-// IsUnavailable reports whether a backend dependency could not complete an
-// otherwise valid File Content operation.
+// IsUnavailable reports whether the backend failed an otherwise valid
+// operation.
 func IsUnavailable(err error) bool {
 	return hasKind(err, errorUnavailable)
 }

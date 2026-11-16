@@ -25,7 +25,7 @@ type UpdateInstitutionCommand struct {
 	ExamCapacity *model.ExamCapacityPolicy
 }
 
-// GetInstitution reads one Institution after authorizing the caller.
+// GetInstitution needs institution.manage.
 func (s *Service) GetInstitution(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -47,7 +47,7 @@ func (s *Service) GetInstitution(
 	return institution, nil
 }
 
-// UpdateInstitution updates an Institution after authorizing the caller.
+// UpdateInstitution needs institution.manage.
 func (s *Service) UpdateInstitution(
 	ctx context.Context,
 	inv invocation.Invocation,

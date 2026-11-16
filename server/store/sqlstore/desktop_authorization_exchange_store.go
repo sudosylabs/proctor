@@ -56,8 +56,8 @@ func validateDesktopAuthorizationExchange(input *store.DesktopAuthorizationExcha
 }
 
 // Exchange redeems an issued desktop authorization code for a new desktop
-// Session and completes its audit, or denies it while an active Attempt locks
-// the User's Sessions.
+// session and completes its audit, or denies it while an active attempt locks
+// the user's sessions.
 func (s SQLBrowserAuthenticationStore) Exchange(
 	ctx context.Context,
 	input *store.DesktopAuthorizationExchange,
@@ -73,7 +73,6 @@ func (s SQLBrowserAuthenticationStore) Exchange(
 	})
 }
 
-// exchangeDesktopAuthorizationCode redeems an issued desktop authorization code for a desktop Session inside its transaction.
 func exchangeDesktopAuthorizationCode(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -182,7 +181,7 @@ func lockIssuedDesktopAuthorization(
 	return transaction, nil
 }
 
-// requireDesktopExchangeAuthentication rechecks the policy, authentication path, MFA recovery and proof behind the code and locks the active User.
+// requireDesktopExchangeAuthentication rechecks the policy, authentication path, MFA recovery and proof behind the code and locks the active user.
 func requireDesktopExchangeAuthentication(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -205,7 +204,7 @@ func requireDesktopExchangeAuthentication(
 
 	// Match every user-session mutation's lock order. If disable commits
 	// first the active-user lock below rejects exchange; if exchange commits
-	// first disable observes and revokes the new Session.
+	// first disable observes and revokes the new session.
 	if err := lockUserSessions(ctx, tx, transaction.UserID.String()); err != nil {
 		return nil, err
 	}
@@ -220,8 +219,8 @@ func requireDesktopExchangeAuthentication(
 	if recovery.ResetAt.Valid && transaction.CreatedAt.Before(recovery.ResetAt.Time) {
 		return nil, store.ErrAuthenticationGenerationChanged
 	}
-	// A Desktop Session cannot carry the MFA enrollment restriction, so a
-	// User the Access Policy requires to use two-step verification must
+	// A desktop session cannot carry the MFA enrollment restriction, so a
+	// user the access policy requires to use two-step verification must
 	// have proved a second factor in the browser.
 	if input.MFARequiredByPolicy && transaction.AuthenticationStrength != model.AuthenticationMultiFactor {
 		return nil, store.ErrMFAEnrollmentRequired
@@ -261,7 +260,6 @@ func requireDesktopExchangeAuthentication(
 	return recovery, nil
 }
 
-// hasActiveAttemptSessionLock reports whether the User has an active Attempt that locks new Sessions.
 func hasActiveAttemptSessionLock(ctx context.Context, tx *sqlxTxWrapper, userID model.UserID) (bool, error) {
 	var activeAttempt bool
 	if err := tx.Get(ctx, &activeAttempt, `SELECT EXISTS(
@@ -276,7 +274,7 @@ func hasActiveAttemptSessionLock(ctx context.Context, tx *sqlxTxWrapper, userID 
 	return activeAttempt, nil
 }
 
-// denyDesktopExchangeForActiveAttempt denies the code-issued transaction and completes its audit as a Session-lock failure.
+// denyDesktopExchangeForActiveAttempt denies the code-issued transaction and completes its audit as a session-lock failure.
 func denyDesktopExchangeForActiveAttempt(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -328,7 +326,6 @@ func denyDesktopExchangeForActiveAttempt(
 	return &store.DesktopAuthorizationExchangeResult{Denied: true}, nil
 }
 
-// prepareDesktopExchangeSession builds the desktop Session and its initial credentials from the authenticated transaction.
 func prepareDesktopExchangeSession(
 	input *store.DesktopAuthorizationExchange,
 	transaction *model.BrowserAuthenticationTransaction,
@@ -375,7 +372,7 @@ func prepareDesktopExchangeSession(
 	return &candidate, credentials, nil
 }
 
-// insertDesktopExchangeSession enforces the per-User Session limit, inserts the Session and credentials and records the login.
+// insertDesktopExchangeSession enforces the per-user session limit, inserts the session and credentials and records the login.
 func insertDesktopExchangeSession(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -429,7 +426,6 @@ func insertDesktopExchangeSession(
 	return nil
 }
 
-// completeDesktopExchange marks the transaction exchanged and completes its audit event.
 func completeDesktopExchange(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -473,7 +469,6 @@ func completeDesktopExchange(
 	return nil
 }
 
-// desktopExchangeCredentialExpiries returns the access and refresh expiry of the exchanged credentials.
 func desktopExchangeCredentialExpiries(credentials []*model.SessionCredential) (time.Time, time.Time, error) {
 	var accessExpiresAt, refreshExpiresAt time.Time
 	for _, credential := range credentials {

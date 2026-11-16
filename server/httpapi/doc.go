@@ -5,41 +5,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package httpapi holds the resources of Proctor's REST API under /api/v1,
-// plus the /health/live and /health/ready probes. Each resource file
-// (class.go, exam_attempt.go, ...) declares the routes of one API area, their
-// request and response types, the errors each route may return, and the
-// handlers that call the application. Deciding whether the caller may act on
-// a resource stays in the application use cases.
-//
-// The routing kernel is package route: how an endpoint is declared and
-// compiled, what a handler receives and returns, credentials, Problem
-// Details, pagination and the middleware chain. Read its package comment
-// before adding a route. A resource never reaches behind that package.
-//
-// Handlers mint only request.* codes; every domain code comes from the
-// application. A result the transport cannot present returns
-// route.ErrUnpresentable, which is a server fault, never a domain
-// *.unavailable code.
-//
-// New takes the application and a Settings value. It builds each resource
-// from the application service that owns its use cases and hands them to
-// route.New, which compiles every route into one fixed catalog and fails on
-// an ambiguous or invalid route, so nothing is registered after construction.
-// The one exception is the plugin routes under /api/v1/plugins/<id>/, which
-// plugin_routes.go mounts as live routes behind a closed guard table and
-// replaces after every plugin change.
-//
-// Where to look:
-//   - api.go: New, and compileAPI, which handler tests call with fakes
-//   - settings.go: Settings and the ports composition supplies
-//   - resources.go: every resource in the production API, in order
-//   - route/doc.go: the guide to declaring endpoints and writing handlers
-//   - route/error_catalog.yaml: every public error code and its status
-//
-// To add a route, add it to its resource file, list any new resource in
-// resources.go, and update the OpenAPI sources under server/openapi.
-// The WebSocket upgrade and plugin socket routes are the only routes handed
-// the raw ResponseWriter, because the websocket package takes over the
-// connection.
+// Package httpapi declares the resources of the REST API under /api/v1 and
+// the health probes, over the routing kernel in package route. Handlers mint
+// only request.* codes; every domain code, and every decision about whether
+// the caller may act, comes from the application. A result the transport
+// cannot present returns route.ErrUnpresentable, a server fault, never a
+// *.unavailable code. Routes compile once in New, and a new route also needs
+// its OpenAPI source under server/openapi.
 package httpapi

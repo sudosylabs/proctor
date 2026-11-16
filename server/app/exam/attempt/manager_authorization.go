@@ -18,17 +18,16 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// SittingManagerAuthorizer is the manager authorization the Attempt use
-// cases ask. A Sitting decision is the Sitting area's own. A Submission
-// decision first resolves the canonical Submission, because a caller names a
-// Submission without the Exam the Sitting area decides against.
+// SittingManagerAuthorizer answers the attempt use cases' manager questions.
+// A submission decision first resolves the canonical submission, because a
+// caller names a submission without the exam the sitting area decides against.
 type SittingManagerAuthorizer struct {
 	Sittings    *sitting.Service
 	Submissions store.ExamSubmissionStore
 	Audit       *access.Auditor
 }
 
-// AuthorizeSittingView authorizes a manager's read of a Sitting's Attempts.
+// AuthorizeSittingView authorizes a manager's read of a sitting's attempts.
 func (a SittingManagerAuthorizer) AuthorizeSittingView(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -37,8 +36,8 @@ func (a SittingManagerAuthorizer) AuthorizeSittingView(
 	return a.Sittings.AuthorizeSittingView(ctx, inv, sittingID)
 }
 
-// AuthorizeSittingManage authorizes a manager intervention in a Sitting's
-// Attempts and reports whether it rested on the override Action.
+// AuthorizeSittingManage authorizes a manager intervention and reports
+// whether it rested on the override action.
 func (a SittingManagerAuthorizer) AuthorizeSittingManage(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -52,8 +51,8 @@ func (a SittingManagerAuthorizer) AuthorizeSittingManage(
 	return management, nil
 }
 
-// AuthorizeBrowserActivityView authorizes reading the browser activity of a
-// Sitting's Attempts and reports the Academic Unit it is audited at.
+// AuthorizeBrowserActivityView reports the academic unit the read is audited
+// at.
 func (a SittingManagerAuthorizer) AuthorizeBrowserActivityView(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -67,11 +66,9 @@ func (a SittingManagerAuthorizer) AuthorizeBrowserActivityView(
 	return browserActivity, nil
 }
 
-// AuthorizeSubmissionView authorizes a manager's read of one sealed
-// Submission. The candidate who made the Submission is never its manager:
-// that denial is recorded at the Submission's Academic Unit and concealed as
-// not found, whatever Role the candidate holds, before the current Exam
-// Manager decision is asked.
+// AuthorizeSubmissionView denies the submission's own candidate, whatever
+// role they hold, before any manager decision is asked; the denial is
+// concealed as not found.
 func (a SittingManagerAuthorizer) AuthorizeSubmissionView(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -89,8 +86,8 @@ func (a SittingManagerAuthorizer) AuthorizeSubmissionView(
 		return apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
-	// The Submission's Candidate is denied below, so the projection must be
-	// the requested Submission's, whatever the Store returned.
+	// The candidate is denied below, so the projection must be the requested
+	// submission's, whatever the store returned.
 	if !authorization.ConsistentWith(submissionID) {
 		return apperror.New("exam.attempt.unavailable").Wrap(errors.New("Submission authorization projection is incomplete"))
 	}
@@ -120,10 +117,9 @@ func (a SittingManagerAuthorizer) AuthorizeSubmissionView(
 	)
 }
 
-// ScreenClipViewAuthorization is what allowed a caller to see an Attempt's
-// screen clips, and so the audit a playback is recorded under. A Sitting
-// management decision is scoped to the Sitting's Class, which the caller
-// fills in once it has resolved the Sitting.
+// ScreenClipViewAuthorization is what allowed a caller to see an attempt's
+// clips, and so the audit a playback is recorded under. A sitting decision is
+// scoped to the class, which the caller fills in once it resolves the sitting.
 type ScreenClipViewAuthorization struct {
 	Action    model.Action
 	Resource  model.Resource
@@ -131,9 +127,8 @@ type ScreenClipViewAuthorization struct {
 	ScopeID   string
 }
 
-// AuthorizeScreenClipView lets the Sitting's Exam Managers see an Attempt's
-// clips, and once the Attempt is submitted, those allowed to review its
-// Submission. The candidate never sees their own.
+// AuthorizeScreenClipView admits the sitting's managers and, once the attempt
+// is submitted, its reviewers. The candidate never sees their own clips.
 func (a SittingManagerAuthorizer) AuthorizeScreenClipView(
 	ctx context.Context,
 	inv invocation.Invocation,

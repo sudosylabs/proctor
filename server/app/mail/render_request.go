@@ -29,14 +29,15 @@ type PersonalAccessTokenDetails struct {
 	AcademicUnitScoped bool
 }
 
-// ExamManagerDetails tell an Exam Manager which Exam and relationship changed.
+// ExamManagerDetails tell an exam manager which exam and relationship
+// changed.
 type ExamManagerDetails struct {
 	Title        string
 	Relationship string
 	ActionAt     time.Time
 }
 
-// ClassTransitionDetails name the Classes and dates of an enrollment change;
+// ClassTransitionDetails name the classes and dates of an enrollment change;
 // PreviousClassDisplayName is set only for a transfer.
 type ClassTransitionDetails struct {
 	PreviousClassDisplayName string
@@ -67,13 +68,14 @@ type EmailChangeDetails struct {
 	NewAddress string
 }
 
-// RetentionDetails carries the planned retirement date of a retention notice.
+// RetentionDetails carries the planned retirement date of a retention
+// notice.
 type RetentionDetails struct {
 	RetireAfter time.Time
 }
 
-// Presentation is the closed set of safe, typed facts accepted by mail
-// rendering. Only this package can add a presentation family.
+// Presentation is the closed set of typed facts mail rendering accepts. Only
+// this package can add a presentation family.
 type Presentation interface{ mailPresentation() }
 
 func (PersonalAccessTokenDetails) mailPresentation() {}

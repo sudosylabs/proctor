@@ -15,9 +15,8 @@ import (
 	"time"
 )
 
-// IntegrityOutcome is what an integrity policy does once its rule is met. It
-// comes from this closed list whichever policy decides, and audited core code
-// applies it.
+// IntegrityOutcome is what an integrity policy does once its rule is met.
+// Every policy picks from this closed list, and audited core code applies it.
 type IntegrityOutcome string
 
 const (
@@ -36,16 +35,16 @@ type IntegrityFailMode string
 
 const (
 	// IntegrityFailContain treats losing sight of the candidate as the
-	// violation itself: Connection Loss suspends when its lease expires.
+	// violation itself: connection loss suspends when its lease expires.
 	IntegrityFailContain IntegrityFailMode = "contain"
-	// IntegrityFailRecordGap records that signals are missing and keeps
-	// going: Focus Loss counts the signals missing before each one it gets.
+	// IntegrityFailRecordGap records that signals are missing and carries on:
+	// focus loss counts the signals missing before each one it gets.
 	IntegrityFailRecordGap IntegrityFailMode = "record_gap"
 )
 
-// IntegrityPolicyKind identifies the policy that caused evidence and a flag.
-// It is not a verdict or severity supplied by a client. The core kinds are
-// plain names; a capability's kinds are "<plugin-id>.<kind>".
+// IntegrityPolicyKind identifies the policy behind evidence and a flag; it is
+// not a client-supplied verdict or severity. Core kinds are plain names and a
+// capability's kinds are "<plugin-id>.<kind>".
 type IntegrityPolicyKind string
 
 const (
@@ -54,16 +53,17 @@ const (
 	IntegrityPolicyBrowserNavigation IntegrityPolicyKind = "browser_navigation"
 )
 
-// NativeIntegrityPolicyNamespace prefixes the policy kinds of Desktop native
-// capabilities, as in native.display_topology. The core owns the namespace,
-// so no plugin may use it as its ID.
+// NativeIntegrityPolicyNamespace prefixes the kinds of desktop native
+// capabilities, as in native.display_topology. The core owns it, so no plugin
+// may use it as its ID.
 const NativeIntegrityPolicyNamespace = "native"
 
-// IntegrityPolicyKindMaxLength bounds a kind: a 64-character plugin ID, a
-// dot, and a 32-character name. The SQL schema uses the same bound.
+// IntegrityPolicyKindMaxLength is a 64-character plugin ID, a dot and a
+// 32-character name; the SQL schema uses the same bound.
 const IntegrityPolicyKindMaxLength = 97
 
-// capabilityPolicyKind is the SQL CHECK's pattern, character for character.
+// capabilityPolicyKind must match the SQL CHECK pattern character for
+// character.
 var capabilityPolicyKind = regexp.MustCompile(`^[a-z][a-z0-9.-]{0,63}\.[a-z][a-z0-9_]{0,31}$`)
 
 func (k IntegrityPolicyKind) IsValid() bool {
@@ -76,25 +76,23 @@ func (k IntegrityPolicyKind) IsCore() bool {
 	return core
 }
 
-// IsCapability reports whether the kind is spelled as a capability's kind.
-// Native capabilities' kinds are capability kinds too.
+// IsCapability reports whether the kind is spelled as a capability's kind,
+// which includes native capabilities.
 func (k IntegrityPolicyKind) IsCapability() bool {
 	return capabilityPolicyKind.MatchString(string(k))
 }
 
-// nativeCapability returns the native capability a native.<capability> kind
-// names.
 func (k IntegrityPolicyKind) nativeCapability() (NativeCapabilityID, bool) {
 	capability, native := strings.CutPrefix(string(k), NativeIntegrityPolicyNamespace+".")
 	return NativeCapabilityID(capability), native && isNativeIdentifier(capability)
 }
 
-// IntegrityPolicy is what the core knows about a built-in policy.
+// IntegrityPolicy is what the core knows about one built-in policy.
 type IntegrityPolicy struct {
 	Kind     IntegrityPolicyKind
 	FailMode IntegrityFailMode
-	// SuspensionReason is what the candidate is told when the policy
-	// suspends their Attempt, or empty when it never suspends.
+	// SuspensionReason is what the candidate is told when the policy suspends
+	// their attempt; empty means it never suspends.
 	SuspensionReason AttemptSuspensionCandidateReason
 }
 
@@ -115,10 +113,9 @@ var coreIntegrityPolicies = map[IntegrityPolicyKind]IntegrityPolicy{
 	},
 }
 
-// integrityPolicy returns the policy the core applies for a kind: a built-in
-// policy, or a native capability's. Every native capability's policy
-// contains on failure, since Desktop's enforce rules contain the window when
-// a capability cannot be observed, and suspends with the native reason.
+// Every native capability's policy contains on failure, because the
+// desktop's enforce rules contain the window when a capability cannot be
+// observed, and suspends with the native reason.
 func integrityPolicy(kind IntegrityPolicyKind) (IntegrityPolicy, bool) {
 	if policy, ok := coreIntegrityPolicies[kind]; ok {
 		return policy, true
@@ -133,8 +130,6 @@ func integrityPolicy(kind IntegrityPolicyKind) (IntegrityPolicy, bool) {
 	return IntegrityPolicy{}, false
 }
 
-// integrityPolicySuspends reports whether some policy the core applies
-// suspends with the reason.
 func integrityPolicySuspends(reason AttemptSuspensionCandidateReason) bool {
 	if reason == "" {
 		return false
@@ -150,21 +145,18 @@ func integrityPolicySuspends(reason AttemptSuspensionCandidateReason) bool {
 	return false
 }
 
-// IntegrityEvidenceDetailMaxBytes bounds the opaque detail a capability's
-// evidence carries. The SQL schema uses the same bound.
+// IntegrityEvidenceDetailMaxBytes bounds a capability's opaque evidence detail;
+// the SQL schema uses the same bound.
 const IntegrityEvidenceDetailMaxBytes = 64 * 1024
 
-// validEvidenceDetail reports whether detail is one bounded JSON
-// object.
 func validEvidenceDetail(detail json.RawMessage) bool {
 	trimmed := bytes.TrimSpace(detail)
 	return len(detail) <= IntegrityEvidenceDetailMaxBytes &&
 		len(trimmed) > 1 && trimmed[0] == '{' && json.Valid(trimmed)
 }
 
-// NewIntegrityPolicySuspension opens the Suspension a policy's decision
-// causes, with the reason that policy declares. A policy that never suspends
-// has none to open.
+// NewIntegrityPolicySuspension opens the suspension a policy's decision causes,
+// with that policy's reason. A policy that never suspends has none to open.
 func NewIntegrityPolicySuspension(
 	id AttemptSuspensionID,
 	attemptID ExamAttemptID,

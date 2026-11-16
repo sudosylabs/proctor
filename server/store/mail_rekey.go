@@ -36,17 +36,15 @@ type MailPayloadKeyUsage struct {
 
 type MailKeyState struct {
 	RequiredPrimaryKeyID string
-	// PrimaryPromotionAllowed is true only after the operation which installed
-	// RequiredPrimaryKeyID completed with a valid zero-reference retirement
-	// proof. A node may then stage a different primary while retaining the
-	// required key for reads; persistence still rejects its writes until the
-	// next rekey command advances the durable fence.
+	// PrimaryPromotionAllowed is true only once the rekey that installed
+	// RequiredPrimaryKeyID proved no references remain to the retiring key. A
+	// node may then stage a new primary while keeping the required key for
+	// reads, but its writes are rejected until the next rekey moves the fence.
 	PrimaryPromotionAllowed bool
 	Active                  []MailPayloadKeyUsage
 }
 
-// MailRekeyTargetKind identifies an encrypted mail-domain value without
-// exposing its ciphertext through any operator projection.
+// MailRekeyTargetKind names the kind of encrypted mail value being rekeyed.
 type MailRekeyTargetKind string
 
 const (
@@ -89,8 +87,8 @@ type MailRekeyProofRequest struct {
 	RetiringKeyID string
 }
 
-// MailRekeyProof is safe operational metadata: key identities and aggregate
-// reference counts only. It never contains key material, owners, or payloads.
+// MailRekeyProof holds key IDs and reference counts only, never key material,
+// owners or payloads.
 type MailRekeyProof struct {
 	PrimaryKeyID         string
 	RetiringKeyID        string

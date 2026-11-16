@@ -5,15 +5,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package academic owns the academic structure of the installation: the
-// Institution, Academic Units, Programmes, Programme Levels, Academic Periods,
-// Classes, Academic Unit and Class memberships, and Affiliations. Service holds
-// every one of these use cases, one file per entity.
-// Academic administration batches, Student Progression and onboarding imports
-// live in app/onboarding and call Service methods.
-// Start with academic.go for the Service and its collaborators, then open the
-// file named for the entity you are changing. effects.go builds the realtime
-// events a committed change publishes.
+// Package academic owns the institution's academic structure: units,
+// programmes and levels, periods, classes, memberships and affiliations.
+// Batches, student progression and onboarding imports live in app/onboarding
+// and call into this package.
 package academic
 
 import (
@@ -27,8 +22,6 @@ import (
 )
 
 // Dependencies are the collaborators New distributes to the Service.
-// Publisher delivers the realtime events the use cases build in effects.go
-// after a change commits.
 type Dependencies struct {
 	Store      store.Catalog
 	Authorizer *access.Authorizer
@@ -52,7 +45,7 @@ type Service struct {
 	affiliations        store.AffiliationStore
 	academicUnitMembers store.AcademicUnitMemberStore
 	roleBindings        store.RoleBindingStore
-	// sittings finds the Sitting boards a Class Membership change refreshes.
+	// sittings finds the sitting boards a class membership change refreshes.
 	sittings store.ExamSittingStore
 
 	authorizer *access.Authorizer
@@ -63,7 +56,7 @@ type Service struct {
 	newID      func() string
 }
 
-// New builds the Service, keeping the Store contracts it calls.
+// New refuses missing collaborators.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Store == nil {
 		return nil, errors.New("academic store catalog is required")

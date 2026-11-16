@@ -17,13 +17,13 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// ExamAttemptWorkspaceBatchOperation names the one Workspace write command in
-// idempotency outcomes and audit.
+// ExamAttemptWorkspaceBatchOperation is the idempotency and audit operation
+// of every workspace write.
 const ExamAttemptWorkspaceBatchOperation = "exam.attempt.workspace.batch"
 
 // IsValidWorkspaceSHA256 reports whether value is a lowercase hexadecimal
-// SHA-256 digest, the form Attempt Workspace content and Submission manifest
-// digests are stored in.
+// SHA-256 digest, the form workspace content and submission manifest digests
+// are stored in.
 func IsValidWorkspaceSHA256(value string) bool {
 	if len(value) != 64 || strings.ToLower(value) != value {
 		return false
@@ -32,42 +32,38 @@ func IsValidWorkspaceSHA256(value string) bool {
 	return err == nil
 }
 
-// ExamAttemptWorkspaceWriteAccess names who writes one batch. It is one of
-// two kinds:
+// ExamAttemptWorkspaceWriteAccess names who writes one batch:
 //
 //   - ExamAttemptWorkspaceEditorAccess: the candidate's own Desktop, proved by
-//     Session, registered key, open Connection and continuity credential. It
-//     also requires current Class membership, an Open Sitting before its
-//     deadline, an Active Attempt, the exact active unexpired Participation
-//     generation and no pending Workspace correction acknowledgement.
-//   - ExamAttemptWorkspaceEnvironmentAccess: the Attempt's execution
-//     environment on the candidate's behalf, proved by its owner's current
-//     runtime lease. It requires only that lease, the environment's current
-//     incarnation and an Attempt with no Submission, so the owner can harvest
-//     the guest's last changes while the Attempt is frozen or past its
-//     deadline, until the seal.
+//     session, registered key, open connection and continuity credential. It
+//     also requires current class membership, an open sitting before its
+//     deadline, an active attempt, the exact active unexpired participation
+//     generation and no pending workspace correction acknowledgement.
+//   - ExamAttemptWorkspaceEnvironmentAccess: the attempt's execution
+//     environment, proved by its owner's current runtime lease. It requires
+//     only that lease, the current incarnation and no submission, so the
+//     owner can harvest the guest's last changes while the attempt is frozen
+//     or past its deadline, until the seal.
 //
-// Persistence rechecks the chosen kind once per reservation, readiness and
-// batch, and on every exact replay.
+// The store rechecks access once per reservation, readiness and batch, and on
+// every exact replay.
 type ExamAttemptWorkspaceWriteAccess interface {
-	// WorkspaceAttemptID is the Attempt whose Workspace is written.
 	WorkspaceAttemptID() model.ExamAttemptID
 	// WorkspaceAuthor is the author the writer's changes are journaled under.
 	WorkspaceAuthor() model.AttemptWorkspaceAuthor
 	examAttemptWorkspaceWriteAccess()
 }
 
-// ExamAttemptWorkspaceReadAccess names who reads the live Attempt Workspace:
-// the candidate's Desktop (CandidateAttemptAccess) or the owner of the
-// Attempt's execution environment (ExamAttemptWorkspaceEnvironmentAccess).
+// ExamAttemptWorkspaceReadAccess names who reads the live workspace: the
+// candidate's Desktop (CandidateAttemptAccess) or the owner of the attempt's
+// execution environment (ExamAttemptWorkspaceEnvironmentAccess).
 type ExamAttemptWorkspaceReadAccess interface {
 	WorkspaceAttemptID() model.ExamAttemptID
 	examAttemptWorkspaceReadAccess()
 }
 
-// ExamAttemptWorkspaceEditorAccess is the complete hash-only selector for a
-// candidate's own write from Desktop. It additionally requires the owning
-// Session-bound open Connection, registered key and continuity credential.
+// ExamAttemptWorkspaceEditorAccess is the hash-only selector for a
+// candidate's own write from Desktop.
 type ExamAttemptWorkspaceEditorAccess struct {
 	AttemptID                model.ExamAttemptID
 	ParticipationID          model.AttemptParticipationID
@@ -91,15 +87,12 @@ func (a ExamAttemptWorkspaceEditorAccess) WorkspaceAuthor() model.AttemptWorkspa
 func (ExamAttemptWorkspaceEditorAccess) examAttemptWorkspaceWriteAccess() {}
 
 // ExamAttemptWorkspaceEnvironmentAccess is the selector the owner of an
-// Attempt's execution environment writes and reads through, on the
-// candidate's behalf. Fence is the owner's runtime lease fence and
-// Incarnation the environment incarnation it acts for; persistence requires
-// that lease to be the Attempt's current unexpired one, the incarnation to
-// be the environment's current one, and the Attempt to have no Submission.
-// No Session, Connection or Participation is involved. The candidate is
-// resolved from the Attempt. Tag, when set, is the process tag the write's
-// author names beside the incarnation, such as terminal:1 for a change a
-// terminal's program made; it takes no part in the owner check.
+// attempt's execution environment writes and reads through. The store
+// requires Fence to be the attempt's current unexpired lease, Incarnation the
+// environment's current one, and no submission; no session, connection or
+// participation is involved. Tag, when set, is the process tag named in the
+// author beside the incarnation (terminal:1 for a change a terminal's program
+// made); it takes no part in the owner check.
 type ExamAttemptWorkspaceEnvironmentAccess struct {
 	AttemptID   model.ExamAttemptID
 	Incarnation int64
@@ -115,8 +108,7 @@ func (a ExamAttemptWorkspaceEnvironmentAccess) WorkspaceAuthor() model.AttemptWo
 	return model.NewEnvironmentWorkspaceAuthor(a.Incarnation, a.Tag)
 }
 
-// Valid reports whether every selector field is well formed, the author it
-// names included.
+// Valid reports whether every field, and the author it names, is well formed.
 func (a ExamAttemptWorkspaceEnvironmentAccess) Valid() bool {
 	return a.AttemptID.IsValid() && a.Incarnation >= 0 && a.Fence > 0 && a.WorkspaceAuthor().IsValid()
 }
@@ -129,10 +121,10 @@ func (a CandidateAttemptAccess) WorkspaceAttemptID() model.ExamAttemptID { retur
 
 func (CandidateAttemptAccess) examAttemptWorkspaceReadAccess() {}
 
-// ExamAttemptWorkspaceMutationTarget is the bounded preflight projection used
-// to begin one Class-scoped audit attempt and address post-commit candidate
-// effects. It exposes no path, content, credential, Session, or object selector.
-// ApplyBatch rechecks all target ownership and eligibility under its locks.
+// ExamAttemptWorkspaceMutationTarget is the preflight projection used to begin
+// the class-scoped audit attempt and address post-commit effects. It carries
+// no path, content, credential, session or object selector. ApplyBatch
+// rechecks ownership and eligibility under its locks, so it is not a grant.
 type ExamAttemptWorkspaceMutationTarget struct {
 	ExamID          model.ExamID
 	SittingID       model.ExamSittingID
@@ -143,18 +135,18 @@ type ExamAttemptWorkspaceMutationTarget struct {
 
 // ExamAttemptWorkspaceObjectReservation checks write access once and creates
 // invisible, expiring metadata for every object a batch will stage, before any
-// VFS write. With no ObjectIDs it only resolves the target. PostgreSQL
-// supplies CreatedAt and ExpiresAt using its clock. Exact repeats of the same
-// unused ObjectID keep the same reservation.
+// VFS write. With no ObjectIDs it only resolves the target. CreatedAt and
+// ExpiresAt use PostgreSQL's clock. Repeating an unused ObjectID keeps its
+// reservation.
 type ExamAttemptWorkspaceObjectReservation struct {
 	Access    ExamAttemptWorkspaceWriteAccess
 	ObjectIDs []model.AttemptWorkspaceObjectID
 }
 
-// ExamAttemptWorkspaceObjectsReady records verified bounded metadata for
-// every object staged for one batch, after VFS staging. It never carries an
-// object key or backend revision. Exact repeats with identical content are
-// idempotent; different content conflicts.
+// ExamAttemptWorkspaceObjectsReady records verified metadata for every object
+// staged for one batch, after VFS staging. It never carries an object key or
+// backend revision. Repeating identical content is idempotent; different
+// content conflicts.
 type ExamAttemptWorkspaceObjectsReady struct {
 	Access  ExamAttemptWorkspaceWriteAccess
 	Objects []ExamAttemptWorkspaceReadyObject
@@ -173,12 +165,12 @@ type ExamAttemptWorkspaceReadyObject struct {
 // ExpectedContentVersion, and a Ready ObjectID. Delete requires EntryID and
 // ExpectedPath, plus ExpectedContentVersion for a file. Recursive directory
 // deletion requires the batch's ExpectedWorkspaceCursor.
-// Rename and move are the same MoveEntry operation; moving a directory
-// atomically rewrites its descendants after checking every resulting path and
-// collision. Non-recursive deletion of a non-empty directory conflicts.
-// Recursive deletion removes the entire subtree atomically, retires its owned
-// objects with retained-outcome protection, and appends one recursive journal
-// record. Published Starter and submitted content pins remain protected.
+// Rename is a move; moving a directory rewrites its descendants atomically
+// after checking every resulting path for collision. Non-recursive deletion
+// of a non-empty directory conflicts. Recursive deletion removes the subtree
+// atomically, retires its objects with retained-outcome protection, and
+// appends one recursive journal record. Published starter and submitted
+// content pins stay protected.
 type ExamAttemptWorkspaceMutation struct {
 	Operation              model.AttemptWorkspaceMutationKind
 	EntryID                model.AttemptWorkspaceEntryID
@@ -202,10 +194,11 @@ type ExamAttemptWorkspaceBatch struct {
 	AuditAt                 time.Time
 }
 
-// ExamAttemptWorkspaceBatchResult is the safe acknowledged state. Changes has
-// one journal entry per mutation, in order, at consecutive cursors, each with
-// the batch's author. A replay carries the author of the original batch. It carries no mutation-key digest, object selector,
-// credential, Session, binding, or content body.
+// ExamAttemptWorkspaceBatchResult is the acknowledged state. Changes has one
+// journal entry per mutation, in order, at consecutive cursors, each with the
+// batch's author; a replay carries the original batch's author. It carries no
+// mutation-key digest, object selector, credential, session, binding or
+// content body.
 type ExamAttemptWorkspaceBatchResult struct {
 	SittingID       model.ExamSittingID
 	ClassID         model.ClassID
@@ -215,15 +208,12 @@ type ExamAttemptWorkspaceBatchResult struct {
 	Replayed        bool
 }
 
-// ConsistentWith reports whether the result names the resolved target's
-// Sitting, Class, candidate and Attempt Workspace, and carries one valid
-// change per mutation, of the requested operation, in that workspace, at
-// consecutive positive cursors, by the writer's author kind. Unless it
-// replays an earlier batch, each change is for the proposed entry and by the
-// writer's exact author; a replay keeps the original batch's reference. It reads target, which the caller has already checked.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the result names target's sitting, class,
+// candidate and workspace, and carries one valid change per mutation, of the
+// requested operation, at consecutive positive cursors, by the writer's
+// author kind. Unless replayed, each change is for the proposed entry and by
+// the writer's exact author. The conformance suite asserts it on every real
+// result.
 func (r *ExamAttemptWorkspaceBatchResult) ConsistentWith(
 	target *ExamAttemptWorkspaceMutationTarget,
 	author model.AttemptWorkspaceAuthor,
@@ -265,8 +255,8 @@ func (e *ErrAttemptWorkspaceBatchItem) Error() string {
 func (e *ErrAttemptWorkspaceBatchItem) Unwrap() error { return e.Err }
 
 // CandidateWorkspaceJournalOptions requests ordered changes strictly after a
-// numeric cursor. Limit is 1..200. Paths remain in the protected response body
-// and never enter a URL, pagination token, audit field, log, or realtime event.
+// numeric cursor. Limit is 1..200. Paths stay in the protected response body
+// and never enter a URL, pagination token, audit field, log or realtime event.
 type CandidateWorkspaceJournalOptions struct {
 	Access      ExamAttemptWorkspaceReadAccess
 	AfterCursor int64
@@ -284,12 +274,9 @@ type CandidateWorkspaceJournalPage struct {
 	RefreshRequired bool
 }
 
-// ConsistentWith reports whether the page names its Attempt Workspace, its
-// current cursor is not behind the cursor the reader already holds, and a page
-// that asks for a refresh carries no entries and no further page.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the page names its workspace, is not behind
+// afterCursor, and, when asking for a refresh, carries no entries and no
+// further page. The conformance suite asserts it on every real result.
 func (p *CandidateWorkspaceJournalPage) ConsistentWith(afterCursor int64) bool {
 	return !(p == nil ||
 		!p.WorkspaceID.IsValid() ||
@@ -298,70 +285,56 @@ func (p *CandidateWorkspaceJournalPage) ConsistentWith(afterCursor int64) bool {
 }
 
 // NotBehind is the application's postcondition on a journal page: its
-// current cursor is not behind the cursor the reader already holds.
+// current cursor is at least afterCursor.
 func (p *CandidateWorkspaceJournalPage) NotBehind(afterCursor int64) bool {
 	return p.CurrentCursor >= afterCursor
 }
 
-// ExamAttemptWorkspaceStore is the deep seam for the acknowledged live
-// Workspace. It owns access revalidation, hierarchy/quota checks, object-stage
-// visibility, selective concurrency, ordered journal/cursor advancement,
-// attempt-scoped command outcome, and cleanup eligibility.
+// ExamAttemptWorkspaceStore holds the acknowledged live workspace.
 //
 // Every write is one batch: ReserveObjects, then VFS staging, then
-// MarkObjectsReady, then ApplyBatch. Each checks access once for the whole
+// MarkObjectsReady, then ApplyBatch, each checking access once for the whole
 // batch. The editor and the execution environment both write this way; the
-// access kind decides how the writer is proved, what else it requires and
-// the journal author. The command outcome is keyed under the candidate
-// either way, and audit adds the author, and for the environment its lease
-// fence, to the aggregate data.
-// Every changed entry records the author of its last change, which a
-// Submission seals.
+// access kind decides how the writer is proved and the journal author. The
+// command outcome is keyed under the candidate either way, and audit adds the
+// author (and for the environment its lease fence). Every changed entry
+// records the author of its last change, which the submission seals. Reads
+// take either access and return the same projections.
 //
-// The reads take either the candidate's Desktop access or an environment
-// access and return the same manifest, file and journal projections.
+// AppendAttemptEvidence stores one evidence record under the same check as
+// environment writes: a stale lease or incarnation conflicts with
+// attempt_environment_owner, and an attempt with a submission with
+// exam_attempt_state. The record is stamped with PostgreSQL time; a later
+// observation time is clamped to it. Kind, author and sequence identify it:
+// the same claim again returns the stored record with Repeated, and a
+// different claim conflicts with attempt_evidence_sequence. A record over the
+// attempt's record or byte bound is not stored but counted in the inventory
+// and returned as Refused. A stored record extends the inventory's chained
+// digest in the same transaction. It raises no flag, writes no audit and
+// leaves the attempt unchanged. Once the submission exists the inventory is
+// fixed.
 //
-// AppendAttemptEvidence stores one Attempt evidence record through an
-// environment access, under the same check as the environment's reads and
-// writes: the owner's current lease and incarnation and no Submission. A
-// stale lease or incarnation conflicts with attempt_environment_owner; an
-// Attempt with a Submission conflicts with exam_attempt_state. The record belongs to the Attempt,
-// names the access's author and is stamped with PostgreSQL time; an
-// observation time after it is clamped to it. Its kind is one of the core's.
-// The kind, author and sequence identify it: the same claim again returns the
-// stored record with Repeated, and a different claim for them conflicts with
-// attempt_evidence_sequence. A record that would pass the Attempt's record
-// or byte bound is not stored: the refusal is counted in the inventory and
-// returned as Refused. A stored record extends the inventory's chained digest
-// in the same transaction. Nothing raises a Flag, writes audit or changes the
-// Attempt. Once the Submission exists the inventory is fixed and nothing more
-// is accepted.
+// AppendTerminalInput stores one execution.input record from the node serving
+// a terminal, which holds no lease. It requires the named incarnation to be
+// current, the environment not ended and no submission: another incarnation
+// conflicts with attempt_environment_incarnation, an attempt without an
+// environment is not found, and a sealed one conflicts with
+// exam_attempt_state. Otherwise it stores as AppendAttemptEvidence does.
 //
-// AppendTerminalInput stores one execution.input record from the node that
-// serves a terminal, which holds no lease: it requires the environment's
-// current incarnation to be the one named, with the environment not ended,
-// and the Attempt to have no Submission. Another incarnation conflicts with
-// attempt_environment_incarnation, an Attempt without an environment is not
-// found, and a sealed one conflicts with exam_attempt_state. The record is
-// then stored exactly as AppendAttemptEvidence stores one, by the
-// incarnation and terminal's author.
-//
-// ApplyBatch atomically applies every mutation in order: it changes the
-// logical hierarchy and current content pointers, advances the Workspace
-// Cursor once per mutation, appends one journal record per mutation, marks
-// each consumed Ready object Current, makes each superseded or deleted
-// attempt-owned object reclaimable after the safety window, checks capacity
-// once against the final state, and commits one idempotent outcome and the
-// supplied audit attempt. Audit data is limited to safe scope, counts by
-// operation, and the resulting cursor range; paths, content metadata, bodies,
-// and object identities are excluded. If any mutation fails, nothing changes
-// and the error is an ErrAttemptWorkspaceBatchItem naming it, except for
-// capacity, which is a property of the whole batch. Required corrections
-// selecting workspace are checked under the same Sitting lock as publication.
-// Exact replays recheck current write eligibility and return the retained
-// result. The durable journal records the command's bounded KeyDigest for
-// correlation, but candidate journal projections omit it. At most the newest
-// 4,096 entries remain; pruning and append are atomic. Stable conflicts are
+// ApplyBatch applies every mutation in order in one transaction: hierarchy
+// and content pointers, one cursor advance and journal record per mutation,
+// consumed Ready objects marked Current, superseded or deleted objects made
+// reclaimable after the safety window, capacity checked once against the
+// final state, one idempotent outcome and the audit attempt. Audit data holds
+// only scope, counts by operation and the cursor range, never paths, content
+// metadata, bodies or object identities. If a mutation fails nothing changes
+// and the error is an ErrAttemptWorkspaceBatchItem naming it, except
+// capacity, which belongs to the whole batch. Required workspace corrections
+// are checked under the same sitting lock as publication. Exact replays
+// recheck write eligibility and return the retained result. The journal keeps
+// the command's KeyDigest for correlation; candidate projections omit it. At
+// most the newest 4,096 entries remain; pruning and append are atomic.
+// Stable conflicts are
 // attempt_workspace_path, attempt_workspace_entry,
 // attempt_workspace_content_version, attempt_workspace_not_empty,
 // attempt_workspace_cursor, attempt_workspace_entry_limit,
@@ -369,11 +342,11 @@ func (p *CandidateWorkspaceJournalPage) NotBehind(afterCursor int64) bool {
 //
 // Cleanup claims use PostgreSQL time, limit 1..200, and a trimmed token of at
 // most 128 bytes. ClaimObjectsForCleanup selects only attempt-origin objects
-// whose safe window elapsed and which have no current Entry, retained command
-// outcome, or other durable reference. It also recovers stale claims. Physical
-// removal is idempotent; an outcome-unknown removal remains Claimed so a later
-// stale-claim retry repeats removal before CompleteObjectCleanup deletes the
-// metadata. ReleaseObjectCleanup handles known physical-removal failure.
+// past their safety window with no current entry, retained command outcome or
+// other durable reference, and recovers stale claims. An outcome-unknown
+// removal stays Claimed so a later stale-claim retry repeats it before
+// CompleteObjectCleanup deletes the metadata. ReleaseObjectCleanup is for a
+// known removal failure.
 type ExamAttemptWorkspaceStore interface {
 	AppendAttemptEvidence(context.Context, *ExamAttemptEvidenceAppend) (*ExamAttemptEvidenceAppendResult, error)
 	AppendTerminalInput(context.Context, *ExamAttemptTerminalInputAppend) (*ExamAttemptEvidenceAppendResult, error)

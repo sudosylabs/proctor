@@ -6,27 +6,10 @@
 // ---------------------------------------------------------------------------------------------
 
 // Package administration owns the institution administrator's access and
-// retention controls: Roles and Role Bindings, the Access Policy and public
-// access discovery, the Retention Policy, retention control, previews,
-// records and candidate notices, and the audit listings. One flat Service
-// holds every one of these use cases, one file per concern; its fields are
-// the Store contracts it calls and one of each collaborator: the access
-// Authorizer, the mutation auditor, the mail Composer and the realtime
-// Publisher. effects.go builds the realtime events a committed change
-// publishes.
-//
-// The retention Jobs' system audit and notice dispatcher live here too,
-// outside Service; composition builds them with NewRetentionJobs for the Job
-// catalog.
-//
-// Counts, in counts.go, is a second, small service: the bounded counts of
-// work waiting on an administrator (pending Invitations, failed Jobs and mail
-// deliveries, open onboarding imports) behind the administration navigation.
-// It holds one counting function per resource, supplied by the service that
-// owns the resource, so it imports none of them.
-//
-// Start with administration.go for the Service and its collaborators, then
-// open the file named for the concern you are changing.
+// retention controls: roles and bindings, the access policy and public access
+// discovery, retention, and the audit listings. Counts is a separate small
+// service whose counters are supplied by the services that own each resource,
+// so it imports none of them.
 package administration
 
 import (
@@ -44,7 +27,6 @@ import (
 )
 
 // Dependencies are the collaborators New distributes to the Service.
-// Publisher delivers the realtime effects of a committed change.
 type Dependencies struct {
 	Store        store.Catalog
 	Authorizer   *access.Authorizer
@@ -52,23 +34,21 @@ type Dependencies struct {
 	Capabilities *identity.DeploymentCapabilities
 	Mail         *mail.Composer
 	Publisher    realtime.Publisher
-	// CanonicalOrigin, SupportAddress and PasswordMinimumLength are the
-	// operator-owned facts access discovery publishes.
+	// CanonicalOrigin, SupportAddress and PasswordMinimumLength are published
+	// by access discovery unchanged.
 	CanonicalOrigin         string
 	SupportAddress          string
 	PasswordMinimumLength   int
 	RecentAuthenticationTTL time.Duration
-	// Sessions are the deployment Session lifetimes that bound the Access
-	// Policy's Session lengths.
+	// Sessions are the deployment session lifetimes that bound the policy's
+	// session lengths.
 	Sessions identity.SessionPolicy
-	// Plugins describes and validates the compiled-in plugins. Nil makes
-	// plugin administration unavailable.
+	// Plugins nil makes plugin administration unavailable.
 	Plugins PluginCatalog
 	Now     func() time.Time
 }
 
-// Service holds every administration use case. Its fields are the Store
-// contracts it calls and one of each collaborator.
+// Service holds every administration use case.
 type Service struct {
 	roles             store.RoleStore
 	roleBindings      store.RoleBindingStore
@@ -84,28 +64,25 @@ type Service struct {
 	environmentProfiles store.EnvironmentProfileStore
 
 	authorizer *access.Authorizer
-	// auditor opens the attempt of each mutation and fails it when the
-	// mutation does not commit; the Store completes a committed attempt.
+	// auditor fails the attempt of a mutation that does not commit; the store
+	// completes a committed one.
 	auditor      access.MutationAuditAdapter
 	publisher    realtime.Publisher
 	mail         *mail.Composer
 	capabilities *identity.DeploymentCapabilities
 	plugins      PluginCatalog
 
-	// canonicalOrigin, supportAddress and passwordMinimumLength are the
-	// operator-owned facts access discovery publishes unchanged.
 	canonicalOrigin         string
 	supportAddress          string
 	passwordMinimumLength   int
 	recentAuthenticationTTL time.Duration
-	// sessionLimits are the Access Policy's Session length bounds, derived
-	// in New from the deployment Session lifetimes.
+	// sessionLimits are derived in New from the deployment session lifetimes.
 	sessionLimits model.SessionLengthLimits
 	now           func() time.Time
 }
 
-// New builds the Service, keeping the Store contracts it calls. It refuses
-// an invalid access discovery presentation and missing collaborators.
+// New refuses an invalid access discovery presentation and missing
+// collaborators.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Store == nil {
 		return nil, errors.New("administration store catalog is required")

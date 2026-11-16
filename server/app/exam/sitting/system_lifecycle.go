@@ -18,10 +18,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// AdvanceDue applies the Sitting's due lifecycle transition, such as opening
-// at the scheduled start or closing at the scheduled end, under a system
-// audit for the invoking Job. It supplies the sealing Job for a transition
-// into Closing.
+// AdvanceDue applies the due lifecycle transition, such as opening at the
+// scheduled start or closing at the scheduled end, and supplies the sealing
+// job for a move into closing.
 func (s *Service) AdvanceDue(
 	ctx context.Context,
 	system invocation.System,
@@ -44,9 +43,9 @@ func (s *Service) AdvanceDue(
 	)
 }
 
-// FinishSealing closes a Closing Sitting once every created Attempt is
-// terminal with a sealed Submission; otherwise the Sitting stays Closing. It
-// is safe to call after every bounded sealing pass.
+// FinishSealing closes a closing sitting once every attempt is terminal with
+// a sealed submission; otherwise it stays closing. It is safe to call after
+// every sealing pass.
 func (s *Service) FinishSealing(
 	ctx context.Context,
 	system invocation.System,
@@ -68,9 +67,8 @@ func (s *Service) FinishSealing(
 	)
 }
 
-// ListLifecycleDue returns up to Limit Sittings whose next lifecycle
-// transition is due, ordered by due time and Sitting ID after the optional
-// cursor, for the lifecycle recovery Job that system names.
+// ListLifecycleDue returns up to Limit sittings whose next transition is due,
+// ordered by due time and sitting ID after the optional cursor.
 func (s *Service) ListLifecycleDue(
 	ctx context.Context,
 	system invocation.System,

@@ -18,8 +18,8 @@ import (
 // request so a client cannot make address resolution unbounded.
 const maximumForwardedHops = 32
 
-// trustedProxies decides which connection peers may describe the original
-// client. The zero value trusts no peer.
+// trustedProxies are the peers allowed to name the original client. The zero
+// value trusts none.
 type trustedProxies []netip.Prefix
 
 func (p trustedProxies) contains(address netip.Addr) bool {
@@ -35,7 +35,6 @@ func (p trustedProxies) contains(address netip.Addr) bool {
 	return false
 }
 
-// requestPeer is the connection peer and whether it is a trusted proxy.
 type requestPeer struct {
 	address netip.Addr
 	raw     string

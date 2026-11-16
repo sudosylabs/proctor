@@ -15,10 +15,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// MembershipPageQuery selects an effective instant or full retained history
-// and the page order: by membership start (the zero Order) or by member name,
-// reversed when Descending. Transport adapters resolve opaque continuations
-// into explicit selectors.
+// MembershipPageQuery selects an effective instant or the full retained
+// history, ordered by membership start (the zero Order) or by member name,
+// reversed when Descending.
 type MembershipPageQuery struct {
 	Limit      int
 	ActiveAt   *int64
@@ -27,9 +26,8 @@ type MembershipPageQuery struct {
 	Descending bool
 }
 
-// membershipPageKeyset validates the order and continuation of a membership
-// page: a continuation names its last membership (afterID) with that
-// membership's start in the start order, or its member in the name order.
+// membershipPageKeyset requires a continuation to carry the start of its
+// last membership in start order, or its member in name order.
 func membershipPageKeyset(query MembershipPageQuery, afterID string, afterStartAt time.Time, afterUserID model.UserID) (store.MembershipPageKeyset, error) {
 	keyset := store.MembershipPageKeyset{Order: query.Order, Descending: query.Descending}
 	if !keyset.Order.IsValid() {

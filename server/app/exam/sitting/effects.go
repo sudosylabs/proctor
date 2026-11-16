@@ -17,9 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// publishScheduled announces a newly scheduled Sitting to its managers, then
-// invalidates its board and its candidates' Exam activity. at is the instant
-// the schedule was committed.
+// at is the instant the schedule was committed.
 func (s *Service) publishScheduled(ctx context.Context, sitting *model.ExamSitting, at time.Time) error {
 	event, err := realtime.NewExamSittingScheduledEvent(sitting.ExamID, sitting.ID, sitting.State, sitting.Revision, at)
 	if err != nil {
@@ -29,8 +27,6 @@ func (s *Service) publishScheduled(ctx context.Context, sitting *model.ExamSitti
 	return s.publishWithInvalidations(ctx, sitting, event)
 }
 
-// publishScheduleUpdated announces a changed schedule to the Sitting's
-// managers, then invalidates its board and its candidates' Exam activity.
 func (s *Service) publishScheduleUpdated(ctx context.Context, sitting *model.ExamSitting, at time.Time) error {
 	event, err := realtime.NewExamSittingScheduleUpdatedEvent(sitting.ExamID, sitting.ID, sitting.State, sitting.Revision, at)
 	if err != nil {
@@ -40,8 +36,6 @@ func (s *Service) publishScheduleUpdated(ctx context.Context, sitting *model.Exa
 	return s.publishWithInvalidations(ctx, sitting, event)
 }
 
-// publishCanceled announces a canceled Sitting to its managers, then
-// invalidates its board and its candidates' Exam activity.
 func (s *Service) publishCanceled(ctx context.Context, sitting *model.ExamSitting, at time.Time) error {
 	event, err := realtime.NewExamSittingCanceledEvent(sitting.ExamID, sitting.ID, sitting.State, sitting.Revision, at)
 	if err != nil {
@@ -51,11 +45,9 @@ func (s *Service) publishCanceled(ctx context.Context, sitting *model.ExamSittin
 	return s.publishWithInvalidations(ctx, sitting, event)
 }
 
-// publishLifecycleChanged announces a lifecycle transition, in this order:
-// the transition to the Sitting's managers, the same fact to its candidates,
-// the board invalidation, and the Exam activity invalidation of every
-// candidate. Nothing is published unless both facts can be built; after that
-// a failed publication never stops the ones after it.
+// publishLifecycleChanged publishes to managers, then candidates, then the
+// board and candidate activity invalidations. Nothing is published unless both
+// events build; after that a failed publication never stops the ones after it.
 func (s *Service) publishLifecycleChanged(
 	ctx context.Context,
 	sitting *model.ExamSitting,
@@ -95,10 +87,9 @@ func (s *Service) publishLifecycleChanged(
 	)
 }
 
-// publishWithInvalidations publishes one schedule fact, then the Sitting
-// board invalidation, then the Exam activity invalidation of every candidate
-// of the Sitting. A failed publication never stops the ones after it; the
-// failures are returned joined in that order.
+// publishWithInvalidations publishes event, then the board and candidate
+// activity invalidations. A failed publication never stops the ones after it;
+// failures come back joined in that order.
 func (s *Service) publishWithInvalidations(
 	ctx context.Context,
 	sitting *model.ExamSitting,
@@ -111,9 +102,8 @@ func (s *Service) publishWithInvalidations(
 	)
 }
 
-// publishLifecycle announces a lifecycle result that changed the Sitting and
-// was not replayed. A failed publication is reported under operation and the
-// command or Job still succeeds.
+// publishLifecycle skips unchanged and replayed results. A failed publication
+// is reported, not returned, so the command or job still succeeds.
 func (s *Service) publishLifecycle(ctx context.Context, result *store.ExamSittingLifecycleResult, operation string) {
 	if result == nil || !result.Changed || result.Replayed || result.Value == nil || result.Value.Sitting == nil {
 		return

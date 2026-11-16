@@ -15,10 +15,8 @@ import (
 type Server struct {
 	ListenAddress string `json:"ListenAddress"`
 	PublicURL     string `json:"PublicURL"`
-	// DocumentationURL is where the installation's documentation site is
-	// published, such as https://docs.example.edu. Problem Details then link
-	// each error to its page at <DocumentationURL>/problems/<code>. Empty
-	// sends type "about:blank": the error is described by its status and code.
+	// DocumentationURL is the documentation site's origin; problem details link
+	// to <DocumentationURL>/problems/<code>. Empty sends type "about:blank".
 	DocumentationURL  string    `json:"DocumentationURL"`
 	WebappDirectory   string    `json:"WebappDirectory"`
 	TLS               ServerTLS `json:"TLS"`
@@ -29,13 +27,11 @@ type Server struct {
 	ShutdownTimeout   Duration  `json:"ShutdownTimeout"`
 	MaxHeaderBytes    int       `json:"MaxHeaderBytes"`
 	MaxBodyBytes      int64     `json:"MaxBodyBytes"`
-	// TrustedProxies lists the reverse proxies, as IP addresses or CIDR
-	// prefixes, whose X-Forwarded-For and X-Request-ID headers the server
-	// accepts. Empty trusts no proxy: the connection address is the client.
+	// TrustedProxies are the IPs or CIDR prefixes whose X-Forwarded-For and
+	// X-Request-ID headers are believed. Empty trusts no proxy.
 	TrustedProxies []string `json:"TrustedProxies"`
 }
 
-// defaultServer returns the default HTTP server settings.
 func defaultServer() Server {
 	return Server{
 		ListenAddress:   "127.0.0.1:8065",
@@ -60,8 +56,6 @@ func defaultServer() Server {
 	}
 }
 
-// validateDocumentationURL accepts an empty value or an absolute HTTP or
-// HTTPS URL with no user information, query or fragment.
 func validateDocumentationURL(raw string, add func(string, string)) {
 	if raw == "" {
 		return
@@ -102,8 +96,6 @@ func validatePublicURL(raw string, add func(string, string)) {
 	}
 }
 
-// validateServerLimits checks the client listener's timeouts, header and body
-// bounds, and trusted proxies.
 func validateServerLimits(server Server, add func(string, string)) {
 	durations := []struct {
 		field string

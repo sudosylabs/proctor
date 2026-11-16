@@ -27,8 +27,7 @@ type IssueStudentClassInvitationCommand struct {
 	IntendedStartsAt, IntendedEndsAt                                          int64
 	SuggestedUsername, SuggestedDisplayName                                   string
 	SuggestedFirstName, SuggestedLastName, SuggestedLocale, SuggestedTimezone string
-	// ExpiresInDays is the inviter's optional whole-day lifetime; nil selects
-	// model.InvitationLifetime.
+	// ExpiresInDays is a whole-day lifetime; nil selects model.InvitationLifetime.
 	ExpiresInDays             *int
 	IdempotencyKey            string
 	batchDuplicate            bool
@@ -49,8 +48,7 @@ type IssueTeacherAcademicUnitInvitationCommand struct {
 	IntendedStartsAt, IntendedEndsAt                                          int64
 	SuggestedUsername, SuggestedDisplayName                                   string
 	SuggestedFirstName, SuggestedLastName, SuggestedLocale, SuggestedTimezone string
-	// ExpiresInDays is the inviter's optional whole-day lifetime; nil selects
-	// model.InvitationLifetime.
+	// ExpiresInDays is a whole-day lifetime; nil selects model.InvitationLifetime.
 	ExpiresInDays             *int
 	IdempotencyKey            string
 	batchDuplicate            bool
@@ -64,8 +62,7 @@ type IssueAcademicUnitRoleInvitationCommand struct {
 	AcademicUnitID                   model.AcademicUnitID
 	RoleID                           model.RoleID
 	IntendedStartsAt, IntendedEndsAt int64
-	// ExpiresInDays is the inviter's optional whole-day lifetime; nil selects
-	// model.InvitationLifetime.
+	// ExpiresInDays is a whole-day lifetime; nil selects model.InvitationLifetime.
 	ExpiresInDays             *int
 	IdempotencyKey            string
 	batchDuplicate            bool
@@ -79,8 +76,7 @@ type IssueInstitutionRoleInvitationCommand struct {
 	InstitutionID                    model.InstitutionID
 	RoleID                           model.RoleID
 	IntendedStartsAt, IntendedEndsAt int64
-	// ExpiresInDays is the inviter's optional whole-day lifetime; nil selects
-	// model.InvitationLifetime.
+	// ExpiresInDays is a whole-day lifetime; nil selects model.InvitationLifetime.
 	ExpiresInDays             *int
 	IdempotencyKey            string
 	batchDuplicate            bool
@@ -89,9 +85,8 @@ type IssueInstitutionRoleInvitationCommand struct {
 	onboardingImportRowNumber int
 }
 
-// authorizedScopedRoleInvitationIssue is the scope-specific result of the
-// caller's authorization, resource, and delegation checks. The shared issue
-// path must not infer or repeat those checks.
+// authorizedScopedRoleInvitationIssue carries checks already made by the
+// scope-specific path; the shared issue path must not infer or repeat them.
 type authorizedScopedRoleInvitationIssue struct {
 	targetEmail                      string
 	purpose                          model.InvitationPurpose
@@ -122,8 +117,8 @@ type AcceptInstitutionRoleInvitationCommand struct {
 	Claim, Source string
 }
 
-// InvitationView intentionally excludes the target mailbox, claim digest, and
-// raw claim. Delivery is the only boundary allowed to observe the raw claim.
+// InvitationView deliberately omits the mailbox, claim digest and raw claim;
+// only delivery may observe the raw claim.
 type InvitationView struct {
 	ID               model.InvitationID
 	Purpose          model.InvitationPurpose
@@ -140,9 +135,8 @@ type InvitationView struct {
 	NoOp             bool
 }
 
-// InvitationAcceptanceView is the outcome of accepting an Invitation: the
-// account and the one membership or binding its purpose grants. Replayed is
-// true when an exact retry returned the stored outcome.
+// InvitationAcceptanceView is an accepted invitation's account and grant;
+// Replayed is true when an exact retry returned the stored outcome.
 type InvitationAcceptanceView struct {
 	Invitation         InvitationView
 	User               *model.User
@@ -153,8 +147,8 @@ type InvitationAcceptanceView struct {
 	Replayed           bool
 }
 
-// InvitationDeliveryView is the state of an Invitation's latest mail delivery
-// for operators; it shows the recipient only masked.
+// InvitationDeliveryView is the latest mail delivery state; the recipient is
+// shown only masked.
 type InvitationDeliveryView struct {
 	TemplateKey       model.MailTemplateKey
 	State             model.MailDeliveryState
@@ -166,9 +160,8 @@ type InvitationDeliveryView struct {
 	PublicFailureCode string
 }
 
-// InvitationAdministrationView is purpose-built for authorized operators. It
-// includes the approved recipient and lifecycle fields while keeping claim
-// material, rendered mail, provider identity, and transport internals private.
+// InvitationAdministrationView is for authorized operators: it shows the
+// recipient but never claim material, rendered mail or transport internals.
 type InvitationAdministrationView struct {
 	InvitationView
 	TargetEmail    string
@@ -180,8 +173,8 @@ type InvitationAdministrationView struct {
 	Delivery       *InvitationDeliveryView
 }
 
-// InvitationAdministrationPage is one page of visible Invitations; the first
-// page also carries their total (see paging.Total).
+// InvitationAdministrationPage is one page of visible invitations; only the
+// first page carries the total (see paging.Total).
 type InvitationAdministrationPage struct {
 	Items []InvitationAdministrationView
 	More  bool
@@ -237,21 +230,20 @@ type ReplaceInvitationCommand struct {
 	ExpectedRevision, IntendedStartsAt, IntendedEndsAt                        int64
 	SuggestedUsername, SuggestedDisplayName                                   string
 	SuggestedFirstName, SuggestedLastName, SuggestedLocale, SuggestedTimezone string
-	// ExpiresInDays is the inviter's optional whole-day lifetime; nil keeps
-	// the replaced Invitation's lifetime in whole days.
+	// ExpiresInDays is a whole-day lifetime; nil keeps the replaced
+	// invitation's lifetime.
 	ExpiresInDays *int
 }
 
-// MaximumInvitationBatchItems bounds the rows of one RunInvitationBatch call,
-// which authorizes the whole batch once at its scope.
+// MaximumInvitationBatchItems bounds one RunInvitationBatch call, which
+// authorizes the whole batch once at its scope.
 const MaximumInvitationBatchItems = 200
 
-// InvitationBatchOperation is the single operation every row of a batch runs;
+// InvitationBatchOperation is the one operation every row of a batch runs;
 // it also fixes the scope type the batch must name.
 type InvitationBatchOperation string
 
-// The batch operations: create an Invitation of one purpose, or resend or
-// revoke existing Invitations.
+// Invitation batch operations.
 const (
 	InvitationBatchStudentClassCreate        InvitationBatchOperation = "student_class.create"
 	InvitationBatchTeacherAcademicUnitCreate InvitationBatchOperation = "teacher_academic_unit.create"
@@ -276,8 +268,8 @@ func (o InvitationBatchOperation) IsValid() bool {
 	}
 }
 
-// InvitationBatchItemCommand is a closed union interpreted only according to
-// its batch's single operation. Non-applicable fields make that row invalid.
+// InvitationBatchItemCommand is a union read according to the batch's
+// operation; a field that does not apply makes the row invalid.
 type InvitationBatchItemCommand struct {
 	InvitationID                                                              model.InvitationID
 	TargetEmail                                                               string
@@ -318,8 +310,8 @@ type InvitationBatchItemResult struct {
 	ErrorCode    string
 }
 
-// InvitationBatchResult lists every row's outcome in input order with the
-// totals of each status.
+// InvitationBatchResult lists row outcomes in input order, with per-status
+// totals.
 type InvitationBatchResult struct {
 	Operation InvitationBatchOperation
 	Items     []InvitationBatchItemResult
@@ -407,9 +399,8 @@ func invalidInvitationError(err error) error { return apperror.New("invitation.i
 
 const invitationAcceptanceAttemptQualifier = "claim-accept"
 
-// checkInvitationAttempt counts one Invitation claim attempt against the
-// claim's identity and the caller's source, refusing once either limit is
-// exceeded.
+// checkInvitationAttempt limits claim attempts per claim and per source, so
+// neither a single claim nor a single source can brute-force claims.
 func (s *Service) checkInvitationAttempt(ctx context.Context, claimIdentity, source string) error {
 	policy := s.rateLimit
 	if s.attempts == nil || policy.Window <= 0 || policy.MaximumAttempts <= 0 || policy.MaximumSourceAttempts <= 0 {

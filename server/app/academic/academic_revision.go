@@ -9,9 +9,8 @@ package academic
 
 import "github.com/sudosylabs/proctor/server/app/apperror"
 
-// checkAcademicRevision compares a client's optional snapshot only after the
-// application has authorized and loaded the resource. Store CAS still protects
-// changes between this comparison and commit.
+// checkAcademicRevision must run only after the resource is authorized and
+// loaded. The store's compare-and-set still guards the window up to commit.
 func checkAcademicRevision(expected *int64, current int64, conflictCode apperror.Code) error {
 	if expected == nil {
 		return nil

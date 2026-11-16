@@ -980,8 +980,8 @@ func (s SQLUserTokenStore) ConsumePasswordReset(
 		}
 
 		// Discover only the lock key; token validity is rechecked under the lock.
-		// Take the Session lock before token, User and credential row locks, matching
-		// issuance and removal so either the new Session is revoked or proof fails.
+		// Take the session lock before token, user and credential row locks, matching
+		// issuance and removal so either the new session is revoked or proof fails.
 		var resetUserID string
 		if err := tx.Get(
 			ctx,

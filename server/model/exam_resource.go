@@ -48,9 +48,9 @@ func (m ExamResourceMediaType) IsValid() bool {
 	}
 }
 
-// ExamResource is one ordered, protected supporting file selected by the
-// mutable Exam Draft. FileEntryID is stable across content replacement while
-// SelectedFileRevisionID pins the exact immutable bytes currently authored.
+// ExamResource is one ordered, protected supporting file the draft selects.
+// FileEntryID survives content replacement; SelectedFileRevisionID pins the
+// exact bytes currently authored.
 type ExamResource struct {
 	ID                     ExamResourceID
 	ExamID                 ExamID

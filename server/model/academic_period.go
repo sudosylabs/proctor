@@ -11,9 +11,9 @@ import (
 	"time"
 )
 
-// AcademicPeriodOwner identifies exactly one immutable owner. Institution
-// periods apply everywhere; Academic Unit periods apply to the owner's
-// subtree.
+// AcademicPeriodOwner holds exactly one of its IDs and never changes. An
+// institution period applies everywhere; an academic unit period applies to
+// that unit's subtree.
 type AcademicPeriodOwner struct {
 	InstitutionID  InstitutionID
 	AcademicUnitID AcademicUnitID
@@ -56,9 +56,8 @@ func (o AcademicPeriodOwner) Resource() Resource {
 func (o AcademicPeriodOwner) Type() ResourceType { return o.Resource().Type }
 func (o AcademicPeriodOwner) ID() string         { return o.Resource().ID }
 
-// AcademicPeriod is the time window in which classes and enrollments apply,
-// such as an academic year or semester. StartsAt is inclusive and EndsAt is
-// exclusive.
+// AcademicPeriod is a window such as an academic year or semester in which
+// classes apply. StartsAt is inclusive and EndsAt is exclusive.
 type AcademicPeriod struct {
 	ID          AcademicPeriodID
 	CreatedAt   time.Time
@@ -73,7 +72,7 @@ type AcademicPeriod struct {
 	EndsAt      time.Time
 }
 
-// NewAcademicPeriod constructs a period with application-supplied identity and clock.
+// NewAcademicPeriod builds a period at revision 1 and validates it.
 func NewAcademicPeriod(
 	id AcademicPeriodID,
 	owner AcademicPeriodOwner,
@@ -100,7 +99,8 @@ func NewAcademicPeriod(
 	return period, nil
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
+// PrepareCreate stamps the ID and creation time, clears archive state and
+// normalizes UTC times and names; it does nothing on nil.
 func (ap *AcademicPeriod) PrepareCreate(id AcademicPeriodID, at time.Time) {
 	if ap == nil {
 		return
@@ -118,7 +118,7 @@ func (ap *AcademicPeriod) PrepareCreate(id AcademicPeriodID, at time.Time) {
 	sanitizeNamed(&ap.Name, &ap.DisplayName, &ap.Description)
 }
 
-// PrepareUpdate applies the application-selected transition time.
+// PrepareUpdate stamps the update time and bumps the revision.
 func (ap *AcademicPeriod) PrepareUpdate(at time.Time) {
 	if ap == nil {
 		return
@@ -133,7 +133,7 @@ func (ap *AcademicPeriod) PrepareUpdate(at time.Time) {
 	sanitizeNamed(&ap.Name, &ap.DisplayName, &ap.Description)
 }
 
-// Archive marks the period archived.
+// Archive sets ArchivedAt and bumps the revision; archiving twice fails.
 func (ap *AcademicPeriod) Archive(at time.Time) error {
 	if ap == nil {
 		return invalidModelError("AcademicPeriod.Archive", "academic_period", "", "academic period is nil", "")
@@ -151,12 +151,12 @@ func (ap *AcademicPeriod) Archive(at time.Time) error {
 	return ap.Validate()
 }
 
-// IsArchived reports whether the period is archived.
+// IsArchived reports whether ArchivedAt is set; a nil period is not archived.
 func (ap *AcademicPeriod) IsArchived() bool {
 	return ap != nil && ap.ArchivedAt.Valid
 }
 
-// Validate checks rehydrated academic-period state.
+// Validate checks the period's fields, for new and stored values alike.
 func (ap *AcademicPeriod) Validate() error {
 	const where = "AcademicPeriod.Validate"
 	if ap == nil {
@@ -195,7 +195,7 @@ func (ap *AcademicPeriod) Validate() error {
 	return validateNamed(where, "academic_period", ap.ID.String(), ap.Name, ap.DisplayName, ap.Description)
 }
 
-// Auditable returns a deliberately safe audit projection.
+// Auditable returns the fields that are safe to record in the audit log.
 func (ap *AcademicPeriod) Auditable() map[string]any {
 	if ap == nil {
 		return map[string]any{}
@@ -215,7 +215,7 @@ func (ap *AcademicPeriod) Auditable() map[string]any {
 	}
 }
 
-// ResourceID returns the string form used by authorization Resource contracts.
+// ResourceID returns the ID in the form authorization resources use.
 func (ap *AcademicPeriod) ResourceID() string {
 	if ap == nil {
 		return ""

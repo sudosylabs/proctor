@@ -15,18 +15,14 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// settledEvent tells every node that the owner of an Attempt's environment
-// completed a settle, so a seal waiting on another node stops waiting. It
-// carries only the Attempt ID; a lost message costs the waiter its budget,
-// and the Store records no gap for a settle that completed.
+// settledEvent tells every node that an owner completed a settle, so a seal
+// waiting on another node stops waiting.
 const settledEvent cluster.Event = "exam.attempt.environment.settled"
 
-// ClusterSettles carries completed settles across the cluster: the owner's
-// node signals its own waiters and broadcasts to its peers, which signal
-// theirs. It never blocks the owner and never fails it. A waiter holds at
-// most one signal, and a lost one costs the waiter its budget, never a false
-// gap, because the gap is recorded only for a settle the row still has
-// pending.
+// ClusterSettles carries completed settles across the cluster without ever
+// blocking or failing the owner. A waiter holds at most one pending signal. A
+// lost signal costs the waiter its budget, never a false gap, because the gap
+// is recorded only for a settle the row still has pending.
 type ClusterSettles struct {
 	*attemptBroadcast
 

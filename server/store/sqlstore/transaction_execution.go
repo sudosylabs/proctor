@@ -31,10 +31,9 @@ func rawSQLTransactionPolicy[T any](commit bool, commitError func(T, error) erro
 	}
 }
 
-// runSQLTransaction owns the ordinary transaction lifecycle inside the
-// PostgreSQL adapter. Operation bodies retain domain locks, queries, error
-// translation, and result construction; application code never receives this
-// generic transaction mechanism.
+// runSQLTransaction owns the ordinary transaction lifecycle; operation bodies
+// keep their own locks, queries and error translation, and application code
+// never receives the transaction.
 func runSQLTransaction[Tx transactionFinalizer, T any](
 	ctx context.Context,
 	begin func(context.Context) (Tx, error),

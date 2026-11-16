@@ -53,7 +53,7 @@ const (
 	JobTypeOnboardingImportParse         JobType = "onboarding_import.parse"
 	JobTypeOnboardingImportExecute       JobType = "onboarding_import.execute"
 	JobTypeStudentProgressionPreview     JobType = "student_progression.preview"
-	// JobTypeAcademicAdministrationPreviewResolve resolves the Users an
+	// JobTypeAcademicAdministrationPreviewResolve resolves the users an
 	// academic administration filter matches into a frozen preview.
 	JobTypeAcademicAdministrationPreviewResolve JobType = "academic_administration_preview.resolve"
 	// JobTypeDomainEventDispatch delivers one committed domain event from the
@@ -74,8 +74,8 @@ const (
 	JobAttemptStatusLeaseExpired JobAttemptStatus = "lease_expired"
 	JobAttemptStatusIncompatible JobAttemptStatus = "incompatible"
 
-	// JobDedupeActive permits a new logical occurrence after the prior Job is
-	// terminal. JobDedupePermanent reserves the key across every lifecycle state.
+	// JobDedupeActive allows a new occurrence once the prior job is final.
+	// JobDedupePermanent reserves the key in every state.
 	JobDedupeActive    JobDedupePolicy = "active"
 	JobDedupePermanent JobDedupePolicy = "permanent"
 )
@@ -106,8 +106,8 @@ type Job struct {
 	WorkReserved    int
 	Progress        *JobProgress
 	Revision        int64
-	// CreatedByUserID names the operator whose request started the Job; it is
-	// zero for recurring and system work.
+	// CreatedByUserID is the operator whose request started the job; zero for
+	// recurring and system work.
 	CreatedByUserID UserID
 }
 
@@ -283,9 +283,9 @@ func (j *Job) Retry(publicErrorCode string, availableAt, at time.Time) (*Job, er
 	return &result, result.Validate()
 }
 
-// Relinquish requeues a command that this node cannot execute and restores the
-// consumed claim slot. Attempt history still records the incompatible worker,
-// while the finite failure budget remains available to capable workers.
+// Relinquish requeues a command this node cannot run and gives back the claim.
+// The attempt history still records the incompatible worker, but the failure
+// budget stays available to capable workers.
 func (j *Job) Relinquish(publicErrorCode string, availableAt, at time.Time) (*Job, error) {
 	if j == nil ||
 		j.Status != JobStatusRunning ||
@@ -342,8 +342,8 @@ func (j *Job) Cancel(publicErrorCode string, at time.Time) (*Job, error) {
 	return &result, result.Validate()
 }
 
-// RequestCancellation immediately cancels queued work and durably marks
-// running work for cooperative cancellation by its fenced worker.
+// RequestCancellation cancels queued work at once and marks running work for
+// cooperative cancellation by its fenced worker.
 func (j *Job) RequestCancellation(at time.Time) (*Job, error) {
 	if j == nil || (j.Status != JobStatusQueued && j.Status != JobStatusRunning) || TimeUTC(at).Before(j.UpdatedAt) {
 		return nil, invalidModelError("Job.RequestCancellation", "job", "", "job cancellation cannot be requested", "")
@@ -358,8 +358,8 @@ func (j *Job) RequestCancellation(at time.Time) (*Job, error) {
 	return &result, result.Validate()
 }
 
-// ExplicitRetry requeues a failed Job without altering its prior Attempts. One
-// additional claim is admitted; policy decides which terminal Jobs may call it.
+// ExplicitRetry requeues a failed job without altering its prior attempts and
+// allows one more claim. Policy decides which final jobs may be retried.
 func (j *Job) ExplicitRetry(at time.Time) (*Job, error) {
 	if j == nil || (j.Status != JobStatusFailed && j.Status != JobStatusCanceled) || TimeUTC(at).Before(j.UpdatedAt) {
 		return nil, invalidModelError("Job.ExplicitRetry", "job", "", "job cannot be explicitly retried", "")
@@ -476,7 +476,7 @@ func (t JobClaimToken) IsValid() bool {
 var jobSafeCode = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,127}$`)
 var jobSafeStage = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,63}$`)
 
-// jobTypes is the closed Job type vocabulary in declaration order.
+// jobTypes is in declaration order.
 var jobTypes = []JobType{
 	JobTypeProfilePictureGenerateDefault,
 	JobTypeProfilePictureReconcile,
@@ -508,7 +508,7 @@ var jobTypes = []JobType{
 	JobTypeDomainEventDispatch,
 }
 
-// jobStatuses is the closed Job status vocabulary in lifecycle order.
+// jobStatuses is in lifecycle order.
 var jobStatuses = []JobStatus{
 	JobStatusQueued,
 	JobStatusRunning,
@@ -518,17 +518,17 @@ var jobStatuses = []JobStatus{
 	JobStatusCanceled,
 }
 
-// JobTypes returns every Job type, including those no operator surface
-// shows. Host inspection lists across all of them.
+// JobTypes returns every job type, including those no operator surface shows,
+// for host inspection.
 func JobTypes() []JobType { return slices.Clone(jobTypes) }
 
-// JobStatuses returns every Job status in lifecycle order.
+// JobStatuses returns every job status in lifecycle order.
 func JobStatuses() []JobStatus { return slices.Clone(jobStatuses) }
 
-// IsValid reports whether t is a known Job type.
+// IsValid reports whether t is a known job type.
 func (t JobType) IsValid() bool { return slices.Contains(jobTypes, t) }
 
-// IsValid reports whether s is a known Job status.
+// IsValid reports whether s is a known job status.
 func (s JobStatus) IsValid() bool { return slices.Contains(jobStatuses, s) }
 
 func validJobAttemptStatus(value JobAttemptStatus) bool {

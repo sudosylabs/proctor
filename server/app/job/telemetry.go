@@ -15,17 +15,17 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// Recorder observes bounded Job runtime facts and never receives commands,
-// results, errors, claims, identifiers, or actor data.
+// Recorder observes bounded runtime facts and never receives commands,
+// results, errors, claims, identifiers or actor data.
 type Recorder interface {
 	Started(model.JobType)
 	Finished(model.JobType, ExecutionOutcome, time.Duration)
 	Record(Activity)
 }
 
-// Activity is a bounded operational fact emitted by the Job runtime. Name is
-// either a registered Job type, recurrence, or periodic-task name; Operation
-// and Outcome are selected only by this package.
+// Activity is a bounded runtime fact. Name is a registered job type,
+// recurrence or periodic-task name; Operation and Outcome come only from this
+// package.
 type Activity struct {
 	Kind         string
 	Name         string
@@ -35,15 +35,15 @@ type Activity struct {
 	QueueLatency time.Duration
 }
 
-// Tracer encloses one claimed Job execution in a span. It receives only the
-// registered Job type; the returned context carries the span to the handler
-// and its store calls, and finish receives the closed execution outcome.
+// Tracer encloses one claimed execution in a span. It receives only the job
+// type; the returned context carries the span to the handler, and finish
+// receives the execution outcome.
 type Tracer interface {
 	StartExecution(ctx context.Context, jobType model.JobType) (spanCtx context.Context, finish func(ExecutionOutcome))
 }
 
-// ExecutionOutcome is the closed telemetry vocabulary for one claimed Job
-// execution. It includes runtime terminal states that are not handler outcomes.
+// ExecutionOutcome is the closed outcome vocabulary of one claimed execution,
+// including runtime terminal states that are not handler outcomes.
 type ExecutionOutcome string
 
 // The execution outcomes a Recorder and a Tracer receive. The first five
@@ -77,8 +77,8 @@ func executionOutcomeFromHandler(outcome OutcomeKind) ExecutionOutcome {
 	}
 }
 
-// trace starts the execution span when a Tracer is configured. The returned
-// finish must be called exactly once with the execution's final outcome.
+// trace returns a finish that must be called exactly once with the
+// execution's final outcome.
 func (r *Engine) trace(ctx context.Context, jobType model.JobType) (context.Context, func(ExecutionOutcome)) {
 	if r.deps.Tracer == nil {
 		return ctx, func(ExecutionOutcome) {}

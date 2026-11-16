@@ -19,36 +19,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// authenticationAccessPolicy is the consumer-owned view of current access
-// policy needed by authentication entry points. Terminal persistence
-// operations independently recheck the authoritative policy in their
-// transaction.
-type authenticationAccessPolicy interface {
-	roleHolderMFARequirement
-	sessionLengthPolicy
-	AllowsLocalLogin(context.Context) (bool, error)
-	ExternalProviderAdmission(context.Context, string) (externalProviderAdmissionPolicy, error)
-	AvailableExternalProviders(context.Context, []model.ExternalAuthenticationProvider) ([]model.ExternalAuthenticationProvider, error)
-	// AllowsDesktopAuthorization reports whether Desktop authorization may use
-	// the password, or the provider protocol type and identifier.
-	AllowsDesktopAuthorization(context.Context, string, string) (bool, error)
-}
-
-// roleHolderMFARequirement answers whether the current Access Policy requires the
-// User to use two-step verification because the User is a role holder: the User holds
-// a current Role Binding at any scope. Every sign-in, refresh and Desktop
-// handoff that would otherwise grant single-factor authority asks it.
-type roleHolderMFARequirement interface {
-	RequiresMFA(context.Context, model.UserID) (bool, error)
-}
-
-// sessionLengthPolicy applies the Access Policy Session lengths to the
-// deployment lifetimes: a set length shortens its default, never lengthens it.
-// Session creation, activity, refresh and the Desktop exchange ask it.
-type sessionLengthPolicy interface {
-	SessionLifetimes(context.Context, SessionPolicy) (sessionLifetimes, error)
-}
-
 // sessionLifetimes are the effective idle and absolute lengths a Session gets
 // now.
 type sessionLifetimes struct {
@@ -87,6 +57,10 @@ type currentAuthenticationAccessPolicyDependencies struct {
 	Now         func() time.Time
 }
 
+// currentAuthenticationAccessPolicy answers the authentication entry points
+// from the current Access Policy. The answers only gate the entry point: each
+// terminal persistence operation rechecks the authoritative policy in its own
+// transaction.
 type currentAuthenticationAccessPolicy struct {
 	deps currentAuthenticationAccessPolicyDependencies
 	// pausedWarning reports the paused role holder requirement once per
@@ -135,6 +109,8 @@ func (p *currentAuthenticationAccessPolicy) ExternalProviderAdmission(
 	}, nil
 }
 
+// AllowsDesktopAuthorization reports whether Desktop authorization may use
+// the password, or the provider protocol type and identifier.
 func (p *currentAuthenticationAccessPolicy) AllowsDesktopAuthorization(ctx context.Context, method, providerID string) (bool, error) {
 	policy, err := p.current(ctx)
 	if err != nil || !policy.DesktopAuthorizationEnabled {
@@ -167,12 +143,15 @@ func (p *currentAuthenticationAccessPolicy) AvailableExternalProviders(
 	return available, nil
 }
 
-// RequiresMFA reads the authoritative policy and Role Bindings on every call;
-// nothing is cached, so a newly granted role or a policy change applies to the
-// next sign-in or refresh. While the deployment disables two-step
-// verification the requirement pauses: nobody could satisfy it, and
-// restricting every role holder would leave no administrator able to change
-// the policy.
+// RequiresMFA reports whether the policy requires the User to use two-step
+// verification because they hold a current Role Binding at any scope. Every
+// sign-in, refresh and Desktop handoff that would otherwise grant
+// single-factor authority asks it. It reads the authoritative policy and Role
+// Bindings on every call; nothing is cached, so a newly granted role or a
+// policy change applies to the next sign-in or refresh. While the deployment
+// disables two-step verification the requirement pauses: nobody could satisfy
+// it, and restricting every role holder would leave no administrator able to
+// change the policy.
 func (p *currentAuthenticationAccessPolicy) RequiresMFA(ctx context.Context, userID model.UserID) (bool, error) {
 	if !p.deps.MFAEnabled {
 		policy, err := p.current(ctx)
@@ -198,7 +177,9 @@ func (p *currentAuthenticationAccessPolicy) RequiresMFA(ctx context.Context, use
 	return p.deps.Policies.HasRoleHolderMFARequirement(ctx, userID, model.TimeUTC(p.deps.Now()))
 }
 
-// SessionLifetimes reads the current policy on every call. Activity reaches
+// SessionLifetimes applies the policy's Session lengths to the deployment
+// lifetimes: a set length shortens its default, never lengthens it. It reads
+// the current policy on every call. Activity reaches
 // it only after the activity debounce, so the read stays bounded.
 func (p *currentAuthenticationAccessPolicy) SessionLifetimes(ctx context.Context, defaults SessionPolicy) (sessionLifetimes, error) {
 	policy, err := p.current(ctx)
@@ -237,6 +218,8 @@ type AccessPolicyCapabilitySnapshot struct {
 }
 
 // AccessPolicyCapabilitySource reports the deployment's current capabilities.
+// Administration reads them through it; identity holds DeploymentCapabilities
+// itself.
 type AccessPolicyCapabilitySource interface {
 	Snapshot() AccessPolicyCapabilitySnapshot
 }

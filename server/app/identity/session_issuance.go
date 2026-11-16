@@ -92,9 +92,6 @@ func (s *Service) requireSessionAuthentication() error {
 	if s.publisher == nil {
 		return errors.New("authentication security effects are required")
 	}
-	if s.auditor == nil {
-		return errors.New("authentication audit is required")
-	}
 	if s.hasher == nil {
 		return errors.New("password hasher is required")
 	}

@@ -627,10 +627,10 @@ func newTestAuthenticationServiceWithEffects(
 		users: persistence.User(), passwords: persistence.PasswordCredential(),
 		sessions: persistence.Session(), sessionCredentials: persistence.SessionCredential(),
 		desktopRegistrations: authenticationDesktopRegistrationLookupFake{}, personalAccessTokens: personalTokens,
-		accessPolicy: allowAllAuthenticationAccessPolicy(), dpop: testAuthenticationDPoP(t, cache), cache: cache,
+		accessPolicy: allowAllAuthenticationAccessPolicy(t), dpop: testAuthenticationDPoP(t, cache), cache: cache,
 		attempts: mustAuthenticationAttemptAccounting(t, cache), hasher: hasher,
-		auditor:       &mutationAttemptAuditorFake{events: &[]string{}, beginID: model.NewID()},
-		securityAudit: &securityAuditorFake{}, publisher: effects, mfaCredentials: mfaCredentials, mfa: mustTestMFAMechanics(t), diagnostics: newDiscardLogger(t),
+		auditor:       grantedAccess(t, nil).Auditor.MutationAudit(),
+		securityAudit: newSecurityAuditLog(t, nil).auditor, publisher: effects, mfaCredentials: mfaCredentials, mfa: mustTestMFAMechanics(t), diagnostics: newDiscardLogger(t),
 		sessionPolicy: SessionPolicy{
 			AccessTTL:              time.Hour,
 			RefreshTTL:             24 * time.Hour,

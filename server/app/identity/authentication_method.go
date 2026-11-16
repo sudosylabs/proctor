@@ -52,7 +52,6 @@ func (s *Service) requireAuthenticationMethods() error {
 		s.externalProviders == nil ||
 		s.capabilities == nil ||
 		s.hasher == nil ||
-		s.auditor == nil ||
 		s.publisher == nil ||
 		s.recentAuthenticationTTL <= 0 ||
 		s.now == nil {

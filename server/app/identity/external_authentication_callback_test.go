@@ -36,9 +36,9 @@ func TestOrdinaryExternalAuthenticationDoesNotPrepareProvisioningOutsideAutoProv
 			provider := admissionModeProvider{providerConnectionProvider: providerConnectionProvider{
 				state: stateToken, assertion: &model.ExternalAuthenticationAssertion{ProviderID: "campus", Subject: "opaque-subject",
 					Username: "eligible-user", Email: "eligible@example.edu"}}, autoProvision: true}
-			service := &Service{externalProviders: externalProviderSourceFake{provider: provider}, externalLoginStates: &externalLoginStateStoreFake{get: state, consumeResult: state, storeNow: databaseNow}, institutions: providerConnectionInstitutionStoreFake{institution: institution}, externalIdentities: identities, accessPolicy: authenticationAccessPolicyFake{providers: map[string]bool{"campus": true},
-				providerModes: map[string]model.ProviderAdmissionMode{"campus": mode}}, securityAudit: &securityAuditorFake{}, capabilities: &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{
-				Providers: []AccessPolicyProviderCapability{{Descriptor: provider.Descriptor(), AutoProvision: true}}}}, externalAuthenticationPolicy: ExternalAuthenticationPolicy{PublicURL: "https://proctor.example.test"}, now: func() time.Time { return databaseNow }}
+			service := &Service{externalProviders: externalProviderSourceFake{provider: provider}, externalLoginStates: &externalLoginStateStoreFake{get: state, consumeResult: state, storeNow: databaseNow}, institutions: providerConnectionInstitutionStoreFake{institution: institution}, externalIdentities: identities, accessPolicy: accessPolicyTerms{providers: map[string]bool{"campus": true},
+				providerModes: map[string]model.ProviderAdmissionMode{"campus": mode}}.reader(t), securityAudit: newSecurityAuditLog(t, nil).auditor, capabilities: deploymentCapabilities(AccessPolicyCapabilitySnapshot{
+				Providers: []AccessPolicyProviderCapability{{Descriptor: provider.Descriptor(), AutoProvision: true}}}), externalAuthenticationPolicy: ExternalAuthenticationPolicy{PublicURL: "https://proctor.example.test"}, now: func() time.Time { return databaseNow }}
 
 			_, err = service.completeExternalCallback(context.Background(), "campus", bindingToken, model.ExternalAuthenticationCallback{}, model.RequestMetadata{})
 			require.True(t, apperror.Is(err, "authentication.external.account_not_linked"), "completion error = %v", err)
@@ -74,9 +74,9 @@ func TestInvitationAdmissionDelegatesExactProofWithoutCreatingOrdinarySession(t 
 	provider := admissionModeProvider{providerConnectionProvider: providerConnectionProvider{state: stateToken,
 		assertion: &model.ExternalAuthenticationAssertion{ProviderID: "campus", Subject: "opaque-subject",
 			Username: "invited-user", Email: " Invited@Example.EDU ", EmailVerified: true}}, autoProvision: false}
-	service := &Service{externalProviders: externalProviderSourceFake{provider: provider}, externalLoginStates: &externalLoginStateStoreFake{get: state, consumeResult: state, storeNow: databaseNow}, institutions: providerConnectionInstitutionStoreFake{institution: institution}, externalIdentities: identities, invitations: acceptor, accessPolicy: authenticationAccessPolicyFake{providers: map[string]bool{"campus": true},
-		providerModes: map[string]model.ProviderAdmissionMode{"campus": model.ProviderAdmissionInvitationRequired}}, securityAudit: &securityAuditorFake{}, capabilities: &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{
-		Providers: []AccessPolicyProviderCapability{{Descriptor: provider.Descriptor()}}}}, externalAuthenticationPolicy: ExternalAuthenticationPolicy{PublicURL: "https://proctor.example.test", NodeID: "node-a"}, now: func() time.Time { return databaseNow }}
+	service := &Service{externalProviders: externalProviderSourceFake{provider: provider}, externalLoginStates: &externalLoginStateStoreFake{get: state, consumeResult: state, storeNow: databaseNow}, institutions: providerConnectionInstitutionStoreFake{institution: institution}, externalIdentities: identities, invitations: acceptor, accessPolicy: accessPolicyTerms{providers: map[string]bool{"campus": true},
+		providerModes: map[string]model.ProviderAdmissionMode{"campus": model.ProviderAdmissionInvitationRequired}}.reader(t), securityAudit: newSecurityAuditLog(t, nil).auditor, capabilities: deploymentCapabilities(AccessPolicyCapabilitySnapshot{
+		Providers: []AccessPolicyProviderCapability{{Descriptor: provider.Descriptor()}}}), externalAuthenticationPolicy: ExternalAuthenticationPolicy{PublicURL: "https://proctor.example.test", NodeID: "node-a"}, now: func() time.Time { return databaseNow }}
 
 	result, err := service.completeExternalCallback(context.Background(), "campus", bindingToken, model.ExternalAuthenticationCallback{}, model.RequestMetadata{})
 	require.NoError(t, err, "completion result")
@@ -97,11 +97,11 @@ func TestInvitationAdmissionDelegatesExactProofWithoutCreatingOrdinarySession(t 
 	secondState.ConsumedAt = model.OptionalTime{}
 	secondProvider := provider
 	secondProvider.state = secondStateToken
-	audit := &securityAuditorFake{}
+	audit := newSecurityAuditLog(t, nil)
 	acceptor.result, acceptor.err, acceptor.state = nil, store.ErrAuthenticationMethodDisabled, nil
 	service.externalProviders = externalProviderSourceFake{provider: secondProvider}
 	service.externalLoginStates = &externalLoginStateStoreFake{get: &secondState, consumeResult: &secondState, storeNow: databaseNow}
-	service.securityAudit = audit
+	service.securityAudit = audit.auditor
 	result, err = service.completeExternalCallback(context.Background(), "campus", secondBindingToken, model.ExternalAuthenticationCallback{}, model.RequestMetadata{})
 	failureCodes := audit.externalFailureCodes()
 	require.Nil(t, result, "terminal provider removal result=%#v error=%v failure_audits=%v", result, err, failureCodes)
@@ -127,7 +127,7 @@ func TestInvitationAdmissionCallbackRejectsWhenGloballyDisabledAfterStart(t *tes
 	}
 	identities := &externalIdentityResolutionStoreFake{}
 	acceptor := &externalInvitationAcceptorFake{}
-	audit := &securityAuditorFake{}
+	audit := newSecurityAuditLog(t, nil)
 	institution, err := model.NewInstitution(model.NewInstitutionID(), "northbridge", "Northbridge", "", databaseNow)
 	require.NoError(t, err)
 	provider := admissionModeProvider{providerConnectionProvider: providerConnectionProvider{
@@ -137,13 +137,13 @@ func TestInvitationAdmissionCallbackRejectsWhenGloballyDisabledAfterStart(t *tes
 			Email: "invited@example.edu", EmailVerified: true,
 		},
 	}}
-	service := &Service{externalProviders: externalProviderSourceFake{provider: provider}, externalLoginStates: &externalLoginStateStoreFake{get: state, consumeResult: state, storeNow: databaseNow}, institutions: providerConnectionInstitutionStoreFake{institution: institution}, externalIdentities: identities, invitations: acceptor, accessPolicy: authenticationAccessPolicyFake{
+	service := &Service{externalProviders: externalProviderSourceFake{provider: provider}, externalLoginStates: &externalLoginStateStoreFake{get: state, consumeResult: state, storeNow: databaseNow}, institutions: providerConnectionInstitutionStoreFake{institution: institution}, externalIdentities: identities, invitations: acceptor, accessPolicy: accessPolicyTerms{
 		providers:                   map[string]bool{"campus": true},
 		providerModes:               map[string]model.ProviderAdmissionMode{"campus": model.ProviderAdmissionInvitationRequired},
 		invitationAdmissionDisabled: true,
-	}, securityAudit: audit, capabilities: &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{
+	}.reader(t), securityAudit: audit.auditor, capabilities: deploymentCapabilities(AccessPolicyCapabilitySnapshot{
 		Providers: []AccessPolicyProviderCapability{{Descriptor: provider.Descriptor()}},
-	}}, externalAuthenticationPolicy: ExternalAuthenticationPolicy{PublicURL: "https://proctor.example.test", NodeID: "node-b"}, now: func() time.Time { return databaseNow }}
+	}), externalAuthenticationPolicy: ExternalAuthenticationPolicy{PublicURL: "https://proctor.example.test", NodeID: "node-b"}, now: func() time.Time { return databaseNow }}
 
 	result, err := service.completeExternalCallback(context.Background(), "campus", bindingToken, model.ExternalAuthenticationCallback{}, model.RequestMetadata{})
 	require.Nil(t, result, "result=%#v err=%v", result, err)
@@ -166,7 +166,7 @@ func TestExternalAuthenticationCallbackRejectsLegacyDesktopStateBeforeConsumptio
 		Provider: "campus", StateHash: model.HashToken(stateToken), BindingHash: model.HashToken(bindingToken),
 		ReturnTo: "/", ClientType: model.SessionClientDesktop, ExpiresAt: time.Now().Add(time.Minute),
 	}}
-	service := &Service{externalProviders: externalProviderSourceFake{provider: desktopCallbackExternalProvider{state: stateToken}}, externalLoginStates: states, accessPolicy: allowAllAuthenticationAccessPolicy(), now: time.Now}
+	service := &Service{externalProviders: externalProviderSourceFake{provider: desktopCallbackExternalProvider{state: stateToken}}, externalLoginStates: states, accessPolicy: allowAllAuthenticationAccessPolicy(t), now: time.Now}
 	result, err := service.completeExternalCallback(context.Background(), "campus", bindingToken,
 		model.ExternalAuthenticationCallback{Values: map[string][]string{"code": {"accepted"}}}, model.RequestMetadata{})
 	require.Nil(t, result, "legacy desktop callback result=%#v err=%v", result, err)

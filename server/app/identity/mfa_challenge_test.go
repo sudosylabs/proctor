@@ -40,7 +40,7 @@ func TestMFAChallengeRejectsReplayedRecoveryCodeAndPreservesEffectOrdering(t *te
 		},
 		hashes: []string{"access-hash"},
 	}
-	audit := &securityAuditorFake{trace: &events}
+	audit := newSecurityAuditLog(t, &events)
 	effects := revocationsIn(&events, "effects")
 	service := newTestMFAApplicationService(t, persistence, audit, effects, now)
 	application := service
@@ -64,8 +64,8 @@ func TestMFAChallengeRejectsReplayedRecoveryCodeAndPreservesEffectOrdering(t *te
 	}}, effects.Calls())
 	// Self-service MFA is audited against the Institution with the acting
 	// User as its subject.
-	require.Len(t, audit.events, 2)
-	for _, record := range audit.events {
+	require.Len(t, audit.events(), 2)
+	for _, record := range audit.events() {
 		require.Equal(t, principal.UserID, record.actor)
 		require.Equal(t, principal.SessionID, record.sessionID)
 		require.Equal(t, principal.UserID, record.target, "self-service MFA subject")
@@ -73,8 +73,8 @@ func TestMFAChallengeRejectsReplayedRecoveryCodeAndPreservesEffectOrdering(t *te
 		require.Equal(t, model.ResourceInstitution, record.resource.Type)
 		require.Equal(t, "request-a", record.metadata.RequestID)
 	}
-	require.Len(t, audit.terminal, 1, "the replay's failure is the only outcome the Service records")
-	require.Equal(t, "authentication.mfa.code_invalid", audit.terminal[0].errorCode)
+	require.Len(t, audit.terminal(), 1, "the replay's failure is the only outcome the Service records")
+	require.Equal(t, "authentication.mfa.code_invalid", audit.terminal()[0].errorCode)
 }
 
 func TestMFARecoveryCodeLoginConsumptionIsSerialized(t *testing.T) {
@@ -89,7 +89,7 @@ func TestMFARecoveryCodeLoginConsumptionIsSerialized(t *testing.T) {
 		},
 	}
 	service := newTestMFAApplicationService(
-		t, persistence, &securityAuditorFake{}, &realtimetest.Publisher{}, now,
+		t, persistence, newSecurityAuditLog(t, nil), &realtimetest.Publisher{}, now,
 	)
 	const contenders = 8
 	start := make(chan struct{})

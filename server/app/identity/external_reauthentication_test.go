@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -71,9 +72,8 @@ func TestExternalReauthenticationBindsOriginalSessionAndClosedTask(t *testing.T)
 			provider := &freshExternalProviderFake{}
 			service := externalAuthenticationBeginService(t, externalProviderSourceFake{provider: provider}, newAuthenticationCacheFake(), 10)
 			states := &externalLoginStateStoreFake{storeNow: now}
-			events := []string{}
-			audit := &mutationAttemptAuditorFake{events: &events, beginID: model.NewAuditEventID().String()}
-			service.externalLoginStates, service.auditor = states, audit
+			audits := grantedAccess(t, nil)
+			service.externalLoginStates, service.auditor = states, audits.Auditor.MutationAudit()
 			result, err := service.BeginExternalReauthentication(context.Background(), invocation.New(principal, model.RequestMetadata{}), BeginExternalReauthenticationCommand{Task: test.task, Source: "192.0.2.30"})
 			if test.want == "" {
 				require.Error(t, err, "unbounded continuation reached provider or Store")
@@ -93,7 +93,9 @@ func TestExternalReauthenticationBindsOriginalSessionAndClosedTask(t *testing.T)
 			require.Equal(t, principal.SessionID, bound.SessionID, "missing exact fresh-proof binding: %#v %#v", bound, provider.beginRequest)
 			require.Equal(t, principal.CredentialID.String(), bound.SessionCredentialID.String(), "missing exact fresh-proof binding: %#v %#v", bound, provider.beginRequest)
 			require.Equal(t, principal.ExternalIdentityID, bound.ExternalIdentityID, "missing exact fresh-proof binding: %#v %#v", bound, provider.beginRequest)
-			require.Equal(t, audit.beginID, bound.AuditEventID, "missing exact fresh-proof binding: %#v %#v", bound, provider.beginRequest)
+			attempts := recordedAttempts(t, audits)
+			require.Len(t, attempts, 1, "missing exact fresh-proof binding: %#v %#v", bound, provider.beginRequest)
+			require.Equal(t, attempts[0].ID.String(), bound.AuditEventID, "missing exact fresh-proof binding: %#v %#v", bound, provider.beginRequest)
 		})
 	}
 }
@@ -115,7 +117,17 @@ func TestExternalReauthenticationCallbackUsesBoundProofAndSafeFailureContinuatio
 		t.Run(test.name, func(t *testing.T) {
 			now := model.NowUTC()
 			stateToken, binding := model.NewCredentialToken(), model.NewCredentialToken()
-			state := &model.ExternalLoginState{Provider: "campus", Purpose: model.ExternalAuthenticationPurposeReauthenticate, TargetUserID: model.NewUserID(), SessionID: model.NewSessionID(), SessionCredentialID: model.NewSessionCredentialID(), ExternalIdentityID: model.NewExternalIdentityID(), AuditEventID: model.NewAuditEventID().String(), StateHash: model.HashToken(stateToken), BindingHash: model.HashToken(binding), ReturnTo: "/account/connect-provider", ClientType: model.SessionClientWeb, ExpiresAt: now.Add(time.Minute)}
+			// The reauthentication attempt is begun when the flow starts, as
+			// BeginExternalReauthentication does, so the callback ends a real one.
+			audits := grantedAccess(t, nil)
+			target := userSettingsSessionPrincipal(now)
+			begun, err := audits.Auditor.MutationAudit().Begin(context.Background(), access.Mutation{
+				Invocation: invocation.New(target, model.RequestMetadata{}), Action: model.ActionAuthenticationReauthenticate,
+				Resource:  model.Resource{Type: model.ResourceUser, ID: target.UserID.String()},
+				Operation: "external", Value: map[string]any{"session_id": target.SessionID.String(), "provider": "campus"},
+			})
+			require.NoError(t, err)
+			state := &model.ExternalLoginState{Provider: "campus", Purpose: model.ExternalAuthenticationPurposeReauthenticate, TargetUserID: target.UserID, SessionID: target.SessionID, SessionCredentialID: model.NewSessionCredentialID(), ExternalIdentityID: model.NewExternalIdentityID(), AuditEventID: begun.String(), StateHash: model.HashToken(stateToken), BindingHash: model.HashToken(binding), ReturnTo: "/account/connect-provider", ClientType: model.SessionClientWeb, ExpiresAt: now.Add(time.Minute)}
 			state.PrepareCreate(model.NewExternalLoginStateID(), now.Add(-time.Second))
 			provider := &freshExternalProviderFake{providerConnectionProvider: providerConnectionProvider{state: stateToken, completeErr: test.providerErr, assertion: &model.ExternalAuthenticationAssertion{ProviderID: "campus", Subject: "private-subject", AuthenticatedAt: now.Add(test.offset).UnixMilli()}}}
 			service := externalAuthenticationBeginService(t, externalProviderSourceFake{provider: provider}, newAuthenticationCacheFake(), 10)
@@ -123,12 +135,10 @@ func TestExternalReauthenticationCallbackUsesBoundProofAndSafeFailureContinuatio
 			states := &externalLoginStateStoreFake{get: state, consumeResult: state, storeNow: now}
 			institution, err := model.NewInstitution(model.NewInstitutionID(), "fresh-proof", "Fresh Proof", "", now)
 			require.NoError(t, err)
-			events := []string{}
-			auditor := &mutationAttemptAuditorFake{events: &events}
 			committed := &model.Session{ID: state.SessionID, UserID: state.TargetUserID}
 			sessions := &freshExternalSessionStoreFake{result: &store.SessionReauthenticationResult{Session: committed}, err: test.commitErr}
 			service.externalLoginStates, service.sessions = states, sessions
-			service.institutions, service.securityAudit, service.auditor, service.invalidator = providerConnectionInstitutionStoreFake{institution: institution}, &securityAuditorFake{}, auditor, externalInvalidatorFake{}
+			service.institutions, service.securityAudit, service.auditor, service.invalidator = providerConnectionInstitutionStoreFake{institution: institution}, newSecurityAuditLog(t, nil).auditor, audits.Auditor.MutationAudit(), externalInvalidatorFake{}
 			result, err := service.completeExternalCallback(context.Background(), "campus", binding, model.ExternalAuthenticationCallback{}, model.RequestMetadata{})
 			require.NoError(t, err, "completion")
 			require.NotNil(t, result, "completion")
@@ -140,7 +150,10 @@ func TestExternalReauthenticationCallbackUsesBoundProofAndSafeFailureContinuatio
 			if test.fail {
 				require.Nil(t, result.Session)
 				require.Equal(t, "/account/reauthenticate?task=connect-provider#external_login=failed", result.ReturnTo)
-				require.Equal(t, state.AuditEventID, auditor.failID)
+				attempts := recordedAttempts(t, audits)
+				require.Len(t, attempts, 1)
+				require.Equal(t, state.AuditEventID, attempts[0].ID.String())
+				require.Equal(t, model.AuditStatusFail, attempts[0].Status)
 			} else {
 				require.Same(t, committed, result.Session, "proof changed Session")
 				require.Equal(t, state.ReturnTo, result.ReturnTo, "proof changed final task")
@@ -193,11 +206,11 @@ func TestExternalRecoveryRequiresFreshExistingIdentityBeforeSessionIssuance(t *t
 			states := &externalLoginStateStoreFake{get: state, consumeResult: state, storeNow: now}
 			institution, err := model.NewInstitution(model.NewInstitutionID(), "fresh-proof", "Fresh Proof", "", now)
 			require.NoError(t, err)
-			service.externalLoginStates, service.securityAudit = states, &securityAuditorFake{}
+			service.externalLoginStates, service.securityAudit = states, newSecurityAuditLog(t, nil).auditor
 			service.mfaCredentials, service.mfa, service.sessions = recovery, mustTestMFAMechanics(t), sessions
 			service.institutions = providerConnectionInstitutionStoreFake{institution: institution}
 			service.externalIdentities = recoveryExternalIdentityFake{user: user, identity: &model.ExternalIdentity{ID: model.NewExternalIdentityID(), UserID: user.ID, Provider: "campus", Subject: "existing-identity"}}
-			service.capabilities = &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{{Descriptor: provider.Descriptor()}}}}
+			service.capabilities = deploymentCapabilities(AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{{Descriptor: provider.Descriptor()}}})
 			result, err := service.completeExternalCallback(context.Background(), "campus", binding, model.ExternalAuthenticationCallback{}, model.RequestMetadata{})
 			require.Equal(t, 1, recovery.reads, "recovery state is read once for the resolved User")
 			require.Empty(t, sessions.saves, "unverified recovery flow issued a Session")

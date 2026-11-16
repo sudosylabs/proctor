@@ -115,7 +115,6 @@ func (s *Service) requireDesktopCompatibility(builds []model.DesktopBuildTuple) 
 	if s.desktopCompatibilityPolicies == nil ||
 		s.institutions == nil ||
 		s.authorizer == nil ||
-		s.auditor == nil ||
 		s.recentAuthenticationTTL <= 0 ||
 		s.now == nil {
 		return errors.New("desktop compatibility service dependencies are invalid")

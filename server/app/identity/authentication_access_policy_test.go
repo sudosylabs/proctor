@@ -67,66 +67,73 @@ func TestCurrentAuthenticationAccessPolicyPausesRoleHolderMFAWithoutMFA(t *testi
 	}
 }
 
-type authenticationAccessPolicyFake struct {
-	local                       bool
-	providers                   map[string]bool
+// accessPolicyTerms describe the current Access Policy a test runs under;
+// reader builds the production reader over a policy Store holding them.
+type accessPolicyTerms struct {
+	local bool
+	// providers admits each listed provider with auto-provisioning.
+	providers map[string]bool
+	// providerModes admits each listed provider with its mode; it takes
+	// precedence over providers.
 	providerModes               map[string]model.ProviderAdmissionMode
 	invitationAdmissionDisabled bool
-	// desktop answers every Desktop authorization method.
+	// desktop enables Desktop authorization, for the password while local
+	// sign-in is enabled and for each admitted provider.
 	desktop bool
-	// roleHolderMFA lists the Users the policy requires to use two-step
-	// verification.
+	// roleHolderMFA lists the role holders the policy requires to use
+	// two-step verification.
 	roleHolderMFA map[model.UserID]bool
-	// lifetimes, when set, replace the deployment Session lifetimes.
+	// lifetimes, when set, are the policy's Session lengths, in whole
+	// minutes. They only ever shorten the deployment lifetimes.
 	lifetimes *sessionLifetimes
-	err       error
+	// err fails every read of the policy.
+	err error
 }
 
-func (p authenticationAccessPolicyFake) SessionLifetimes(_ context.Context, defaults SessionPolicy) (sessionLifetimes, error) {
-	if p.lifetimes != nil {
-		return *p.lifetimes, p.err
-	}
-	return sessionLifetimes{Idle: defaults.IdleTTL, Absolute: defaults.AbsoluteTTL}, p.err
-}
-
-func (p authenticationAccessPolicyFake) RequiresMFA(_ context.Context, userID model.UserID) (bool, error) {
-	return p.roleHolderMFA[userID], p.err
-}
-
-func allowAllAuthenticationAccessPolicy() authenticationAccessPolicy {
-	return authenticationAccessPolicyFake{local: true, providers: map[string]bool{"campus": true, "campus-a": true, "campus-b": true}}
-}
-
-func (p authenticationAccessPolicyFake) AllowsLocalLogin(context.Context) (bool, error) {
-	return p.local, p.err
-}
-
-func (p authenticationAccessPolicyFake) AllowsDesktopAuthorization(context.Context, string, string) (bool, error) {
-	return p.desktop, p.err
-}
-
-func (p authenticationAccessPolicyFake) ExternalProviderAdmission(_ context.Context, providerID string) (externalProviderAdmissionPolicy, error) {
-	result := externalProviderAdmissionPolicy{InvitationAdmissionEnabled: !p.invitationAdmissionDisabled}
-	if mode := p.providerModes[providerID]; mode != "" {
-		result.Mode = mode
-		return result, p.err
-	}
-	if p.providers[providerID] {
-		result.Mode = model.ProviderAdmissionAutoProvision
-		return result, p.err
-	}
-	return result, p.err
-}
-
-func (p authenticationAccessPolicyFake) AvailableExternalProviders(_ context.Context, configured []model.ExternalAuthenticationProvider) ([]model.ExternalAuthenticationProvider, error) {
-	if p.err != nil {
-		return nil, p.err
-	}
-	available := make([]model.ExternalAuthenticationProvider, 0, len(configured))
-	for _, provider := range configured {
-		if p.providers[provider.ID] {
-			available = append(available, provider)
+// reader builds the production reader. It runs with two-step verification
+// enabled, so the role holder requirement applies.
+func (p accessPolicyTerms) reader(t testing.TB) *currentAuthenticationAccessPolicy {
+	t.Helper()
+	policy := model.NewInitialAccessPolicy(model.NewAccessPolicyID(), time.UnixMilli(1_000))
+	policy.LocalLoginEnabled = p.local
+	// Invitation local credentials need local sign-in, so the policy offers
+	// them only while it is enabled.
+	policy.InvitationLocalCredentialEnabled = p.local
+	policy.InvitationAdmissionEnabled = !p.invitationAdmissionDisabled
+	policy.DesktopAuthorizationEnabled = p.desktop
+	for id, admitted := range p.providers {
+		if admitted {
+			policy.ProviderAdmissions[id] = model.ProviderAdmissionAutoProvision
 		}
 	}
-	return available, nil
+	for id, mode := range p.providerModes {
+		policy.ProviderAdmissions[id] = mode
+	}
+	policy.RoleHolderMFARequired = len(p.roleHolderMFA) > 0
+	if p.lifetimes != nil {
+		policy.SessionIdleMinutes = int(p.lifetimes.Idle / time.Minute)
+		policy.SessionAbsoluteMinutes = int(p.lifetimes.Absolute / time.Minute)
+	}
+	require.NoError(t, policy.Validate())
+	reader, err := newCurrentAuthenticationAccessPolicy(currentAuthenticationAccessPolicyDependencies{
+		Policies: &accessPolicyStoreFake{
+			snapshot: &store.AccessPolicySnapshot{Policy: policy}, getErr: p.err,
+			roleHolderMFAUsers: p.roleHolderMFA, roleHolderMFAErr: p.err,
+		},
+		MFAEnabled: true, Diagnostics: newDiscardLogger(t), Now: time.Now,
+	})
+	require.NoError(t, err)
+	return reader
+}
+
+// allowAllAccessPolicyTerms enable local sign-in and admit the test
+// providers.
+func allowAllAccessPolicyTerms() accessPolicyTerms {
+	return accessPolicyTerms{local: true, providers: map[string]bool{"campus": true, "campus-a": true, "campus-b": true}}
+}
+
+// allowAllAuthenticationAccessPolicy is the reader of allowAllAccessPolicyTerms.
+func allowAllAuthenticationAccessPolicy(t testing.TB) *currentAuthenticationAccessPolicy {
+	t.Helper()
+	return allowAllAccessPolicyTerms().reader(t)
 }

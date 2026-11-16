@@ -213,6 +213,15 @@ func (a *Audits) Attempts() []*model.AuditEvent {
 	return attempts
 }
 
+// Events returns every recorded event in the order it was saved: attempts,
+// decisions and the terminal failures an auditor records directly. An
+// attempt shows its outcome once completed.
+func (a *Audits) Events() []*model.AuditEvent {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]*model.AuditEvent(nil), a.events...)
+}
+
 // Decisions returns the recorded authorization decisions, in order.
 func (a *Audits) Decisions() []*model.AuditEvent {
 	a.mu.Lock()
@@ -267,6 +276,7 @@ func (a *Audits) Complete(_ context.Context, completion *store.AuditCompletion) 
 		if event.ID == completion.ID {
 			event.Status = completion.Status
 			event.ErrorCode = completion.ErrorCode
+			event.Result = completion.Result
 			return event, nil
 		}
 	}

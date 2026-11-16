@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -54,7 +55,7 @@ func TestPasswordReauthenticationBindsCurrentIdentityAndRequiresCommit(t *testin
 		{name: "external Session", password: "CorrectHorseBatteryStaple1!", method: "oidc", code: "authentication.reauthentication_method_required"},
 		{name: "password changed", password: "CorrectHorseBatteryStaple1!", method: "password", storeErr: store.ErrPasswordCredentialChanged, code: "authentication.credentials_invalid", commit: true},
 		{name: "Session revoked", password: "CorrectHorseBatteryStaple1!", method: "password", storeErr: store.NewErrNotFound("session", ""), code: "authentication.credentials_invalid", commit: true},
-		{name: "audit unavailable", password: "CorrectHorseBatteryStaple1!", method: "password", auditErr: apperror.New("audit.unavailable"), code: "audit.unavailable"},
+		{name: "audit unavailable", password: "CorrectHorseBatteryStaple1!", method: "password", auditErr: errors.New("audit store unavailable"), code: "audit.unavailable"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -73,7 +74,11 @@ func TestPasswordReauthenticationBindsCurrentIdentityAndRequiresCommit(t *testin
 			events := []string{}
 			fake := &reauthenticationSessionStoreFake{events: &events, result: &store.SessionReauthenticationResult{Session: session}, err: test.storeErr}
 			service.sessions = fake
-			service.auditor = &mutationAttemptAuditorFake{events: &events, beginID: model.NewID(), beginErr: test.auditErr}
+			audit := accessWith(t, &events, accesstest.Options{})
+			if test.auditErr != nil {
+				audit.Audits.FailAttempts(test.auditErr)
+			}
+			service.auditor = audit.Auditor.MutationAudit()
 			mfa := &mfaApplicationStoreFake{}
 			service.mfaCredentials = mfa
 			actual, err := service.ReauthenticatePassword(ctx, invocation.New(principal, model.RequestMetadata{}), ReauthenticatePasswordCommand{Password: test.password, Source: "192.0.2.45"})

@@ -34,9 +34,9 @@ func roleHolderMFALoginFixture(t *testing.T, covered bool) (*Service, *authentic
 		User: &model.User{Username: "role-holder-user", Email: "role-holder-user@example.edu"}, Password: roleHolderMFATestPassword,
 	})
 	require.NoError(t, err)
-	policy := allowAllAuthenticationAccessPolicy().(authenticationAccessPolicyFake)
+	policy := allowAllAccessPolicyTerms()
 	policy.roleHolderMFA = map[model.UserID]bool{user.ID: covered}
-	service.accessPolicy = policy
+	service.accessPolicy = policy.reader(t)
 	return service, persistence, user
 }
 
@@ -103,7 +103,7 @@ func TestRefreshEnforcesRoleHolderMFARequirementBySessionKind(t *testing.T) {
 			persistence.rotation = &store.SessionRotation{Session: session}
 			service := newTestAuthenticationServiceWithEffects(t, persistence, newAuthenticationCacheFake(), &realtimetest.Publisher{},
 				&mfaApplicationStoreFake{}, discardPersonalAccessTokenStore{}, model.NewCredentialToken, func() time.Time { return at })
-			service.accessPolicy = authenticationAccessPolicyFake{local: true, roleHolderMFA: map[model.UserID]bool{user.ID: test.covered}}
+			service.accessPolicy = accessPolicyTerms{local: true, roleHolderMFA: map[model.UserID]bool{user.ID: test.covered}}.reader(t)
 			_, _, err := service.RefreshSession(context.Background(), invocation.Invocation{}, RefreshSessionCommand{RefreshToken: model.NewCredentialToken()})
 			if test.wantCode != "" {
 				require.True(t, apperror.Is(err, test.wantCode), "err=%v", err)
@@ -124,7 +124,7 @@ func TestDesktopAuthorizationRefusesSingleFactorProofOfRoleHolder(t *testing.T) 
 	userID := model.NewUserID()
 	persistence := &desktopAuthorizationStoreFake{contextUserID: userID}
 	service := newTestDesktopAuthorizationService(t, persistence, func() time.Time { return at })
-	service.accessPolicy = authenticationAccessPolicyFake{local: true, desktop: true, roleHolderMFA: map[model.UserID]bool{userID: true}}
+	service.accessPolicy = accessPolicyTerms{local: true, desktop: true, roleHolderMFA: map[model.UserID]bool{userID: true}}.reader(t)
 	principal := model.Principal{UserID: userID, SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: at}
@@ -155,7 +155,7 @@ func TestDesktopExchangeCarriesRoleHolderMFARequirementToTheStore(t *testing.T) 
 	userID := model.NewUserID()
 	persistence := &desktopAuthorizationStoreFake{exchangeUserID: userID, exchangeErr: store.ErrMFAEnrollmentRequired}
 	service := newTestDesktopAuthorizationService(t, persistence, func() time.Time { return at })
-	service.accessPolicy = authenticationAccessPolicyFake{local: true, desktop: true, roleHolderMFA: map[model.UserID]bool{userID: true}}
+	service.accessPolicy = accessPolicyTerms{local: true, desktop: true, roleHolderMFA: map[model.UserID]bool{userID: true}}.reader(t)
 	command := testDesktopAuthorizationExchangeCommand(t, service, at, model.NewCredentialToken(), model.NewCredentialToken(), model.NewCredentialToken(), "")
 	_, err := service.ExchangeDesktopAuthorization(context.Background(), invocation.Invocation{}, command)
 	require.True(t, apperror.Is(err, "authentication.mfa.enrollment_required"), "err=%v", err)
@@ -166,7 +166,7 @@ func TestDesktopExchangeCarriesRoleHolderMFARequirementToTheStore(t *testing.T) 
 func TestMFAChallengeAdmitsEnrollmentRestrictionButNotRecovery(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
-	service := newTestMFAApplicationService(t, &mfaApplicationStoreFake{}, &securityAuditorFake{}, &realtimetest.Publisher{}, at)
+	service := newTestMFAApplicationService(t, &mfaApplicationStoreFake{}, newSecurityAuditLog(t, nil), &realtimetest.Publisher{}, at)
 	base := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: at}
@@ -185,13 +185,13 @@ func TestMFADisableIsRefusedWhileThePolicyRequiresIt(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
 	events := []string{}
-	audit := &securityAuditorFake{trace: &events}
+	audit := newSecurityAuditLog(t, &events)
 	persistence := &mfaApplicationStoreFake{}
 	service := newTestMFAApplicationService(t, persistence, audit, &realtimetest.Publisher{}, at)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: at, MFACompletedAt: model.OptionalTimeFrom(at)}
-	service.accessPolicy = authenticationAccessPolicyFake{roleHolderMFA: map[model.UserID]bool{principal.UserID: true}}
+	service.accessPolicy = accessPolicyTerms{roleHolderMFA: map[model.UserID]bool{principal.UserID: true}}.reader(t)
 	err := service.DisableMFA(context.Background(), invocation.New(principal, model.RequestMetadata{}))
 	require.True(t, apperror.Is(err, "mfa.required_by_policy"), "err=%v", err)
 	// The refusal is an audited failure of the attempted disablement.

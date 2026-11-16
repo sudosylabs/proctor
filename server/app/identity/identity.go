@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/logging"
@@ -53,20 +52,6 @@ type AuthenticationCache interface {
 	Add(context.Context, string, int64, time.Duration) (int64, error)
 }
 
-// resourceAuthorizer is the one authorization port. A use case authorizes an
-// Action on a concrete Resource immediately before the work it guards,
-// enabling or disabling an account authorizes managing that User's account
-// state, and personal access token creation asks which actions the caller may
-// delegate.
-type resourceAuthorizer interface {
-	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
-	AuthorizeAccountStateManage(context.Context, invocation.Invocation, model.UserID) error
-	CanDelegateActionsAtScope(context.Context, model.Principal, []string, model.RoleScopeType, string) (bool, error)
-	PersonalAccessTokenDelegation(context.Context, model.Principal) (access.PersonalAccessTokenDelegation, error)
-}
-
-var _ resourceAuthorizer = (*access.Authorizer)(nil)
-
 // OperationalRecorder receives the outcome of each authentication entry point
 // the package observes. It is optional; a Service built without one records
 // nothing.
@@ -84,7 +69,7 @@ type Dependencies struct {
 	Registry     ExternalProviderSource
 	Authorizer   *access.Authorizer
 	Auditor      *access.Auditor
-	Capabilities AccessPolicyCapabilitySource
+	Capabilities *DeploymentCapabilities
 	Publisher    realtime.Publisher
 	Mail         *mail.Composer
 	Hasher       *PasswordHasher
@@ -117,94 +102,6 @@ type Dependencies struct {
 	RecoveryDiagnostics       *logging.Logger
 }
 
-// securityAuditor is the part of *access.Auditor that records security
-// actions proved outside an authenticated mutation: a local password sign-in
-// (the admitted attempt, its completion and a terminal failure), an external
-// sign-in (the attempt before its Session is issued, its completion and a
-// failed provider callback), the Desktop authorization and reauthentication
-// handoffs, which act for a proved account at Institution scope, the two-step
-// verification transitions, recorded for the acting User as their subject,
-// and the personal access token drafts that the token aggregate completes.
-// Mutations are audited through the Service's access.MutationAuditor.
-type securityAuditor interface {
-	BeginLocalLogin(context.Context, model.UserID, model.SessionClientType, model.RequestMetadata) (*model.AuditEvent, error)
-	BeginAuthentication(
-		context.Context,
-		model.UserID,
-		string,
-		string,
-		model.SessionClientType,
-		model.RequestMetadata,
-		model.InstitutionID,
-	) (*model.AuditEvent, error)
-	BeginAccountActionAtScope(
-		context.Context,
-		access.AccountAuditActor,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		model.RequestMetadata,
-		any,
-	) (*model.AuditEvent, error)
-	BeginCriticalActionForSubject(
-		context.Context,
-		model.Principal,
-		model.UserID,
-		model.Action,
-		model.Resource,
-		model.RequestMetadata,
-		any,
-		any,
-	) (*model.AuditEvent, error)
-	PrepareCriticalAction(
-		context.Context,
-		model.Principal,
-		model.Action,
-		model.Resource,
-		model.RequestMetadata,
-		any,
-		any,
-	) (*model.AuditEvent, error)
-	CompleteCriticalAction(context.Context, model.AuditEventID, model.AuditStatus, string, any) (*model.AuditEvent, error)
-	RecordLocalLoginFailure(context.Context, model.UserID, model.SessionClientType, model.RequestMetadata, string) error
-	RecordExternalAuthenticationFailure(context.Context, string, string, model.RequestMetadata, model.InstitutionID, string) error
-}
-
-var _ securityAuditor = (*access.Auditor)(nil)
-
-// mailComposer is the part of *mail.Composer the Service prepares frozen
-// account-token mail and security notices with.
-type mailComposer interface {
-	Enabled() bool
-	PrepareAccountStateChanged(mail.NoticePreparation, bool) (*store.PreparedMail, error)
-	PrepareEmailVerification(mail.AccountTokenPreparation) (*store.PreparedMail, error)
-	PreparePasswordReset(mail.AccountTokenPreparation) (*store.PreparedMail, error)
-	PreparePasswordChanged(mail.NoticePreparation) (*store.PreparedMail, error)
-	PrepareEmailChangeWarning(mail.AccountTokenPreparation) (*store.PreparedMail, error)
-	PrepareEmailChangeVerification(mail.AccountTokenPreparation) (*store.PreparedMail, error)
-	PrepareEmailVerifiedByAdministrator(mail.NoticePreparation) (*store.PreparedMail, error)
-	PrepareMFANotice(mail.NoticePreparation, mail.MFANoticeKind) (*store.PreparedMail, error)
-	PreparePersonalAccessTokenSecurityNotice(mail.PersonalAccessTokenPreparation) (*store.PreparedMail, error)
-	PrepareSessionsRevokedByAdministrator(mail.NoticePreparation) (*store.PreparedMail, error)
-}
-
-var _ mailComposer = (*mail.Composer)(nil)
-
-// passwordHasher is the part of the one shared *PasswordHasher the Service
-// hashes, verifies and checks password reuse with. Account recovery tests
-// substitute password work failures through it.
-type passwordHasher interface {
-	Hash(context.Context, string) (string, error)
-	ReuseCheck(string) store.PasswordReuseCheck
-	Verify(context.Context, string, string) error
-	VerifyDummy(context.Context, string) error
-	NeedsRehash(string) bool
-	maximumPasswordLength() int
-}
-
-var _ passwordHasher = (*PasswordHasher)(nil)
-
 // Service holds every identity use case: sign-in, Sessions, Desktop
 // authorization, reauthentication, registration and compatibility, two-step
 // verification and the MFA key ring, account tokens and email changes,
@@ -232,22 +129,23 @@ type Service struct {
 	// accessPolicy is the one *currentAuthenticationAccessPolicy every flow
 	// shares; dpop is the one DPoP nonce and replay guard, shared with
 	// Desktop authorization.
-	accessPolicy authenticationAccessPolicy
+	accessPolicy *currentAuthenticationAccessPolicy
 	dpop         *dpopSecurity
 	cache        AuthenticationCache
-	capabilities AccessPolicyCapabilitySource
+	capabilities *DeploymentCapabilities
 	attempts     *AttemptAccounting
 	// hasher is the one shared *PasswordHasher; it is nil when composition
 	// supplies none, and construction then refuses.
-	hasher     passwordHasher
-	authorizer resourceAuthorizer
-	auditor    access.MutationAuditor
-	// securityAudit is nil when composition supplies no Auditor; local and
-	// external sign-in, the Desktop handoffs, two-step verification
-	// transitions and personal access token changes then fail closed with the
-	// audit unavailable.
-	securityAudit securityAuditor
-	mail          mailComposer
+	hasher     *PasswordHasher
+	authorizer *access.Authorizer
+	auditor    access.MutationAuditAdapter
+	// securityAudit records the security actions proved outside an
+	// authenticated mutation: sign-in, the Desktop handoffs, two-step
+	// verification transitions and personal access token changes. It is nil
+	// when composition supplies no Auditor, and those flows then fail closed
+	// with the audit unavailable.
+	securityAudit *access.Auditor
+	mail          *mail.Composer
 	publisher     realtime.Publisher
 	// invalidator is the shared *CacheInvalidator; external reauthentication
 	// drops the cached access credentials it replaces.
@@ -375,14 +273,9 @@ func (s *Service) constructSessionAuthentication(deps Dependencies, mfa *mfaMech
 	s.desktopRegistrations, s.personalAccessTokens = deps.Store.DesktopRegistration(), deps.Store.PersonalAccessToken()
 	s.mfaCredentials, s.mfa = deps.Store.MFA(), mfa
 	s.accessPolicy, s.dpop, s.cache, s.attempts = authenticationAccess, dpop, deps.Cache, deps.Attempts
-	if deps.Hasher != nil {
-		s.hasher = deps.Hasher
-	}
-
+	s.hasher = deps.Hasher
 	s.mail, s.publisher, s.capabilities = deps.Mail, deps.Publisher, deps.Capabilities
-	if deps.Auditor != nil {
-		s.securityAudit = deps.Auditor
-	}
+	s.securityAudit = deps.Auditor
 
 	s.operational, s.diagnostics = deps.Operational, deps.AuthenticationDiagnostics
 	s.sessionPolicy, s.loginRateLimit, s.personalAccessTokenPolicy = deps.Sessions, deps.LoginRateLimit, deps.PersonalAccessToken

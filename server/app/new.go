@@ -378,7 +378,7 @@ func newIdentity(
 	deps Dependencies,
 	shared sharedMechanics,
 	authorizer *access.Authorizer,
-	capabilities identity.AccessPolicyCapabilitySource,
+	capabilities identity.DeploymentCapabilities,
 	invitations *externalInvitationAcceptor,
 	wake *jobWake,
 ) (*identity.Service, error) {
@@ -388,7 +388,7 @@ func newIdentity(
 		Registry:                  deps.Registry,
 		Authorizer:                authorizer,
 		Auditor:                   shared.audit,
-		Capabilities:              capabilities,
+		Capabilities:              &capabilities,
 		Publisher:                 shared.realtime,
 		Mail:                      shared.mail,
 		Hasher:                    shared.hasher,

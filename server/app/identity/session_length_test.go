@@ -49,8 +49,9 @@ func TestSessionCreationAndRefreshUseThePolicySessionLengths(t *testing.T) {
 	})
 	require.NoError(t, err)
 	shortened := sessionLifetimes{Idle: 30 * time.Minute, Absolute: 90 * time.Minute}
-	policy := allowAllAuthenticationAccessPolicy().(authenticationAccessPolicyFake)
-	policy.lifetimes = &shortened
+	terms := allowAllAccessPolicyTerms()
+	terms.lifetimes = &shortened
+	policy := terms.reader(t)
 	service.accessPolicy = policy
 	result, err := service.Login(context.Background(), invocation.Invocation{}, LoginCommand{
 		LoginID: user.Email, Password: roleHolderMFATestPassword, ClientType: model.SessionClientWeb, Source: "192.0.2.20",
@@ -79,7 +80,7 @@ func TestDesktopExchangeUsesThePolicySessionLengths(t *testing.T) {
 	persistence := &desktopAuthorizationStoreFake{exchangeErr: store.ErrAuthenticationGenerationChanged}
 	shortened := sessionLifetimes{Idle: 20 * time.Minute, Absolute: 40 * time.Minute}
 	service := newTestDesktopAuthorizationService(t, persistence, func() time.Time { return at })
-	service.accessPolicy = authenticationAccessPolicyFake{local: true, desktop: true, lifetimes: &shortened}
+	service.accessPolicy = accessPolicyTerms{local: true, desktop: true, lifetimes: &shortened}.reader(t)
 	command := testDesktopAuthorizationExchangeCommand(t, service, at, model.NewCredentialToken(), model.NewCredentialToken(), model.NewCredentialToken(), "")
 	_, _ = service.ExchangeDesktopAuthorization(context.Background(), invocation.Invocation{}, command)
 	require.NotNil(t, persistence.exchanged)

@@ -53,8 +53,7 @@ func TestAccountTokenInspectionNamesTheAddressWithoutConsuming(t *testing.T) {
 	verification := &inspectionTokenStoreFake{token: &model.UserToken{UserID: user.ID, Purpose: model.UserTokenEmailVerification,
 		Target: "ada.new@example.edu", CreatedAt: changedAt, ExpiresAt: now.Add(time.Hour)}}
 	application := newAccountTokenTestApp(t, accountTokenTestDependencies{users: &accountTokenUserStoreFake{byID: user},
-		passwords: &accountTokenPasswordStoreFake{}, tokens: verification, institution: &model.Institution{ID: model.NewInstitutionID()},
-		mailer: &accountTokenMailerFake{enabled: true}, now: func() time.Time { return now }})
+		passwords: &accountTokenPasswordStoreFake{}, tokens: verification, institution: &model.Institution{ID: model.NewInstitutionID()}, now: func() time.Time { return now }})
 	inspected, err := application.InspectEmailVerification(context.Background(), invocation.Invocation{}, InspectAccountTokenCommand{Token: accountTokenTestRawToken, Source: "192.0.2.10"})
 	require.NoError(t, err)
 	require.Equal(t, "ada.new@example.edu", inspected.Email)
@@ -63,8 +62,7 @@ func TestAccountTokenInspectionNamesTheAddressWithoutConsuming(t *testing.T) {
 	undo := &inspectionTokenStoreFake{token: &model.UserToken{UserID: user.ID, Purpose: model.UserTokenEmailChangeUndo,
 		Target: "ada.old@example.edu", CreatedAt: changedAt, ExpiresAt: now.Add(70 * time.Hour)}}
 	application = newAccountTokenTestApp(t, accountTokenTestDependencies{users: &accountTokenUserStoreFake{byID: user},
-		passwords: &accountTokenPasswordStoreFake{}, tokens: undo, institution: &model.Institution{ID: model.NewInstitutionID()},
-		mailer: &accountTokenMailerFake{enabled: true}, now: func() time.Time { return now }})
+		passwords: &accountTokenPasswordStoreFake{}, tokens: undo, institution: &model.Institution{ID: model.NewInstitutionID()}, now: func() time.Time { return now }})
 	change, err := application.InspectEmailChangeUndo(context.Background(), invocation.Invocation{}, InspectAccountTokenCommand{Token: accountTokenTestRawToken, Source: "192.0.2.10"})
 	require.NoError(t, err)
 	require.Equal(t, "ada.old@example.edu", change.RestoredEmail)
@@ -104,8 +102,8 @@ func TestAccountTokenInspectionConcealsUnusableTokensGenerically(t *testing.T) {
 			t.Parallel()
 			application := newAccountTokenTestApp(t, accountTokenTestDependencies{users: &accountTokenUserStoreFake{byID: test.user},
 				passwords: &accountTokenPasswordStoreFake{}, tokens: &inspectionTokenStoreFake{token: test.token},
-				institution: &model.Institution{ID: model.NewInstitutionID()}, mailer: &accountTokenMailerFake{enabled: true},
-				now: func() time.Time { return now }})
+				institution: &model.Institution{ID: model.NewInstitutionID()},
+				now:         func() time.Time { return now }})
 			_, err := application.InspectEmailVerification(context.Background(), invocation.Invocation{}, InspectAccountTokenCommand{Token: test.raw})
 			require.True(t, apperror.Is(err, "authentication.account_token.invalid"), "inspection error = %v", err)
 		})
@@ -113,7 +111,7 @@ func TestAccountTokenInspectionConcealsUnusableTokensGenerically(t *testing.T) {
 
 	application := newAccountTokenTestApp(t, accountTokenTestDependencies{users: &accountTokenUserStoreFake{byID: activeUser},
 		passwords: &accountTokenPasswordStoreFake{}, tokens: &inspectionTokenStoreFake{err: errors.New("connection reset")},
-		institution: &model.Institution{ID: model.NewInstitutionID()}, mailer: &accountTokenMailerFake{enabled: true}})
+		institution: &model.Institution{ID: model.NewInstitutionID()}})
 	_, err := application.InspectEmailChangeUndo(context.Background(), invocation.Invocation{}, InspectAccountTokenCommand{Token: accountTokenTestRawToken})
 	require.True(t, apperror.Is(err, "authentication.account_recovery.unavailable"), "store failure = %v", err)
 }
@@ -125,8 +123,7 @@ func TestAccountTokenInspectionIsRateLimitedPerToken(t *testing.T) {
 	tokens := &inspectionTokenStoreFake{token: &model.UserToken{UserID: user.ID, Purpose: model.UserTokenEmailVerification,
 		Target: "ada@example.edu", CreatedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Hour)}}
 	application := newAccountTokenTestApp(t, accountTokenTestDependencies{users: &accountTokenUserStoreFake{byID: user},
-		passwords: &accountTokenPasswordStoreFake{}, tokens: tokens, institution: &model.Institution{ID: model.NewInstitutionID()},
-		mailer: &accountTokenMailerFake{enabled: true}, now: func() time.Time { return now },
+		passwords: &accountTokenPasswordStoreFake{}, tokens: tokens, institution: &model.Institution{ID: model.NewInstitutionID()}, now: func() time.Time { return now },
 		rateLimit: LoginRateLimitPolicy{Window: time.Minute, MaximumAttempts: 1, MaximumSourceAttempts: 100}})
 	command := InspectAccountTokenCommand{Token: accountTokenTestRawToken, Source: "192.0.2.10"}
 	_, err := application.InspectEmailVerification(context.Background(), invocation.Invocation{}, command)

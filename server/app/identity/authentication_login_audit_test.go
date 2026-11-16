@@ -10,21 +10,24 @@ package identity
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// securityAuditRecord is one security audit event as *access.Auditor
-// received it: who acted for which resource and scope, with the request
-// identity, and how the event ended.
+// securityAuditRecord is one security audit event as the real
+// *access.Auditor stored it: who acted for which resource and scope, with the
+// request identity, and how the event ended. Parameters, prior state and
+// result are decoded from their stored JSON.
 type securityAuditRecord struct {
 	id         model.AuditEventID
 	status     model.AuditStatus
@@ -33,6 +36,7 @@ type securityAuditRecord struct {
 	target     model.UserID
 	clientType model.SessionClientType
 	action     model.Action
+	authMethod string
 	resource   model.Resource
 	scopeType  model.RoleScopeType
 	scopeID    string
@@ -50,118 +54,86 @@ func (r *securityAuditRecord) operation() string {
 	return operation
 }
 
-// securityAuditorFake stands in for *access.Auditor. It keeps every security
-// audit event it received, in order, with the request metadata, and the
-// terminal outcome of each, so tests assert what became durable rather than
-// which calls were made.
-type securityAuditorFake struct {
-	events      []*securityAuditRecord
-	pending     map[string]*securityAuditRecord
-	terminal    []securityAuditRecord
-	completeErr error
-	// trace, when set, receives audit_begin and audit_success or audit_fail
-	// in call order, interleaved with the other fakes' events.
-	trace *[]string
+// securityAuditLog is a real *access.Auditor over its own audit store, which
+// a test gives the Service as its security auditor. It reads back every
+// security audit event, in order, with its terminal outcome, so tests assert
+// what became durable rather than which calls were made. It is kept apart
+// from the mutation auditor so these records hold only security events.
+type securityAuditLog struct {
+	t       testing.TB
+	auditor *access.Auditor
+	audits  *accesstest.Audits
 }
 
-func (f *securityAuditorFake) appendTrace(event string) {
-	if f.trace != nil {
-		*f.trace = append(*f.trace, event)
+// newSecurityAuditLog builds the log. A trace, when given, receives
+// audit_begin and audit_success or audit_fail in call order, interleaved
+// with the other fakes' events.
+func newSecurityAuditLog(t testing.TB, trace *[]string) *securityAuditLog {
+	t.Helper()
+	fixture := accesstest.New(t, accesstest.Options{Observe: func(event string) {
+		if trace == nil {
+			return
+		}
+		switch {
+		case strings.HasPrefix(event, "audit-begin:"):
+			*trace = append(*trace, "audit_begin")
+		case event == "audit-success":
+			*trace = append(*trace, "audit_success")
+		case event == "audit-fail":
+			*trace = append(*trace, "audit_fail")
+		}
+	}})
+	return &securityAuditLog{t: t, auditor: fixture.Auditor, audits: fixture.Audits}
+}
+
+// events returns every stored security event, in the order it was begun or
+// recorded.
+func (l *securityAuditLog) events() []*securityAuditRecord {
+	var records []*securityAuditRecord
+	for _, event := range l.audits.Events() {
+		target := event.SubjectUserID
+		if target.IsZero() && event.Resource.Type == model.ResourceUser {
+			target = model.UserID(event.Resource.ID)
+		}
+		records = append(records, &securityAuditRecord{
+			id: event.ID, status: event.Status, actor: event.ActorID, sessionID: event.SessionID, target: target,
+			clientType: model.SessionClientType(event.ClientType), action: model.Action(event.Action),
+			authMethod: event.AuthMethod, resource: event.Resource, scopeType: event.ScopeType, scopeID: event.ScopeID,
+			metadata:   model.RequestMetadata{RequestID: event.RequestID, IPAddress: event.IPAddress, UserAgent: event.UserAgent},
+			parameters: decodedAuditData(l.t, event.Parameters), prior: decodedAuditData(l.t, event.PriorState),
+			errorCode: event.ErrorCode, result: decodedAuditData(l.t, event.Result),
+		})
 	}
+	return records
 }
 
-func (f *securityAuditorFake) begin(record *securityAuditRecord) *model.AuditEvent {
-	f.appendTrace("audit_begin")
-	if f.pending == nil {
-		f.pending = map[string]*securityAuditRecord{}
+// pending returns the attempts no outcome has completed yet, by identifier.
+func (l *securityAuditLog) pending() map[string]*securityAuditRecord {
+	pending := map[string]*securityAuditRecord{}
+	for _, record := range l.events() {
+		if record.status == model.AuditStatusAttempt {
+			pending[record.id.String()] = record
+		}
 	}
-	record.id, record.status = model.NewAuditEventID(), model.AuditStatusAttempt
-	f.pending[record.id.String()] = record
-	f.events = append(f.events, record)
-	return &model.AuditEvent{ID: record.id}
+	return pending
 }
 
-func (f *securityAuditorFake) BeginLocalLogin(_ context.Context, userID model.UserID, clientType model.SessionClientType, metadata model.RequestMetadata) (*model.AuditEvent, error) {
-	return f.begin(&securityAuditRecord{actor: userID, target: userID, clientType: clientType, metadata: metadata}), nil
-}
-
-func (f *securityAuditorFake) BeginAccountActionAtScope(_ context.Context, actor access.AccountAuditActor, action model.Action,
-	resource model.Resource, scopeType model.RoleScopeType, scopeID string, metadata model.RequestMetadata, parameters any,
-) (*model.AuditEvent, error) {
-	return f.begin(&securityAuditRecord{actor: actor.UserID, sessionID: actor.SessionID, target: model.UserID(resource.ID),
-		clientType: actor.ClientType, action: action, resource: resource, scopeType: scopeType, scopeID: scopeID,
-		metadata: metadata, parameters: parameters}), nil
-}
-
-func (f *securityAuditorFake) BeginCriticalActionForSubject(_ context.Context, principal model.Principal, subject model.UserID,
-	action model.Action, resource model.Resource, metadata model.RequestMetadata, parameters, prior any,
-) (*model.AuditEvent, error) {
-	return f.begin(&securityAuditRecord{actor: principal.UserID, sessionID: principal.SessionID, target: subject,
-		clientType: principal.ClientType, action: action, resource: resource, metadata: metadata,
-		parameters: parameters, prior: prior}), nil
-}
-
-func (f *securityAuditorFake) PrepareCriticalAction(_ context.Context, principal model.Principal, action model.Action,
-	resource model.Resource, metadata model.RequestMetadata, parameters, prior any,
-) (*model.AuditEvent, error) {
-	return nil, errors.New("unexpected prepared audit draft")
-}
-
-func (f *securityAuditorFake) CompleteCriticalAction(_ context.Context, auditID model.AuditEventID, status model.AuditStatus, errorCode string, result any) (*model.AuditEvent, error) {
-	if status == model.AuditStatusSuccess {
-		f.appendTrace("audit_success")
-	} else {
-		f.appendTrace("audit_fail")
+// terminal returns the events that ended, in order.
+func (l *securityAuditLog) terminal() []securityAuditRecord {
+	var terminal []securityAuditRecord
+	for _, record := range l.events() {
+		if record.status != model.AuditStatusAttempt {
+			terminal = append(terminal, *record)
+		}
 	}
-	if f.completeErr != nil {
-		return nil, f.completeErr
-	}
-	record, ok := f.pending[auditID.String()]
-	if !ok {
-		return nil, errors.New("unknown audit attempt")
-	}
-	delete(f.pending, auditID.String())
-	record.status, record.errorCode, record.result = status, errorCode, result
-	f.terminal = append(f.terminal, *record)
-	return &model.AuditEvent{ID: auditID, Status: status, ErrorCode: errorCode}, nil
-}
-
-func (f *securityAuditorFake) RecordLocalLoginFailure(_ context.Context, target model.UserID,
-	clientType model.SessionClientType, metadata model.RequestMetadata, errorCode string,
-) error {
-	record := securityAuditRecord{id: model.NewAuditEventID(), status: model.AuditStatusFail, target: target,
-		clientType: clientType, metadata: metadata, errorCode: errorCode}
-	f.events = append(f.events, &record)
-	f.terminal = append(f.terminal, record)
-	return nil
-}
-
-func (f *securityAuditorFake) BeginAuthentication(_ context.Context, userID model.UserID, method, providerID string,
-	clientType model.SessionClientType, metadata model.RequestMetadata, institutionID model.InstitutionID,
-) (*model.AuditEvent, error) {
-	return f.begin(&securityAuditRecord{actor: userID, target: userID, clientType: clientType,
-		action: model.ActionAuthenticationExternalLogin, resource: model.Resource{Type: model.ResourceUser, ID: userID.String()},
-		scopeType: model.RoleScopeInstitution, scopeID: institutionID.String(), metadata: metadata,
-		parameters: map[string]any{"provider": providerID, "method": method}}), nil
-}
-
-func (f *securityAuditorFake) RecordExternalAuthenticationFailure(_ context.Context, providerID, method string,
-	metadata model.RequestMetadata, institutionID model.InstitutionID, errorCode string,
-) error {
-	record := securityAuditRecord{id: model.NewAuditEventID(), status: model.AuditStatusFail,
-		action: model.ActionAuthenticationExternalLogin, resource: model.Resource{Type: model.ResourceInstitution, ID: institutionID.String()},
-		scopeType: model.RoleScopeInstitution, scopeID: institutionID.String(), metadata: metadata,
-		parameters: map[string]any{"provider": providerID, "method": method}, errorCode: errorCode}
-	f.events = append(f.events, &record)
-	f.terminal = append(f.terminal, record)
-	return nil
+	return terminal
 }
 
 // externalFailureCodes returns the error codes of the failed external
 // sign-ins recorded, in order.
-func (f *securityAuditorFake) externalFailureCodes() []string {
+func (l *securityAuditLog) externalFailureCodes() []string {
 	codes := []string{}
-	for _, record := range f.terminal {
+	for _, record := range l.terminal() {
 		if record.action == model.ActionAuthenticationExternalLogin && record.status == model.AuditStatusFail {
 			codes = append(codes, record.errorCode)
 		}
@@ -170,9 +142,9 @@ func (f *securityAuditorFake) externalFailureCodes() []string {
 }
 
 // withOperation returns the events begun with operation, in order.
-func (f *securityAuditorFake) withOperation(operation string) []*securityAuditRecord {
+func (l *securityAuditLog) withOperation(operation string) []*securityAuditRecord {
 	var matched []*securityAuditRecord
-	for _, record := range f.events {
+	for _, record := range l.events() {
 		if record.operation() == operation {
 			matched = append(matched, record)
 		}
@@ -181,22 +153,23 @@ func (f *securityAuditorFake) withOperation(operation string) []*securityAuditRe
 }
 
 // lastFailure returns the last event that ended as a failure, or nil.
-func (f *securityAuditorFake) lastFailure() *securityAuditRecord {
-	for index := len(f.terminal) - 1; index >= 0; index-- {
-		if f.terminal[index].status == model.AuditStatusFail {
-			return &f.terminal[index]
+func (l *securityAuditLog) lastFailure() *securityAuditRecord {
+	terminal := l.terminal()
+	for index := len(terminal) - 1; index >= 0; index-- {
+		if terminal[index].status == model.AuditStatusFail {
+			return &terminal[index]
 		}
 	}
 	return nil
 }
 
-func newLocalLoginAuditFixture(t *testing.T, mfa store.MFAStore) (*Service, *authenticationStoreFake, *securityAuditorFake, *model.User) {
+func newLocalLoginAuditFixture(t *testing.T, mfa store.MFAStore) (*Service, *authenticationStoreFake, *securityAuditLog, *model.User) {
 	t.Helper()
 	persistence := newAuthenticationStoreFake()
 	service := newTestAuthenticationServiceWithPorts(t, persistence, newAuthenticationCacheFake(), mfa,
 		discardPersonalAccessTokenStore{}, model.NewCredentialToken, time.Now)
-	audit := &securityAuditorFake{}
-	service.securityAudit = audit
+	audit := newSecurityAuditLog(t, nil)
+	service.securityAudit = audit.auditor
 	user, err := service.CreateLocalUser(context.Background(), CreateLocalUserCommand{
 		User: &model.User{Username: "audited-user", Email: "audited-user@example.edu"}, Password: "CorrectHorseBatteryStaple1!",
 	})
@@ -218,9 +191,9 @@ func TestLocalLoginSuccessIsDurablyAuditedWithActorAndSession(t *testing.T) {
 	require.NoError(t, err)
 	// The application begins the attempt; Session creation completes it in
 	// the same transaction, so the application records no terminal outcome.
-	require.Len(t, audit.pending, 1, "pending")
-	require.Empty(t, audit.terminal, "pending")
-	for id, record := range audit.pending {
+	require.Len(t, audit.pending(), 1, "pending")
+	require.Empty(t, audit.terminal(), "pending")
+	for id, record := range audit.pending() {
 		require.Equal(t, user.ID, record.actor)
 		require.Equal(t, model.SessionClientWeb, record.clientType)
 		require.Equal(t, "192.0.2.10", record.metadata.IPAddress)
@@ -259,9 +232,9 @@ func TestLocalLoginFailuresAreDurablyAudited(t *testing.T) {
 			})
 			require.True(t, apperror.Is(err, test.code), "err = %v", err)
 			require.Empty(t, persistence.sessions, "sessions")
-			require.Empty(t, audit.pending, "sessions")
-			require.Len(t, audit.terminal, 1, "sessions")
-			record := audit.terminal[0]
+			require.Empty(t, audit.pending(), "sessions")
+			require.Len(t, audit.terminal(), 1, "sessions")
+			record := audit.terminal()[0]
 			wantTarget := model.UserID("")
 			if test.knownTarget {
 				wantTarget = user.ID
@@ -286,8 +259,8 @@ func TestLocalLoginRejectedBeforeAdmissionWritesNoAudit(t *testing.T) {
 	require.True(t, apperror.Is(err, "authentication.credentials_invalid"), "first err = %v", err)
 	_, err = service.Login(context.Background(), localLoginInvocation(), command)
 	require.True(t, apperror.Is(err, "authentication.rate_limited"), "limited err = %v", err)
-	require.Len(t, audit.terminal, 1)
-	require.Equal(t, "authentication.credentials_invalid", audit.terminal[0].errorCode)
+	require.Len(t, audit.terminal(), 1)
+	require.Equal(t, "authentication.credentials_invalid", audit.terminal()[0].errorCode)
 }
 
 func TestLocalLoginIssuesNoSessionWhenSuccessAuditCannotComplete(t *testing.T) {
@@ -301,9 +274,9 @@ func TestLocalLoginIssuesNoSessionWhenSuccessAuditCannotComplete(t *testing.T) {
 	require.Nil(t, result, "result")
 	require.Error(t, err, "result")
 	require.Empty(t, persistence.sessions, "sessions")
-	require.Empty(t, audit.pending, "pending")
-	require.Len(t, audit.terminal, 1, "pending")
-	require.Equal(t, model.AuditStatusFail, audit.terminal[0].status, "pending")
+	require.Empty(t, audit.pending(), "pending")
+	require.Len(t, audit.terminal(), 1, "pending")
+	require.Equal(t, model.AuditStatusFail, audit.terminal()[0].status, "pending")
 }
 
 func TestAuditServiceLocalLoginEventsCarryRequestIdentity(t *testing.T) {

@@ -14,9 +14,8 @@ import (
 )
 
 // DeploymentCapabilities projects only safe process capabilities from the
-// live provider registry and mail transport, as the AccessPolicyCapabilitySource
-// composition gives the identity and administration areas. Secrets never
-// enter policy code.
+// live provider registry and mail transport. Composition gives the same value
+// to the identity and administration areas. Secrets never enter policy code.
 type DeploymentCapabilities struct {
 	Providers ExternalProviderSource
 	Mail      mail.Sender

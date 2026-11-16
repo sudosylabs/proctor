@@ -91,7 +91,7 @@ type MFARekeyStatusView struct {
 // requireMFARekey checks the collaborators of the MFA key ring use cases,
 // which exist only when the catalog has Job and MFA stores.
 func (s *Service) requireMFARekey() error {
-	if s.mfaCredentials == nil || s.jobs == nil || s.authorizer == nil || s.auditor == nil || s.now == nil || s.mfaRekeyWake == nil {
+	if s.mfaCredentials == nil || s.jobs == nil || s.authorizer == nil || s.now == nil || s.mfaRekeyWake == nil {
 		return errors.New("MFA key service dependencies are incomplete")
 	}
 	return nil

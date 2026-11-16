@@ -65,6 +65,10 @@ type PasswordHasher struct {
 	parameters    passwordParameters
 	dummyHash     string
 	work          chan struct{}
+	// hashHook, when set, replaces Hash. Only tests set it, to reach
+	// password work failures and fixed encodings the real derivation never
+	// returns. Production leaves it nil.
+	hashHook func(context.Context, string) (string, error)
 }
 
 // NewPasswordHasher builds the hasher from the password policy.
@@ -123,6 +127,9 @@ func NewPasswordHasher(deps PasswordHasherDependencies) (*PasswordHasher, error)
 // Hash validates the password against the length limits and returns its
 // Argon2id encoding with a fresh salt. It fails when the hasher is at capacity.
 func (h *PasswordHasher) Hash(ctx context.Context, password string) (string, error) {
+	if h.hashHook != nil {
+		return h.hashHook(ctx, password)
+	}
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}

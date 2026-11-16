@@ -21,7 +21,6 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/config"
-	"github.com/sudosylabs/proctor/server/store"
 )
 
 func testPasswordPolicy() PasswordPolicy {
@@ -188,9 +187,8 @@ func (r *passwordWorkRecorderFake) Rejected() { r.rejected.Add(1) }
 // passwordHasherOf is the shared *PasswordHasher a test Service holds.
 func passwordHasherOf(t testing.TB, service *Service) *PasswordHasher {
 	t.Helper()
-	hasher, ok := service.hasher.(*PasswordHasher)
-	require.True(t, ok, "the Service holds %T, not the shared password hasher", service.hasher)
-	return hasher
+	require.NotNil(t, service.hasher, "the Service holds no password hasher")
+	return service.hasher
 }
 
 func saturatePasswordWork(t *testing.T, hasher *PasswordHasher) func() {
@@ -210,17 +208,10 @@ func saturatePasswordWork(t *testing.T, hasher *PasswordHasher) func() {
 	return release
 }
 
-type passwordHashFunc func(context.Context, string) (string, error)
-
-func (h passwordHashFunc) Hash(ctx context.Context, password string) (string, error) {
-	return h(ctx, password)
-}
-
-func (passwordHashFunc) ReuseCheck(string) store.PasswordReuseCheck {
-	return store.PasswordReuseCheck{}
-}
-
-func testPasswordHashFailures(t *testing.T, unavailableCode string, invoke func(*testing.T, context.Context, passwordHashFunc) error) {
+// testPasswordHashFailures runs invoke once per password work failure, with
+// the production hasher whose Hash fails that way, and checks the failure
+// is reported with the code the caller owns after exactly one hash.
+func testPasswordHashFailures(t *testing.T, unavailableCode string, invoke func(*testing.T, context.Context, *PasswordHasher) error) {
 	t.Helper()
 	for _, test := range []struct {
 		name string
@@ -236,7 +227,7 @@ func testPasswordHashFailures(t *testing.T, unavailableCode string, invoke func(
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			calls := 0
-			hasher := passwordHashFunc(func(got context.Context, _ string) (string, error) {
+			hasher := hookedPasswordHasher(t, func(got context.Context, _ string) (string, error) {
 				calls++
 				require.Equal(t, ctx, got, "password work did not receive the request context")
 				return "", test.err

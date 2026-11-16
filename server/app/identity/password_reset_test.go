@@ -25,12 +25,10 @@ func TestRequestPasswordResetPreservesGenericResponseAndIssuedToken(t *testing.T
 	t.Parallel()
 
 	now := time.Date(2026, time.August, 12, 9, 30, 0, 0, time.UTC)
-	user := &model.User{
-		ID: model.NewUserID(), Email: "student@example.edu", DisplayName: "Student",
-	}
+	user := accountTokenTestUser("student@example.edu")
 	institution := &model.Institution{ID: model.NewInstitutionID()}
 	tokens := &accountTokenStoreFake{}
-	mailer := &accountTokenMailerFake{enabled: true}
+	mailer, rendered := newTestMail(t, true)
 	app := newAccountTokenTestApp(t, accountTokenTestDependencies{
 		users: &accountTokenUserStoreFake{byEmail: user},
 		passwords: &accountTokenPasswordStoreFake{
@@ -50,14 +48,14 @@ func TestRequestPasswordResetPreservesGenericResponseAndIssuedToken(t *testing.T
 	require.True(t, tokens.issued.ExpiresAt.Equal(now.Add(45*time.Minute)), "token expiry = %s", tokens.issued.ExpiresAt)
 	require.NotNil(t, tokens.event)
 	require.Equal(t, string(model.ActionAuthenticationPasswordResetRequest), tokens.event.Action)
-	require.Len(t, mailer.messages, 1)
-	require.Contains(t, mailer.messages[0], "#token="+accountTokenTestRawToken)
+	require.Equal(t, []model.MailTemplateKey{model.MailTemplateIdentityPasswordReset}, rendered.keys())
+	require.Contains(t, rendered.actionURLs()[0], "#token="+accountTokenTestRawToken)
 
 	unknown := newAccountTokenTestApp(t, accountTokenTestDependencies{
 		users:     &accountTokenUserStoreFake{byEmailErr: store.NewErrNotFound("user", "")},
 		passwords: &accountTokenPasswordStoreFake{}, tokens: &accountTokenStoreFake{},
-		institution: institution, mailer: &accountTokenMailerFake{enabled: true},
-		now: func() time.Time { return now },
+		institution: institution,
+		now:         func() time.Time { return now },
 	})
 	require.NoError(t, unknown.RequestPasswordReset(
 		context.Background(), invocation.Invocation{},
@@ -68,10 +66,11 @@ func TestRequestPasswordResetPreservesGenericResponseAndIssuedToken(t *testing.T
 func TestRequestPasswordResetReportsMailUnavailableWhenLocalLoginRemainsEnabled(t *testing.T) {
 	t.Parallel()
 
+	disabledMail, _ := newTestMail(t, false)
 	app := newAccountTokenTestApp(t, accountTokenTestDependencies{
 		users: &accountTokenUserStoreFake{}, passwords: &accountTokenPasswordStoreFake{},
 		tokens: &accountTokenStoreFake{}, institution: &model.Institution{ID: model.NewInstitutionID()},
-		mailer: &accountTokenMailerFake{enabled: false},
+		mailer: disabledMail,
 	})
 	err := app.RequestPasswordReset(context.Background(), invocation.Invocation{}, RequestPasswordResetCommand{
 		Email: "student@example.edu", Source: "192.0.2.10",
@@ -82,9 +81,9 @@ func TestRequestPasswordResetReportsMailUnavailableWhenLocalLoginRemainsEnabled(
 func TestRequestPasswordResetConcealsAtomicEnqueueFailure(t *testing.T) {
 	t.Parallel()
 
-	user := &model.User{ID: model.NewUserID(), Email: "student@example.edu"}
+	user := accountTokenTestUser("student@example.edu")
 	tokens := &accountTokenStoreFake{issueErr: errors.New("database unavailable")}
-	mailer := &accountTokenMailerFake{enabled: true}
+	mailer, rendered := newTestMail(t, true)
 	app := newAccountTokenTestApp(t, accountTokenTestDependencies{
 		users:     &accountTokenUserStoreFake{byEmail: user},
 		passwords: &accountTokenPasswordStoreFake{credential: &model.PasswordCredential{UserID: user.ID}},
@@ -93,7 +92,7 @@ func TestRequestPasswordResetConcealsAtomicEnqueueFailure(t *testing.T) {
 	require.NoError(t, app.RequestPasswordReset(context.Background(), invocation.Invocation{}, RequestPasswordResetCommand{Email: user.Email}))
 	require.NotNil(t, tokens.issuedMail, "prepared durable reset aggregate")
 	require.Equal(t, model.JobTypeMailDeliverCredential, tokens.issuedMail.Job.Type, "prepared durable reset aggregate")
-	require.Len(t, mailer.messages, 1, "prepared durable reset aggregate")
+	require.Len(t, rendered.rendered(), 1, "prepared durable reset aggregate")
 }
 
 func TestRequestPasswordResetCreatesNoIntentForDisabledOrExternalOnlyAccount(t *testing.T) {
@@ -111,14 +110,14 @@ func TestRequestPasswordResetCreatesNoIntentForDisabledOrExternalOnlyAccount(t *
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			tokens := &accountTokenStoreFake{}
-			mailer := &accountTokenMailerFake{enabled: true}
+			mailer, rendered := newTestMail(t, true)
 			app := newAccountTokenTestApp(t, accountTokenTestDependencies{
 				users: &accountTokenUserStoreFake{byEmail: test.user}, passwords: test.password,
 				tokens: tokens, institution: &model.Institution{ID: model.NewInstitutionID()}, mailer: mailer,
 			})
 			require.NoError(t, app.RequestPasswordReset(context.Background(), invocation.Invocation{}, RequestPasswordResetCommand{Email: test.user.Email}))
 			require.Nil(t, tokens.issuedMail, "ineligible account intent")
-			require.Empty(t, mailer.messages, "ineligible account intent")
+			require.Empty(t, rendered.rendered(), "ineligible account intent")
 		})
 	}
 }
@@ -126,27 +125,27 @@ func TestRequestPasswordResetCreatesNoIntentForDisabledOrExternalOnlyAccount(t *
 func TestRequestPasswordResetIsGenericAndInertWhenCurrentPolicyDisablesLocalLogin(t *testing.T) {
 	t.Parallel()
 
-	user := &model.User{ID: model.NewUserID(), Email: "student@example.edu"}
+	user := accountTokenTestUser("student@example.edu")
 	tokens := &accountTokenStoreFake{}
-	mailer := &accountTokenMailerFake{enabled: false}
+	mailer, rendered := newTestMail(t, false)
 	app := newAccountTokenTestApp(t, accountTokenTestDependencies{
 		users: &accountTokenUserStoreFake{byEmail: user}, passwords: &accountTokenPasswordStoreFake{
 			credential: &model.PasswordCredential{UserID: user.ID},
 		}, tokens: tokens, institution: &model.Institution{ID: model.NewInstitutionID()}, mailer: mailer,
-		accessPolicy: authenticationAccessPolicyFake{local: false},
+		accessPolicy: accessPolicyTerms{local: false}.reader(t),
 	})
 	require.NoError(t, app.RequestPasswordReset(context.Background(), invocation.Invocation{}, RequestPasswordResetCommand{
 		Email: user.Email, Source: "192.0.2.7",
 	}))
 	require.Nil(t, tokens.issued, "disabled local recovery issued")
-	require.Empty(t, mailer.messages, "disabled local recovery issued")
+	require.Empty(t, rendered.rendered(), "disabled local recovery issued")
 }
 
 func TestCompletePasswordResetCommitsBeforeEffects(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, time.August, 12, 10, 0, 0, 0, time.UTC)
-	user := &model.User{ID: model.NewUserID(), Email: "student@example.edu"}
+	user := accountTokenTestUser("student@example.edu")
 	session := &model.Session{ID: model.NewSessionID(), UserID: user.ID}
 	order := make([]string, 0, 2)
 	var hashed []string
@@ -169,9 +168,9 @@ func TestCompletePasswordResetCommitsBeforeEffects(t *testing.T) {
 	app := newAccountTokenTestApp(t, accountTokenTestDependencies{
 		users: &accountTokenUserStoreFake{byID: user}, passwords: &accountTokenPasswordStoreFake{},
 		tokens: tokens, institution: &model.Institution{ID: model.NewInstitutionID()},
-		mailer: &accountTokenMailerFake{enabled: true}, effects: effects,
-		hasher: accountTokenHasherFake{hash: "encoded-new-password", passwords: &hashed},
-		now:    func() time.Time { return now },
+		effects: effects,
+		hasher:  accountTokenTestHasher(t, "encoded-new-password", &hashed),
+		now:     func() time.Time { return now },
 	})
 
 	got, err := app.CompletePasswordReset(
@@ -193,13 +192,13 @@ func TestCompletePasswordResetCommitsBeforeEffects(t *testing.T) {
 func TestCompletePasswordResetMapsTerminalAccessPolicyFenceToInvalidCredential(t *testing.T) {
 	t.Parallel()
 
-	user := &model.User{ID: model.NewUserID(), Email: "student@example.edu"}
+	user := accountTokenTestUser("student@example.edu")
 	app := newAccountTokenTestApp(t, accountTokenTestDependencies{
 		users: &accountTokenUserStoreFake{byID: user}, passwords: &accountTokenPasswordStoreFake{},
 		tokens: &accountTokenStoreFake{byHash: &model.UserToken{UserID: user.ID, Purpose: model.UserTokenPasswordReset}, consumeReset: func(string, string, time.Time, *model.AuditEvent) (*store.PasswordResetResult, error) {
 			return nil, store.ErrAuthenticationMethodDisabled
 		}},
-		institution: &model.Institution{ID: model.NewInstitutionID()}, mailer: &accountTokenMailerFake{enabled: true},
+		institution: &model.Institution{ID: model.NewInstitutionID()},
 	})
 	result, err := app.CompletePasswordReset(context.Background(), invocation.Invocation{}, CompletePasswordResetCommand{
 		Token: accountTokenTestRawToken, Password: "NewCorrectHorseBatteryStaple1!", Source: "192.0.2.8",
@@ -217,7 +216,7 @@ func TestCompletePasswordResetRefusesARecentPasswordAndPassesTheHistoryCheck(t *
 		return policy
 	}()})
 	require.NoError(t, err)
-	user := &model.User{ID: model.NewUserID(), Email: "student@example.edu"}
+	user := accountTokenTestUser("student@example.edu")
 	var reuse store.PasswordReuseCheck
 	tokens := &accountTokenStoreFake{byHash: &model.UserToken{UserID: user.ID, Purpose: model.UserTokenPasswordReset}}
 	tokens.consumeResetInput = func(input *store.PasswordResetCompletion) { reuse = input.Reuse }
@@ -226,7 +225,7 @@ func TestCompletePasswordResetRefusesARecentPasswordAndPassesTheHistoryCheck(t *
 	}
 	app := newAccountTokenTestApp(t, accountTokenTestDependencies{
 		users: &accountTokenUserStoreFake{byID: user}, passwords: &accountTokenPasswordStoreFake{}, tokens: tokens,
-		institution: &model.Institution{ID: model.NewInstitutionID()}, mailer: &accountTokenMailerFake{enabled: true}, hasher: hasher,
+		institution: &model.Institution{ID: model.NewInstitutionID()}, hasher: hasher,
 	})
 	result, err := app.CompletePasswordReset(context.Background(), invocation.Invocation{}, CompletePasswordResetCommand{
 		Token: accountTokenTestRawToken, Password: "lantern-orchard-copper-tide", Source: "192.0.2.8",
@@ -250,9 +249,9 @@ func TestCompletePasswordResetRefusesARecentPasswordAndPassesTheHistoryCheck(t *
 }
 
 func TestPasswordResetWorkFailuresDoNotConsumeResetToken(t *testing.T) {
-	testPasswordHashFailures(t, "authentication.account_recovery.unavailable", func(t *testing.T, ctx context.Context, hasher passwordHashFunc) error {
+	testPasswordHashFailures(t, "authentication.account_recovery.unavailable", func(t *testing.T, ctx context.Context, hasher *PasswordHasher) error {
 		consumed := false
-		user := &model.User{ID: model.NewUserID(), Email: "student@example.edu"}
+		user := accountTokenTestUser("student@example.edu")
 		tokens := &accountTokenStoreFake{byHash: &model.UserToken{UserID: user.ID, Purpose: model.UserTokenPasswordReset},
 			consumeReset: func(string, string, time.Time, *model.AuditEvent) (*store.PasswordResetResult, error) {
 				consumed = true
@@ -261,7 +260,7 @@ func TestPasswordResetWorkFailuresDoNotConsumeResetToken(t *testing.T) {
 		application := newAccountTokenTestApp(t, accountTokenTestDependencies{
 			users: &accountTokenUserStoreFake{byID: user}, passwords: &accountTokenPasswordStoreFake{}, tokens: tokens,
 			institution: &model.Institution{ID: model.NewInstitutionID()},
-			mailer:      &accountTokenMailerFake{enabled: true}, hasher: accountTokenHasherFake{hashFunc: hasher.Hash},
+			hasher:      hasher,
 		})
 		user, err := application.CompletePasswordReset(ctx, invocation.Invocation{}, CompletePasswordResetCommand{
 			Token: accountTokenTestRawToken, Password: "correct horse battery staple", Source: "192.0.2.34",
@@ -280,8 +279,8 @@ func TestCompletePasswordResetUnknownTokenDoesNotSpendPasswordWork(t *testing.T)
 	app := newAccountTokenTestApp(t, accountTokenTestDependencies{
 		users: &accountTokenUserStoreFake{}, passwords: &accountTokenPasswordStoreFake{},
 		tokens:      &accountTokenStoreFake{},
-		institution: &model.Institution{ID: model.NewInstitutionID()}, mailer: &accountTokenMailerFake{enabled: true},
-		hasher: accountTokenHasherFake{hash: "encoded-password", passwords: &hashed},
+		institution: &model.Institution{ID: model.NewInstitutionID()},
+		hasher:      accountTokenTestHasher(t, "encoded-password", &hashed),
 	})
 	result, err := app.CompletePasswordReset(context.Background(), invocation.Invocation{}, CompletePasswordResetCommand{
 		Token: model.NewCredentialToken(), Password: "NewCorrectHorseBatteryStaple1!", Source: "192.0.2.9",

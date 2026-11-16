@@ -11,13 +11,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/sudosylabs/proctor/server/app/access"
-	"github.com/sudosylabs/proctor/server/app/apperror"
+
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/model"
@@ -25,90 +27,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// The fakes below stand in for the collaborators the parent app package
-// supplies; each records what the identity use cases ask of it.
-
-type institutionAuditorFake struct {
-	events    *[]string
-	beginID   string
-	beginIDs  []string
-	failCode  string
-	action    model.Action
-	resource  model.Resource
-	resources []model.Resource
-	scopeType model.RoleScopeType
-	scopeID   string
-	subjects  []model.UserID
-	values    []map[string]any
-}
-
-func (a *institutionAuditorFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
-	if !attempt.Subject.IsZero() {
-		a.subjects = append(a.subjects, attempt.Subject)
-	}
-	if attempt.ScopeType != "" || attempt.ScopeID != "" {
-		a.scopeType, a.scopeID = attempt.ScopeType, attempt.ScopeID
-	}
-
-	*a.events = append(*a.events, "audit-begin")
-	a.values = append(a.values, attempt.Value)
-	a.action, a.resource = attempt.Action, attempt.Resource
-	a.resources = append(a.resources, attempt.Resource)
-	if len(a.beginIDs) > 0 {
-		id := a.beginIDs[0]
-		a.beginIDs = a.beginIDs[1:]
-		return model.AuditEventID(id), nil
-	}
-	return model.AuditEventID(a.beginID), nil
-}
-
-func (a *institutionAuditorFake) Fail(_ context.Context, _ model.AuditEventID, code string) error {
-	*a.events = append(*a.events, "audit-fail")
-	a.failCode = code
-	return nil
-}
-
-type mutationAttemptAuditorFake struct {
-	events   *[]string
-	beginID  string
-	beginIDs []string
-	beginErr error
-	failErr  error
-	failID   string
-	failCode string
-	attempt  access.Mutation
-	attempts []access.Mutation
-}
-
-// Begin records the whole Mutation; the event names whether it carried an
-// explicit scope, as the two positional entry points once did.
-func (a *mutationAttemptAuditorFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
-	if attempt.ScopeType != "" {
-		*a.events = append(*a.events, "begin-at-scope")
-	} else {
-		*a.events = append(*a.events, "begin")
-	}
-
-	a.attempt = attempt
-	a.attempts = append(a.attempts, attempt)
-	return model.AuditEventID(a.nextBeginID()), a.beginErr
-}
-
-func (a *mutationAttemptAuditorFake) nextBeginID() string {
-	if len(a.beginIDs) == 0 {
-		return a.beginID
-	}
-	id := a.beginIDs[0]
-	a.beginIDs = a.beginIDs[1:]
-	return id
-}
-
-func (a *mutationAttemptAuditorFake) Fail(_ context.Context, id model.AuditEventID, code string) error {
-	*a.events = append(*a.events, "fail")
-	a.failID = id.String()
-	a.failCode = code
-	return a.failErr
-}
+// The fakes below stand in for the Stores the parent app package supplies;
+// each records what the identity use cases ask of it. The authorizer, the
+// auditors and the mail Composer are the production ones.
 
 type accessAcademicPeriodStoreFake struct {
 	store.AcademicPeriodStore
@@ -259,10 +180,12 @@ type accessPolicyStoreFake struct {
 	// roleHolderMFAUsers are the Users HasRoleHolderMFARequirement reports as covered.
 	roleHolderMFAUsers map[model.UserID]bool
 	roleHolderMFAErr   error
+	// getErr makes every read of the current policy fail.
+	getErr error
 }
 
 func (s *accessPolicyStoreFake) Get(context.Context, int) (*store.AccessPolicySnapshot, error) {
-	return s.snapshot, nil
+	return s.snapshot, s.getErr
 }
 
 func (s *accessPolicyStoreFake) Preflight(_ context.Context, input *store.AccessPolicyPreflight) (*store.AccessPolicyPreflightResult, error) {
@@ -280,48 +203,6 @@ func (s *accessPolicyStoreFake) HasRoleHolderMFARequirement(_ context.Context, u
 func (s *accessPolicyStoreFake) Replace(_ context.Context, input *store.AccessPolicyReplacement, command *store.CommandIdempotency) (*store.AccessPolicyReplacementResult, error) {
 	s.replaceInput, s.command = input, command
 	return s.result, s.replaceErr
-}
-
-type accessPolicyAuthorizationFake struct {
-	resourceAuthorizer
-	action model.Action
-}
-
-func (a *accessPolicyAuthorizationFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, _ model.Resource) error {
-	a.action = action
-	return nil
-}
-
-type accessPolicyCapabilitiesFake struct {
-	snapshot AccessPolicyCapabilitySnapshot
-}
-
-func (c *accessPolicyCapabilitiesFake) Snapshot() AccessPolicyCapabilitySnapshot { return c.snapshot }
-
-type accessPolicyAuditFake struct {
-	beginID  string
-	beginErr error
-	failErr  error
-	attempt  access.Mutation
-	failID   string
-	failCode string
-}
-
-func (a *accessPolicyAuditFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
-	// This fake keeps no subject, so it refuses a Mutation that names one
-	// instead of dropping it.
-	// It stands in for access.MutationAuditAdapter, which records it.
-	if !attempt.Subject.IsZero() {
-		return "", apperror.New("audit.internal")
-	}
-
-	a.attempt = attempt
-	return model.AuditEventID(a.beginID), a.beginErr
-}
-
-func (a *accessPolicyAuditFake) Fail(_ context.Context, id model.AuditEventID, code string) error {
-	a.failID, a.failCode = id.String(), code
-	return a.failErr
 }
 
 type accessPolicyInstitutionFake struct {
@@ -376,59 +257,11 @@ func seedAuthenticatedSession(
 	return user, result.Tokens.AccessToken
 }
 
-type mailRekeyAuditFake struct {
-	beginID  string
-	attempt  access.Mutation
-	failID   string
-	failCode string
-	failErr  error
-	events   *[]string
-}
-
-func (f *mailRekeyAuditFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
-	// This fake keeps no subject, so it refuses a Mutation that names one
-	// instead of dropping it.
-	// It stands in for access.MutationAuditAdapter, which records it.
-	if !attempt.Subject.IsZero() {
-		return "", apperror.New("audit.internal")
-	}
-
-	if attempt.ScopeType == "" && attempt.ScopeID == "" {
-		return "", errors.New("unscoped mail rekey audit is forbidden")
-	}
-
-	if f.events != nil {
-		*f.events = append(*f.events, "audit")
-	}
-	f.attempt = attempt
-	return model.AuditEventID(f.beginID), nil
-}
-
-func (f *mailRekeyAuditFake) Fail(_ context.Context, id model.AuditEventID, code string) error {
-	f.failID, f.failCode = id.String(), code
-	return f.failErr
-}
-
 func oldSealerKeyID(t *testing.T, key string) string {
 	t.Helper()
 	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: 1})
 	require.NoError(t, err)
 	return sealer.PrimaryKeyID()
-}
-
-// mailAuthorizerFake records each operator authorization of the key rings:
-// the action and the Resource it was asked to authorize.
-type mailAuthorizerFake struct {
-	resourceAuthorizer
-	actions   []model.Action
-	resources []model.Resource
-	err       error
-}
-
-func (a *mailAuthorizerFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource) error {
-	a.actions = append(a.actions, action)
-	a.resources = append(a.resources, resource)
-	return a.err
 }
 
 type mailRendererFake struct{ content mail.FrozenContent }
@@ -479,34 +312,6 @@ func mailTestUser(principal model.Principal, at time.Time) *model.User {
 	return user
 }
 
-type DirectMailPreparation struct {
-	Recipient    *model.User
-	OccurrenceID model.MailOccurrenceID
-	Kind         model.MailOccurrenceKind
-	TemplateKey  model.MailTemplateKey
-	ActionURL    string
-	At           time.Time
-	Deadline     time.Time
-	JobType      model.JobType
-}
-
-// accountAuthorizerFake authorizes every account-state and email action and
-// records the decision for the call-order assertions of those tests.
-type accountAuthorizerFake struct {
-	resourceAuthorizer
-	events *[]string
-}
-
-func (a *accountAuthorizerFake) Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error {
-	*a.events = append(*a.events, "authorize-manage")
-	return nil
-}
-
-func (a *accountAuthorizerFake) AuthorizeAccountStateManage(context.Context, invocation.Invocation, model.UserID) error {
-	*a.events = append(*a.events, "authorize-manage")
-	return nil
-}
-
 // userSettingsSessionPrincipal is the interactive Session principal that the
 // authentication tests sign a User in as.
 func userSettingsSessionPrincipal(at time.Time) model.Principal {
@@ -517,4 +322,199 @@ func userSettingsSessionPrincipal(at time.Time) model.Principal {
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: at,
 	}
+}
+
+// accessWith builds the real authorizer and auditor the options describe and
+// places what they do in events: "grants" for each read of the caller's Role
+// Bindings, "decision:<action>:<status>" for a recorded decision,
+// "audit-begin:<action>" for a mutation attempt and "audit-<status>" for its
+// completion. A nil events drops them.
+func accessWith(t testing.TB, events *[]string, options accesstest.Options) *accesstest.Fixture {
+	t.Helper()
+	options.Observe = func(event string) {
+		if events != nil {
+			*events = append(*events, event)
+		}
+	}
+	return accesstest.New(t, options)
+}
+
+// grantedAccess builds the real authorizer and auditor over the grants alone.
+func grantedAccess(t testing.TB, events *[]string, grants ...accesstest.Grant) *accesstest.Fixture {
+	t.Helper()
+	return accessWith(t, events, accesstest.Options{Grants: grants})
+}
+
+// institutionGrant grants the actions Institution-wide.
+func institutionGrant(userID model.UserID, actions ...model.Action) accesstest.Grant {
+	return accesstest.Grant{UserID: userID, Actions: actions}
+}
+
+// withAccess gives the Service the fixture's authorizer and mutation auditor,
+// as composition gives it the shared ones.
+func withAccess(service *Service, fixture *accesstest.Fixture) *Service {
+	service.authorizer, service.auditor = fixture.Authorizer, fixture.Auditor.MutationAudit()
+	return service
+}
+
+// recordedAttempt is one mutation attempt the real auditor recorded, with its
+// Parameters and PriorState decoded from their stored JSON.
+type recordedAttempt struct {
+	*model.AuditEvent
+	parameters map[string]any
+	prior      any
+}
+
+// value is the "value" parameter the attempt was begun with.
+func (a recordedAttempt) value() any {
+	return a.parameters["value"]
+}
+
+// recordedAttempts returns the fixture's mutation attempts, in order.
+func recordedAttempts(t testing.TB, fixture *accesstest.Fixture) []recordedAttempt {
+	t.Helper()
+	var attempts []recordedAttempt
+	for _, event := range fixture.Audits.Attempts() {
+		parameters, _ := decodedAuditData(t, event.Parameters).(map[string]any)
+		attempts = append(attempts, recordedAttempt{AuditEvent: event, parameters: parameters, prior: decodedAuditData(t, event.PriorState)})
+	}
+	return attempts
+}
+
+// decodedAuditData decodes stored audit JSON; nothing stored decodes to nil.
+func decodedAuditData(t testing.TB, raw json.RawMessage) any {
+	t.Helper()
+	if len(raw) == 0 {
+		return nil
+	}
+	var value any
+	require.NoError(t, json.Unmarshal(raw, &value))
+	return value
+}
+
+// mailRenderRecorder renders every message the real Composer freezes and
+// records what it was asked to render. A set err fails every render.
+type mailRenderRecorder struct {
+	mu       sync.Mutex
+	requests []mail.RenderRequest
+	err      error
+}
+
+func (r *mailRenderRecorder) Render(request mail.RenderRequest) (mail.FrozenContent, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.requests = append(r.requests, request)
+	if r.err != nil {
+		return mail.FrozenContent{}, r.err
+	}
+	return mail.FrozenContent{Subject: "Notice", Text: "Notice", HTML: "<p>Notice</p>"}, nil
+}
+
+// rendered returns what the Composer asked to render, in order.
+func (r *mailRenderRecorder) rendered() []mail.RenderRequest {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]mail.RenderRequest(nil), r.requests...)
+}
+
+// keys returns the template of each rendered message, in order.
+func (r *mailRenderRecorder) keys() []model.MailTemplateKey {
+	var keys []model.MailTemplateKey
+	for _, request := range r.rendered() {
+		keys = append(keys, request.Key)
+	}
+	return keys
+}
+
+// actionURLs returns the link each rendered message carries, in order.
+func (r *mailRenderRecorder) actionURLs() []string {
+	var urls []string
+	for _, request := range r.rendered() {
+		urls = append(urls, request.ActionURL)
+	}
+	return urls
+}
+
+// newTestMail builds the production mail Composer. An enabled sender queues
+// rendered mail; a disabled one makes the Composer record suppressed mail
+// without rendering it.
+func newTestMail(t testing.TB, enabled bool) (*mail.Composer, *mailRenderRecorder) {
+	t.Helper()
+	renderer := &mailRenderRecorder{}
+	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
+	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
+	require.NoError(t, err)
+	composer, err := mail.NewComposer(mail.ComposerDependencies{
+		Renderer: renderer,
+		Sender:   &mailSenderFake{enabled: enabled, from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}},
+		Sealer:   sealer,
+	})
+	require.NoError(t, err)
+	return composer, renderer
+}
+
+// mailRecipient is an active User the real Composer can address.
+func mailRecipient(id model.UserID) *model.User {
+	user := &model.User{Username: "recipient", Email: "recipient@example.edu", DisplayName: "Recipient", EmailVerified: true, Locale: "en", Timezone: "UTC"}
+	user.PrepareCreate(id, time.UnixMilli(1))
+	return user
+}
+
+// deploymentCapabilities builds the production DeploymentCapabilities that
+// report the snapshot: its providers are live in the registry and durable
+// mail rides an enabled, healthy sender.
+func deploymentCapabilities(snapshot AccessPolicyCapabilitySnapshot) *DeploymentCapabilities {
+	source := accessPolicyProviderSourceFake{providers: map[string]ExternalIdentityProvider{}}
+	for _, provider := range snapshot.Providers {
+		source.descriptors = append(source.descriptors, provider.Descriptor)
+		source.providers[provider.Descriptor.ID] = capabilityProvider{descriptor: provider.Descriptor, autoProvision: provider.AutoProvision}
+	}
+	health := accessPolicyMailHealthFake{code: mail.HealthHealthy}
+	return &DeploymentCapabilities{Providers: source, Mail: accessPolicyMailSenderFake{enabled: snapshot.DurableMail}, Health: health, MFAEnabled: snapshot.MFA}
+}
+
+// noCapabilities is a deployment with no providers, durable mail or MFA.
+func noCapabilities() *DeploymentCapabilities {
+	return deploymentCapabilities(AccessPolicyCapabilitySnapshot{})
+}
+
+// capabilityProvider is a configured provider as the capability snapshot
+// sees it; it never signs anyone in.
+type capabilityProvider struct {
+	descriptor    model.ExternalAuthenticationProvider
+	autoProvision bool
+}
+
+func (p capabilityProvider) Descriptor() model.ExternalAuthenticationProvider { return p.descriptor }
+func (p capabilityProvider) AutoProvision() bool                              { return p.autoProvision }
+func (capabilityProvider) Begin(context.Context, ExternalProviderBeginRequest) (*ExternalProviderBeginResponse, error) {
+	return nil, errors.New("capability provider does not sign in")
+}
+func (capabilityProvider) State(model.ExternalAuthenticationCallback) (string, error) {
+	return "", errors.New("capability provider does not sign in")
+}
+func (capabilityProvider) Complete(context.Context, ExternalProviderCompleteRequest) (*model.ExternalAuthenticationAssertion, error) {
+	return nil, errors.New("capability provider does not sign in")
+}
+
+// hookedPasswordHasher is the production hasher whose Hash returns what hash
+// returns, for password work failures and fixed encodings.
+func hookedPasswordHasher(t testing.TB, hash func(context.Context, string) (string, error)) *PasswordHasher {
+	t.Helper()
+	hasher, err := NewPasswordHasher(PasswordHasherDependencies{Settings: testPasswordPolicy()})
+	require.NoError(t, err)
+	hasher.hashHook = hash
+	return hasher
+}
+
+// fixedPasswordHasher hashes every password to encoded, appending
+// "hash-password" to events when they are given.
+func fixedPasswordHasher(t testing.TB, events *[]string, encoded string, err error) *PasswordHasher {
+	t.Helper()
+	return hookedPasswordHasher(t, func(context.Context, string) (string, error) {
+		if events != nil {
+			*events = append(*events, "hash-password")
+		}
+		return encoded, err
+	})
 }

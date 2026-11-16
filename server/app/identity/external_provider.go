@@ -112,7 +112,7 @@ func (s *Service) requireExternalAuthentication() error {
 	if s.invalidator == nil {
 		return errors.New("authentication invalidator is required")
 	}
-	if s.auditor == nil || s.capabilities == nil || s.invitations == nil || s.recentAuthenticationTTL <= 0 {
+	if s.capabilities == nil || s.invitations == nil || s.recentAuthenticationTTL <= 0 {
 		return errors.New("external authentication method lifecycle dependencies are required")
 	}
 	if s.diagnostics == nil {

@@ -13,7 +13,7 @@ paths:
       tags:
         - Access policy
       description: >-
-        Returns the complete current installation admission policy, safe deployment capabilities, and bounded applied transition history to an authorized principal. Provider secrets and mail configuration are never exposed.
+        Returns the installation's whole current Access Policy, the deployment facts an administrator needs to edit it, and up to 100 of its most recent changes. Provider secrets and mail settings are never included.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -58,7 +58,7 @@ paths:
       tags:
         - Access policy
       description: >-
-        Replaces the complete installation Access Policy under an optimistic revision fence. Proctor repeats deployment-capability and last-administrator-path checks in the authoritative transaction, can revoke Sessions affected by newly disabled methods or, when two-step verification becomes required for role holders, the role holders' Sessions that have not proved a second factor, pulls live Session deadlines in when a Session length becomes shorter, and requires both a strong recent interactive Session and an Idempotency-Key.
+        Replaces the whole Access Policy. Send the `revision` you read as `expected_revision`. If the policy has changed since, the request fails and nothing changes. Proctor checks again, as it saves the change, that the deployment supports the new settings and that a system administrator can still sign in. When you ask it to, Proctor signs out Sessions that used a sign-in method you are turning off. If the change starts requiring two-step verification for role holders, it also signs out their Sessions that have not proved a second factor. When a Session length gets shorter, running Sessions get the earlier deadline. The request needs a recent, strongly authenticated interactive Session and an Idempotency-Key.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -129,7 +129,7 @@ paths:
       tags:
         - Access policy
       description: >-
-        Evaluates the complete proposed replacement against the current revision, configured provider capabilities, invitation delivery, two-step verification availability, and last-administrator access paths, and counts the role holders without two-step verification and their Sessions that have not proved it. Preflight makes no durable change and does not reserve the revision, so replacement repeats every check in its authoritative transaction.
+        Checks a proposed Access Policy without saving it. Proctor compares it with the current revision and checks the configured providers, Invitation mail delivery, two-step verification support and whether a system administrator could still sign in. It also counts the role holders without two-step verification and their Sessions that have not proved a second factor. Nothing is saved and the revision is not held for you, so the replacement runs every check again.
       x-proctor-auth: strong_recent_session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -179,7 +179,7 @@ paths:
 components:
   requestBodies:
     PreflightAccessPolicy:
-      description: The complete revision-fenced policy proposal to evaluate without mutation.
+      description: The whole proposed Access Policy, with the `expected_revision` it is based on. Nothing is saved.
       required: true
       content:
         application/json:
@@ -218,10 +218,11 @@ components:
             session_idle_minutes: 480
             session_absolute_minutes: null
       description: >-
-        A complete revision-fenced replacement of the installation Access Policy. Every setting is required so omitted values cannot silently inherit an unsafe prior state.
+        The whole new Access Policy, with the `expected_revision` it is based on. Every setting is required, so a
+        setting you forget can't quietly keep an unsafe earlier value.
   responses:
     AccessPolicyOK:
-      description: Revisioned Access Policy, bounded transition history, and safe deployment capabilities
+      description: The current Access Policy, its recent changes and the deployment facts for editing it
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -230,29 +231,48 @@ components:
           schema:
             $ref: '#/components/schemas/AccessPolicyResponse'
           example:
-            id: ybndrfg8ejkmcpqxot1uwisza3
+            id: fotnmte5o3j9wftdm5rtbfofqr
             revision: 4
-            created_at: '2027-01-01T00:00:00Z'
-            updated_at: '2027-01-01T01:00:00Z'
+            created_at: '2026-07-01T08:00:00Z'
+            updated_at: '2026-08-20T13:15:00Z'
             local_login_enabled: true
             public_registration_enabled: false
             invitation_admission_enabled: true
             invitation_local_credential_enabled: true
             desktop_authorization_enabled: true
-            provider_admissions: {}
-            role_holder_mfa_required: false
-            role_holder_mfa_enforced: false
+            provider_admissions:
+              university_oidc: invitation_required
+            role_holder_mfa_required: true
+            role_holder_mfa_enforced: true
             session_idle_minutes: 480
             session_absolute_minutes: null
             session_idle_minutes_default: 10080
             session_idle_minutes_maximum: 10080
             session_absolute_minutes_default: 43200
             session_absolute_minutes_maximum: 43200
-            history: []
-            available_providers: []
+            history:
+              - from_revision: 3
+                to_revision: 4
+                actor_user_id: o87yi4tenx8kodmcuup1hmtsbo
+                changed_fields:
+                  - revoke_existing_sessions
+                  - role_holder_mfa_required
+                changed_at: '2026-08-20T13:15:00Z'
+                outcome: applied
+              - from_revision: 2
+                to_revision: 3
+                actor_user_id: o87yi4tenx8kodmcuup1hmtsbo
+                changed_fields:
+                  - session_idle_minutes
+                changed_at: '2026-08-02T10:00:00Z'
+                outcome: applied
+            available_providers:
+              - id: university_oidc
+                display_name: University sign-in
+                type: oidc
             durable_mail: true
     AccessPolicyPreflightOK:
-      description: Safe blockers for the proposed Access Policy replacement
+      description: What would stop the proposed Access Policy, and how many role holders and Sessions it affects
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -266,7 +286,11 @@ components:
             role_holder_single_factor_session_count: 5
   schemas:
     ProviderAdmissionMode:
-      description: Admission rule applied after a configured provider proves an external identity.
+      description: >-
+        How a configured external sign-in provider lets people in once it has proved who they are. `linked_only`
+        signs in only identities already linked to a User. `invitation_required` also lets a new identity in by
+        accepting an Invitation. `auto_provision` also creates a User for a new identity, when the provider
+        supports it. A provider with no entry can't be used to sign in.
       type: string
       enum:
         - linked_only
@@ -292,26 +316,30 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: The current policy revision used as an optimistic concurrency fence.
+          description: >-
+            The `revision` of the policy you based this proposal on. If the policy has changed since, the request
+            fails with `access_policy.revision_conflict`.
         revoke_existing_sessions:
           type: boolean
           description: >-
-            One-shot choice to revoke active Sessions authenticated by methods newly disabled by this transition and, when this transition starts requiring two-step verification of role holders, the live role holders' Sessions that have not proved a second factor.
+            Applies to this change only and is not stored. When true, Proctor signs out active Sessions that used a
+            sign-in method this change turns off. If this change starts requiring two-step verification for role
+            holders, it also signs out their live Sessions that have not proved a second factor.
         local_login_enabled:
           type: boolean
-          description: Whether configured local-password login may be used.
+          description: Whether people may sign in with a local password.
         public_registration_enabled:
           type: boolean
-          description: Whether public local self-registration is admitted.
+          description: Whether anyone may create their own local account through public registration.
         invitation_admission_enabled:
           type: boolean
-          description: Whether outstanding Invitations may admit recipients.
+          description: Whether pending Invitations can be accepted to let their recipients in.
         invitation_local_credential_enabled:
           type: boolean
-          description: Whether Invitation acceptance may enroll a local password.
+          description: Whether someone accepting an Invitation may set a local password.
         desktop_authorization_enabled:
           type: boolean
-          description: Whether the native-client browser authorization protocol is admitted.
+          description: Whether Proctor Desktop may sign in through the browser authorization flow.
         provider_admissions:
           type: object
           maxProperties: 64
@@ -319,11 +347,19 @@ components:
             pattern: ^[a-z0-9][a-z0-9._-]{0,63}$
           additionalProperties:
             $ref: '#/components/schemas/ProviderAdmissionMode'
-          description: Admission mode for each configured external authentication provider, keyed by provider ID.
+          description: >-
+            The admission mode for each external sign-in provider you turn on, keyed by provider ID. Leave a
+            provider out to turn it off.
         role_holder_mfa_required:
           type: boolean
           description: >-
-            Whether every role holder must use two-step verification. A role holder is any User with a current Role Binding at any scope, system administrators included. A role holder without a second factor signs in on the web to a Session restricted to setting up two-step verification, completing a challenge, or signing out; Proctor Desktop refuses that sign-in with `authentication.mfa.enrollment_required`. The requirement pauses, restricting and refusing nothing, while the server configuration disables two-step verification. Clients may label this switch "Two-step required for staff"; it is unrelated to the staff member Affiliation.
+            Whether every role holder must use two-step verification. A role holder is any User with a current Role
+            Binding at any scope, system administrators included. A role holder without a second factor who signs in
+            on the web gets a Session that can only set up two-step verification, complete a challenge or sign out.
+            Proctor Desktop refuses that sign-in with `authentication.mfa.enrollment_required`. While the server
+            configuration turns two-step verification off, the requirement is paused and restricts or refuses
+            nobody. Clients may label this switch "Two-step required for staff". It has nothing to do with the staff
+            member Affiliation.
         session_idle_minutes:
           type:
             - integer
@@ -331,7 +367,11 @@ components:
           minimum: 1
           maximum: 527040
           description: >-
-            How long a Session may stay unused before it ends, in minutes; null keeps the deployment default. It lies between the deployment minimum, which outlasts an access credential and the activity debounce, and `session_idle_minutes_maximum`, and never exceeds the effective absolute length. Shortening it pulls live Sessions' idle deadlines in; lengthening it never extends a running Session.
+            How long a Session may stay unused before it ends, in minutes. Null uses the deployment default. The value
+            must be at least the deployment minimum, which is longer than an access credential lasts and longer than
+            the delay before activity is recorded. It must be at most `session_idle_minutes_maximum` and never longer
+            than the absolute Session length in force. Shortening it moves running Sessions' idle deadlines earlier.
+            Lengthening it never extends a running Session.
         session_absolute_minutes:
           type:
             - integer
@@ -339,9 +379,12 @@ components:
           minimum: 1
           maximum: 527040
           description: >-
-            How long a Session may last from sign-in, in minutes; null keeps the deployment default. It lies between the deployment minimum, which outlasts the recent-authentication window and the idle minimum, and `session_absolute_minutes_maximum`. Shortening it pulls live Sessions' deadlines and credentials in; lengthening it never extends a running Session.
+            How long a Session may last from sign-in, in minutes. Null uses the deployment default. The value must be
+            at least the deployment minimum, which is longer than the recent sign-in window and the idle minimum, and
+            at most `session_absolute_minutes_maximum`. Shortening it moves running Sessions' deadlines and their
+            credentials' expiry earlier. Lengthening it never extends a running Session.
     AccessPolicyTransitionResponse:
-      description: Safe immutable summary of one applied Access Policy replacement.
+      description: A summary of one applied change to the Access Policy. A recorded change can't be edited.
       type: object
       additionalProperties: false
       required:
@@ -356,13 +399,19 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The policy revision before the change.
         to_revision:
           type: integer
           format: int64
           minimum: 2
+          description: The policy revision the change produced.
         actor_user_id:
           $ref: '#/components/schemas/ID'
+          description: The User who made the change.
         changed_fields:
+          description: >-
+            The settings whose values changed, in alphabetical order. It includes `revoke_existing_sessions` when the
+            change was made with that option on.
           type: array
           minItems: 1
           uniqueItems: true
@@ -382,12 +431,13 @@ components:
         changed_at:
           type: string
           format: date-time
-          description: Time when the replacement committed.
+          description: When the change was saved.
         outcome:
           type: string
           const: applied
+          description: The result of the change. Only applied changes are recorded, so it is always `applied`.
     AccessPolicyResponse:
-      description: Current revisioned Access Policy plus bounded safe capabilities and transition history.
+      description: The current Access Policy, the deployment facts needed to edit it and its most recent changes.
       type: object
       additionalProperties: false
       required:
@@ -415,27 +465,37 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The Access Policy identifier.
         revision:
           type: integer
           format: int64
           minimum: 1
-          description: Monotonic policy revision used for optimistic concurrency.
+          description: >-
+            Goes up by one with every applied change. Send it as `expected_revision` when you preflight or replace
+            the policy.
         created_at:
           type: string
           format: date-time
+          description: When the Access Policy was created.
         updated_at:
           type: string
           format: date-time
+          description: When the Access Policy last changed.
         local_login_enabled:
           type: boolean
+          description: Whether people may sign in with a local password.
         public_registration_enabled:
           type: boolean
+          description: Whether anyone may create their own local account through public registration.
         invitation_admission_enabled:
           type: boolean
+          description: Whether pending Invitations can be accepted to let their recipients in.
         invitation_local_credential_enabled:
           type: boolean
+          description: Whether someone accepting an Invitation may set a local password.
         desktop_authorization_enabled:
           type: boolean
+          description: Whether Proctor Desktop may sign in through the browser authorization flow.
         provider_admissions:
           type: object
           maxProperties: 64
@@ -443,6 +503,9 @@ components:
             pattern: ^[a-z0-9][a-z0-9._-]{0,63}$
           additionalProperties:
             $ref: '#/components/schemas/ProviderAdmissionMode'
+          description: >-
+            The admission mode of each external sign-in provider the policy turns on, keyed by provider ID. A
+            provider that is not listed is off.
         role_holder_mfa_required:
           type: boolean
           description: Whether every role holder, a User with a current Role Binding at any scope, must use two-step verification. Clients may label it "Two-step required for staff".
@@ -457,14 +520,14 @@ components:
             - 'null'
           minimum: 1
           maximum: 527040
-          description: The idle Session length the policy sets, in minutes; null while the deployment default applies.
+          description: The idle Session length the policy sets, in minutes. Null while the deployment default applies.
         session_absolute_minutes:
           type:
             - integer
             - 'null'
           minimum: 1
           maximum: 527040
-          description: The absolute Session length the policy sets, in minutes; null while the deployment default applies.
+          description: The absolute Session length the policy sets, in minutes. Null while the deployment default applies.
         session_idle_minutes_default:
           type: integer
           minimum: 0
@@ -473,7 +536,7 @@ components:
           type: integer
           minimum: 0
           maximum: 527040
-          description: The longest idle Session length the policy may set, in minutes; the deployment configuration is the ceiling.
+          description: The longest idle Session length the policy may set, in minutes. The deployment configuration sets this limit.
         session_absolute_minutes_default:
           type: integer
           minimum: 0
@@ -482,23 +545,28 @@ components:
           type: integer
           minimum: 0
           maximum: 527040
-          description: The longest absolute Session length the policy may set, in minutes; the deployment configuration is the ceiling.
+          description: The longest absolute Session length the policy may set, in minutes. The deployment configuration sets this limit.
         history:
           type: array
           maxItems: 100
           items:
             $ref: '#/components/schemas/AccessPolicyTransitionResponse'
-          description: Newest bounded applied transitions retained for administrative context.
+          description: Up to 100 of the most recent applied changes, newest first.
         available_providers:
           type: array
           maxItems: 64
           items:
             $ref: '#/components/schemas/ExternalAuthenticationProviderResponse'
+          description: >-
+            Every external sign-in provider configured on this deployment, whether or not the policy turns it on.
+            Only these may appear in `provider_admissions`.
         durable_mail:
           type: boolean
-          description: Whether the deployment can durably deliver invitation and account-security mail.
+          description: >-
+            Whether the deployment can reliably deliver Invitation and account-security mail. Without it, a change
+            that newly depends on Invitations is blocked.
     AccessPolicyBlockerResponse:
-      description: Safe reason the proposed policy cannot currently be applied.
+      description: One reason the proposed Access Policy can't be applied right now.
       type: object
       additionalProperties: false
       required:
@@ -513,12 +581,20 @@ components:
             - last_system_administrator_path
             - mfa_unavailable
           description: >-
-            `mfa_unavailable` means the proposal starts requiring two-step verification of role holders while the server configuration disables two-step verification.
+            Why the proposal is blocked. `provider_unavailable`: a provider in `provider_admissions` is not
+            configured on this deployment. `provider_admission_unsupported`: the provider can't create Users, so
+            `auto_provision` is not allowed. `invitation_delivery_unavailable`: the proposal newly depends on
+            Invitations while the deployment can't reliably deliver mail. `last_system_administrator_path`: no
+            system administrator would have a way left to sign in. `mfa_unavailable`: the proposal starts requiring
+            two-step verification for role holders while the server configuration turns two-step verification
+            off.
         provider_id:
           type: string
-          description: Configured provider associated with the blocker, when provider-specific.
+          description: The ID of the provider the blocker is about. Omitted when the blocker is not about one provider.
     AccessPolicyPreflightResponse:
-      description: Current safe blockers and role holder two-step verification counts for a proposed Access Policy replacement.
+      description: >-
+        What would stop a proposed Access Policy today, and how many role holders and Sessions lack two-step
+        verification.
       type: object
       additionalProperties: false
       required:
@@ -529,15 +605,19 @@ components:
         role_holders_without_mfa_count:
           type: integer
           minimum: 0
-          description: Active role holders, those holding a current Role Binding at any scope, who have no active second factor.
+          description: >-
+            How many active role holders, Users with a current Role Binding at any scope, have no active second
+            factor.
         role_holder_single_factor_session_count:
           type: integer
           minimum: 0
           description: >-
-            Live Sessions of active role holders that have not proved a second factor: the Sessions `revoke_existing_sessions` signs out when the proposal starts requiring two-step verification of role holders.
+            How many live Sessions of active role holders have not proved a second factor. These are the Sessions
+            `revoke_existing_sessions` signs out when the proposal starts requiring two-step verification for role
+            holders.
         blockers:
           type: array
           maxItems: 66
           items:
             $ref: '#/components/schemas/AccessPolicyBlockerResponse'
-          description: Empty when no blocker is currently observed; replacement still repeats all checks.
+          description: Each problem found, sorted by code and provider. Empty when none was found. The replacement still runs every check again.

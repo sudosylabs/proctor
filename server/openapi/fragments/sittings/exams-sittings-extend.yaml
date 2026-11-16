@@ -16,7 +16,10 @@ paths:
       tags:
         - Sittings
       description: >-
-        Moves an open or paused Sitting deadline to a strictly later instant under its exact revision fence. Class and Academic Period eligibility are rechecked, and the operation cannot shorten the window or revive a closed Sitting.
+        Moves the deadline of an open or paused Sitting to a later time. Send the Sitting's current
+        revision; the request fails if it changed since you read it. The server checks again that the
+        Class is eligible and that the new deadline fits its Academic Period. You can't shorten a Sitting
+        or reopen a closed one.
       x-proctor-auth: principal_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -76,7 +79,7 @@ paths:
 components:
   requestBodies:
     ExtendExamSitting:
-      description: Exact Sitting revision, strictly later deadline, and private manager rationale.
+      description: The Sitting's current revision, the new later deadline, and a private reason.
       required: true
       content:
         application/json:
@@ -88,7 +91,7 @@ components:
             reason: Thirty minutes were granted after a verified interruption.
   schemas:
     ExtendExamSittingRequest:
-      description: Revision-fenced deadline extension for an open or paused Sitting.
+      description: A later deadline for an open or paused Sitting.
       type: object
       additionalProperties: false
       required:
@@ -100,13 +103,17 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: >-
+            The Sitting's current revision, as last read. The request fails with a conflict if the Sitting
+            has changed since.
         scheduled_end_at:
           type: string
           format: date-time
-          description: New RFC 3339 deadline, which must be strictly later than the current deadline.
+          description: The new deadline. It must be later than the current deadline.
         reason:
           type: string
           minLength: 1
           maxLength: 1000
           description: >-
-            Private manager rationale. Must be valid UTF-8, already trimmed, 1-1000 Unicode scalar values, and at most 4000 UTF-8 bytes.
+            Why you are extending the Sitting. It is kept for audit and is never shown to candidates. Send
+            valid UTF-8 with no leading or trailing whitespace: 1 to 1000 characters and at most 4000 bytes.

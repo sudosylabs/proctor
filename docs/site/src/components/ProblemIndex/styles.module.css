@@ -1,0 +1,140 @@
+.summary {
+  color: var(--proctor-ink-muted);
+  font-size: 0.875rem;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 24px 0 4px;
+}
+
+.field {
+  align-items: center;
+  background: var(--proctor-surface-raised);
+  border: 1px solid var(--proctor-border);
+  border-radius: 8px;
+  color: var(--proctor-ink-muted);
+  display: flex;
+  gap: 8px;
+  height: 38px;
+  max-width: 30rem;
+  padding: 0 12px;
+  transition: border-color 120ms ease;
+}
+
+.field:hover {
+  border-color: var(--proctor-border-strong);
+}
+
+.field:focus-within {
+  border-color: var(--proctor-primary);
+  box-shadow: 0 0 0 3px var(--proctor-primary-soft);
+}
+
+.field input {
+  background: transparent;
+  border: 0;
+  color: var(--proctor-ink);
+  flex: 1;
+  font: inherit;
+  font-size: 0.9rem;
+  min-width: 0;
+  outline: 0;
+}
+
+.field input::placeholder {
+  color: var(--proctor-ink-muted);
+}
+
+.statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.statuses button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--proctor-border);
+  border-radius: 999px;
+  color: var(--proctor-ink-soft);
+  cursor: pointer;
+  display: inline-flex;
+  font: 500 0.78rem var(--ifm-font-family-base);
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+
+.statuses button span {
+  color: var(--proctor-ink-muted);
+  font: 400 0.72rem var(--ifm-font-family-monospace);
+}
+
+.statuses button:hover {
+  border-color: var(--proctor-border-strong);
+  color: var(--proctor-ink);
+}
+
+.statuses button[aria-pressed="true"] {
+  border-color: var(--proctor-ink);
+  color: var(--proctor-ink);
+}
+
+.count {
+  color: var(--proctor-ink-muted);
+  font-size: 0.84rem;
+  margin: 8px 0 0 !important;
+  min-height: 1.3em;
+}
+
+.area {
+  scroll-margin-top: calc(var(--ifm-navbar-height) + 24px);
+}
+
+.areaHead {
+  align-items: baseline;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin: 36px 0 10px;
+}
+
+.areaHead h2 {
+  font-size: 1.0625rem !important;
+  letter-spacing: -0.012em !important;
+  margin: 0 !important;
+}
+
+.areaHead span {
+  color: var(--proctor-ink-muted);
+  font-size: 0.8rem;
+}
+
+.subHead {
+  color: var(--proctor-ink-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin: 18px 0 6px;
+}
+
+.rows {
+  border-top: 1px solid var(--proctor-border);
+}
+
+.empty {
+  color: var(--proctor-ink-muted);
+  padding: 24px 0;
+}
+
+.hidden {
+  clip: rect(0 0 0 0);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}

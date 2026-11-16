@@ -13,14 +13,14 @@ paths:
         required: true
         schema:
           $ref: '#/components/schemas/ID'
-        description: The durable Job whose execution history is requested.
+        description: ID of the Job whose Attempts to list.
     get:
       operationId: listJobAttempts
       summary: List ordered execution Attempts for one Job
       tags:
         - Jobs
       description: >-
-        Returns the bounded execution history for an authorized, allowlisted Job in attempt-number order. The projection exposes safe status and public failure information, never worker leases, private payloads, stack traces, or infrastructure diagnostics.
+        Returns the execution history of one Job the caller may see, highest attempt number first. Each Attempt shows its status, timing and public failure reason. Worker identities, private payloads, stack traces and infrastructure diagnostics are never included.
       x-proctor-auth: principal_required
       x-proctor-error-codes:
         - authorization.denied
@@ -55,7 +55,8 @@ paths:
           in: query
           schema:
             type: string
-          description: Opaque continuation emitted by the preceding page for this exact Job and query.
+          description: >-
+            The `next_cursor` value from the previous page for this Job. Treat it as an unreadable token: don't parse it or build one.
       responses:
         "200":
           $ref: '#/components/responses/JobAttemptListOK'
@@ -74,14 +75,32 @@ paths:
 components:
   responses:
     JobAttemptListOK:
-      description: Safe Job Attempt collection
+      description: One page of the Job's Attempts.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/JobAttemptListResponse'
+          example:
+            items:
+              - id: 1asb7sk89dp1ex339fkh3te5t4
+                number: 2
+                status: succeeded
+                started_at: '2026-08-01T02:20:03Z'
+                heartbeat_at: '2026-08-01T02:21:30Z'
+                lease_expires_at: '2026-08-01T02:22:30Z'
+                completed_at: '2026-08-01T02:21:41Z'
+              - id: saqjfmjqqy9mo1yj4zwed73333
+                number: 1
+                status: failed
+                started_at: '2026-08-01T02:15:02Z'
+                heartbeat_at: '2026-08-01T02:15:32Z'
+                lease_expires_at: '2026-08-01T02:16:32Z'
+                completed_at: '2026-08-01T02:15:40Z'
+                public_error_code: database.unavailable
   schemas:
     JobAttemptStatus:
-      description: Durable lifecycle state of one execution Attempt.
+      description: >-
+        State of one execution Attempt. `lease_expired` means the worker stopped reporting before it finished. `incompatible` means the worker that picked up the Job could not run it and handed it back to the queue.
       type: string
       enum:
         - running
@@ -91,7 +110,7 @@ components:
         - lease_expired
         - incompatible
     JobAttemptResponse:
-      description: Safe execution history for one Job Attempt.
+      description: One execution Attempt of a Job.
       type: object
       additionalProperties: false
       required:
@@ -104,36 +123,39 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: ID of the Attempt.
         number:
           type: integer
           minimum: 1
-          description: Monotonic attempt number within the parent Job.
+          description: Position of this Attempt within its Job. The first Attempt is 1 and each new one goes up by one.
         status:
           $ref: '#/components/schemas/JobAttemptStatus'
+          description: Where the Attempt is in its lifecycle.
         started_at:
           type: string
           format: date-time
-          description: Time when execution started.
+          description: Time the Attempt started running.
         heartbeat_at:
           type: string
           format: date-time
-          description: Time of the last retained worker heartbeat.
+          description: Time the worker last reported that it was still running the Attempt.
         lease_expires_at:
           type: string
           format: date-time
-          description: Time at which this execution lease expires.
+          description: >-
+            Time the worker's hold on the Job runs out. If the worker hasn't reported again by then, the Attempt is treated as abandoned.
         completed_at:
           type: string
           format: date-time
-          description: Time when the Attempt reached a terminal state, when complete.
+          description: Time the Attempt finished. Omitted while it is still running.
         public_error_code:
           type: string
           anyOf:
             - $ref: '#/components/schemas/JobErrorCode'
             - type: string
-          description: Stable safe failure category for a failed terminal Attempt; internal error detail is never returned.
+          description: Public reason the Attempt failed. Internal error detail is never returned. Omitted when there is no failure to report.
     JobAttemptListResponse:
-      description: One bounded page of Job execution Attempts.
+      description: One page of a Job's execution Attempts.
       type: object
       additionalProperties: false
       required:
@@ -143,6 +165,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/JobAttemptResponse'
+          description: Attempts on this page, highest attempt number first.
         next_cursor:
           type: string
-          description: Opaque continuation for the next page, omitted after the final page.
+          description: Token to pass as `cursor` to read the next page. Treat it as unreadable. Omitted on the last page.

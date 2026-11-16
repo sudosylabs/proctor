@@ -13,7 +13,7 @@ paths:
       operationId: configureExamDraftBrowserPolicy
       summary: Replace the Browser Policy on the active Exam Draft
       description: >-
-        Replaces the complete closed Browser Policy value at the expected Draft revision. Disabled policies contain no rules; enabled policies use canonical HTTPS origins and deterministic path and host matching.
+        Replaces the whole Browser Policy on the Draft. The change is made only if expected_revision still matches the Draft's current revision. A disabled policy has no rules. An enabled policy lists the sites candidates may open, and Proctor matches pages against them by host and path in a fixed order.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -74,7 +74,7 @@ paths:
       operationId: configureExamDraftFocusLoss
       summary: Replace the Focus Loss policy on the active Exam Draft
       description: >-
-        Replaces the complete Focus Loss rule on the mutable Draft at the expected revision. Duration, incident window, threshold, and outcome are validated together so published Revisions carry one coherent policy snapshot.
+        Replaces the whole Focus Loss rule on the Draft. The change is made only if expected_revision still matches the Draft's current revision. The minimum duration, incident count, window and outcome are checked together, so every published Revision carries a rule that makes sense as a whole.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -211,7 +211,7 @@ components:
   requestBodies:
     ConfigureExamDraftBrowserPolicy:
       required: true
-      description: Supplies the expected Draft revision and complete replacement Browser Policy.
+      description: The Draft revision you last saw, and the complete new Browser Policy.
       content:
         application/json:
           schema:
@@ -219,10 +219,26 @@ components:
           example:
             expected_revision: 4
             browser_policy:
-              enabled: false
+              enabled: true
+              start_rule_id: reference
+              rules:
+                - rule_id: reference
+                  origin: https://reference.example.edu
+                  path_prefix: /algorithms
+                  host_match: exact
+                  allow_redirects: false
+                  blocked_navigation_outcome: record
+                  institution_http_exception: false
+                - rule_id: library
+                  origin: https://library.example.edu
+                  path_prefix: /
+                  host_match: exact_and_subdomains
+                  allow_redirects: true
+                  blocked_navigation_outcome: integrity_evidence
+                  institution_http_exception: false
     ConfigureExamDraftFocusLoss:
       required: true
-      description: Supplies the expected Draft revision and the complete replacement Focus Loss collection and outcome policy.
+      description: The Draft revision you last saw, and the complete new Focus Loss rule.
       content:
         application/json:
           schema:
@@ -259,8 +275,10 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The Draft revision you last saw. If the Draft has changed since, the request fails with a conflict.
         browser_policy:
           $ref: '#/components/schemas/BrowserPolicy'
+          description: The new Browser Policy. It replaces the current one completely.
     ConfigureExamDraftFocusLossRequest:
       type: object
       additionalProperties: false
@@ -276,26 +294,35 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The Draft revision you last saw. If the Draft has changed since, the request fails with a conflict.
         enabled:
           type: boolean
+          description: True to apply the rule during Attempts.
         minimum_duration_milliseconds:
           type: integer
           format: int64
           minimum: 500
           maximum: 300000
+          description: The shortest focus loss that counts as an incident, in milliseconds.
         incident_count:
           type: integer
           minimum: 1
           maximum: 100
+          description: How many incidents within the window trigger the outcome.
         window_milliseconds:
           type: integer
           format: int64
           minimum: 10000
           maximum: 14400000
-          description: Must also be greater than or equal to minimum_duration_milliseconds.
+          description: >-
+            The rolling time window in which incidents are counted, in milliseconds. It must be at least
+            minimum_duration_milliseconds.
         outcome:
           type: string
           enum:
             - flag
             - flag_and_warn
             - flag_and_suspend
+          description: >-
+            What happens when the threshold is reached. flag marks the Attempt for review. flag_and_warn also warns
+            the candidate. flag_and_suspend also suspends the Attempt.

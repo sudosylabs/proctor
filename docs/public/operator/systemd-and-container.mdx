@@ -1,21 +1,22 @@
 ---
-title: Run Proctor With Systemd or a Container
-description: Preserve the tracked non-root, readiness, writable-path, and shutdown contracts in a host service or immutable container.
+title: Run Proctor with systemd or a container
+description: Run Proctor as a host service or an immutable container, and keep the non-root user, readiness, writable paths and shutdown behavior that the repository examples set up.
 audience: operator
 maturity: preview
 ---
 
-# Run Proctor With Systemd or a Container
+# Run Proctor with systemd or a container
 
-The repository ships two pre-production application runtime examples. Both run
-one Proctor application node. Neither bundles a certified highly available
-database, storage, cache, or load balancer.
+The repository includes two pre-production examples for running the
+application. Each runs one Proctor application node. Neither includes a
+database, storage, cache or load balancer that is certified as highly
+available.
 
 ## Systemd
 
-The tracked `deploy/systemd/proctor.service` runs as the dedicated `proctor`
-user, validates configuration in `ExecStartPre`, starts `proctor serve`, and
-uses `Type=notify`.
+The unit in the repository, `deploy/systemd/proctor.service`, runs as the
+dedicated `proctor` user. It checks the configuration in `ExecStartPre`,
+starts `proctor serve`, and uses `Type=notify`.
 
 ```sh
 install -o root -g root -m 0644 \
@@ -26,46 +27,52 @@ systemctl enable --now proctor
 systemctl status proctor
 ```
 
-The unit removes capabilities, enables `NoNewPrivileges`, protects system and
-kernel surfaces, restricts address families, and grants only the state, log,
-and runtime directories. Use a drop-in for another deliberate writable path;
-do not weaken `ProtectSystem` or grant root merely to bind public ports. Let a
-load balancer bind privileged ports or grant only the narrow OS bind capability
-after reviewing the change.
+The unit drops all capabilities, turns on `NoNewPrivileges`, protects the
+system and kernel, restricts address families, and allows writes only to the
+state, log and runtime directories. If you need another writable path, add it
+in a drop-in on purpose. Don't weaken `ProtectSystem`, and don't run as root
+just to bind public ports. Let a load balancer bind the privileged ports, or,
+after reviewing the change, grant only the narrow operating-system capability
+to bind them.
 
-Proctor sends `READY=1` only after dependencies, serving lease, startup
-reconciliation, Jobs, WebSocket, listener handoff, and readiness succeed. A
-notification failure is logged; systemd's startup timeout remains the external
-boundary. Proctor also reports the rest of its lifecycle to systemd:
+Proctor sends `READY=1` only after its dependencies, serving lease, startup
+reconciliation, Jobs, WebSocket, listener handoff and readiness have all
+succeeded. If the notification fails, Proctor logs it, and systemd's startup
+timeout still sets the outer limit. Proctor also tells systemd about the rest
+of its lifecycle:
 
 | Event | Notification |
 | --- | --- |
-| shutdown begins, after readiness is withdrawn | `STOPPING=1` |
-| `SIGHUP` reload (`systemctl reload proctor`) | `RELOADING=1` with `MONOTONIC_USEC`, then `READY=1`, also after a failed reload that kept the running configuration |
-| every half `WatchdogSec` while the node is healthy | `WATCHDOG=1` |
+| Shutdown begins, after readiness is withdrawn | `STOPPING=1` |
+| A `SIGHUP` reload (`systemctl reload proctor`) | `RELOADING=1` with `MONOTONIC_USEC`, then `READY=1`. It sends `READY=1` even after a failed reload that kept the running configuration |
+| Every half `WatchdogSec` while the node is healthy | `WATCHDOG=1` |
 
-The tracked unit sets `WatchdogSec=60s`. Proctor samples its own readiness,
-the same answer `/health/ready` gives including the bounded PostgreSQL, cache,
-cluster, and VFS probe, several times per keep-alive interval and sends
-`WATCHDOG=1` only when the node was ready at least once since the previous
-keep-alive. A short dependency blip therefore costs nothing, but a node that
-stays unready for most of a minute, or whose readiness check wedges, stops the
-keep-alives; systemd then aborts it with `SIGABRT`, which writes every
-goroutine's stack to the journal, and `Restart=on-failure` starts it again.
-After `STOPPING=1` the keep-alives continue through the bounded drain, so
-`TimeoutStopSec`, not the watchdog, limits shutdown. Raise `WatchdogSec` in a
-drop-in if your PostgreSQL failover routinely takes longer than about half a
-minute; `WatchdogSec=0` disables the watchdog.
+The unit in the repository sets `WatchdogSec=60s`. Proctor checks its own
+readiness several times in each keep-alive interval. This is the same answer
+`/health/ready` gives, including the time-limited PostgreSQL, cache, cluster
+and VFS probe. Proctor sends `WATCHDOG=1` only if the node was ready at least
+once since the previous keep-alive.
 
-The unit keeps `Type=notify` with `ExecReload` sending `SIGHUP`, which works
-on every supported systemd. On systemd 253 or newer you may instead set
-`Type=notify-reload` and remove `ExecReload`; systemd then sends `SIGHUP`
-itself and waits for the same `RELOADING=1` and `READY=1` pair.
+So a short dependency blip costs nothing. If a node stays unready for most of
+a minute, or its readiness check hangs, the keep-alives stop. Systemd then
+aborts the process with `SIGABRT`, which writes every goroutine's stack to the
+journal, and `Restart=on-failure` starts it again.
+
+After `STOPPING=1` the keep-alives continue through the time-limited drain, so
+`TimeoutStopSec` limits shutdown, not the watchdog. If your PostgreSQL failover
+regularly takes longer than about half a minute, raise `WatchdogSec` in a
+drop-in. `WatchdogSec=0` turns the watchdog off.
+
+The unit uses `Type=notify` with an `ExecReload` that sends `SIGHUP`, which
+works on every supported systemd. On systemd 253 or newer you can set
+`Type=notify-reload` instead and remove `ExecReload`. Systemd then sends
+`SIGHUP` itself and waits for the same `RELOADING=1` and `READY=1` pair.
 
 ## Container
 
-Copy the tracked `deploy/compose` example, select an immutable image tag and
-digest, and provide protected config, environment, state, log, and secret paths.
+Copy the `deploy/compose` example from the repository. Select an immutable
+image by tag and digest, and provide protected paths for configuration,
+environment, state, logs and secrets.
 
 ```sh
 docker compose config
@@ -73,29 +80,40 @@ docker compose up --detach --wait
 docker compose ps
 ```
 
-The application container runs uid/gid `65532`, drops all capabilities, uses a
-read-only root filesystem, has a bounded no-exec `/tmp`, and mounts only the
-declared writable data/log paths plus read-only configuration/secrets. Its
-healthcheck calls the packaged `proctor-healthcheck` against readiness.
+The application container runs as uid and gid `65532` and drops all
+capabilities. It has a read-only root filesystem and a size-limited `/tmp`
+that can't run programs. It mounts only the declared data and log paths as
+writable, plus configuration and secrets as read-only. Its healthcheck runs
+the packaged `proctor-healthcheck` against readiness.
 
-Do not bake populated configuration or secrets into the image. Do not mount the
-Docker socket. The example's single-host service is a deployment illustration,
+Don't build filled-in configuration or secrets into the image. Don't mount the
+Docker socket. The example runs on a single host to show a deployment. It is
 not active-active infrastructure.
 
 ## Shutdown
 
-Send SIGTERM or use the runtime's normal stop command. Proctor first becomes
-unready, drains HTTP, stops Jobs and WebSocket, closes transport, withdraws the
-serving lease, closes metrics, flushes traces, then closes shared
-infrastructure. One `Server.ShutdownTimeout` budget, measured from when
-shutdown starts, bounds that whole sequence: every step that waits gets only
-what remains of it, so a slow step shortens later steps instead of extending
-shutdown. Keep `TimeoutStopSec` and the container stop window longer than
-`Server.ShutdownTimeout` plus the logging flush (`Log.ShutdownTimeout`); the
-tracked units already are.
+Send SIGTERM, or use your runtime's normal stop command. Proctor then works
+through these steps in order:
 
-A second SIGTERM or SIGINT during the drain forces the stop: remaining HTTP
-connections close at once, the shutdown budget ends, so Jobs, WebSocket, and
-metrics stop waiting for in-flight work, and the process exits with status 1 so the supervisor records an incomplete
-drain. A third signal exits immediately without further cleanup; the serving
-and discovery leases then expire on their own.
+1. It marks itself unready.
+2. It drains HTTP.
+3. It stops Jobs and WebSocket.
+4. It closes the transport.
+5. It withdraws its serving lease.
+6. It closes metrics.
+7. It flushes traces.
+8. It closes shared infrastructure.
+
+A single `Server.ShutdownTimeout` budget covers the whole sequence, counted
+from the moment shutdown starts. Each step that waits gets only what is left
+of the budget. A slow step shortens the steps after it instead of making
+shutdown longer. Keep `TimeoutStopSec` and the container's stop window longer
+than `Server.ShutdownTimeout` plus the time to flush logs
+(`Log.ShutdownTimeout`). The units in the repository already do.
+
+A second SIGTERM or SIGINT during the drain forces the stop. Remaining HTTP
+connections close at once and the shutdown budget ends, so Jobs, WebSocket and
+metrics stop waiting for work in progress. The process exits with status 1, so
+the supervisor records that the drain didn't finish. A third signal exits
+immediately without further cleanup. The serving and discovery leases then
+expire on their own.

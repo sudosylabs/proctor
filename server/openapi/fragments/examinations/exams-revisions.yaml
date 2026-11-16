@@ -13,7 +13,7 @@ paths:
       operationId: listExamRevisions
       summary: List bounded immutable Exam Revision metadata
       description: >-
-        Lists immutable publication snapshots for the Exam in stable order, including policy and content digests, capacity, resource counts, and publication provenance. It does not return protected resource bytes or mutable Draft state.
+        Lists the Exam's published Revisions, newest first. Each entry includes digests of the policy and content, the capacity limits, Resource and Starter Workspace counts, and who published it and when. It does not return Resource content or the current Draft.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -40,7 +40,7 @@ paths:
         - name: limit
           in: query
           required: false
-          description: Maximum number of immutable Exam Revision metadata records to return in this page.
+          description: The most Revisions to return in one page, from 1 to 200. Defaults to 50.
           schema:
             type: integer
             minimum: 1
@@ -49,7 +49,7 @@ paths:
         - name: cursor
           in: query
           required: false
-          description: Opaque cursor over descending Revision number and identity; clients return it unchanged.
+          description: The next_cursor value from the previous page, sent back unchanged. Omit it for the first page.
           schema:
             type: string
       responses:
@@ -73,13 +73,13 @@ paths:
       tags:
         - Examinations
       description: >-
-        Validates the complete current Draft and publishes it as a new immutable Exam Revision. The expected Draft revision prevents publishing concurrent edits, and the Idempotency-Key makes an exact lost-response retry safe. Publication captures content, policy, capacity, resources, and starter Workspace facts as one revision.
+        Checks the whole current Draft and publishes it as a new Revision, which can't change afterwards. Publishing happens only if expected_revision still matches the Draft's current revision, so you never publish edits you haven't seen. Send an Idempotency-Key: if the response is lost, retrying with the same key returns the same result. The Revision captures the text, policies, capacity limits, Resources and Starter Workspace together.
       x-codeSamples:
         - lang: Shell
           source: |-
             curl --fail-with-body \
               --request POST \
-              --url 'https://proctor.example.edu/api/v1/exams/<exam-id>/revisions' \
+              --url 'https://proctor.example.edu/api/v1/exams/8uk3fh7sw1mxqdbt5yrcg4oz9a/revisions' \
               --header 'Authorization: Bearer <access-token>' \
               --header 'Content-Type: application/json' \
               --header 'Idempotency-Key: docs-exam-publish-012' \
@@ -147,7 +147,7 @@ paths:
       operationId: getExamRevision
       summary: Get bounded immutable Exam Revision metadata
       description: >-
-        Returns one immutable Revision only after verifying its Exam ownership path and the caller's current management authority. The response exposes publication metadata and digests, not mutable Draft state or protected content bytes.
+        Returns one published Revision. It checks that the Revision belongs to this Exam and that you can currently manage the Exam. The response holds publication details and digests, not the current Draft or any file content.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -193,7 +193,7 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/ID'
-      description: The immutable Exam Revision identifier.
+      description: The ID of a published Revision of this Exam.
   requestBodies:
     PublishExamRevision:
       required: true
@@ -204,10 +204,10 @@ components:
           example:
             expected_revision: 12
       description: >-
-        The exact mutable Draft revision expected by the publisher. Publication fails on a stale revision rather than publishing unintended changes.
+        The Draft revision you expect to publish. If the Draft has changed since, publishing fails instead of including changes you haven't seen.
   responses:
     ExamRevisionOK:
-      description: Bounded immutable Exam Revision metadata
+      description: The published Revision.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -215,8 +215,31 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamRevisionResponse'
+          example:
+            id: t1oekp5dqa7nwrzhcx3by9mug4
+            exam_id: 8uk3fh7sw1mxqdbt5yrcg4oz9a
+            number: 2
+            source_draft_revision: 8
+            title: Algorithms — final examination
+            policy_schema_version: 1
+            policy_digest: 823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812
+            capacity:
+              resource_maximum_count: 10
+              resource_maximum_bytes: 10485760
+              workspace_maximum_entries: 500
+              workspace_maximum_file_bytes: 10485760
+              workspace_maximum_total_bytes: 52428800
+            starter_workspace_digest: 21a3230e03772a58aff1b3709a9e232850916337e1fba95c434076b6668c6e08
+            content_digest: ed7002b439e9ac845f22357d822bac1444730fbdb6016d3ec9432297b9ec9f73
+            resource_count: 2
+            starter_workspace_entry_count: 3
+            starter_workspace_total_bytes: 128
+            published_by_user_id: c9me3tsk7oyhx1bwuadgz5nqrf
+            published_at: '2026-08-01T16:45:00Z'
+            base_revision_id: gx7ab3nwh1ekqmd9pzucsoyt5r
+            publication_kind: standard
     ExamRevisionCreated:
-      description: Exam Draft published as an immutable Exam Revision
+      description: The new Revision, published from the Draft.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -224,8 +247,31 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamRevisionResponse'
+          example:
+            id: t1oekp5dqa7nwrzhcx3by9mug4
+            exam_id: 8uk3fh7sw1mxqdbt5yrcg4oz9a
+            number: 2
+            source_draft_revision: 8
+            title: Algorithms — final examination
+            policy_schema_version: 1
+            policy_digest: 823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812
+            capacity:
+              resource_maximum_count: 10
+              resource_maximum_bytes: 10485760
+              workspace_maximum_entries: 500
+              workspace_maximum_file_bytes: 10485760
+              workspace_maximum_total_bytes: 52428800
+            starter_workspace_digest: 21a3230e03772a58aff1b3709a9e232850916337e1fba95c434076b6668c6e08
+            content_digest: ed7002b439e9ac845f22357d822bac1444730fbdb6016d3ec9432297b9ec9f73
+            resource_count: 2
+            starter_workspace_entry_count: 3
+            starter_workspace_total_bytes: 128
+            published_by_user_id: c9me3tsk7oyhx1bwuadgz5nqrf
+            published_at: '2026-08-01T16:45:00Z'
+            base_revision_id: gx7ab3nwh1ekqmd9pzucsoyt5r
+            publication_kind: standard
     ExamRevisionListOK:
-      description: Bounded immutable Exam Revision metadata collection
+      description: One page of the Exam's published Revisions, newest first.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -233,6 +279,31 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamRevisionListResponse'
+          example:
+            items:
+              - id: t1oekp5dqa7nwrzhcx3by9mug4
+                exam_id: 8uk3fh7sw1mxqdbt5yrcg4oz9a
+                number: 2
+                source_draft_revision: 8
+                title: Algorithms — final examination
+                policy_schema_version: 1
+                policy_digest: 823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812
+                capacity:
+                  resource_maximum_count: 10
+                  resource_maximum_bytes: 10485760
+                  workspace_maximum_entries: 500
+                  workspace_maximum_file_bytes: 10485760
+                  workspace_maximum_total_bytes: 52428800
+                starter_workspace_digest: 21a3230e03772a58aff1b3709a9e232850916337e1fba95c434076b6668c6e08
+                content_digest: ed7002b439e9ac845f22357d822bac1444730fbdb6016d3ec9432297b9ec9f73
+                resource_count: 2
+                starter_workspace_entry_count: 3
+                starter_workspace_total_bytes: 128
+                published_by_user_id: c9me3tsk7oyhx1bwuadgz5nqrf
+                published_at: '2026-08-01T16:45:00Z'
+                base_revision_id: gx7ab3nwh1ekqmd9pzucsoyt5r
+                publication_kind: standard
+            next_cursor: eyJudW1iZXIiOjIsInJldmlzaW9uX2lkIjoidDFvZWtwNWRxYTdud3J6aGN4M2J5OW11ZzQifQ
   schemas:
     PublishExamRevisionRequest:
       type: object
@@ -244,9 +315,12 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: The exact current Draft revision to validate and publish.
+          description: The Draft revision you expect to publish. If the Draft has changed since, the request fails with a conflict.
     ExamRevisionResponse:
       type: object
+      description: >-
+        A summary of one published Revision. A Revision is a copy of the Draft taken at publication, and it can't
+        change.
       additionalProperties: false
       required:
         - id
@@ -268,56 +342,79 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The Revision ID.
         exam_id:
           $ref: '#/components/schemas/ID'
+          description: The Exam this Revision belongs to.
         number:
           type: integer
           format: int64
           minimum: 1
+          description: The Revision's number within the Exam. The first Revision is 1, and each new one adds 1.
         source_draft_revision:
           type: integer
           format: int64
           minimum: 1
+          description: The Draft revision this Revision was published from.
         title:
           type: string
           minLength: 1
           maxLength: 200
+          description: The Exam title at publication.
         policy_schema_version:
           type: integer
           const: 1
+          description: The version of the policy format the Revision was saved in. Always 1 today.
         policy_digest:
           $ref: '#/components/schemas/SHA256'
+          description: The SHA-256 digest of the Revision's integrity policy, as lowercase hex. Two Revisions with the same policy have the same digest.
         capacity:
           $ref: '#/components/schemas/ExamCapacityPolicy'
+          description: The Resource and Starter Workspace limits that applied at publication.
         starter_workspace_digest:
           $ref: '#/components/schemas/SHA256'
+          description: The SHA-256 digest of the Starter Workspace file list and contents, as lowercase hex.
         content_digest:
           $ref: '#/components/schemas/SHA256'
+          description: >-
+            The SHA-256 digest of everything the Revision holds, as lowercase hex: title, instructions, policies,
+            capacity, Resources and Starter Workspace. Two Revisions with the same content have the same digest.
         resource_count:
           type: integer
           minimum: 0
           maximum: 100
+          description: How many Resources the Revision includes.
         starter_workspace_entry_count:
           type: integer
           minimum: 0
           maximum: 5000
+          description: How many files and directories the Revision's Starter Workspace has.
         starter_workspace_total_bytes:
           type: integer
           format: int64
           minimum: 0
           maximum: 1073741824
+          description: The total size of the Starter Workspace files, in bytes.
         published_by_user_id:
           $ref: '#/components/schemas/ID'
+          description: The User who published the Revision.
         published_at:
           type: string
           format: date-time
+          description: When the Revision was published.
         base_revision_id:
           $ref: '#/components/schemas/ID'
+          description: >-
+            The Revision this one was based on: the one the Draft was last published as, or the Revision a live
+            correction changes. Omitted for the first Revision.
         publication_kind:
           type: string
           enum:
             - standard
             - live_correction
+          description: >-
+            standard means the Revision was published from the Draft. live_correction means it corrects a Revision
+            during a running Sitting.
     ExamRevisionListResponse:
       type: object
       additionalProperties: false
@@ -327,8 +424,9 @@ components:
         items:
           type: array
           maxItems: 200
+          description: The Revisions on this page, newest first.
           items:
             $ref: '#/components/schemas/ExamRevisionResponse'
         next_cursor:
           type: string
-          description: Opaque cursor over descending Revision number and identity; clients return it unchanged.
+          description: Send this back as cursor to get the next page. Omitted on the last page.

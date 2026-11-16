@@ -16,7 +16,9 @@ paths:
       tags:
         - Sittings
       description: >-
-        Derives candidates from Class membership effective at the Sitting's actual opening time and excludes everyone with an Attempt. It never fabricates an Attempt or Submission for absence and is available only after lifecycle state makes the no-show set meaningful.
+        Lists the candidates who were members of the Class when the Sitting actually opened and who never
+        started an Attempt. Absence never creates an Attempt or Submission. The list is available only
+        while the Sitting is `closing` or `closed`; in any other state the request fails with a conflict.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -51,7 +53,9 @@ paths:
           in: query
           schema:
             type: string
-          description: Opaque cursor over candidate identity; return unchanged.
+          description: >-
+            The `next_cursor` from the previous page. Pass it back unchanged and do not parse or build it
+            yourself.
       responses:
         "200":
           $ref: '#/components/responses/ExamSittingNoShowListOK'
@@ -72,7 +76,7 @@ paths:
 components:
   responses:
     ExamSittingNoShowListOK:
-      description: Bounded candidates with no Attempt, derived from membership active at actual Sitting start
+      description: One page of candidates who were in the Class when the Sitting opened and have no Attempt.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -80,9 +84,14 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamSittingNoShowListResponse'
+          example:
+            items:
+              - candidate_user_id: sjebyge5cpbop1xwo4eds74ejb
+              - candidate_user_id: hmyjmj68dw6gdxctnghbrhwcth
+            next_cursor: eyJjYW5kaWRhdGVfdXNlcl9pZCI6ImhteWptajY4ZHc2Z2R4Y3RuZ2hicmh3Y3RoIn0
   schemas:
     ExamSittingNoShowResponse:
-      description: Candidate who belonged to the target Class at actual opening and has no Attempt.
+      description: A candidate who was in the Class when the Sitting opened and never started an Attempt.
       type: object
       additionalProperties: false
       required:
@@ -90,8 +99,9 @@ components:
       properties:
         candidate_user_id:
           $ref: '#/components/schemas/ID'
+          description: The candidate's user ID.
     ExamSittingNoShowListResponse:
-      description: One bounded page of derived no-show candidate identities.
+      description: One page of no-show candidates, ordered by user ID.
       type: object
       additionalProperties: false
       required:
@@ -100,8 +110,11 @@ components:
         items:
           type: array
           maxItems: 200
+          description: The no-show candidates on this page, at most `limit`.
           items:
             $ref: '#/components/schemas/ExamSittingNoShowResponse'
         next_cursor:
           type: string
-          description: Opaque candidate-identity cursor; clients return it unchanged.
+          description: >-
+            Pass this as `cursor` to get the next page. Omitted on the last page. Don't parse or
+            build it yourself.

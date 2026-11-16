@@ -1,6 +1,6 @@
 ---
 title: Authorize Proctor Desktop
-description: Understand the hosted browser handoff, explicit approval, registered key, DPoP proof, compatibility, and recovery boundaries.
+description: How Proctor Desktop hands sign-in to your browser, asks for your approval, and keeps its Session tied to a registered key, plus what to do when something goes wrong.
 audience: account-holder
 maturity: preview
 ---
@@ -9,93 +9,103 @@ import Link from '@docusaurus/Link';
 
 # Authorize Proctor Desktop
 
-<Term id="desktop-authorization">Desktop Authorization</Term> lets the native
-client receive a Session without collecting an Institution password or
-provider credential. Desktop prepares a one-time request and opens the
-canonical Proctor server in your ordinary browser. The server identifies the
-account and asks for explicit approval before returning a short-lived code to
-the exact loopback callback.
+<Term id="desktop-authorization">Desktop Authorization</Term> gives the
+Proctor Desktop app a Session without the app ever asking for your
+Institution password or your sign-in provider's details. Desktop prepares a
+one-time request and opens your Institution's Proctor server in your usual
+browser. The server works out which account you are using and asks you to
+approve the request. Only then does it send a short-lived code back to the
+exact local address Desktop is listening on.
 
 <GovernedFigure asset="desktop-authorization-handoff" />
 
-## Before Approval
+## Before you approve
 
-1. Enter or select the Institution's server URL in Desktop.
-2. Desktop reads public discovery, verifies the canonical origin, and checks
-   request-specific compatibility with `GET /api/v1/system/ping`.
-3. Desktop creates random state, an S256 PKCE verifier and challenge, a P-256
-   ES256 key pair, and an exact IP-literal loopback callback on an ephemeral
-   port and random path. `localhost`, a remote host, and a callback that later
-   changes are invalid.
-4. The start operation returns a hosted authorization URL. The browser page
-   binds its one-use fragment proof to a route-scoped HttpOnly cookie, then
-   removes the proof and request handle from browser history.
+1. In Desktop, enter or choose your Institution's server URL.
+2. Desktop reads the server's public discovery information, checks the
+   server's address, and checks with `GET /api/v1/system/ping` that this
+   Desktop build can be used for the request.
+3. Desktop creates a random state value, an S256 PKCE verifier and challenge,
+   and a P-256 ES256 key pair. It also sets up a callback on a loopback IP
+   address, using a temporary port and a random path. A callback to
+   `localhost`, to another computer, or one that changes later is not allowed.
+4. The start step returns a sign-in address for your browser. The browser page
+   ties its one-use proof, carried in the URL fragment, to an HttpOnly cookie
+   that only this route can use. It then removes the proof and the request
+   handle from your browser history.
 
-The Desktop private key, PKCE verifier, and raw Session credentials never enter
-the browser page. The server retains the public key and digests or bounded
-transaction facts needed to complete the handoff.
+Desktop's private key, the PKCE verifier and the raw Session credentials never
+reach the browser page. The server keeps the public key, plus digests and a
+small, limited set of details about the request that it needs to finish the
+handoff.
 
-## Identify the Account in the Hosted Page
+## Confirm your account in the browser
 
-The `/authorize/desktop` page may offer a current Web Session automatically.
-Otherwise it shows the local and external methods permitted for this
-transaction. Local authentication and provider return identify the account
-only for this authorization and do not create a new Web Session.
+If you are already signed in to Proctor in that browser, the
+`/authorize/desktop` page may offer that Web Session straight away. Otherwise
+it shows the local and external sign-in methods allowed for this request.
+Signing in here, locally or through a provider, only identifies your account
+for this one authorization. It doesn't create a new Web Session.
 
-The confirmation shows the safe Institution presentation, the account's name
-and email address, the bounded device label, and when the request started.
-Verify them, then choose **Allow**.
-“Use another account” clears only the transaction identity and returns to
-method selection. Cancellation ends the request; it does not create a Desktop
-Session.
+The confirmation shows your Institution's name as Proctor safely displays it,
+your account name and email address, a short device label, and when the
+request started. Check these details, then choose **Allow**.
+“Use another account” forgets only the account chosen for this request and
+takes you back to the list of sign-in methods. Canceling ends the request,
+and no Desktop Session is created.
 
 <GovernedFigure asset="desktop-authorization-confirmation" />
 
-Approval returns only a code and the original state to the exact loopback
-callback. Desktop must compare state before exchanging the code with the same
-PKCE verifier and public key. The code is one-use and short-lived.
+When you approve, the server sends only a code and the original state value
+back to the exact loopback callback. Desktop must check that the state matches
+before it exchanges the code, using the same PKCE verifier and public key. The
+code can be used once and expires quickly.
 
-## What Desktop Receives
+## What Desktop receives
 
-A successful exchange creates or refreshes the public-key Desktop Registration
-and creates a DPoP-bound Desktop Session. Every protected Desktop request then
-uses the access credential plus a newly signed proof for the exact public
-method, target URI, access-credential hash, issue time, unique proof identifier,
-and current server nonce.
+A successful exchange creates or refreshes Desktop's Desktop Registration,
+which records its public key. It also creates a Desktop Session bound to DPoP.
+From then on, every protected request from Desktop carries the access
+credential and a newly signed proof. Each proof covers the exact request
+method, target URI, a hash of the access credential, the time it was issued,
+a unique proof identifier and the server's current nonce.
 
 <GovernedFigure asset="desktop-dpop-boundary" />
 
-The access credential alone is not usable as `Bearer`. A copied proof cannot be
-replayed for another request. Desktop refresh uses the same registered key and
-a separate refresh-proof shape.
+The access credential doesn't work on its own as a `Bearer` token. Someone who
+copies a proof can't reuse it for a different request. When Desktop refreshes
+its Session, it uses the same registered key and a separate kind of refresh
+proof.
 
-## Compatibility Is a Separate Gate
+## Compatibility is checked separately
 
-`system/ping` evaluates one declared Desktop release, build ID, platform,
-architecture, and realtime protocol against the verified build catalog and the
-Institution's narrower Desktop Compatibility Policy. A well-formed request
-returns a result even when the service is in maintenance or the build is
-unsupported. The declaration is consistency metadata, not binary attestation,
-and the response deliberately provides no update URL.
+`system/ping` checks the Desktop release, build ID, platform, architecture and
+realtime protocol that Desktop reports. It compares them with the server's
+catalog of verified builds and with your Institution's Desktop Compatibility
+Policy, which can be stricter. A correctly formed request always gets an
+answer, even when the service is in maintenance or the build isn't supported.
+What Desktop reports is used to check that things line up. It doesn't prove
+which program is actually running. The answer never includes a link to
+download an update.
 
-An administrator may require an update, revoke a known build, or put Desktop
-admission into maintenance. The policy cannot authorize an unknown build that
-the server catalog does not recognize.
+An administrator can require an update, revoke a known build, or put Desktop
+sign-in into maintenance. The policy can't allow a build that the server's
+catalog doesn't recognize.
 
-## Recover Without Weakening the Flow
+## If something goes wrong
 
-| What you see | Safe next action |
+| What you see | What to do |
 | --- | --- |
-| Unusable or expired request | Return to Desktop and start a completely new authorization. |
-| Origin or callback mismatch | Stop. Re-enter the intended server origin and let Desktop create a new IP-literal callback. |
-| Active Attempt Session message | Return to the Desktop Session already taking the Exam; do not create a competing Session. |
-| Update required or build revoked | Install an Institution-approved build, then start again. Do not edit build declarations. |
-| Maintenance or temporary unavailability | Wait until the server-provided retry time when present. |
-| DPoP nonce required | Let Desktop store the replacement nonce and sign a new proof. Never resend the rejected proof. |
-| Proof replayed | Create a new proof with a new identifier; do not retry the captured proof. |
-| Desktop Registration revoked | Complete a new explicit browser authorization with a new key. Revocation cannot be undone. |
-| Secure credential storage unavailable | Do not copy refresh credentials or private keys into files or logs. The exact client behavior is owned by the Desktop implementation, which is not present in this repository. |
+| Unusable or expired request | Go back to Desktop and start a completely new authorization. |
+| Origin or callback mismatch | Stop. Enter the server address you meant to use again, and let Desktop create a new loopback IP callback. |
+| Active Attempt Session message | Go back to the Desktop Session where you are already taking the Exam. Don't create a second Session. |
+| Update required or build revoked | Install a build your Institution has approved, then start again. Don't edit what the build reports about itself. |
+| Maintenance or temporary unavailability | Wait. If the server gives a time to try again, wait until then. |
+| DPoP nonce required | Let Desktop save the new nonce and sign a new proof. Never send the rejected proof again. |
+| Proof replayed | Create a new proof with a new identifier. Don't retry the proof that was captured. |
+| Desktop Registration revoked | Go through a new browser approval, with a new key. A revoked registration can't be restored. |
+| Secure credential storage unavailable | Don't copy refresh credentials or private keys into files or logs. Exactly how the app behaves is decided by the Desktop app itself, whose code is not in this repository. |
 
-For implementers, the <Link to="/api/recipes/desktop-authorization">Desktop Authorization API recipe</Link>
-contains the operation sequence and failure fences. Account holders can review
-or revoke the resulting registration in [Secure your account](./security.mdx).
+If you are building an integration, the <Link to="/api/recipes/desktop-authorization">Desktop Authorization API recipe</Link>
+lists each step and the checks that stop it. You can review or revoke the
+resulting registration from [Secure your account](./security.mdx).

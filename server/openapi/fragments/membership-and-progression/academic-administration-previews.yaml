@@ -13,9 +13,20 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Proposes applying one existing-User academic administration operation to every User the User directory filter matches. The filter takes exactly the User directory's filter fields with the same validation and visibility rules, including those only an Institution-wide viewer may apply, and the request is refused as the directory would refuse it.
-        Nothing changes yet: a preview Job resolves the filter under the caller's visibility at that moment, freezes the ordered list of matching Users, and classifies each row as `will_change`, `no_op`, or `skipped` with a closed reason. The caller's own account is always skipped, and a disable or Session revocation also skips System Administrators. More than 10,000 matching Users fails the preview with `academic_administration_preview.too_many_users`; narrow the filter.
-        Poll the preview until it is `preview_ready` or `failed`. `class.transfer` is not offered: a transfer names the exact membership it replaces, which Student Progression chooses instead. Requires a strong, recent interactive Session.
+        Previews one academic administration operation applied to every existing User that a User directory filter
+        matches. The filter takes the same fields as the User directory, with the same validation and visibility
+        rules, including the fields only an Institution-wide viewer may use. A filter the directory would refuse is
+        refused here too.
+
+        Nothing changes yet. A background Job applies the filter with your visibility at that moment, saves the
+        ordered list of matching Users, and puts each row in `will_change`, `no_op` or `skipped`, with a reason for
+        each skipped row. Your own account is always skipped, and a disable or Session revocation also skips System
+        Administrators. If more than 10,000 Users match, the preview fails with
+        `academic_administration_preview.too_many_users`; narrow the filter and try again.
+
+        Poll the preview until it is `preview_ready` or `failed`. `class.transfer` is not offered, because a
+        transfer must name the exact enrollment it replaces; a Student Progression does that instead. Requires a
+        strong, recent interactive Session.
       x-proctor-auth: strong_recent_session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -75,7 +86,16 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Reads the caller's own preview: its lifecycle state, operation, filter, digest and revision, and once ready its `summary` of rows by class with skipped rows counted by reason. The summary counts only the rows whose User the caller's User directory shows now, the rows the rows listing shows. After commit the row counts report execution outcomes. Only the User who created a preview, holding onboarding batch visibility at its scope, can read it: a caller without that visibility is denied, and any other User reads it as not found. Once the caller's directory would refuse the preview's filter (an activity filter after Institution-wide `user.view` is lost, a Role filter after `role.view` is lost), the read is refused with `academic_administration_preview.authorization_lost`.
+        Reads one of your own previews: its state, operation, filter, digest and revision and, once it is ready, a
+        `summary` of its rows by group, with skipped rows counted by reason. The summary counts only the rows whose
+        User your User directory shows now, which are the rows the rows listing returns. After commit, the row
+        counts report what happened when each row ran.
+
+        Only the User who created a preview can read it, and only while they can see onboarding batches at its
+        scope. A caller without that access is denied, and any other User gets not found. If your directory would
+        now refuse the preview's filter (for example an activity filter after you lose Institution-wide `user.view`,
+        or a Role filter after you lose `role.view`), the read is refused with
+        `academic_administration_preview.authorization_lost`.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -125,7 +145,12 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Pages the frozen rows of one class of the caller's own preview in row order, each naming its User and, after commit, its outcome. A row appears only while the caller's User directory shows its User now, so a viewer whose visibility narrowed since the preview froze no longer sees the Users it lost, and the read is refused with `academic_administration_preview.authorization_lost` once the caller's directory would refuse the preview's filter. A cursor continues only the group and reason it was issued for.
+        Pages through the saved rows of one group of your own preview, in row order. Each row names its User and,
+        after commit, its outcome. A row appears only while your User directory still shows its User, so if your
+        visibility has narrowed since the preview was made, you no longer see the Users you lost. Once your directory
+        would refuse the preview's filter, the read is refused with
+        `academic_administration_preview.authorization_lost`. A cursor only continues the group and reason it was
+        issued for.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -153,7 +178,7 @@ paths:
         - name: group
           in: query
           required: true
-          description: The preview class whose rows to list.
+          description: The group of rows to list.
           schema:
             type: string
             enum:
@@ -163,7 +188,7 @@ paths:
         - name: reason
           in: query
           required: false
-          description: Only with `group=skipped`, keep the rows skipped for this reason.
+          description: Only with `group=skipped`. List only the rows skipped for this reason.
           schema:
             $ref: '#/components/schemas/AcademicAdministrationPreviewSkipReason'
         - $ref: '#/components/parameters/PageLimit'
@@ -194,8 +219,19 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Commits the caller's own ready preview when its revision and digest still match, within 15 minutes of it becoming ready as PostgreSQL measures it; after that the commit is refused with `academic_administration_preview.expired` and a new preview is needed. A preview another User created reads as not found, and a commit is refused with `academic_administration_preview.authorization_lost` once the caller's User directory would refuse the preview's filter.
-        One execution Job then runs the frozen rows, never the filter again, so a User who starts matching after the preview is not changed. Every row is authorized again in PostgreSQL when it runs, a row whose User the caller's directory no longer shows fails with `authorization.denied`, and every remaining row fails with `authorization.denied` once the caller's directory would refuse the filter. The first commit records one batch-level audit entry with the operation, filter, counts and preview identity; each row's own audit entry names the preview and row, whether the row succeeds or fails. The response is the committed preview as the commit recorded it, and repeating the request with the same Idempotency-Key returns that same commit. Requires a strong, recent interactive Session.
+        Commits your own ready preview if its revision and digest still match, within 15 minutes of it becoming
+        ready, measured by the server's database clock. After that the commit is refused with
+        `academic_administration_preview.expired`, and you need a new preview. A preview another User created reads
+        as not found, and the commit is refused with `academic_administration_preview.authorization_lost` once your
+        User directory would refuse the preview's filter.
+
+        One background Job then runs the saved rows. It never runs the filter again, so a User who starts matching
+        after the preview is not changed. Each row is authorized again when it runs. A row whose User your directory
+        no longer shows fails with `authorization.denied`, and once your directory would refuse the filter, every
+        remaining row fails the same way. The first commit records one audit entry for the whole batch, with the
+        operation, filter, counts and preview ID. Each row also gets its own audit entry naming the preview and row,
+        whether it succeeds or fails. The response is the preview as the commit recorded it, and repeating the request
+        with the same Idempotency-Key returns that same commit. Requires a strong, recent interactive Session.
       x-proctor-auth: strong_recent_session_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -264,7 +300,8 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Cancels the caller's own preview before it finishes. Rows not yet run are canceled; a row already committing finishes, and completed rows are never rolled back.
+        Cancels your own preview before it finishes. Rows that have not run yet are canceled. A row that is already
+        running finishes, and rows that already completed are never undone.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -325,10 +362,10 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/ID'
-      description: The academic administration preview identifier.
+      description: The ID of the academic administration preview.
   requestBodies:
     CreateAcademicAdministrationPreview:
-      description: One operation, its exact scope and fields, and the User directory filter whose matching Users it applies to.
+      description: The operation, its scope and fields, and the User directory filter that picks the Users it applies to.
       required: true
       content:
         application/json:
@@ -343,7 +380,7 @@ components:
                 - student
               never_signed_in: true
     CommitAcademicAdministrationPreview:
-      description: Exact immutable preview revision and digest to commit.
+      description: The revision and digest of the preview you reviewed.
       required: true
       content:
         application/json:
@@ -351,10 +388,12 @@ components:
             $ref: '#/components/schemas/AcademicAdministrationPreviewCommitRequest'
           example:
             expected_revision: 2
-            preview_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+            preview_digest: 3946ca64ff78d93ca61090a437cbb6b3d2ca0d488f5f9ccf3059608368b27693
   responses:
     AcademicAdministrationPreviewAccepted:
-      description: The preview whose resolution or execution Job was queued.
+      description: >-
+        The preview. Its background Job has been queued: resolving the filter after you create the preview, or
+        running the rows after you commit it.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -362,8 +401,28 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/AcademicAdministrationPreviewResponse'
+          example:
+            id: yu7twx6xxb4udbc94foq5zq9ni
+            state: parsing
+            operation: user.disable
+            scope_type: institution
+            scope_id: ybndrfg8ejkmcpqxot1uwisza3
+            filter:
+              affiliation:
+                - student
+              never_signed_in: true
+            total_rows: 0
+            succeeded_rows: 0
+            no_op_rows: 0
+            failed_rows: 0
+            skipped_rows: 0
+            preview_job_id: dpbj4ddm3hw8fkicm7nuazihkg
+            created_at: '2026-09-01T09:00:00Z'
+            updated_at: '2026-09-01T09:00:00Z'
+            expires_at: '2026-09-08T09:00:00Z'
+            revision: 1
     AcademicAdministrationPreviewOK:
-      description: The caller's own academic administration preview.
+      description: Your academic administration preview.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -371,8 +430,37 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/AcademicAdministrationPreviewResponse'
+          example:
+            id: yu7twx6xxb4udbc94foq5zq9ni
+            state: preview_ready
+            operation: user.disable
+            scope_type: institution
+            scope_id: ybndrfg8ejkmcpqxot1uwisza3
+            filter:
+              affiliation:
+                - student
+              never_signed_in: true
+            preview_digest: 3946ca64ff78d93ca61090a437cbb6b3d2ca0d488f5f9ccf3059608368b27693
+            summary:
+              will_change: 41
+              no_op: 3
+              skipped: 1
+              skip_reasons:
+                - reason: academic_administration_preview.system_administrator
+                  rows: 1
+            total_rows: 45
+            succeeded_rows: 0
+            no_op_rows: 0
+            failed_rows: 0
+            skipped_rows: 0
+            preview_job_id: dpbj4ddm3hw8fkicm7nuazihkg
+            created_at: '2026-09-01T09:00:00Z'
+            updated_at: '2026-09-01T09:00:06Z'
+            preview_expires_at: '2026-09-01T09:15:06Z'
+            expires_at: '2026-09-08T09:00:00Z'
+            revision: 2
     AcademicAdministrationPreviewRowsOK:
-      description: One page of the preview's rows the caller's directory shows.
+      description: One page of the preview's rows that your User directory shows.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -380,11 +468,30 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/AcademicAdministrationPreviewRowListResponse'
+          example:
+            items:
+              - row: 1
+                user_id: yftfs48pasu5fd6czhcwz6b4x3
+                username: student.one
+                display_name: Student One
+                group: will_change
+                status: valid
+              - row: 2
+                user_id: nan7rdocriztinowtuyrbqg67a
+                username: student.two
+                display_name: Student Two
+                group: will_change
+                status: valid
+            next_cursor: eyJyb3ciOjIsImdyb3VwIjoid2lsbF9jaGFuZ2UiLCJyZWFzb24iOiIifQ
   schemas:
     AcademicAdministrationPreviewSkipReason:
       type: string
       description: >-
-        Why a preview skips a row: the caller's own account, a System Administrator from a disable or Session revocation, a Class enrollment of a User enrolled in another Class of the same Period or without a current student Affiliation, or an end of a User holding several current relationships it could end. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+        Why a preview skips a row: the row is your own account (`self`), a System Administrator in a disable or
+        Session revocation (`system_administrator`), a Class enrollment of a User already enrolled in another Class of
+        the same Academic Period (`enrollment_conflict`) or without a current student Affiliation
+        (`student_affiliation_required`), or an end for a User who holds several current relationships it could end
+        (`ambiguous`). New reasons may be added later, so show an unknown reason as a generic skip.
       enum:
         - academic_administration_preview.ambiguous
         - academic_administration_preview.enrollment_conflict
@@ -393,7 +500,7 @@ components:
         - academic_administration_preview.system_administrator
     AcademicAdministrationPreviewOperation:
       type: string
-      description: The one existing-User academic administration operation a preview applies.
+      description: The existing-User academic administration operation a preview applies to every matching User.
       enum:
         - affiliation.add
         - affiliation.end
@@ -408,17 +515,19 @@ components:
         - user_sessions.revoke
     AcademicAdministrationPreviewFilter:
       description: >-
-        The User directory filter of a preview, spelled as the directory's query parameters are; each member narrows the caller's visibility and none widens it. `q` is at most 256 characters.
+        The User directory filter of a preview, using the directory's query parameter names. Each field narrows the
+        Users you can see, and none widens it.
       type: object
       additionalProperties: false
       properties:
         q:
           type: string
           maxLength: 256
-          description: Literal case-insensitive substring matched against visible User directory fields.
+          description: Text matched, without regard to case, anywhere in the User directory fields you can see.
         affiliation:
           type: array
           maxItems: 4
+          description: Keep Users who hold a current Affiliation of any of these kinds.
           items:
             type: string
             enum:
@@ -428,9 +537,13 @@ components:
               - external
         academic_unit_id:
           $ref: '#/components/schemas/ID'
+          description: Keep Users with a current membership in this Academic Unit or one of its descendants.
         role_id:
           type: array
           maxItems: 16
+          description: >-
+            Keep Users who hold a current Role Binding of any of these Roles, within the scopes where you hold
+            role_binding.view. Using it needs Institution-wide role.view.
           items:
             $ref: '#/components/schemas/ID'
         state:
@@ -438,14 +551,24 @@ components:
           enum:
             - active
             - disabled
+          description: >-
+            Keep only `active` or only `disabled` accounts. Only Institution-wide user.view can see disabled Users.
         never_signed_in:
           type: boolean
+          description: >-
+            When true, keep Users who have never signed in. Needs Institution-wide user.view, and cannot be combined
+            with `last_active_after` or `last_active_before`.
         last_active_after:
           type: string
           format: date-time
+          description: >-
+            Keep Users whose last account activity is at or after this instant. Needs Institution-wide user.view.
         last_active_before:
           type: string
           format: date-time
+          description: >-
+            Keep Users whose last account activity is before this instant. It must be later than
+            `last_active_after`. Needs Institution-wide user.view.
     AcademicAdministrationPreviewRequest:
       type: object
       additionalProperties: false
@@ -457,18 +580,28 @@ components:
       properties:
         operation:
           $ref: '#/components/schemas/AcademicAdministrationPreviewOperation'
+          description: The operation to apply to every matching User.
         scope_type:
           type: string
           enum:
             - institution
             - academic_unit
             - class
+          description: >-
+            The kind of scope the operation runs in: `academic_unit` for Academic Unit membership operations, `class`
+            for Class operations, `institution` for Affiliation and User operations, and any of the three for Role
+            Binding operations.
         scope_id:
           $ref: '#/components/schemas/ID'
+          description: The Institution, Academic Unit or Class the operation runs in.
         filter:
           $ref: '#/components/schemas/AcademicAdministrationPreviewFilter'
+          description: The User directory filter that picks the Users the operation applies to.
         role_id:
           $ref: '#/components/schemas/ID'
+          description: >-
+            The Role to bind or unbind. Required for `role_binding.create` and `role_binding.end`, and not allowed
+            for other operations.
         affiliation_kind:
           type: string
           enum:
@@ -476,16 +609,27 @@ components:
             - teacher
             - staff
             - external
+          description: >-
+            The kind of Affiliation to add or end. Required for `affiliation.add` and `affiliation.end`, and not
+            allowed for other operations.
         start_at:
-          description: When the relationship a creating operation makes starts; omitted, every row starts when the preview is created.
+          description: >-
+            When the relationship made by a creating operation starts (`affiliation.add`, `academic_unit_member.add`,
+            `class.enroll` or `role_binding.create`). Omit it and every row starts at the time the preview was
+            created. Not allowed for other operations.
           type: string
           format: date-time
         end_at:
-          description: When the relationship a creating operation makes ends; it must be after `start_at`, or after the preview's creation when `start_at` is omitted, or the request is refused with `request.invalid` on `end_at`.
+          description: >-
+            When the relationship made by `affiliation.add`, `class.enroll` or `role_binding.create` ends. It must be
+            after `start_at`, or after the preview's creation time when `start_at` is omitted; otherwise the request
+            is refused with `request.invalid` on `end_at`.
           type: string
           format: date-time
     AcademicAdministrationPreviewCommitRequest:
-      description: Revision and SHA-256 digest fencing a commit to the reviewed preview.
+      description: >-
+        The revision and SHA-256 digest of the preview you reviewed. The commit is refused if the preview has
+        changed since.
       type: object
       additionalProperties: false
       required:
@@ -496,12 +640,13 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The preview's `revision` when you reviewed it.
         preview_digest:
           type: string
           pattern: ^[0-9a-f]{64}$
-          description: SHA-256 digest of the exact immutable preview, encoded as lowercase hexadecimal.
+          description: The preview's `preview_digest`, a SHA-256 digest in lowercase hexadecimal.
     AcademicAdministrationPreviewSummary:
-      description: A ready preview's rows by class, and its skipped rows by reason.
+      description: A ready preview's row counts by group, and its skipped rows counted by reason.
       type: object
       additionalProperties: false
       required:
@@ -514,16 +659,20 @@ components:
           type: integer
           minimum: 0
           maximum: 10000
+          description: Rows the operation will change.
         no_op:
           type: integer
           minimum: 0
           maximum: 10000
+          description: Rows where the change already holds, so the operation leaves them as they are.
         skipped:
           type: integer
           minimum: 0
           maximum: 10000
+          description: Rows the operation will skip.
         skip_reasons:
           type: array
+          description: The skipped rows, counted by reason.
           items:
             type: object
             additionalProperties: false
@@ -536,10 +685,12 @@ components:
                 anyOf:
                   - $ref: '#/components/schemas/AcademicAdministrationPreviewSkipReason'
                   - type: string
+                description: Why these rows are skipped.
               rows:
                 type: integer
                 minimum: 1
                 maximum: 10000
+                description: How many rows are skipped for this reason.
     AcademicAdministrationPreviewResponse:
       type: object
       additionalProperties: false
@@ -563,6 +714,7 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The ID of the preview.
         state:
           type: string
           enum:
@@ -573,20 +725,29 @@ components:
             - completed_with_errors
             - canceled
             - failed
+          description: >-
+            Where the preview stands: `parsing` while the filter is resolved, `preview_ready` when it can be reviewed
+            and committed, `executing` while its rows run, and then `completed`, `completed_with_errors`, `canceled`
+            or `failed`.
         operation:
           $ref: '#/components/schemas/AcademicAdministrationPreviewOperation'
+          description: The operation the preview applies.
         scope_type:
           type: string
           enum:
             - institution
             - academic_unit
             - class
+          description: The kind of scope the operation runs in.
         scope_id:
           $ref: '#/components/schemas/ID'
+          description: The Institution, Academic Unit or Class the operation runs in.
         filter:
           $ref: '#/components/schemas/AcademicAdministrationPreviewFilter'
+          description: The User directory filter the preview resolved.
         role_id:
           $ref: '#/components/schemas/ID'
+          description: The Role a Role Binding operation binds or unbinds. Omitted for other operations.
         affiliation_kind:
           type: string
           enum:
@@ -594,61 +755,82 @@ components:
             - teacher
             - staff
             - external
+          description: The kind of Affiliation an Affiliation operation adds or ends. Omitted for other operations.
         start_at:
           type: string
           format: date-time
+          description: >-
+            The start requested for a creating operation. Omitted when none was given, in which case every row starts
+            at the time the preview was created.
         end_at:
           type: string
           format: date-time
+          description: The end requested for a creating operation. Omitted when none was given.
         preview_digest:
           type: string
           pattern: ^[0-9a-f]{64}$
-          description: Present once the preview is ready.
+          description: >-
+            SHA-256 digest of the ready preview, in lowercase hexadecimal. Send it back to commit. Present once the
+            preview is ready.
         summary:
           $ref: '#/components/schemas/AcademicAdministrationPreviewSummary'
+          description: The rows you can see, counted by group. Present once the preview is ready.
         total_rows:
           type: integer
           minimum: 0
           maximum: 10000
+          description: How many rows the preview saved, one for each matching User.
         succeeded_rows:
           type: integer
           minimum: 0
+          description: Rows that ran successfully. Zero until the preview is committed.
         no_op_rows:
           type: integer
           minimum: 0
+          description: Rows that changed nothing because the change already held. Zero until the preview is committed.
         failed_rows:
           type: integer
           minimum: 0
+          description: Rows that failed when they ran. Zero until the preview is committed.
         skipped_rows:
           type: integer
           minimum: 0
+          description: Rows that were skipped. Zero until the preview is committed.
         preview_job_id:
           $ref: '#/components/schemas/ID'
+          description: The Job that resolves the filter and builds the rows.
         execution_job_id:
           $ref: '#/components/schemas/ID'
+          description: The Job that runs the rows. Present once the preview is committed.
         failure_code:
           type: string
           anyOf:
             - $ref: '#/components/schemas/OnboardingImportFailureCode'
             - type: string
+          description: Why the preview failed. Present only when it failed.
         created_at:
           type: string
           format: date-time
+          description: When the preview was created.
         updated_at:
           type: string
           format: date-time
+          description: When the preview last changed.
         preview_expires_at:
           type: string
           format: date-time
-          description: When the ready preview stops admitting its commit, 15 minutes after it became ready.
+          description: When the ready preview can no longer be committed, 15 minutes after it became ready.
         expires_at:
           type: string
           format: date-time
-          description: When the preview and its rows are removed, seven days after creation.
+          description: When the preview and its rows are deleted, seven days after it was created.
         revision:
           type: integer
           format: int64
           minimum: 1
+          description: >-
+            The preview's revision, which goes up each time it changes. Send it back as `expected_revision` to
+            commit.
     AcademicAdministrationPreviewRowResponse:
       type: object
       additionalProperties: false
@@ -664,23 +846,29 @@ components:
           type: integer
           minimum: 1
           maximum: 10000
+          description: The row's number in the preview, starting at 1.
         user_id:
           $ref: '#/components/schemas/ID'
+          description: The User this row applies to.
         username:
           type: string
+          description: The User's username.
         display_name:
           type: string
+          description: The User's display name.
         group:
           type: string
           enum:
             - will_change
             - no_op
             - skipped
+          description: The group the row is in.
         reason:
           type: string
           anyOf:
             - $ref: '#/components/schemas/AcademicAdministrationPreviewSkipReason'
             - type: string
+          description: Why the row is skipped. Present only for skipped rows.
         status:
           type: string
           enum:
@@ -692,15 +880,23 @@ components:
             - failed
             - skipped
             - canceled
+          description: >-
+            Where the row stands. Before commit, a row that will change is `valid` and every other row is
+            `invalid`. After commit it shows the row's outcome: `pending` until it runs, then `succeeded`, `no_op`,
+            `failed`, `skipped` or `canceled`.
         public_code:
           type: string
           anyOf:
             - $ref: '#/components/schemas/OnboardingImportRowCode'
             - type: string
+          description: Why the row failed when it ran. Present only for failed rows.
         resource_id:
           $ref: '#/components/schemas/ID'
+          description: >-
+            The Affiliation, membership, enrollment, Role Binding or User the row created or changed. Present once
+            the row has run successfully.
     AcademicAdministrationPreviewRowListResponse:
-      description: One page of preview rows in row order.
+      description: One page of preview rows, in row order.
       type: object
       additionalProperties: false
       required:
@@ -709,8 +905,8 @@ components:
         items:
           type: array
           maxItems: 200
+          description: The rows on this page.
           items:
             $ref: '#/components/schemas/AcademicAdministrationPreviewRowResponse'
         next_cursor:
-          type: string
-          description: Opaque continuation for the next page, omitted after the final page.
+          $ref: '#/components/schemas/NextCursor'

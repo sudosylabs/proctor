@@ -1,216 +1,232 @@
 ---
-title: Develop Realtime, Clustering, and Effects
-description: Keep WebSocket connections bounded and node-local while using best-effort cluster propagation only after authoritative commits.
+title: Realtime, clustering and effects
+description: Keep WebSocket connections bounded and local to one node, and use best-effort cluster propagation only after the authoritative commit.
 audience: developer
 maturity: preview
 slug: /developers/server/realtime-cluster-effects/
 ---
 
-# Develop Realtime, Clustering, and Effects
+# Realtime, clustering and effects
 
-Realtime delivery helps a connected client notice a committed fact quickly. It
-does not make a fact durable. A WebSocket belongs to one application node;
-cluster propagation can notify peers; PostgreSQL and managed content remain
-the recovery authority when either path misses a message.
+Realtime delivery helps a connected client notice a committed fact quickly.
+It doesn't make the fact durable. A WebSocket belongs to one application node,
+and cluster propagation can tell the other nodes. When either path misses a
+message, PostgreSQL and managed content are still what clients recover from.
 
-## Separate the Three Boundaries
+## Keep the boundaries separate
 
-| Boundary | Responsibility |
+| Boundary | What it does |
 | --- | --- |
-| Owning application use case | Event meaning, authorization timing, and post-commit publication |
-| `app/realtime` | Transport-neutral event and close-reason contracts, local-first delivery, peer codecs, loop prevention, and security invalidation semantics |
-| `server/websocket` | Upgrade, connection state, wire envelopes, sequencing, replay, liveness, subscriptions, and backpressure |
-| Cluster adapter | Authenticated bounded peer delivery and membership, not application policy |
+| The application use case that owns the event | Decides what the event means, when authorization happens, and publishes after commit |
+| `app/realtime` | Transport-neutral contracts for events and close reasons, local-first delivery, peer codecs, loop prevention, and what security invalidation means |
+| `server/websocket` | Upgrade, connection state, wire envelopes, sequencing, replay, liveness, subscriptions and backpressure |
+| Cluster adapter | Authenticated, bounded delivery to peers, and membership. No application policy |
 
-The application Realtime module is inert after construction. It owns no
-listener, goroutine, queue, retry loop, WebSocket, or cluster lifecycle. The
-composition root attaches its local sink and peer fan-out once before
+Once built, the application Realtime module does nothing on its own. It owns
+no listener, goroutine, queue, retry loop, WebSocket or cluster lifecycle. The
+composition root attaches its local sink and peer fan-out once, before
 readiness.
 
-## Publish a Past-Tense Fact
+## Publish a fact in the past tense
 
-Create an event only after the durable state exists. Name it in the past tense,
+Create an event only once the durable state exists. Name it in the past tense,
 for example `UserSettingsChanged` or `SessionRevoked`. Include only the
-minimal approved identifiers, revision, state code, and event time a consumer
-needs to refetch or invalidate.
+smallest set of approved identifiers, the revision, a state code and the event
+time: just what a consumer needs to refetch or invalidate.
 
 Never include:
 
-- credentials, Session tokens, or continuity secrets;
-- Exam answers, Workspace content, or paths;
-- mail bodies or recipient addresses;
-- private rationale or provider claims;
-- mutable domain records; or
-- arbitrary maps and error strings.
+- credentials, Session tokens or continuity secrets
+- Exam answers, Workspace content or paths
+- mail bodies or recipient addresses
+- private rationale or provider claims
+- mutable domain records
+- arbitrary maps or error strings
 
-The normal publication sequence is local-first, then best-effort peer fan-out.
-A peer-received event applies local work only and is never rebroadcast.
+Publication normally goes to the local node first, then out to peers on a
+best-effort basis. When a peer receives an event, it only does local work. It
+never broadcasts the event again.
 
-## Decide Whether Delivery Is Durable
+## Decide whether delivery must be durable
 
-Use ordinary realtime when the consumer can reconstruct the truth:
+Ordinary realtime is fine when the consumer can rebuild the truth itself:
 
-- cache invalidation;
-- refetch hints;
-- connection close or subscription invalidation;
-- safe lifecycle facts; and
-- presence-like or transient UI coordination.
+- cache invalidation
+- hints to refetch
+- closing a connection or invalidating a subscription
+- safe lifecycle facts
+- presence and other short-lived UI coordination
 
-Use a named Store operation, durable Job, mail occurrence, or purpose-specific
-outbox when the continuation itself must survive loss. Do not add retries to
-ordinary realtime until the product contract requires durable delivery.
+When the follow-up itself must survive a loss, use a named Store operation, a
+durable Job, a mail occurrence or an outbox built for that purpose. Don't add
+retries to ordinary realtime until the product contract needs durable
+delivery.
 
-A failed post-commit publication is reported as a bounded transient diagnostic.
-It must not turn a successful durable mutation into a rollback claim or cause
-the application to repeat the mutation.
+If publishing fails after commit, it is reported as a bounded, transient
+diagnostic. It must never turn a successful durable mutation into a claim of
+rollback, or make the application repeat the mutation.
 
-## Invalidate Derived Collections Deliberately
+## Invalidate derived collections on purpose
 
-Candidate Exam Activity and the manager candidate-status board are derived,
-paginated projections. A mutation that changes their answer publishes a
-selector-only refetch hint after commit; it does not attempt to patch one
-client's current page or carry the changed record on the wire.
+Candidate Exam Activity and the manager's candidate-status board are derived,
+paginated views. When a mutation changes what they would show, it publishes a
+refetch hint that carries only a selector, after commit. It doesn't try to
+patch one client's current page, and it doesn't send the changed record over
+the wire.
 
 The fan-out rules live beside the events they publish:
 
 - `PublishCandidateActivityChangedForSitting` in
-  `server/app/realtime/sitting_invalidation.go` pages through affected
-  candidate identities in bounded groups and emits one self-scoped activity
-  hint;
-- `PublishSittingBoardChanged` in the same file emits one Exam-and-Sitting
-  selector for authorized managers; and
+  `server/app/realtime/sitting_invalidation.go` pages through the affected
+  candidate identities in bounded groups and emits one activity hint scoped to
+  each candidate.
+- `PublishSittingBoardChanged`, in the same file, emits one Exam-and-Sitting
+  selector for authorized managers.
 - `publishArchivedExamSittings` in `server/app/exam/effects.go` pages through
   the Sittings of an archived Exam and invalidates both views.
 
 Each Exam area calls these from its own `effects.go`, after the use case
 commits.
 
-Keep the query projection and the invalidation selector separate. The event
-must contain only the identifiers needed to refetch; no candidate row, Session,
+Keep the query view and the invalidation selector apart. The event carries
+only the identifiers needed to refetch. No candidate row, Session,
 Registration, Participation, Connection, Browser Activity, evidence, private
-reason, or Review decision belongs in it. Fan-out may partially fail after the
-durable mutation, so join bounded publication errors for diagnostics and rely
-on reconnect or ordinary refetch for convergence.
+reason or Review decision belongs in it. Fan-out may fail partway through
+after the durable mutation, so join the bounded publication errors for
+diagnostics, and rely on reconnect or ordinary refetch to bring clients up to
+date.
 
-When adding a state transition, inspect its effect on both collections. Sitting
-schedule and lifecycle changes, corrections, enrollment changes, Attempt and
-Submission transitions, Review release, and Exam archival do not all have the
-same audience. Wire the smallest owning invalidation helper only after commit.
-Test event privacy in
-`server/app/realtime/exam_collection_invalidation_event_test.go`, fan-out and
-mutation placement beside the owning application tests, and HTTP projection
-shape through the DTO registry in `server/httpapi/openapi_dto_registry_test.go`.
+When you add a state transition, check what it does to both collections.
+Sitting schedule and lifecycle changes, corrections, enrollment changes,
+Attempt and Submission transitions, Review release and Exam archival don't all
+reach the same audience. Wire in the smallest invalidation helper that owns
+the case, and only after commit. Test each part where it lives:
 
-## Establish and Authorize Connections
+- event privacy in
+  `server/app/realtime/exam_collection_invalidation_event_test.go`
+- fan-out and where it sits in the mutation, beside the owning application
+  tests
+- the shape of the HTTP view, through the DTO registry in
+  `server/httpapi/openapi_dto_registry_test.go`
 
-The HTTP route catalog owns the named WebSocket upgrade. Cookie-authenticated
-Web Session upgrades require the exact configured public Origin. A Web Session
-access credential may use an allowed bearer transport; a Desktop Session must
-use `Authorization: DPoP` and a fresh proof for the handshake. Non-browser
-clients may omit Origin. A successful upgrade transfers the connection to the
-sibling WebSocket transport.
+## Set up and authorize connections
 
-Each connection retains:
+The HTTP route catalog owns the named WebSocket upgrade. The rules depend on
+the credential:
 
-- one immutable principal;
-- one node-local connection identity;
-- monotonic outbound sequence;
-- bounded outbound and replay queues;
-- explicit subscriptions;
-- liveness state; and
-- an enforced backpressure policy.
+- A Web Session upgrade authenticated by cookie needs the exact configured
+  public Origin.
+- A Web Session access credential may use an allowed bearer transport.
+- A Desktop Session must use `Authorization: DPoP`, with a fresh proof for the
+  handshake.
+- Clients that aren't browsers may leave out Origin.
 
-Subscription requests carry an explicit action and resource and call the
-application authorization boundary. Authentication at upgrade is not
-permission to subscribe forever. Role, Role Binding, assurance, account, and
-Session changes can invalidate the affected connections across nodes.
+Once the upgrade succeeds, the connection passes to the sibling WebSocket
+transport.
 
-## Design Replay and Resynchronization
+Each connection keeps:
 
-Replay is bounded and node-local. Reconnection to the same node may recover
-only the events retained in that node’s queue. If the requested sequence is too
-old or the client reaches another node, the server creates a fresh connection
-and requires authoritative HTTP resynchronization.
+- one immutable principal
+- one connection identity local to the node
+- an outbound sequence that only goes up
+- bounded outbound and replay queues
+- explicit subscriptions
+- liveness state
+- an enforced backpressure policy
 
-Do not transfer replay queues between nodes or claim cluster messages form a
-durable event log. A client must already know how to rebuild each subscribed
-view from its HTTP authority.
+A subscription request names an explicit action and resource, and goes
+through the application's authorization boundary. Authenticating at upgrade
+doesn't grant permission to stay subscribed forever. Changes to a Role, Role
+Binding, assurance, account or Session can invalidate the affected
+connections on every node.
 
-## Bound Backpressure
+## Design replay and resynchronization
 
-Every queue and payload has a hard bound. Decide what happens when a consumer
-cannot keep up:
+Replay is bounded and local to one node. Reconnecting to the same node can
+recover only the events still in that node's queue. If the requested sequence
+is too old, or the client lands on another node, the server creates a fresh
+connection and requires a full resynchronization over HTTP.
 
-- coalesce a replaceable refetch hint;
-- drop an explicitly disposable signal;
-- close the slow connection with a stable reason; or
-- reject new work before memory grows without limit.
+Don't move replay queues between nodes, and don't claim that cluster messages
+make up a durable event log. A client must already know how to rebuild each
+view it subscribes to from its HTTP source.
 
-Never block an application mutation indefinitely on one client’s socket. Never
-place unbounded work on the cluster receive callback. Backpressure behavior is
-part of the protocol and needs deterministic tests.
+## Bound backpressure
 
-## Keep WebSocket Errors Protocol-Native
+Every queue and payload has a hard limit. Decide what happens when a consumer
+can't keep up:
 
-WebSocket uses its own versioned error envelope and bounded close reasons. It
-reuses stable application codes where appropriate but does not send HTTP
-Problem Details after upgrade. Unknown failures map to a generic unavailable
-code and retain only bounded outer diagnostics.
+- merge a refetch hint that a newer one can replace
+- drop a signal that is explicitly disposable
+- close the slow connection with a stable reason
+- reject new work before memory grows without limit
 
-Wire DTOs are strict, versioned, and size-limited. Reject missing or unknown
-schema versions where the protocol requires a closed contract. An
-acknowledgement returns only safe receipt facts; it does not echo credentials,
-private policy, or rejected payloads.
+Never block an application mutation indefinitely on one client's socket.
+Never put unbounded work on the cluster's receive callback. Backpressure
+behavior is part of the protocol, and it needs deterministic tests.
 
-## Understand Cluster Transport
+## Keep WebSocket errors native to the protocol
 
-Single-node and Memberlist adapters implement the same application-facing
-transport meaning. Memberlist provides peer membership and best-effort bounded
-delivery. It does not replace Redis, PostgreSQL, VFS, or a Job queue.
+WebSocket has its own versioned error envelope and a bounded set of close
+reasons. It reuses stable application codes where they fit, but never sends
+HTTP Problem Details after the upgrade. Unknown failures map to a generic
+unavailable code and keep only bounded diagnostics on the outside.
 
-Multi-node mode:
+Wire DTOs are strict, versioned and limited in size. Where the protocol needs
+a closed contract, reject missing or unknown schema versions. An
+acknowledgement returns only safe facts about the receipt. It never echoes
+credentials, private policy or rejected payloads.
 
-- discovers compatible peers through short-lived PostgreSQL leases and
-  optional configured seeds;
-- authenticates gossip with its own rotating encryption key ring;
-- validates node identity and protocol ranges continuously;
-- allows unknown safe message types or fields only within the declared rolling
-  compatibility policy;
-- contains handler panics and never logs payload data; and
-- recovers from missed delivery through TTL, revalidation, periodic repair, or
-  client refetch.
+## The cluster transport
 
-Redis is required for coherent disposable authentication counters in
-Memberlist mode. It is not the peer transport and remains non-authoritative.
+The single-node and Memberlist adapters mean the same thing to the
+application. Memberlist provides peer membership and best-effort, bounded
+delivery. It doesn't replace Redis, PostgreSQL, VFS or a Job queue.
+
+In multi-node mode, the cluster:
+
+- finds compatible peers through short-lived PostgreSQL leases and any seeds
+  you configure
+- authenticates gossip with its own rotating ring of encryption keys
+- keeps checking node identity and protocol ranges
+- accepts unknown safe message types or fields only within the declared
+  rolling compatibility policy
+- contains handler panics and never logs payload data
+- recovers from missed delivery through TTLs, revalidation, periodic repair or
+  a client refetch
+
+In Memberlist mode, Redis is required so that the disposable authentication
+counters stay consistent across nodes. Redis is not the peer transport, and
+it is never the authority.
 
 Read the exact [cluster delivery guarantees](https://github.com/sudosylabs/Proctor/blob/main/server/cluster/GUARANTEES.md)
-before changing message envelopes, admission, discovery, key rotation, or
+before you change message envelopes, admission, discovery, key rotation or
 shutdown.
 
-## Test Realtime and Cluster Behavior
+## Test realtime and cluster behavior
 
 Cover:
 
-- upgrade credential and Origin rules;
-- current subscription authorization;
-- event and error schema versions;
-- sequence monotonicity and replay window boundaries;
-- resynchronization after a gap or node change;
-- queue saturation and close/drop policy;
-- local-first then peer publication;
-- no rebroadcast of peer-received events;
-- invalidation after role, account, assurance, or Session change;
-- peer incompatibility and malformed message rejection;
-- duplicate, missing, and delayed delivery;
-- handler panic containment; and
-- recovery from PostgreSQL authority after missed propagation.
+- the credential and Origin rules at upgrade
+- authorization of current subscriptions
+- event and error schema versions
+- sequences only going up, and the edges of the replay window
+- resynchronization after a gap or a change of node
+- queues filling up, and the close or drop policy
+- publishing locally first, then to peers
+- events received from a peer never being broadcast again
+- invalidation after a role, account, assurance or Session change
+- incompatible peers, and rejecting malformed messages
+- duplicate, missing and delayed delivery
+- containing handler panics
+- recovering from PostgreSQL after propagation was missed
 
-Use focused unit tests first, then:
+Start with focused unit tests, then run:
 
 ```sh
 make -C server integration-realtime
 make -C server architecture
 ```
 
-For a local incident, use [Jobs and realtime troubleshooting](../troubleshooting/jobs-realtime.mdx)
+For a local incident, see [Jobs and realtime troubleshooting](../troubleshooting/jobs-realtime.mdx)
 or [cluster troubleshooting](../troubleshooting/cluster.mdx).

@@ -13,7 +13,7 @@ paths:
       operationId: editExamDraftText
       summary: Edit authored title or Markdown instructions on the active Exam Draft
       description: >-
-        Changes one or both authored text fields on the mutable Draft only when the expected Draft revision still matches. Null leaves a field unchanged, while bounded Markdown is stored as authored content and rendered through the documentation-safe presentation contract.
+        Changes the Draft title, its Markdown instructions, or both. The change is made only if expected_revision still matches the Draft's current revision, so you never overwrite someone else's newer edit. A field you leave out or send as null stays as it is. Proctor stores the Markdown exactly as you wrote it and renders it safely when it is shown.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -71,7 +71,7 @@ components:
   requestBodies:
     EditExamDraftText:
       required: true
-      description: Supplies the expected Draft revision and at least one authored title or Markdown instructions change.
+      description: The Draft revision you last saw, and a new title, new instructions, or both.
       content:
         application/json:
           schema:
@@ -102,16 +102,20 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The Draft revision you last saw. If the Draft has changed since, the request fails with a conflict.
         title:
           type:
             - string
             - "null"
           minLength: 1
           maxLength: 200
-          description: Omitted or null leaves the title unchanged; a present value is trimmed and must remain non-empty.
+          description: >-
+            The new title, up to 200 characters. Leading and trailing spaces are removed, and the result must not be
+            empty. Leave it out or send null to keep the current title.
         instructions_markdown:
           type:
             - string
             - "null"
           description: >-
-            Omitted or null leaves the authored Markdown unchanged; an empty string clears it. Present UTF-8 content is limited to 65536 bytes.
+            The new instructions, as Markdown. Up to 65,536 bytes of UTF-8. An empty string removes the instructions.
+            Leave it out or send null to keep the current instructions.

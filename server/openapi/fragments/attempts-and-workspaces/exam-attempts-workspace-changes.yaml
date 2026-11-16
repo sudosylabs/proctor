@@ -12,8 +12,7 @@ paths:
     get:
       operationId: listCandidateExamWorkspaceChanges
       summary: List ordered acknowledged Workspace changes
-      description: >-
-        Returns acknowledged Workspace mutations after the supplied workspace_cursor in strict order for the active candidate Attempt. If retained history can no longer bridge the cursor, the response explicitly instructs the client to reload the full manifest.
+      description: Returns the Workspace changes the server accepted after workspace_cursor, in order, for the candidate's active Attempt. If the server no longer keeps enough history to continue from that cursor, the response tells the client to reload the full file list instead.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -44,7 +43,7 @@ paths:
         - name: workspace_cursor
           in: query
           required: false
-          description: Start the listing with changes strictly after this Workspace Cursor; zero or omission starts at the retained beginning. Omit it when continuing with cursor.
+          description: List only changes made after this Workspace Cursor. Zero, or leaving it out, starts at the oldest change the server still keeps. Leave it out when you continue a listing with cursor.
           schema:
             type: integer
             format: int64
@@ -72,7 +71,7 @@ paths:
 components:
   responses:
     CandidateWorkspaceJournalOK:
-      description: Bounded ordered acknowledged Workspace changes or an explicit full-refresh signal
+      description: One page of Workspace changes in order, or a signal to reload the full file list.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -80,8 +79,37 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/CandidateWorkspaceJournalResponse'
+          example:
+            workspace_id: wj3drgzdpnf54rxf5d8qd3dqne
+            current_cursor: 17
+            items:
+              - cursor: 15
+                entry_id: 14j8umgczgrdp95w77zuxmxfu9
+                kind: file
+                operation: replace_file
+                old_path: answers/main.go
+                new_path: answers/main.go
+                content_version: kVcIsgUpj6Sg9aheovEZXzUjpw
+                changed_at: '2026-08-01T09:12:40Z'
+                author:
+                  kind: candidate
+                  ref: c8xmq7t4h1rz6a3kpedn5yw9fo
+              - cursor: 16
+                entry_id: saqjfmjqqy9mo1yj4zwed73333
+                kind: file
+                operation: move_entry
+                old_path: answers/draft.txt
+                new_path: answers/notes.txt
+                content_version: VhOGu5NgyvhwvSuqK4dWGlgnoA
+                changed_at: '2026-08-01T09:14:05Z'
+                author:
+                  kind: environment
+                  ref: 0/terminal:1
+            next_cursor: eyJhZnRlcl93b3Jrc3BhY2VfY3Vyc29yIjoxNn0
+            refresh_required: false
   schemas:
     CandidateWorkspaceJournalEntryResponse:
+      description: One change the server accepted in the Attempt Workspace.
       type: object
       additionalProperties: false
       required:
@@ -93,17 +121,21 @@ components:
         - author
       properties:
         cursor:
+          description: Workspace Cursor of this change. Cursors go up by one with each change, with no gaps.
           type: integer
           format: int64
           minimum: 1
         entry_id:
+          description: ID of the Workspace Entry that changed.
           $ref: '#/components/schemas/ID'
         kind:
+          description: Whether the changed entry is a file or a directory.
           type: string
           enum:
             - file
             - directory
         operation:
+          description: The kind of change.
           type: string
           enum:
             - create_file
@@ -112,17 +144,21 @@ components:
             - move_entry
             - delete_entry
         old_path:
+          description: Path of the entry before the change. Present for replace_file, move_entry and delete_entry. For replace_file it equals new_path.
           $ref: '#/components/schemas/StarterWorkspacePath'
         new_path:
+          description: Path of the entry after the change. Present for create_file, create_directory, replace_file and move_entry. Omitted for delete_entry.
           $ref: '#/components/schemas/StarterWorkspacePath'
         content_version:
+          description: Workspace Content Version of the file after the change. Present when a file is created, replaced or moved. Omitted for directories and deletions.
           $ref: '#/components/schemas/WorkspaceContentVersion'
         changed_at:
+          description: When the server accepted the change.
           type: string
           format: date-time
         recursive:
           type: boolean
-          description: When true, this directory deletion removes old_path and all descendants whose paths start with old_path followed by a slash. Clients apply the entire subtree removal at this one cursor.
+          description: True when this deletion removes the directory at old_path and everything inside it, meaning every path that starts with old_path followed by a slash. Apply the whole removal at this one cursor.
         author:
           $ref: '#/components/schemas/WorkspaceAuthor'
     WorkspaceAuthor:
@@ -145,6 +181,7 @@ components:
           maxLength: 96
           description: The reference within the kind. For `candidate`, the Attempt Connection the editor wrote through. For `environment`, the environment incarnation in decimal, followed by a slash and the tag of the writing process, such as `terminal:1`, when it is known.
     CandidateWorkspaceJournalResponse:
+      description: One page of Workspace changes after the requested cursor.
       type: object
       additionalProperties: false
       required:
@@ -154,12 +191,15 @@ components:
         - refresh_required
       properties:
         workspace_id:
+          description: ID of the Attempt Workspace.
           $ref: '#/components/schemas/ID'
         current_cursor:
+          description: Latest Workspace Cursor of the Workspace when the server read this page.
           type: integer
           format: int64
           minimum: 0
         items:
+          description: Changes in ascending cursor order. Empty when refresh_required is true.
           type: array
           maxItems: 200
           items:
@@ -167,4 +207,5 @@ components:
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
         refresh_required:
+          description: True when the server can't continue from the requested cursor, because the cursor is ahead of the Workspace or older than the history the server keeps. The page is then empty, and the client must reload the full file list.
           type: boolean

@@ -13,7 +13,7 @@ paths:
       tags:
         - Access policy
       description: >-
-        Returns the same-origin, unauthenticated capability document a client uses before choosing a registration or authentication flow. The response contains only safe presentation and compatibility data, is never a substitute for authorization, and is returned with Cache-Control: no-store. It also carries two operator-configured presentation facts that apply before and after installation setup: the optional support mailbox hosted pages offer as a contact, and the minimum password length new passwords must meet.
+        Returns what a client needs to know before anyone signs in: which registration and sign-in paths are open, which providers to offer and which Proctor Desktop protocol versions the server accepts. No sign-in is needed, and the document is served from the installation's own origin with Cache-Control: no-store. It holds only details that are safe to show anyone, and it never stands in for a permission check. Two operator settings appear both before and after the installation is set up: the optional support mailbox that hosted pages offer as a contact, and the minimum length for new passwords.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -38,7 +38,7 @@ paths:
 components:
   responses:
     PublicAccessDiscoveryOK:
-      description: Versioned same-origin safe access discovery
+      description: The public access discovery document
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -46,9 +46,34 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/PublicAccessDiscoveryResponse'
+          example:
+            discovery_version: 1
+            canonical_origin: https://proctor.example.edu
+            installation_id: wj3drgzdpnf54rxf5d8qd3dqne
+            initialized: true
+            institution:
+              id: wj3drgzdpnf54rxf5d8qd3dqne
+              name: northbridge
+              display_name: Northbridge University
+            policy_revision: 4
+            capabilities:
+              local_login: true
+              public_registration: false
+              invitation_admission: true
+              desktop_authorization: true
+            providers:
+              - id: university_oidc
+                display_name: University sign-in
+                type: oidc
+            desktop_authorization:
+              protocol: proctor-desktop-authorization
+              minimum_version: 1
+              maximum_version: 1
+            support_address: exams-help@example.edu
+            password_minimum_length: 12
   schemas:
     PublicInstitutionPresentationResponse:
-      description: Safe Institution identity suitable for unauthenticated sign-in presentation.
+      description: The Institution's identity, safe to show on sign-in pages before anyone signs in.
       type: object
       additionalProperties: false
       required:
@@ -58,12 +83,17 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The Institution identifier.
         name:
           type: string
+          description: The Institution's machine name.
         display_name:
           type: string
+          description: The Institution's name as shown to people.
     PublicAccessCapabilitiesResponse:
-      description: Safe switches a client uses to choose an admitted account or authentication flow.
+      description: >-
+        Which ways in the Access Policy currently allows, so a client can offer the right sign-in or registration
+        flow. All are false until the installation is set up.
       type: object
       additionalProperties: false
       required:
@@ -74,14 +104,18 @@ components:
       properties:
         local_login:
           type: boolean
+          description: Whether people may sign in with a local password.
         public_registration:
           type: boolean
+          description: Whether anyone may create their own local account.
         invitation_admission:
           type: boolean
+          description: Whether pending Invitations can be accepted.
         desktop_authorization:
           type: boolean
+          description: Whether Proctor Desktop may sign in through the browser authorization flow.
     DesktopAuthorizationCompatibilityResponse:
-      description: Version range supported by this installation's native-client browser authorization protocol.
+      description: The versions of the Proctor Desktop browser authorization protocol this server accepts.
       type: object
       additionalProperties: false
       required:
@@ -92,14 +126,17 @@ components:
         protocol:
           type: string
           const: proctor-desktop-authorization
+          description: The protocol name.
         minimum_version:
           type: integer
           minimum: 1
+          description: The oldest protocol version the server accepts.
         maximum_version:
           type: integer
           minimum: 1
+          description: The newest protocol version the server accepts.
     PublicAccessDiscoveryResponse:
-      description: Versioned same-origin capabilities for choosing an unauthenticated entry path.
+      description: What a client needs before sign-in to choose how to register or sign in.
       type: object
       additionalProperties: false
       required:
@@ -114,22 +151,27 @@ components:
         discovery_version:
           type: integer
           const: 1
+          description: The format version of this document. Always 1 in this API version.
         canonical_origin:
           type: string
           format: uri
-          description: Exact public origin clients must use for same-origin browser and redirect validation.
+          description: >-
+            The installation's public origin. Clients must use exactly this origin when they check browser requests
+            and redirects.
         installation_id:
           $ref: '#/components/schemas/ID'
+          description: The installation identifier, the same as the Institution's. Omitted until the installation is set up.
         initialized:
           type: boolean
-          description: True after the one-time installation bootstrap transaction has committed.
+          description: True once the installation has been set up. Setup happens once.
         institution:
           $ref: '#/components/schemas/PublicInstitutionPresentationResponse'
+          description: The Institution to show on sign-in pages. Omitted until the installation is set up.
         policy_revision:
           type: integer
           format: int64
           minimum: 1
-          description: Current Access Policy revision when the installation is initialized.
+          description: The current Access Policy revision. Omitted until the installation is set up.
         capabilities:
           $ref: '#/components/schemas/PublicAccessCapabilitiesResponse'
         providers:
@@ -137,15 +179,18 @@ components:
           maxItems: 64
           items:
             $ref: '#/components/schemas/ExternalAuthenticationProviderResponse'
+          description: >-
+            The external sign-in providers to offer: those configured on this deployment that the Access Policy turns
+            on, sorted by ID. Empty until the installation is set up.
         desktop_authorization:
           $ref: '#/components/schemas/DesktopAuthorizationCompatibilityResponse'
         support_address:
           type: string
           format: email
           maxLength: 254
-          description: Operator-configured help mailbox (`Mail.SupportAddress`) that hosted pages offer as a contact. Omitted when none is configured.
+          description: The help mailbox, set by the operator in `Mail.SupportAddress`, that hosted pages offer as a contact. Omitted when none is set.
         password_minimum_length:
           type: integer
           minimum: 8
           maximum: 128
-          description: Minimum number of characters a new local password must contain (`Authentication.Password.MinimumLength`). Other password rules still apply and are reported when a password is rejected.
+          description: The fewest characters a new local password may have, set by `Authentication.Password.MinimumLength`. Other password rules still apply and are reported when a password is rejected.

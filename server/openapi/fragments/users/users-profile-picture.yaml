@@ -15,13 +15,13 @@ paths:
       tags:
         - Users
       description: >-
-        Returns an authorized private WebP rendition rather than a public or signed storage URL. The response carries an ETag and private cache policy; clients may send If-None-Match to receive 304 when their selected rendition is unchanged. Scoped visibility and disabled-User concealment are rechecked.
+        Returns the User's profile picture as a square WebP image, served directly rather than through a public or signed storage link. The response has an ETag and may be cached privately. Send If-None-Match to get 304 when the image has not changed. Every request checks again that you can see the User, so disabled Users stay hidden from scoped viewers.
       x-codeSamples:
         - lang: Shell
           source: |-
             curl --fail-with-body \
               --request GET \
-              --url 'https://proctor.example.edu/api/v1/users/<user-id>/profile-picture?size=256' \
+              --url 'https://proctor.example.edu/api/v1/users/wj3drgzdpnf54rxf5d8qd3dqne/profile-picture?size=256' \
               --header 'Authorization: Bearer <access-token>' \
               --header 'Accept: image/webp' \
               --output 'profile.webp'
@@ -58,13 +58,13 @@ paths:
               - 256
               - 512
             default: 256
-          description: Square rendition width in pixels. The server returns normalized WebP at 128, 256, or 512 pixels.
+          description: Width and height of the image in pixels, 128, 256 or 512.
         - name: If-None-Match
           in: header
           required: false
           schema:
             type: string
-          description: One or more entity tags from an earlier rendition response. A match returns 304 without a body.
+          description: One or more ETags from earlier responses. If one matches, you get 304 with no body.
       responses:
         "200":
           $ref: '#/components/responses/ProfilePictureOK'
@@ -88,16 +88,16 @@ paths:
       tags:
         - Users
       description: >-
-        Streams one supported source image for an authorized User. Proctor validates and normalizes the image before committing a private revision with 128, 256, and 512 pixel WebP renditions. Use If-Match when replacing an existing custom picture so a stale editor cannot overwrite a newer revision.
+        Uploads a new custom profile picture for a User. Proctor checks the image and converts it to WebP at 128, 256 and 512 pixels before saving it. When you replace an existing custom picture, send If-Match so you can't overwrite a newer upload by mistake.
       x-codeSamples:
         - lang: Shell
           source: |-
             curl --fail-with-body \
               --request PUT \
-              --url 'https://proctor.example.edu/api/v1/users/<user-id>/profile-picture' \
+              --url 'https://proctor.example.edu/api/v1/users/wj3drgzdpnf54rxf5d8qd3dqne/profile-picture' \
               --header 'Authorization: Bearer <access-token>' \
               --header 'Content-Type: image/png' \
-              --header 'If-Match: "<current-sha256>"' \
+              --header 'If-Match: "3f1c9a2be47d08e6a5c3b19f0d72e84a6b5c1d09e3f7a28b4c6d0e1f2a3b4c5d"' \
               --data-binary '@profile.png'
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
@@ -132,7 +132,9 @@ paths:
           required: false
           schema:
             type: string
-          description: Strong ETag of the current custom picture when replacing it. Omit this header for the first custom upload.
+          description: >-
+            The ETag of the current custom picture, from any of its sizes, when you replace it. Omit it for the
+            first custom upload.
       requestBody:
         required: true
         content:
@@ -149,7 +151,7 @@ paths:
               type: string
               format: binary
         description: >-
-          Raw PNG, JPEG, or WebP bytes. The server validates, normalizes, and privately stores the 128, 256, and 512 pixel WebP renditions.
+          The image file as raw PNG, JPEG or WebP bytes. The server checks it and stores WebP copies at 128, 256 and 512 pixels.
       responses:
         "200":
           $ref: '#/components/responses/UserProfileOK'
@@ -173,15 +175,15 @@ paths:
       tags:
         - Users
       description: >-
-        Removes the target User's current custom picture only when If-Match names its exact strong revision, then returns the retained default profile projection. A stale editor cannot remove a newer upload, and storage cleanup occurs after the durable state change.
+        Removes a User's custom picture so the default picture shows again, and returns the updated profile. If-Match must name the current custom picture, so you can't remove a newer upload by mistake. The stored files are deleted after the change is saved.
       x-codeSamples:
         - lang: Shell
           source: |-
             curl --request DELETE \
-              --url 'https://proctor.example.edu/api/v1/users/<user-id>/profile-picture' \
+              --url 'https://proctor.example.edu/api/v1/users/wj3drgzdpnf54rxf5d8qd3dqne/profile-picture' \
               --header 'Authorization: Bearer <token>' \
               --header 'X-Proctor-CSRF-Token: <session-csrf-token>' \
-              --header 'If-Match: "<current-sha256>"'
+              --header 'If-Match: "3f1c9a2be47d08e6a5c3b19f0d72e84a6b5c1d09e3f7a28b4c6d0e1f2a3b4c5d"'
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -213,7 +215,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Required strong ETag of the exact custom picture revision to remove.
+          description: The ETag of the custom picture to remove, from any of its sizes.
       responses:
         "200":
           $ref: '#/components/responses/UserProfileOK'
@@ -234,12 +236,16 @@ paths:
 components:
   responses:
     ProfilePictureOK:
-      description: Normalized private profile-picture rendition
+      description: The profile picture as a WebP image
       headers:
         ETag:
+          description: >-
+            The image's SHA-256 in quotes. Send it in If-None-Match to check for changes, or in If-Match to
+            replace or remove this custom picture.
           schema:
             type: string
         Cache-Control:
+          description: Always `private, max-age=86400`. Only this caller may cache the image, for up to a day.
           schema:
             type: string
       content:

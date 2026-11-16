@@ -1,0 +1,27 @@
+blocks:
+  - row:
+      - group: Avoid
+        text: the failure is far from its cause
+        items:
+          - card: Something went wrong
+            text: A toast away from the form that soon disappears
+            dashed: true
+          - card: Set a new password
+            quiet: true
+          - card: New password
+            text: Only a red border marks the problem
+          - card: Set password
+            text: Nothing beside it explains what failed
+      - group: Do
+        text: the failure sits beside its cause
+        accent: true
+        items:
+          - card: Set a new password
+            quiet: true
+          - card: New password
+            text: "Right below the field: **Use at least 12 characters.**"
+          - card: Form feedback
+            text: "Space kept above the button: **Password could not be changed. Try again.**"
+          - card: Set password
+            text: Stays in the same place when feedback appears
+    links: none

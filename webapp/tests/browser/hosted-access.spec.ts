@@ -247,9 +247,8 @@ async function expectPersistentSubmissionFailure(
   await expect(feedback).toHaveAttribute("role", "status");
   await expect(feedback).toHaveAttribute("aria-live", "polite");
   await expect(feedback).toContainText(expectedMessage);
-  await expect(
-    feedback.locator('[data-proctor-notice-tone="danger"]'),
-  ).toBeVisible();
+  await expect(feedback.locator('[data-proctor-icon="error"]')).toBeVisible();
+  await expect(feedback.locator("[data-proctor-notice]")).toHaveCount(0);
   await expect(feedback).not.toBeFocused();
 
   const after = await submissionGeometry(page, firstControl);
@@ -299,9 +298,10 @@ for (const colorScheme of ["light", "dark"] as const) {
     await expect(lockup).toBeVisible();
     const masthead = await lockup.evaluate((image) => {
       const header = image.closest("header");
+      const identity = image.parentElement;
       return {
-        first: header?.firstElementChild === image,
-        children: Array.from(header?.children ?? []).map((child) =>
+        first: header?.firstElementChild === identity && identity?.firstElementChild === image,
+        children: Array.from(identity?.children ?? []).map((child) =>
           child === image ? "lockup" : child.textContent,
         ),
       };
@@ -323,8 +323,8 @@ for (const colorScheme of ["light", "dark"] as const) {
     } else {
       expect(new URL(currentSource).pathname).toContain(
         colorScheme === "dark"
-          ? "proctor-lockup-purple-white"
-          : "proctor-lockup",
+          ? "proctor-lockup-dark"
+          : "proctor-lockup-light",
       );
     }
   });
@@ -371,7 +371,7 @@ test("setup validates and atomically submits the installation", { tag: "@cross-b
       name: "Set up your institution",
     }),
   ).toBeVisible();
-  await expect(page.getByText("Set up Proctor", { exact: true })).toBeVisible();
+  await expect(page.getByText("Set up Proctor", { exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Create institution" }).click();
   await expect(page.locator("#institution-display-name")).toBeFocused();
@@ -444,7 +444,7 @@ test("public registration submits only account input and enters verification", {
   await expect(
     page.getByRole("banner").getByText("Northbridge Institute", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("contentinfo")).toContainText(
+  await expect(page.getByRole("complementary", { name: "About this page" })).toContainText(
     "Need help? Contact Northbridge Institute.",
   );
 
@@ -532,7 +532,7 @@ test("login presents the admitted methods and sanitizes provider failure state",
   await expect(
     page.getByRole("banner").getByText("Northbridge Institute", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("contentinfo")).toContainText(
+  await expect(page.getByRole("complementary", { name: "About this page" })).toContainText(
     "Need help? Contact Northbridge Institute.",
   );
   await expect(page.getByLabel("Email or username")).toBeVisible();
@@ -554,7 +554,9 @@ test("login presents the admitted methods and sanitizes provider failure state",
   await expect(
     page.getByRole("heading", { level: 2, name: "New to Proctor?" }),
   ).toBeVisible();
-  await expect(page.getByRole("main")).toContainText(
+  await expect(
+    page.getByRole("complementary", { name: "About this page" }),
+  ).toContainText(
     "Students and staff join through an invitation from Northbridge Institute. Create an account if your institution allows it.",
   );
   await expect(page.getByRole("link", { name: "Create an account" })).toHaveAttribute(
@@ -586,7 +588,9 @@ test("login offers account creation only while public registration is open", asy
   });
   await page.goto("/login");
 
-  await expect(page.getByRole("main")).toContainText(
+  await expect(
+    page.getByRole("complementary", { name: "About this page" }),
+  ).toContainText(
     "Students and staff join through an invitation from Northbridge Institute.",
   );
   await expect(page.getByRole("link", { name: "Create an account" })).toHaveCount(0);
@@ -633,7 +637,7 @@ test("login failure stays beside the action without moving the credentials", { t
   );
 });
 
-test("rejected credentials sit under the password and keep both values", { tag: "@cross-browser" }, async ({
+test("rejected credentials stay beside the action and keep both values", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   await mockDiscovery(page, { ...defaultDiscovery, providers: [] });
@@ -656,22 +660,26 @@ test("rejected credentials sit under the password and keep both values", { tag: 
   const before = await submissionGeometry(page, "#login-id");
   await page.getByRole("button", { name: "Sign in" }).click();
 
+  await expectPersistentSubmissionFailure(
+    page,
+    "That email or password isn’t right. Check both and try again.",
+    before,
+    "#login-id",
+  );
   const password = page.locator("#password");
-  const message = "That email or password isn’t right. Check both and try again.";
-  await expect(password).toHaveAttribute("aria-invalid", "true");
-  await expect(password).toHaveAccessibleDescription(message);
-  await expect(password).toBeFocused();
+  await expect(password).not.toHaveAttribute("aria-invalid", "true");
+  await expect(page.locator("#login-id")).not.toHaveAttribute("aria-invalid", "true");
+  // The rail offers the reset route only once credentials were rejected.
+  const rail = page.getByRole("complementary", { name: "About this page" });
+  await expect(rail.getByRole("heading", { name: "Can’t remember your password?" })).toBeVisible();
+  await expect(rail.getByRole("link", { name: "Reset it by email" })).toHaveAttribute(
+    "href",
+    "/account/forgot-password",
+  );
   await expect(password).toHaveValue("private-password");
   await expect(page.getByLabel("Email or username")).toHaveValue(
     "student@example.edu",
   );
-  await expect(page.locator("[data-proctor-form-feedback]")).toBeEmpty();
-  const after = await submissionGeometry(page, "#login-id");
-  expect(after.controlTop).toBe(before.controlTop);
-  expect(after.feedbackHeight).toBe(0);
-
-  await password.fill("another-password");
-  await expect(password).not.toHaveAttribute("aria-invalid", "true");
 });
 
 test("setup failure stays below the action without moving the atomic form", { tag: "@cross-browser" }, async ({
@@ -812,7 +820,7 @@ test("local login enters MFA without placing credentials in the URL", async ({ p
     page.getByRole("heading", { level: 1, name: "Enter your code" }),
   ).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-  await expect(page.getByText("Sign in", { exact: true })).toBeVisible();
+  await expect(page.getByText("Sign in", { exact: true })).toHaveCount(0);
   await expect(page.locator("#login-id")).toHaveCount(0);
   await expect(page.locator("#password")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Verify" })).toBeVisible();
@@ -822,7 +830,7 @@ test("local login enters MFA without placing credentials in the URL", async ({ p
   await expect(page.locator("#mfa-code")).toHaveAttribute("required", "");
   await expect(
     page.locator('label[for="mfa-code"] [data-required-indicator]'),
-  ).toHaveText("*");
+  ).toHaveCount(0);
   await expect(page).toHaveURL(`${canonicalOrigin}/login`);
   await expect(page.locator("body")).not.toContainText("private-password");
 
@@ -953,10 +961,8 @@ test("password recovery keeps its accepted response generic", async ({ page }) =
   ).toBeFocused();
   await expect(page.getByRole("status")).toContainText("Check your email");
   await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-  await expect(page.getByText("Reset password", { exact: true })).toHaveCSS(
-    "color",
-    "rgb(11, 118, 110)",
-  );
+  await expect(page.locator('[data-proctor-status-tone]')).toHaveText("Request received");
+  await expect(page.locator('[data-proctor-status-tone]')).toHaveCSS("color", "rgb(11, 118, 110)");
   // The typed address is echoed from page memory inside the same generic
   // sentence for every address; it never claims that an account exists.
   await expect(page.locator("main")).toContainText(
@@ -997,13 +1003,16 @@ test("password reset consumes only the sanitized fragment credential", async ({
   await expect(
     page.getByRole("heading", { level: 1, name: "Choose a new password" }),
   ).toBeVisible();
-  await expect(page.getByRole("heading")).toHaveCount(1);
+  await expect(page.getByRole("main").getByRole("heading")).toHaveCount(1);
+  await expect(
+    page.getByRole("complementary", { name: "About this page" }).getByRole("heading", { name: "This link works once" }),
+  ).toBeVisible();
   await expect(page.locator("#new-password")).toHaveAccessibleDescription(
     "At least 14 characters. You can’t reuse a recent password.",
   );
   // A published support address turns the Institution name into a contact.
   await expect(
-    page.getByRole("contentinfo").getByRole("link", { name: defaultDiscovery.institution.display_name }),
+    page.getByRole("complementary", { name: "About this page" }).getByRole("link", { name: defaultDiscovery.institution.display_name }),
   ).toHaveAttribute("href", "mailto:help@northbridge.example");
   await expect(page.locator("#confirm-new-password")).not.toHaveAttribute(
     "aria-describedby",
@@ -1057,10 +1066,10 @@ test("password reset announces an unusable link returned after submission", { ta
   await expect(page.getByRole("status")).toContainText(
     "This reset link has expired",
   );
-  await expect(page.getByText("Reset password", { exact: true })).toHaveCSS(
-    "color",
-    "rgb(180, 35, 60)",
-  );
+  const status = page.locator('[data-proctor-status-tone="danger"]');
+  await expect(status).toHaveText("Link expired");
+  await expect(status).toHaveCSS("color", "rgb(165, 31, 55)");
+  await expect(status.locator('[data-proctor-icon="stateDanger"]')).toBeVisible();
   await expect(page.getByRole("link", { name: "Send a new link" })).toHaveAttribute(
     "href",
     "/account/forgot-password",
@@ -1399,10 +1408,14 @@ test("Desktop authorization approves the exact sanitized request", async ({
     "translate",
     "no",
   );
-  await expect(page.getByRole("note")).toHaveText(
-    "Didn’t start this? Close this page. Nothing happens unless you choose Allow.",
+  const rail = page.getByRole("complementary", { name: "About this page" });
+  await expect(
+    rail.getByRole("heading", { level: 2, name: "Didn’t start this?" }),
+  ).toBeVisible();
+  await expect(rail).toContainText(
+    "Close this page. Nothing happens unless you choose Allow.",
   );
-  await expect(page.getByRole("contentinfo")).toContainText(
+  await expect(page.getByRole("banner")).toContainText(
     `Signed in as ${desktopAuthorizationDocumentationFixture.synthetic_context.display_name}`,
   );
   const documentationCapture =
@@ -1481,7 +1494,7 @@ test("Desktop approval confirms success before handing off", async ({
   await expect(page.getByRole("main")).toContainText(
     "Returning to Proctor Desktop…",
   );
-  await expect(page.getByRole("contentinfo")).toContainText(
+  await expect(page.getByRole("banner")).toContainText(
     `Signed in as ${defaultDesktopAuthorization.account.display_name}`,
   );
   await expect(page.getByRole("button", { name: "Allow", exact: true })).toHaveCount(0);
@@ -1792,7 +1805,7 @@ test("provider connection requires an explicit provider selection action", async
     "href",
     "/account/security",
   );
-  await expect(page.getByRole("contentinfo")).toContainText(
+  await expect(page.getByRole("banner")).toContainText(
     `Signed in as ${defaultDesktopAuthorization.account.display_name}`,
   );
   await page.getByRole("button", { name: "Continue to University SSO" }).click();
@@ -1983,10 +1996,13 @@ for (const pageCase of [
     route:
       "/authorize/desktop?request=desktop-handle&state=desktop-state#proof=private-browser-proof",
     heading: "Sign in to Proctor Desktop?",
+    // The request is checked in the task's facts; the reassurance sits in the rail.
+    evidence: "main [data-proctor-fact-list], aside [data-proctor-rail-item]",
   },
   {
     route: "/account/connect-provider",
     heading: "Connect University SSO",
+    evidence: "aside [data-proctor-rail-item]",
   },
 ] as const) {
   test(`${pageCase.route} follows dark mode and stays one-dimensional when narrow`, { tag: "@cross-browser" }, async ({
@@ -2023,7 +2039,8 @@ for (const pageCase of [
     await expect(
       page.getByRole("heading", { level: 1, name: pageCase.heading }),
     ).toBeVisible();
-    await expect(page.locator("aside")).toHaveCount(0);
+    await expect(page.locator("aside")).toHaveCount(1);
+    await expect(page.locator("main aside")).toHaveCount(0);
     await expect(page.locator("main ol")).toHaveCount(0);
     if ("notice" in pageCase && !pageCase.notice) {
       // Password recovery states its evidence in the lede and field hint.
@@ -2164,7 +2181,7 @@ test("shared notices and password disclosure controls keep their contracts", asy
   ).toBeVisible();
 });
 
-test("required controls are marked and compound controls stay optically aligned", { tag: "@cross-browser" }, async ({
+test("required controls rely on the native constraint and compound controls stay optically aligned", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   await mockDiscovery(page, { ...defaultDiscovery, providers: [] });
@@ -2173,7 +2190,7 @@ test("required controls are marked and compound controls stay optically aligned"
     await expect(page.locator(`#${id}`)).toHaveAttribute("required", "");
     await expect(
       page.locator(`label[for="${id}"] [data-required-indicator]`),
-    ).toHaveText("*");
+    ).toHaveCount(0);
   }
 
   await mockSetupStatus(page);
@@ -2190,7 +2207,7 @@ test("required controls are marked and compound controls stay optically aligned"
     await expect(page.locator(`#${id}`)).toHaveAttribute("required", "");
     await expect(
       page.locator(`label[for="${id}"] [data-required-indicator]`),
-    ).toHaveText("*");
+    ).toHaveCount(0);
   }
   await expect(page.locator("#institution-description")).not.toHaveAttribute(
     "required",
@@ -2226,7 +2243,7 @@ test("required controls are marked and compound controls stay optically aligned"
     await expect(page.locator(`#${id}`)).toHaveAttribute("required", "");
     await expect(
       page.locator(`label[for="${id}"] [data-required-indicator]`),
-    ).toHaveText("*");
+    ).toHaveCount(0);
   }
 
   const firstNameBox = await page.locator("#registration-first-name").boundingBox();

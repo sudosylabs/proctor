@@ -15,7 +15,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Returns one active Class after authorizing the exact Class resource rather than inferring access from a broader directory read. The projection identifies its Programme Level and Academic Period without including its student roster.
+        Returns one active Class. Proctor checks the caller's permission on this Class itself. Being able to list Classes elsewhere is not enough. The response names its Programme Level and Academic Period and does not include its students.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -57,7 +57,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Applies a partial Class update and can change its Programme Level or Academic Period only when both targets remain eligible and authorized. Existing roster history is preserved and cross-period membership invariants are rechecked.
+        Changes some of a Class's fields. It can also move the Class to another Programme Level or Academic Period when the caller is allowed to and the target can take it. The Class's membership history is kept, and Proctor checks again that its members' Academic Period rules still hold.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -110,7 +110,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Archives one Class only after proving it has no active members or Role Bindings. The operation retains historical enrollment and audit records and never ends relationships implicitly.
+        Archives one Class, but only when it has no active members or Role Bindings. Past enrollment and audit records are kept. Archiving never ends a membership or Role Binding for you.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -162,7 +162,7 @@ paths:
 components:
   requestBodies:
     UpdateClass:
-      description: Partial Class presentation, Programme Level, or Academic Period change.
+      description: The Class fields to change, including its Programme Level or Academic Period.
       required: true
       content:
         application/json:
@@ -178,6 +178,16 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ClassResponse'
+          example:
+            revision: 2
+            id: 6xoche483hwrx5rpu8jzjoe7qg
+            created_at: '2026-08-05T08:30:00Z'
+            updated_at: '2026-08-18T12:00:00Z'
+            programme_level_id: iqcx3qc9sbbt6ocshszfqgq6ci
+            academic_period_id: sjebyge5cpbop1xwo4eds74ejb
+            name: cs-level-100-a
+            display_name: Computer Science Level 100 — B
+            description: First-year Class A.
     ClassArchived:
       description: Class archived
       headers:
@@ -185,7 +195,7 @@ components:
           $ref: '#/components/headers/NoStore'
   schemas:
     UpdateClassRequest:
-      description: Mutable Class fields; omitted or null values leave the stored value unchanged.
+      description: The Class fields you can change. Fields you leave out or send as null stay as they are.
       type: object
       additionalProperties: false
       properties:
@@ -193,29 +203,38 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Optional positive revision from the last resource response. A stale value returns the resource conflict error without applying the edit. Omission preserves v1 compatibility; null is invalid.
+          description: >-
+            Optional. The `revision` from your last read. If the Class has changed since, the request fails
+            with `class.conflict` and nothing changes. Without it, the change applies whatever the current
+            revision. Null is rejected.
         programme_level_id:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the Programme Level unchanged.
+          description: The Programme Level to move the Class to. Omitted or null leaves it unchanged.
         academic_period_id:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the Academic Period unchanged.
+          description: The Academic Period to move the Class to. Omitted or null leaves it unchanged.
         name:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged.
+          description: >-
+            New machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. It must be
+            unique among active Classes with the same Programme Level and Academic Period. Omitted or null leaves it unchanged. An empty string is rejected.
         display_name:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged.
+          description: >-
+            New name shown to people, 1 to 128 characters. Omitted or null leaves it unchanged. An empty string is
+            rejected.
         description:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged.
+          description: >-
+            New longer text, up to 1,024 characters. Omitted or null leaves it unchanged. An empty string clears
+            it.

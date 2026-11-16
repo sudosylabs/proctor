@@ -1,0 +1,43 @@
+blocks:
+  - row:
+      - card: Root Makefile
+        text: "`make run-server` starts everything; `dev-down` stops it and `dev-reset` wipes it"
+  - row:
+      - card: Vite
+        text: Optional. Reloads browser code live at port 5173.
+        dashed: true
+      - card: Proctor server
+        text: Runs in the foreground at port 8065, with health checks and metrics
+        accent: true
+        via: passes API and WebSocket
+    gap: wide
+    from:
+      - {from: 1, to: 1, label: "`run-webapp`", dashed: true}
+      - {from: 1, to: 2, label: "`run-server`", accent: true}
+  - row:
+      - group: Services
+        text: started and health-checked
+        columns: 2
+        items:
+          - card: PostgreSQL
+            text: Saved data
+          - card: Redis
+            text: Disposable cache
+          - card: MinIO
+            text: File content
+          - card: Mailpit
+            text: Captured mail
+      - group: Observability
+        text: safe to lose and rebuild
+        dashed: true
+        columns: 2
+        items:
+          - card: Prometheus
+          - card: Grafana
+          - card: Loki
+          - card: OTel Collector
+    links: none
+    from:
+      - {from: 2, to: 1, label: uses}
+      - {from: 2, to: 2, label: reports to, dashed: true}
+  - note: Generated secrets, logs and seed files stay in the ignored `.build/dev` folder. The tracked scripts rebuild everything else.

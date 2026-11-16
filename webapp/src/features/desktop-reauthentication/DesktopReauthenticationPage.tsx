@@ -1,13 +1,15 @@
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
 
-import { AccessPageShell } from "../../components/AccessPageShell/AccessPageShell";
+import { AccessPageShell, RailItem, TaskRail } from "../../components/AccessPageShell/AccessPageShell";
 import { AccessTaskIntro } from "../../components/AccessTaskIntro/AccessTaskIntro";
 import { Button } from "../../components/Button/Button";
+import { Fact, FactList } from "../../components/FactList/FactList";
 import { FormFeedback } from "../../components/FormFeedback/FormFeedback";
 import { PasswordField } from "../../components/InputField/PasswordField";
 import { Notice } from "../../components/Notice/Notice";
 import { TaskState, TaskStateActions, TaskStateAnnouncement } from "../../components/TaskState/TaskState";
-import { message } from "../../i18n/messages";
+import { formatDateTime } from "../../i18n/dateTime";
+import { message, type MessageID } from "../../i18n/messages";
 import type { DesktopReauthenticationContext, DesktopReauthenticationProof } from "./DesktopReauthenticationApi";
 import {
   useDesktopReauthenticationJourney,
@@ -46,13 +48,13 @@ export function DesktopReauthenticationContent({ actions, snapshot }: {
         ? "webapp.desktop_reauthentication.checking.heading" : "webapp.desktop_reauthentication.returning.heading");
       return <>
         <TaskStateAnnouncement message={heading} />
-        <TaskState busy heading={heading} headingID={headingID} label={message("webapp.desktop_reauthentication.kind")}
+        <TaskState busy heading={heading} headingID={headingID}
           body={message(view.kind === "checking"
             ? "webapp.desktop_reauthentication.checking.body" : "webapp.desktop_reauthentication.approved.returning")} />
       </>;
     }
     case "approved":
-      return <Terminal focusHeading={focusHeading} tone="success"
+      return <Terminal focusHeading={focusHeading} tone="success" statusLabel="webapp.desktop_reauthentication.status.approved"
         heading={message("webapp.desktop_reauthentication.approved.heading")}
         body={message("webapp.desktop_reauthentication.approved.body")} />;
     case "canceled":
@@ -60,11 +62,11 @@ export function DesktopReauthenticationContent({ actions, snapshot }: {
         heading={message("webapp.desktop_reauthentication.canceled.heading")}
         body={message("webapp.desktop_reauthentication.canceled.body")} />;
     case "invalid":
-      return <Terminal focusHeading={focusHeading} tone="danger"
+      return <Terminal focusHeading={focusHeading} tone="danger" statusLabel="webapp.desktop_reauthentication.status.invalid"
         heading={message("webapp.desktop_reauthentication.invalid.heading")}
         body={message("webapp.desktop_reauthentication.invalid.body")} />;
     case "unavailable":
-      return <Terminal focusHeading={focusHeading} tone="warning"
+      return <Terminal focusHeading={focusHeading} tone="warning" statusLabel="webapp.desktop_reauthentication.status.unavailable"
         heading={message("webapp.desktop_reauthentication.unavailable.heading")}
         body={message("webapp.desktop_reauthentication.unavailable.body")}>
         <TaskStateActions>
@@ -76,17 +78,18 @@ export function DesktopReauthenticationContent({ actions, snapshot }: {
   }
 }
 
-function Terminal({ body, children, focusHeading, heading, tone }: {
+function Terminal({ body, children, focusHeading, heading, statusLabel, tone }: {
   body: string;
   children?: ReactNode;
   focusHeading: boolean;
   heading: string;
   tone?: "success" | "warning" | "danger";
+  statusLabel?: MessageID;
 }) {
   return <>
     <TaskStateAnnouncement message={focusHeading ? heading : ""} />
     <TaskState heading={heading} headingID={headingID} focusHeading={focusHeading} body={body}
-      label={message("webapp.desktop_reauthentication.kind")} labelTone={tone}>
+      status={tone === undefined || statusLabel === undefined ? undefined : { label: message(statusLabel), tone }}>
       {children}
     </TaskState>
   </>;
@@ -108,7 +111,7 @@ function Proof({ actions, context, snapshot }: {
     <section className={styles.page} aria-labelledby={headingID}>
       <TaskStateAnnouncement message={pending === undefined ? "" : message("webapp.desktop_reauthentication.working")} />
       <AccessTaskIntro headingID={headingID} focusHeading={snapshot.focusHeading}
-        kind={message("webapp.desktop_reauthentication.kind")}
+
         heading={message("webapp.desktop_reauthentication.heading")}
         body={provider === undefined
           ? message("webapp.desktop_reauthentication.lede.password", { Name: context.name })
@@ -128,7 +131,18 @@ function Proof({ actions, context, snapshot }: {
           </TaskStateActions>
           <FormFeedback message={feedbackMessage(snapshot.feedback)} />
         </>}
-      <p className={styles.note}>{message("webapp.desktop_reauthentication.note")}</p>
+      <TaskRail>
+        <RailItem>
+          <p>{message("webapp.desktop_reauthentication.note")}</p>
+        </RailItem>
+        <RailItem>
+          <FactList>
+            <Fact label={message("webapp.desktop_reauthentication.rail.expires")}>
+              <time dateTime={context.expiresAt}>{formatDateTime(context.expiresAt)}</time>
+            </Fact>
+          </FactList>
+        </RailItem>
+      </TaskRail>
     </section>
   );
 }

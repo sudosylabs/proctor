@@ -16,7 +16,10 @@ paths:
       tags:
         - Sittings
       description: >-
-        Starts or completes early closure for an open or paused Sitting under the exact revision fence. New participation and Workspace mutation stop immediately; unfinished Attempts follow the durable bounded sealing process rather than being discarded.
+        Closes an open or paused Sitting before its deadline. Send the Sitting's current revision; the
+        request fails if it changed since you read it. Candidates can't join or change their Workspaces
+        from that moment. Unfinished Attempts are sealed as Submissions, not discarded, so the Sitting can
+        stay in `closing` for a short time before it is `closed`.
       x-proctor-auth: principal_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -73,7 +76,7 @@ paths:
 components:
   requestBodies:
     CloseExamSitting:
-      description: Exact current Sitting revision and private rationale for manager-initiated early closure.
+      description: The Sitting's current revision and a private reason for closing it early.
       required: true
       content:
         application/json:

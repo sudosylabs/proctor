@@ -16,15 +16,18 @@ paths:
       tags:
         - Sittings
       description: >-
-        The multipart body contains metadata first and content second. A successful response exposes only authoritative ready-stage metadata; storage and lease identities remain private.
+        Uploads the content for one resource that a live correction will add or replace. Send a
+        multipart body with the `metadata` part first and the `content` part second. Then pass the
+        returned `stage_id` in the correction's `resources`. The response describes the ready stage only;
+        storage and upload details stay private.
       x-codeSamples:
         - lang: Shell
           source: |-
             curl --request POST \
-              --url 'https://proctor.example.edu/api/v1/exams/<exam-id>/sittings/<sitting-id>/correction-resource-stages' \
+              --url 'https://proctor.example.edu/api/v1/exams/wj3drgzdpnf54rxf5d8qd3dqne/sittings/14j8umgczgrdp95w77zuxmxfu9/correction-resource-stages' \
               --header 'Authorization: Bearer <token>' \
               --header 'Idempotency-Key: correction-stage-01J7YS5EP6P9M3JAXKQFRHD5TB' \
-              --form 'metadata={"base_revision_id":"ybndrfg8ejkmcpqxot1uwisza3","target_kind":"addition","media_type":"application/pdf","size":128,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"};type=application/json' \
+              --form 'metadata={"base_revision_id":"ih1r84kij94nrwis97rft6rduh","target_kind":"addition","media_type":"application/pdf","size":48213,"sha256":"3b0a7ca3a01569f4af07368009f9b6480354618beb93b7241df7c3dcf22619f5"};type=application/json' \
               --form 'content=@./correction.pdf;type=application/pdf'
       x-proctor-auth: principal_required
       x-proctor-idempotency: required
@@ -64,7 +67,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/RequiredIdempotencyKey'
       requestBody:
-        description: Exactly two ordered multipart parts containing strict stage metadata followed by the bounded resource bytes.
+        description: Two multipart parts in this order, the stage metadata and then the resource file.
         required: true
         content:
           multipart/form-data:
@@ -90,7 +93,7 @@ paths:
 components:
   responses:
     ExamSittingCorrectionResourceStageCreated:
-      description: Purpose-bound resource content staged and ready for one live Sitting correction
+      description: The content was uploaded and is ready to use in a correction of this Sitting.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -98,6 +101,13 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamSittingCorrectionResourceStageResponse'
+          example:
+            stage_id: iqcx3qc9sbbt6ocshszfqgq6ci
+            resource_id: p6y6sf8ac6m5if373fkkebj7j6
+            media_type: application/pdf
+            size: 48213
+            sha256: 3b0a7ca3a01569f4af07368009f9b6480354618beb93b7241df7c3dcf22619f5
+            expires_at: '2026-12-14T10:47:12Z'
   schemas:
     ExamSittingCorrectionResourceStageMetadata:
       type: object
@@ -109,26 +119,34 @@ components:
         - size
         - sha256
       description: >-
-        For addition, replaces_resource_id must be omitted. For replacement, it is required and identifies a resource in the exact base Revision.
+        What you are uploading. For an `addition`, leave out `replaces_resource_id`. For a `replacement`,
+        it is required and names a resource in the base Revision.
       properties:
         base_revision_id:
           $ref: '#/components/schemas/ID'
+          description: The Exam Revision the Sitting delivers now, which the correction will build on.
         target_kind:
           type: string
           enum:
             - addition
             - replacement
+          description: >-
+            `addition` uploads a new resource. `replacement` uploads new content for an existing resource.
         replaces_resource_id:
           $ref: '#/components/schemas/ID'
+          description: The existing resource whose content you are replacing. Only for `replacement`.
         media_type:
           $ref: '#/components/schemas/ExamResourceMediaType'
+          description: The file's media type.
         size:
           type: integer
           format: int64
           minimum: 0
           maximum: 104857600
+          description: The file size in bytes, at most 100 MiB. It must match the uploaded content.
         sha256:
           $ref: '#/components/schemas/SHA256'
+          description: The SHA-256 digest of the file, as lowercase hex. It must match the uploaded content.
     ExamSittingCorrectionResourceStageMultipart:
       type: object
       additionalProperties: false
@@ -136,15 +154,18 @@ components:
         - metadata
         - content
       description: >-
-        Exactly two parts in order: metadata first as a non-file JSON part (maximum 32768 bytes), then content. The complete HTTP body is limited to 100 MiB plus 64 KiB multipart overhead.
+        Exactly two parts, in this order. First `metadata`, a JSON part that is not a file upload, at most
+        32768 bytes. Then `content`, the file. The whole request body can be at most 100 MiB plus 64 KiB
+        for multipart overhead.
       properties:
         metadata:
           $ref: '#/components/schemas/ExamSittingCorrectionResourceStageMetadata'
         content:
           type: string
           format: binary
+          description: The resource file's bytes.
     ExamSittingCorrectionResourceStageResponse:
-      description: Safe ready-stage identity and content metadata for one purpose-bound correction upload.
+      description: A staged upload that is ready to use in a correction.
       type: object
       additionalProperties: false
       required:
@@ -157,18 +178,25 @@ components:
       properties:
         stage_id:
           $ref: '#/components/schemas/ID'
+          description: The stage's ID. Pass it as `stage_id` in the correction's `resources`.
         resource_id:
           $ref: '#/components/schemas/ID'
+          description: >-
+            The resource the content belongs to. For an addition this is a new ID; for a replacement it is
+            the `replaces_resource_id` you sent.
         media_type:
           $ref: '#/components/schemas/ExamResourceMediaType'
+          description: The uploaded file's media type.
         size:
           type: integer
           format: int64
           minimum: 0
           maximum: 104857600
+          description: The uploaded file's size in bytes.
         sha256:
           $ref: '#/components/schemas/SHA256'
+          description: The SHA-256 digest of the uploaded file, as lowercase hex.
         expires_at:
           type: string
           format: date-time
-          description: RFC 3339 expiry after which this unconsumed stage cannot be applied.
+          description: The time after which the stage can no longer be used in a correction.

@@ -1,18 +1,18 @@
 ---
-title: Contribute Documentation
-description: Put Proctor guidance in the correct authority, maintain generated views, and verify public pages, API reference, terminology, and governed visuals.
+title: Contribute documentation
+description: Put Proctor guidance in the right place, keep generated pages current, and check public pages, the API reference, terminology and figures.
 audience: developer
 maturity: preview
 slug: /developers/documentation/
 ---
 
-# Contribute Documentation
+# Contribute documentation
 
-Documentation is part of the product contract. A useful change gives one
-reader the information needed to complete a task without turning prose into a
-second implementation inventory.
+Documentation is part of what Proctor promises. A good change gives one reader
+what they need to finish a task. It doesn't turn prose into a second list of
+everything the code does.
 
-## Choose the Owning Location
+## Choose where it goes
 
 | Information | Author it in |
 | --- | --- |
@@ -25,13 +25,13 @@ second implementation inventory.
 | Public availability or maturity | The affected public page and the implementation and tests that support it |
 | Discoverable implementation detail | Code, tests, configuration, or command help |
 
-Avoid copying an architecture or component contract into public prose. Explain
-the reader's task and consequence, then link to the exact source when a
-contributor needs deeper engineering context.
+Don't copy an architecture or component contract into public prose. Explain
+the reader's task and what follows from it. When a contributor needs more
+engineering detail, link to the exact source.
 
-## Author a Public Page
+## Write a public page
 
-Every authored page begins with the required metadata:
+Every hand-written page starts with the required metadata:
 
 ```mdx
 ---
@@ -43,33 +43,33 @@ slug: /developers/example/
 ---
 ```
 
-Allowed maturity values are `available`, `preview`, and `planned`. Planned
-content remains outside ordinary navigation until it describes usable behavior.
-Do not use maturity as marketing; it reports implementation and release state.
+The allowed maturity values are `available`, `preview` and `planned`. Planned
+pages stay out of the normal navigation until they describe behavior people
+can use. Maturity reports how far the implementation and release have got. It
+is not a marketing label.
 
-A durable page should answer:
+A page that lasts should answer these questions:
 
-1. Who is this for?
-2. What can they accomplish now?
-3. What must they know before starting?
-4. What exact command or decision advances the task?
-5. How do they verify success and recover from failure?
-6. Where should they continue?
+1. Who is it for?
+2. What can they do now?
+3. What do they need to know before they start?
+4. Which command or decision moves the task forward?
+5. How do they check it worked, and recover if it didn't?
+6. Where do they go next?
 
-## Use Canonical Language
+## Use the glossary terms
 
-Use the terms defined in the public [glossary](../reference/glossary.mdx). Preserve important
-distinctions: an Installation is not a tenant; a Class is not a generic group;
-an Exam Revision is not an Exam Sitting; an authentication Session is not an
-Exam Attempt.
+Use the terms defined in the public [glossary](../reference/glossary.mdx), and
+keep the distinctions that matter. An Installation is not a tenant. A Class is
+not a generic group. An Exam Revision is not an Exam Sitting. An
+authentication Session is not an Exam Attempt.
 
-Use the inline `Term` glossary component only for a deliberately selected first
-occurrence where the definition materially helps the reader. Keep tooltips out
-of headings, code, API paths, tables dense with repeated terms, and
-illustrations.
+Use the inline `Term` glossary component only on a first occurrence you choose
+on purpose, where the definition really helps the reader. Keep tooltips out of
+headings, code, API paths, tables full of repeated terms, and illustrations.
 
-After a canonical glossary authority changes, regenerate and check its public
-views from `docs/site`:
+When the source glossary changes, regenerate and check its public views from
+`docs/site`:
 
 ```sh
 npm run generate:glossary
@@ -77,38 +77,44 @@ npm run check:glossary
 npm run test:glossary
 ```
 
-## Add a Visual Only When It Explains
+## Add a figure only when it explains something
 
-A diagram or screenshot is evidence, not decoration. Add one when it makes an
-ownership, sequence, lifecycle, spatial relationship, or stable UI procedure
-materially easier to understand than prose.
+A diagram or screenshot is evidence, not decoration. Add one when it makes
+ownership, a sequence, a lifecycle, a spatial relationship or a stable UI
+procedure much easier to follow than prose.
 
-Every visual must have one registry record in `docs/public/assets.json`, exact
-bytes below `docs/public/static/assets`, synthetic and privacy-reviewed content,
-useful alternative text, a caption, dimensions, review triggers, and a visual
-acceptance hash. Public MDX references the asset through `GovernedFigure` using
-only its stable registry ID.
+Every figure needs all of the following:
 
-Do not add Markdown images, raw `img` elements, image imports, direct asset
-paths, unregistered files, real operational screenshots, or copied vendor
+- one registry record in `docs/public/assets.json`;
+- the exact file under `docs/public/static/assets`;
+- synthetic content that has passed a privacy review;
+- useful alternative text and a caption;
+- its dimensions;
+- review triggers;
+- a visual acceptance hash.
+
+Public MDX refers to the figure through `GovernedFigure`, using only its stable
+registry ID.
+
+Don't add Markdown images, raw `img` elements, image imports, direct asset
+paths, unregistered files, screenshots of real operations, or copied vendor
 artwork.
 
-Review diagrams at full size and inside the page. Every word must stay in its
-container; every connector must join its source and target; the complete
-structure must remain recognizable at 390 × 844; and meaning must survive
-print, dark surrounding UI, and loss of color.
+Review diagrams at full size and inside the page. Every word must stay inside
+its box, and every connector must join its source and its target. The whole
+structure must still be recognizable at 390 × 844. The meaning must survive
+printing, a dark interface around it, and the loss of color.
 
-Run the asset gate from `docs/site`:
+Run the figure checks from `docs/site`:
 
 ```sh
 npm run validate:assets
 npm run test:assets
 ```
 
-## Keep Search and API Views Current
+## Keep search and the API pages current
 
-Authored public or API content changes require the deterministic local search
-adapter to be regenerated:
+When you change public or API content, regenerate the local search index:
 
 ```sh
 cd docs/site
@@ -117,20 +123,20 @@ npm run check:search
 npm run test:search
 ```
 
-The search index remains local and sends no reader query to an external
-service.
+The index is built the same way every time and stays local. It never sends a
+reader's search to an outside service.
 
-API endpoint and product-area pages are generated from the reviewed
-`server/openapi.json` artifact. Edit the human-owned YAML modules and use the
-[HTTP and OpenAPI workflow](./http-and-openapi.mdx); never edit
-`docs/api/reference` output.
+The API endpoint and product-area pages are generated from the reviewed
+`server/openapi.json` artifact. Edit the human-written YAML modules and follow
+the [HTTP and OpenAPI workflow](./http-and-openapi.mdx). Never edit the output
+in `docs/api/reference`.
 
-## Maintain Technical References
+## Keep the technical references current
 
-The environment-variable inventory is generated from the server's typed
-override declarations. The command-line reference is deliberately
-human-authored, while its required commands and flags are checked against the
-Cobra source. After changing configuration overrides or the CLI, run from
+The environment variable reference is generated from the server's typed
+override declarations. The command-line reference is written by hand on
+purpose, but a check compares its required commands and flags against the
+Cobra source. After you change configuration overrides or the CLI, run from
 `docs/site`:
 
 ```sh
@@ -138,14 +144,16 @@ npm run generate:technical-reference
 npm run check:technical-reference
 ```
 
-Do not edit `docs/public/reference/environment-variables.mdx` by hand. Update
-`server/config/environment_overlay.go`, then regenerate it. Update
-`docs/public/reference/command-line.mdx` when a command's purpose, arguments,
-side effects, output, failure behavior, or recovery guidance changes. The
-technical-reference check detects stale environment output and required CLI
-contracts that no longer agree with their source declarations.
+Don't edit `docs/public/reference/environment-variables.mdx` by hand. Change
+`server/config/environment_overlay.go`, then regenerate the page.
 
-## Preview and Verify
+Update `docs/public/reference/command-line.mdx` when a command's purpose,
+arguments, side effects, output, failure behavior or recovery guidance
+changes. The technical reference check catches environment output that is out
+of date, and required CLI contracts that no longer match their source
+declarations.
+
+## Preview and check
 
 Start the documentation site from the repository root:
 
@@ -153,7 +161,7 @@ Start the documentation site from the repository root:
 make docs-start
 ```
 
-Before handoff, run:
+Before you hand off, run:
 
 ```sh
 make docs-check
@@ -161,29 +169,30 @@ make -C server architecture
 ```
 
 The docs gate checks metadata, terminology adapters, design tokens, icons,
-search, governed assets, OpenAPI content and rendering, TypeScript, broken
-links, and the production build.
+search, governed figures, OpenAPI content and rendering, TypeScript, broken
+links and the production build.
 
-For a visible change, inspect desktop and mobile layouts, both themes,
-keyboard order and focus, reduced motion, zoom, wrapping, figure legibility,
-and unintended horizontal overflow.
+For a change people can see, look at the desktop and mobile layouts, both
+themes, keyboard order and focus, reduced motion, zoom, text wrapping, how
+legible the figures are, and any horizontal overflow you didn't intend.
 
 {/* TODO(docs-editorial-policy): Decide whether Proctor adopts a tracked prose
 linter and public style vocabulary before documenting a lint command. The
 current checks validate metadata, links, domain markup, generated adapters, and
 the production build but do not claim general editorial lint coverage. */}
 
-## Review the Source
+## Review your page
 
-- Does the page solve a task rather than repeat a file inventory?
-- Does every statement belong to this authority?
-- Are unresolved facts explicit TODO comments rather than invented promises?
-- Are examples synthetic and free of credentials, student data, Exam answers,
-  hostnames, object keys, and local paths?
-- Are external links HTTPS and internal routes checked?
-- Did every affected generated view rebuild from its named tracked input?
+- Does the page help with a task, rather than repeat a list of files?
+- Does every statement belong on this page?
+- Are open questions written as explicit TODO comments, rather than invented
+  promises?
+- Are the examples synthetic, with no credentials, student data, Exam answers,
+  hostnames, object keys or local paths?
+- Do external links use HTTPS, and have internal routes been checked?
+- Did every affected generated page rebuild from the tracked input it names?
 
 ## Next
 
-- Prepare the [contribution checklist](./contribution-checklist.mdx).
-- Run the complete [documentation and product gates](./testing.mdx).
+- Work through the [contribution checklist](./contribution-checklist.mdx).
+- Run the full [documentation and product gates](./testing.mdx).

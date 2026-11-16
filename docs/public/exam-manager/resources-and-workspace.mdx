@@ -1,61 +1,86 @@
 ---
 title: Add Resources and a Starter Workspace
-description: Keep read-only Exam Resources separate from initial writable code and freeze both into immutable Revisions.
+description: Keep read-only Exam Resources apart from the starting code candidates can edit, and fix both into each Revision.
 audience: exam-manager
 maturity: preview
 ---
 
 # Add Resources and a Starter Workspace
 
-Exam Resources and the Starter Workspace are both protected authored material,
-but they serve different purposes and use different identity models.
+Exam Resources and the Starter Workspace are both protected material that you
+write. They do different jobs, though, and Proctor tracks them in different
+ways.
 
-| Material | Candidate use | Identity and change model |
+| Material | How candidates use it | How it is identified and changed |
 | --- | --- | --- |
-| Exam Resource | read-only supporting material outside the code Workspace | stable File Entry with immutable File Revisions and explicit order |
-| Starter Workspace | initial files and empty directories copied into each Attempt Workspace | one logical hierarchy with opaque content versions |
+| Exam Resource | read-only supporting material, kept outside the code Workspace | a fixed File Entry, with File Revisions that never change and a set order |
+| Starter Workspace | the files and empty folders copied into each Attempt Workspace at the start | one tree of folders and files, with opaque content versions |
 
-## Govern Exam Resources
+## Exam Resources
 
-Each Resource has a required display name, optional bounded Markdown
-description, explicit zero-based order, and an exact available content
-revision. Replacing content creates another File Revision, so already published
-Revisions retain the bytes they selected. Removing a Resource closes the Draft
-ordering gap but does not erase published history.
+Each Resource has:
 
-The default authoring policy allows ten Resources of at most 10 MiB each. Fixed
-server ceilings are 100 Resources and 100 MiB each. The initial allowlist is
-verified PDF, PNG, JPEG, WebP, UTF-8 text, Markdown, CSV, and JSON; executables,
-archives, macros, and disk images are excluded. The current Institution policy
-may be narrower and is rechecked at mutation and publication.
+- a display name, which is required;
+- an optional short Markdown description;
+- a set position, counting from zero;
+- an exact content revision that is available.
 
-## Build the Starter Workspace as a Logical Tree
+Replacing a Resource's content creates another File Revision, so Revisions
+you have already published keep the bytes they chose. Removing a Resource
+closes the gap in the Draft's order, but doesn't erase published history.
 
-Paths are case-sensitive, canonical POSIX-relative values. They reject empty
-or absolute paths, dot traversal, repeated or trailing separators, backslashes,
-control characters, and the reserved `.proctor` root. Directories are metadata;
-removing a non-empty directory is rejected rather than recursive.
+By default, the authoring policy allows ten Resources of up to 10 MiB each.
+The server's fixed upper limits are 100 Resources and 100 MiB each.
 
-Defaults are 500 entries, 10 MiB per file, and 50 MiB total. Fixed ceilings are
-5,000 entries, 100 MiB per file, and 1 GiB total. Each file change compares the
-current opaque Workspace Content Version. That value is a concurrency token,
-not a file or revision identity.
+At first, Proctor accepts only checked PDF, PNG, JPEG, WebP, UTF-8 text,
+Markdown, CSV and JSON files. It doesn't accept executables, archives, files
+with macros or disk images. Your Institution's current policy may be stricter,
+and Proctor checks it again each time you change a Resource and when you
+publish.
 
-## Protect Content Throughout the Flow
+## Build the Starter Workspace as a tree
 
-Uploads stream to a new unguessable VFS object while checking type, size, and
-checksum. PostgreSQL makes content visible only after metadata and domain
-relationship commit. A failed commit can leave an invisible object for bounded
-orphan cleanup; visible metadata never points to a partial upload.
+Paths are case-sensitive, relative POSIX paths in standard form. Proctor
+rejects:
 
-Protected reads authorize every request, return inline content with checksum
-ETag and `nosniff`, and expose no object key or public URL. Candidate delivery
-offers no download, export, print, drag-out, external-open, or local-folder
-projection. Rendering necessarily transfers bounded bytes to an authorized
-client; the enforceable guarantee is export containment, not that bytes never
-reach the device.
+- empty or absolute paths;
+- paths that use dots to climb out of the Workspace;
+- repeated or trailing separators;
+- backslashes;
+- control characters;
+- the reserved `.proctor` folder at the top level.
 
-Lowering Institution capacity does not rewrite existing Draft material.
-Removal, reordering, and metadata repair remain possible, while replacement
-content and publication must meet the new limits. Publication freezes the
-complete capacity values for future Attempts.
+Folders are only records, not stored content. Proctor rejects removing a
+folder that still has things in it, rather than deleting everything inside.
+
+By default, a Starter Workspace can have 500 entries, 10 MiB per file and
+50 MiB in total. The fixed upper limits are 5,000 entries, 100 MiB per file
+and 1 GiB in total.
+
+Each change to a file is checked against its current Workspace Content
+Version, which is an opaque value. It exists only to stop two changes from
+overwriting each other. It doesn't identify a file or a revision.
+
+## How content is protected
+
+While a file uploads, Proctor streams it into a new storage object in the VFS
+whose name can't be guessed, and checks its type, size and checksum.
+PostgreSQL makes the content visible only once its details, and its link to
+the Exam material, have been saved. If that save fails, an invisible object
+may be left behind, and a limited clean-up job removes it later. Visible
+details never point to a half-finished upload.
+
+Every protected read is authorized on its own. Proctor returns the content
+inline, with a checksum ETag and `nosniff`, and never reveals the storage key
+or a public URL.
+
+When candidates take the Exam, there is no way to download, export, print,
+drag out, open in another app or save the material to a local folder. To
+display material, Proctor has to send a limited number of bytes to an
+authorized app. What Proctor can guarantee is that the material can't be
+exported, not that the bytes never reach the device.
+
+If your Institution lowers its capacity limits, Proctor doesn't rewrite the
+material already in your Draft. You can still remove Resources, reorder them
+and fix their details. Any replacement content, and publishing, must meet the
+new limits. Publishing fixes all the capacity values for future Attempts.

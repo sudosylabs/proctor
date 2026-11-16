@@ -1,98 +1,106 @@
 ---
-title: Operate Health, Metrics, Logs, and Traces
-description: Route by readiness, understand serving-lease failure, scrape and profile every node safely, trace requests, store operations, and Jobs, and diagnose failures without leaking private data.
+title: Health, metrics, logs and traces
+description: Route traffic by readiness, understand what a serving-lease failure does, scrape and profile each node safely, trace requests, store operations and Jobs, and find faults without leaking private data.
 audience: operator
 maturity: preview
 ---
 
-# Operate Health, Metrics, Logs, and Traces
+# Health, metrics, logs and traces
 
-Process existence, liveness, readiness, and dependency diagnostics answer
-different questions. Only readiness should put a node in the client traffic
-pool.
+A running process, liveness, readiness and dependency diagnostics each tell you
+something different. Only readiness should decide whether a node receives
+client traffic.
 
 <GovernedFigure asset="node-readiness-lifecycle" />
 
-## Health Endpoints
+## Health endpoints
 
-| Endpoint | Meaning | Traffic decision |
+| Endpoint | What it tells you | What to do with it |
 | --- | --- | --- |
-| `GET /health/live` | process and root runtime can answer | restart policy signal; not sufficient for routing |
-| `GET /health/ready` | mandatory startup and serving prerequisites are currently satisfied | include/remove node from load-balancer pool |
+| `GET /health/live` | The process and its root runtime can answer | Use it for restart policy. It isn't enough for routing |
+| `GET /health/ready` | Everything required to start and serve is in place right now | Add the node to, or remove it from, the load-balancer pool |
 
-Readiness remains false until platform dependencies, metrics, serving lease,
-startup reconciliation, Jobs, WebSocket, listener, and HTTP handoff succeed. It
-becomes false before drain. While serving, readiness also probes PostgreSQL,
-the cache, the cluster transport, and VFS at most once per second, each probe
-bounded to 2 seconds; a failed probe reports not ready until a later probe
-succeeds, without stopping the process. The VFS probe checks only that the
-local root directory or the S3 bucket exists, so its cost does not grow with
-the number of stored files. A required metrics-listener failure, a
-rejected serving lease, or a lease renewal that keeps failing past its retry
-slack is terminal: Proctor removes readiness and stops serving rather than
-risk operating without its durable node proof.
+Readiness stays false until platform dependencies, metrics, the serving lease,
+startup reconciliation, Jobs, WebSocket, the listener and the HTTP handoff have
+all succeeded. It turns false before a drain begins.
+
+While a node is serving, readiness also probes PostgreSQL, the cache, the
+cluster transport and VFS. It probes at most once a second, and each probe has
+2 seconds to finish. After a failed probe the node reports not ready until a
+later probe succeeds, but the process keeps running. The VFS probe only checks
+that the local root directory or the S3 bucket exists, so it doesn't get slower
+as you store more files.
+
+Some failures are terminal: a required metrics listener that fails, a serving
+lease that is rejected, or a lease renewal that keeps failing past its retry
+margin. Proctor then removes readiness and stops serving, rather than run
+without the durable proof that it is the serving node.
 
 A failed plugin never removes readiness. While an enabled plugin has failed,
-`GET /health/ready` still answers `200` but with `"status": "degraded"`, and
+`GET /health/ready` still answers `200`, but with `"status": "degraded"`, and
 the node keeps serving without that plugin. The server log and the
 `proctor_plugin_state` metric name the plugin. See
 [Plugins configuration](../reference/configuration/plugins.mdx).
 
-The serving lease lasts 30 seconds, renews every 5 seconds, and bounds each
-operation to 5 seconds. A transient renewal failure is retried every second
-while an attempt can still finish at least 5 seconds before the last renewed
-lease expires, so a PostgreSQL interruption of roughly 15 seconds does not stop
-the node. These are current implementation timings, not alert threshold
-recommendations.
+The serving lease lasts 30 seconds and renews every 5 seconds. Each lease
+operation has 5 seconds to finish. Proctor retries a failed renewal every
+second, as long as an attempt can still finish at least 5 seconds before the
+last renewed lease expires. So a PostgreSQL interruption of about 15 seconds
+doesn't stop the node. These are the timings in the current implementation,
+not recommended alert thresholds.
 
 ## Metrics
 
-Metrics use a separate node-local listener, default `127.0.0.1:8067`, exposing
-`GET /metrics` and, only when [profiling](#profiling) is enabled, the Go
-runtime profiles. Scrape every node; Memberlist does not aggregate metrics.
-The `proctor_` families cover readiness, HTTP, stores, caches, WebSocket,
-cluster, Jobs, VFS, mail, plugins, and selected domain outcomes.
+Metrics have their own listener on each node, by default `127.0.0.1:8067`. It
+serves `GET /metrics` and, only when you turn on [profiling](#profiling), the
+Go runtime profiles. Scrape every node, because Memberlist doesn't combine
+metrics across nodes. The `proctor_` families cover readiness, HTTP, stores,
+caches, WebSocket, cluster, Jobs, VFS, mail, plugins and selected domain
+outcomes.
 
-When binding beyond loopback, configuration requires static TLS and a random
-32–512-byte bearer token. Keep the token in protected secret input (prefer
-`PROCTOR_METRICS_BEARER_TOKEN`). Do not put it in scrape URLs or logs. The
-scraper sends it as `Authorization: Bearer <token>`; on loopback the token is
-optional. Listener settings take effect only after a restart, and every
-`Metrics` field has a matching `PROCTOR_METRICS_` override.
+If you bind the listener to anything other than loopback, the configuration
+must use static TLS and a random bearer token of 32 to 512 bytes. Keep the
+token in a protected secret input, preferably `PROCTOR_METRICS_BEARER_TOKEN`.
+Don't put it in scrape URLs or logs. The scraper sends it as
+`Authorization: Bearer <token>`. On loopback the token is optional. Listener
+settings take effect only after a restart, and every `Metrics` field has a
+matching `PROCTOR_METRICS_` override.
 
-Apply your own target labels in Prometheus. Proctor's labels never contain raw
-request or VFS paths, cache keys, host, node, User, Session, or Exam
-identifiers, mail recipients, payloads, credentials, or error text.
+Add your own target labels in Prometheus. Proctor's labels never contain raw
+request or VFS paths, cache keys, host, node, User, Session or Exam
+identifiers, mail recipients, payloads, credentials or error text.
 
-### Database Pool Saturation
+### Database pool saturation
 
 Each node exports its PostgreSQL connection pool:
 
-| Family | Meaning |
+| Family | What it counts |
 | --- | --- |
-| `proctor_database_in_use_connections` | connections currently executing work |
-| `proctor_database_idle_connections` | connections open and waiting in the pool |
-| `proctor_database_open_connections`, `proctor_database_max_open_connections` | current and configured pool size |
-| `proctor_database_waits_total` | requests that waited because every connection was in use |
-| `proctor_database_wait_duration_seconds_total` | cumulative time spent waiting for a connection |
+| `proctor_database_in_use_connections` | Connections running work right now |
+| `proctor_database_idle_connections` | Connections open and waiting in the pool |
+| `proctor_database_open_connections`, `proctor_database_max_open_connections` | Current and configured pool size |
+| `proctor_database_waits_total` | Requests that waited because every connection was busy |
+| `proctor_database_wait_duration_seconds_total` | Total time spent waiting for a connection |
 
-A rising `rate(proctor_database_waits_total[5m])` with in-use connections at
-`Database.MaxOpenConnections` means the pool, not PostgreSQL, is the
-bottleneck. Divide the wait-duration rate by the wait-count rate for the mean
-wait. Compare the pool size multiplied by node count with PostgreSQL's own
-connection limit before raising it.
+If `rate(proctor_database_waits_total[5m])` is rising while in-use connections
+sit at `Database.MaxOpenConnections`, the bottleneck is the pool, not
+PostgreSQL. To get the mean wait, divide the wait-duration rate by the
+wait-count rate. Before you raise the pool size, multiply it by the number of
+nodes and compare the result with PostgreSQL's own connection limit.
 
-### Slow Store Operations
+### Slow store operations
 
-Set `Database.SlowOperationThreshold` (for example `500ms`) to log one
-`slow store operation` warning for every store operation that takes at least
-that long. Each record names only the closed operation, such as
-`user.get_by_email`, and `duration_ms`; it never includes SQL, arguments, rows,
-or error text. The duration covers the whole named operation, including store
-retries and every statement of a transaction. The record carries the
-request's `request_id` and, with tracing enabled, the store span's `trace_id`.
-The default `0s` disables
-the log; `proctor_store_operation_duration_seconds` remains the aggregate view.
+Set `Database.SlowOperationThreshold`, for example to `500ms`, and Proctor logs
+one `slow store operation` warning for each store operation that takes at
+least that long. The record names only the operation, such as
+`user.get_by_email`, from a fixed set, and gives its `duration_ms`. It never
+includes SQL, arguments, rows or error text.
+
+The duration covers the whole named operation, including store retries and
+every statement in a transaction. The record carries the request's
+`request_id` and, with tracing on, the store span's `trace_id`. The default,
+`0s`, turns the log off. `proctor_store_operation_duration_seconds` still gives
+you the aggregate view.
 
 ### Plugins
 
@@ -109,11 +117,11 @@ such as a sign-in the provider rejected.
 
 ## Profiling
 
-Set `Metrics.ProfilingEnabled` to serve Go runtime profiles from the same
-listener under `/debug/pprof/` (`heap`, `goroutine`, `allocs`, `block`,
-`mutex`, `threadcreate`, `profile`, `trace`, and `symbol`). Profiling requires
-the metrics bearer token even on loopback, and it is never available on the
-public listener. Fetch a profile from one node at a time:
+Set `Metrics.ProfilingEnabled` to serve Go runtime profiles from the metrics
+listener under `/debug/pprof/`: `heap`, `goroutine`, `allocs`, `block`,
+`mutex`, `threadcreate`, `profile`, `trace` and `symbol`. Profiling needs the
+metrics bearer token even on loopback, and it is never available on the public
+listener. Fetch a profile from one node at a time:
 
 ```sh
 curl --fail --silent --show-error --cacert metrics-ca.pem \
@@ -123,40 +131,46 @@ curl --fail --silent --show-error --cacert metrics-ca.pem \
 go tool pprof -http=127.0.0.1:0 node-a-cpu.pprof
 ```
 
-A CPU profile or execution trace must finish within `Metrics.WriteTimeout`
-(default `30s`). Profiles describe code paths, stacks, and allocation sizes
-rather than stored records, but treat captured files as internal diagnostics
-and disable profiling again when the investigation ends.
+A CPU profile or execution trace must finish within `Metrics.WriteTimeout`,
+which defaults to `30s`. Profiles describe code paths, stacks and allocation
+sizes, not stored records. Still, treat the files you capture as internal
+diagnostics, and turn profiling off again when you have finished.
 
 ## Logs
 
-Use JSON logs for machine ingestion and bounded file rotation where local files
-are selected. Preserve request/node correlation and closed component/outcome
-fields. Do not increase diagnostic value by logging credentials, URLs with
-secrets, User/Exam identifiers without approved purpose, Workspace paths or
-content, recipients, evidence, provider payloads, or error strings as metric
-labels.
+Use JSON logs when a machine reads them. If you write logs to local files, use
+rotation with a size limit. Keep the request and node correlation fields and
+the fixed component and outcome fields. Don't try to make logs more useful by
+adding any of these:
 
-Every record written while handling a request carries its `request_id`, the
-value returned in the `X-Request-ID` response header. With tracing enabled,
-records written inside a span also carry `trace_id` and `span_id`, so a log
-search and a trace view lead to each other.
+- credentials, or URLs that contain secrets;
+- User or Exam identifiers, unless there is an approved reason;
+- Workspace paths or content;
+- recipients, evidence or provider payloads;
+- error strings as metric labels.
+
+Every record written while Proctor handles a request carries its `request_id`.
+This is the value returned in the `X-Request-ID` response header. With tracing
+on, records written inside a span also carry `trace_id` and `span_id`, so you
+can go from a log search to a trace and back.
 
 ## Traces
 
-Tracing is off by default. Set `Tracing.Enabled` and point
-`Tracing.EndpointURL` at an OpenTelemetry collector's OTLP/HTTP traces
-receiver, normally `http://127.0.0.1:4318/v1/traces` on the node itself or a
-collector on its private network; use `https` when the collector is remote.
-Proctor exports OTLP over HTTP with protobuf encoding rather than gRPC: it
-needs no long-lived HTTP/2 client stream, passes ordinary HTTP proxies and TLS
-termination, and keeps the gRPC transport out of the server.
+Tracing is off by default. Set `Tracing.Enabled`, and point
+`Tracing.EndpointURL` at the OTLP/HTTP traces receiver of an OpenTelemetry
+collector. Normally that is `http://127.0.0.1:4318/v1/traces` on the node
+itself, or a collector on the node's private network. Use `https` when the
+collector is remote.
 
-To export directly to a hosted backend that authenticates OTLP requests, such
-as Honeycomb or Grafana Cloud, set its `https` traces URL in
+Proctor exports OTLP over HTTP with protobuf encoding, not over gRPC. That way
+it needs no long-lived HTTP/2 client stream, it works through ordinary HTTP
+proxies and TLS termination, and the server doesn't need the gRPC transport.
+
+To export straight to a hosted backend that authenticates OTLP requests, such
+as Honeycomb or Grafana Cloud, put its `https` traces URL in
 `Tracing.EndpointURL` and its credential in `Tracing.Headers`:
 
-```json
+```json title="config.json"
 "Tracing": {
   "Enabled": true,
   "EndpointURL": "https://api.honeycomb.io/v1/traces",
@@ -165,58 +179,67 @@ as Honeycomb or Grafana Cloud, set its `https` traces URL in
 ```
 
 Header values are secrets. `proctor config show` prints each header name with
-a `[redacted]` value, and values are never logged or recorded in spans. Prefer supplying them through `PROCTOR_TRACING_HEADERS`,
-which uses the standard `OTEL_EXPORTER_OTLP_HEADERS` list format
-(`name=value` pairs separated by commas, values percent-encoded) and replaces
-the configured headers as a whole. Proctor itself ignores
-`OTEL_EXPORTER_OTLP_HEADERS` and `OTEL_EXPORTER_OTLP_TRACES_HEADERS`, so
-configuration remains the only header source. Headers require an `https`
-endpoint unless the collector is on loopback. A collector on the node or
-private network can instead hold the backend credential itself.
+the value `[redacted]`, and Proctor never logs the values or records them in
+spans.
 
-Each node records:
+It's better to supply them through `PROCTOR_TRACING_HEADERS`. This uses the
+standard `OTEL_EXPORTER_OTLP_HEADERS` list format: `name=value` pairs separated
+by commas, with percent-encoded values. It replaces all the configured headers
+at once. Proctor itself ignores `OTEL_EXPORTER_OTLP_HEADERS` and
+`OTEL_EXPORTER_OTLP_TRACES_HEADERS`, so headers only ever come from Proctor's
+configuration.
+
+Headers need an `https` endpoint unless the collector is on loopback. As an
+alternative, a collector on the node or the private network can hold the
+backend credential itself.
+
+Each node records these spans:
 
 | Span | Name | Attributes |
 | --- | --- | --- |
-| inbound HTTP request (server) | `GET /api/v1/users/{user_id}/affiliations`: method and route template | `http.request.method`, `http.route`, `http.response.status_code`, `proctor.request_id` |
-| store operation (internal), only inside a sampled trace | `store user.get_by_email` | `db.system.name`, `db.operation.name` |
-| Job execution (consumer, a new trace) | `job mail_delivery` | `proctor.job.type`, `proctor.job.outcome` |
+| Inbound HTTP request (server) | The method and route template, such as `GET /api/v1/users/{user_id}/affiliations` | `http.request.method`, `http.route`, `http.response.status_code`, `proctor.request_id` |
+| Store operation (internal), only inside a sampled trace | `store user.get_by_email` | `db.system.name`, `db.operation.name` |
+| Job execution (consumer, starts a new trace) | `job mail_delivery` | `proctor.job.type`, `proctor.job.outcome` |
 
 Spans never carry request paths, query strings, headers, credentials, client
-addresses, User or exam identifiers, SQL, arguments, rows, payloads, or error
-text. A 5xx response, failed store operation, or failed Job is marked as an
-error with only its status, `store operation failed`, or the outcome name. A
-WebSocket upgrade's span ends at the handshake rather than lasting for the
-connection.
+addresses, User or exam identifiers, SQL, arguments, rows, payloads or error
+text. Proctor marks a 5xx response, a failed store operation or a failed Job as
+an error. The error shows only the status, `store operation failed`, or the
+outcome name. The span for a WebSocket upgrade ends at the handshake. It
+doesn't last for the whole connection.
 
-Proctor continues an inbound W3C `traceparent` only when the connection peer is
-in `Server.TrustedProxies`, the same rule that admits a proxy's request ID. Any
-other client starts a new trace and cannot choose its identity or force
-sampling; `baggage` is never read. `Tracing.SampleRatio` (default `1`) samples
-new traces. Lower it on busy installations, since one request can produce many
-store spans. The collector, not Proctor, owns retention, tail sampling, and the
-trace backend. At shutdown Proctor flushes buffered spans for up to
-`Tracing.ShutdownTimeout`; export failures are logged and never affect
+Proctor continues an inbound W3C `traceparent` only when the connecting peer is
+listed in `Server.TrustedProxies`. This is the same rule that lets a proxy set
+the request ID. Any other client starts a new trace, and can't choose its
+identity or force sampling. Proctor never reads `baggage`.
+
+`Tracing.SampleRatio`, which defaults to `1`, sets how many new traces are
+sampled. Lower it on busy installations, since one request can produce many
+store spans. Retention, tail sampling and the trace backend are the
+collector's job, not Proctor's. At shutdown, Proctor flushes buffered spans for
+up to `Tracing.ShutdownTimeout`. It logs export failures, and they never affect
 requests or readiness.
 
-The tracked development OpenTelemetry, Prometheus, Grafana, and Loki stack is a
-local verification environment. It is not a production retention, sampling, or
-alerting policy. `make run` and the cluster stack enable tracing and send spans
-to the development collector, which prints one line per span in its log
-(`make dev-logs`) and forwards every span to a local, in-memory Jaeger. Open
-the Jaeger UI at `http://127.0.0.1:16686` and choose the `proctor` service.
+The development OpenTelemetry, Prometheus, Grafana and Loki stack in the
+repository is for checking things locally. It isn't a production policy for
+retention, sampling or alerting. `make run` and the cluster stack turn on
+tracing and send spans to the development collector. The collector prints one
+line per span in its log (`make dev-logs`), and forwards every span to a local
+Jaeger that keeps them in memory. Open the Jaeger UI at
+`http://127.0.0.1:16686` and choose the `proctor` service.
 
-## Diagnose a Not-ready Node
+## Find out why a node isn't ready
 
-1. read the first bounded startup/runtime error from the node log;
-2. verify effective configuration with `proctor config validate`;
-3. verify PostgreSQL and selected required dependencies from their own trusted
-   diagnostics without printing credentials;
-4. compare `proctor version --json` and hosted build identity;
-5. in a cluster, check stable Node ID, Redis/shared VFS, Memberlist key overlap,
-   bind/advertise resolution, and compatible peer versions; and
-6. fix the owning dependency or configuration, then restart and wait for
-   readiness—never force the load balancer to ignore it.
+1. Read the first startup or runtime error in the node log.
+2. Check the effective configuration with `proctor config validate`.
+3. Check PostgreSQL and the other dependencies the node needs, using their own
+   trusted diagnostics, without printing credentials.
+4. Compare `proctor version --json` with the hosted build identity.
+5. In a cluster, check the stable Node ID, Redis and shared VFS, that the
+   Memberlist keys overlap, that bind and advertise addresses resolve, and that
+   peer versions are compatible.
+6. Fix the dependency or configuration at fault, then restart and wait for
+   readiness. Never force the load balancer to ignore readiness.
 
 {/* TODO(operator-alert-policy): Establish exercised service-level objectives,
 alert thresholds, paging routes, log/trace retention, and dashboard ownership

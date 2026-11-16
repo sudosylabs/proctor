@@ -11,7 +11,7 @@ paths:
       operationId: registerLocalUser
       summary: Register one unverified local account when current policy permits
       description: >-
-        Creates one unverified local account only when the current Access Policy permits public registration. The required first and last names are self-asserted profile presentation, not identity proof. Registration does not grant institutional affiliation or authorization, and a verification message is sent without returning credential material.
+        Creates one local account with an unverified email address, but only when the current Access Policy allows public registration and local sign-in. The first and last names are what the person says they are called. They are shown on the profile and do not prove identity. Registering does not make the account a member of any Institution or grant it any access. Proctor emails a verification link to the address. The response returns no credentials.
       tags:
         - Authentication
       x-proctor-auth: public
@@ -46,7 +46,7 @@ components:
   requestBodies:
     PublicRegistration:
       required: true
-      description: Supplies the new account's required first and last names, unique username, normalized email address, and policy-compliant local password. Public registration does not accept a display name.
+      description: The new account's first and last names, a username no other account uses, an email address and a local password that meets the password rules. Public registration does not accept a display name.
       content:
         application/json:
           schema:
@@ -70,19 +70,24 @@ components:
       properties:
         first_name:
           type: string
+          description: The person's first name, shown on the profile. Surrounding spaces are removed, and it can't be blank.
           minLength: 1
           maxLength: 64
         last_name:
           type: string
+          description: The person's last name, shown on the profile. Surrounding spaces are removed, and it can't be blank.
           minLength: 1
           maxLength: 64
         username:
           type: string
+          description: The sign-in name for the new account. No other account may already use it.
           minLength: 1
           maxLength: 64
         email:
           type: string
           format: email
           maxLength: 254
+          description: The account email address. It is stored in lower case, and the verification link is sent to it.
         password:
           type: string
+          description: The new local password. It must meet the password rules and must not contain the username, the part of the email address before the @, or the person's name.

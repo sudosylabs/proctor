@@ -13,7 +13,7 @@ paths:
       tags:
         - Users
       description: >-
-        Returns the signed-in User's exact bounded settings JSON source, format version, revision, and write capability. The server does not reinterpret the source into undocumented fields, and the private response is never shared-cacheable.
+        Returns your settings document exactly as it was saved, with its format version, revision and whether you can replace it. The server does not rewrite the document or add fields to it. The response is private and must not be stored by shared caches.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -46,7 +46,7 @@ paths:
       tags:
         - Users
       description: >-
-        Validates and replaces the signed-in User's complete settings source under an exact revision fence. An Idempotency-Key replay returns the retained outcome, while stale revisions fail rather than overwriting a concurrent client update.
+        Checks and replaces your whole settings document. `expected_revision` must match the current revision, so an update from another client is never overwritten: a stale revision fails with `user_settings.revision_conflict`. A retry with the same Idempotency-Key returns the first result.
       x-proctor-auth: session_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -95,7 +95,7 @@ paths:
 components:
   requestBodies:
     ReplaceUserSettings:
-      description: Complete settings JSON source, its supported format version, and the exact current revision to replace.
+      description: The whole new settings document, its format version, and the revision you are replacing.
       required: true
       content:
         application/json:
@@ -107,7 +107,7 @@ components:
             expected_revision: ybndrfg8ejkmcpqxot1uwisza3
   responses:
     UserSettingsOK:
-      description: Exact current User Settings Document
+      description: Your current settings document
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
@@ -115,8 +115,14 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/UserSettingsResponse'
+          example:
+            source: '{"appearance":{"theme":"system"}}'
+            format_version: 1
+            revision: ybndrfg8ejkmcpqxot1uwisza3
+            writable: true
+            updated_at: '2026-08-01T09:30:00Z'
     UserSettingsReplaced:
-      description: User Settings Document replacement outcome
+      description: Result of replacing your settings document
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
@@ -124,9 +130,14 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/UserSettingsReplacementResponse'
+          example:
+            revision: grofpg49hmqe47x811ttzoochx
+            format_version: 1
+            updated_at: '2026-08-02T14:12:05Z'
+            changed: true
   schemas:
     UserSettingsResponse:
-      description: Exact private User Settings Document with concurrency metadata.
+      description: Your settings document as saved, with the details you need to replace it safely.
       type: object
       additionalProperties: false
       required:
@@ -139,23 +150,25 @@ components:
         source:
           type: string
           maxLength: 262144
-          description: Exact validated JSON source, bounded to 256 KiB.
+          description: The settings document as JSON text, exactly as saved. At most 256 KiB.
         format_version:
           type: integer
           minimum: 1
-          description: Version of the settings document format understood by the server.
+          description: Version of the settings format the document uses.
         revision:
           $ref: '#/components/schemas/ID'
-          description: Opaque current document revision required for conditional replacement.
+          description: The document's current revision. Send it as `expected_revision` when you replace the document.
         writable:
           type: boolean
-          description: Whether this Session may currently replace the settings source.
+          description: >-
+            True when this server can write the document's format version, so you can replace it. False when the
+            document uses a format this server does not support.
         updated_at:
           type: string
           format: date-time
-          description: Time of the latest durable replacement.
+          description: Time the document was last replaced.
     UserSettingsReplaceRequest:
-      description: Complete conditional replacement for the current User Settings Document.
+      description: The whole new settings document, which replaces the current one.
       type: object
       additionalProperties: false
       required:
@@ -166,13 +179,16 @@ components:
         source:
           type: string
           maxLength: 262144
+          description: The new settings document as JSON text. At most 256 KiB.
         format_version:
           type: integer
           minimum: 1
+          description: Version of the settings format the document uses. This server accepts version 1.
         expected_revision:
           $ref: '#/components/schemas/ID'
+          description: The `revision` you last read. The request fails if the document has changed since.
     UserSettingsReplacementResponse:
-      description: Result metadata for a committed replacement or exact idempotent replay.
+      description: The saved document's details after a replacement, or after a retry of one.
       type: object
       additionalProperties: false
       required:
@@ -183,12 +199,15 @@ components:
       properties:
         revision:
           $ref: '#/components/schemas/ID'
+          description: The document's revision after the request. Use it for your next replacement.
         format_version:
           type: integer
           minimum: 1
+          description: Version of the settings format the saved document uses.
         updated_at:
           type: string
           format: date-time
+          description: Time the document was last replaced.
         changed:
           type: boolean
-          description: False when the accepted source already matched the retained document.
+          description: False when the new document was the same as the saved one, so nothing changed.

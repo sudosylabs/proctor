@@ -1,135 +1,150 @@
 ---
-title: Proctor Command-Line Reference
-description: Checked operator-facing commands for serving, validating and showing configuration, migrating and reverting the schema, inspecting the cluster and Jobs, recovering administrator access, and identifying a build.
+title: Command-line reference
+description: The commands operators use to run Proctor, check and show its configuration, apply and revert migrations, look at the cluster and Jobs, recover administrator access, and identify a build.
 audience: operator
 maturity: preview
 slug: /reference/command-line/
 ---
 
-# Proctor Command-Line Reference
+# Command-line reference
 
-The CLI is a thin caller of server capabilities. It does not implement a second
-policy path. Run `proctor help` or command-specific `--help` from the exact
-release binary for localized usage and the current flag surface.
+The CLI calls into the server and nothing more. It doesn't have its own,
+separate set of rules. For translated usage and the current flags, run
+`proctor help`, or `--help` on a command, from the exact release binary you
+run.
 
-Every command accepts `--config` (short form `-c`). An explicit path wins over
-`PROCTOR_CONFIG` and the default `config/config.json`. The flag is persistent,
-so it may also come before the command. `proctor completion --help` describes
-shell-completion generation.
+Every command accepts `--config` (short form `-c`). A path you pass takes
+priority over `PROCTOR_CONFIG` and the default `config/config.json`. The flag
+applies to every command, so you can also put it before the command name.
+`proctor completion --help` explains how to generate shell completion.
 
-Help and messages are localized. The CLI picks its locale from
-`PROCTOR_LOCALE`, then the standard `LC_ALL`, `LC_MESSAGES`, and `LANG`
-environment variables. Command names, flags, and machine-readable values stay
+Help and messages are translated. The CLI chooses its locale from
+`PROCTOR_LOCALE`, then from the standard `LC_ALL`, `LC_MESSAGES` and `LANG`
+environment variables. Command names, flags and machine-readable values are
 the same in every locale.
 
 ## Commands
 
-| Command | Purpose | Starts the server? |
+| Command | What it does | Starts the server? |
 | --- | --- | --- |
-| `proctor serve` | run migrations/startup reconciliation, dependencies, Jobs, WebSocket, HTTP, readiness, and bounded shutdown | yes |
-| `proctor config validate` | strictly load and validate effective configuration | no |
-| `proctor config show` | print the effective configuration with every secret redacted | no |
-| `proctor migrate status` | compare database and server schema versions and report pending migrations | no |
-| `proctor migrate up` | apply every pending migration deliberately | no |
-| `proctor migrate down` | revert an explicit number of the newest migrations while every node is stopped | no |
-| `proctor cluster status` | list serving node leases, cluster discovery rows, and the schema version | no |
-| `proctor jobs list` | list the newest durable Jobs with state, attempts, last error code, and availability | no |
-| `proctor jobs show` | show one Job and its most recent attempts | no |
-| `proctor administrator recover` | host-only administrator local-authentication recovery while all nodes are stopped | no |
-| `proctor administrator reset-mfa` | reset an existing administrator's MFA and require reenrollment while all nodes are stopped | no |
-| `proctor version` | print build version, commit, build time, and Go version | no |
+| `proctor serve` | Runs migrations and startup checks, connects to the services Proctor needs, and runs Jobs, WebSocket, HTTP and readiness, with a time limit on shutdown | Yes |
+| `proctor config validate` | Loads the configuration in force, strictly, and checks it | No |
+| `proctor config show` | Prints the configuration in force, with every secret hidden | No |
+| `proctor migrate status` | Compares the database and server schema versions, and lists migrations not yet applied | No |
+| `proctor migrate up` | Applies every pending migration, when you choose to | No |
+| `proctor migrate down` | Reverts the number of newest migrations you name, while every node is stopped | No |
+| `proctor cluster status` | Lists serving node leases, cluster discovery rows and the schema version | No |
+| `proctor jobs list` | Lists the newest stored Jobs with their state, attempts, last error code and when they are next available | No |
+| `proctor jobs show` | Shows one Job and its most recent attempts | No |
+| `proctor administrator recover` | Recovers an administrator's local sign-in from the host, while all nodes are stopped | No |
+| `proctor administrator reset-mfa` | Resets an existing administrator's MFA and makes them enroll again, while all nodes are stopped | No |
+| `proctor version` | Prints the build version, commit, build time and Go version | No |
 
-## Serve and Validate
+## Run and check
 
 ```sh
 proctor config validate --config /etc/proctor/config.json
 proctor serve --config /etc/proctor/config.json
 ```
 
-`serve` integrates with systemd notification when `NOTIFY_SOCKET` is present:
-it reports readiness, shutdown, and reloads, and feeds the watchdog when
-`WATCHDOG_USEC` names this process.
-The first SIGTERM or SIGINT starts a graceful drain, a second forces it to
-finish at once and makes `serve` exit with status 1, and a third exits
-immediately. SIGHUP reloads configuration and static TLS certificates.
-The CLI warns when run as root; use a dedicated non-root service account.
+When `NOTIFY_SOCKET` is set, `serve` talks to systemd. It reports readiness,
+shutdown and reloads, and it feeds the watchdog when `WATCHDOG_USEC` names
+this process.
 
-## Show Effective Configuration
+The first SIGTERM or SIGINT starts a graceful drain. A second one makes the
+drain finish at once, and `serve` exits with status 1. A third exits
+immediately. SIGHUP reloads the configuration and static TLS certificates.
+
+The CLI warns you when it runs as root. Run Proctor under its own service
+account that isn't root.
+
+## Show the configuration in force
 
 ```sh
 proctor config show --config /etc/proctor/config.json
 proctor config show --json --config /etc/proctor/config.json
 ```
 
-`config show` loads and validates configuration exactly as `config validate`
-does: built-in defaults, then the file, then `PROCTOR_` environment
-overrides. It prints one `Path = value` line per setting, with values in their
-JSON spelling, preceded by a comment naming any environment variables that
-replaced a file value. `--json` prints the whole document in the configuration
-file's shape instead. Every secret is replaced by `[redacted]` in both forms:
-the database data source, Redis password, metrics bearer token, Memberlist,
-mail sealing and MFA key rings, SMTP password, S3 credentials, bootstrap
-secret, and OIDC client secrets. An empty secret stays empty, so the output
-shows whether a secret is set without revealing it. The command connects to no
-dependency and never writes the file.
+`config show` loads and checks the configuration exactly as `config validate`
+does: the built-in defaults, then the file, then any `PROCTOR_` environment
+overrides. It prints one `Path = value` line for each setting, with the value
+written as it would be in JSON. Above a line, a comment names any environment
+variables that replaced the value from the file. With `--json`, it prints the
+whole document in the same shape as the configuration file instead.
 
-## Database Migration
+Both forms replace every secret with `[redacted]`. That covers the database
+data source, the Redis password, the metrics bearer token, the Memberlist,
+mail encryption and MFA keys, the SMTP password, S3 credentials, the bootstrap
+secret, and OIDC client secrets. An empty secret stays empty, so you can see
+whether a secret is set without seeing its value. The command doesn't connect
+to any other service and never writes the file.
+
+## Database migrations
 
 ```sh
 proctor migrate status --config /etc/proctor/config.json
 proctor migrate up --config /etc/proctor/config.json
 ```
 
-The current pre-release baseline does not support upgrading older incompatible
-development schemas. Status does not certify backup, rollback, or production
-upgrade safety.
+The current pre-release baseline can't upgrade older development schemas that
+don't match it. `migrate status` doesn't confirm that your backups, rollback
+or a production upgrade are safe.
 
-### Reverting Migrations
+### Revert migrations
 
 ```sh
 proctor migrate down --steps 1 --config /etc/proctor/config.json
 proctor migrate down --steps 1 --confirm --config /etc/proctor/config.json
 ```
 
-`migrate down` reverts the newest `--steps` applied migrations; the count is
-required and must not exceed the applied migrations. It first prints the
-current schema version, each migration it would revert, and the resulting
-version. Without `--confirm` it stops there, reverts nothing, and exits with
-status 1. It refuses while any serving node holds a live lease, naming the
-nodes; stop every node and wait for a crashed node's lease to expire first.
-While reverting it holds the migration lock and the serving-node lease fence,
-so no node can start serving or migrate meanwhile.
+`migrate down` reverts the newest `--steps` applied migrations. You must give
+the count, and it can't be more than the number of applied migrations.
 
-Proctor currently ships one pre-release baseline migration, so `--steps 1`
-reverts to version 0: an **empty schema**. Every Proctor table and all of its
-data is dropped; only Morph's own `db_migrations` and `db_lock` bookkeeping
-tables remain, and only a database backup brings the data back. The command
-says so before it acts. A node started afterwards applies the baseline again
-and starts from an empty installation. Rollback is never a startup action.
+The command first prints the current schema version, each migration it would
+revert, and the version you would end up on. Without `--confirm` it stops
+there, reverts nothing, and exits with status 1.
 
-## Read-Only Inspection
+It refuses to run while any serving node holds a live lease, and names those
+nodes. Stop every node first. If a node crashed, wait for its lease to expire.
+While it reverts, the command holds the migration lock and the serving node
+lease fence, so no node can start serving or run migrations in the meantime.
 
-`migrate status`, `cluster status`, `jobs list`, and `jobs show` only read. They open the database with
-every session set to `default_transaction_read_only`, so PostgreSQL itself
-rejects any write. They never migrate, never take the migration lock or
-another advisory lock, and never create a table, so they are safe to run
-beside serving nodes and do not require the schema to match the binary.
+Proctor ships one pre-release baseline migration today, so `--steps 1` takes
+you back to version 0, which is an **empty schema**. Every Proctor table and
+all of its data is dropped. Only Morph's own `db_migrations` and `db_lock`
+bookkeeping tables remain, and only a database backup brings the data back.
+The command tells you this before it acts. A node you start afterwards applies
+the baseline again and starts as an empty installation. Proctor never rolls
+back migrations at startup.
+
+## Read-only inspection
+
+`migrate status`, `cluster status`, `jobs list` and `jobs show` only read.
+They open the database with every session set to
+`default_transaction_read_only`, so PostgreSQL itself rejects any write. They
+never migrate, never take the migration lock or any other advisory lock, and
+never create a table. You can run them safely next to serving nodes, and the
+schema doesn't have to match the binary.
 
 ```sh
 proctor cluster status --config /etc/proctor/config.json
 proctor cluster status --json --config /etc/proctor/config.json
 ```
 
-`cluster status` prints the database and server schema versions with the
-pending migration count, the PostgreSQL time, and two tables. **Serving
-nodes** lists every serving node lease with its node ID, state, renewal time,
-expiry, and lease ID; a node may serve only while its lease is `live` by the
-PostgreSQL clock, and an `expired` row belongs to a node that stopped without
-withdrawing its lease. **Cluster discovery** lists the Memberlist bootstrap
-rows with advertise address, server version, and protocol range; these rows
-are disposable and written only by the `memberlist` cluster backend, never by
-`local`. Expired rows are shown rather than hidden. Each list stops at 500
-rows and says so. A database with no schema reports no nodes.
+`cluster status` prints the database and server schema versions, how many
+migrations are pending, the PostgreSQL time, and two tables:
+
+- **Serving nodes** lists every serving node lease with its node ID, state,
+  renewal time, expiry and lease ID. A node may serve only while its lease is
+  `live` by the PostgreSQL clock. An `expired` row belongs to a node that
+  stopped without giving up its lease.
+- **Cluster discovery** lists the Memberlist bootstrap rows with their
+  advertise address, server version and protocol range. These rows are
+  disposable. Only the `memberlist` cluster backend writes them, never
+  `local`.
+
+Expired rows are shown, not hidden. Each list stops at 500 rows and says so. A
+database with no schema reports no nodes.
 
 ```sh
 proctor jobs list --config /etc/proctor/config.json
@@ -138,28 +153,33 @@ proctor jobs show <job-id>
 proctor jobs show <job-id> --json
 ```
 
-`jobs list` prints the newest Jobs first, at most `--limit` of them (default
-50, at most 200), with ID, type, state, attempts used of the maximum, last
-public error code, the time the Job is next available to a worker, and the
-last update. `--type` and `--state` are repeatable or comma-separated and
-accept only known values; the error for an unknown value lists them. States
-are `queued`, `running`, `cancel_requested`, `succeeded`, `failed`, and
-`canceled`. Unlike the administrator API, host listing includes internal Job
-types. When more Jobs match, the output says so; narrow the filters rather
-than paging. `jobs show` adds creation, start, completion, and progress
-times and the 20 most recent attempts with node, heartbeat, lease expiry, and
-error code.
+`jobs list` prints the newest Jobs first, up to `--limit` of them (default 50,
+at most 200). For each Job it shows the ID, type, state, attempts used out of
+the maximum, the last public error code, when a worker can next pick it up,
+and when it last changed.
 
-Neither command prints a Job's command, checkpoint, result, deduplication
-key, or an attempt's claim token, because those can carry user identifiers or
-content. Both refuse a database without a schema. `--json` writes the same
-fields for automation. To cancel or retry a Job, use the administrator Jobs
-API, which authorizes and audits the change; the CLI never changes Jobs.
+You can repeat `--type` and `--state`, or separate values with commas. They
+accept only known values, and the error for an unknown value lists the ones
+you can use. The states are `queued`, `running`, `cancel_requested`,
+`succeeded`, `failed` and `canceled`. Unlike the administrator API, listing
+from the host includes internal Job types. When more Jobs match than it
+shows, the output says so. Narrow the filters instead of paging.
 
-## Host-Only Administrator Recovery
+`jobs show` adds the creation, start, completion and progress times, and the
+20 most recent attempts with their node, heartbeat, lease expiry and error
+code.
 
-Stop every application node first. Confirm the exact Institution and active
-system-administrator User. Choose at least one recovery action:
+Neither command prints a Job's command, checkpoint, result or deduplication
+key, or an attempt's claim token, because those can contain user identifiers
+or content. Both refuse to run on a database without a schema. `--json` writes
+the same fields for scripts. To cancel or retry a Job, use the administrator
+Jobs API, which checks permission and records the change in the audit log.
+The CLI never changes Jobs.
+
+## Recover an administrator from the host
+
+Stop every application node first. Confirm the exact Institution and the
+active system administrator User. Then choose at least one recovery action:
 
 ```sh
 proctor administrator recover \
@@ -170,17 +190,20 @@ proctor administrator recover \
   --rotate-password
 ```
 
-`--rotate-password` reads the new password from redirected, non-terminal
-standard input; a password is never a positional argument or flag. Capture it
-without echo using your shell's private-input facility (for example `read -rs`
-followed by a standard-input redirection), and never put the value in the
-command itself. The command mints no Session and preserves MFA and existing
-Sessions. The operation writes a durable
-recovery record while transports and workers remain stopped. Restart normally
-so Proctor reconciles its audit record. Other flags are `--institution-id`,
-`--user-id`, and `--enable-local-login`.
+`--rotate-password` reads the new password from standard input, which must be
+redirected and not a terminal. You never pass a password as an argument or a
+flag. Capture it without echo using your shell's private input, for example
+`read -rs` followed by redirecting standard input, and never put the value in
+the command itself.
 
-For a lost authenticator, use the separately named MFA reset command:
+The command doesn't create a Session, and it leaves MFA and existing Sessions
+as they are. It writes a lasting recovery record while transports and workers
+are still stopped. Restart normally, so that Proctor can complete its audit
+record. The other flags are `--institution-id`, `--user-id` and
+`--enable-local-login`.
+
+If an administrator has lost their authenticator, use the separate MFA reset
+command:
 
 ```sh
 proctor administrator reset-mfa \
@@ -189,32 +212,37 @@ proctor administrator reset-mfa \
   --user-id <user-id>
 ```
 
-MFA must be enabled and configured. The target must be an active system
-administrator with an existing permitted primary authentication method.
-The command accepts no password, recovery code, or factor proof. It retires
-old MFA material, revokes the target's Sessions, PATs and unfinished access
-grants, and records a mandatory reenrollment restriction with durable host
-recovery evidence. It preserves primary credentials and the Access Policy.
+MFA must be turned on and set up. The target must be an active system
+administrator who already has a primary sign-in method they are allowed to
+use. The command accepts no password, recovery code or proof of a factor.
 
-Restart normally to reconcile the audit record. Then sign in with fresh
-password or provider proof and enroll a new authenticator. An external-only
-administrator must use an already linked, permitted provider; restore that
-provider first if it is unavailable. Disabling MFA does not lift the recovery
-restriction. A second host recovery command is rejected until the pending
-record has been reconciled. After a crashed node, wait for its serving lease
-to expire before retrying either command.
+It retires the old MFA material and revokes the target's Sessions, PATs and
+unfinished access grants. It records that the administrator must enroll again,
+along with lasting evidence of the host recovery. It keeps the primary
+credentials and the Access Policy as they are.
+
+Restart normally so Proctor can complete the audit record. The administrator
+then signs in again with their password or provider and enrolls a new
+authenticator. An administrator who signs in only through an external provider
+must use a provider that is already linked and allowed. If that provider is
+down, restore it first. Turning MFA off doesn't lift the requirement to enroll
+again.
+
+Proctor rejects a second host recovery command until it has completed the
+record of the first. If a node crashed, wait for its serving lease to expire
+before you retry either command.
 
 Neither command migrates the database. Each refuses to run unless the database
-schema exactly matches the build, and tells you to run `proctor migrate status`
+schema matches the build exactly, and tells you to run `proctor migrate status`
 and `proctor migrate up` first. Running an offline command never creates a
 serving lease.
 
-## Build Identity
+## Build identity
 
 ```sh
 proctor version
 proctor version --json
 ```
 
-Use `--json` for automation. Compare the binary identity with the release
-manifest and packaged hosted application before deployment.
+Use `--json` in scripts. Before you deploy, compare the binary's identity with
+the release manifest and the packaged hosted application.

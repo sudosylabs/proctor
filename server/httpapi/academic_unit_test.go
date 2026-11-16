@@ -219,7 +219,7 @@ func TestAcademicUnitHTTPErrorUsesProblemDetailsContract(t *testing.T) {
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, "resource.not_found", problem.Code)
 	require.Equal(t, http.StatusNotFound, problem.Status)
-	require.Equal(t, "https://proctor.sudosylabs.com/problems/resource.not_found", problem.Type)
+	require.Equal(t, "about:blank", problem.Type)
 	require.Equal(t, "academic_unit", problem.Fields["resource"])
 }
 

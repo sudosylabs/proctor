@@ -1,89 +1,35 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "assets": [
     {
       "id": "installation-authority-topology",
-      "path": "static/assets/diagrams/installation-authority-topology.svg",
-      "public_path": "/assets/diagrams/installation-authority-topology.svg",
       "kind": "diagram",
+      "source": "diagrams/installation-authority-topology.yaml",
       "owner": "Proctor documentation maintainers",
       "license": {
         "status": "pending",
         "expression": null,
         "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
       },
-      "provenance": "Original deterministic SVG authored for the Proctor documentation repository.",
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
       "privacy_review": {
         "status": "approved",
-        "basis": "Contains architecture labels and synthetic node names only; no Institution, User, Exam, credential, hostname, or operational data."
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
       },
-      "alt": "Requests pass through a load balancer to identical Proctor nodes. Nodes commit application state to PostgreSQL and opaque managed bytes to VFS before disposable Redis, Memberlist, realtime, or mail delivery effects.",
-      "caption": "The same authority boundary applies to one node or many: durable state and managed content commit before reconstructible cache, cluster, realtime, or delivery effects.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-09-12",
-      "visual_review": {
-        "status": "approved",
-        "source_sha256": "b26aa126d207bb3ffaf18a8159a5227d319546b4d954c9b3513ec6bc351b1605",
-        "reviewed": "2026-09-12",
-        "method": "Chromium inspection of exact SVG bytes at full 1200x720 size and in built documentation pages at 1440x1024 and 390x844, plus print media. Reviewed text containment, arrow endpoints, desktop labels, mobile overview and full-size link, and print structure; page scroll widths match both viewports.",
-        "checks": [
-          "text_containment",
-          "connector_continuity",
-          "rendered_legibility",
-          "narrow_viewport",
-          "print_contrast"
-        ],
-        "viewports": [
-          {
-            "name": "desktop",
-            "width": 1440,
-            "height": 1024
-          },
-          {
-            "name": "mobile",
-            "width": 390,
-            "height": 844
-          }
-        ]
-      },
+      "alt": "Requests pass through a load balancer to one or more identical Proctor nodes. Nodes first save to PostgreSQL and file storage, then tell the Redis cache, live updates, other nodes and mail, all of which are safe to lose and rebuild.",
+      "caption": "One node or many, Proctor saves to PostgreSQL and file storage before anything else hears about a change.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
       "review_triggers": [
         ".agents/skills/server-boundaries/references/dependencies.md",
         ".agents/skills/runtime-operations/references/runtime.md"
-      ]
-    },
-    {
-      "id": "protected-request-assurance-flow",
-      "path": "static/assets/diagrams/protected-request-assurance-flow.svg",
-      "public_path": "/assets/diagrams/protected-request-assurance-flow.svg",
-      "kind": "diagram",
-      "owner": "Proctor documentation maintainers",
-      "license": {
-        "status": "pending",
-        "expression": null,
-        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
-      },
-      "provenance": "Original deterministic SVG authored from Proctor's identity, transport, application, and authorization contracts.",
-      "privacy_review": {
-        "status": "approved",
-        "basis": "Contains security contract labels and credential-type names only; no User, Session, credential, Institution, request, or operational data."
-      },
-      "alt": "A Web Session, DPoP-bound Desktop Session, or Personal Access Token passes through its exact transport proof, CSRF or DPoP binding, and declared assurance checks to establish an immutable principal. The principal contains identity and assurance, not permission. The owning use case combines it with an action and exact resource, reads current PostgreSQL authority, and durably records allow or deny.",
-      "caption": "Transport proof establishes an immutable principal, not permission. The owning use case separately evaluates current action-and-resource authority and can proceed only after its allow decision is durably recorded.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-30",
+      ],
       "visual_review": {
         "status": "approved",
-        "source_sha256": "2f5ad4fb862058e6ee613d49c2f97654e878264bd9e95842c45df213536bbcae",
-        "reviewed": "2026-08-30",
-        "method": "Full-size SVG and in-page browser geometry review at 1200x720, 1440x1024, and 390x844 in light and dark site themes.",
+        "source_sha256": "e29c975d56562139468297cd36eb9c71742d434d3683bbc622818bb7865c0aaa",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
         "checks": [
           "text_containment",
           "connector_continuity",
@@ -103,7 +49,28 @@
             "height": 844
           }
         ]
+      }
+    },
+    {
+      "id": "protected-request-assurance-flow",
+      "kind": "diagram",
+      "source": "diagrams/protected-request-assurance-flow.yaml",
+      "owner": "Proctor documentation maintainers",
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
       },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "A request brings one credential, which passes three proof checks and becomes a caller with no permissions attached. A separate permission check then reads current roles and scope for the exact resource, saves an audit record, and allows or denies.",
+      "caption": "Proving a credential only says who is asking; current permissions for the exact resource decide whether the request is allowed.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
       "review_triggers": [
         ".agents/skills/identity-and-access/references/identity.md",
         ".agents/skills/authorization-audit/references/authorization.md",
@@ -112,129 +79,209 @@
         "server/httpapi/route/authentication.go",
         "server/app/access/session_assurance.go",
         "server/app/access/authorization.go"
-      ]
+      ],
+      "visual_review": {
+        "status": "approved",
+        "source_sha256": "bea9d1ec3f21ab596f9f4dbaab0d85b79d29358b94f16f1c6c44c20fd0d6895d",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
+        "checks": [
+          "text_containment",
+          "connector_continuity",
+          "rendered_legibility",
+          "narrow_viewport",
+          "print_contrast"
+        ],
+        "viewports": [
+          {
+            "name": "desktop",
+            "width": 1440,
+            "height": 1024
+          },
+          {
+            "name": "mobile",
+            "width": 390,
+            "height": 844
+          }
+        ]
+      }
     },
     {
       "id": "desktop-authorization-handoff",
-      "path": "static/assets/diagrams/desktop-authorization-handoff.svg",
-      "public_path": "/assets/diagrams/desktop-authorization-handoff.svg",
       "kind": "diagram",
+      "source": "diagrams/desktop-authorization-handoff.yaml",
       "owner": "Proctor documentation maintainers",
-      "license": {"status": "pending", "expression": null, "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."},
-      "provenance": "Original deterministic SVG authored from Proctor's Desktop Authorization model, application, HTTP, and hosted-browser contracts.",
-      "privacy_review": {"status": "approved", "basis": "Contains protocol steps, canonical security-material names, and generic account and device labels only; no User, Institution, credential, callback, build, or operational data."},
-      "alt": "Proctor Desktop creates state, S256 PKCE, a P-256 key, and an exact IP-literal loopback callback. The hosted browser binds the one-use request, authenticates the person, and asks for explicit approval. A code and state return to that exact callback. Desktop verifies state and exchanges the code using the same verifier and public key to create a Desktop Registration and DPoP-bound Session.",
-      "caption": "The browser authenticates the person while Desktop retains the private key and PKCE verifier. Explicit approval returns only a one-use code and state to the exact loopback callback before the same client creates a registered-key Session.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-30",
-      "visual_review": {
-        "status": "approved",
-        "source_sha256": "d123688043bcf4163b9eb9e7056702acbfb86a57a767620e98fe25a3ea7c7be3",
-        "reviewed": "2026-08-30",
-        "method": "Full-size deterministic SVG render and in-page browser geometry review at 1200x720, 1440x1024, and 390x844 in light and dark site themes.",
-        "checks": ["text_containment", "connector_continuity", "rendered_legibility", "narrow_viewport", "print_contrast"],
-        "viewports": [{"name": "desktop", "width": 1440, "height": 1024}, {"name": "mobile", "width": 390, "height": 844}]
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
       },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "Four steps left to right: Desktop prepares a request and key pair, the browser opens it, the person approves, and Desktop exchanges the returned code. The result is a Desktop Registration and a Desktop session tied to this computer's key.",
+      "caption": "Your browser confirms who you are, while Desktop keeps the private key that its new Desktop session depends on.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
       "review_triggers": [
         ".agents/skills/identity-and-access/references/access-and-onboarding.md",
         ".agents/skills/identity-and-access/references/identity.md",
         "webapp/src/features/desktop-authorization/CONTRACT.md",
         "server/openapi/fragments/authentication/auth-desktop.yaml"
-      ]
+      ],
+      "visual_review": {
+        "status": "approved",
+        "source_sha256": "359d63ab7f34ecb89bd0762e1ba7d04fe28b3fa5c15062f0c6410d4f7aee2545",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
+        "checks": [
+          "text_containment",
+          "connector_continuity",
+          "rendered_legibility",
+          "narrow_viewport",
+          "print_contrast"
+        ],
+        "viewports": [
+          {
+            "name": "desktop",
+            "width": 1440,
+            "height": 1024
+          },
+          {
+            "name": "mobile",
+            "width": 390,
+            "height": 844
+          }
+        ]
+      }
     },
     {
       "id": "desktop-dpop-boundary",
-      "path": "static/assets/diagrams/desktop-dpop-boundary.svg",
-      "public_path": "/assets/diagrams/desktop-dpop-boundary.svg",
       "kind": "diagram",
+      "source": "diagrams/desktop-dpop-boundary.yaml",
       "owner": "Proctor documentation maintainers",
-      "license": {"status": "pending", "expression": null, "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."},
-      "provenance": "Original deterministic SVG authored from Proctor's registered-key Desktop Session and DPoP contracts.",
-      "privacy_review": {"status": "approved", "basis": "Contains generic protocol inputs and verification labels only; no key, credential, nonce, proof, User, Session, Institution, request, or operational data."},
-      "alt": "Desktop keeps its P-256 private key, access and refresh credentials, and current nonce. It signs a new proof for every request over the exact method, canonical target URI, access hash, issue time, unique identifier, and nonce. The server validates all bindings and replay state before establishing a registered-key principal. A nonce challenge requires storing the replacement and signing a completely new proof.",
-      "caption": "DPoP proves possession for this exact request; it is not an authorization decision. A nonce challenge replaces the nonce and the rejected proof is never replayed.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-30",
-      "visual_review": {
-        "status": "approved",
-        "source_sha256": "112db31ef2a14c261ace661679638de643aeddc7806f9ce31af25fc488216811",
-        "reviewed": "2026-08-30",
-        "method": "Full-size deterministic SVG render and in-page browser geometry review at 1200x720, 1440x1024, and 390x844 in light and dark site themes.",
-        "checks": ["text_containment", "connector_continuity", "rendered_legibility", "narrow_viewport", "print_contrast"],
-        "viewports": [{"name": "desktop", "width": 1440, "height": 1024}, {"name": "mobile", "width": 390, "height": 844}]
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
       },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "Proctor Desktop sends each request with its credential and a newly signed proof. The server runs five checks in order, and only then treats the request as coming from a known person and Desktop Registration, which is not yet permission.",
+      "caption": "Every Desktop request needs a fresh proof signed with the registered key, and any failed check stops it.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
       "review_triggers": [
         ".agents/skills/identity-and-access/references/identity.md",
         "server/app/identity/dpop.go",
         "server/httpapi/authentication.go",
         "server/openapi/fragments/authentication/auth-desktop.yaml"
-      ]
+      ],
+      "visual_review": {
+        "status": "approved",
+        "source_sha256": "9068c91013029fe57054a72d73db95a5876f0428f1eb569cbf286660634d01cc",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
+        "checks": [
+          "text_containment",
+          "connector_continuity",
+          "rendered_legibility",
+          "narrow_viewport",
+          "print_contrast"
+        ],
+        "viewports": [
+          {
+            "name": "desktop",
+            "width": 1440,
+            "height": 1024
+          },
+          {
+            "name": "mobile",
+            "width": 390,
+            "height": 844
+          }
+        ]
+      }
     },
     {
       "id": "invitation-lifecycle",
-      "path": "static/assets/diagrams/invitation-lifecycle.svg",
-      "public_path": "/assets/diagrams/invitation-lifecycle.svg",
       "kind": "diagram",
+      "source": "diagrams/invitation-lifecycle.yaml",
       "owner": "Proctor documentation maintainers",
-      "license": {"status": "pending", "expression": null, "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."},
-      "provenance": "Original deterministic SVG authored from Proctor's Invitation aggregate, browser-acceptance, and transactional-mail contracts.",
-      "privacy_review": {"status": "approved", "basis": "Contains generic lifecycle and delivery labels only; no recipient, claim, User, target, Role, mail address, delivery, or operational data."},
-      "alt": "Issuing freezes one immutable purpose package in pending state. Acceptance atomically commits every package effect; replacement creates a new Invitation and supersedes the old one; revocation invalidates the exact Invitation; and PostgreSQL time expires it. Resend keeps the package but rotates the claim and deadline. Mail remains a separate delivery record and never overrides terminal Invitation state.",
-      "caption": "The package and delivery have separate lifecycles. Resend rotates the disposable claim; every terminal transition remains durable and makes old mail harmless.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-30",
-      "visual_review": {
-        "status": "approved",
-        "source_sha256": "db1c0e1669ee7b07fc52276f4cb75c2d0dc4288b5650650fef450d3b23c1a4fb",
-        "reviewed": "2026-08-30",
-        "method": "Full-size deterministic SVG render and in-page browser geometry review at 1200x720, 1440x1024, and 390x844 in light and dark site themes.",
-        "checks": ["text_containment", "connector_continuity", "rendered_legibility", "narrow_viewport", "print_contrast"],
-        "viewports": [{"name": "desktop", "width": 1440, "height": 1024}, {"name": "mobile", "width": 390, "height": 844}]
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
       },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "Create leads to Pending, which ends in one of four final outcomes: Accepted, Replaced, Revoked or Expired. Resending gives a new link and deadline. Mail is tracked separately and cannot reopen a finished Invitation.",
+      "caption": "An Invitation waits in Pending until it is accepted, replaced, revoked or expires.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
       "review_triggers": [
         ".agents/skills/identity-and-access/references/access-and-onboarding.md",
         "server/model/invitation.go",
         "server/app/onboarding/invitation.go",
         "server/openapi/fragments/invitations-and-onboarding/shared.yaml"
-      ]
+      ],
+      "visual_review": {
+        "status": "approved",
+        "source_sha256": "d44d93d484f231e4622b8e82751c7c518bac9766ce17cd23965e45692d39e26b",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
+        "checks": [
+          "text_containment",
+          "connector_continuity",
+          "rendered_legibility",
+          "narrow_viewport",
+          "print_contrast"
+        ],
+        "viewports": [
+          {
+            "name": "desktop",
+            "width": 1440,
+            "height": 1024
+          },
+          {
+            "name": "mobile",
+            "width": 390,
+            "height": 844
+          }
+        ]
+      }
     },
     {
       "id": "onboarding-import-timeline",
-      "path": "static/assets/diagrams/onboarding-import-timeline.svg",
-      "public_path": "/assets/diagrams/onboarding-import-timeline.svg",
       "kind": "diagram",
+      "source": "diagrams/onboarding-import-timeline.yaml",
       "owner": "Proctor documentation maintainers",
-      "license": {"status": "pending", "expression": null, "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."},
-      "provenance": "Original deterministic SVG authored from Proctor's onboarding import, durable Job, row-atomicity, cancellation, and report contracts.",
-      "privacy_review": {"status": "approved", "basis": "Contains generic workflow stages, limits, and outcome classes only; no CSV row, recipient, User, target, Role, credential, report, or operational data."},
-      "alt": "A bounded CSV upload creates a validation Job without domain mutation. Validation resolves each row, deletes original bytes, and freezes a digest and normalized outcomes. Explicit commit chooses require-all-valid or valid-rows-only. The execution Job reauthorizes and commits each row independently. Cancellation stops new rows, while the retained formula-safe report records successes, no-ops, created IDs, and public errors.",
-      "caption": "Validation creates evidence, not effects. Explicit commit starts row-independent mutations, so cancellation and failure retain earlier successes for deliberate compensation.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-30",
-      "visual_review": {
-        "status": "approved",
-        "source_sha256": "df99c5f9c16ae659e22322bdaefb70e10041849912adea2ab90a9db941f71bb5",
-        "reviewed": "2026-08-30",
-        "method": "Full-size deterministic SVG render and in-page browser geometry review at 1200x720, 1440x1024, and 390x844 in light and dark site themes.",
-        "checks": ["text_containment", "connector_continuity", "rendered_legibility", "narrow_viewport", "print_contrast"],
-        "viewports": [{"name": "desktop", "width": 1440, "height": 1024}, {"name": "mobile", "width": 390, "height": 844}]
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
       },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "A CSV import moves through upload, validation and a saved preview that can't change, then a commit you choose, a run that checks and commits each row on its own, and a kept report. Nothing changes before the commit.",
+      "caption": "Nothing changes until you commit a preview you have reviewed.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
       "review_triggers": [
         ".agents/skills/identity-and-access/references/access-and-onboarding.md",
         "server/app/onboarding/import.go",
@@ -244,103 +291,118 @@
         "server/app/onboarding/student_progression.go",
         "server/app/onboarding/student_progression_preview.go",
         "server/openapi/fragments/invitations-and-onboarding/onboarding-imports.yaml"
-      ]
+      ],
+      "visual_review": {
+        "status": "approved",
+        "source_sha256": "25be81edcdf6156575c6e972b2fa22833f21cbfa97e349e8f2e4f34b8a4eb4a2",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
+        "checks": [
+          "text_containment",
+          "connector_continuity",
+          "rendered_legibility",
+          "narrow_viewport",
+          "print_contrast"
+        ],
+        "viewports": [
+          {
+            "name": "desktop",
+            "width": 1440,
+            "height": 1024
+          },
+          {
+            "name": "mobile",
+            "width": 390,
+            "height": 844
+          }
+        ]
+      }
     },
     {
       "id": "sitting-lifecycle-controls",
-      "path": "static/assets/diagrams/sitting-lifecycle-controls.svg",
-      "public_path": "/assets/diagrams/sitting-lifecycle-controls.svg",
       "kind": "diagram",
+      "source": "diagrams/sitting-lifecycle-controls.yaml",
       "owner": "Proctor documentation maintainers",
-      "license": {"status": "pending", "expression": null, "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."},
-      "provenance": "Original deterministic SVG authored from Proctor's Sitting, Attempt-control, deadline, and bounded-sealing contracts.",
-      "privacy_review": {"status": "approved", "basis": "Contains canonical lifecycle state and action labels only; no Exam, Sitting, Class, User, Attempt, schedule, reason, evidence, or operational data."},
-      "alt": "A Sitting moves from Scheduled to Open, then Closing and Closed; Scheduled may instead become Canceled. Open may pause and resume without moving its deadline, and Open or Paused may enter Closing through early close or scheduled deadline. Closing seals unfinished created Attempts. Sitting controls change delivery or lifecycle, while Kick, Suspension, re-allow, and manager end act on one Attempt with distinct provenance.",
-      "caption": "Pause is not Suspension, cancel is not close, and Closing is recoverable work before Closed. Attempt controls preserve one candidate's separate provenance without changing the whole Sitting.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-30",
-      "visual_review": {
-        "status": "approved",
-        "source_sha256": "b85ae880eb61bf3336b2dfdbbc62779cab6e770251a8f060820103beab60b9de",
-        "reviewed": "2026-08-30",
-        "method": "Full-size deterministic SVG render and in-page browser geometry review at 1200x720, 1440x1024, and 390x844 in light and dark site themes.",
-        "checks": ["text_containment", "connector_continuity", "rendered_legibility", "narrow_viewport", "print_contrast"],
-        "viewports": [{"name": "desktop", "width": 1440, "height": 1024}, {"name": "mobile", "width": 390, "height": 844}]
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
       },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "A Sitting moves from Scheduled to Open, then Closing and Closed. Scheduled can instead be canceled, and Open can pause and resume. Below, Sitting controls that change the whole Sitting sit beside Attempt controls that change one Attempt.",
+      "caption": "Pause isn't Suspension and cancel isn't close; Closing is work that seals unfinished Attempts, and Attempt controls act on one candidate only.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
       "review_triggers": [
         ".agents/skills/exam-lifecycle/references/examinations.md",
         "server/app/exam/sitting/lifecycle.go",
         "server/app/exam/sitting/system_lifecycle.go",
         "server/openapi/fragments/sittings/shared.yaml",
         "server/openapi/fragments/attempts-and-workspaces/exams-sittings-attempts.yaml"
-      ]
+      ],
+      "visual_review": {
+        "status": "approved",
+        "source_sha256": "78d82b65bc3098c0ed2db82b146ae1805368b2c3b09f8feb057ba1626b5cb67e",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
+        "checks": [
+          "text_containment",
+          "connector_continuity",
+          "rendered_legibility",
+          "narrow_viewport",
+          "print_contrast"
+        ],
+        "viewports": [
+          {
+            "name": "desktop",
+            "width": 1440,
+            "height": 1024
+          },
+          {
+            "name": "mobile",
+            "width": 390,
+            "height": 844
+          }
+        ]
+      }
     },
     {
       "id": "correction-acknowledgement-sequence",
-      "path": "static/assets/diagrams/correction-acknowledgement-sequence.svg",
-      "public_path": "/assets/diagrams/correction-acknowledgement-sequence.svg",
       "kind": "diagram",
+      "source": "diagrams/correction-acknowledgement-sequence.yaml",
       "owner": "Proctor documentation maintainers",
-      "license": {"status": "pending", "expression": null, "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."},
-      "provenance": "Original deterministic SVG authored from Proctor's live-correction staging, Revision, candidate-notice, acknowledgement, and runtime-capability contracts.",
-      "privacy_review": {"status": "approved", "basis": "Contains generic workflow stages and capability classes only; no Exam content, Resource, policy, Sitting, Attempt, candidate, reason, credential, or operational data."},
-      "alt": "A Manager stages purpose-bound Resource bytes, then applies one complete manifest for instructions, Resources, Browser Policy, and candidate-safe notice. Commit creates a new immutable Revision and retargets only the affected Sitting. Candidates see ordered notices. Required acknowledgement blocks Workspace writes, governed Browser, and voluntary submission while reads, renewal, activity reporting, and acknowledgement continue. Committing acknowledgement restores capability according to current state.",
-      "caption": "Staged bytes remain invisible until one correction command creates an immutable Revision. Required acknowledgement is Attempt-owned and blocks selected capabilities without interrupting secure continuity.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-09-12",
-      "visual_review": {
-        "status": "approved",
-        "source_sha256": "79462b22ad6b1ab57659d686c0567142e89739e3eff91e2b10b3069922d64bfd",
-        "reviewed": "2026-09-12",
-        "method": "Chromium inspection of exact SVG bytes at full 1200x720 size and in built documentation pages at 1440x1024 and 390x844, plus print media. Reviewed text containment, arrow endpoints, desktop labels, mobile overview and full-size link, and print structure; page scroll widths match both viewports.",
-        "checks": ["text_containment", "connector_continuity", "rendered_legibility", "narrow_viewport", "print_contrast"],
-        "viewports": [{"name": "desktop", "width": 1440, "height": 1024}, {"name": "mobile", "width": 390, "height": 844}]
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
       },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "A Manager stages files, applies one complete correction, and a new Revision is created for this Sitting only; candidates then see notices in order. If acknowledgement is required, some actions are blocked while others still work, until the candidate acknowledges.",
+      "caption": "A correction makes a new Revision for one Sitting, and a required acknowledgement pauses only some actions until the candidate accepts it.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
       "review_triggers": [
         ".agents/skills/exam-lifecycle/references/examinations.md",
         "server/app/exam/correction/apply.go",
         "server/app/exam/correction/resource_stage.go",
         "server/openapi/fragments/sittings/exams-sittings-corrections.yaml",
         "server/openapi/fragments/attempts-and-workspaces/exam-attempts-presentation.yaml"
-      ]
-    },
-    {
-      "id": "academic-structure-ownership-map",
-      "path": "static/assets/diagrams/academic-structure-ownership-map.svg",
-      "public_path": "/assets/diagrams/academic-structure-ownership-map.svg",
-      "kind": "diagram",
-      "owner": "Proctor documentation maintainers",
-      "license": {
-        "status": "pending",
-        "expression": null,
-        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
-      },
-      "provenance": "Original deterministic SVG authored from Proctor's canonical academic-structure and authorization contracts.",
-      "privacy_review": {
-        "status": "approved",
-        "basis": "Contains canonical domain labels and generic relationship descriptions only; no Institution, Academic Unit, Programme, Class, User, enrollment, or operational data."
-      },
-      "alt": "One Institution owns a hierarchy of Academic Units. Each Academic Unit may own child units and Programmes; each Programme owns Programme Levels; and each Class is one concrete roster under a Programme Level. Academic Periods may be Institution-owned and apply everywhere, or Academic-Unit-owned and apply to that unit and its descendants. Every Class explicitly names exactly one Academic Period applicable to its Programme's Academic Unit.",
-      "caption": "Academic Units may recurse, but Programme, Programme Level, and Class ownership is singular. A Class explicitly names one applicable Institution- or Academic-Unit-owned Period; Proctor never infers a global current Period.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-24",
+      ],
       "visual_review": {
         "status": "approved",
-        "source_sha256": "b4d83ffc3e6920c9c248b051353f2241330193e56f2eb469402436aa3db32d86",
-        "reviewed": "2026-08-24",
-        "method": "Full-size SVG and in-page browser geometry review at 1200x720, 1440x1024, and 390x844 in light and dark site themes.",
+        "source_sha256": "36082e571e570368adb5601b782481eb7c912ce041688b6f4c51c4fe1690dc3d",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
         "checks": [
           "text_containment",
           "connector_continuity",
@@ -360,43 +422,39 @@
             "height": 844
           }
         ]
+      }
+    },
+    {
+      "id": "academic-structure-ownership-map",
+      "kind": "diagram",
+      "source": "diagrams/academic-structure-ownership-map.yaml",
+      "owner": "Proctor documentation maintainers",
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
       },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "The Institution owns Academic Units, which own Programmes, which own Programme Levels, which own Classes. Academic Periods are owned by the Institution or a Unit, and each Class names exactly one Period.",
+      "caption": "Everything has one owner, and every Class names exactly one Academic Period; Proctor never guesses a current one.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
       "review_triggers": [
         ".agents/skills/glossary/SKILL.md",
         ".agents/skills/academic-structure/SKILL.md",
         ".agents/skills/authorization-audit/references/authorization.md",
         "docs/api/recipes/academic-structure.mdx"
-      ]
-    },
-    {
-      "id": "exam-publication-delivery-lifecycle",
-      "path": "static/assets/diagrams/exam-publication-delivery-lifecycle.svg",
-      "public_path": "/assets/diagrams/exam-publication-delivery-lifecycle.svg",
-      "kind": "diagram",
-      "owner": "Proctor documentation maintainers",
-      "license": {
-        "status": "pending",
-        "expression": null,
-        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
-      },
-      "provenance": "Original deterministic SVG authored from Proctor's canonical Exam authoring, publication, Sitting, Attempt, and Submission contracts.",
-      "privacy_review": {
-        "status": "approved",
-        "basis": "Contains canonical examination states and generic relationship descriptions only; no Exam, Class, User, Attempt, Submission, schedule, reason, answer, or operational data."
-      },
-      "alt": "An Exam owns one mutable revision-fenced Draft. Publishing freezes title, typed policies, ordered Resources, Starter Workspace, capacity limits, and digests into an immutable numbered Revision before a Sitting selects it with one Class and time window. A live correction creates a new Revision for one Sitting and can change only instructions, Resources, and Browser Policy. An Attempt ends in one final Submission.",
-      "caption": "Publishing separates mutable authoring from immutable delivery and freezes every protected input. Live correction is a new immutable Revision for one Sitting, while submission and automatic closure converge on one final result.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-09-12",
+      ],
       "visual_review": {
         "status": "approved",
-        "source_sha256": "2a42d372407bc9aa1ffa2e6529f499a8ca614b01cdd5b71828123b9f6ec54b72",
-        "reviewed": "2026-09-12",
-        "method": "Chromium inspection of exact SVG bytes at full 1200x720 size and in built documentation pages at 1440x1024 and 390x844, plus print media. Reviewed text containment, arrow endpoints, desktop labels, mobile overview and full-size link, and print structure; page scroll widths match both viewports.",
+        "source_sha256": "7dfe154081e917a2be037b2aff39a0a6a88affb0d62e41d0311e7b175853fa06",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
         "checks": [
           "text_containment",
           "connector_continuity",
@@ -416,44 +474,40 @@
             "height": 844
           }
         ]
+      }
+    },
+    {
+      "id": "exam-publication-delivery-lifecycle",
+      "kind": "diagram",
+      "source": "diagrams/exam-publication-delivery-lifecycle.yaml",
+      "owner": "Proctor documentation maintainers",
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
       },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "An Exam has one Draft, and publishing it creates a numbered Revision that can't change. A Sitting delivers one Revision to one Class, each student gets one Attempt, and each Attempt ends in one Submission.",
+      "caption": "Only the Draft changes; publishing creates a Revision that can't change, and every Sitting delivers one Revision to one Class.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
       "review_triggers": [
         ".agents/skills/glossary/SKILL.md",
         ".agents/skills/exam-lifecycle/references/examinations.md",
         "docs/api/recipes/author-and-publish-exam.mdx",
         "docs/api/recipes/manage-sitting.mdx",
         "docs/api/recipes/candidate-attempt.mdx"
-      ]
-    },
-    {
-      "id": "developer-repository-boundaries",
-      "path": "static/assets/diagrams/developer-repository-boundaries.svg",
-      "public_path": "/assets/diagrams/developer-repository-boundaries.svg",
-      "kind": "diagram",
-      "owner": "Proctor documentation maintainers",
-      "license": {
-        "status": "pending",
-        "expression": null,
-        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
-      },
-      "provenance": "Original deterministic SVG authored from Proctor's module contracts and server dependency reference; Mattermost artwork and expression were not copied.",
-      "privacy_review": {
-        "status": "approved",
-        "basis": "Contains repository module and responsibility labels only; no Institution, User, Exam, credential, hostname, local filesystem path, or operational data."
-      },
-      "alt": "The root Go workspace references four independently verified modules. The server module contains transport, application, domain, and Store contract boundaries and consumes the portable cache, mail, and VFS modules. The workspace assists repository development but every module must still pass test, race, vet, and build checks with workspace assistance disabled.",
-      "caption": "The root workspace joins development without erasing module boundaries. Server policy points inward, portable packages expose Proctor-independent contracts, and every Go module remains independently verifiable.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-27",
+      ],
       "visual_review": {
         "status": "approved",
-        "source_sha256": "a51c1244f47814222095af80cac51d05d57b539b60f03b1a56dd16e9eeed035f",
-        "reviewed": "2026-08-27",
-        "method": "Full-size SVG and in-page browser geometry review at 1200x720, 1440x1024, and 390x844 in light and dark site themes.",
+        "source_sha256": "ec50f3945f2de62ce2533a73089375d75e7b8dce69c4025065042e42a262dd96",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
         "checks": [
           "text_containment",
           "connector_continuity",
@@ -473,44 +527,40 @@
             "height": 844
           }
         ]
+      }
+    },
+    {
+      "id": "developer-repository-boundaries",
+      "kind": "diagram",
+      "source": "diagrams/developer-repository-boundaries.yaml",
+      "owner": "Proctor documentation maintainers",
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
       },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "The server module, which holds HTTP, WebSocket and Jobs over use cases, domain rules and Store contracts, uses three portable packages: Cache, Mail and VFS. Each package lists what it leaves out. A note says the root go.work only joins the modules for local work, and each module still passes its checks with GOWORK=off.",
+      "caption": "The server uses portable cache, mail and file packages, and every Go module still builds and tests on its own without the workspace.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
       "review_triggers": [
         "go.work",
         ".agents/skills/server-boundaries/references/dependencies.md",
         "packages/cache/README.md",
         "packages/mail/README.md",
         "packages/vfs/README.md"
-      ]
-    },
-    {
-      "id": "developer-local-runtime",
-      "path": "static/assets/diagrams/developer-local-runtime.svg",
-      "public_path": "/assets/diagrams/developer-local-runtime.svg",
-      "kind": "diagram",
-      "owner": "Proctor documentation maintainers",
-      "license": {
-        "status": "pending",
-        "expression": null,
-        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
-      },
-      "provenance": "Original deterministic SVG authored from Proctor's tracked root development lifecycle, build defaults, and runtime contracts; Mattermost artwork and expression were not copied.",
-      "privacy_review": {
-        "status": "approved",
-        "basis": "Contains generic developer service names and documented loopback ports only; no Institution, User, Exam, credential, external hostname, local filesystem path, or operational data."
-      },
-      "alt": "The root Makefile owns the local development lifecycle. Its optional Vite process proxies browser API and WebSocket traffic to the foreground Proctor server. The server uses health-checked PostgreSQL, Redis, MinIO, and Mailpit services. Prometheus, Grafana, Loki, and the OpenTelemetry Collector are reconstructible diagnostic services, while generated configuration, secrets, and logs remain under ignored build state.",
-      "caption": "The root Makefile owns one reproducible local lifecycle: the server remains foreground-visible, dependencies are health-checked, observability is reconstructible, and generated secrets and state remain ignored outputs.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-27",
+      ],
       "visual_review": {
         "status": "approved",
-        "source_sha256": "b57715815ce370c24dc7d5d5d0e77fa1679abe84f579a5400d9cc99e4657296f",
-        "reviewed": "2026-08-27",
-        "method": "Full-size SVG and in-page browser geometry review at 1200x720, 1440x1024, and 390x844 in light and dark site themes.",
+        "source_sha256": "bea4c330af560ef296142c5885315424de0ce65443984e5b9b53cfb2d970d371",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
         "checks": [
           "text_containment",
           "connector_continuity",
@@ -530,43 +580,39 @@
             "height": 844
           }
         ]
+      }
+    },
+    {
+      "id": "developer-local-runtime",
+      "kind": "diagram",
+      "source": "diagrams/developer-local-runtime.yaml",
+      "owner": "Proctor documentation maintainers",
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
       },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "The root Makefile starts the Proctor server in the foreground on port 8065, and optionally Vite on port 5173, which passes API and WebSocket traffic to the server. The server uses health-checked PostgreSQL, Redis, MinIO and Mailpit, and reports to Prometheus, Grafana, Loki and the OpenTelemetry Collector, which are safe to lose and rebuild. Generated secrets, logs and seed files stay in the ignored .build/dev folder.",
+      "caption": "One Makefile starts the whole local stack; observability can be rebuilt, and generated secrets and state stay out of the repository.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
       "review_triggers": [
         "build/README.md",
         "build/make/config.mk",
         "build/make/dev.mk",
         "webapp/README.md"
-      ]
-    },
-    {
-      "id": "developer-request-diagnostic-path",
-      "path": "static/assets/diagrams/developer-request-diagnostic-path.svg",
-      "public_path": "/assets/diagrams/developer-request-diagnostic-path.svg",
-      "kind": "diagram",
-      "owner": "Proctor documentation maintainers",
-      "license": {
-        "status": "pending",
-        "expression": null,
-        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
-      },
-      "provenance": "Original deterministic SVG authored from Proctor's HTTP transport, application, persistence, runtime, and post-commit effect contracts; no upstream artwork or expression was copied.",
-      "privacy_review": {
-        "status": "approved",
-        "basis": "Contains generic request-boundary labels and safe evidence categories only; no Institution, User, Exam, credential, request, hostname, filesystem path, or operational data."
-      },
-      "alt": "A client request passes through the HTTP transport boundary and the owning application use case before PostgreSQL commits authoritative state, audit, and durable Job or mail intent. Cache, cluster, WebSocket, and SMTP effects follow the commit and are reconstructible or best effort. Problem Details and a request ID identify transport failures, durable records prove the committed outcome, and metrics or bounded logs explain effect delivery.",
-      "caption": "Diagnose the first unproven owner in order. Response evidence explains rejection, durable records prove the PostgreSQL outcome, and metrics or bounded logs explain post-commit delivery without overriding that outcome.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-27",
+      ],
       "visual_review": {
         "status": "approved",
-        "source_sha256": "2c054ba9d486291ffc8a5537794b43aa0844fd2c972e1077fc2bed32b4e9d181",
-        "reviewed": "2026-08-27",
-        "method": "Full-size SVG and in-page browser geometry review at 1200x720, 1440x1024, and 390x844 in light and dark site themes.",
+        "source_sha256": "4b00e10165f2ba83cbe507103e360abf7913c871f6568f76961d3abc25b780cc",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
         "checks": [
           "text_containment",
           "connector_continuity",
@@ -586,7 +632,28 @@
             "height": 844
           }
         ]
+      }
+    },
+    {
+      "id": "developer-request-diagnostic-path",
+      "kind": "diagram",
+      "source": "diagrams/developer-request-diagnostic-path.yaml",
+      "owner": "Proctor documentation maintainers",
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
       },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "A request passes the HTTP layer, the owning use case and PostgreSQL, and effects such as cache, cluster, WebSocket and SMTP follow only after the commit. Below, the response explains a rejection by the HTTP layer or use case, saved records prove what PostgreSQL committed, and metrics and logs explain effect delivery.",
+      "caption": "Check each part in order and stop at the first you can’t prove; a failed effect never undoes what PostgreSQL saved.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
       "review_triggers": [
         ".agents/skills/http-api/references/transport.md",
         ".agents/skills/server-boundaries/references/application.md",
@@ -594,37 +661,12 @@
         "server/httpapi/CONTRACT.md",
         "server/httpapi/route/problem.go",
         "server/metrics/module.go"
-      ]
-    },
-    {
-      "id": "developer-user-settings-vertical-slice",
-      "path": "static/assets/diagrams/developer-user-settings-vertical-slice.svg",
-      "public_path": "/assets/diagrams/developer-user-settings-vertical-slice.svg",
-      "kind": "diagram",
-      "owner": "Proctor documentation maintainers",
-      "license": {
-        "status": "pending",
-        "expression": null,
-        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
-      },
-      "provenance": "Original deterministic SVG authored from the implemented Proctor User Settings model, application, Store, PostgreSQL, HTTP, OpenAPI, and realtime contracts; no upstream artwork or expression was copied.",
-      "privacy_review": {
-        "status": "approved",
-        "basis": "Contains generic boundary labels and the public operation purpose only; no User, Session, settings source, credential, Institution, request, hostname, filesystem path, or operational data."
-      },
-      "alt": "A Session-authenticated User Settings replacement passes from strict HTTP decoding to the owning self-service application use case, which refers to the domain model and prepares audit and idempotency before calling a named Store replacement. PostgreSQL locks the current document and commits the source, audit, and replay outcome before a best-effort realtime refetch hint is published.",
-      "caption": "Each boundary owns one part of the replacement. PostgreSQL makes the source, audit, and replay outcome authoritative; realtime publishes only a post-commit refetch hint and never the settings source.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-27",
+      ],
       "visual_review": {
         "status": "approved",
-        "source_sha256": "7e9b09ea0aba09a7300384a5440b92ffafd419e91633553728c11e91ec29d7b6",
-        "reviewed": "2026-08-27",
-        "method": "Full-size SVG and in-page browser geometry review at 1200x720, 1440x1024, and 390x844 in light and dark site themes.",
+        "source_sha256": "d6363ea8b59800b96df1910954c7f23547c46dc279b39327398b73a56eb3ab13",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
         "checks": [
           "text_containment",
           "connector_continuity",
@@ -644,7 +686,28 @@
             "height": 844
           }
         ]
+      }
+    },
+    {
+      "id": "developer-user-settings-vertical-slice",
+      "kind": "diagram",
+      "source": "diagrams/developer-user-settings-vertical-slice.yaml",
+      "owner": "Proctor documentation maintainers",
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
       },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "A settings replacement passes from the HTTP resource to the use case, which checks with the domain model, then to a named Store replace and to PostgreSQL, which locks the row and saves the source, audit and replay result together. After the commit, a realtime hint tells clients to refetch without carrying the settings.",
+      "caption": "Each part owns one decision in the settings replacement, and only the PostgreSQL commit decides; the realtime hint follows and never carries the settings.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
       "review_triggers": [
         "server/model/user_settings.go",
         "server/app/user/settings.go",
@@ -652,37 +715,12 @@
         "server/store/sqlstore/user_settings_store.go",
         "server/httpapi/user_settings.go",
         "server/openapi/fragments/users/users-settings.yaml"
-      ]
-    },
-    {
-      "id": "developer-webapp-feature-ownership",
-      "path": "static/assets/diagrams/developer-webapp-feature-ownership.svg",
-      "public_path": "/assets/diagrams/developer-webapp-feature-ownership.svg",
-      "kind": "diagram",
-      "owner": "Proctor documentation maintainers",
-      "license": {
-        "status": "pending",
-        "expression": null,
-        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
-      },
-      "provenance": "Original deterministic SVG authored from Proctor's hosted-route, OpenAPI, localization, design-system, feature, and component contracts; no upstream artwork or expression was copied.",
-      "privacy_review": {
-        "status": "approved",
-        "basis": "Contains repository boundary and generated-adapter labels only; no Institution, User, credential, request, hostname, filesystem path, or operational data."
-      },
-      "alt": "Four human-owned sources define hosted route membership, HTTP shapes, visible messages, and visual meaning. Their generated browser adapters feed the hosted-route root, feature action and state machine, and contracted shared components that compose one page without duplicating those authorities.",
-      "caption": "A hosted feature composes generated projections of reviewed sources. The page owns interaction state; it does not become another authority for routes, HTTP, language, or visual meaning.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 12000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-27",
+      ],
       "visual_review": {
         "status": "approved",
-        "source_sha256": "6b65f47d153f6c4bcc678fa3ebf2223eb9f5512c414412c6f4fa64930f1d6654",
-        "reviewed": "2026-08-27",
-        "method": "Full-size SVG and in-page browser geometry review at 1200x720, 1440x1024, and 390x844 in light and dark site themes.",
+        "source_sha256": "50ede35b11c36c5c18dd24e4d284fc4cb039f4f93813b9ef4fcb22a71ab7e964",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
         "checks": [
           "text_containment",
           "connector_continuity",
@@ -702,7 +740,28 @@
             "height": 844
           }
         ]
+      }
+    },
+    {
+      "id": "developer-webapp-feature-ownership",
+      "kind": "diagram",
+      "source": "diagrams/developer-webapp-feature-ownership.yaml",
+      "owner": "Proctor documentation maintainers",
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
       },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "Four sources written by people, the route catalog, OpenAPI YAML, the i18n catalog and the visual system, generate browser files: routes.ts, schema.ts, messages.ts, and tokens and icons. The route root, the feature and shared components use them to build a page.",
+      "caption": "A feature builds its page from generated copies of reviewed sources and never becomes another source for routes, HTTP shapes, messages or styles.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
       "review_triggers": [
         "server/webui/hosted_routes.json",
         "server/openapi/base.yaml",
@@ -710,37 +769,12 @@
         "webapp/DESIGN_SYSTEM.md",
         "webapp/src/app/HostedRoutes.tsx",
         "webapp/src/app/CONTRACT.md"
-      ]
-    },
-    {
-      "id": "developer-password-reset-browser-flow",
-      "path": "static/assets/diagrams/developer-password-reset-browser-flow.svg",
-      "public_path": "/assets/diagrams/developer-password-reset-browser-flow.svg",
-      "kind": "diagram",
-      "owner": "Proctor documentation maintainers",
-      "license": {
-        "status": "pending",
-        "expression": null,
-        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
-      },
-      "provenance": "Original deterministic SVG authored from the implemented Proctor password-reset bootstrap, API action, form state, focus, and recovery contracts; no upstream artwork or expression was copied.",
-      "privacy_review": {
-        "status": "approved",
-        "basis": "Uses a masked fragment example and generic outcome labels only; no real credential, User, Institution, email address, request, hostname, or operational data."
-      },
-      "alt": "A password-reset credential arrives in a masked URL fragment. The root removes the complete fragment before parsing one purpose-specific token. The ready form keeps that token out of rendering and storage, then posts only the token and password. A bounded result mapper selects complete, unusable, or retryable behavior with distinct clearing, focus, and recovery rules.",
-      "caption": "Credential sanitation happens before rendering. The feature then maps one bounded HTTP result into the exact terminal or recoverable state that owns the next focus and secret-lifetime decision.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 12000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-27",
+      ],
       "visual_review": {
         "status": "approved",
-        "source_sha256": "f9b7e3e018f86bb714fdfdb029623524ca79e442d724fb72e10062bac0f4a267",
-        "reviewed": "2026-08-27",
-        "method": "Full-size SVG and in-page browser geometry review at 1200x720, 1440x1024, and 390x844 in light and dark site themes.",
+        "source_sha256": "22b73d34b224f3d75dddb5fc1acc8252c4262cd2f43126b3b539ee1bed4960ea",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
         "checks": [
           "text_containment",
           "connector_continuity",
@@ -760,7 +794,28 @@
             "height": 844
           }
         ]
+      }
+    },
+    {
+      "id": "developer-password-reset-browser-flow",
+      "kind": "diagram",
+      "source": "diagrams/developer-password-reset-browser-flow.yaml",
+      "owner": "Proctor documentation maintainers",
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
       },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "The reset link carries a token in the URL fragment. The root removes the whole fragment from history before reading one token, the ready form keeps it out of the page and storage, and the form posts only the token and password. The result leads to complete, unusable link or try again, each with its own clearing and focus rules.",
+      "caption": "The token leaves the URL before anything renders, and each result clears, focuses and recovers in its own way.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
       "review_triggers": [
         "webapp/src/app/HostedRoutes.tsx",
         "webapp/src/auth/fragments.ts",
@@ -768,37 +823,12 @@
         "webapp/src/features/reset-password/ResetPasswordApi.ts",
         "webapp/src/components/PasswordRecovery/ResetPasswordContent.tsx",
         "server/openapi/fragments/authentication/auth-password-reset.yaml"
-      ]
-    },
-    {
-      "id": "developer-webapp-feedback-placement",
-      "path": "static/assets/diagrams/developer-webapp-feedback-placement.svg",
-      "public_path": "/assets/diagrams/developer-webapp-feedback-placement.svg",
-      "kind": "illustration",
-      "owner": "Proctor documentation maintainers",
-      "license": {
-        "status": "pending",
-        "expression": null,
-        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
-      },
-      "provenance": "Original deterministic SVG authored from Proctor's InputField, FormFeedback, and password-recovery contracts; no upstream artwork or expression was copied.",
-      "privacy_review": {
-        "status": "approved",
-        "basis": "Contains synthetic password-form labels and bounded failure examples only; no password value, User, Institution, email address, credential, request, or operational data."
-      },
-      "alt": "A side-by-side form comparison. The discouraged example shows a temporary detached toast and an invalid field identified only by its coral border. The accepted example places a specific error immediately below the invalid field and reserves a persistent general-feedback lane directly above an unchanged primary action.",
-      "caption": "Place evidence beside its cause: field guidance follows the field, general submission failure stays beside the action, and recoverable feedback does not unexpectedly move that action.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 10000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-27",
+      ],
       "visual_review": {
         "status": "approved",
-        "source_sha256": "89a8da80530b1a00b8e11c3d7d57eff48bb91b275eff11efe9eaf6a9eae6c376",
-        "reviewed": "2026-08-27",
-        "method": "Full-size SVG and in-page browser geometry review at 1200x720, 1440x1024, and 390x844 in light and dark site themes.",
+        "source_sha256": "1c5266973dd40de1f1a225015fd171afd88314ba641d3bb9664a5b5cc2bf4b95",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
         "checks": [
           "text_containment",
           "connector_continuity",
@@ -818,13 +848,59 @@
             "height": 844
           }
         ]
+      }
+    },
+    {
+      "id": "developer-webapp-feedback-placement",
+      "kind": "diagram",
+      "source": "diagrams/developer-webapp-feedback-placement.yaml",
+      "owner": "Proctor documentation maintainers",
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
       },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "Two password forms side by side. The one to avoid shows a disappearing toast away from the form, a field marked only by a red border, and no explanation beside the button. The one to follow puts guidance right below the field and keeps space above an unmoving button for the general failure.",
+      "caption": "Put field guidance under its field and a general failure beside the button, without moving the button.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
       "review_triggers": [
         "webapp/src/components/InputField/CONTRACT.md",
         "webapp/src/components/FormFeedback/CONTRACT.md",
         "webapp/src/components/PasswordRecovery/ResetPasswordContent.tsx",
         "webapp/src/components/PasswordRecovery/PasswordRecovery.module.css"
-      ]
+      ],
+      "visual_review": {
+        "status": "approved",
+        "source_sha256": "e8d8f3829dcadb78c1cd77c86ce5448bf0925e22b76e3e1981615e33d5e40e49",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
+        "checks": [
+          "text_containment",
+          "connector_continuity",
+          "rendered_legibility",
+          "narrow_viewport",
+          "print_contrast"
+        ],
+        "viewports": [
+          {
+            "name": "desktop",
+            "width": 1440,
+            "height": 1024
+          },
+          {
+            "name": "mobile",
+            "width": 390,
+            "height": 844
+          }
+        ]
+      }
     },
     {
       "id": "developer-password-reset-form",
@@ -941,123 +1017,321 @@
     },
     {
       "id": "candidate-trust-chain",
-      "path": "static/assets/diagrams/candidate-trust-chain.svg",
-      "public_path": "/assets/diagrams/candidate-trust-chain.svg",
       "kind": "diagram",
+      "source": "diagrams/candidate-trust-chain.yaml",
       "owner": "Proctor documentation maintainers",
-      "license": {"status": "pending", "expression": null, "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."},
-      "provenance": "Original deterministic SVG authored from Proctor's registered-key Desktop Session, Participation, Connection, and protected Attempt request contracts.",
-      "privacy_review": {"status": "approved", "basis": "Contains generic trust-boundary and credential-class labels only; no key, credential, User, Session, Attempt, Institution, request, or operational data."},
-      "alt": "Candidate access forms an exact chain. A Desktop Registration binds the user and institution to a P-256 key. A DPoP-bound Desktop Session proves the registered client. Secure admission creates one current Participation generation with a hashed continuity credential and lease. One Attempt Connection operates beneath it. Every protected HTTP operation requires both the current DPoP Session selector and the current Attempt continuity, Connection, Participation, and generation fence.",
-      "caption": "Candidate access is a chain, not one bearer token. Authentication proves the registered client; current Sitting and Attempt state still decide every protected operation.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-30",
-      "visual_review": {"status": "approved", "source_sha256": "a5ca5b3cafa817aac98b4212b9c93785ddf9a4ffadc8974c5019cef51aff31e2", "reviewed": "2026-08-30", "method": "Exact SVG bytes inspected full-size in a browser and in-page at 1440x1024 and 390x844; responsive review confirmed containment, connector continuity, no horizontal overflow, and usable caption/full-size controls, while print-emulated element capture confirmed contrast and non-color meaning.", "checks": ["text_containment", "connector_continuity", "rendered_legibility", "narrow_viewport", "print_contrast"], "viewports": [{"name": "desktop", "width": 1440, "height": 1024}, {"name": "mobile", "width": 390, "height": 844}]},
-      "review_triggers": [".agents/skills/exam-lifecycle/references/examinations.md", ".agents/skills/identity-and-access/references/identity.md", "server/app/exam/attempt/candidate_access.go", "server/app/exam/attempt/connection.go", "server/httpapi/exam_attempt.go"]
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
+      },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "Four links in a chain: Desktop registration, Desktop session, Participation and Connection. Every exam request presents all four, and the Sitting and Attempt still decide whether it is allowed.",
+      "caption": "A candidate isn’t trusted on one token. Each link depends on the one before it.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
+      "review_triggers": [
+        ".agents/skills/exam-lifecycle/references/examinations.md",
+        ".agents/skills/identity-and-access/references/identity.md",
+        "server/app/exam/attempt/candidate_access.go",
+        "server/app/exam/attempt/connection.go",
+        "server/httpapi/exam_attempt.go"
+      ],
+      "visual_review": {
+        "status": "approved",
+        "source_sha256": "f025b7069bc01bdcd66afccf4315551997dc1661acf284605071b30020988079",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
+        "checks": [
+          "text_containment",
+          "connector_continuity",
+          "rendered_legibility",
+          "narrow_viewport",
+          "print_contrast"
+        ],
+        "viewports": [
+          {
+            "name": "desktop",
+            "width": 1440,
+            "height": 1024
+          },
+          {
+            "name": "mobile",
+            "width": 390,
+            "height": 844
+          }
+        ]
+      }
     },
     {
       "id": "participation-lease-timeline",
-      "path": "static/assets/diagrams/participation-lease-timeline.svg",
-      "public_path": "/assets/diagrams/participation-lease-timeline.svg",
       "kind": "diagram",
+      "source": "diagrams/participation-lease-timeline.yaml",
       "owner": "Proctor documentation maintainers",
-      "license": {"status": "pending", "expression": null, "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."},
-      "provenance": "Original deterministic SVG authored from Proctor's Participation lease, renewal, Connection Loss, Suspension, and re-allow contracts.",
-      "privacy_review": {"status": "approved", "basis": "Contains generic timeline, lifecycle, and signal labels only; no User, Attempt, Participation, credential, timestamp, evidence record, or operational data."},
-      "alt": "A Participation begins with generation one and one Connection. Monotonic authenticated renewal advances its database expiry. A brief reconnect before expiry may keep the generation. Once database time reaches expiry, renewal cannot revive it: the generation and Connection remain fenced, neutral Connection Loss evidence and one Flag are recorded, and the Attempt is suspended. Re-allow returns the Attempt to Ready so fresh admission can create generation two. Ping, renewal, and ordinary request failure remain distinct signals.",
-      "caption": "Continuity advances only through authenticated renewal. Database-time expiry is exclusive, permanently fences the generation, and requires manager re-allow before fresh admission.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-30",
-      "visual_review": {"status": "approved", "source_sha256": "44034fa48a2e4f1801fcd9abd9fa91a8e9810aec420678a0d752c0beaf071410", "reviewed": "2026-08-30", "method": "Exact SVG bytes inspected full-size in a browser and in-page at 1440x1024 and 390x844; responsive review confirmed containment, connector continuity, no horizontal overflow, and usable caption/full-size controls, while print-emulated element capture confirmed contrast and non-color meaning.", "checks": ["text_containment", "connector_continuity", "rendered_legibility", "narrow_viewport", "print_contrast"], "viewports": [{"name": "desktop", "width": 1440, "height": 1024}, {"name": "mobile", "width": 390, "height": 844}]},
-      "review_triggers": [".agents/skills/exam-lifecycle/references/examinations.md", "server/app/exam/attempt/participation_renewal.go", "server/app/exam/attempt/participation_expiry.go", "server/app/exam/attempt/reallow.go", "server/app/jobs/exam_attempt_expiry.go", "server/model/exam_attempt.go", "server/store/sqlstore/exam_attempt_store.go"]
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
+      },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "A timeline: admission, renewals, a quick reconnect, then the lease expires. Expiry leads to suspension, a Manager allowing the candidate back, and a new generation. Below, ping, renewal and a failed request are shown as three different signals.",
+      "caption": "Renewals keep a generation alive; once its lease expires it is shut off for good, and only a Manager can start a new one.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
+      "review_triggers": [
+        ".agents/skills/exam-lifecycle/references/examinations.md",
+        "server/app/exam/attempt/participation_renewal.go",
+        "server/app/exam/attempt/participation_expiry.go",
+        "server/app/exam/attempt/reallow.go",
+        "server/app/jobs/exam_attempt_expiry.go",
+        "server/model/exam_attempt.go",
+        "server/store/sqlstore/exam_attempt_store.go"
+      ],
+      "visual_review": {
+        "status": "approved",
+        "source_sha256": "5e817f6ac833ff1bb7f9269f90cee6c4a20d9d600a36976205a3b39705d54cb1",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
+        "checks": [
+          "text_containment",
+          "connector_continuity",
+          "rendered_legibility",
+          "narrow_viewport",
+          "print_contrast"
+        ],
+        "viewports": [
+          {
+            "name": "desktop",
+            "width": 1440,
+            "height": 1024
+          },
+          {
+            "name": "mobile",
+            "width": 390,
+            "height": 844
+          }
+        ]
+      }
     },
     {
       "id": "browser-activity-privacy-boundary",
-      "path": "static/assets/diagrams/browser-activity-privacy-boundary.svg",
-      "public_path": "/assets/diagrams/browser-activity-privacy-boundary.svg",
       "kind": "diagram",
+      "source": "diagrams/browser-activity-privacy-boundary.yaml",
       "owner": "Proctor documentation maintainers",
-      "license": {"status": "pending", "expression": null, "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."},
-      "provenance": "Original deterministic SVG authored from Proctor's Browser Policy, Browser Activity minimization, sequence, and integrity-evidence contracts.",
-      "privacy_review": {"status": "approved", "basis": "Contains generic allowlist, event, retained-field, and excluded-data labels only; no actual URL, navigation, User, Attempt, content, credential, or operational data."},
-      "alt": "Browser Policy defines one governed HTTPS surface using exact host or subdomain rules, path prefixes, redirects, and one start rule. Only top-level open, close, allowed, redirected, and blocked navigation events pass through privacy minimization. Retained activity contains bounded source, sequence, policy Revision, time, reason, and minimized scheme, host, port, and path. Credentials, query, fragment, page content, referrer, headers, cookies, DOM, downloads, local paths, screenshots, webcam, clipboard, source code, and arbitrary payloads are excluded.",
-      "caption": "Policy governs navigation while minimization governs evidence. A gap records uncertainty; Proctor never invents an observation or retains page content.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-09-12",
-      "visual_review": {"status": "approved", "source_sha256": "eec6b20729dce6b4780e56dd297cd3cb9f97d4d3f7f17eb780724d12f48b3c70", "reviewed": "2026-09-12", "method": "Chromium inspection of exact SVG bytes at full 1200x720 size and in built documentation pages at 1440x1024 and 390x844, plus print media. Reviewed text containment, arrow endpoints, desktop labels, mobile overview and full-size link, and print structure; page scroll widths match both viewports.", "checks": ["text_containment", "connector_continuity", "rendered_legibility", "narrow_viewport", "print_contrast"], "viewports": [{"name": "desktop", "width": 1440, "height": 1024}, {"name": "mobile", "width": 390, "height": 844}]},
-      "review_triggers": [".agents/skills/exam-lifecycle/references/examinations.md", "server/app/exam/attempt/browser_activity.go", "server/model/browser_activity.go", "server/openapi/fragments/attempts-and-workspaces/exam-attempts-presentation.yaml"]
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
+      },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "The Browser Policy decides which pages open, three kinds of top-level events are recorded, and a minimal record is kept. A separate list shows what is never collected, such as query strings, page content, cookies and screenshots.",
+      "caption": "Proctor keeps a cut-down record of top-level pages only, never page content, and marks missing records as gaps.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
+      "review_triggers": [
+        ".agents/skills/exam-lifecycle/references/examinations.md",
+        "server/app/exam/attempt/browser_activity.go",
+        "server/model/browser_activity.go",
+        "server/openapi/fragments/attempts-and-workspaces/exam-attempts-presentation.yaml"
+      ],
+      "visual_review": {
+        "status": "approved",
+        "source_sha256": "07f7072f732977b13b70f82e6d5962c9fa6da3a0d3f012249f6cca868d3077bb",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
+        "checks": [
+          "text_containment",
+          "connector_continuity",
+          "rendered_legibility",
+          "narrow_viewport",
+          "print_contrast"
+        ],
+        "viewports": [
+          {
+            "name": "desktop",
+            "width": 1440,
+            "height": 1024
+          },
+          {
+            "name": "mobile",
+            "width": 390,
+            "height": 844
+          }
+        ]
+      }
     },
     {
       "id": "submission-provenance-boundary",
-      "path": "static/assets/diagrams/submission-provenance-boundary.svg",
-      "public_path": "/assets/diagrams/submission-provenance-boundary.svg",
       "kind": "diagram",
+      "source": "diagrams/submission-provenance-boundary.yaml",
       "owner": "Proctor documentation maintainers",
-      "license": {"status": "pending", "expression": null, "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."},
-      "provenance": "Original deterministic SVG authored from Proctor's voluntary, manager-ended, automatic Sitting-closure, Submission manifest, and no-show contracts.",
-      "privacy_review": {"status": "approved", "basis": "Contains generic terminal-path, immutable-manifest, and provenance labels only; no Exam, Sitting, User, Attempt, Submission, file, reason, checksum, or operational data."},
-      "alt": "Three terminal paths converge on one immutable Submission. Candidate submission requires the current Participation, Connection, and acknowledged terminal fences. Manager end requires the exact Attempt revision and a private reason. Sitting closure performs bounded sealing and records missing state as discrepancies. The Submission pins the Exam Revision, Workspace Cursor, manifest identities, content versions, checksums, integrity terminal accounting, discrepancies, provenance, and server time. A no-show has neither a fabricated Attempt nor Submission.",
-      "caption": "Provenance records how acknowledged state was sealed; it does not grade the work or infer intent. Every created Attempt has at most one immutable Submission, while a no-show has none.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-30",
-      "visual_review": {"status": "approved", "source_sha256": "5888b3fe87870ceed0b16f114e801e75d04cbec38b1bf2f8d2b1503e6ea9bc06", "reviewed": "2026-08-30", "method": "Exact SVG bytes inspected full-size in a browser and in-page at 1440x1024 and 390x844; responsive review confirmed containment, connector continuity, no horizontal overflow, and usable caption/full-size controls, while print-emulated element capture confirmed contrast and non-color meaning.", "checks": ["text_containment", "connector_continuity", "rendered_legibility", "narrow_viewport", "print_contrast"], "viewports": [{"name": "desktop", "width": 1440, "height": 1024}, {"name": "mobile", "width": 390, "height": 844}]},
-      "review_triggers": [".agents/skills/exam-lifecycle/references/examinations.md", "server/model/exam_submission.go", "server/app/exam/attempt/submission.go", "server/store/sqlstore/exam_submission_store.go"]
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
+      },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "Three ways an Attempt can end, candidate submitted, Manager ended and Sitting closed, all lead to one sealed Submission that can't change. Beside it, a no-show creates no Attempt and no Submission.",
+      "caption": "Every Attempt ends in one sealed Submission whose provenance says how it ended, not how good the work was.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
+      "review_triggers": [
+        ".agents/skills/exam-lifecycle/references/examinations.md",
+        "server/model/exam_submission.go",
+        "server/app/exam/attempt/submission.go",
+        "server/store/sqlstore/exam_submission_store.go"
+      ],
+      "visual_review": {
+        "status": "approved",
+        "source_sha256": "5a2c3030d090f9af7743c94e09a508d303ecea1b94ca6178ec86215edd4484b5",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
+        "checks": [
+          "text_containment",
+          "connector_continuity",
+          "rendered_legibility",
+          "narrow_viewport",
+          "print_contrast"
+        ],
+        "viewports": [
+          {
+            "name": "desktop",
+            "width": 1440,
+            "height": 1024
+          },
+          {
+            "name": "mobile",
+            "width": 390,
+            "height": 844
+          }
+        ]
+      }
     },
     {
       "id": "integrity-review-release-boundary",
-      "path": "static/assets/diagrams/integrity-review-release-boundary.svg",
-      "public_path": "/assets/diagrams/integrity-review-release-boundary.svg",
       "kind": "diagram",
+      "source": "diagrams/integrity-review-release-boundary.yaml",
       "owner": "Proctor documentation maintainers",
-      "license": {"status": "pending", "expression": null, "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."},
-      "provenance": "Original deterministic SVG authored from Proctor's integrity chain, private Review, finalization, and explicit candidate-result release contracts.",
-      "privacy_review": {"status": "approved", "basis": "Contains generic evidence, disposition, private-field, and released-field labels only; no observation, Flag, evidence, decision, rationale, User, Submission, or operational data."},
-      "alt": "A bounded integrity chain moves from native observation to security signal, detector finding, evidence, and Flag, while gaps remain explicit discrepancies. The private manager Review records one confirmed, dismissed, or inconclusive disposition per Flag, private rationale and notes, and optional approved remarks under revision fences. Finalization freezes the inventory digest. Explicit release exposes only Review, Submission, and Attempt identities, sanitized approved remarks, and release time. Flags, evidence, discrepancies, decisions, private fields, Workspace files, grades, scores, rubrics, and pass-fail outcomes remain excluded.",
-      "caption": "Evidence stays inside the private Review boundary. Finalization freezes that record; explicit release creates a deliberately smaller candidate projection.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-30",
-      "visual_review": {"status": "approved", "source_sha256": "df9a727dcc7bd2ef9ad95091b9f10d536a761203a3ac83cfb1627249fb79c89c", "reviewed": "2026-08-30", "method": "Exact SVG bytes inspected full-size in a browser and in-page at 1440x1024 and 390x844; responsive review confirmed containment, connector continuity, no horizontal overflow, and usable caption/full-size controls, while print-emulated element capture confirmed contrast and non-color meaning.", "checks": ["text_containment", "connector_continuity", "rendered_legibility", "narrow_viewport", "print_contrast"], "viewports": [{"name": "desktop", "width": 1440, "height": 1024}, {"name": "mobile", "width": 390, "height": 844}]},
-      "review_triggers": [".agents/skills/exam-lifecycle/references/examinations.md", "server/model/exam_review.go", "server/app/exam/review/manager_authorization.go", "server/openapi/fragments/integrity-review/submissions-review.yaml", "server/openapi/fragments/submissions/exam-attempts-result.yaml"]
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
+      },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "The integrity record moves through private manager review and finalization to release, where the candidate sees only approved remarks and the release time. A separate list shows what is never released, including Flags, evidence, private notes and any grade.",
+      "caption": "Managers review the integrity record privately; release shows the candidate only the remarks they approved.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
+      "review_triggers": [
+        ".agents/skills/exam-lifecycle/references/examinations.md",
+        "server/model/exam_review.go",
+        "server/app/exam/review/manager_authorization.go",
+        "server/openapi/fragments/integrity-review/submissions-review.yaml",
+        "server/openapi/fragments/submissions/exam-attempts-result.yaml"
+      ],
+      "visual_review": {
+        "status": "approved",
+        "source_sha256": "d67334d3300b6dec3ec10309c66b1e15920d73fdc026b4b5fa31313302f5e24a",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
+        "checks": [
+          "text_containment",
+          "connector_continuity",
+          "rendered_legibility",
+          "narrow_viewport",
+          "print_contrast"
+        ],
+        "viewports": [
+          {
+            "name": "desktop",
+            "width": 1440,
+            "height": 1024
+          },
+          {
+            "name": "mobile",
+            "width": 390,
+            "height": 844
+          }
+        ]
+      }
     },
     {
       "id": "node-readiness-lifecycle",
-      "path": "static/assets/diagrams/node-readiness-lifecycle.svg",
-      "public_path": "/assets/diagrams/node-readiness-lifecycle.svg",
       "kind": "diagram",
+      "source": "diagrams/node-readiness-lifecycle.yaml",
       "owner": "Proctor documentation maintainers",
-      "license": {"status": "pending", "expression": null, "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."},
-      "provenance": "Original deterministic SVG authored from Proctor's startup ordering, serving-node lease, readiness, HTTP drain, terminal runtime failure, and reverse shutdown contracts.",
-      "privacy_review": {"status": "approved", "basis": "Contains generic runtime component and lifecycle labels only; no Institution, node ID, address, configuration value, dependency endpoint, credential, log, or operational event data."},
-      "alt": "A Proctor node remains not ready while it starts platform dependencies and metrics, commits the serving lease and startup reconciliation, starts Jobs and WebSocket, and hands the listener to HTTP. Only then is it ready for traffic. Normal cancellation makes it unready and gracefully drains HTTP. Serving-lease or required metrics-listener failure makes it unready and force-stops HTTP. Both paths close Jobs, WebSocket, transport, lease, metrics, and platform in reverse ownership order; startup failure follows the same close path without publishing readiness.",
-      "caption": "Liveness is not routing authority. Proctor publishes readiness only after every serving prerequisite, removes it before drain, and never lets an owned component outlive its authority.",
-      "width": 1200,
-      "height": 720,
-      "max_bytes": 100000,
-      "theme": "light-high-contrast",
-      "visual_system": "proctor-assurance-v1",
-      "last_reviewed": "2026-08-30",
-      "visual_review": {"status": "approved", "source_sha256": "2b5024633dab3be3f7780f6662cc47dec598d1011911df654ae6221a1a506f1f", "reviewed": "2026-08-30", "method": "Exact SVG bytes inspected full-size in a browser and in-page at 1440x1024 and 390x844; responsive review confirmed containment, connector continuity, no horizontal overflow, and usable caption/full-size controls, while print-emulated element capture confirmed contrast and non-color meaning.", "checks": ["text_containment", "connector_continuity", "rendered_legibility", "narrow_viewport", "print_contrast"], "viewports": [{"name": "desktop", "width": 1440, "height": 1024}, {"name": "mobile", "width": 390, "height": 844}]},
-      "review_triggers": [".agents/skills/runtime-operations/references/runtime.md", "server/server.go", "server/serving_node_lease.go", "server/server_lifecycle_test.go", "deploy/systemd/proctor.service"]
+      "license": {
+        "status": "pending",
+        "expression": null,
+        "note": "Original Proctor artwork; publication waits for the repository documentation-license decision."
+      },
+      "provenance": "Original diagram layout authored for the Proctor documentation and drawn by the site Diagram component.",
+      "privacy_review": {
+        "status": "approved",
+        "basis": "Contains product concepts and synthetic labels only; no Institution, User, Exam, credential, hostname, or operational data."
+      },
+      "alt": "A node starts its platform, serving lease, Jobs and WebSocket, and HTTP in order, and only then becomes ready for traffic. A normal stop or a failure makes it not ready first, then everything closes in reverse order.",
+      "caption": "A node reports ready only after everything it needs has started, and stops reporting ready before it stops serving.",
+      "theme": "site",
+      "visual_system": "proctor-diagrams-v2",
+      "last_reviewed": "2026-11-15",
+      "review_triggers": [
+        ".agents/skills/runtime-operations/references/runtime.md",
+        "server/server.go",
+        "server/serving_node_lease.go",
+        "server/server_lifecycle_test.go",
+        "deploy/systemd/proctor.service"
+      ],
+      "visual_review": {
+        "status": "approved",
+        "source_sha256": "bd2ee66d41a00cf8afe88acffadc4f084c6f25fe54264e3c19841d876aa369a6",
+        "reviewed": "2026-11-15",
+        "method": "Chromium review of the rendered diagram on its documentation pages and on a review page, in the light and dark themes, at 1440x1024 (736px column, side by side) and 390x844 (stacked); print colours come from the print tokens in the component stylesheet. Checked text containment, arrow and connector endpoints, label fit in the arrow gaps, stacked order and source labels, and no horizontal overflow.",
+        "checks": [
+          "text_containment",
+          "connector_continuity",
+          "rendered_legibility",
+          "narrow_viewport",
+          "print_contrast"
+        ],
+        "viewports": [
+          {
+            "name": "desktop",
+            "width": 1440,
+            "height": 1024
+          },
+          {
+            "name": "mobile",
+            "width": 390,
+            "height": 844
+          }
+        ]
+      }
     }
   ]
 }

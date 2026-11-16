@@ -29,7 +29,7 @@
   color: var(--proctor-primary-strong);
   font-family: var(--ifm-font-family-monospace);
   font-size: var(--proctor-type-caption-size);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.06em;
   margin: 0;
   text-transform: uppercase;
@@ -86,7 +86,7 @@
   display: inline-flex;
   font-size: var(--proctor-type-caption-size);
   font-variant-numeric: tabular-nums;
-  font-weight: 700;
+  font-weight: 600;
   height: var(--proctor-space-6);
   justify-content: center;
   width: var(--proctor-space-6);

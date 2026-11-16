@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Notice } from "../Notice/Notice";
+import { Icon } from "../Icon/Icon";
 import styles from "./FormFeedback.module.css";
 
 export interface FormFeedbackProps {
@@ -19,7 +19,12 @@ export function FormFeedback({ className, id, message }: FormFeedbackProps) {
       id={id}
       role="status"
     >
-      {message === undefined ? null : <Notice tone="danger">{message}</Notice>}
+      {message === undefined ? null : (
+        <p className={styles.message}>
+          <Icon className={styles.icon} name="error" />
+          <span>{message}</span>
+        </p>
+      )}
     </div>
   );
 }

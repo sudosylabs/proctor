@@ -15,8 +15,7 @@ paths:
       summary: Render a protected candidate Workspace file inline
       tags:
         - Attempts and workspaces
-      description: >-
-        Streams one protected active Workspace file only after rechecking the authenticated Session, Attempt credential, open Connection, current Participation, and readable Attempt state. It never exposes a VFS or object-store identity. Private no-store caching, nosniff, ETag, and conditional 304 behavior apply.
+      description: Streams one file from the active Workspace. Before it sends anything, the server checks the Session, the Attempt credential, the open Connection, the current Participation, and that the Attempt can still be read. The response never reveals where the file is stored. Responses are private and not cached (no-store), use nosniff, carry an ETag, and return 304 when the content has not changed.
       x-codeSamples:
         - lang: Shell
           source: |-

@@ -1,25 +1,26 @@
 ---
-title: Configuration Reference
-description: Configure Proctor's listeners, dependencies, security policy, localization, and logging from one strict versioned JSON document.
+title: Configuration reference
+description: Set up Proctor's listeners, dependencies, security settings, locale and logging in one strict, versioned JSON file.
 audience: operator
 maturity: preview
 slug: /reference/configuration/
 ---
 
-# Configuration Reference
+# Configuration reference
 
-Proctor reads one versioned JSON document at process startup. This section
-explains every supported field, its default, its accepted values, and the
-relationships that validation enforces.
+Proctor reads one versioned JSON file when the process starts. This section
+covers every supported field, its default, the values it accepts, and the
+rules that tie fields together.
 
-The defaults are a **local-development baseline**, not a production sizing or
-security recommendation. In particular, the example uses loopback listeners,
-development credentials, local storage, process-local cache, and disabled mail.
+The defaults are a **local development baseline**. They are not a
+recommendation for production size or security. The example uses loopback
+listeners, development credentials, local storage, an in-process cache, and
+mail turned off.
 
 ## Start from the complete example
 
-Copy the tracked example, protect the copy, and validate it before starting the
-server:
+Copy the example in the repository, restrict who can read the copy, and
+check it before you start the server:
 
 ```sh
 cp config/config.example.json config/config.json
@@ -27,91 +28,93 @@ chmod 600 config/config.json
 proctor config validate --config config/config.json
 ```
 
-The canonical example is
+The reference example is
 [`server/config/config.example.json`](https://github.com/sudosylabs/Proctor/blob/main/server/config/config.example.json).
-It contains every field and exactly matches the defaults compiled into the
-server.
+It contains every field, and its values match the defaults built into the
+server exactly.
 
-Proctor resolves the active file in this order:
+Proctor looks for the active file in this order:
 
-1. the path passed to `--config`;
-2. the path in `PROCTOR_CONFIG`;
-3. `config/config.json` relative to the process working directory.
+1. The path you pass to `--config`.
+2. The path in `PROCTOR_CONFIG`.
+3. `config/config.json`, relative to the process working directory.
 
-The server does not create the active configuration file.
+The server never creates the active configuration file for you.
 
 ## How loading works
 
-Proctor begins with its compiled defaults and then decodes the JSON document
-over them. An omitted field therefore keeps its default. This supports smaller
-installation-specific files, but the complete example remains the clearest
-starting point for operators and reviewers.
+Proctor starts from its built-in defaults and then reads your JSON file over
+them. A field you leave out keeps its default. This means you can keep a
+shorter file for your installation, but the complete example is still the
+clearest place for operators and reviewers to start.
 
-The decoder accepts exactly one JSON object and rejects unknown field names,
-trailing JSON values, wrong value types, and malformed durations. Field names
-are case-sensitive. Validation then checks individual bounds and cross-field
-requirements before any runtime infrastructure is composed.
+The file must hold exactly one JSON object. Proctor rejects unknown field
+names, extra JSON values after the object, values of the wrong type, and
+durations it can't parse. Field names are case-sensitive. Proctor then checks
+each value's limits and the rules between fields, before it sets up anything
+else.
 
-Durations use Go duration syntax, such as `250ms`, `15s`, `5m`, or `24h`.
-Byte limits are integer byte counts. Network endpoints use `host:port` unless a
-field explicitly requires an HTTP or HTTPS URL.
+Durations use Go duration syntax, such as `250ms`, `15s`, `5m` or `24h`.
+Byte limits are whole numbers of bytes. Network addresses use `host:port`,
+unless a field says it needs an HTTP or HTTPS URL.
 
-## Browse by responsibility
+## Browse by area
 
 | Section | What it controls |
 | --- | --- |
-| [Server and metrics](./configuration/server-and-metrics.mdx) | Public HTTP/TLS serving, hosted webapp assets, shutdown, request bounds, and the Prometheus listener. |
-| [Data and cluster](./configuration/data-and-cluster.mdx) | PostgreSQL, disposable cache, and single-node or Memberlist coordination. |
-| [Mail and files](./configuration/mail-and-files.mdx) | SMTP delivery, mail secret sealing, opaque byte storage, and file-content work limits. |
-| [Authentication](./configuration/authentication.mdx) | Bootstrap, passwords, sessions, recovery, personal access tokens, MFA, CAS, and OIDC. |
-| [Localization and logging](./configuration/localization-and-logging.mdx) | Installation locale and dynamically reconfigurable log targets. |
-| [Execution](./configuration/execution.mdx) | Whether code execution is on, and the execution hosts. |
-| [Plugins](./configuration/plugins.mdx) | Which compiled-in plugins run, and their settings. |
+| [Server and metrics](./configuration/server-and-metrics.mdx) | Public HTTP and TLS serving, the hosted webapp files, shutdown, request limits, and the Prometheus listener. |
+| [Data and cluster](./configuration/data-and-cluster.mdx) | PostgreSQL, the disposable cache, and running as one node or as a Memberlist cluster. |
+| [Mail and files](./configuration/mail-and-files.mdx) | SMTP delivery, encryption of mail secrets, file byte storage, and limits on file content work. |
+| [Authentication](./configuration/authentication.mdx) | Bootstrap, passwords, sessions, recovery, personal access tokens, MFA, CAS and OIDC. |
+| [Localization and logging](./configuration/localization-and-logging.mdx) | The installation locale and log targets you can change while the server runs. |
+| [Execution](./configuration/execution.mdx) | Whether code execution is on, and the execution hosts it uses. |
+| [Plugins](./configuration/plugins.mdx) | Which built-in plugins run, and their settings. |
 
 ## Environment overrides
 
-Supported `PROCTOR_` variables override the decoded JSON for the current
-process. Overrides are validated together with the file, but they are never
-written back to it. The generated
-[environment variable inventory](./environment-variables.mdx) lists every
-accepted variable and representation.
+Supported `PROCTOR_` variables override the values from the JSON file for the
+current process. Proctor checks overrides together with the file, but never
+writes them back to it. The generated
+[environment variable list](./environment-variables.mdx) shows every accepted
+variable and how to write its value.
 
-Keep credentials and key material in a protected secret-delivery mechanism.
-Never commit populated examples. The active JSON file and any environment file
-must be readable only by the Proctor service account or its protected group.
+Keep credentials and keys in a protected secret store. Never commit an example
+with real values in it. Only the Proctor service account, or its protected
+group, should be able to read the active JSON file and any environment file.
 
-## Reload and restart boundary
+## What reloads and what needs a restart
 
-Logging and the external-authentication provider registry are the only
-configuration surfaces applied dynamically after a successful reload. Every
-other change requires a process restart so listeners, infrastructure clients,
-and security policy remain coherent for the life
-of the process.
+Proctor applies only two areas after a successful reload: logging and the list
+of external sign-in providers. Every other change needs a process restart.
+This keeps listeners, connections to other services, and security settings
+consistent for as long as the process runs.
 
-Validate the intended effective configuration before reloading or restarting.
-Validation proves the shape and relationships of the values; it does not prove
-that PostgreSQL, Redis, SMTP, object storage, or identity providers are reachable.
+Check the configuration you intend to run before you reload or restart.
+Checking confirms the shape of the values and how they fit together. It
+doesn't confirm that PostgreSQL, Redis, SMTP, object storage or your identity
+providers are reachable.
 
-## Secret separation
+## Keep secrets separate
 
-Bootstrap credentials, MFA sealing keys, mail sealing keys, Memberlist keys,
-TLS private keys, metrics bearer tokens, database
-credentials, and object-storage credentials serve different trust boundaries.
-Do not reuse material between them.
+Bootstrap credentials, MFA encryption keys, mail encryption keys, Memberlist
+keys, TLS private keys, metrics bearer tokens, database credentials and
+object storage credentials each protect something different. Don't reuse one
+for another.
 
-MFA, mail, and Memberlist rotations use one primary encryption key plus a
-bounded fallback decryption ring. Roll the new primary to every relevant node,
-retain the old key only while old ciphertext or cluster traffic can still
-exist, and remove it after convergence. Proctor rejects reuse between the MFA,
-mail, and Memberlist key purposes.
+MFA, mail and Memberlist keys rotate the same way. Each has one primary key
+for encryption and a short list of older keys that are still accepted for
+decryption. Roll the new primary out to every node that needs it. Keep the old
+key only while old encrypted data or cluster traffic can still use it, and
+remove it once every node has the new one. Proctor rejects a key that is
+reused across the MFA, mail and Memberlist purposes.
 
 :::note[Production sizing status]
 
-The repository does not yet define tested production sizing profiles for
-connection pools, cache memory, request limits, file-content concurrency,
-or log queues. Use the enforceable ranges in this
-reference, then determine production values from the installation's workload,
-dependency capacity, and failure budget.
+The repository doesn't yet define tested production sizes for connection
+pools, cache memory, request limits, file content concurrency or log queues.
+Stay within the ranges in this reference, then choose production values from
+your installation's workload, the capacity of the services it depends on, and
+how much failure you can tolerate.
 
 :::
 

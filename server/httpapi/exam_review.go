@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -602,7 +603,7 @@ func (h examIntegrityReviewHandlers) listFlags(request route.Request) (route.Res
 	}
 
 	query := review.ListFlagsQuery{SubmissionID: submissionID, Limit: 50}
-	if err = applyReviewPageQuery(request, "flag", &query.Limit, func(id string) error {
+	if err = applyReviewPageQuery(request, "flag", reviewPageLimit, &query.Limit, func(id string) error {
 		query.AfterFlagID, err = model.ParseIntegrityFlagID(id)
 		return err
 	}); err != nil {
@@ -656,7 +657,7 @@ func (h examIntegrityReviewHandlers) listEvidence(request route.Request) (route.
 	}
 
 	query := review.ListEvidenceQuery{SubmissionID: submissionID, FlagID: flagID, Limit: 50}
-	if err = applyReviewPageQuery(request, "evidence", &query.Limit, func(id string) error {
+	if err = applyReviewPageQuery(request, "evidence", reviewPageLimit, &query.Limit, func(id string) error {
 		query.AfterEvidenceID, err = model.ParseIntegrityEvidenceID(id)
 		return err
 	}); err != nil {
@@ -710,7 +711,7 @@ func (h examIntegrityReviewHandlers) listDiscrepancies(request route.Request) (r
 	}
 
 	query := review.ListDiscrepanciesQuery{SubmissionID: submissionID, Limit: 50}
-	if err = applyReviewPageQuery(request, "discrepancy", &query.Limit, func(id string) error {
+	if err = applyReviewPageQuery(request, "discrepancy", reviewPageLimit, &query.Limit, func(id string) error {
 		query.AfterDiscrepancyID, err = model.ParseIntegrityDiscrepancyID(id)
 		return err
 	}); err != nil {
@@ -1035,12 +1036,20 @@ func optionalSubmissionReviewID(raw string) (model.SubmissionReviewID, error) {
 	return model.ParseSubmissionReviewID(raw)
 }
 
-func applyReviewPageQuery(request route.Request, kind string, limit *int, setCursor func(string) error) error {
+// Review lists accept at most reviewPageLimit records per page; native
+// conditions, which the review application caps lower, at most
+// nativeConditionPageLimit.
+const (
+	reviewPageLimit          = 200
+	nativeConditionPageLimit = 100
+)
+
+func applyReviewPageQuery(request route.Request, kind string, maximum int, limit *int, setCursor func(string) error) error {
 	values := request.HTTP.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
-		if err != nil || parsed < 1 || parsed > 200 {
-			return route.InvalidRequest(errors.New("must be between 1 and 200"))
+		if err != nil || parsed < 1 || parsed > maximum {
+			return route.InvalidRequest(fmt.Errorf("must be between 1 and %d", maximum))
 		}
 		*limit = parsed
 	}
@@ -1078,6 +1087,7 @@ func (h examIntegrityReviewHandlers) listAttemptEvidence(request route.Request) 
 	if err = applyReviewPageQuery(
 		request,
 		"attempt_evidence",
+		store.AttemptEvidenceReviewMaximum,
 		&query.Limit,
 		func(id string) error { query.AfterID, err = model.ParseIntegrityEvidenceID(id); return err },
 	); err != nil {
@@ -1118,6 +1128,7 @@ func (h examIntegrityReviewHandlers) listNativeConditions(request route.Request)
 	if err = applyReviewPageQuery(
 		request,
 		"native_condition",
+		nativeConditionPageLimit,
 		&query.Limit,
 		func(id string) error { query.AfterID, err = model.ParseIntegrityEvidenceID(id); return err },
 	); err != nil {

@@ -1,64 +1,66 @@
 ---
-title: Choose Topology and Assign Dependency Ownership
-description: Run one node or several active nodes without confusing application redundancy with dependency availability or durable authority.
+title: Choose a topology and who runs each dependency
+description: Run one node or several active nodes, and keep in mind that redundant application nodes don't make your dependencies available or change where durable state lives.
 audience: operator
 maturity: preview
 ---
 
-# Choose Topology and Assign Dependency Ownership
+# Choose a topology and who runs each dependency
 
-Single-node and active-active Proctor have the same application semantics. A
-cluster improves application-node availability only when every required shared
-dependency and the traffic path have suitable redundancy.
+Proctor behaves the same on one node as on several active nodes. A cluster
+keeps the application available only when every shared dependency it needs,
+and the traffic path to it, is redundant enough as well.
 
-## Single Application Node
+## One application node
 
-Use `Cluster.Backend: local`, a stable node ID, production-suitable PostgreSQL
-and VFS, and the selected mail/provider services. The application may
-use bounded process-local cache. Memberlist has no peers and broadcast is a
-no-op.
+Set `Cluster.Backend: local` and give the node a stable node ID. Use
+PostgreSQL and VFS that are fit for production, and the mail and provider
+services you chose. The application may use a size-limited cache inside its
+own process. Memberlist has no peers, so broadcasts do nothing.
 
-Single node is simpler to operate but its application process, host, and any
-node-local VFS or certificate cache are single points of failure. Built-in
-Let's Encrypt is available only in this local cluster mode.
+A single node is simpler to run. Its application process, its host, and any
+VFS or certificate cache stored on the node are each a single point of
+failure. Built-in Let's Encrypt works only in this `local` cluster mode.
 
-## Active-Active Application Nodes
+## Several active application nodes
 
-Place identical compatible application nodes behind a redundant external load
-balancer and route only to ready nodes. Configure:
+Put identical, compatible application nodes behind a redundant external load
+balancer, and send traffic only to nodes that are ready. Configure:
 
-- one shared authoritative PostgreSQL installation;
-- shared S3-compatible VFS rather than node-local content;
-- Redis application cache for installation-wide disposable security counters;
-- `Cluster.Backend: memberlist`, a unique stable Node ID per node, and one
-  converged gossip keyring;
-- private reachable TCP and UDP bind/advertise endpoints;
-- the same validated application and policy configuration; and
-- shared SMTP and identity-provider capabilities as selected.
+- one shared PostgreSQL installation that holds the durable state;
+- shared S3-compatible VFS instead of content stored on each node;
+- a Redis application cache for the disposable security counters shared
+  across the installation;
+- `Cluster.Backend: memberlist`, a unique stable Node ID on each node, and one
+  gossip keyring that every node agrees on;
+- private TCP and UDP bind and advertise addresses that the nodes can reach;
+- the same checked application and policy configuration on every node;
+- shared SMTP and identity-provider services, if you use them.
 
-Memberlist carries best-effort invalidation and realtime facts. Redis does not
-transport Memberlist messages. Neither replaces PostgreSQL authority.
+Memberlist carries best-effort cache invalidation and realtime updates. Redis
+doesn't carry Memberlist messages. Neither of them takes the place of
+PostgreSQL as the record of durable state.
 
-## Dependency Consequences
+## What happens when a dependency is lost
 
-| Dependency loss | Expected consequence |
+| Lost dependency | What to expect |
 | --- | --- |
-| PostgreSQL unavailable | readiness/startup or current operations fail closed; durable work cannot proceed |
-| Redis unavailable in Memberlist mode | required shared security/cache capability is unavailable; do not downgrade silently to local memory |
-| VFS unavailable | metadata may remain readable, but protected content operations fail; do not substitute object listings |
-| SMTP unavailable | durable delivery remains queued/retryable according to descriptor; application state is not rolled back |
-| peer message lost | affected clients/nodes recover through refetch, TTL, renewal, and durable state |
-| load balancer unhealthy | application nodes may be ready but externally unreachable; this is operator infrastructure |
+| PostgreSQL unavailable | Readiness, startup or the current operation stops safely. Durable work can't continue |
+| Redis unavailable in Memberlist mode | The shared security and cache service the node needs is missing. Don't quietly fall back to local memory |
+| VFS unavailable | Metadata may still be readable, but protected content operations fail. Don't use object listings instead |
+| SMTP unavailable | Delivery stays queued and is retried according to its descriptor. Application state isn't rolled back |
+| A peer message is lost | Affected clients and nodes recover by fetching again, through TTLs and renewals, and from durable state |
+| Load balancer unhealthy | Application nodes may be ready but unreachable from outside. This is your infrastructure to fix |
 
 <GovernedFigure asset="installation-authority-topology" />
 
-## Do Not Call the Compose Example HA
+## The Compose example is not high availability
 
-The tracked Compose file demonstrates one immutable application container and
-its mounts/ports. It intentionally does not package single-host PostgreSQL,
-Redis, or object storage as a highly available production installation. Use
-independently operated redundant dependencies and load balancing before making
-an availability claim.
+The Compose file in the repository shows one immutable application container
+with its mounts and ports. It deliberately doesn't package PostgreSQL, Redis or
+object storage on a single host as a highly available production installation.
+Before you claim any availability, run redundant dependencies and load
+balancing that are operated independently.
 
 {/* TODO(operator-capacity-topology): Certify supported node counts, dependency
 topologies, latency budgets, and event/candidate capacity before publishing

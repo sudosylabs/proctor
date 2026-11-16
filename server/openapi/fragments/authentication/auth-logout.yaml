@@ -11,7 +11,7 @@ paths:
       operationId: logout
       summary: Revoke the current session
       description: >-
-        Revokes the exact interactive Session represented by the current access credential and clears browser authentication cookies when present. Other Sessions for the User remain active.
+        Signs out the interactive Session that the current access credential belongs to. If the request used browser cookies, the response clears them. The User's other Sessions stay signed in.
       x-codeSamples:
         - lang: Shell
           label: Revoke the current Session

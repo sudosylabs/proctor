@@ -13,14 +13,14 @@ paths:
         required: true
         schema:
           $ref: '#/components/schemas/ID'
-        description: The supported terminal Job to enqueue for another execution Attempt.
+        description: ID of the finished Job to queue for another Attempt. Its type must support retry.
     post:
       operationId: retryJob
       summary: Explicitly retry a supported terminal Job
       tags:
         - Jobs
       description: >-
-        Transitions an authorized, retryable terminal Job back to queued execution while preserving its prior Attempt history. The command never mutates the original Attempt or retries unsupported, active, exhausted, or incompatible work.
+        Puts a finished Job back in the queue so it runs again. Earlier Attempts stay in the history unchanged. The request is rejected for a Job whose type doesn't allow a retry from its current status, for a Job that is still queued or running, and for exhausted or incompatible work.
       x-codeSamples:
         - lang: Shell
           source: |-

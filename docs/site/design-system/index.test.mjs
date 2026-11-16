@@ -6,9 +6,7 @@ import test from 'node:test';
 import {fileURLToPath} from 'node:url';
 
 import {
-  CURRENT_ILLUSTRATION_SYSTEM,
   auditDesignSystem,
-  illustrationPalette,
   renderDesignTokenCSS,
 } from './index.mjs';
 
@@ -18,30 +16,19 @@ test('the tracked design-system adapter is current and valid', async () => {
   assert.deepEqual(await auditDesignSystem(), []);
 });
 
-test('generated CSS self-hosts IBM Plex and exposes canonical purple', () => {
+test('generated CSS self-hosts Geist and exposes canonical purple', () => {
   const source = renderDesignTokenCSS();
-  assert.match(source, /@fontsource\/ibm-plex-sans\/latin-400\.css/);
-  assert.match(source, /@fontsource\/ibm-plex-mono\/latin-600\.css/);
+  assert.match(source, /@fontsource\/geist-sans\/latin-400\.css/);
+  assert.match(source, /@fontsource\/geist-mono\/latin-500\.css/);
   assert.match(source, /--proctor-primary: #5c00aa/);
-  assert.match(source, /--ifm-font-family-base: "IBM Plex Sans"/);
-});
-
-test('current illustrations use the purple semantic palette', () => {
-  const palette = illustrationPalette(CURRENT_ILLUSTRATION_SYSTEM, 'new-diagram');
-  assert(palette.has('#5c00aa'));
-  assert(!palette.has('#3657d6'));
-});
-
-test('retired illustration systems are no longer accepted', () => {
-  assert.throws(
-    () => illustrationPalette('legacy-cobalt-v0', 'installation-authority-topology'),
-    /unknown illustration system/,
-  );
+  assert.match(source, /--ifm-font-family-base: "Geist Sans"/);
 });
 
 test('documentation ships only the reviewed local brand assets', async () => {
   const brandDirectory = resolve(siteRoot, 'static/img/brand');
   const expectedDigests = {
+    'proctor-docs-lockup-light.svg':
+      '61aed9cffa106b1762bf56d757e492c8b0ec85383130d865c8f36a5a922cc028',
     'proctor-docs-lockup-white.svg':
       'ddd47cdd882006acb919a7bdb80b2098d4409800ea76c9f1900d89405bfed604',
     'proctor-favicon-dark.svg':

@@ -1,0 +1,25 @@
+.callout {
+  border: 1px solid var(--proctor-border);
+  border-radius: 10px;
+  color: var(--proctor-ink-soft);
+  display: grid;
+  font-size: 0.9rem;
+  gap: 12px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  line-height: 1.6;
+  margin: 0 0 24px;
+  padding: 14px 16px;
+}
+
+.callout svg {
+  color: var(--proctor-ink-muted);
+  margin-top: 3px;
+}
+
+.warn svg {
+  color: var(--proctor-attention);
+}
+
+.callout div > :last-child {
+  margin-bottom: 0;
+}

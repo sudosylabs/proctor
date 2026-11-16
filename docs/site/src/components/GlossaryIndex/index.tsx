@@ -18,22 +18,27 @@ export default function GlossaryIndex(): React.JSX.Element {
   }, [query]);
   const sections = [...new Set(matches.map((entry) => entry.section))];
 
+  const filtering = query.trim().length > 0;
+
   return (
     <div className={styles.glossary}>
       <label className={styles.filter}>
-        <span>Filter canonical terms</span>
+        <svg aria-hidden="true" height="15" viewBox="0 0 16 16" width="15">
+          <path d="M2.5 4h11M4.5 8h7M6.5 12h3" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+        </svg>
+        <span className={styles.hidden}>Filter terms</span>
         <input
           autoComplete="off"
           name="glossary-query"
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Try “workspace”, “identity”, or “exam”…"
+          placeholder="Filter terms"
           spellCheck={false}
           type="search"
           value={query}
         />
       </label>
       <p aria-live="polite" className={styles.count}>
-        Showing {matches.length} of {glossaryTerms.length} terms
+        {filtering ? `${matches.length} of ${glossaryTerms.length} terms` : null}
       </p>
       {sections.map((section) => (
         <section className={styles.section} key={section}>
@@ -44,12 +49,11 @@ export default function GlossaryIndex(): React.JSX.Element {
               .map((entry) => (
                 <div className={styles.entry} id={entry.id} key={entry.id}>
                   <dt>
-                    <a aria-label={`Link to ${entry.term}`} href={`#${entry.id}`}>#</a>
-                    {entry.term}
+                    <a href={`#${entry.id}`}>{entry.term}</a>
                   </dt>
                   <dd>
                     <p>{entry.definition}</p>
-                    <p className={styles.avoid}><strong>Avoid:</strong> {entry.avoid}</p>
+                    {entry.avoid ? <p className={styles.avoid}>Avoid: {entry.avoid}</p> : null}
                   </dd>
                 </div>
               ))}
@@ -57,10 +61,7 @@ export default function GlossaryIndex(): React.JSX.Element {
         </section>
       ))}
       {matches.length === 0 ? (
-        <div className={styles.empty}>
-          <strong>No canonical term matches “{query.trim()}”.</strong>
-          <span>Try a broader product concept or clear the filter.</span>
-        </div>
+        <p className={styles.empty}>No term matches “{query.trim()}”.</p>
       ) : null}
     </div>
   );

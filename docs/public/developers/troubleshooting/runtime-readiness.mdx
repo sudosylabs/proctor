@@ -1,50 +1,51 @@
 ---
-title: Runtime and Readiness
-description: Diagnose toolchain, container, dependency, port, startup, migration, and readiness failures in the local Proctor runtime.
+title: Runtime and readiness
+description: Track down problems with tools, containers, the services Proctor depends on, ports, startup, migrations and readiness in your local Proctor setup.
 audience: developer
 maturity: preview
 ---
 
-# Runtime and Readiness
+# Runtime and readiness
 
-The local environment has three distinct layers: host tools, persistent Docker
-services, and the foreground Proctor process. Diagnose them in that order so a
-dependency failure is not mistaken for an application failure.
+Your local environment has three separate layers: the tools on your machine,
+the Docker services that keep running in the background, and the Proctor
+process in the foreground. Check them in that order, so you don't mistake a
+problem with a dependency for a problem with the application.
 
-## Establish the Failing Layer
+## Find the layer that fails
 
 ```sh
 make dev-doctor
 ```
 
-Read the result from top to bottom. The first error identifies the earliest
-unproven layer. A missing server endpoint after an unhealthy PostgreSQL
-container is not yet evidence of a server defect.
+Read the output from top to bottom. The first error points to the earliest
+layer that isn't working yet. If the PostgreSQL container is unhealthy, a
+missing server endpoint after it doesn't yet show a bug in the server.
 
-| First error | Meaning | Next command |
+| First error | What it means | Run next |
 | --- | --- | --- |
-| `toolchain` | A pinned or required host command is unavailable | `make dev-tools` |
-| `Docker Compose plugin` | The Docker client cannot invoke Compose v2 | `docker compose version` |
-| `Docker daemon` | The client cannot reach the engine | `docker info` |
+| `toolchain` | A pinned or required command isn't available on your machine | `make dev-tools` |
+| `Docker Compose plugin` | The Docker client can't run Compose v2 | `docker compose version` |
+| `Docker daemon` | The client can't reach the Docker engine | `docker info` |
 | `container … is missing` | The expected Compose project has no such service | `make dev-up` |
-| `container … is unhealthy` | The service started but failed its health contract | Inspect that service's bounded logs |
-| generated configuration or webapp identity is missing | The derived local state is incomplete | `make dev-state` or `make webapp-build` |
-| a dependency endpoint fails | The container may be running without serving correctly | Check its health endpoint and logs |
-| server liveness fails | No healthy server process is serving that address | Inspect the foreground server output |
-| server readiness fails | The process lives but cannot safely accept product traffic | Follow readiness dependencies below |
+| `container … is unhealthy` | The service started but failed its health check | Look at the end of that service's logs |
+| Generated configuration or webapp identity is missing | The local state built from your inputs is incomplete | `make dev-state` or `make webapp-build` |
+| A dependency endpoint fails | The container may be running but not serving correctly | Check its health endpoint and logs |
+| Server liveness fails | No healthy server process is serving that address | Look at the output of the server in the foreground |
+| Server readiness fails | The process is running but can't yet take product traffic safely | Follow the readiness steps below |
 
-## Prove the Host Tools
+## Check the tools on your machine
 
 ```sh
 make dev-tools
 ```
 
-This is the version authority for Go, Node.js, npm, Docker, Compose, `jq`, and
-`curl`. Fix its first reported mismatch before reinstalling application
-dependencies. When a tool was upgraded, start a new shell so the command path
-and version cache are current.
+This command decides which versions of Go, Node.js, npm, Docker, Compose, `jq`
+and `curl` are correct. Fix the first mismatch it reports before you reinstall
+application dependencies. If you upgraded a tool, open a new shell so the
+command path and cached versions are up to date.
 
-## Prove Containers Before the Server
+## Check the containers before the server
 
 ```sh
 docker compose \
@@ -57,21 +58,22 @@ docker compose \
   logs --no-color --tail=100 postgres redis minio
 ```
 
-Keep logs bounded and select only the service that owns the failed health
-check. The normal local lifecycle is:
+Look only at the end of the logs, and only for the service whose health check
+failed. The usual local start-up is:
 
 ```sh
 make dev-up
 make run-server
 ```
 
-`make run-server` intentionally keeps Proctor in the foreground. The first
-startup error remains visible and `Ctrl-C` initiates its normal shutdown. Do
-not background the process while diagnosing startup.
+`make run-server` keeps Proctor in the foreground on purpose. The first
+startup error stays on screen, and `Ctrl-C` starts a normal shutdown. Don't
+move the process to the background while you're looking into a startup
+problem.
 
-## Resolve a Port Conflict Without Killing Unknown Work
+## Fix a port conflict without killing unknown processes
 
-On macOS, identify the listener for the exact port:
+On macOS, find what is listening on the exact port:
 
 ```sh
 lsof -nP -iTCP:8065 -sTCP:LISTEN
@@ -83,41 +85,41 @@ On Linux:
 ss -ltnp 'sport = :8065'
 ```
 
-Confirm that the process belongs to this development environment before
-stopping it. If another project legitimately owns the port, choose a complete,
-non-overlapping Proctor port set with the supported `PROCTOR_*_PORT` Make
-overrides described in [Development configuration](../development-configuration.mdx).
-Changing only the HTTP port can leave the public origin, Vite proxy, metrics,
-or dependency endpoints inconsistent.
+Make sure the process belongs to this development environment before you stop
+it. If another project really does need the port, choose a full set of Proctor
+ports that don't overlap, using the supported `PROCTOR_*_PORT` Make overrides
+described in [Development configuration](../development-configuration.mdx).
+If you change only the HTTP port, the public origin, Vite proxy, metrics or
+dependency addresses can stop matching.
 
-## Distinguish Liveness From Readiness
+## Liveness and readiness are different
 
 ```sh
 curl --fail --silent --show-error http://127.0.0.1:8065/health/live
 curl --fail --silent --show-error http://127.0.0.1:8065/health/ready
 ```
 
-Liveness means the process is running. Readiness means the server has completed
-startup and its required serving capabilities are available. A live but
-unready process should stay out of load-balancer traffic.
+Liveness means the process is running. Readiness means the server has finished
+starting and everything it needs to serve is available. A process that is
+live but not ready should get no traffic from the load balancer.
 
 When readiness fails:
 
-1. Keep the foreground startup output.
-2. Check PostgreSQL first because it owns durable application state.
-3. Check configured runtime capabilities such as VFS, mail, and cluster
-   serving admission without assuming every optional integration gates
-   readiness in the same way.
-4. Correct the first unavailable authority, then recheck readiness.
+1. Keep the startup output from the foreground server.
+2. Check PostgreSQL first, because it holds the application's lasting state.
+3. Check the other services you configured, such as the VFS, mail and the
+   cluster's check on whether a node may serve. Don't assume every optional
+   integration affects readiness in the same way.
+4. Fix the first one that is unavailable, then check readiness again.
 
-Do not weaken readiness to make the endpoint green. The failed check is the
-protection.
+Don't weaken the readiness check to make the endpoint go green. The failing
+check is what protects you.
 
-## Diagnose Generated State
+## Generated local state
 
-The local lifecycle derives configuration under ignored `.build/dev` state and
-serves the compiled webapp only when `webapp/dist/webapp-build.json` matches the
-server build identity.
+The local setup generates configuration under `.build/dev`, which Git ignores.
+It serves the compiled webapp only when `webapp/dist/webapp-build.json`
+matches the server's build identity.
 
 ```sh
 make dev-state
@@ -125,33 +127,35 @@ make webapp-build
 make dev-doctor
 ```
 
-Treat generated state as an output. Change tracked configuration templates or
-Make inputs, then regenerate; do not make a lasting fix by editing the ignored
-JSON directly. Never attach the generated configuration or secrets to an issue.
+Treat generated state as output. To change it for good, edit the configuration
+templates or Make inputs in the repository and generate again. Don't edit the
+ignored JSON directly. Never attach the generated configuration or secrets to
+an issue.
 
-## Handle Migration Failures
+## Migration failures
 
-Migration errors are PostgreSQL errors, not Redis or browser errors. Preserve
-the first migration message and the database logs before taking action.
+Migration errors come from PostgreSQL, not from Redis or the browser. Keep the
+first migration message and the database logs before you do anything.
 
-Proctor is pre-release. Old disposable development databases may be
-incompatible with the current baseline and can require explicit recreation.
-That does not make deletion the default response:
+Proctor is pre-release. Old development databases that you can throw away may
+not work with the current baseline, and you may need to recreate them on
+purpose. That doesn't make deleting the database the default answer:
 
-1. Decide whether the database contains anything you need to retain.
-2. Save any approved development-only evidence outside the reset path.
+1. Decide whether the database holds anything you need to keep.
+2. Save any development-only evidence you're allowed to keep somewhere the
+   reset won't touch.
 3. Stop the foreground server.
-4. Only for an intentionally disposable fixture, run `make dev-reset` and
+4. Only if the setup is meant to be thrown away, run `make dev-reset` and
    recreate it with the documented local setup.
 
-Never apply that development recovery to an operator installation, and never
-manually mark a failed migration as complete.
+Never use this development recovery on an operator's installation, and never
+mark a failed migration as complete by hand.
 
-## Prove the Recovery
+## Confirm the fix
 
-Repeat `make dev-doctor`, then repeat the command that originally failed. For
-a server change, finish with the focused Go test and the appropriate server
-gate. For a runtime composition change, also run:
+Run `make dev-doctor` again, then the command that failed in the first place.
+For a server change, finish with the focused Go test and the server checks
+that apply. If you changed how the runtime is put together, also run:
 
 ```sh
 make -C server architecture

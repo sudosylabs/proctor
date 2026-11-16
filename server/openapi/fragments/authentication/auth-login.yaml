@@ -13,7 +13,7 @@ paths:
       tags:
         - Authentication
       description: >-
-        Authenticates a local credential and creates an interactive Session for the declared client type. Browser clients receive host-only cookies while native clients may consume response tokens; MFA-enabled accounts must include a current TOTP or unused recovery code. Authentication failures do not reveal which credential was wrong. Every rate-limit-admitted success or failure is durably audited; if that audit cannot be recorded the login fails with audit.unavailable and issues no usable Session. Requires Content-Type application/json, optionally with charset=utf-8. Cross-origin browser requests and invalid media types return request.invalid before credential verification or cookie issuance; native clients may omit browser origin headers.
+        Checks a local username or email address and password, then creates an interactive Session for the declared client type. Web and Desktop clients receive their credentials as host-only cookies, and the response body leaves out tokens. A CLI client receives the access and refresh tokens in the body. An account with two-step verification turned on must also send a current authenticator code or one unused recovery code. A failed sign-in does not say which value was wrong. Every attempt that passes the rate limit is recorded in the audit log, whether it succeeds or fails. If that audit record can't be written, the sign-in fails with audit.unavailable and no usable Session is issued. The request must use Content-Type application/json, optionally with charset=utf-8. A cross-origin browser request or a wrong media type returns request.invalid before the password is checked or any cookie is set. Native clients may omit browser origin headers.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -21,7 +21,7 @@ paths:
               --request POST \
               --url 'https://proctor.example.edu/api/v1/auth/login' \
               --header 'Content-Type: application/json' \
-              --data '{"login_id":"ada@example.edu","password":"<redacted>","client_type":"cli","device_name":"Exam workstation"}'
+              --data '{"login_id":"ada@example.edu","password":"correct-horse-battery-staple-2026","client_type":"cli","device_name":"Exam workstation"}'
       x-proctor-auth: public
       x-proctor-error-codes:
         - authentication.mfa.enrollment_required
@@ -70,12 +70,12 @@ components:
             $ref: '#/components/schemas/LoginRequest'
           example:
             login_id: ada@example.edu
-            password: <redacted>
+            password: correct-horse-battery-staple-2026
             client_type: cli
-            device_id: docs-example
-            device_name: API documentation example
+            device_id: lab-3-workstation-12
+            device_name: Exam workstation
       description: >-
-        The local login identifier, password, client type, optional device presentation, and optional MFA proof. Credentials are sensitive and must never be logged.
+        The username or email address, password and client type, with an optional device ID and name and an optional two-step verification code. These values are secrets: never log them.
   schemas:
     LoginRequest:
       type: object
@@ -87,23 +87,23 @@ components:
       properties:
         login_id:
           type: string
-          description: The normalized username or email address used for local authentication.
+          description: The username or email address of the local account. Case and surrounding spaces are ignored.
         password:
           type: string
-          description: The local password. Treat this value as a secret in clients, traces, and logs.
+          description: The account's local password. Treat it as a secret and keep it out of traces and logs.
         client_type:
           type: string
           enum:
             - desktop
             - cli
             - web
-          description: The client family for the Session being created.
+          description: The kind of client the new Session is for. It decides whether credentials come back as cookies (web, desktop) or in the body (cli).
         device_id:
           type: string
-          description: An optional stable client-controlled device identifier.
+          description: An identifier the client chooses for its device and keeps the same across sign-ins, up to 128 bytes. It is shown in Session management.
         device_name:
           type: string
-          description: An optional human-facing device name shown in Session management.
+          description: A readable device name shown in Session management, up to 128 characters.
         mfa_code:
           type: string
-          description: A current TOTP code or one unused recovery code when MFA is required.
+          description: A current six-digit authenticator code, or one unused recovery code. Required when the account has two-step verification turned on.

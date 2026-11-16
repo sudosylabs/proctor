@@ -11,45 +11,45 @@ components:
       type: http
       scheme: bearer
       description: >-
-        A Proctor session access credential or Personal Access Token, subject to the route's x-proctor-auth
-        requirement.
+        A Session access token or a Personal Access Token. Each operation says which kinds of credential it
+        accepts.
     dpopAuth:
       type: apiKey
       in: header
       name: Authorization
       description: >-
-        A Desktop Session access credential accompanied by a fresh RFC 9449 DPoP proof and server nonce in the
-        DPoP header.
+        A Desktop Session access token sent with the DPoP scheme. Each request also carries a fresh RFC 9449
+        DPoP proof, including the latest server nonce, in the DPoP header.
     sessionCookie:
       type: apiKey
       in: cookie
       name: PROCTOR_ACCESS
-      description: The host-only HttpOnly browser session access cookie.
+      description: The browser Session cookie. It is HttpOnly and sent only to this host.
     csrfToken:
       type: apiKey
       in: header
       name: X-Proctor-CSRF-Token
-      description: Required with the session cookie for state-changing requests.
+      description: The CSRF token. Send it with the Session cookie on every request that changes data.
     refreshBearerAuth:
       type: http
       scheme: bearer
-      description: A refresh credential accepted only by the refresh operation.
+      description: A refresh token. Only the refresh operation accepts it.
     refreshDPoPAuth:
       type: apiKey
       in: header
       name: Authorization
-      description: A Desktop refresh credential presented with the DPoP scheme and a fresh proof in the DPoP header.
+      description: A Desktop refresh token sent with the DPoP scheme, with a fresh proof in the DPoP header.
     refreshCookie:
       type: apiKey
       in: cookie
       name: PROCTOR_REFRESH
-      description: The host-only HttpOnly browser refresh cookie.
+      description: The browser refresh cookie. It is HttpOnly and sent only to this host.
   parameters:
     PageLimit:
       name: limit
       in: query
       required: false
-      description: Maximum number of items in the page.
+      description: Maximum number of items to return in this page.
       schema:
         type: integer
         minimum: 1
@@ -59,7 +59,8 @@ components:
       name: cursor
       in: query
       required: false
-      description: Opaque next_cursor from the previous page, returned unchanged; omit it for the first page.
+      description: >-
+        The `next_cursor` from the previous page, sent back exactly as received. Omit it to get the first page.
       schema:
         type: string
         minLength: 1
@@ -69,8 +70,9 @@ components:
       in: header
       required: true
       description: >-
-        Required opaque client key. Identical semantic commands replay the committed outcome for at least 24
-        hours; reuse with different input is a conflict.
+        A unique key you choose for this request, such as a random UUID. If you retry with the same key and the
+        same input within 24 hours, you get the first result back and the change is not made twice. Reusing a
+        key with different input fails with `idempotency.conflict`.
       schema:
         type: string
         minLength: 1
@@ -110,21 +112,21 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/ID'
-      description: The sealed Submission identifier.
+      description: The Submission identifier.
     AttemptWorkspaceEntryID:
       name: attempt_workspace_entry_id
       in: path
       required: true
       schema:
         $ref: '#/components/schemas/ID'
-      description: The active Attempt Workspace entry identifier.
+      description: The identifier of an entry in the Attempt Workspace.
     CandidateAttemptCredential:
       name: X-Proctor-Attempt-Credential
       in: header
       required: true
       description: >-
-        Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation.
-        Never log, persist, cache, or place this value in a URL.
+        The secret continuity credential of the active Participation: 32 bytes as unpadded URL-safe base64.
+        Treat it like a password. Never log, store, cache or put it in a URL.
       schema:
         type: string
         minLength: 43
@@ -134,7 +136,7 @@ components:
       name: X-Proctor-Attempt-Connection-ID
       in: header
       required: true
-      description: The durable open Attempt Connection bound to the current authenticated Session.
+      description: The identifier of the open Attempt Connection that belongs to the current Session.
       schema:
         $ref: '#/components/schemas/ID'
     ExamResourceID:
@@ -143,7 +145,7 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/ID'
-      description: The Exam resource identifier.
+      description: The Exam Resource identifier.
     ClassID:
       name: class_id
       in: path
@@ -169,7 +171,7 @@ components:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
           example:
-            type: /problems/request-invalid
+            type: https://docs.example.edu/problems/request.invalid
             title: Invalid request
             status: 400
             detail: One or more request fields are invalid.
@@ -187,7 +189,7 @@ components:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
           example:
-            type: /problems/authentication-required
+            type: https://docs.example.edu/problems/authentication.required
             title: Authentication required
             status: 401
             detail: Supply a credential accepted by this operation.
@@ -203,7 +205,7 @@ components:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
           example:
-            type: /problems/authorization-denied
+            type: https://docs.example.edu/problems/authorization.denied
             title: Access denied
             status: 403
             detail: The authenticated principal is not authorized for this action.
@@ -219,7 +221,7 @@ components:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
           example:
-            type: /problems/resource-not-found
+            type: https://docs.example.edu/problems/resource.not_found
             title: Resource not found
             status: 404
             detail: The requested resource is unavailable or not visible to this principal.
@@ -235,7 +237,7 @@ components:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
           example:
-            type: /problems/idempotency-conflict
+            type: https://docs.example.edu/problems/idempotency.conflict
             title: Request conflict
             status: 409
             detail: The idempotency key was already used with different input.
@@ -251,7 +253,7 @@ components:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
           example:
-            type: /problems/exam.security.preflight_expired
+            type: https://docs.example.edu/problems/exam.security.preflight_expired
             title: Gone
             status: 410
             detail: The security preflight expired.
@@ -267,7 +269,7 @@ components:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
           example:
-            type: /problems/server.internal
+            type: https://docs.example.edu/problems/server.internal
             title: Internal server error
             status: 500
             detail: An unexpected error occurred.
@@ -283,7 +285,7 @@ components:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
           example:
-            type: /problems/rate-limited
+            type: https://docs.example.edu/problems/authentication.rate_limited
             title: Too many requests
             status: 429
             detail: Retry after the client backoff interval.
@@ -291,14 +293,13 @@ components:
             request_id: req_docs_rate_limited
     ServiceUnavailable:
       description: >-
-        Service unavailable. The service.busy code means this node's bounded password or content-processing
-        capacity is currently full. No password proof or completed content publication is issued by that
-        refused operation; retry after the indicated delay, preserving any required idempotency key.
+        Service unavailable. The `service.busy` code means this server is already handling as many password
+        checks or file-processing jobs as it can. The refused request had no effect. Retry after the
+        `Retry-After` delay, with the same Idempotency-Key if the operation takes one.
       headers:
         Retry-After:
           description: >-
-            Present with value 1 for service.busy. Wait at least this many seconds before retrying the
-            operation.
+            Sent with `service.busy`, with the value 1. Wait at least this many seconds before you retry.
           schema:
             type: integer
             minimum: 1
@@ -309,25 +310,25 @@ components:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
           example:
-            type: /problems/administration-unavailable
+            type: https://docs.example.edu/problems/administration.unavailable
             title: Service unavailable
             status: 503
-            detail: A required authoritative dependency is temporarily unavailable.
+            detail: A service this request needs is temporarily unavailable.
             code: administration.unavailable
             request_id: req_docs_unavailable
   headers:
     NoStore:
-      description: Prevents storage of sensitive responses.
+      description: Always `no-store`. Browsers and proxies must not keep a copy of this response.
       schema:
         type: string
         const: no-store
     PrivateNoStore:
-      description: Marks a private response and prevents all storage.
+      description: Always `private, no-store`. The response is for this caller only, and nothing may keep a copy.
       schema:
         type: string
         const: private, no-store
     NoSniff:
-      description: Prevents content-type sniffing.
+      description: Always `nosniff`. Browsers must use the declared Content-Type and not guess another.
       schema:
         type: string
         const: nosniff
@@ -336,12 +337,16 @@ components:
       type: string
       minLength: 1
       maxLength: 2048
-      description: Opaque continuation for the next page, omitted on the last page. Clients return it unchanged as cursor.
+      description: >-
+        Token for the next page. Send it back unchanged as `cursor`, and do not parse it. Omitted on the last
+        page.
     ID:
       type: string
       pattern: ^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$
+      description: A Proctor identifier, 26 lowercase z-base-32 characters. Compare it as an exact string.
     ExamResourceMediaType:
       type: string
+      description: The media type of an Exam Resource file.
       enum:
         - application/pdf
         - image/png
@@ -356,21 +361,24 @@ components:
       minLength: 1
       maxLength: 1024
       description: >-
-        An already-canonical, case-sensitive POSIX-relative path: at most 16 segments and 255 UTF-8 bytes per
-        segment. Empty, absolute, dot, dot-dot, repeated/trailing separators, backslashes, NUL/control
-        characters, and the reserved .proctor root are rejected.
+        A case-sensitive relative path that uses `/` between segments, with at most 16 segments of up to 255
+        UTF-8 bytes each. The server does not clean paths up. It rejects an empty or absolute path, `.` or
+        `..` segments, repeated or trailing slashes, backslashes, control characters and the reserved
+        `.proctor` folder.
     WorkspaceContentVersion:
       type: string
       pattern: ^[A-Za-z0-9_-]{26}$
       description: >-
-        Opaque comparison token for one acknowledged Workspace file content state. It is not an entity
-        identifier and must be returned unchanged.
+        A token for one saved version of a Workspace file's content. Compare it or send it back unchanged. It
+        is not an identifier, and you should not read meaning into its characters.
     SHA256:
       type: string
       pattern: ^[0-9a-f]{64}$
+      description: A SHA-256 digest as 64 lowercase hexadecimal characters.
     InstitutionResponse:
       type: object
       additionalProperties: false
+      description: The installation's Institution.
       required:
         - id
         - created_at
@@ -385,23 +393,33 @@ components:
         created_at:
           type: string
           format: date-time
+          description: Time the Institution was created.
         updated_at:
           type: string
           format: date-time
+          description: Time of the latest change to the Institution.
         archived_at:
           type: string
           format: date-time
+          description: Time the Institution was archived. Omitted while it is active.
         name:
           type: string
+          description: Short machine name of the Institution.
         display_name:
           type: string
+          description: Name shown to people.
         description:
           type: string
+          description: Free-text description. It can be empty.
         exam_capacity:
           $ref: '#/components/schemas/ExamCapacityPolicy'
     ExamCapacityPolicy:
       type: object
       additionalProperties: false
+      description: >-
+        Size limits for Exam content and candidate Workspaces across the Institution. Publishing an Exam
+        Revision keeps the limits in force at that moment, so later changes do not affect a Sitting already
+        under way.
       required:
         - resource_maximum_count
         - resource_maximum_bytes
@@ -413,31 +431,36 @@ components:
           type: integer
           minimum: 1
           maximum: 100
+          description: Most Exam Resources one Exam can have. The default is 10.
         resource_maximum_bytes:
           type: integer
           format: int64
           minimum: 1
           maximum: 104857600
+          description: Largest size of one Exam Resource, in bytes. The default is 10 MiB.
         workspace_maximum_entries:
           type: integer
           minimum: 1
           maximum: 5000
+          description: Most files and folders one Workspace can hold. The default is 500.
         workspace_maximum_file_bytes:
           type: integer
           format: int64
           minimum: 1
           maximum: 104857600
+          description: Largest size of one Workspace file, in bytes. The default is 10 MiB.
         workspace_maximum_total_bytes:
           type: integer
           format: int64
           minimum: 1
           maximum: 1073741824
+          description: Largest total size of all files in one Workspace, in bytes. The default is 50 MiB.
     UserProfileResponse:
       type: object
       additionalProperties: false
       description: >-
-        User directory projection. Email, verification, locale, timezone, activity, and disabled state are
-        present only for self or institution-wide user.view authority.
+        A User's profile. The email, verification, locale, time zone, activity and disabled fields appear only
+        when you read your own profile or hold Institution-wide user.view.
       required:
         - id
         - created_at
@@ -454,51 +477,66 @@ components:
         created_at:
           type: string
           format: date-time
+          description: Time the User account was created.
         updated_at:
           type: string
           format: date-time
+          description: Time of the latest change to the account.
         archived_at:
           type: string
           format: date-time
+          description: Time the account was archived. Omitted while it is not archived.
         username:
           type: string
+          description: Unique sign-in name, in lowercase.
         email:
           type: string
           format: email
+          description: The User's email address.
         email_verified:
           type: boolean
+          description: True when the User has confirmed they own the current email address.
         display_name:
           type: string
+          description: Name shown to other people. It can be empty.
         first_name:
           type: string
+          description: Given name. It can be empty.
         last_name:
           type: string
+          description: Family name. It can be empty.
         locale:
           type: string
+          description: Preferred language tag, such as `en` or `fr-CA`. Defaults to `en`.
         timezone:
           type: string
+          description: Preferred time zone name, such as `Europe/Paris`. Defaults to `UTC`.
         last_login_at:
           type: string
           format: date-time
-          description: Time the User last signed in.
+          description: Time the User last signed in. Omitted if they never have.
         last_activity_at:
           type: string
           format: date-time
           description: >-
-            Time the User was last active in any Session: a sign-in, or authenticated use or refresh of a Session.
-            Use is recorded at most once per Session per activity update interval (five minutes by default), so it
-            can trail the latest request by up to that interval. It never moves backwards.
+            Time the User was last active in any Session: signing in, or using or refreshing a Session. The server
+            records use at most once per Session every five minutes by default, so it can lag the latest request
+            by that much. It never moves backwards.
         disabled_at:
           type: string
           format: date-time
+          description: Time the account was disabled. Omitted while it is enabled.
         profile_picture_url:
           type: string
+          description: >-
+            Relative URL of the User's profile picture. Once a picture has been uploaded, the URL carries a
+            version query that changes with each account change, so a new upload or removal gets a new URL.
         profile_picture_changed_at:
           type: string
           format: date-time
           description: >-
-            Time of the latest upload or removal. It is not a sign that a custom picture exists; use
-            profile_picture_kind.
+            Time of the latest upload or removal. It does not tell you whether a custom picture exists. Use
+            `profile_picture_kind` for that.
         profile_picture_kind:
           $ref: '#/components/schemas/ProfilePictureKind'
     ProfilePictureKind:
@@ -508,7 +546,9 @@ components:
         Which picture the profile picture route serves: the User's own upload (custom), which can be removed, or
         the picture generated for every User (default).
     RoleResponse:
-      description: Reusable Role definition; effective access still requires a scoped Role Binding.
+      description: >-
+        A named set of permissions. A Role grants nothing by itself. A User gets its permissions only through a
+        Role Binding at a scope.
       type: object
       additionalProperties: false
       required:
@@ -526,40 +566,42 @@ components:
         created_at:
           type: string
           format: date-time
-          description: Time when the Role was created.
+          description: Time the Role was created.
         updated_at:
           type: string
           format: date-time
-          description: Time of the latest Role change.
+          description: Time of the latest change to the Role.
         archived_at:
           type: string
           format: date-time
-          description: Time when the Role was archived; omitted while active.
+          description: Time the Role was archived. Omitted while it is active.
         name:
           type: string
-          description: Immutable canonical machine name for the Role.
+          description: Machine name of the Role. It can't change after creation.
         display_name:
           type: string
-          description: Human-facing Role name.
+          description: Name shown to people.
         description:
           type: string
-          description: Human-facing explanation of the Role's intended responsibility.
+          description: What the Role is for, in plain text.
         permissions:
           type: array
-          description: Duplicate-free set of stable permission actions granted by the Role.
+          description: The permissions the Role grants, such as `class.view`. Each appears once.
           items:
             type: string
         built_in:
           type: boolean
-          description: True when installation invariants protect the Role from ordinary update or deletion.
+          description: True for a Role that ships with Proctor. Built-in Roles can't be edited or deleted.
         holders:
           $ref: '#/components/schemas/RoleHolders'
+          description: Who holds the Role now. Present only if you hold role_binding.view somewhere.
     RoleHolders:
       description: >-
-        Who holds a Role now, among the Role Bindings the caller can see: the current Bindings of the Role, effective at
-        the request time on an unarchived scope, inside the caller's role_binding.view scopes. Present on Role reads only,
-        and only for a caller holding role_binding.view somewhere. Each count stops at 10,000; `users` and `scopes` are
-        counted among the Bindings counted, so all three are lower bounds when `bindings` reaches the bound.
+        Who holds a Role now, counting only the Role Bindings you can see. A Binding counts when it is in effect
+        at the time of the request, its scope is not archived, and it sits inside your role_binding.view scopes.
+        Sent on Role reads only, and only if you hold role_binding.view somewhere. Counting stops at 10,000
+        Bindings. `users` and `scopes` are counted from those Bindings, so when `bindings` reaches 10,000 all
+        three numbers are minimums.
       type: object
       additionalProperties: false
       required:
@@ -574,28 +616,30 @@ components:
           type: integer
           minimum: 0
           maximum: 10000
-          description: Current Role Bindings of the Role the caller can see.
+          description: Number of current Role Bindings of this Role that you can see.
         users:
           type: integer
           minimum: 0
           maximum: 10000
-          description: Distinct Users holding those Bindings.
+          description: Number of different Users who hold those Bindings.
         scopes:
           type: integer
           minimum: 0
           maximum: 10000
-          description: Distinct scopes (scope type and identity) of those Bindings.
+          description: Number of different scopes (scope type and ID) those Bindings are at.
         bindings_is_lower_bound:
           type: boolean
-          description: True when `bindings` reached the 10,000 bound and there may be more.
+          description: True when `bindings` reached 10,000 and there may be more.
         users_is_lower_bound:
           type: boolean
-          description: True when `users` may be more than reported, because the Bindings count reached its bound.
+          description: True when `users` may be higher than reported, because counting stopped at 10,000 Bindings.
         scopes_is_lower_bound:
           type: boolean
-          description: True when `scopes` may be more than reported, because the Bindings count reached its bound.
+          description: True when `scopes` may be higher than reported, because counting stopped at 10,000 Bindings.
     RoleBindingResponse:
-      description: Effective-dated grant of one Role to one User in one exact scope.
+      description: >-
+        A grant of one Role to one User at one scope: the Institution, an Academic Unit or a Class. It is in
+        effect from `start_at` until `end_at`, if set.
       type: object
       additionalProperties: false
       required:
@@ -613,31 +657,40 @@ components:
         created_at:
           type: string
           format: date-time
+          description: Time the Role Binding was created.
         updated_at:
           type: string
           format: date-time
+          description: Time of the latest change, such as ending the Binding.
         archived_at:
           type: string
           format: date-time
+          description: Time the Role Binding was archived. Omitted while it is not archived.
         user_id:
           $ref: '#/components/schemas/ID'
+          description: The User who receives the Role.
         role_id:
           $ref: '#/components/schemas/ID'
+          description: The Role granted.
         scope_type:
           type: string
-          description: Stable authorization scope kind for the grant.
+          description: Kind of scope the grant applies to, `institution`, `academic_unit` or `class`.
         scope_id:
           $ref: '#/components/schemas/ID'
+          description: The Institution, Academic Unit or Class the grant applies to.
         start_at:
           type: string
           format: date-time
-          description: Time when the grant becomes effective.
+          description: Time the grant takes effect.
         end_at:
           type: string
           format: date-time
-          description: Time when the grant stops being effective, when bounded.
+          description: Time the grant stops. Omitted for a grant with no end.
     JobStatus:
       type: string
+      description: >-
+        State of a background Job: waiting to run (`queued`), running, asked to stop (`cancel_requested`), or
+        finished as `succeeded`, `failed` or `canceled`.
       enum:
         - queued
         - running
@@ -648,7 +701,7 @@ components:
     OnboardingImportFailureCode:
       type: string
       description: >-
-        Why a failed onboarding import, student progression, or academic administration preview failed: a lost credential or authority, an unreadable file, a target that no longer validates, a progression preview failure, or a preview filter that matched too many Users. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+        Why an onboarding import, student progression or academic administration preview failed as a whole. Examples are lost credentials or permissions, an unreadable file, a target that is no longer valid, or a preview filter that matched too many Users. Later versions may add values. Show your own label for each value, and a general message for one you don't recognize.
       enum:
         - academic_administration_preview.authorization_lost
         - academic_administration_preview.target_conflict
@@ -682,7 +735,7 @@ components:
     OnboardingImportPreviewCode:
       type: string
       description: >-
-        Why a preview row is invalid, duplicate, or annotated: a malformed or duplicate CSV row, a target that does not resolve, a student progression outcome such as an ineligible student or an existing destination enrollment, or an academic administration preview skip reason or no-change marker. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+        Why a preview row is invalid, a duplicate, or carries a note. Examples are a malformed or repeated CSV row, a target that can't be found, a student who can't progress or is already enrolled in the destination, or an academic administration row that will be skipped or changes nothing. Later versions may add values. Show your own label for each value, and a general message for one you don't recognize.
       enum:
         - academic_administration_preview.ambiguous
         - academic_administration_preview.enrollment_conflict
@@ -718,7 +771,7 @@ components:
     OnboardingImportRowCode:
       type: string
       description: >-
-        Why an executed onboarding import, student progression, or academic administration preview row failed, as the Invitation or academic administration operation that ran it reported, or because a preview row reached a User who became a System Administrator after the preview froze. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+        Why a row failed when an onboarding import, student progression or academic administration preview ran. It is the code the Invitation or academic administration operation for that row returned, or `academic_administration_preview.system_administrator` when the row's User became a System Administrator after the preview was taken. Later versions may add values. Show your own label for each value, and a general message for one you don't recognize.
       enum:
         - academic_administration_preview.system_administrator
         - academic_unit_member.conflict
@@ -762,6 +815,9 @@ components:
     OnboardingImportRowResponse:
       type: object
       additionalProperties: false
+      description: >-
+        One row of an import: where it sits, what it does and how it ended. It never repeats the email address
+        or names the row holds.
       required:
         - row
         - reference
@@ -772,11 +828,17 @@ components:
           type: integer
           minimum: 1
           maximum: 50000
+          description: Row number, starting at 1 for the first data row after the header.
         reference:
           type: string
           maxLength: 128
+          description: >-
+            Your label for the row: the value of the CSV `reference` column, or the row number when that column
+            is empty or longer than 128 characters. For a student progression or an academic administration
+            preview, it is the ID of the Class membership or User the row is about.
         operation:
           type: string
+          description: The change the row makes when the import runs.
           enum:
             - student_class.create
             - teacher_academic_unit.create
@@ -796,6 +858,10 @@ components:
             - user_sessions.revoke
         status:
           type: string
+          description: >-
+            Where the row stands. Before commit it is `valid`, `invalid` or `duplicate`. On commit, valid rows
+            become `pending`, rows that would change nothing become `no_op`, and the rest are `skipped`. A pending
+            row ends as `succeeded` or `failed`, or `canceled` if the import is canceled first.
           enum:
             - valid
             - invalid
@@ -811,18 +877,25 @@ components:
           anyOf:
             - $ref: '#/components/schemas/OnboardingImportPreviewCode'
             - type: string
+          description: Why the preview marked the row invalid or duplicate, or a note about it. Omitted when there is none.
         public_code:
           type: string
           anyOf:
             - $ref: '#/components/schemas/OnboardingImportRowCode'
             - type: string
+          description: Why the row failed when the import ran. Present only on a `failed` row.
         invitation_id:
           $ref: '#/components/schemas/ID'
+          description: The Invitation the row created, for rows that invite someone.
         resource_id:
           $ref: '#/components/schemas/ID'
+          description: The ID of the record the row created or changed, when the operation reports one.
     OnboardingImportResponse:
       type: object
       additionalProperties: false
+      description: >-
+        A CSV onboarding import, a student progression or an academic administration preview. The server parses
+        it into rows you can review, then runs the rows when you commit it.
       required:
         - id
         - mode
@@ -846,6 +919,7 @@ components:
           $ref: '#/components/schemas/ID'
         mode:
           type: string
+          description: What kind of import this is, which decides the CSV columns and the operations its rows run.
           enum:
             - student_class
             - teacher_academic_unit
@@ -854,6 +928,9 @@ components:
             - student_progression
         state:
           type: string
+          description: >-
+            Progress of the import. It goes from `uploading` and `parsing` to `preview_ready`, then `executing`
+            after commit, and ends as `completed`, `completed_with_errors`, `canceled` or `failed`.
           enum:
             - uploading
             - parsing
@@ -865,22 +942,29 @@ components:
             - failed
         scope_type:
           type: string
+          description: Kind of scope the import works in.
           enum:
             - class
             - academic_unit
             - institution
         scope_id:
           $ref: '#/components/schemas/ID'
+          description: The Class, Academic Unit or Institution the import works in.
         role_id:
           $ref: '#/components/schemas/ID'
+          description: The Role the import grants, for modes that grant one.
         source_period_id:
           $ref: '#/components/schemas/ID'
+          description: Academic Period students progress from. Student progressions only.
         source_class_id:
           $ref: '#/components/schemas/ID'
+          description: Class students progress from. Student progressions only.
         destination_period_id:
           $ref: '#/components/schemas/ID'
+          description: Academic Period students progress into. Student progressions only.
         destination_class_id:
           $ref: '#/components/schemas/ID'
+          description: Class students progress into. Student progressions only.
         source_class_name:
           type: string
           maxLength: 512
@@ -892,75 +976,98 @@ components:
         effective_at:
           type: string
           format: date-time
+          description: Time the student progression takes effect. Omitted for other modes.
         preview_digest:
           type: string
           pattern: ^[0-9a-f]{64}$
+          description: >-
+            SHA-256 fingerprint of the parsed preview, as 64 hexadecimal characters. Send it back when you commit,
+            to confirm you reviewed this exact preview. Present once parsing has finished.
         ignored_headers:
           type: array
           maxItems: 64
+          description: CSV column names the import did not recognize and ignored, in lowercase and sorted.
           items:
             type: string
             maxLength: 128
         rows:
           type: array
           maxItems: 50000
+          description: Every row of the import. Present only when you read one import, not in listings.
           items:
             $ref: '#/components/schemas/OnboardingImportRowResponse'
         total_rows:
           type: integer
           minimum: 0
           maximum: 50000
+          description: Number of data rows in the import.
         valid_rows:
           type: integer
           minimum: 0
           maximum: 50000
+          description: Rows the preview found valid.
         invalid_rows:
           type: integer
           minimum: 0
           maximum: 50000
+          description: Rows the preview found invalid.
         succeeded_rows:
           type: integer
           minimum: 0
           maximum: 50000
+          description: Rows that ran and made their change.
         no_op_rows:
           type: integer
           minimum: 0
           maximum: 50000
+          description: Rows that needed no change.
         failed_rows:
           type: integer
           minimum: 0
           maximum: 50000
+          description: Rows that ran and failed.
         skipped_rows:
           type: integer
           minimum: 0
           maximum: 50000
+          description: Rows that did not run, because they were left out at commit or the import was canceled.
         commit_policy:
           type: string
+          description: >-
+            How the import was committed: `require_all_valid` runs only if every row is valid, and
+            `valid_rows_only` runs the valid rows and skips the rest. Present after commit.
           enum:
             - require_all_valid
             - valid_rows_only
         parse_job_id:
           $ref: '#/components/schemas/ID'
+          description: The background Job that parses the file.
         execution_job_id:
           $ref: '#/components/schemas/ID'
+          description: The background Job that runs the rows. Present after commit.
         created_at:
           type: string
           format: date-time
+          description: Time the import was created.
         updated_at:
           type: string
           format: date-time
+          description: Time of the latest change to the import.
         expires_at:
           type: string
           format: date-time
+          description: Time after which the import can no longer be read, seven days after it was created.
         revision:
           type: integer
           format: int64
           minimum: 1
+          description: Version number that goes up with each change. Send it as `expected_revision` when you commit.
         failure_code:
           type: string
           anyOf:
             - $ref: '#/components/schemas/OnboardingImportFailureCode'
             - type: string
+          description: Why the import failed. Present only when `state` is `failed`.
         file_name:
           type: string
           minLength: 1
@@ -969,6 +1076,7 @@ components:
     ExternalAuthenticationProviderResponse:
       type: object
       additionalProperties: false
+      description: An identity provider people can sign in with, as configured by the operator.
       required:
         - id
         - display_name
@@ -976,14 +1084,17 @@ components:
       properties:
         id:
           type: string
+          description: The provider's ID, set in the server configuration.
         display_name:
           type: string
+          description: Name to show on the sign-in button.
         type:
           type: string
+          description: The provider's protocol, such as `oidc`.
     ErrorCode:
       type: string
       description: >-
-        Stable public problem code. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+        Machine-readable error code. Later versions may add values. Show your own label for each value, and a general message for one you don't recognize.
       enum:
         - academic_administration_preview.authorization_lost
         - academic_administration_preview.conflict
@@ -1346,7 +1457,7 @@ components:
     AuditAction:
       type: string
       description: >-
-        Stable name of an audited action. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+        Name of an audited action. Later versions may add values. Show your own label for each value, and a general message for one you don't recognize.
       enum:
         - academic.progression.manage
         - academic_audit.view
@@ -1458,7 +1569,7 @@ components:
     ResourceType:
       type: string
       description: >-
-        Stable type of an authorization or audit resource. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+        Type of a resource in permission checks and audit records. Later versions may add values. Show your own label for each value, and a general message for one you don't recognize.
       enum:
         - academic_period
         - academic_unit
@@ -1474,6 +1585,9 @@ components:
     ProblemDetails:
       type: object
       additionalProperties: false
+      description: >-
+        The RFC 9457 error body returned by every failed request. Use `code` to decide what to do. `title` and
+        `detail` are text for people, in the request's language.
       required:
         - type
         - title
@@ -1483,64 +1597,84 @@ components:
         type:
           type: string
           format: uri-reference
+          description: >-
+            Link to this error's page on the installation's documentation site, such as
+            `https://docs.example.edu/problems/request.invalid`, or `about:blank` when the installation has not
+            configured one. Use `code`, not `type`, to decide what to do.
         title:
           type: string
+          description: Short summary of the error for people.
         status:
           type: integer
           minimum: 400
           maximum: 599
+          description: The HTTP status code of the response.
         detail:
           type: string
+          description: Longer explanation of this occurrence for people. Omitted when there is nothing to add.
         instance:
           type: string
           format: uri-reference
+          description: The request path that failed, when the server includes it.
         code:
           type: string
           anyOf:
             - $ref: '#/components/schemas/ErrorCode'
             - type: string
+          description: Machine-readable error code, such as `request.invalid`. Base your error handling on this.
         request_id:
           type: string
+          description: The server's ID for the request. Quote it when you report a problem.
         control_metadata_bytes:
           type: integer
           format: int64
           minimum: 0
           maximum: 2097152
-          description: Present only on an exam.delivery.metadata_capacity refusal.
+          description: >-
+            Bytes of delivery control data already stored. Present only with `exam.delivery.metadata_capacity`.
         control_metadata_limit_bytes:
           type: integer
           format: int64
           minimum: 0
           maximum: 2097152
-          description: Present only on an exam.delivery.metadata_capacity refusal.
+          description: >-
+            Most bytes of delivery control data that can be stored. Present only with
+            `exam.delivery.metadata_capacity`.
         required_reservation_bytes:
           type: integer
           format: int64
           minimum: 0
           maximum: 2097152
-          description: Present only on an exam.delivery.metadata_capacity refusal.
+          description: >-
+            Bytes the refused request needed to reserve. Present only with `exam.delivery.metadata_capacity`.
         remaining_reservable_bytes:
           type: integer
           format: int64
           minimum: 0
           maximum: 2097152
-          description: Present only on an exam.delivery.metadata_capacity refusal.
+          description: >-
+            Bytes that can still be reserved. Present only with `exam.delivery.metadata_capacity`.
         fields:
           type: object
+          description: >-
+            For validation errors, the request fields that were wrong, each mapped to a short reason.
           additionalProperties:
             type: string
         delivery:
           $ref: '#/components/schemas/DeliveryRecovery'
+          description: Current delivery progress and budget, sent with some Exam delivery errors.
     BrowserSourceSessionID:
       type: string
       format: uuid
       pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+      description: Lowercase version 4 UUID that Proctor Desktop assigns to one browser source.
     BrowserDeliveryRecord:
       description: >-
-        Strict closed record. Lifecycle records omit navigation members; optional members are omitted rather
-        than null. Redirect selectors must reference an earlier successful hop in the same source and policy.
-        Policy validation, canonical URL minimization, safe integer spelling and UTC millisecond precision are
-        enforced by the server.
+        One Browser Activity record sent by Proctor Desktop. `kind` decides which members it has: open and close
+        records carry no location, and members a record does not use are left out, never null. A redirect
+        names an earlier successful navigation of the same source and policy. The server checks every record
+        against the browser policy and rejects URLs that are not already in minimal form, unsafe integers, and times
+        that are not UTC with millisecond precision.
       oneOf:
         - type: object
           additionalProperties: false
@@ -1555,15 +1689,19 @@ components:
               format: int64
               minimum: 1
               maximum: 9007199254740991
+              description: Position of the record in this browser source. Each record's number is higher than the last.
             kind:
               type: string
               const: browser_opened
+              description: The exam browser opened.
             policy_revision_id:
               $ref: '#/components/schemas/ID'
+              description: The Exam Revision whose browser policy was in force.
             client_occurred_at:
               type: string
               format: date-time
               pattern: Z$
+              description: When it happened by the Desktop's clock, in UTC with millisecond precision.
         - type: object
           additionalProperties: false
           required:
@@ -1577,15 +1715,19 @@ components:
               format: int64
               minimum: 1
               maximum: 9007199254740991
+              description: Position of the record in this browser source. Each record's number is higher than the last.
             kind:
               type: string
               const: browser_closed
+              description: The exam browser closed.
             policy_revision_id:
               $ref: '#/components/schemas/ID'
+              description: The Exam Revision whose browser policy was in force.
             client_occurred_at:
               type: string
               format: date-time
               pattern: Z$
+              description: When it happened by the Desktop's clock, in UTC with millisecond precision.
         - type: object
           additionalProperties: false
           required:
@@ -1601,18 +1743,23 @@ components:
               format: int64
               minimum: 1
               maximum: 9007199254740991
+              description: Position of the record in this browser source. Each record's number is higher than the last.
             kind:
               type: string
               const: top_level_navigation
+              description: The browser moved to a page the policy allows.
             policy_revision_id:
               $ref: '#/components/schemas/ID'
+              description: The Exam Revision whose browser policy was in force.
             client_occurred_at:
               type: string
               format: date-time
               pattern: Z$
+              description: When it happened by the Desktop's clock, in UTC with millisecond precision.
             location:
               type: object
               additionalProperties: false
+              description: The page address with the query and fragment removed.
               required:
                 - scheme
                 - host
@@ -1621,21 +1768,26 @@ components:
                 scheme:
                   type: string
                   maxLength: 32
+                  description: URL scheme in lowercase, such as `https`.
                 host:
                   type: string
                   maxLength: 2048
+                  description: Host name in lowercase. Empty when the scheme has no host.
                 port:
                   type: string
                   minLength: 1
                   maxLength: 5
+                  description: Port number. Omitted when it is the scheme's default port.
                 path:
                   type: string
                   maxLength: 2048
+                  description: URL path.
             matched_rule_id:
               type: string
               minLength: 1
               maxLength: 64
               pattern: ^[a-z0-9_-]{1,64}$
+              description: The browser policy rule that allowed the page.
         - type: object
           additionalProperties: false
           required:
@@ -1652,18 +1804,23 @@ components:
               format: int64
               minimum: 1
               maximum: 9007199254740991
+              description: Position of the record in this browser source. Each record's number is higher than the last.
             kind:
               type: string
               const: top_level_redirect
+              description: A page redirected to another page the policy allows.
             policy_revision_id:
               $ref: '#/components/schemas/ID'
+              description: The Exam Revision whose browser policy was in force.
             client_occurred_at:
               type: string
               format: date-time
               pattern: Z$
+              description: When it happened by the Desktop's clock, in UTC with millisecond precision.
             location:
               type: object
               additionalProperties: false
+              description: The page address with the query and fragment removed.
               required:
                 - scheme
                 - host
@@ -1672,26 +1829,32 @@ components:
                 scheme:
                   type: string
                   maxLength: 32
+                  description: URL scheme in lowercase, such as `https`.
                 host:
                   type: string
                   maxLength: 2048
+                  description: Host name in lowercase. Empty when the scheme has no host.
                 port:
                   type: string
                   minLength: 1
                   maxLength: 5
+                  description: Port number. Omitted when it is the scheme's default port.
                 path:
                   type: string
                   maxLength: 2048
+                  description: URL path.
             matched_rule_id:
               type: string
               minLength: 1
               maxLength: 64
               pattern: ^[a-z0-9_-]{1,64}$
+              description: The browser policy rule that allowed the target page.
             redirect_from_sequence:
               type: integer
               format: int64
               minimum: 1
               maximum: 9007199254740991
+              description: The `sequence` of the earlier navigation that redirected here.
         - type: object
           additionalProperties: false
           required:
@@ -1707,18 +1870,23 @@ components:
               format: int64
               minimum: 1
               maximum: 9007199254740991
+              description: Position of the record in this browser source. Each record's number is higher than the last.
             kind:
               type: string
               const: blocked_top_level_navigation
+              description: The browser blocked a page the policy does not allow.
             policy_revision_id:
               $ref: '#/components/schemas/ID'
+              description: The Exam Revision whose browser policy was in force.
             client_occurred_at:
               type: string
               format: date-time
               pattern: Z$
+              description: When it happened by the Desktop's clock, in UTC with millisecond precision.
             location:
               type: object
               additionalProperties: false
+              description: The page address with the query and fragment removed.
               required:
                 - scheme
                 - host
@@ -1727,23 +1895,29 @@ components:
                 scheme:
                   type: string
                   maxLength: 32
+                  description: URL scheme in lowercase, such as `https`.
                 host:
                   type: string
                   maxLength: 2048
+                  description: Host name in lowercase. Empty when the scheme has no host.
                 port:
                   type: string
                   minLength: 1
                   maxLength: 5
+                  description: Port number. Omitted when it is the scheme's default port.
                 path:
                   type: string
                   maxLength: 2048
+                  description: URL path.
             matched_rule_id:
               type: string
               minLength: 1
               maxLength: 64
               pattern: ^[a-z0-9_-]{1,64}$
+              description: The browser policy rule that matched the page, when one did. Never sent for `scheme_not_allowed` or `invalid_url`.
             block_reason:
               type: string
+              description: Why the page was blocked.
               enum:
                 - scheme_not_allowed
                 - origin_not_allowed
@@ -1755,21 +1929,24 @@ components:
               format: int64
               minimum: 1
               maximum: 9007199254740991
+              description: The `sequence` of the earlier navigation that tried to redirect here. Required when `block_reason` is `redirect_not_allowed`.
     DeliveryRecovery:
       type: object
       additionalProperties: false
       description: >-
-        Current authorized progress and budget after a delivery refusal, bounded at 32 KiB. These observations
-        do not acknowledge rejected bytes. Independent reads may reflect concurrent progress. Omitted when
-        fresh ownership cannot be established or the family has retired. Available on pending_capacity,
-        replay_window_exceeded, detail_budget_exhausted, sequence_limit, declaration_conflict, upload_expired
-        and delivery rate-limit errors.
+        Current delivery progress and budget, sent with a refused delivery so the client can recover. It is at
+        most 32 KiB. It does not mean the server accepted any of the refused data, and progress read at
+        different moments may differ while other uploads run. Left out when the server can't confirm you still
+        own the delivery, or the delivery has ended. Sent with `pending_capacity`, `replay_window_exceeded`,
+        `detail_budget_exhausted`, `sequence_limit`, `declaration_conflict`, `upload_expired` and the delivery
+        rate-limit errors.
       required:
         - family
         - budget
       properties:
         family:
           type: string
+          description: Which delivery the data belongs to, `native` security data or `browser` activity.
           enum:
             - native
             - browser
@@ -1777,8 +1954,10 @@ components:
           $ref: '#/components/schemas/DeliveryBudgetSnapshot'
         native_status:
           $ref: '#/components/schemas/NativeSecurityStreamStatus'
+          description: Current status of the native security stream. Present only when `family` is `native`.
         browser_status:
           $ref: '#/components/schemas/BrowserSourceStatus'
+          description: Current status of the browser source. Present only when `family` is `browser`.
       oneOf:
         - properties:
             family:

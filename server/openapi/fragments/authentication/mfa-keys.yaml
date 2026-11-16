@@ -13,7 +13,7 @@ paths:
       tags:
         - Authentication
       description: >-
-        Returns the non-secret identifier of this node's configured MFA primary key, the primary-key fence that the last rekey installed, and, per sealing key, how many live TOTP secrets it seals and whether this node's ring holds it. Use it to plan a rotation and to confirm a retiring key seals nothing before removing it from configuration. No key bytes, ciphertext, or account identities are returned.
+        Returns the ID of the primary key this server node uses to encrypt new authenticator secrets, and the primary key the last rekey made required on every node. For each encryption key still in use, it also returns how many live authenticator secrets it encrypts and whether this node has the key configured. Use it to plan a key rotation, and to confirm that a key you are retiring encrypts nothing before you remove it from configuration. Key IDs are not secret. No key bytes, encrypted data or account details are returned.
       x-proctor-auth: strong_recent_session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -57,7 +57,7 @@ paths:
       tags:
         - Authentication
       description: >-
-        Fences the MFA key ring on this node's configured primary key and starts one durable Job that re-seals every live TOTP secret from other keys to it, one credential at a time under a compare-and-swap on its key identity. The Job resumes from its checkpoint after a crash or lease loss. A rekey is refused while another is queued or running, and the fence moves to a different primary only after the previous rekey proved that no live secret needs another key. From the fence onwards every node must seal new secrets with the fenced primary.
+        Makes this node's configured primary key the required primary key for every node, then starts one background Job. The Job re-encrypts every live authenticator secret that uses another key with the primary key, one at a time. Each secret is replaced only if it still uses the key the Job read, so a change made in the meantime is never overwritten. The Job saves its place as it goes and picks up from there after a crash or after it loses its lease. A rekey is refused while another one is queued or running. The required primary key can change to a different key only after the previous rekey proved that no live secret still needs another key. From the moment it starts, every node must encrypt new secrets with the required primary key.
       x-proctor-auth: strong_recent_session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -111,14 +111,14 @@ paths:
         required: true
         schema:
           $ref: '#/components/schemas/ID'
-        description: The durable MFA rekey Job whose safe progress is requested.
+        description: The ID of the MFA rekey Job to read.
     get:
       operationId: getMFARekeyStatus
       summary: Inspect safe progress and final retirement proof for one MFA rekey Job
       tags:
         - Authentication
       description: >-
-        Returns bounded progress for one MFA rekey Job and, after it succeeds, the live-secret counts that prove the retiring key seals nothing and may be removed from configuration. A Job of another type is not found. No secrets, ciphertext, account identities, key bytes, or worker diagnostics are returned.
+        Returns the progress of one MFA rekey Job. After the Job succeeds, it also returns the counts of live secrets that prove the retiring key encrypts nothing and can be removed from configuration. The ID of a Job of any other type returns not found. No secrets, encrypted data, account details, key bytes or worker diagnostics are returned.
       x-proctor-auth: strong_recent_session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -159,7 +159,7 @@ paths:
 components:
   requestBodies:
     StartMFARekey:
-      description: Identifies the configured non-primary MFA key that this rotation must retire.
+      description: The configured key, other than the primary key, that this rotation retires.
       required: true
       content:
         application/json:
@@ -169,7 +169,7 @@ components:
             retiring_key_id: "0123456789abcdef0123456789abcdef"
   responses:
     MFAKeyStateOK:
-      description: MFA key-ring identities, fence, and live-secret counts
+      description: The MFA key IDs, the required primary key and how many live secrets each key encrypts
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -177,8 +177,18 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/MFAKeyStateResponse'
+          example:
+            primary_key_id: 3f9a1c0e7b2d4f6a8c5e0b1d2a3f4e5c
+            required_primary_key_id: 3f9a1c0e7b2d4f6a8c5e0b1d2a3f4e5c
+            active:
+              - key_id: 0123456789abcdef0123456789abcdef
+                credentials: 12
+                configured: true
+              - key_id: 3f9a1c0e7b2d4f6a8c5e0b1d2a3f4e5c
+                credentials: 1488
+                configured: true
     MFARekeyAccepted:
-      description: Durable fenced MFA key rotation accepted
+      description: The MFA key rotation was accepted and its Job is queued
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -186,8 +196,13 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/MFARekeyResponse'
+          example:
+            job_id: sjebyge5cpbop1xwo4eds74ejb
+            primary_key_id: 3f9a1c0e7b2d4f6a8c5e0b1d2a3f4e5c
+            retiring_key_id: 0123456789abcdef0123456789abcdef
+            created_at: '2026-08-01T10:00:00Z'
     MFARekeyStatusOK:
-      description: Safe MFA rekey progress and final retirement proof
+      description: The rekey Job's progress and, once it succeeds, the proof that the retiring key can be removed
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -195,9 +210,29 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/MFARekeyStatusResponse'
+          example:
+            job_id: sjebyge5cpbop1xwo4eds74ejb
+            status: succeeded
+            primary_key_id: 3f9a1c0e7b2d4f6a8c5e0b1d2a3f4e5c
+            retiring_key_id: 0123456789abcdef0123456789abcdef
+            created_at: '2026-08-01T10:00:00Z'
+            updated_at: '2026-08-01T10:02:41Z'
+            completed_at: '2026-08-01T10:02:41Z'
+            attempt_count: 1
+            maximum_attempts: 5
+            processed: 12
+            resealed: 12
+            progress:
+              current: 12
+              total: 12
+              stage: resealing
+            proof:
+              non_primary_references: 0
+              retiring_references: 0
+              retirement_safe: true
   schemas:
     MFASecretKeyUsage:
-      description: Live TOTP secrets sealed with one MFA key.
+      description: How many live authenticator secrets one MFA key encrypts.
       type: object
       additionalProperties: false
       required:
@@ -208,17 +243,17 @@ components:
         key_id:
           type: string
           pattern: ^[0-9a-f]{32}$
-          description: Non-secret 128-bit key identifier encoded as lowercase hexadecimal.
+          description: The key's ID, 128 bits written as 32 lowercase hexadecimal characters. It is not secret.
         credentials:
           type: integer
           format: int64
           minimum: 1
-          description: Number of live MFA credentials whose secret this key seals.
+          description: How many live authenticator secrets this key encrypts.
         configured:
           type: boolean
-          description: Whether this node's configured MFA key ring holds the key.
+          description: Whether this server node has the key in its MFA key configuration.
     MFAKeyStateResponse:
-      description: MFA key-ring identities, the durable primary-key fence, and live-secret counts.
+      description: The MFA key IDs, the required primary key and how many live secrets each key encrypts.
       type: object
       additionalProperties: false
       required:
@@ -228,21 +263,22 @@ components:
         primary_key_id:
           type: string
           pattern: ^[0-9a-f]{32}$
-          description: Identifier of the key this node uses for new MFA secrets.
+          description: The ID of the key this node uses to encrypt new authenticator secrets.
         required_primary_key_id:
           type: string
           pattern: ^[0-9a-f]{32}$
-          description: Primary key the last rekey fenced; every node must seal new secrets with it. Absent before the first rekey.
+          description: The primary key the last rekey made required. Every node must encrypt new secrets with it. Left out before the first rekey.
         active_rekey_job_id:
           $ref: '#/components/schemas/ID'
+          description: The ID of the MFA rekey Job that is queued or running. Left out when there is none.
         active:
           type: array
           maxItems: 9
           items:
             $ref: '#/components/schemas/MFASecretKeyUsage'
-          description: Keys that seal at least one live MFA secret, ordered by identifier.
+          description: The keys that encrypt at least one live authenticator secret, sorted by key ID.
     MFARekeyRequest:
-      description: Exact retiring-key selection for a new fenced MFA rotation Job.
+      description: Which key a new MFA key rotation Job retires.
       type: object
       additionalProperties: false
       required:
@@ -251,9 +287,9 @@ components:
         retiring_key_id:
           type: string
           pattern: ^[0-9a-f]{32}$
-          description: Non-secret identifier of the configured MFA key to retire; it must not be the primary key.
+          description: The ID of the configured MFA key to retire. It must not be the primary key.
     MFARekeyResponse:
-      description: Durable identities created when the MFA rotation Job is accepted.
+      description: The Job and keys of an accepted MFA key rotation.
       type: object
       additionalProperties: false
       required:
@@ -264,18 +300,21 @@ components:
       properties:
         job_id:
           $ref: '#/components/schemas/ID'
+          description: The ID of the rekey Job. Use it to follow progress.
         primary_key_id:
           type: string
           pattern: ^[0-9a-f]{32}$
+          description: The ID of the key that secrets are re-encrypted with.
         retiring_key_id:
           type: string
           pattern: ^[0-9a-f]{32}$
+          description: The ID of the key being retired.
         created_at:
           type: string
           format: date-time
-          description: Time when the rekey Job was created.
+          description: When the rekey Job was created.
     MFARekeyProgress:
-      description: Coarse bounded progress while live MFA secrets are re-sealed.
+      description: Rough progress while live authenticator secrets are re-encrypted.
       type: object
       additionalProperties: false
       required:
@@ -287,18 +326,19 @@ components:
           type: integer
           format: int64
           minimum: 0
-          description: Credentials examined so far.
+          description: How many secrets the Job has checked so far.
         total:
           type: integer
           format: int64
           minimum: 1
-          description: Credentials in the processing set.
+          description: How many secrets the Job expects to check in total.
         stage:
           type: string
+          description: The step the Job is on. resealing means it is re-encrypting secrets.
           enum:
             - resealing
     MFARekeyProof:
-      description: Final live-secret counts used to decide whether the retiring key may be removed.
+      description: The final counts of live secrets that show whether the retiring key can be removed.
       type: object
       additionalProperties: false
       required:
@@ -310,17 +350,17 @@ components:
           type: integer
           format: int64
           minimum: 0
-          description: Live MFA secrets sealed with any non-primary key after processing.
+          description: How many live authenticator secrets still use any key other than the primary key after the Job finished.
         retiring_references:
           type: integer
           format: int64
           minimum: 0
-          description: Live MFA secrets still sealed with the exact retiring key.
+          description: How many live authenticator secrets still use the retiring key.
         retirement_safe:
           type: boolean
-          description: True only when the final counts prove the retiring key can be removed.
+          description: True only when the final counts prove that the retiring key can be removed.
     MFARekeyStatusResponse:
-      description: Safe Job status, progress, and optional final key-retirement proof.
+      description: The rekey Job's status, its progress and, once it succeeds, the key retirement proof.
       type: object
       additionalProperties: false
       required:
@@ -337,41 +377,55 @@ components:
       properties:
         job_id:
           $ref: '#/components/schemas/ID'
+          description: The ID of the rekey Job.
         status:
           $ref: '#/components/schemas/JobStatus'
+          description: The Job's current state.
         primary_key_id:
           type: string
           pattern: ^[0-9a-f]{32}$
+          description: The ID of the key that secrets are re-encrypted with.
         retiring_key_id:
           type: string
           pattern: ^[0-9a-f]{32}$
+          description: The ID of the key being retired.
         created_at:
           type: string
           format: date-time
+          description: When the Job was created.
         updated_at:
           type: string
           format: date-time
+          description: When the Job last changed.
         completed_at:
           type: string
           format: date-time
+          description: When the Job finished. Left out while it is still queued or running.
         public_error_code:
           type: string
           maxLength: 128
+          description: A code saying why the Job's last run failed, such as mfa.rekey.incomplete. Left out when there is no failure to report.
         attempt_count:
           type: integer
           minimum: 0
+          description: How many times the Job has started running.
         maximum_attempts:
           type: integer
           minimum: 1
+          description: How many times the Job may run before it gives up.
         processed:
           type: integer
           format: int64
           minimum: 0
+          description: How many secrets the Job has checked so far.
         resealed:
           type: integer
           format: int64
           minimum: 0
+          description: How many of the checked secrets the Job re-encrypted. A secret that changed while the Job was working is counted as checked but not re-encrypted.
         progress:
           $ref: '#/components/schemas/MFARekeyProgress'
+          description: The progress the Job last saved. Left out until the Job has saved progress.
         proof:
           $ref: '#/components/schemas/MFARekeyProof'
+          description: The key retirement proof. Present only after the Job succeeds.

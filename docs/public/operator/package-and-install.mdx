@@ -1,19 +1,20 @@
 ---
-title: Verify a Package and Install the Application
-description: Build or receive a deterministic Proctor release, verify build identity and checksums, and install an immutable application payload.
+title: Verify and install a package
+description: Build or receive a reproducible Proctor release, check its build identity and checksums, and install it as a payload that the service can't change.
 audience: operator
 maturity: preview
 ---
 
-# Verify a Package and Install the Application
+# Verify and install a package
 
-A Proctor deployment is one matched payload: server binary, hosted web
-application, configuration example, legal notices, deployment examples, and
-build identity. Do not mix a binary and webapp from different builds.
+A Proctor deployment is one matched set of files: the server binary, the hosted
+web application, the configuration example, legal notices, deployment examples
+and the build identity. Don't combine a binary and a web application from
+different builds.
 
-## Build the Current Source Deliberately
+## Build from source
 
-From a reviewed repository checkout:
+From a repository checkout you have reviewed, run:
 
 ```sh
 make package-verify
@@ -21,42 +22,43 @@ make dist
 make container
 ```
 
-- `package-verify` assembles the current-platform directory and verifies the
-  executable, hosted build metadata, configuration example, systemd unit, and
-  source commit identity.
-- `dist` creates deterministic Linux amd64/arm64 archives plus `SHA256SUMS`.
-- `container` builds the minimal non-root runtime image.
+- `package-verify` assembles the directory for the current platform. It checks
+  the executable, the hosted build metadata, the configuration example, the
+  systemd unit and the source commit.
+- `dist` creates reproducible Linux amd64 and arm64 archives, plus
+  `SHA256SUMS`.
+- `container` builds the minimal runtime image, which runs as a non-root user.
 
-These commands prove repository packaging invariants. They do not turn an
-arbitrary checkout into a supported release.
+These commands prove that the repository packages correctly. They don't turn
+any checkout into a supported release.
 
-## Verify a Received Artifact
+## Verify a release you received
 
-1. Obtain the archive or image and checksum/manifest through the selected
-   release channel.
-2. Verify the archive SHA-256 before extraction, or select the image by tag and
-   digest rather than a mutable tag alone.
-3. Run `proctor version --json` and retain the version, commit, build time, and
-   Go version in deployment evidence.
-4. Verify `BUILD_METADATA` and `webapp/dist/webapp-build.json` belong to that
-   same binary commit.
-5. Copy the configuration example; never edit the extracted canonical example
-   in place as the active secret-bearing file.
+1. Get the archive or image, and its checksum or manifest, through the release
+   channel you chose.
+2. Check the archive's SHA-256 before you extract it. For an image, select it
+   by tag and digest, not by a tag alone, since a tag can move.
+3. Run `proctor version --json`. Keep the version, commit, build time and Go
+   version in your deployment records.
+4. Check that `BUILD_METADATA` and `webapp/dist/webapp-build.json` belong to
+   the same commit as the binary.
+5. Copy the configuration example. Never edit the extracted example in place
+   and use it as your active file with secrets in it.
 
-The server validates the hosted build identity at startup and fails before
-readiness when it does not match the binary.
+At startup, Proctor checks the hosted build identity. If it doesn't match the
+binary, the server stops before it becomes ready.
 
-## Install an Immutable Payload
+## Install files the service can't change
 
-For the tracked systemd layout, extract to `/opt/proctor` and keep the release
-owned by root. Run it through the dedicated `proctor` user. Keep mutable
-configuration in `/etc/proctor`, state in `/var/lib/proctor`, and file logs in
-`/var/log/proctor`.
+For the systemd layout in the repository, extract the release to
+`/opt/proctor` and keep it owned by root. Run the service as the dedicated
+`proctor` user. Keep configuration you change in `/etc/proctor`, state in
+`/var/lib/proctor`, and log files in `/var/log/proctor`.
 
-Do not run the service from a writable source checkout. Do not allow the service
-account to replace its executable or hosted application. A later deployment
-installs another complete matched payload and restarts under deliberate change
-control.
+Don't run the service from a source checkout it can write to. Don't let the
+service account replace its own executable or hosted application. To deploy a
+new version, install another complete matched set and restart, as a planned
+and reviewed change.
 
 {/* TODO(operator-release-verification): Define the signed release-manifest and
 artifact-signature policy before describing authenticity verification beyond

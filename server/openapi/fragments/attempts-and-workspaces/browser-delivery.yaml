@@ -12,10 +12,7 @@ paths:
     get:
       operationId: browserSourceList
       summary: List owned Participation Browser sources
-      description: >-
-        Return at most 49 source statuses in successful start order, bounded at 1 MiB, for one owned
-        Participation. Current registered-key ownership is required; any live source also requires current
-        Connection continuity. This is source recovery, not Browser Activity history access.
+      description: Returns up to 49 browser activity source statuses for one Participation you own, in the order the sources started. The response is at most 1 MiB. You need a Session for the registered key that owns the Participation. If any source is still live, you also need the current Connection headers. Use this to recover sources after a lost response. It gives no access to Browser Activity history.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -54,7 +51,7 @@ paths:
         - name: participation_id
           in: query
           required: true
-          description: Owned Participation whose bounded source inventory is requested.
+          description: ID of the Participation you own whose browser activity sources you want.
           schema:
             $ref: '#/components/schemas/ID'
         - $ref: '#/components/parameters/PageLimit'
@@ -87,11 +84,7 @@ paths:
     get:
       operationId: browserSourceStatus
       summary: Recover an owned Browser source
-      description: >-
-        Read the current immutable Browser source identity, source counters and delivery closure after an
-        ambiguous start or reset response. Requires the owning User and current registered key Session. A live
-        source also requires exact current Connection continuity; closed-source ownership grants no live
-        interaction. The response is at most 16 KiB.
+      description: 'Returns the status of one browser activity source: who owns it, its counters and whether it has been closed. Use it when a start or reset response was lost. You must be the User who owns the source, with a current Session for the registered key. A live source also needs the current Connection headers. Owning a closed source does not let you interact with the Attempt. The response is at most 16 KiB.'
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -155,10 +148,7 @@ paths:
     post:
       operationId: declareBrowserDeliveryGaps
       summary: Declare permanent missing Browser positions
-      description: >-
-        Current registered-key ownership is always rechecked. A live source additionally requires the exact
-        current Connection headers. Declarations are canonical and idempotent; gaps never create event
-        receipts. Closed-source writes must precede the immutable upload deadline.
+      description: Declares sequence numbers of a browser activity source that the client can never deliver. The server always checks that the registered key still owns the source. A live source also needs the current Connection headers. Repeating the same declaration returns the same result. Declared gaps never create event receipts. For a closed source, the request must arrive before the upload deadline, which can't change.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -231,10 +221,7 @@ paths:
     post:
       operationId: sealBrowserDelivery
       summary: Declare a closed Browser source final boundary
-      description: >-
-        Current registered-key ownership is always rechecked. A live source additionally requires the exact
-        current Connection headers. Declarations are canonical and idempotent; gaps never create event
-        receipts. Closed-source writes must precede the immutable upload deadline.
+      description: Declares the last sequence number of a closed browser activity source. The server always checks that the registered key still owns the source. Repeating the same declaration returns the same result. The request must arrive before the upload deadline, which can't change.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -307,10 +294,7 @@ paths:
     post:
       operationId: updateBrowserDeliverySummary
       summary: Update cumulative unretained Browser delivery counts
-      description: >-
-        Current registered-key ownership is always rechecked. A live source additionally requires the exact
-        current Connection headers. Declarations are canonical and idempotent; gaps never create event
-        receipts. Closed-source writes must precede the immutable upload deadline.
+      description: Reports how many browser activity events the client produced but could not deliver. The server always checks that the registered key still owns the source. A live source also needs the current Connection headers. Repeating the same summary returns the same result. For a closed source, the request must arrive before the upload deadline, which can't change.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -383,11 +367,7 @@ paths:
     post:
       operationId: appendHistoricalBrowserDelivery
       summary: Upload retained events for a closed Browser source
-      description: >-
-        Requires current registered-key ownership of an already closed source and its immutable policy
-        revision/digest. Old candidate Connection headers are rejected. Original per-event receipts survive
-        repacking; receipt progress remains distinct from settled gaps. The upload deadline and final declared
-        boundary are immutable.
+      description: Uploads stored events for a browser activity source that is already closed. You need the registered key that owns the source, and the events must use the policy revision and digest the source started with. Candidate Connection headers are rejected. Each event keeps its receipt even if it is sent again in a different batch. Receipt progress is reported separately from positions settled by declared gaps. The upload deadline and any declared final position can't change.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -472,10 +452,7 @@ paths:
     get:
       operationId: browserDeliveryReceipts
       summary: Read bounded per-event Browser receipts
-      description: >-
-        Return up to 64 retained receipts in ascending sequence order, omitting missing positions.
-        next_cursor continues at the next retained receipt and is omitted on the last page. Response is bounded at 16 KiB;
-        current registered-key ownership and live Connection rules apply.
+      description: Returns up to 64 stored event receipts in ascending sequence order. Missing positions are skipped. next_cursor continues at the next stored receipt and is left out on the last page. The response is at most 16 KiB. The same ownership and live Connection rules apply as for the source status.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -515,7 +492,7 @@ paths:
         - name: limit
           in: query
           required: false
-          description: Maximum number of retained receipts in the page.
+          description: Largest number of stored receipts to return on this page.
           schema:
             type: integer
             minimum: 1
@@ -549,7 +526,7 @@ components:
       name: source_session_id
       in: path
       required: true
-      description: Canonical UUIDv4 source identity assigned by the privileged Desktop.
+      description: 'ID of the browser activity source: a lowercase UUID version 4 that the Desktop assigned when it started the source.'
       schema:
         type: string
         format: uuid
@@ -587,33 +564,41 @@ components:
         - remaining_runtime_reset_starts
       properties:
         missing_ranges_truncated:
+          description: True when there are more missing ranges than missing_ranges lists.
           type: boolean
         server_time:
+          description: Server time when the status was read.
           type: string
           format: date-time
         allocated_through_sequence:
+          description: Highest sequence number reserved for the source so far.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         terminal_missing_through_sequence:
+          description: Positions up to this one that were not received are permanently missing, for example after the upload deadline passed. Zero when there is no such cutoff.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         closure:
+          description: Whether and how the server closed the source.
           $ref: '#/components/schemas/DeliveryClosure'
         declaration_revision:
+          description: Number of gap and final declarations recorded for the source. Send it as expected_revision in the next declaration.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         detail_mode:
+          description: collecting while individual events are kept. summary_only after a delivery limit was reached or detailed delivery was stopped, when only summary counts are kept.
           type: string
           enum:
             - collecting
             - summary_only
         budget_scope:
+          description: Whether the Participation limit or the lifetime Attempt limit caused summary_only. Null while collecting.
           type:
             - string
             - 'null'
@@ -622,6 +607,7 @@ components:
             - attempt
             - null
         summary_only_reason:
+          description: Which limit was reached, or local_loss_inventory_exhausted when the client stopped detailed delivery. Null while collecting.
           type:
             - string
             - 'null'
@@ -633,6 +619,7 @@ components:
             - local_loss_inventory_exhausted
             - null
         summary:
+          description: The latest summary of undelivered events. Null until the client sends one.
           type:
             - object
             - 'null'
@@ -643,74 +630,92 @@ components:
             - count_complete
           properties:
             summary_sequence:
+              description: Number of this summary. Each changed summary uses a higher number.
               type: integer
               format: int64
               minimum: 1
               maximum: 9007199254740991
             unretained_record_count:
+              description: Total number of events produced but not delivered so far.
               type: integer
               format: int64
               minimum: 0
               maximum: 9007199254740991
             count_complete:
+              description: Whether the count is exact.
               type: boolean
             first_unretained_at:
+              description: When the first undelivered event was produced, by the client clock. Omitted when unknown.
               type: string
               format: date-time
             last_unretained_at:
+              description: When the most recent undelivered event was produced, by the client clock. Omitted when unknown.
               type: string
               format: date-time
         highest_contiguous_sequence:
+          description: Highest sequence number such that every event from 1 up to it has been received.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         settled_through_sequence:
+          description: Highest sequence number such that every position up to it has been received or declared missing.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         highest_seen_sequence:
+          description: Highest sequence number the server has received.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         missing_ranges:
+          description: Up to the first 32 ranges of positions that are neither received nor declared missing, in ascending order.
           type: array
           items:
             $ref: '#/components/schemas/SequenceRange'
           maxItems: 32
         source_session_id:
+          description: ID of the browser activity source.
           type: string
           format: uuid
           pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
         attempt_id:
+          description: ID of the Exam Attempt.
           $ref: '#/components/schemas/ID'
         participation_id:
+          description: ID of the Attempt Participation that started the source.
           $ref: '#/components/schemas/ID'
         generation:
+          description: Participation Generation that started the source.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
         policy_revision_id:
+          description: ID of the Exam Revision whose Browser Policy the source uses.
           $ref: '#/components/schemas/ID'
         policy_digest:
+          description: SHA-256 digest of that Browser Policy, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         predecessor_source_session_id:
+          description: ID of the source this one replaced. Null when start_transition is initial.
           type:
             - string
             - 'null'
           format: uuid
           pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
         start_transition:
+          description: Why the source started. initial for the first source, policy_correction after a live correction to the Browser Policy, and runtime_reset after the browser runtime was reset.
           type: string
           enum:
             - initial
             - policy_correction
             - runtime_reset
         runtime_reset_reason:
+          description: Why the browser runtime was reset. Present only when start_transition is runtime_reset, otherwise null.
           type:
             - string
             - 'null'
@@ -720,29 +725,31 @@ components:
             - source_corrupt
             - null
         started_at:
+          description: When the source started.
           type: string
           format: date-time
         remaining_correction_starts:
+          description: How many more sources this Participation may start after a policy correction. It starts at 32.
           type: integer
           format: int64
           minimum: 0
           maximum: 32
         remaining_runtime_reset_starts:
+          description: How many more sources this Participation may start after a runtime reset. It starts at 16.
           type: integer
           format: int64
           minimum: 0
           maximum: 16
-      description: >-
-        At most 16 KiB. Immutable source policy and start provenance, server-owned first closure and finite
-        historical delivery window. Counters are remaining successful starts across this Participation;
-        retries and retirement never replenish them. Source status conveys no navigation authority.
+      description: Status of one browser activity source, at most 16 KiB. The policy and how the source started can't change. The server alone decides when it closes, and after that history can be uploaded only until a fixed deadline. The remaining-start counters cover the whole Participation, and neither retries nor retirement give starts back. The status grants no permission to navigate.
     BrowserSourceList:
+      description: Browser activity sources of one Participation, in start order.
       type: object
       additionalProperties: false
       required:
         - items
       properties:
         items:
+          description: Source statuses on this page.
           type: array
           maxItems: 200
           items:
@@ -750,6 +757,7 @@ components:
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
     BrowserEventReceipt:
+      description: Receipt for one stored browser activity event.
       type: object
       additionalProperties: false
       required:
@@ -758,18 +766,22 @@ components:
         - received_at
       properties:
         sequence:
+          description: Sequence number of the event in its source.
           type: integer
           format: int64
           minimum: 1
           maximum: 50000
         event_digest:
+          description: SHA-256 digest of the event record, prefixed with sha256:. It does not depend on how events were batched or sent.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         received_at:
+          description: When the server first stored the event.
           type: string
           format: date-time
           pattern: Z$
     BrowserActivityAcknowledgement:
+      description: Receipts for the events just sent, with the source's current delivery progress.
       type: object
       additionalProperties: false
       required:
@@ -785,58 +797,70 @@ components:
         - server_time
       properties:
         highest_contiguous_sequence:
+          description: Highest sequence number such that every event from 1 up to it has been received.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         settled_through_sequence:
+          description: Highest sequence number such that every position up to it has been received or declared missing.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         highest_seen_sequence:
+          description: Highest sequence number the server has received.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         allocated_through_sequence:
+          description: Highest sequence number reserved for the source so far.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         terminal_missing_through_sequence:
+          description: Positions up to this one that were not received are permanently missing. Zero when there is no such cutoff.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         missing_ranges:
+          description: Up to the first 32 ranges of positions that are neither received nor declared missing, in ascending order.
           type: array
           items:
             $ref: '#/components/schemas/SequenceRange'
           maxItems: 32
         missing_ranges_truncated:
+          description: True when there are more missing ranges than missing_ranges lists.
           type: boolean
         source_session_id:
+          description: ID of the browser activity source.
           type: string
           format: uuid
           pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
         receipts:
+          description: One receipt for each event in the request.
           type: array
           minItems: 1
           maxItems: 64
           items:
             $ref: '#/components/schemas/BrowserEventReceipt'
         server_time:
+          description: Server time when the events were acknowledged.
           type: string
           format: date-time
           pattern: Z$
     BrowserReceiptPage:
+      description: One page of stored event receipts.
       type: object
       additionalProperties: false
       required:
         - items
       properties:
         items:
+          description: Receipts on this page, in ascending sequence order.
           type: array
           maxItems: 64
           items:
@@ -844,6 +868,7 @@ components:
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
     BrowserDeliveryGapResult:
+      description: Receipt for a gap declaration, with the source's current status.
       type: object
       additionalProperties: false
       required:
@@ -851,10 +876,13 @@ components:
         - status
       properties:
         receipt:
+          description: Receipt for the declaration.
           $ref: '#/components/schemas/DeliveryGapReceipt'
         status:
+          description: Status of the source after the declaration.
           $ref: '#/components/schemas/BrowserSourceStatus'
     BrowserDeliverySummaryResult:
+      description: The recorded summary, with the source's current status.
       type: object
       additionalProperties: false
       required:
@@ -862,8 +890,10 @@ components:
         - status
       properties:
         summary:
+          description: The summary the server recorded.
           $ref: '#/components/schemas/UnretainedDeliverySummary'
         status:
+          description: Status of the source after the summary.
           $ref: '#/components/schemas/BrowserSourceStatus'
     BrowserActivityBatch:
       type: object
@@ -877,33 +907,37 @@ components:
         - events
       properties:
         source_session_id:
+          description: ID of the browser activity source. It must match the path.
           type: string
           format: uuid
           pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
         participation_id:
+          description: ID of the Attempt Participation that started the source.
           $ref: '#/components/schemas/ID'
         generation:
+          description: Participation Generation that started the source.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
         policy_revision_id:
+          description: ID of the Exam Revision whose Browser Policy the source uses.
           $ref: '#/components/schemas/ID'
         policy_digest:
+          description: SHA-256 digest of that Browser Policy, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         events:
+          description: The events, 1 to 64, in ascending sequence order.
           type: array
           minItems: 1
           maxItems: 64
           items:
             $ref: '#/components/schemas/BrowserDeliveryRecord'
-      description: >-
-        At most 256 KiB. Events have strictly increasing unique sequences and the frozen source policy
-        revision. Every event digest covers only its canonical record, independent of packing and transport.
+      description: Stored browser activity events for one closed source, at most 256 KiB. Sequence numbers must be unique and increase strictly, and every event must use the source's policy revision. Each event digest covers only its own record, so it does not depend on how events are batched or sent.
   responses:
     BrowserSourceStatusOK:
-      description: Current owned source status.
+      description: Current status of the source you own.
       headers:
         Cache-Control:
           schema:
@@ -913,8 +947,42 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/BrowserSourceStatus'
+          example:
+            missing_ranges_truncated: false
+            server_time: '2026-08-01T10:05:00Z'
+            allocated_through_sequence: 212
+            terminal_missing_through_sequence: 0
+            closure:
+              closed_at: '2026-08-01T10:00:00Z'
+              close_reason: submission
+              known_at_close: 212
+              unknown_tail: true
+              upload_expires_at: '2026-08-02T10:00:00Z'
+            declaration_revision: 1
+            detail_mode: collecting
+            budget_scope: null
+            summary_only_reason: null
+            summary: null
+            highest_contiguous_sequence: 198
+            settled_through_sequence: 204
+            highest_seen_sequence: 212
+            missing_ranges:
+              - first: 205
+                last: 207
+            source_session_id: 3f6c2a9e-8d41-4b7a-9c35-0e2f7d18a6b4
+            attempt_id: 1asb7sk89dp1ex339fkh3te5t4
+            participation_id: 6xoche483hwrx5rpu8jzjoe7qg
+            generation: 2
+            policy_revision_id: iqcx3qc9sbbt6ocshszfqgq6ci
+            policy_digest: "sha256:4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"
+            predecessor_source_session_id: null
+            start_transition: initial
+            runtime_reset_reason: null
+            started_at: '2026-08-01T09:02:11Z'
+            remaining_correction_starts: 32
+            remaining_runtime_reset_starts: 16
     BrowserSourceListOK:
-      description: Bounded ordered source inventory.
+      description: Browser activity sources of the Participation, in start order.
       headers:
         Cache-Control:
           schema:
@@ -924,8 +992,70 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/BrowserSourceList'
+          example:
+            items:
+              - missing_ranges_truncated: false
+                server_time: '2026-08-01T10:05:00Z'
+                allocated_through_sequence: 212
+                terminal_missing_through_sequence: 0
+                closure:
+                  closed_at: '2026-08-01T09:41:29Z'
+                  close_reason: runtime_reset
+                  known_at_close: 212
+                  unknown_tail: true
+                  upload_expires_at: '2026-08-02T09:41:29Z'
+                declaration_revision: 1
+                detail_mode: collecting
+                budget_scope: null
+                summary_only_reason: null
+                summary: null
+                highest_contiguous_sequence: 198
+                settled_through_sequence: 204
+                highest_seen_sequence: 212
+                missing_ranges:
+                  - first: 205
+                    last: 207
+                source_session_id: 3f6c2a9e-8d41-4b7a-9c35-0e2f7d18a6b4
+                attempt_id: 1asb7sk89dp1ex339fkh3te5t4
+                participation_id: 6xoche483hwrx5rpu8jzjoe7qg
+                generation: 2
+                policy_revision_id: iqcx3qc9sbbt6ocshszfqgq6ci
+                policy_digest: "sha256:4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"
+                predecessor_source_session_id: null
+                start_transition: initial
+                runtime_reset_reason: null
+                started_at: '2026-08-01T09:02:11Z'
+                remaining_correction_starts: 32
+                remaining_runtime_reset_starts: 15
+              - missing_ranges_truncated: false
+                server_time: '2026-08-01T10:05:00Z'
+                allocated_through_sequence: 37
+                terminal_missing_through_sequence: 0
+                closure:
+                  unknown_tail: false
+                declaration_revision: 0
+                detail_mode: collecting
+                budget_scope: null
+                summary_only_reason: null
+                summary: null
+                highest_contiguous_sequence: 37
+                settled_through_sequence: 37
+                highest_seen_sequence: 37
+                missing_ranges: []
+                source_session_id: 9b1e4d27-5c83-4f60-a2d9-71c8e3b05f1a
+                attempt_id: 1asb7sk89dp1ex339fkh3te5t4
+                participation_id: 6xoche483hwrx5rpu8jzjoe7qg
+                generation: 2
+                policy_revision_id: iqcx3qc9sbbt6ocshszfqgq6ci
+                policy_digest: "sha256:4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"
+                predecessor_source_session_id: 3f6c2a9e-8d41-4b7a-9c35-0e2f7d18a6b4
+                start_transition: runtime_reset
+                runtime_reset_reason: coordinator_restarted
+                started_at: '2026-08-01T09:41:30Z'
+                remaining_correction_starts: 32
+                remaining_runtime_reset_starts: 15
     BrowserActivityAcknowledgementOK:
-      description: Bounded authoritative Browser delivery result. No navigation or history-view authority is granted.
+      description: Receipts for the uploaded events. This grants no permission to navigate or to view Browser Activity history.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -933,8 +1063,28 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/BrowserActivityAcknowledgement'
+          example:
+            highest_contiguous_sequence: 207
+            settled_through_sequence: 207
+            highest_seen_sequence: 212
+            allocated_through_sequence: 212
+            terminal_missing_through_sequence: 0
+            missing_ranges: []
+            missing_ranges_truncated: false
+            source_session_id: 3f6c2a9e-8d41-4b7a-9c35-0e2f7d18a6b4
+            receipts:
+              - sequence: 205
+                event_digest: "sha256:5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+                received_at: '2026-08-01T10:06:02Z'
+              - sequence: 206
+                event_digest: "sha256:6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b"
+                received_at: '2026-08-01T10:06:02Z'
+              - sequence: 207
+                event_digest: "sha256:d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"
+                received_at: '2026-08-01T10:06:02Z'
+            server_time: '2026-08-01T10:06:02Z'
     BrowserReceiptPageOK:
-      description: Bounded authoritative Browser delivery result. No navigation or history-view authority is granted.
+      description: One page of stored event receipts. This grants no permission to navigate or to view Browser Activity history.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -942,8 +1092,17 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/BrowserReceiptPage'
+          example:
+            items:
+              - sequence: 1
+                event_digest: "sha256:4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"
+                received_at: '2026-08-01T09:02:12Z'
+              - sequence: 2
+                event_digest: "sha256:ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d"
+                received_at: '2026-08-01T09:02:15Z'
+            next_cursor: eyJzZXF1ZW5jZSI6Mn0
     BrowserDeliveryGapResultOK:
-      description: Bounded authoritative Browser delivery result. No navigation or history-view authority is granted.
+      description: Receipt for the gap declaration and the current source status. This grants no permission to navigate or to view Browser Activity history.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -951,8 +1110,48 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/BrowserDeliveryGapResult'
+          example:
+            receipt:
+              declaration_id: loss-0001
+              request_digest: "sha256:ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d"
+              declaration_revision: 1
+              settled_through_sequence: 204
+            status:
+              missing_ranges_truncated: false
+              server_time: '2026-08-01T10:05:00Z'
+              allocated_through_sequence: 212
+              terminal_missing_through_sequence: 0
+              closure:
+                closed_at: '2026-08-01T10:00:00Z'
+                close_reason: submission
+                known_at_close: 212
+                unknown_tail: true
+                upload_expires_at: '2026-08-02T10:00:00Z'
+              declaration_revision: 1
+              detail_mode: collecting
+              budget_scope: null
+              summary_only_reason: null
+              summary: null
+              highest_contiguous_sequence: 198
+              settled_through_sequence: 204
+              highest_seen_sequence: 212
+              missing_ranges:
+                - first: 205
+                  last: 207
+              source_session_id: 3f6c2a9e-8d41-4b7a-9c35-0e2f7d18a6b4
+              attempt_id: 1asb7sk89dp1ex339fkh3te5t4
+              participation_id: 6xoche483hwrx5rpu8jzjoe7qg
+              generation: 2
+              policy_revision_id: iqcx3qc9sbbt6ocshszfqgq6ci
+              policy_digest: "sha256:4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"
+              predecessor_source_session_id: null
+              start_transition: initial
+              runtime_reset_reason: null
+              started_at: '2026-08-01T09:02:11Z'
+              remaining_correction_starts: 32
+              remaining_runtime_reset_starts: 16
     BrowserDeliverySummaryResultOK:
-      description: Bounded authoritative Browser delivery result. No navigation or history-view authority is granted.
+      description: The recorded summary and the current source status. This grants no permission to navigate or to view Browser Activity history.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -960,12 +1159,56 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/BrowserDeliverySummaryResult'
+          example:
+            summary:
+              summary_sequence: 1
+              unretained_record_count: 3
+              count_complete: true
+              first_unretained_at: '2026-08-01T09:55:01Z'
+              last_unretained_at: '2026-08-01T09:55:04Z'
+            status:
+              missing_ranges_truncated: false
+              server_time: '2026-08-01T10:05:00Z'
+              allocated_through_sequence: 212
+              terminal_missing_through_sequence: 0
+              closure:
+                closed_at: '2026-08-01T10:00:00Z'
+                close_reason: submission
+                known_at_close: 212
+                unknown_tail: true
+                upload_expires_at: '2026-08-02T10:00:00Z'
+              declaration_revision: 1
+              detail_mode: collecting
+              budget_scope: null
+              summary_only_reason: null
+              summary:
+                summary_sequence: 1
+                unretained_record_count: 3
+                count_complete: true
+                first_unretained_at: '2026-08-01T09:55:01Z'
+                last_unretained_at: '2026-08-01T09:55:04Z'
+              highest_contiguous_sequence: 198
+              settled_through_sequence: 204
+              highest_seen_sequence: 212
+              missing_ranges:
+                - first: 205
+                  last: 207
+              source_session_id: 3f6c2a9e-8d41-4b7a-9c35-0e2f7d18a6b4
+              attempt_id: 1asb7sk89dp1ex339fkh3te5t4
+              participation_id: 6xoche483hwrx5rpu8jzjoe7qg
+              generation: 2
+              policy_revision_id: iqcx3qc9sbbt6ocshszfqgq6ci
+              policy_digest: "sha256:4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"
+              predecessor_source_session_id: null
+              start_transition: initial
+              runtime_reset_reason: null
+              started_at: '2026-08-01T09:02:11Z'
+              remaining_correction_starts: 32
+              remaining_runtime_reset_starts: 16
   requestBodies:
     BrowserActivityBatch:
       required: true
-      description: >-
-        Closed historical Browser Activity append using the same event codec as realtime. The source must
-        already be closed.
+      description: Stored browser activity events for a closed source, in the same format as the live WebSocket. The source must already be closed.
       content:
         application/json:
           schema:

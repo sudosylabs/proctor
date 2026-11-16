@@ -5,6 +5,7 @@ import test from 'node:test';
 import {
   auditSearchIndex,
   buildSearchIndex,
+  kebab,
   renderSearchData,
   searchableText,
 } from './index.mjs';
@@ -42,6 +43,19 @@ test('search covers authored pages, product areas, and every operation', async (
   );
 });
 
+test('endpoint slugs match the API plugin, which keeps acronyms whole', () => {
+  assert.equal(kebab('getMFAStatus'), 'get-mfa-status');
+  assert.equal(kebab('inspectMFAKeyState'), 'inspect-mfa-key-state');
+  assert.equal(kebab('submitExamAttempt'), 'submit-exam-attempt');
+});
+
+test('search covers every catalogued error code', async () => {
+  const entries = await buildSearchIndex();
+  const problems = entries.filter((entry) => entry.kind === 'problem');
+  assert(problems.length > 300);
+  assert(problems.every((entry) => entry.href === `/problems/${entry.title}`));
+});
+
 test('search covers the realtime overview and every realtime message', async () => {
   const entries = await buildSearchIndex();
   const asyncapi = JSON.parse(await readFile(new URL('../../../server/asyncapi.json', import.meta.url), 'utf8'));
@@ -58,5 +72,8 @@ test('search covers the realtime overview and every realtime message', async () 
 });
 
 test('the generated adapter records its human-owned inputs', async () => {
-  assert.match(renderSearchData(await buildSearchIndex()), /public MDX, server\/openapi\.json and server\/asyncapi\.json/);
+  assert.match(
+    renderSearchData(await buildSearchIndex()),
+    /public MDX, server\/openapi\.json, server\/asyncapi\.json and the error catalog/,
+  );
 });

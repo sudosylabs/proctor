@@ -1,56 +1,58 @@
 ---
-title: Jobs and Realtime
-description: Diagnose durable Job execution, attempts, leases, retries, cancellation, WebSocket delivery, replay, backpressure, and authoritative resynchronization.
+title: Jobs and realtime
+description: Track down problems with Job runs, attempts, leases, retries, cancellation, WebSocket delivery, replay, backpressure and resyncing from the server.
 audience: developer
 maturity: preview
 ---
 
-# Jobs and Realtime
+# Jobs and realtime
 
-Durable Jobs and WebSocket events solve different problems. A Job records
-finite work that must survive process loss. A WebSocket event is a best-effort
-notification that tells a connected client to refresh. Neither is a substitute
-for PostgreSQL-authoritative state.
+Jobs and WebSocket events do different jobs. A Job records a finite piece of
+work that must survive the process going away. A WebSocket event is a
+best-effort notice that tells a connected client to refresh. Neither replaces
+the state in PostgreSQL, which is the source of truth.
 
-## Diagnose a Job From Durable History
+## Use a Job's saved history
 
-Use the authenticated <a href="/api/">API reference</a> contract to list
-Jobs, retrieve one Job, and list its attempts. Record only synthetic
-identifiers, state names, bounded error codes, attempt numbers, and timestamps.
+Use the authenticated operations in the <a href="/api/">API reference</a> to
+list Jobs, fetch one Job, and list its attempts. Write down only test IDs,
+state names, error codes, attempt numbers and times.
 
-| Job state | Meaning | What to inspect next |
+| Job state | What it means | What to check next |
 | --- | --- | --- |
-| `Queued` | Work is eligible for a compatible worker | Queue latency, descriptor compatibility, and capacity |
-| `Running` | One current claim token and lease own execution | Attempt heartbeat, lease age, and activity checkpoint |
-| `CancelRequested` | Cancellation is durable but the worker has not completed it | Worker checkpoint and cancellation handling |
-| `Succeeded` | The terminal outcome committed | Verify the owning result rather than rerunning work |
-| `Failed` | Retry policy or an operator decision ended execution | Attempt history and bounded failure code |
-| `Canceled` | Cancellation completed terminally | The actor and documented cancellation path |
+| `Queued` | A compatible worker can pick up the work | Queue latency, descriptor compatibility and capacity |
+| `Running` | One current claim token and lease own the run | The attempt's heartbeat, how old the lease is, and the activity checkpoint |
+| `CancelRequested` | The cancellation is saved, but the worker hasn't finished it | The worker's checkpoint and how it handles cancellation |
+| `Succeeded` | The final outcome is committed | Check the result where it is owned, rather than running the work again |
+| `Failed` | The retry policy, or an operator, ended the run | Attempt history and the failure code |
+| `Canceled` | Cancellation finished, and the Job is done | Who canceled it, and the documented cancellation path |
 
-Job attempts are at-least-once. A worker can stop after an external effect but
-before committing its outcome. Implementations must use idempotent activities,
-checkpoints, and stable operation identity instead of assuming one execution.
+Proctor runs each Job at least once, and possibly more. A worker can stop after
+it has changed something outside Proctor but before it saves its outcome. Job
+code must use idempotent activities, checkpoints and a stable operation ID,
+rather than assuming it runs only once.
 
-## Understand Lease and Retry Evidence
+## Leases and retries
 
-The default claim lease is 60 seconds with a 15-second heartbeat. An expired
-lease makes work reclaimable; a newer claim token fences the old worker from
-committing. That transition can look like duplicate execution while still
-protecting the single durable outcome.
+By default, a claim lease lasts 60 seconds and the worker sends a heartbeat
+every 15 seconds. When a lease expires, another worker can claim the work. The
+newer claim token then blocks the old worker from saving its outcome. This can
+look like the work ran twice, while still protecting the single saved outcome.
 
-Inspect the sequence, not only the final error:
+Look at the whole sequence, not only the last error:
 
-1. Job creation and descriptor version.
-2. Claiming node, attempt number, and claim time.
-3. Heartbeats and current lease deadline.
-4. Activity checkpoint or completed activity result.
-5. Retry scheduling, cancellation, or terminal commit.
+1. When the Job was created, and its descriptor version.
+2. Which node claimed it, the attempt number, and when.
+3. The heartbeats and the current lease deadline.
+4. The activity checkpoint, or the result of a finished activity.
+5. Retry scheduling, cancellation or the final commit.
 
-An incompatible restore does not consume the attempt budget. Fix worker or
-descriptor compatibility rather than repeatedly retrying the same mismatch.
-Queued and running Jobs are never retention-deleted.
+A restore that doesn't match the worker doesn't use up an attempt. Fix the
+compatibility between the worker and the descriptor, rather than retrying the
+same mismatch again and again. Retention never deletes queued or running
+Jobs.
 
-Useful metric families include:
+These metric families are useful:
 
 - `proctor_jobs_executions_total`
 - `proctor_jobs_execution_duration_seconds`
@@ -59,49 +61,52 @@ Useful metric families include:
 - `proctor_jobs_activity_duration_seconds`
 - `proctor_jobs_queue_latency_seconds`
 
-Use metrics to find the failing class, then durable history for one synthetic
-Job to explain it. Metrics do not replace the Job record.
+Use the metrics to find which kind of Job is failing. Then use the saved
+history of one test Job to explain why. Metrics don't replace the Job record.
 
-## Diagnose WebSocket Establishment
+## When a WebSocket won't connect
 
-When the connection never opens, inspect the browser handshake:
+If the connection never opens, look at the browser's handshake:
 
-- the URL and configured public origin;
-- exactly one permitted cookie, bearer, or DPoP credential mode;
-- the exact Origin for cookie-authenticated connections;
-- HTTP status and stable Problem Details code when upgrade is rejected; and
-- server readiness on the node that received the handshake.
+- The URL and the configured public origin.
+- That the request uses exactly one allowed kind of credential: cookie, bearer
+  or DPoP.
+- The exact Origin, for connections that use a cookie.
+- The HTTP status and the stable Problem Details code, if the upgrade is
+  rejected.
+- Server readiness on the node that received the handshake.
 
-Do not paste cookies, bearer or DPoP credentials, DPoP proofs or nonces, or a
-full handshake export into an issue.
+Don't paste cookies, bearer or DPoP credentials, DPoP proofs or nonces, or a
+full export of the handshake into an issue.
 
-## Diagnose Missing or Gapped Events
+## Missing events or gaps in the sequence
 
-Every connection has bounded sequencing. A reconnect may request local-node
-replay, but replay history is finite and node-local. A reconnect routed to
-another node or a sequence older than the retained buffer may not be replayable.
+Each connection numbers its events, within limits. When a client reconnects,
+it can ask the node for a replay. But each node keeps only a limited replay
+history of its own. If the reconnect reaches a different node, or asks for a
+sequence older than the node still holds, the replay may not be possible.
 
-The correct client response to a gap or failed replay is:
+When there is a gap or a replay fails, the client should:
 
-1. discard assumptions based on the missing notification;
-2. refetch the affected resource through authoritative HTTP;
-3. replace local derived state with that response; and
-4. resume realtime updates from the new known point.
+1. Drop anything it assumed from the missing notice.
+2. Fetch the affected resource again over HTTP.
+3. Replace its local copy with that response.
+4. Resume realtime updates from that new point.
 
-Cluster messages and WebSocket publications occur after the durable commit.
-Their loss can delay a view, but it must not reverse the committed outcome.
+Cluster messages and WebSocket events go out after the commit. Losing them can
+delay what a view shows, but it must never undo the saved outcome.
 
-Relevant metric families include `proctor_websocket_connections`,
+The relevant metric families are `proctor_websocket_connections`,
 `proctor_websocket_messages_total`, `proctor_websocket_replays_total`,
-`proctor_websocket_backpressure_disconnects_total`, and
+`proctor_websocket_backpressure_disconnects_total` and
 `proctor_websocket_subscriptions`. A backpressure disconnect means the client
-could not consume the bounded outbound queue; it must reconnect and
-resynchronize rather than demand an unbounded server buffer.
+couldn't keep up with the limited outgoing queue. The client must reconnect
+and resync, rather than expect the server to buffer without limit.
 
-## Prove the Recovery
+## Confirm the fix
 
-For a Job defect, add a focused test that covers claim fencing, retry,
-checkpoint, cancellation, or terminal outcome as appropriate. For a WebSocket
-defect, prove both the realtime path and HTTP resynchronization. Then run the
-relevant PostgreSQL or cluster integration suite and repeat one synthetic
-end-to-end workflow.
+For a Job problem, add a focused test for claim fencing, retry, checkpoints,
+cancellation or the final outcome, whichever applies. For a WebSocket problem,
+test both the realtime path and resyncing over HTTP. Then run the PostgreSQL
+or cluster integration suite that applies, and repeat one end-to-end workflow
+with test data.

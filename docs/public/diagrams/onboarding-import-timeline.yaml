@@ -1,0 +1,19 @@
+blocks:
+  - row:
+      - card: Upload
+        text: A CSV for one exact scope. Nothing changes yet.
+      - card: Validate
+        text: Names become exact IDs, then the file is deleted.
+      - card: Preview
+        text: Saved and can’t change. Review every row here.
+  - row:
+      - card: Commit
+        text: "You choose `require_all_valid` or `valid_rows_only`."
+        accent: true
+      - card: Run rows
+        text: Each row is checked again and commits on its own.
+      - card: Report
+        text: Successes, no-ops and errors, kept for a limited time.
+    from:
+      - {from: 3, to: 1, label: You decide}
+  - note: "**Finished rows stay finished.** Canceling or a later failure doesn’t roll them back, so you reverse effects yourself."

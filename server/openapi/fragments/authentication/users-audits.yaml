@@ -14,11 +14,11 @@ paths:
         Returns one page of the current Session User's own account history, newest first unless `order=asc`
         asks for oldest first. The first page, read without a cursor, also carries `total`: the number of events
         the filters match across every page, exact below 10,000 and reported as 10,000 with
-        `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Reading the
+        `total_is_lower_bound` at that limit. Later pages carry no total, so keep the first page's. Reading the
         first page oldest first reaches the end of the history without counting pages. The history holds
         events about the User's account, whoever performed them, and account-relevant events the User performed
-        on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label
-        themselves; rows outside the catalogue and unfinished attempts are never returned. No item carries
+        on anything else. Each item carries an `event` name from a fixed list that can grow, and clients write
+        their own labels for it. Records outside that list and unfinished attempts are never returned. No item carries
         another person's identity: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent
         appear only on the User's own actions. A resource identity appears only when the resource is the User,
         the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at.
@@ -28,12 +28,12 @@ paths:
         another User, the sentence names that User only while the User can see them now through the User
         directory's visibility, as the institution audit list does, and otherwise says "a user". It names an
         Academic Unit or Class only where the resource identity appears, and a Role only when the event bound it
-        to the User; otherwise it uses a generic noun such as "a class".
+        to the User. Otherwise it uses a generic noun such as "a class".
         The page also carries `runs`: each stretch of two or more consecutive items on the page with the same
         actor kind, event, recorded operation, status, and relation, with a plural `summary` such as "You
         changed 5 profile pictures". Items stay unchanged and individually addressable. A run never reaches
         past the page, so a stretch the page edge cuts reads as two runs, or the client fetches the next page
-        before folding the last one; each run's count is exact for the items it covers. Events that cannot
+        before folding the last one. Each run's count is exact for the items it covers. Events that cannot
         follow one another, such as turning on two-step verification, never form a run.
         Personal Access Tokens cannot read this history. Reading it records no authorization decision.
       tags:
@@ -64,21 +64,21 @@ paths:
         - name: created_after
           in: query
           required: false
-          description: Return only events recorded at or after this RFC 3339 instant.
+          description: Return only events recorded at or after this RFC 3339 time.
           schema:
             type: string
             format: date-time
         - name: created_before
           in: query
           required: false
-          description: Return only events recorded before this RFC 3339 instant; it must be later than `created_after`.
+          description: Return only events recorded before this RFC 3339 time. It must be later than `created_after`.
           schema:
             type: string
             format: date-time
         - name: event
           in: query
           required: false
-          description: Return only these events. Repeat the parameter to select several; omit it for all.
+          description: Return only these events. Repeat the parameter to select several, or leave it out for all.
           style: form
           explode: true
           schema:
@@ -143,7 +143,7 @@ components:
             $ref: '#/components/schemas/SelfAuditListResponse'
           example:
             items:
-              - id: ybndrfg8ejkmcpqxot1uwisza3
+              - id: hmyjmj68dw6gdxctnghbrhwcth
                 created_at: '2026-08-01T09:30:00Z'
                 event: password.changed
                 status: success
@@ -152,12 +152,12 @@ components:
                   kind: self
                 resource:
                   type: user
-                  id: ybndrfg8ejkmcpqxot1uwisza4
+                  id: wj3drgzdpnf54rxf5d8qd3dqne
                 client_type: web
                 ip_address: 192.0.2.10
                 user_agent: Mozilla/5.0
                 summary: You changed your password
-              - id: ybndrfg8ejkmcpqxot1uwisza5
+              - id: 6xoche483hwrx5rpu8jzjoe7qg
                 created_at: '2026-07-30T14:05:00Z'
                 event: mfa.reset_by_administrator
                 status: success
@@ -166,10 +166,10 @@ components:
                   kind: administrator
                 resource:
                   type: user
-                  id: ybndrfg8ejkmcpqxot1uwisza4
+                  id: wj3drgzdpnf54rxf5d8qd3dqne
                 client_type: web
                 summary: An administrator reset two-step verification for your account
-              - id: ybndrfg8ejkmcpqxot1uwisza6
+              - id: 39kqk53i4cswfzbi7hbai1r8qg
                 created_at: '2026-07-29T11:00:00Z'
                 event: profile_picture.changed
                 status: success
@@ -182,7 +182,7 @@ components:
                 ip_address: 192.0.2.10
                 user_agent: Mozilla/5.0
                 summary: You changed the profile picture of Bo Student
-              - id: ybndrfg8ejkmcpqxot1uwisza7
+              - id: fotnmte5o3j9wftdm5rtbfofqr
                 created_at: '2026-07-29T10:59:00Z'
                 event: profile_picture.changed
                 status: success
@@ -205,8 +205,8 @@ components:
   schemas:
     SelfAuditEvent:
       description: >-
-        Stable name of one account-relevant event. The catalogue is closed and may grow; clients own the
-        labels and should present an unknown name generically.
+        The name of one event in the account history. The list is fixed but can grow in later releases.
+        Clients write their own labels and should show an unknown name in a generic way.
       type: string
       enum:
         - academic_unit.joined
@@ -269,12 +269,16 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The audit event ID.
         created_at:
           type: string
           format: date-time
           description: Time the event began.
         event:
           type: string
+          description: >-
+            The name of the event, such as password.changed. A newer server may send a name this contract does
+            not list yet, so show an unknown name in a generic way.
           anyOf:
             - $ref: '#/components/schemas/SelfAuditEvent'
             - type: string
@@ -290,10 +294,11 @@ components:
             - subject
             - actor
           description: >-
-            `subject` when the event is about the User's account; `actor` when the User performed it on
+            `subject` when the event is about the User's account, or `actor` when the User performed it on
             anything else.
         actor:
           type: object
+          description: Who performed the event. It never identifies another person.
           additionalProperties: false
           required:
             - kind
@@ -309,19 +314,23 @@ components:
                 with no signed-in actor such as a background Job, offline recovery, or an emailed link.
         resource:
           type: object
+          description: What the event was recorded against.
           additionalProperties: false
           required:
             - type
           properties:
             type:
               type: string
-              description: Stable type of the resource the event was recorded against.
+              description: The type of the resource the event was recorded against, such as user or class. The values don't change between releases.
             id:
               $ref: '#/components/schemas/ID'
+              description: >-
+                The resource ID. Present only when the resource is the User, the Institution, or an Academic Unit
+                or Class where the User has or had a membership or Role Binding.
         error_code:
           type: string
           maxLength: 128
-          description: Stable safe failure category of a failed event.
+          description: A code for why a failed event failed. It holds no private details, and the values don't change between releases.
         client_type:
           type: string
           maxLength: 32
@@ -329,20 +338,20 @@ components:
         ip_address:
           type: string
           maxLength: 64
-          description: Network address of the User's own action; omitted for anyone else's.
+          description: The IP address of the User's own action. Left out for anyone else's.
         user_agent:
           type: string
           maxLength: 512
-          description: User agent of the User's own action; omitted for anyone else's.
+          description: The user agent of the User's own action. Left out for anyone else's.
         summary:
           type: string
           maxLength: 2048
           description: >-
-            One sentence describing the event in the negotiated language, for display only; clients that need to
-            reason about the event read its codes. It never names who acted on the User; it names a User the User
-            acted on only while the User can see them now, and a failed event says so.
+            One sentence describing the event in the language chosen for the request. It is for display only, so
+            clients that need to act on the event should read its codes. It never names who acted on the User. It
+            names a User the User acted on only while the User can see them now, and a failed event says so.
     SelfAuditListResponse:
-      description: One bounded page of the current User's own account history.
+      description: One page of the current User's own account history, with at most 200 items.
       type: object
       additionalProperties: false
       required:
@@ -350,6 +359,7 @@ components:
       properties:
         items:
           type: array
+          description: The events on this page, in the requested order.
           maxItems: 200
           items:
             $ref: '#/components/schemas/SelfAuditEventResponse'
@@ -364,7 +374,7 @@ components:
         next_cursor:
           type: string
           maxLength: 2048
-          description: Opaque continuation for the next page, omitted after the final page.
+          description: Pass this back as cursor to get the next page. Treat it as a token and don't read or change it. Left out on the last page.
         total:
           type: integer
           minimum: 0
@@ -374,7 +384,7 @@ components:
             stops and `total_is_lower_bound` is true.
         total_is_lower_bound:
           type: boolean
-          description: True when `total` reached the 10,000 bound and the history may be longer. Present with `total`.
+          description: True when `total` reached the 10,000 limit and the history may be longer. Present with `total`.
     SelfAuditRun:
       description: >-
         Consecutive items on one page with the same actor kind, event, recorded operation, status, and relation.

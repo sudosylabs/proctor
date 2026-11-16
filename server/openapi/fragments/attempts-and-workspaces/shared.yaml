@@ -8,7 +8,7 @@
 components:
   responses:
     CandidateExamProtectedContent:
-      description: Authorized inline candidate Exam content; not a public URL or export response
+      description: The requested Exam content, sent inline to the authorized candidate. This is not a public or export URL.
       headers:
         ETag:
           schema:
@@ -27,7 +27,7 @@ components:
             type: string
             format: binary
     CandidateExamContentNotModified:
-      description: Protected candidate Exam content has not changed
+      description: The content has not changed since the entity tag the client sent.
       headers:
         ETag:
           schema:
@@ -42,6 +42,7 @@ components:
             const: nosniff
   schemas:
     CandidateExamWorkspaceItemResponse:
+      description: One file or directory in the Attempt Workspace. File-only members are omitted for directories.
       type: object
       additionalProperties: false
       required:
@@ -50,26 +51,33 @@ components:
         - path
       properties:
         id:
+          description: ID of the Workspace Entry. It stays the same when the entry is renamed or moved.
           $ref: '#/components/schemas/ID'
         kind:
+          description: Whether the entry is a file or a directory.
           type: string
           enum:
             - file
             - directory
         path:
+          description: Current Workspace Path of the entry.
           $ref: '#/components/schemas/StarterWorkspacePath'
         content_version:
+          description: Workspace Content Version of the current file content. Present only for files. Send it back unchanged when you replace or delete the file.
           $ref: '#/components/schemas/WorkspaceContentVersion'
         media_type:
+          description: Media type declared for the file. Present only for files.
           type: string
           minLength: 1
           maxLength: 255
         size:
+          description: File size in bytes. Present only for files.
           type: integer
           format: int64
           minimum: 0
           maximum: 104857600
         sha256:
+          description: Lowercase hexadecimal SHA-256 digest of the file content. Present only for files.
           $ref: '#/components/schemas/SHA256'
       oneOf:
         - properties:

@@ -1,0 +1,21 @@
+blocks:
+  - row:
+      - card: Create
+        text: Purpose, target and recipient are fixed
+      - card: Pending
+        text: "Waiting for the person to accept. **Resend** sends a new link and deadline; old links stop working."
+        accent: true
+      - branch: true
+        span: 2
+        items:
+          - title: Accepted
+            text: All its effects apply at once, or none do
+          - title: Replaced
+            text: A new Invitation takes over from this one
+          - title: Revoked
+            text: An administrator cancels it
+          - title: Expired
+            text: The deadline passed before anyone accepted
+        footer: Each of these is final.
+  - note: "**Mail is tracked on its own.** Sending the email doesn’t change the Invitation, and an old email can’t reopen one that is finished."
+    rule: dashed

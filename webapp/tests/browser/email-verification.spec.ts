@@ -31,10 +31,8 @@ test("email verification requires deliberate token consumption", { tag: "@cross-
       "Confirm the address this link was sent to. The link works once, for 24 hours.",
     ),
   ).toBeVisible();
-  await expect(page.getByText("Confirm email", { exact: true })).toHaveCSS(
-    "color",
-    "rgb(101, 95, 105)",
-  );
+  // A pending task has no status line; only a real outcome shows one.
+  await expect(page.locator("[data-proctor-status-tone]")).toHaveCount(0);
   await expect(page.locator("[data-proctor-notice]")).toHaveCount(0);
   await expect(
     page.getByRole("link", { name: "Back to sign in", exact: true }),
@@ -51,10 +49,8 @@ test("email verification requires deliberate token consumption", { tag: "@cross-
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
   await expect(page.getByRole("status")).toHaveText("Your email is confirmed");
   await expect(page.getByText("You can now sign in to Proctor.")).toBeVisible();
-  await expect(page.getByText("Confirm email", { exact: true })).toHaveCSS(
-    "color",
-    "rgb(11, 118, 110)",
-  );
+  await expect(page.locator('[data-proctor-status-tone]')).toHaveText("Email confirmed");
+  await expect(page.locator('[data-proctor-status-tone]')).toHaveCSS("color", "rgb(11, 118, 110)");
   await expect(
     page.getByRole("link", { name: "Sign in", exact: true }),
   ).toHaveAttribute("href", "/login");
@@ -192,10 +188,9 @@ test("missing and malformed fragment credentials make no request", async ({
       page.getByRole("button", { name: "Confirm email address" }),
     ).toHaveCount(0);
     await expect(page.locator("body")).not.toContainText("secret");
-    await expect(page.getByText("Confirm email", { exact: true })).toHaveCSS(
-      "color",
-      "rgb(180, 35, 60)",
-    );
+    const status = page.locator('[data-proctor-status-tone="danger"]');
+    await expect(status).toHaveText("Email not confirmed");
+    await expect(status).toHaveCSS("color", "rgb(165, 31, 55)");
     await expect(
       page.getByRole("link", { name: "Sign in", exact: true }),
     ).toHaveAttribute("href", "/login");
@@ -288,10 +283,8 @@ test("a retryable failure retains one in-memory token without duplicate submissi
       "Proctor couldn’t finish the check. Try again, or sign in if your email is already confirmed.",
     ),
   ).toBeVisible();
-  await expect(page.getByText("Confirm email", { exact: true })).toHaveCSS(
-    "color",
-    "rgb(149, 82, 13)",
-  );
+  await expect(page.locator('[data-proctor-status-tone]')).toHaveText("Not checked");
+  await expect(page.locator('[data-proctor-status-tone]')).toHaveCSS("color", "rgb(149, 82, 13)");
   await page.getByRole("button", { name: "Try again" }).click();
   await expect(
     page.getByRole("heading", { level: 1, name: "Your email is confirmed" }),

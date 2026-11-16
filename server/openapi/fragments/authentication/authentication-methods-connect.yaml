@@ -13,7 +13,7 @@ paths:
       operationId: beginProviderConnection
       summary: Begin a proof-bound provider connection for the exact current User
       description: >-
-        Creates a short-lived provider connection transaction bound to the current strongly authenticated User and returns its redirect URL. Completing the provider flow cannot attach the identity to a different User.
+        Starts a short-lived connection to an external provider for the current User and returns the address to send the browser to. The interactive Session must have passed two-step verification and must have signed in or reauthenticated recently. When the provider sign-in finishes, the identity can be linked only to this User.
       tags:
         - Authentication
       x-proctor-auth: strong_recent_session_required
@@ -70,7 +70,7 @@ components:
   requestBodies:
     BeginProviderConnection:
       required: true
-      description: Supplies the validated relative destination to restore after the external provider connection completes.
+      description: The path on this server to return to after the provider connection finishes.
       content:
         application/json:
           schema:
@@ -79,7 +79,7 @@ components:
             return_to: /settings/authentication
   responses:
     ProviderConnectionCreated:
-      description: Provider connection redirect prepared
+      description: The provider connection was started
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -87,6 +87,9 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ProviderConnectionResponse'
+          example:
+            redirect_url: 'https://sso.example.edu/authorize?client_id=proctor&response_type=code&scope=openid&state=Bq7wN2cXk9LmRv4tKz6YhDs1FgJ8aEoU3iTpBvM5xWe'
+            expires_at: '2026-08-01T09:20:00Z'
   schemas:
     BeginProviderConnectionRequest:
       type: object
@@ -94,6 +97,7 @@ components:
       properties:
         return_to:
           type: string
+          description: The path on this server to return to, such as /settings/authentication. It must start with a single slash and have no host or fragment. Defaults to /.
           maxLength: 2048
     ProviderConnectionResponse:
       type: object
@@ -105,6 +109,8 @@ components:
         redirect_url:
           type: string
           format: uri
+          description: The provider's sign-in address. Send the browser there to connect the identity.
         expires_at:
           type: string
           format: date-time
+          description: When this connection attempt expires. Finish the provider sign-in before then.

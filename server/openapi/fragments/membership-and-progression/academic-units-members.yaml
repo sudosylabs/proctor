@@ -15,7 +15,18 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Lists authorized current or historical organizational memberships for one Academic Unit at the requested effective instant. Membership describes a relationship only and is never presented as an unrestricted permission grant. Bounded pages are ordered by `sort` and `dir`, by default the membership start (`since`) ascending then identity. The first page also reports `total`, the memberships the filter matches across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. The next_cursor freezes the effective instant or history filter and the order, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests. Each item names the member in `user`, with email only for Institution-wide user.view, and, for a caller holding role_binding.view on this unit, lists the member's current Role Bindings scoped exactly to it in `roles_here`.
+        Lists the memberships of one Academic Unit that you may see: either those in effect at one instant, or the
+        full history. A membership records a relationship only. It never grants permissions by itself.
+
+        Pages are ordered by `sort` and `dir`, by default by membership start (`since`), oldest first, then by ID. The
+        first page also reports `total`, the number of memberships the filter matches across all pages. It is exact
+        below 10,000; at 10,000 counting stops and `total_is_lower_bound` is true. A cursor keeps the first page's
+        instant or history filter and its order, but every page reads current data, so memberships added or changed
+        between requests can change later pages.
+
+        Each item names the member in `user`. `email` is included only if you hold Institution-wide user.view. If you
+        hold role_binding.view on this Academic Unit, each item also lists the member's current Role Bindings scoped
+        exactly to it, in `roles_here`.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -43,11 +54,16 @@ paths:
           schema:
             type: string
             format: date-time
-          description: RFC 3339 instant at which membership must be effective; ignored when history is true in legacy full-list mode. For paging, omit it with history=true and inherit the first page instant when following a cursor.
+          description: >-
+            Return the memberships in effect at this instant. Defaults to now. It cannot be combined with
+            `history=true`. When following a cursor you may omit it, because the cursor keeps the first page's
+            instant.
         - name: history
           in: query
           required: false
-          description: When true, return membership history. Legacy full-list mode ignores active_at; paged requests must omit active_at with history=true.
+          description: >-
+            When true, return the full membership history instead of only the memberships in effect at one instant.
+            It cannot be combined with `active_at`.
           schema:
             type: boolean
             default: false
@@ -55,9 +71,9 @@ paths:
           in: query
           required: false
           description: >-
-            The page order, each key then by membership identity: `since` (the membership start, the default) or `name`
-            (the member's presented name, the display name or else the username, compared case-insensitively on
-            its first 64 characters). A cursor continues only the sort and direction that produced it; repeat both
+            The page order, each key followed by membership ID: `since` (the membership start, the default) or
+            `name` (the member's display name, or their username when there is none, compared case-insensitively on
+            its first 64 characters). A cursor only continues the sort and direction that produced it, so repeat both
             when following it.
           schema:
             type: string
@@ -98,7 +114,9 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Creates one effective-dated relationship between an existing User and the Academic Unit in the route. The transaction rechecks Unit authority and overlap constraints but creates no Role or Role Binding.
+        Adds an existing User to the Academic Unit in the path, from an optional start time. The request rechecks
+        your authority over the Academic Unit and refuses a membership that overlaps another one. It creates no Role
+        or Role Binding.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -147,7 +165,7 @@ paths:
 components:
   requestBodies:
     CreateAcademicUnitMember:
-      description: Existing User and optional effective start for membership in the route Academic Unit.
+      description: The existing User to add and, optionally, when the membership starts.
       required: true
       content:
         application/json:
@@ -158,20 +176,58 @@ components:
             start_at: '2026-08-01T00:00:00Z'
   responses:
     AcademicUnitMemberCreated:
-      description: Academic Unit Member created
+      description: The new membership.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/AcademicUnitMemberResponse'
+          example:
+            id: iqcx3qc9sbbt6ocshszfqgq6ci
+            created_at: '2026-07-20T14:05:00Z'
+            updated_at: '2026-07-20T14:05:00Z'
+            academic_unit_id: 889766ufjgio6kbpzjbufozksq
+            user_id: ybndrfg8ejkmcpqxot1uwisza3
+            start_at: '2026-08-01T00:00:00Z'
     AcademicUnitMemberListOK:
-      description: Academic Unit Member collection
+      description: One page of the Academic Unit's memberships.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/AcademicUnitMemberListResponse'
+          example:
+            items:
+              - id: iqcx3qc9sbbt6ocshszfqgq6ci
+                created_at: '2026-07-20T14:05:00Z'
+                updated_at: '2026-07-20T14:05:00Z'
+                academic_unit_id: 889766ufjgio6kbpzjbufozksq
+                user_id: ybndrfg8ejkmcpqxot1uwisza3
+                start_at: '2026-08-01T00:00:00Z'
+                user:
+                  display_name: Teacher One
+                  username: teacher.one
+                  email: teacher.one@example.edu
+                roles_here:
+                  - role_id: nybc6xhg593upqice3sdeyro5k
+                    display_name: Department Lead
+                roles_here_more: 0
+              - id: dfa1x1n7mkthyoziwxnupsmyia
+                created_at: '2026-07-21T09:00:00Z'
+                updated_at: '2026-07-21T09:00:00Z'
+                academic_unit_id: 889766ufjgio6kbpzjbufozksq
+                user_id: f6tcxyfofj3n3buuqfjaw9j1jn
+                start_at: '2026-08-15T00:00:00Z'
+                user:
+                  display_name: Staff Two
+                  username: staff.two
+                  email: staff.two@example.edu
+                roles_here: []
+                roles_here_more: 0
+            next_cursor: eyJhZnRlciI6ImRmYTF4MW43bWt0aHlveml3eG51cHNteWlhIn0
+            total: 14
+            total_is_lower_bound: false
   schemas:
     AcademicUnitMemberListResponse:
-      description: One page of the collection in its requested order; the first page carries its total.
+      description: One page of memberships in the requested order. Only the first page carries `total`.
       type: object
       additionalProperties: false
       required:
@@ -179,6 +235,7 @@ components:
       properties:
         items:
           type: array
+          description: The memberships on this page.
           items:
             $ref: '#/components/schemas/AcademicUnitMemberListItemResponse'
         next_cursor:
@@ -188,17 +245,17 @@ components:
           minimum: 0
           maximum: 10000
           description: >-
-            Memberships matching the effective instant or history filter across every page, present only on the
-            first page. At 10,000 counting stops and `total_is_lower_bound` is true.
+            How many memberships match the instant or history filter across all pages. Present only on the first
+            page. Counting stops at 10,000, and then `total_is_lower_bound` is true.
         total_is_lower_bound:
           type: boolean
-          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.
+          description: True when counting stopped at 10,000 and there may be more. Present with `total`.
     AcademicUnitMemberListItemResponse:
       type: object
       additionalProperties: false
       description: >-
-        One membership with who the member is. `roles_here` and `roles_here_more` are present only when the caller
-        holds role_binding.view on this Academic Unit.
+        One membership and who the member is. `roles_here` and `roles_here_more` are present only if you hold
+        role_binding.view on this Academic Unit.
       required:
         - id
         - created_at
@@ -210,63 +267,81 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The ID of the membership.
         created_at:
           type: string
           format: date-time
+          description: When the membership was created.
         updated_at:
           type: string
           format: date-time
+          description: When the membership last changed, for example when it was ended.
         archived_at:
           type: string
           format: date-time
+          description: When the membership was archived. An archived membership is never in effect. Omitted unless archived.
         academic_unit_id:
           $ref: '#/components/schemas/ID'
+          description: The Academic Unit the User is a member of.
         user_id:
           $ref: '#/components/schemas/ID'
+          description: The member.
         start_at:
           type: string
           format: date-time
+          description: When the membership takes effect.
         end_at:
           type: string
           format: date-time
+          description: >-
+            When the membership stops being in effect. The membership is no longer in effect at this instant.
+            Omitted while it has no end.
         user:
           $ref: '#/components/schemas/AcademicUnitMemberUser'
+          description: Who the member is.
         roles_here:
           type: array
           maxItems: 5
-          description: The member's current Role Bindings scoped exactly to this Academic Unit, oldest first.
+          description: Up to five of the member's current Role Bindings scoped exactly to this Academic Unit, oldest first.
           items:
             $ref: '#/components/schemas/AcademicUnitMemberRole'
         roles_here_more:
           type: integer
           minimum: 0
-          description: Current Role Bindings on this Academic Unit past the five listed. Present with `roles_here`.
+          description: >-
+            How many more current Role Bindings the member holds on this Academic Unit beyond the five listed.
+            Present with `roles_here`.
     AcademicUnitMemberUser:
       type: object
       additionalProperties: false
       description: >-
-        Who the member is. Seeing a unit's members shows their display name and username; email is present only for
-        a caller holding Institution-wide user.view.
+        Who the member is. Anyone who can see the Academic Unit's members sees the display name and username.
+        `email` is present only if you hold Institution-wide user.view.
       required:
         - display_name
         - username
       properties:
         display_name:
           type: string
+          description: The member's display name.
         username:
           type: string
+          description: The member's username.
         email:
           type: string
           format: email
+          description: The member's email address. Present only if you hold Institution-wide user.view.
     AcademicUnitMemberRole:
       type: object
       additionalProperties: false
+      description: One Role the member holds through a Role Binding scoped to this Academic Unit.
       required:
         - role_id
         - display_name
       properties:
         role_id:
           $ref: '#/components/schemas/ID'
+          description: The ID of the Role.
         display_name:
           type: string
           description: The Role's display name.
@@ -278,6 +353,8 @@ components:
       properties:
         user_id:
           $ref: '#/components/schemas/ID'
+          description: The existing User to add.
         start_at:
           type: string
           format: date-time
+          description: When the membership starts. Omit it to start now.

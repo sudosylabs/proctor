@@ -1,94 +1,118 @@
 ---
-title: Author and Publish an Exam
-description: Edit one revision-fenced Draft and publish a complete immutable Revision without exposing concurrent or protected content.
+title: Write and publish an Exam
+description: Edit your Exam's Draft safely alongside other Managers, then publish it as a complete Revision that never changes, without exposing protected content.
 audience: exam-manager
 maturity: preview
 ---
 
 import Link from '@docusaurus/Link';
 
-# Author and Publish an Exam
+# Write and publish an Exam
 
-An <Term id="exam">Exam</Term> is stable identity and ownership. It has exactly
-one mutable <Term id="exam-draft">Draft</Term> and a history of immutable
-<Term id="exam-revision">Revisions</Term>. A Sitting selects a Revision; it
-never follows the changing Draft.
+An <Term id="exam">Exam</Term> holds the Exam's lasting identity and who owns
+it. Each Exam has exactly one <Term id="exam-draft">Draft</Term> that you can
+edit, and a history of <Term id="exam-revision">Revisions</Term> that never
+change. A Sitting uses a chosen Revision. It never follows the Draft as you
+keep editing.
 
-## Create in the Exact Academic Unit
+## Create the Exam in the right Academic Unit
 
-Creation names the owning Academic Unit and initial title and instructions.
-The creator becomes immutable provenance, current owner, and first Manager.
-The Exam itself does not store mutable title, policy, Resources, Class, or
-schedule; those belong to Draft, Revision, or Sitting.
+When you create an Exam, you name the Academic Unit that owns it, and give it
+a first title and instructions. You are recorded as its creator for good, and
+you become its current owner and first Manager.
 
-## Edit Through One Revision Fence
+The Exam itself doesn't store a title, policy, Resources, Class or schedule
+that can change. Those live in the Draft, a Revision or a Sitting.
 
-Every Draft mutation supplies `expected_revision`. After success, use the
-returned revision for the next operation. On conflict, fetch the complete
-current authoring view, compare all changed areas, and deliberately reapply the
-edit. Do not increment a stale number or replay one field over another
-Manager's work.
+## Every edit checks the Draft revision
 
-The Draft freezes these areas at publication:
+Each change to the Draft includes `expected_revision`. When the change
+succeeds, use the revision it returns for your next change.
 
-- required title and optional sanitized-at-presentation Markdown instructions;
-- typed Exam Policy Set, including the Focus Loss rule;
-- separate Browser Policy;
-- ordered Exam Resources and their exact File Revisions;
-- Starter Workspace hierarchy and content versions; and
-- the current Exam Capacity Policy values governing content limits.
+If there is a conflict, someone else has changed the Draft. Fetch the full
+current authoring view, compare every area that changed, and then make your
+edit again on purpose. Don't just add one to an out-of-date revision number,
+and don't write one field over another Manager's work.
 
-There is no generic policy JSON. Use the typed fields in the current contract.
-Connection Loss is fixed to `flag_and_suspend`. Focus Loss carries enabled,
-minimum duration, incident threshold, time window, and one closed outcome.
-Browser Policy is a versioned start rule and bounded set of HTTPS origin/path
-rules; blocked navigation is recorded rather than silently broadened.
+When you publish, these parts of the Draft are fixed:
 
-Desktop security families each have a mode: disabled, observe or enforce. An
-observed family only records. An enforced family stops the candidate starting
-while its check is not met, and raises a Flag when it stops being met during
-the Exam. Choose its outcome: a Flag, or a Flag and a suspension. Turning on
-applications always blocks the apps the Desktop release never allows, such as
-remote-control and screen-sharing tools. Its allowed list may name only apps the
-release marks allowable, and when it names any, no other catalog app may run.
-A family the candidate's Desktop release cannot check refuses the Exam at Start
-rather than being skipped. Each Desktop release says on which platforms each
-check is proven reliable enough to enforce. An enforced family refuses Start on
-a platform where it is not, while an observed family runs everywhere. Nothing
-is enforceable on Linux yet.
+- the title, which is required, and the instructions, which are optional
+  Markdown that Proctor cleans up when it displays them;
+- the typed Exam Policy Set, including the Focus Loss rule;
+- the Browser Policy, which is separate;
+- the Exam Resources, in order, with their exact File Revisions;
+- the Starter Workspace's folders and files, with their content versions;
+- the current Exam Capacity Policy values that set content limits.
 
-When the Exam records the screen, a candidate can start only once their Desktop
-may record and has at least 3 GiB free, enough for a long session and the clips
-cut from it. Linux cannot record yet, so a recording Exam cannot start there.
+There is no general-purpose policy JSON. Use the typed fields in the current
+contract:
 
-## Review Before Publishing
+- Connection Loss is always `flag_and_suspend`.
+- Focus Loss has an on or off switch, a minimum duration, a number of
+  incidents that triggers it, a time window, and one outcome from a fixed list.
+- Browser Policy has a version, a start rule, and a limited set of rules that
+  allow HTTPS addresses and paths. Navigation that is blocked is recorded. The
+  rules are never quietly widened to let it through.
 
-Check the title, rendered and sanitized instructions, policy values, Browser
-Policy start rule, Resource order and metadata, Starter Workspace manifest,
-content-capacity totals, and current Draft revision.
+Each Desktop security family has a mode: disabled, observe or enforce:
 
-Publishing validates the complete Draft atomically. An unchanged Draft does
-not create a redundant Revision. A stale Draft, invalid path,
-over-capacity resource, or incomplete typed policy blocks the transition
-without publishing a partial snapshot.
+- An observed family only records.
+- An enforced family stops the candidate starting while its check isn't met,
+  and raises a Flag when the check stops being met during the Exam. Choose its
+  outcome: a Flag, or a Flag and a suspension.
 
-## Understand the Immutable Result
+Turning on the applications family always blocks the apps the Desktop release
+never allows, such as remote-control and screen-sharing tools. Its allowed list
+may name only apps the release marks as allowable. When the list names any, no
+other catalog app may run.
 
-Publication creates the next numbered Revision, selects it as the future
-default, rebases the Draft, records publisher and time, and commits audit and
-idempotent outcome before transient effects. Existing Revisions never change
-when the Draft is edited later.
+If the candidate's Desktop release can't check a family, the Exam is refused
+at Start rather than the family being skipped. Each Desktop release says on
+which platforms each check is reliable enough to enforce. An enforced family
+refuses Start on a platform where it isn't, while an observed family runs
+everywhere. Nothing can be enforced on Linux yet.
 
-Manager Revision discovery exposes safe identity, order, provenance, digests,
-and aggregate counts. It deliberately omits instructions, canonical policy
-bytes, Resource details, Starter Workspace paths, opaque content identities,
-and source bytes.
+When the Exam records the screen, a candidate can start only once their
+Desktop is allowed to record and has at least 3 GiB free, which is enough for a
+long session and the clips cut from it. Linux can't record yet, so an Exam that
+records can't start there.
 
-An urgent live correction later creates another immutable Revision for one
-open or paused Sitting. It may change only instructions, Resources, and Browser
-Policy; it cannot change Exam Policy, Starter Workspace,
-eligibility, or schedule. The full correction lifecycle is covered in Phase 6
-Sitting guidance.
+## Check before you publish
+
+Check:
+
+- the title, and the instructions as they will appear after clean-up;
+- the policy values;
+- the Browser Policy start rule;
+- the order and details of each Resource;
+- the Starter Workspace's list of files;
+- the content-capacity totals;
+- the current Draft revision.
+
+When you publish, Proctor checks the whole Draft in one step. If nothing has
+changed since the last Revision, it doesn't create another one. An
+out-of-date Draft, an invalid path, a Resource over the capacity limit or an
+incomplete typed policy stops publication, and nothing is partly published.
+
+## What publishing creates
+
+Publishing creates the next numbered Revision and makes it the default from
+now on. The Draft is then based on the new Revision. Proctor records who
+published and when. It saves the audit record and the stored result of the
+request before any short-lived side effects run. Editing the Draft later never changes existing
+Revisions.
+
+When Managers look up Revisions, they see the Revision's identity, its number
+in the order, who published it and when, digests and overall counts. They
+don't see the instructions, the exact policy bytes, Resource details, Starter
+Workspace paths, opaque content identifiers or source bytes.
+
+If something urgent needs fixing during an Exam, a live correction creates
+another Revision that never changes, for one open or paused Sitting. A
+correction can change only the instructions, Resources and Browser Policy. It
+can't change the Exam Policy, the Starter Workspace, who is eligible or the
+schedule. The full correction process is covered in the Phase 6 Sitting
+guidance.
 
 Use the <Link to="/api/recipes/author-and-publish-exam">API recipe</Link> for
-exact operations and safe retry.
+the exact operations and how to retry safely.

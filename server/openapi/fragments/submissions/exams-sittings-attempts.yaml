@@ -17,9 +17,10 @@ paths:
       tags:
         - Submissions
       description: >-
-        An authorized current Exam Manager atomically seals the last acknowledged Workspace state and ends one
-        active, ready, or suspended Attempt. The private reason is retained for audit and is never returned to
-        the candidate. At or after the Sitting deadline, scheduled closure owns terminal provenance.
+        Ends one active, ready or suspended Attempt on behalf of the candidate. The candidate's last
+        acknowledged Workspace state is sealed as a Submission in the same step. Your reason is kept for
+        audit and is never shown to the candidate. Once the Sitting deadline is reached, scheduled closure
+        seals the Attempt instead.
       x-proctor-auth: principal_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -88,8 +89,9 @@ paths:
       tags:
         - Submissions
       description: >-
-        Authorizes the canonical Submission first, rechecks the current Exam Manager relationship and scope,
-        then conceals any nested ownership mismatch.
+        Returns the summary of one sealed Submission: what was sealed, its size, and the state of its
+        integrity data. You must currently manage the Exam. If the Submission does not belong to the Exam,
+        Sitting and Attempt in the path, the request fails as not found.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -141,7 +143,9 @@ paths:
       summary: List one protected immutable Submission manifest page
       tags:
         - Submissions
-      description: The opaque cursor contains only the last stable Entry identity and never a path or storage selector.
+      description: >-
+        Lists the files and directories sealed in one Submission, one page at a time. The page cursor
+        never contains a file path or storage location.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -174,11 +178,13 @@ paths:
             minimum: 1
             maximum: 200
             default: 50
-          description: Maximum number of immutable manifest entries to return.
+          description: Maximum number of manifest entries to return.
         - name: cursor
           in: query
           required: false
-          description: Opaque keyset cursor containing only the last stable Entry identity.
+          description: >-
+            The `next_cursor` from the previous page. Pass it back unchanged and do not parse or build it
+            yourself.
           schema:
             type: string
       responses:
@@ -211,8 +217,9 @@ paths:
       tags:
         - Submissions
       description: >-
-        Streams the exact retained starter- or Attempt-origin bytes through the application. It is not a
-        public URL or export and exposes no storage selector.
+        Returns the exact bytes of one sealed file, whether it came from the Starter Workspace or was
+        written during the Attempt. The bytes are served by Proctor itself. This is not a public link or an
+        export, and it reveals no storage location.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -242,7 +249,9 @@ paths:
           required: false
           schema:
             type: string
-          description: Strong ETag from an earlier authorized response; a match returns 304 without content.
+          description: >-
+            The `ETag` from an earlier response for this file. If it still matches, the server returns 304
+            with no body.
       responses:
         '200':
           $ref: '#/components/responses/ExamSubmissionFileContent'
@@ -266,8 +275,7 @@ components:
   requestBodies:
     EndExamAttemptByManager:
       description: >-
-        Exact Attempt revision and private bounded manager reason for sealing one unfinished Attempt before
-        scheduled closure owns it.
+        The Attempt's current revision and your private reason for ending it before the Sitting deadline.
       required: true
       content:
         application/json:
@@ -278,7 +286,9 @@ components:
             reason: Candidate requested an early end after completing the exam.
   responses:
     ExamSubmissionReceiptOK:
-      description: Candidate-safe retained receipt for the manager-ended Submission or its exact replay
+      description: >-
+        The receipt for the Submission. Repeating the request with the same Idempotency-Key returns the same
+        receipt.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -286,8 +296,23 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamSubmissionReceiptResponse'
+          example:
+            submission_id: 39kqk53i4cswfzbi7hbai1r8qg
+            receipt_code: 7QXR-4M2K-HV9D-3JNP
+            exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
+            exam_revision_id: ih1r84kij94nrwis97rft6rduh
+            state: submitted
+            workspace_cursor: 18
+            manifest_digest: 11ae3038c1fe627502b6596d5598808bb5339e26b1bfed1924adec0458cc1b26
+            submitted_at: '2026-12-14T10:48:09Z'
+            browser_activity:
+              state: not_applicable
+              inventory_revision: 1
+              source_count: 0
+              pending_source_count: 0
+              incomplete_source_count: 0
     ExamSubmissionManagerOK:
-      description: Protected immutable Submission header for an authorized current Exam Manager
+      description: The Submission summary.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -295,8 +320,30 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamSubmissionManagerResponse'
+          example:
+            submission_id: 39kqk53i4cswfzbi7hbai1r8qg
+            exam_id: wj3drgzdpnf54rxf5d8qd3dqne
+            exam_sitting_id: 14j8umgczgrdp95w77zuxmxfu9
+            exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
+            exam_revision_id: ih1r84kij94nrwis97rft6rduh
+            workspace_id: fotnmte5o3j9wftdm5rtbfofqr
+            manifest_schema_version: 1
+            workspace_cursor: 18
+            manifest_digest: 11ae3038c1fe627502b6596d5598808bb5339e26b1bfed1924adec0458cc1b26
+            manifest_entry_count: 3
+            manifest_total_file_bytes: 2841
+            final_focus_loss_sequence: 3
+            integrity_state: settled
+            unresolved_integrity_count: 0
+            submitted_at: '2026-12-14T10:48:09Z'
+            browser_activity:
+              state: not_applicable
+              inventory_revision: 1
+              source_count: 0
+              pending_source_count: 0
+              incomplete_source_count: 0
     ExamSubmissionManifestOK:
-      description: Protected immutable Submission manifest page
+      description: One page of the Submission manifest.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -305,12 +352,29 @@ components:
           schema:
             $ref: '#/components/schemas/ExamSubmissionManifestResponse'
           example:
-            submission_id: ybndrfg8ejkmcpqxot1uwisza3
-            workspace_cursor: 12
-            manifest_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-            items: []
+            submission_id: 39kqk53i4cswfzbi7hbai1r8qg
+            workspace_cursor: 18
+            manifest_digest: 11ae3038c1fe627502b6596d5598808bb5339e26b1bfed1924adec0458cc1b26
+            items:
+              - entry_id: dfa1x1n7mkthyoziwxnupsmyia
+                kind: file
+                path: src/main.py
+                content_version: nan7rdocriztinowtuyrbqg67a
+                media_type: text/x-python
+                size: 2214
+                sha256: 702f63d705f0030f2b4832aff9e6a6de6923d3ef5e450ae12a4479b4adf22f8c
+                author:
+                  kind: environment
+                  ref: 0/terminal:1
+              - entry_id: f6tcxyfofj3n3buuqfjaw9j1jn
+                kind: directory
+                path: src
+                author:
+                  kind: candidate
+                  ref: c8xmq7t4h1rz6a3kpedn5yw9fo
+            next_cursor: eyJhZnRlcl9lbnRyeV9pZCI6ImY2dGN4eWZvZmozbjNidXVxZmphdzlqMWpuIn0
     ExamSubmissionFileContent:
-      description: Authorized inline immutable Submission file content; not a public URL or export response
+      description: The file's bytes, served inline. This is not a public link or an export.
       headers:
         ETag:
           schema:
@@ -329,7 +393,7 @@ components:
             type: string
             format: binary
     ExamSubmissionFileNotModified:
-      description: Protected immutable Submission file content has not changed
+      description: The file has not changed since the `ETag` you sent.
       headers:
         ETag:
           schema:
@@ -346,6 +410,7 @@ components:
     EndExamAttemptByManagerRequest:
       type: object
       additionalProperties: false
+      description: The Attempt revision you last read and a private reason for ending it.
       required:
         - expected_revision
         - reason
@@ -354,15 +419,21 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: >-
+            The Attempt's current revision, as last read. The request fails with a conflict if the Attempt
+            has changed since.
         reason:
           type: string
           minLength: 1
           maxLength: 1000
-          description: Trimmed private manager reason; never exposed to the candidate.
+          description: >-
+            Why you are ending the Attempt. It is kept for audit and is never shown to the candidate. Send
+            valid UTF-8 with no leading or trailing whitespace: at most 1000 characters and 4000 bytes.
     ExamSubmissionManagerResponse:
       description: >-
-        Manager-safe Submission header without Workspace bytes or integrity evidence. Retired integrity has an
-        explicit retirement time and omits the former signal counters; retained work remains accessible.
+        A summary of one sealed Submission, without file contents or integrity evidence. When the
+        Institution's retention policy has retired the integrity data, the summary gives the retirement
+        time and leaves out the focus-loss and unresolved counts. The submitted work stays available.
       type: object
       additionalProperties: false
       required:
@@ -383,45 +454,52 @@ components:
       properties:
         submission_id:
           $ref: '#/components/schemas/ID'
+          description: The Submission's ID.
         exam_id:
           $ref: '#/components/schemas/ID'
+          description: The Exam the Submission belongs to.
         exam_sitting_id:
           $ref: '#/components/schemas/ID'
+          description: The Sitting the Submission belongs to.
         exam_attempt_id:
           $ref: '#/components/schemas/ID'
+          description: The Attempt that was sealed.
         exam_revision_id:
           $ref: '#/components/schemas/ID'
-          description: Exact Exam Sitting Revision governing the atomic Submission commit.
+          description: The Exam Revision the Sitting delivered when the Submission was sealed.
         workspace_id:
           $ref: '#/components/schemas/ID'
+          description: The Attempt Workspace that was sealed.
         manifest_schema_version:
           type: integer
           const: 1
-          description: Version of the sealed manifest representation.
+          description: The version of the manifest format.
         workspace_cursor:
           type: integer
           format: int64
           minimum: 0
+          description: The Workspace change cursor that was sealed. Each accepted Workspace change advances it.
         manifest_digest:
           $ref: '#/components/schemas/SHA256'
+          description: The SHA-256 digest of the sealed manifest, as lowercase hex.
         manifest_entry_count:
           type: integer
           minimum: 0
           maximum: 5000
-          description: Total number of file and directory entries in the sealed manifest.
+          description: The number of files and directories in the sealed manifest.
         manifest_total_file_bytes:
           type: integer
           format: int64
           minimum: 0
           maximum: 1073741824
-          description: Sum of sealed file sizes in bytes.
+          description: The total size of all sealed files, in bytes.
         final_focus_loss_sequence:
           type: integer
           format: int64
           minimum: 0
           description: >-
-            Final focus-loss signal sequence acknowledged at submission. Present only while integrity is
-            retained, including when zero.
+            The last focus-loss sequence number accepted when the Attempt was sealed. Present, even when
+            zero, until the integrity data is retired.
         integrity_state:
           type: string
           enum:
@@ -429,28 +507,31 @@ components:
             - gapped
             - retired
           description: >-
-            Whether integrity is complete, contains a known gap, or has been permanently retired under
-            Institution policy.
+            `settled` means the integrity data is complete. `gapped` means it has a known gap. `retired`
+            means the integrity data was permanently removed under the Institution's retention policy.
         integrity_retired_at:
           type: string
           format: date-time
           description: >-
-            Present only when integrity_state is retired. Retirement does not represent a settled integrity
-            result.
+            When the integrity data was retired. Present only when `integrity_state` is `retired`. A retired
+            Submission is not the same as one with settled integrity.
         unresolved_integrity_count:
           type: integer
           format: int64
           minimum: 0
           description: >-
-            Count of integrity items still unresolved for review. Present only while integrity is retained,
-            including when zero.
+            The number of integrity items not yet resolved for review. Present, even when zero, until the
+            integrity data is retired.
         submitted_at:
           type: string
           format: date-time
+          description: When the Submission was sealed.
         browser_activity:
           $ref: '#/components/schemas/BrowserSubmissionSettlement'
     ExamSubmissionManifestItemResponse:
-      description: One immutable file or directory entry in a sealed Submission manifest.
+      description: >-
+        One file or directory in a sealed Submission. File entries carry `content_version`, `media_type`,
+        `size` and `sha256`. Directory entries have none of them.
       type: object
       additionalProperties: false
       required:
@@ -461,29 +542,35 @@ components:
       properties:
         entry_id:
           $ref: '#/components/schemas/ID'
+          description: The entry's ID. Use it to download a file's content.
         kind:
           type: string
           enum:
             - file
             - directory
+          description: Whether the entry is a file or a directory.
         path:
           $ref: '#/components/schemas/StarterWorkspacePath'
+          description: The entry's path relative to the Workspace root.
         author:
           $ref: '#/components/schemas/WorkspaceAuthor'
         content_version:
           $ref: '#/components/schemas/WorkspaceContentVersion'
+          description: The version token of the sealed file content. Files only.
         media_type:
           type: string
           minLength: 1
           maxLength: 255
+          description: The file's media type. Files only.
         size:
           type: integer
           format: int64
           minimum: 0
           maximum: 104857600
-          description: Exact file size in bytes; present only for file entries.
+          description: The file size in bytes. Files only.
         sha256:
           $ref: '#/components/schemas/SHA256'
+          description: The SHA-256 digest of the file, as lowercase hex. Files only.
       oneOf:
         - properties:
             kind:
@@ -507,7 +594,7 @@ components:
               - required:
                   - sha256
     ExamSubmissionManifestResponse:
-      description: One bounded page from an immutable sealed Submission manifest.
+      description: One page of a sealed Submission's manifest, ordered by entry ID.
       type: object
       additionalProperties: false
       required:
@@ -518,19 +605,23 @@ components:
       properties:
         submission_id:
           $ref: '#/components/schemas/ID'
+          description: The Submission the manifest belongs to.
         workspace_cursor:
           type: integer
           format: int64
           minimum: 0
+          description: The Workspace change cursor that was sealed.
         manifest_digest:
           $ref: '#/components/schemas/SHA256'
+          description: The SHA-256 digest of the whole sealed manifest, as lowercase hex.
         items:
           type: array
           maxItems: 200
+          description: The entries on this page, at most `limit`.
           items:
             $ref: '#/components/schemas/ExamSubmissionManifestItemResponse'
         next_cursor:
           type: string
           description: >-
-            Opaque keyset cursor containing only the last stable Entry identity; no path or storage
-            selector enters the URL.
+            Pass this as `cursor` to get the next page. Omitted on the last page. Don't parse or
+            build it yourself. It never contains a file path.

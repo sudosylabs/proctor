@@ -13,7 +13,9 @@ paths:
       operationId: issueStudentClassInvitation
       summary: Invite a student into one exact Class
       description: >-
-        Issues an immutable account and Class-enrollment package for the route Class after validating current roster authority and effective dates. The claim is delivered through durable mail and is never exposed in the administrator response.
+        Invites a student into the Class in the path, with an account and a Class enrollment, after checking your
+        authority over the Class roster and the start and end. Once issued, the Invitation's terms cannot change.
+        The claim is sent by email and never appears in the response.
       tags:
         - Invitations and onboarding
       x-proctor-auth: principal_required
@@ -45,7 +47,7 @@ paths:
         - sessionCookie: []
           csrfToken: []
       requestBody:
-        description: Recipient, optional enrollment interval, and suggested account profile for the route Class.
+        description: The recipient, an optional enrollment start and end, and a suggested profile for the student account.
         required: true
         content:
           application/json:
@@ -59,11 +61,19 @@ paths:
               suggested_timezone: Europe/Paris
       responses:
         "201":
-          description: Invitation issued without claim or mailbox disclosure
+          description: The Invitation was issued. The response contains neither the claim nor mailbox details.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/InvitationResponse'
+              example:
+                id: 5fjuyaie3cdpho3es6dej48g8j
+                purpose: student_class
+                state: pending
+                class_id: sjebyge5cpbop1xwo4eds74ejb
+                academic_period_id: p6y6sf8ac6m5if373fkkebj7j6
+                start_at: '2026-09-01T00:00:00Z'
+                expires_at: '2026-08-27T10:00:00Z'
         "400":
           $ref: '#/components/responses/BadRequest'
         "401":
@@ -89,12 +99,16 @@ components:
         email:
           type: string
           format: email
+          description: The address to send the Invitation to. An account created on acceptance gets this address.
         start_at:
           type: string
           format: date-time
+          description: >-
+            When the enrollment starts once accepted. Omit it to start with the Class's Academic Period.
         end_at:
           type: string
           format: date-time
+          description: When the enrollment ends; it must be after the start. Omit it for no end.
         expires_in_days:
           type:
             - integer
@@ -102,22 +116,30 @@ components:
           minimum: 1
           maximum: 30
           description: >-
-            Whole days until the claim expires, from 1 to 30. Omitted or null selects 7. A value outside the range is rejected with invitation.invalid.
+            How many whole days the Invitation can be accepted for, from 1 to 30. Omit it or send null for 7 days. A
+            value outside the range is refused with invitation.invalid.
         suggested_username:
           type: string
           maxLength: 64
+          description: A username to suggest. The invitee chooses their own username when accepting.
         suggested_display_name:
           type: string
           maxLength: 512
+          description: The name used to greet the invitee in the Invitation email.
         suggested_first_name:
           type: string
           maxLength: 256
+          description: A first name to suggest for the new account.
         suggested_last_name:
           type: string
           maxLength: 256
+          description: A last name to suggest for the new account.
         suggested_locale:
           type: string
           maxLength: 35
+          description: The language of the Invitation email, as a language tag such as `en`.
         suggested_timezone:
           type: string
           maxLength: 64
+          description: >-
+            The time zone the new account gets if the invitee gives none when accepting, such as `Europe/Paris`.

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { invitedAccount } from "./support/api";
-import { currentUser, expectSignedIn, signOut, submitCredentials } from "./support/browser";
+import { currentUser, expectCredentialsRejected, expectSignedIn, signOut, submitCredentials } from "./support/browser";
 import { randomPassword } from "./support/environment";
 
 test("local login creates a cookie Session and sign out revokes it", async ({ page }) => {
@@ -9,7 +9,7 @@ test("local login creates a cookie Session and sign out revokes it", async ({ pa
   expect(await currentUser(page)).toEqual({ status: 401 });
 
   await submitCredentials(page, account.username, randomPassword());
-  await expect(page.locator("#password-error")).toHaveText("That email or password isn’t right. Check both and try again.");
+  await expectCredentialsRejected(page);
   expect(await currentUser(page)).toEqual({ status: 401 });
 
   await submitCredentials(page, account.email, account.password);

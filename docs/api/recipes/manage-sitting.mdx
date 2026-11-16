@@ -1,6 +1,6 @@
 ---
-title: Schedule and Manage a Sitting
-description: Schedule one immutable Revision, operate its lifecycle, apply live corrections, read candidate status, and end or re-allow Attempts safely.
+title: Schedule and run a Sitting
+description: Schedule a published Revision, run the Sitting from start to close, apply live corrections, watch candidate status, and end or re-allow Attempts safely.
 audience: api-consumer
 maturity: preview
 sidebar_position: 9
@@ -8,18 +8,19 @@ sidebar_position: 9
 
 import Link from '@docusaurus/Link';
 
-# Schedule and Manage a Sitting
+# Schedule and run a Sitting
 
-A Sitting delivers one published Revision to one exact Class during a half-open
-time window. Commands are revision-fenced, audited, and idempotent where
-declared; realtime messages only tell a client to refetch authority.
+A Sitting delivers one published Revision to one exact Class within a time
+window. The window includes its start and excludes its end. Each command checks
+the revision you send, is audited, and is idempotent where the reference says
+so. Realtime messages only tell a client to fetch the current state again.
 
 <GovernedFigure asset="sitting-lifecycle-controls" />
 
-## 1. Schedule an Eligible Revision and Class
+## 1. Schedule a Revision for a Class
 
 Call <Link to="/api/reference/schedule-exam-sitting">Schedule Exam Sitting</Link>
-with RFC 3339 timestamps and a required idempotency key.
+with RFC 3339 timestamps and an idempotency key, which is required.
 
 ```json
 {
@@ -30,125 +31,138 @@ with RFC 3339 timestamps and a required idempotency key.
 }
 ```
 
-The Class lineage must reach the Exam's Academic Unit, the Revision must belong
-to the Exam, and the interval must fit its exact Academic Period. A start or
-rescheduled start must be after current PostgreSQL time. Structural authority
-never bypasses these rules.
+Proctor accepts the request only if:
 
-Before opening, <Link to="/api/reference/update-exam-sitting-schedule">Update Exam Sitting schedule</Link>
-may change the Revision, Class, or window using the current Sitting revision.
-Only Scheduled Sittings can be rescheduled or
+- the Class sits under the Exam's Academic Unit;
+- the Revision belongs to the Exam;
+- the window fits inside the Class's exact Academic Period;
+- the start, or a new start when you reschedule, is later than the current
+  PostgreSQL time.
+
+Permissions over the academic structure never let you skip these rules.
+
+Before the Sitting opens,
+<Link to="/api/reference/update-exam-sitting-schedule">Update Exam Sitting schedule</Link>
+can change the Revision, the Class or the window. Send the current Sitting
+revision. Only a Scheduled Sitting can be rescheduled or
 <Link to="/api/reference/cancel-exam-sitting">canceled</Link>.
 
-## 2. Read Authority and Candidate Presence
+## 2. Read the Sitting and who is present
 
-Use <Link to="/api/reference/get-exam-sitting">Get Exam Sitting</Link> for the
-authoritative state. Use
+Call <Link to="/api/reference/get-exam-sitting">Get Exam Sitting</Link> for the
+current state. Call
 <Link to="/api/reference/list-exam-sitting-candidate-statuses">List Sitting candidate statuses</Link>
-for a no-store board evaluated at one response server time. Keep its keyset
-cursor and filter set unchanged across pages.
+for a board that isn't cached and reflects a single server time given in the
+response. Keep its keyset cursor and filters the same across pages.
 
-The status vocabulary is `not_started`, `ready`, `connected`, `reconnecting`,
-`lease_expired`, `suspended`, and `submitted`. It is operational presence, not
-an integrity verdict. It exposes no Session, Registration, credential,
-Connection, private reason, or evidence.
+Each candidate's status is one of `not_started`, `ready`, `connected`,
+`reconnecting`, `lease_expired`, `suspended` or `submitted`. The status says
+whether the candidate is present and working. It is not a judgement on
+integrity. It doesn't show any Session, Registration, credential, Connection,
+private reason or evidence.
 
 <Link to="/api/reference/list-exam-sitting-no-shows">List Sitting no-shows</Link>
-uses membership active at the authoritative open time and excludes every User
-with an Attempt. No-show is not represented by a fabricated Attempt.
+uses the memberships that were active when the Sitting opened, as the server
+recorded it, and leaves out every User who has an Attempt. Proctor never
+creates an Attempt to represent a no-show.
 
-## 3. Apply the Exact Lifecycle Command
+## 3. Send the lifecycle command you need
 
-- <Link to="/api/reference/pause-exam-sitting">Pause</Link> retains read-only
-  presentation and integrity monitoring but blocks admission, writes,
-  and submission.
-- <Link to="/api/reference/resume-exam-sitting">Resume</Link> restores eligible
-  delivery; paused time does not extend the deadline.
+- <Link to="/api/reference/pause-exam-sitting">Pause</Link> keeps the
+  presentation readable and integrity monitoring running, but blocks admission,
+  changes and submission.
+- <Link to="/api/reference/resume-exam-sitting">Resume</Link> brings delivery
+  back for eligible candidates. Paused time doesn't extend the deadline.
 - <Link to="/api/reference/extend-exam-sitting">Extend</Link> moves only the end
   later.
-- <Link to="/api/reference/close-exam-sitting">Close</Link> enters Closing and
-  begins bounded sealing of unfinished Attempts.
+- <Link to="/api/reference/close-exam-sitting">Close</Link> moves the Sitting
+  into Closing and starts sealing unfinished Attempts, with limits on the work.
 
-Supply the current Sitting revision, a new idempotency key for a new decision,
-and a private bounded reason where required. At or after the deadline,
-PostgreSQL time gives the scheduled-end transition precedence over a manager
-command.
+Send the current Sitting revision, a new idempotency key for each new decision,
+and a short private reason where the call needs one. At or after the deadline,
+by PostgreSQL's clock, the scheduled end wins over a manager's command.
 
-Closing is not Closed. Deny new mutations immediately, then monitor until every
-created Attempt has one Submission and the Sitting reports Closed. The sealing
-Job is non-cancelable and recoverable across process loss.
+Closing isn't Closed. Refuse new changes straight away, then keep watching
+until every Attempt that was created has one Submission and the Sitting reports
+Closed. The sealing Job can't be canceled, and it recovers if a process stops.
 
-## 4. Stage and Apply a Live Correction
+## 4. Stage and apply a live correction
 
 <GovernedFigure asset="correction-acknowledgement-sequence" />
 
-For every new or replacement Resource byte sequence, call
+For every new or replacement Resource file, call
 <Link to="/api/reference/stage-exam-sitting-correction-resource-content">Stage correction Resource content</Link>
-against the exact Sitting, base Revision, and resource target. Retain each safe
-ready `stage_id`; staging alone changes nothing visible.
+for the exact Sitting, base Revision and Resource. Keep each `stage_id` that
+comes back ready. Staging on its own changes nothing that anyone can see.
 
-Call <Link to="/api/reference/apply-exam-sitting-correction">Apply Sitting correction</Link>
+Then call <Link to="/api/reference/apply-exam-sitting-correction">Apply Sitting correction</Link>
 with:
 
-- expected Sitting and current Revision fences;
-- optional replacement instructions and Browser Policy;
-- one complete ordered Resource manifest;
-- a 1–500 character candidate-safe summary;
-- canonical changed areas;
-- explicit `acknowledgement_required`;
-- a separate private manager reason; and
+- the expected Sitting revision and current Revision;
+- new instructions and a new Browser Policy, if you're changing them;
+- one complete, ordered list of Resources;
+- a summary of 1 to 500 characters that is safe to show candidates;
+- the standard names of the areas that changed;
+- an explicit `acknowledgement_required`;
+- a separate private reason for managers;
 - a new idempotency key.
 
-An item without a stage retains base bytes, a ready stage selects new bytes,
-and omission removes the Resource. The transition creates an immutable live-
-correction Revision and retargets only this Sitting. It fails if Exam Policy,
-Starter Workspace, eligibility, schedule, or protected
-digests would change.
+In the Resource list, an item without a stage keeps the base file, an item
+with a ready stage uses the new file, and leaving an item out removes that
+Resource. The correction creates a new live-correction Revision that never
+changes, and points only this Sitting at it. The correction fails if it would
+change the Exam Policy, the Starter Workspace, eligibility, the schedule or
+protected digests.
 
-## 5. Track Required Acknowledgement
+## 5. Track acknowledgements
 
-Candidate presentation exposes ordered notices and each Attempt's
-acknowledgement state. Required notices are acknowledged oldest-first through
-the exact Revision route and the candidate's current DPoP, Participation,
-continuity, Session, and Connection fences.
+The candidate presentation lists the notices in order, and shows each
+Attempt's acknowledgement state. Candidates acknowledge required notices oldest
+first, through the route for that exact Revision. Each acknowledgement must
+carry the candidate's current DPoP proof, Participation, continuity credential,
+Session and Connection.
 
-Pending acknowledgement blocks candidate mutation, governed Browser,
-and voluntary submission capability. It does not block protected reads,
-renewal, Browser Activity or Focus Loss reporting, or the acknowledgement
-operation. Authorized closure can still seal and records the missing
-acknowledgement as discrepancy provenance.
+While an acknowledgement is pending, the candidate can't change their work,
+use the governed browser or submit voluntarily. They can still read protected
+content, renew the lease, report Browser Activity and Focus Loss, and
+acknowledge. An authorized close can still seal the Attempt, and records the
+missing acknowledgement as a discrepancy.
 
-## 6. Suspend, Re-allow, or End One Attempt
+## 6. Suspend, re-allow or end one Attempt
 
-Read the exact Attempt and candidate-status Suspension projection first.
-<Link to="/api/reference/suspend-exam-attempt">Suspend Exam Attempt</Link>
-is the immediate manual Kick of an Active Attempt. It requires the expected
-Attempt revision, a private reason, and an idempotency key; it ends the live
-Participation generation and Connection as `kicked`, opens a `manual`
-Suspension with the `manager_suspended` candidate reason, and creates no
-Integrity Flag.
+First read the exact Attempt, and the Suspension details in the candidate
+status.
+
+<Link to="/api/reference/suspend-exam-attempt">Suspend Exam Attempt</Link> is
+the immediate manual Kick of an Active Attempt. Send the expected Attempt
+revision, a private reason and an idempotency key. The call:
+
+- ends the live Participation generation and Connection as `kicked`;
+- opens a `manual` Suspension with the `manager_suspended` reason shown to
+  the candidate;
+- creates no Integrity Flag.
 
 <Link to="/api/reference/reallow-exam-attempt">Re-allow Exam Attempt</Link>
-requires the exact active Suspension, expected Attempt revision, private reason,
-and idempotency key. It returns the Attempt to Ready; fresh Desktop admission
-creates a new Participation generation. Flags, evidence, configuration, and
-history remain.
+needs the exact active Suspension, the expected Attempt revision, a private
+reason and an idempotency key. It puts the Attempt back to Ready. When the
+candidate is admitted again on Desktop, Proctor creates a new Participation
+generation. Flags, evidence, configuration and history stay as they were.
 
 <Link to="/api/reference/end-exam-attempt-by-manager">End Exam Attempt by Manager</Link>
-seals the last acknowledged Workspace from Ready, Active, or Suspended and
-creates one terminal Submission with `manager_ended_attempt` provenance. It is
-not a Kick and cannot be undone. At or after the Sitting deadline, closure owns
-the sealing result instead.
+seals the last acknowledged Workspace of a Ready, Active or Suspended Attempt,
+and creates one final Submission marked `manager_ended_attempt`. It isn't a
+Kick, and you can't undo it. At or after the Sitting deadline, the close seals
+the Attempt instead.
 
-## Failure and Retry Matrix
+## Failures and retries
 
-| Condition | Safe recovery |
+| Condition | What to do |
 | --- | --- |
-| Sitting revision conflict | refetch the full Sitting and reconsider the command |
-| deadline race | accept the scheduled-end result and monitor Closing |
-| correction stage invalid or expired | create a new purpose-bound stage; do not reuse bytes from another target |
-| correction no changes | do not manufacture another Revision |
-| acknowledgement pending | present the oldest notice and call only the acknowledgement operation |
-| re-allow conflict | refetch the exact Suspension and Attempt revision |
-| ambiguous idempotent mutation | replay the exact body with the same key |
-| realtime event missed | refetch authoritative HTTP projections |
+| Sitting revision conflict | Fetch the whole Sitting again and reconsider the command. |
+| deadline race | Accept the scheduled-end result and watch Closing. |
+| correction stage invalid or expired | Create a new stage for this target. Don't reuse a file staged for another target. |
+| correction no changes | Don't create another Revision. |
+| acknowledgement pending | Show the oldest notice, and call only the acknowledgement endpoint. |
+| re-allow conflict | Fetch the exact Suspension and Attempt revision again. |
+| unclear result from an idempotent change | Resend exactly the same body with the same key. |
+| realtime event missed | Fetch the current state over HTTP again. |

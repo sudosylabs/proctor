@@ -3,26 +3,7 @@
     display: flex;
     min-inline-size: 0;
     flex-direction: column;
-  }
-
-  .kind {
-    margin-block-end: var(--proctor-space-3);
-    color: var(--proctor-color-foreground-muted);
-    font-size: var(--proctor-font-size-body-small);
-    font-weight: var(--proctor-font-weight-medium);
-    line-height: var(--proctor-line-height-body-small);
-  }
-
-  .success {
-    color: var(--proctor-color-state-success);
-  }
-
-  .warning {
-    color: var(--proctor-color-state-warning);
-  }
-
-  .danger {
-    color: var(--proctor-color-state-danger);
+    gap: var(--proctor-space-3);
   }
 
   .intro h1 {
@@ -31,14 +12,26 @@
     font-weight: var(--proctor-font-weight-semibold);
     line-height: var(--proctor-line-height-display);
     letter-spacing: var(--proctor-letter-spacing-display);
-    text-wrap: balance;
+    text-wrap: pretty;
   }
 
   .body {
     max-inline-size: 34rem;
-    margin-block-start: var(--proctor-space-4);
     color: var(--proctor-color-foreground-subtle);
     font-size: var(--proctor-font-size-body-large);
     line-height: var(--proctor-line-height-body-large);
+  }
+
+  /* Repeats a before-task rail item where the rail follows the task. */
+  .beforeTask {
+    color: var(--proctor-color-foreground-muted);
+    font-size: var(--proctor-font-size-body-small);
+    line-height: var(--proctor-line-height-body-small);
+  }
+
+  @media (min-width: 48rem) {
+    .beforeTask {
+      display: none;
+    }
   }
 }

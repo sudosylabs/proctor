@@ -1,95 +1,47 @@
 .hero {
-  border-bottom: var(--proctor-stroke-hairline) solid var(--proctor-border);
-  margin-bottom: var(--proctor-space-7);
-  padding-bottom: var(--proctor-space-6);
-}
-
-.eyebrow {
-  color: var(--proctor-primary-strong);
-  font-family: var(--ifm-font-family-monospace);
-  font-size: var(--proctor-type-caption-size);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  margin-bottom: var(--proctor-space-3);
-  text-transform: uppercase;
+  border-bottom: 1px solid var(--proctor-border);
+  margin-bottom: 24px;
+  padding-bottom: 28px;
 }
 
 .hero h1 {
-  font-size: clamp(2.15rem, 4.5vw, var(--proctor-type-heading-large-size));
+  color: var(--proctor-ink);
+  font-size: 2.125rem;
   font-weight: 600;
-  letter-spacing: -0.025em;
-  line-height: var(--proctor-type-heading-large-line);
+  letter-spacing: -0.028em;
+  line-height: 1.15;
   margin: 0;
 }
 
-.hero > p {
+.lead {
   color: var(--proctor-ink-soft);
-  font-size: 1.0625rem;
-  line-height: 1.7;
-  margin: var(--proctor-space-4) 0 0;
-  max-width: 62ch;
+  font-size: 1.125rem;
+  line-height: 1.6;
+  margin: 14px 0 0 !important;
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--proctor-space-3);
-  margin-top: var(--proctor-space-5);
+  gap: 10px;
+  margin-top: 24px;
 }
 
-.record {
-  border-bottom: var(--proctor-stroke-hairline) solid var(--proctor-border);
-  border-top: var(--proctor-stroke-hairline) solid var(--proctor-border);
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: var(--proctor-space-6) 0 0;
-}
-
-.record > div {
-  min-width: 0;
-  padding: var(--proctor-space-4) 0;
-}
-
-.record > div + div {
-  border-left: var(--proctor-stroke-hairline) solid var(--proctor-border);
-  padding-left: var(--proctor-space-4);
-}
-
-.record dt {
+.facts {
   color: var(--proctor-ink-muted);
-  font-family: var(--ifm-font-family-monospace);
-  font-size: var(--proctor-type-caption-size);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.84rem;
+  gap: 4px 16px;
+  margin: 20px 0 0 !important;
 }
 
-.record dd {
-  color: var(--proctor-ink);
-  font-size: var(--proctor-type-body-small-size);
-  font-weight: 600;
-  line-height: 1.45;
-  margin: var(--proctor-space-2) 0 0;
-}
-
-@media (max-width: 680px) {
-  .actions {
-    align-items: stretch;
-    flex-direction: column;
+@media (max-width: 996px) {
+  .hero h1 {
+    font-size: 1.75rem;
   }
 
-  .actions :global(.button) {
-    justify-content: center;
-    text-align: center;
-    width: 100%;
-  }
-
-  .record {
-    grid-template-columns: 1fr;
-  }
-
-  .record > div + div {
-    border-left: 0;
-    border-top: var(--proctor-stroke-hairline) solid var(--proctor-border);
-    padding-left: 0;
+  .lead {
+    font-size: 1.0625rem;
   }
 }

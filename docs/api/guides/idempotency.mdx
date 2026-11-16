@@ -1,26 +1,25 @@
 ---
-title: Idempotency and Retries
-description: Retry Proctor commands without duplicating durable mutations or external effects.
+title: Idempotency and retries
+description: Retry Proctor commands without applying a change twice or repeating its external effects.
 audience: api-consumer
 maturity: preview
 sidebar_position: 5
 ---
 
-# Idempotency and Retries
+# Idempotency and retries
 
-Every operation explicitly declares `x-proctor-idempotency` as `none`,
-`optional`, or `required`. The generated endpoint page displays that value.
+Every operation declares `x-proctor-idempotency` as `none`, `optional` or
+`required`, and its generated endpoint page shows the value.
 
-| Value | Client behavior |
+| Value | What your client does |
 | --- | --- |
-| `none` | Do not send `Idempotency-Key`; use the operation's natural read or replacement semantics |
-| `optional` | Send a key when a mutation may be retried after an uncertain outcome |
-| `required` | Every request must include a key |
+| `none` | Don't send `Idempotency-Key`. Rely on the operation being a read or a replacement |
+| `optional` | Send a key when you might retry a mutation whose outcome you're unsure of |
+| `required` | Send a key with every request |
 
-An idempotency key is 1–128 case-sensitive ASCII characters drawn from letters,
-digits, `-`, `.`, `_`, and `~`. Generate a new unpredictable key for one
-logical command and reuse that same key only when retrying the exact same
-request.
+An idempotency key is 1–128 case-sensitive ASCII characters, made of
+letters, digits, `-`, `.`, `_` and `~`. Generate a new, unpredictable key for
+each logical command. Reuse that key only to retry exactly the same request.
 
 ```bash
 curl --request POST \
@@ -31,28 +30,34 @@ curl --request POST \
   --data '{"title":"Calculus I final","owner_academic_unit_id":"01J7YQ4G6V2CKBYZG83K31T6QA"}'
 ```
 
-## Replay Semantics
+## How Proctor handles a replay
 
-For a valid replay, Proctor repeats authentication, authorization, and required
-audit evaluation but does not repeat the durable mutation or its external
-effects. Records are retained for at least 24 hours.
+When you replay a request correctly, Proctor checks authentication and
+authorization again, and records any required audit. It doesn't apply the
+change again or repeat its external effects. Proctor keeps idempotency
+records for at least 24 hours.
 
-The same key with different canonical input is a conflict. A concurrent retry
-can report that the original command is still in progress. Both conditions use
-stable endpoint error codes; handle them explicitly rather than generating a
-new key immediately, which could duplicate the logical command.
+Two cases return a stable error code from the endpoint:
 
-## Safe Retry Procedure
+- The same key arrives with different input, compared after Proctor
+  normalizes the request. This is a conflict.
+- A retry arrives while the original command is still running. Proctor can
+  report that the original is in progress.
 
-1. Build and retain the exact request payload and one idempotency key.
+Handle both explicitly. Don't respond by generating a new key straight away,
+because that could run the logical command twice.
+
+## Retry safely
+
+1. Build the exact request payload and one idempotency key, and keep both.
 2. Send the command once.
-3. On a connection failure, timeout, or documented transient server failure,
-   retry the identical request with the identical key.
-4. On a definitive client, authorization, or conflict failure, stop and resolve
-   the cause.
-5. Store the returned resource identifier; do not depend on the key as a
-   permanent lookup handle.
+3. On a connection failure, a timeout or a documented transient server
+   failure, retry the identical request with the identical key.
+4. On a definite client, authorization or conflict failure, stop and fix the
+   cause.
+5. Store the identifier of the resource Proctor returns. Don't use the key
+   as a lasting way to look it up.
 
-Replacement operations may instead use natural idempotency and revision or
-precondition fields. Follow the endpoint's declared value and schema rather
-than adding a key universally.
+Replacement operations may rely on being naturally idempotent instead, with
+revision or precondition fields. Follow each endpoint's declared value and
+schema, rather than adding a key to every request.

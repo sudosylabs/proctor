@@ -13,7 +13,10 @@ paths:
       operationId: issueTeacherAcademicUnitInvitation
       summary: Invite a teacher into one exact Academic Unit with one delegated Role package
       description: >-
-        Issues an immutable teacher relationship and Role package for one exact Academic Unit after validating the recipient address, Role eligibility, effective interval, and inviter authority. The one-time claim is delivered through durable mail and is never returned to the administrator.
+        Invites a teacher into one Academic Unit with one Role you may delegate. The request checks the recipient
+        address, whether the Role can be delegated, the start and end, and your authority as the inviter. Once
+        issued, the Invitation's terms cannot change. The one-time claim is sent by email and never returned to
+        you.
       tags:
         - Invitations and onboarding
       x-proctor-auth: principal_required
@@ -45,7 +48,9 @@ paths:
         - sessionCookie: []
           csrfToken: []
       requestBody:
-        description: Recipient, delegated Role, optional effective interval, and suggested profile fields for a teacher Invitation.
+        description: >-
+          The recipient, the Role to delegate, an optional start and end, and suggested profile fields for the new
+          teacher account.
         required: true
         content:
           application/json:
@@ -59,11 +64,22 @@ paths:
               start_at: '2026-08-01T00:00:00Z'
       responses:
         "201":
-          description: Invitation issued without claim or mailbox disclosure
+          description: The Invitation was issued. The response contains neither the claim nor mailbox details.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/InvitationResponse'
+              example:
+                id: 3acmqxefoaf9c4pzapj7miff6w
+                purpose: teacher_academic_unit
+                state: pending
+                academic_unit_id: 889766ufjgio6kbpzjbufozksq
+                role_id: ybndrfg8ejkmcpqxot1uwisza3
+                role_actions:
+                  - class.view
+                  - exam.create
+                start_at: '2026-08-01T00:00:00Z'
+                expires_at: '2026-07-21T09:30:00Z'
         "400":
           $ref: '#/components/responses/BadRequest'
         "401":
@@ -85,7 +101,9 @@ paths:
       operationId: issueAcademicUnitRoleInvitation
       summary: Invite an existing User to one exact Academic Unit Role package
       description: >-
-        Issues an immutable Role grant package scoped to the route Academic Unit for an existing User address. Acceptance cannot expand the recorded Role, scope, or effective interval, and claim material remains confined to the delivery and acceptance path.
+        Invites an existing User, by email address, to one Role scoped to the Academic Unit in the path. Acceptance
+        cannot widen the Role, scope or dates the Invitation records. The claim is only ever sent by email and used
+        to accept.
       tags:
         - Invitations and onboarding
       x-proctor-auth: principal_required
@@ -117,7 +135,9 @@ paths:
         - sessionCookie: []
           csrfToken: []
       requestBody:
-        description: Existing recipient, exact eligible Role, and optional effective interval for the route Academic Unit.
+        description: >-
+          The existing User's address, the Role to grant, and an optional start and end at the Academic Unit in the
+          path.
         required: true
         content:
           application/json:
@@ -129,11 +149,21 @@ paths:
               start_at: '2026-08-01T00:00:00Z'
       responses:
         "201":
-          description: Invitation issued without claim or mailbox disclosure
+          description: The Invitation was issued. The response contains neither the claim nor mailbox details.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/InvitationResponse'
+              example:
+                id: 3nty5pzf7c7dsepkhmmn8bk64f
+                purpose: academic_unit_role
+                state: pending
+                academic_unit_id: 889766ufjgio6kbpzjbufozksq
+                role_id: ybndrfg8ejkmcpqxot1uwisza3
+                role_actions:
+                  - exam.view
+                start_at: '2026-08-01T00:00:00Z'
+                expires_at: '2026-07-21T09:30:00Z'
         "400":
           $ref: '#/components/responses/BadRequest'
         "401":
@@ -160,14 +190,20 @@ components:
         email:
           type: string
           format: email
+          description: The address to send the Invitation to. An account created on acceptance gets this address.
         role_id:
           $ref: '#/components/schemas/ID'
+          description: The Role the teacher gets in the Academic Unit. You must be allowed to delegate it.
         start_at:
           type: string
           format: date-time
+          description: >-
+            When the teacher's membership and Role start once accepted. Omit it to start when the Invitation is
+            issued.
         end_at:
           type: string
           format: date-time
+          description: When the membership and Role end; it must be after the start. Omit it for no end.
         expires_in_days:
           type:
             - integer
@@ -175,22 +211,30 @@ components:
           minimum: 1
           maximum: 30
           description: >-
-            Whole days until the claim expires, from 1 to 30. Omitted or null selects 7. A value outside the range is rejected with invitation.invalid.
+            How many whole days the Invitation can be accepted for, from 1 to 30. Omit it or send null for 7 days. A
+            value outside the range is refused with invitation.invalid.
         suggested_username:
           type: string
           maxLength: 64
+          description: A username to suggest. The invitee chooses their own username when accepting.
         suggested_display_name:
           type: string
           maxLength: 512
+          description: The name used to greet the invitee in the Invitation email.
         suggested_first_name:
           type: string
           maxLength: 256
+          description: A first name to suggest for the new account.
         suggested_last_name:
           type: string
           maxLength: 256
+          description: A last name to suggest for the new account.
         suggested_locale:
           type: string
           maxLength: 35
+          description: The language of the Invitation email, as a language tag such as `en`.
         suggested_timezone:
           type: string
           maxLength: 64
+          description: >-
+            The time zone the new account gets if the invitee gives none when accepting, such as `Europe/Paris`.

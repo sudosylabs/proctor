@@ -11,7 +11,10 @@ paths:
       operationId: listOnboardingImports
       summary: List onboarding imports within the caller's authorized scope
       description: >-
-        Lists the unexpired administrative onboarding imports the caller could read one by one through its current Institution, Academic Unit, or Class onboarding authority, newest first unless `order=asc` asks for oldest first. Items are summary projections without rows; read one import for its preview or report rows. Student progressions are listed through their own resource and never appear here.
+        Lists the onboarding imports that have not expired and that you could read one by one through your current
+        Institution, Academic Unit or Class onboarding authority. They are newest first unless `order=asc` asks for
+        oldest first. Items are summaries without rows; read one import to see its preview or report rows. Student
+        progressions have their own listing and never appear here.
       tags:
         - Invitations and onboarding
       x-proctor-auth: principal_required
@@ -59,14 +62,14 @@ paths:
         - name: cursor
           in: query
           required: false
-          description: Continue from the opaque cursor returned by the preceding page.
+          description: The `next_cursor` from the previous page, passed back unchanged.
           schema:
             type: string
             maxLength: 512
         - name: limit
           in: query
           required: false
-          description: Maximum number of onboarding imports to return in this page.
+          description: The most onboarding imports to return on this page.
           schema:
             type: integer
             minimum: 1
@@ -109,7 +112,9 @@ paths:
       operationId: uploadOnboardingImport
       summary: Upload a bounded onboarding CSV for asynchronous validation
       description: >-
-        Stores one bounded formula-safe CSV source and creates a durable validation Job for the explicit mode and authorization scope. Upload performs no account, membership, or Role mutation; the resulting immutable preview must be reviewed and committed separately.
+        Stores one CSV file, at most 10 MiB, and starts a background Job that validates it for the mode and scope you
+        give. The file's contents are treated as data, never as spreadsheet formulas. Uploading creates no account,
+        membership or Role. Review the resulting preview, then commit it separately.
       tags:
         - Invitations and onboarding
       x-proctor-auth: principal_required
@@ -147,7 +152,7 @@ paths:
         - name: mode
           in: query
           required: true
-          description: Selects the onboarding workflow and therefore the CSV columns and validation rules to apply.
+          description: The onboarding workflow, which decides the CSV columns and the validation rules.
           schema:
             type: string
             enum:
@@ -158,7 +163,7 @@ paths:
         - name: scope_type
           in: query
           required: true
-          description: Declares the kind of resource that owns every row in this import.
+          description: The kind of resource that owns every row of the import.
           schema:
             type: string
             enum:
@@ -168,13 +173,13 @@ paths:
         - name: scope_id
           in: query
           required: true
-          description: Identifies the exact Class, Academic Unit, or Institution that owns the import.
+          description: The Class, Academic Unit or Institution that owns the import.
           schema:
             $ref: '#/components/schemas/ID'
         - name: role_id
           in: query
           required: false
-          description: Role to package into applicable teacher or institution Invitation rows; rejected for modes that do not use Roles.
+          description: The Role that teacher or Institution Invitation rows grant. Refused for modes that use no Role.
           schema:
             $ref: '#/components/schemas/ID'
         - name: file_name
@@ -188,7 +193,9 @@ paths:
             maxLength: 255
       requestBody:
         required: true
-        description: Contains the bounded UTF-8 CSV source to validate; the upload creates only a preview and performs no account or membership mutations.
+        description: >-
+          The UTF-8 CSV file to validate, at most 10 MiB. Uploading only creates a preview; it changes no accounts or
+          memberships.
         content:
           text/csv:
             schema:
@@ -228,7 +235,8 @@ paths:
       operationId: getOnboardingImport
       summary: Get one authorized immutable onboarding preview or final report projection
       description: >-
-        Returns the bounded authorized state, preview digest, and row outcomes for one onboarding import. The projection omits original claims, passwords, mail payloads, internal Job data, and unsafe parsing diagnostics.
+        Returns the state, preview digest and row outcomes of one onboarding import you may read. It never includes
+        claims, passwords, email contents, internal Job data or raw parsing diagnostics.
       tags:
         - Invitations and onboarding
       x-proctor-auth: principal_required
@@ -270,7 +278,7 @@ paths:
 components:
   responses:
     OnboardingImportListOK:
-      description: Bounded authorized onboarding import page
+      description: One page of the onboarding imports you may read.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -279,18 +287,62 @@ components:
           schema:
             $ref: '#/components/schemas/OnboardingImportListResponse'
           example:
-            items: []
+            items:
+              - id: grofpg49hmqe47x811ttzoochx
+                mode: student_class
+                state: preview_ready
+                scope_type: class
+                scope_id: sjebyge5cpbop1xwo4eds74ejb
+                preview_digest: 43bb00d0ce7790a53b91256b370c887b24791a5539a6fbfb70c5870e8c91ae5d
+                total_rows: 3
+                valid_rows: 2
+                invalid_rows: 1
+                succeeded_rows: 0
+                no_op_rows: 0
+                failed_rows: 0
+                skipped_rows: 0
+                parse_job_id: mxxj1cwr3oxqg7ngy6qhzn1q8d
+                created_at: '2026-08-18T13:30:00Z'
+                updated_at: '2026-08-18T13:30:02Z'
+                expires_at: '2026-08-25T13:30:00Z'
+                revision: 2
+                file_name: chemistry-roster.csv
+              - id: cyukhpo471cbgurnd4uz1cg33m
+                mode: teacher_academic_unit
+                state: completed
+                scope_type: academic_unit
+                scope_id: 889766ufjgio6kbpzjbufozksq
+                role_id: nybc6xhg593upqice3sdeyro5k
+                preview_digest: 3946ca64ff78d93ca61090a437cbb6b3d2ca0d488f5f9ccf3059608368b27693
+                total_rows: 12
+                valid_rows: 12
+                invalid_rows: 0
+                succeeded_rows: 12
+                no_op_rows: 0
+                failed_rows: 0
+                skipped_rows: 0
+                commit_policy: require_all_valid
+                parse_job_id: o7ieeha4mzopt7am66krx7y8i9
+                execution_job_id: riytyw4oked3ndiq1khd4qc89k
+                created_at: '2026-08-17T08:00:00Z'
+                updated_at: '2026-08-17T08:06:30Z'
+                expires_at: '2026-08-24T08:00:00Z'
+                revision: 5
+                file_name: new-teachers.csv
+            next_cursor: eyJjcmVhdGVkX2F0IjoiMjAyNi0wOC0xN1QwODowMDowMFoifQ
   schemas:
     OnboardingImportListResponse:
       type: object
       additionalProperties: false
+      description: One page of onboarding import summaries, without rows.
       required:
         - items
       properties:
         items:
           type: array
           maxItems: 200
+          description: The imports on this page.
           items:
             $ref: '#/components/schemas/OnboardingImportResponse'
         next_cursor:
-          type: string
+          $ref: '#/components/schemas/NextCursor'

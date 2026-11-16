@@ -1,0 +1,27 @@
+blocks:
+  - row:
+      - card: HTTP layer
+        text: Decodes and validates, then checks the credential and CSRF
+      - card: Use case
+        text: Checks the action and resource against current permissions
+      - card: PostgreSQL
+        text: Saves the state, audit and any Job or mail together
+        accent: true
+      - card: Effects
+        text: Cache, cluster, WebSocket and SMTP, only after the commit
+        dashed: true
+        via: {label: Then, dashed: true}
+  - row:
+      - card: Response
+        text: Status, stable code and request ID explain a rejection
+        span: 2
+      - card: Saved records
+        text: The record, audit and Job or Delivery state prove the outcome
+      - card: Metrics and logs
+        text: Explain whether the effects were delivered
+    links: none
+    from:
+      - {from: 1, to: 1}
+      - {from: 2, to: 1}
+      - {from: 3, to: 2, accent: true}
+      - {from: 4, to: 3, dashed: true}

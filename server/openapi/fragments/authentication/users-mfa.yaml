@@ -11,7 +11,7 @@ paths:
       operationId: getMFAStatus
       summary: Get current-user MFA status
       description: >-
-        Returns whether MFA is active, whether a setup is pending, and the count of unused recovery codes out of the configured set size for the current User, when the User's own password last changed, and the recent-authentication window: its configured length and, while this Session is recently authenticated, when it ends. TOTP secrets, recovery-code values, and password material are never returned by this status view.
+        Returns the current User's two-step verification status. It says whether two-step verification is on, whether a setup is waiting to be finished, and how many of the User's recovery codes are still unused. It also says when the User's own password last changed, how long the recent sign-in window is and, while this Session is inside that window, when it ends. Authenticator secrets, recovery codes and passwords are never returned here.
       tags:
         - Authentication
       x-proctor-auth: mfa_recovery_session_required
@@ -49,7 +49,7 @@ paths:
       operationId: setupMFA
       summary: Begin MFA setup
       description: >-
-        Creates or replaces a short-lived pending TOTP setup and returns its secret and provisioning URI exactly for enrollment. MFA is not active until a valid code is submitted to the activation operation.
+        Starts setting up an authenticator app for two-step verification. It creates a short-lived pending setup, replacing any earlier one, and returns its secret and provisioning URI once so the app can be set up. Two-step verification is not on until a valid code is sent to the activate operation.
       x-codeSamples:
         - lang: Shell
           label: Begin TOTP enrollment
@@ -107,7 +107,7 @@ paths:
       operationId: activateMFA
       summary: Activate pending MFA setup
       description: >-
-        Verifies a current TOTP code against the pending setup, activates MFA, and returns a new recovery-code set exactly once. An expired or superseded setup cannot be activated.
+        Checks a current authenticator code against the pending setup, turns on two-step verification and returns a new set of recovery codes. The codes are shown only in this response. A setup that has expired or was replaced by a newer one can't be activated.
       tags:
         - Authentication
       x-proctor-auth: recent_mfa_recovery_session_required
@@ -166,7 +166,7 @@ paths:
       operationId: challengeMFA
       summary: Upgrade the current session with MFA
       description: >-
-        Verifies a current TOTP code or one unused recovery code and upgrades the exact current interactive Session to MFA assurance. A recovery code is consumed atomically and cannot be replayed.
+        Checks a current authenticator code or one unused recovery code, then marks the current interactive Session as having passed two-step verification. A recovery code is used up as part of the same step and can't be used again.
       tags:
         - Authentication
       x-proctor-auth: mfa_enrollment_session_required
@@ -227,7 +227,7 @@ paths:
       tags:
         - Authentication
       description: >-
-        Invalidates the current recovery-code set and returns a new single-use set exactly once. It requires a strong, recently authenticated interactive Session; Personal Access Tokens cannot satisfy that assurance. Store the returned codes securely because Proctor does not expose them again.
+        Cancels the current recovery codes and returns a new set, each usable once. The codes are shown only in this response, so store them safely. It needs an interactive Session that has passed two-step verification and has signed in or reauthenticated recently. A Personal Access Token can't be used.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -285,7 +285,7 @@ paths:
       operationId: disableMFA
       summary: Disable current-user MFA
       description: >-
-        Disables MFA for the current User after strong recent authentication and invalidates pending setup material and recovery codes. The transition is audited and may be blocked by current policy.
+        Turns off two-step verification for the current User and cancels any pending setup and all recovery codes. It needs an interactive Session that has passed two-step verification and has signed in or reauthenticated recently. The change is recorded in the audit log. It is refused with mfa.required_by_policy when the Access Policy requires the User to use two-step verification.
       x-codeSamples:
         - lang: Shell
           label: Disable MFA
@@ -343,7 +343,7 @@ components:
   requestBodies:
     MFACode:
       required: true
-      description: Supplies a current TOTP code or, where permitted, one unused recovery code; clients must treat the value as sensitive.
+      description: A current six-digit authenticator code or, where the operation allows it, one unused recovery code. Treat it as a secret.
       content:
         application/json:
           schema:
@@ -352,7 +352,7 @@ components:
             code: "123456"
   responses:
     SessionOK:
-      description: Session
+      description: The current Session after it passed two-step verification
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -360,8 +360,24 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/SessionResponse'
+          example:
+            id: 14j8umgczgrdp95w77zuxmxfu9
+            created_at: '2026-08-01T08:00:00Z'
+            updated_at: '2026-08-01T08:00:20Z'
+            user_id: wj3drgzdpnf54rxf5d8qd3dqne
+            client_type: web
+            device_name: Chrome on macOS
+            authentication_method: password
+            authentication_strength: multi_factor
+            mfa_recovery_required: false
+            mfa_enrollment_required: false
+            authenticated_at: '2026-08-01T08:00:00Z'
+            mfa_completed_at: '2026-08-01T08:00:20Z'
+            last_activity_at: '2026-08-01T08:00:20Z'
+            idle_expires_at: '2026-08-08T08:00:20Z'
+            expires_at: '2026-08-31T08:00:00Z'
     MFAStatusOK:
-      description: MFA status
+      description: The current User's two-step verification status
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -369,8 +385,25 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/MFAStatusResponse'
+          example:
+            service_enabled: true
+            mfa_recovery_required: false
+            mfa_enrollment_required: false
+            authentication_method: password
+            authentication_strength: multi_factor
+            recently_authenticated: true
+            enabled: true
+            pending: false
+            method: authenticator_app
+            enabled_at: '2026-03-14T10:22:00Z'
+            recovery_codes_remaining: 8
+            recovery_codes_total: 10
+            recovery_codes_generated_at: '2026-03-14T10:22:00Z'
+            password_changed_at: '2026-02-10T09:30:00Z'
+            recent_authentication_minutes: 15
+            recently_authenticated_until: '2026-08-01T08:15:00Z'
     MFASetupCreated:
-      description: Pending MFA setup
+      description: The pending authenticator app setup
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -378,8 +411,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/MFASetupResponse'
+          example:
+            secret: MZXW6YTBOI4DGNJRGIZTKNBXHA3DSMRV
+            provisioning_uri: 'otpauth://totp/Proctor:student.one@example.edu?issuer=Proctor&secret=MZXW6YTBOI4DGNJRGIZTKNBXHA3DSMRV'
+            expires_at: '2026-08-01T08:10:00Z'
     MFAActivationOK:
-      description: MFA activated
+      description: Two-step verification is on
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -387,8 +424,20 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/MFAActivationResponse'
+          example:
+            recovery_codes:
+              - k7qm-2xpa-r4tn-w5bz-c3hd-y6fe
+              - p2wd-h6ns-q3xk-a7rm-e5tj-b4vu
+              - z5fc-m3qe-t7wa-k2ny-r6pd-h4xs
+              - b6xn-w2kr-e4pd-s7mz-q3ha-t5cy
+              - u3hm-c7tq-x5wb-n2fe-k6ra-d4zp
+              - e4ra-t6zm-b2qs-w7xk-h3nd-p5cf
+              - s7pe-k4hx-d6mb-r3wq-a5zt-n2cu
+              - h2tz-q5dc-m7ka-e3xs-w4pn-b6rf
+              - n5kw-x3bf-a6ts-h2pe-r7mq-c4dz
+              - d3cs-e7wn-k5hq-t4bm-z6xa-r2pe
     MFARecoveryCodesOK:
-      description: New MFA recovery codes
+      description: The new recovery codes
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -396,8 +445,20 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/MFARecoveryCodesResponse'
+          example:
+            recovery_codes:
+              - k7qm-2xpa-r4tn-w5bz-c3hd-y6fe
+              - p2wd-h6ns-q3xk-a7rm-e5tj-b4vu
+              - z5fc-m3qe-t7wa-k2ny-r6pd-h4xs
+              - b6xn-w2kr-e4pd-s7mz-q3ha-t5cy
+              - u3hm-c7tq-x5wb-n2fe-k6ra-d4zp
+              - e4ra-t6zm-b2qs-w7xk-h3nd-p5cf
+              - s7pe-k4hx-d6mb-r3wq-a5zt-n2cu
+              - h2tz-q5dc-m7ka-e3xs-w4pn-b6rf
+              - n5kw-x3bf-a6ts-h2pe-r7mq-c4dz
+              - d3cs-e7wn-k5hq-t4bm-z6xa-r2pe
     NotImplemented:
-      description: Capability is not enabled
+      description: Two-step verification is not turned on for this server
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -414,6 +475,7 @@ components:
       properties:
         code:
           type: string
+          description: A current six-digit authenticator code, or one unused recovery code where the operation accepts it. Hyphens and spaces in a recovery code are ignored.
     MFARecoveryCodesResponse:
       type: object
       additionalProperties: false
@@ -422,6 +484,7 @@ components:
       properties:
         recovery_codes:
           type: array
+          description: The new recovery codes, each usable once in place of an authenticator code. Earlier codes no longer work. Proctor never shows these codes again.
           items:
             type: string
     MFASetupResponse:
@@ -434,12 +497,15 @@ components:
       properties:
         secret:
           type: string
+          description: The authenticator secret in base32, for typing into an authenticator app by hand. Treat it as a secret.
         provisioning_uri:
           type: string
           format: uri
+          description: An otpauth URI with the same secret, usually shown as a QR code for the authenticator app to scan.
         expires_at:
           type: string
           format: date-time
+          description: When this pending setup expires. Activate it before then.
     MFAActivationResponse:
       type: object
       additionalProperties: false
@@ -448,6 +514,7 @@ components:
       properties:
         recovery_codes:
           type: array
+          description: The recovery codes for the new setup, each usable once in place of an authenticator code. Proctor never shows these codes again.
           items:
             type: string
     MFAStatusResponse:
@@ -468,36 +535,42 @@ components:
       properties:
         service_enabled:
           type: boolean
-          description: Whether local authenticator enrollment and verification are currently available.
+          description: Whether this server currently offers authenticator app setup and two-step verification.
         mfa_recovery_required:
           type: boolean
-          description: Whether this Session is restricted to fresh primary proof and local authenticator enrollment after an assisted reset.
+          description: Whether this Session is limited, after an administrator reset two-step verification, to reauthenticating and setting up a new authenticator app.
         mfa_enrollment_required:
           type: boolean
           description: >-
-            Whether the Access Policy restricts this Web Session until its User sets up or completes two-step verification. Only setting up two-step verification, the second-factor challenge, reauthentication, the security status and sign-out accept it.
+            Whether the Access Policy limits this Web Session until its User sets up or completes two-step verification. While it is true, the Session can only set up two-step verification, answer the two-step verification challenge, reauthenticate, read the security status and sign out.
         authentication_method:
           type: string
+          description: How this Session was signed in.
           enum: [password, oidc, cas]
         authentication_provider_id:
           type: string
-          description: Original provider for an external Session; absent for password Sessions.
+          description: The ID of the provider an external Session signed in through. Left out for a password Session.
         authentication_strength:
           type: string
+          description: multi_factor when this Session has passed two-step verification, otherwise single_factor.
           enum: [single_factor, multi_factor]
         recently_authenticated:
           type: boolean
+          description: Whether this Session signed in or reauthenticated within the recent sign-in window, so actions that need a recent sign-in are allowed.
         enabled:
           type: boolean
+          description: Whether two-step verification is on for the User.
         pending:
           type: boolean
+          description: Whether an authenticator app setup has been started but not yet activated.
         pending_expires_at:
           type: string
           format: date-time
+          description: When the pending setup expires. Present only while pending is true.
         method:
           type: string
           enum: [authenticator_app]
-          description: The second factor in use. Present while two-step verification is enabled or pending; more methods may be added later.
+          description: The second factor in use. Present while two-step verification is on or a setup is pending. More methods may be added later.
         enabled_at:
           type: string
           format: date-time
@@ -505,24 +578,24 @@ components:
         recovery_codes_remaining:
           type: integer
           minimum: 0
-          description: Unused codes in the live recovery-code set; 0 unless enabled.
+          description: How many of the current recovery codes are still unused. 0 when two-step verification is off.
         recovery_codes_total:
           type: integer
           minimum: 0
-          description: Size of the live recovery-code set the User was given, used codes included, so it stays true if the configured count later changes; 0 unless enabled.
+          description: How many recovery codes the User was given in the current set, used ones included. It stays correct even if the configured count changes later. 0 when two-step verification is off.
         recovery_codes_generated_at:
           type: string
           format: date-time
-          description: When the live recovery-code set was issued. Omitted when there is none.
+          description: When the current recovery codes were issued. Left out when there are none.
         password_changed_at:
           type: string
           format: date-time
-          description: When the User's active password credential was last set or changed. Omitted for an account without a password credential.
+          description: When the User's current password was set or last changed. Left out for an account without a password.
         recent_authentication_minutes:
           type: integer
           minimum: 1
-          description: Configured recent-authentication window (`Authentication.RecentAuthenticationTTL`) in whole minutes, rounded down.
+          description: The length of the recent sign-in window, in whole minutes rounded down. It comes from the `Authentication.RecentAuthenticationTTL` setting.
         recently_authenticated_until:
           type: string
           format: date-time
-          description: When this Session's recent-authentication window ends. Present only while `recently_authenticated` is true.
+          description: When this Session's recent sign-in window ends. Present only while `recently_authenticated` is true.

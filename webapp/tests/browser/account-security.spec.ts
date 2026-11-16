@@ -102,7 +102,7 @@ async function enterCode(field: Locator, code: string) {
 
 async function activate(page: Page) {
   await page.getByRole("button", { name: "Set up two-step verification", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Scan this code", level: 1 })).toBeFocused();
+  await expect(page.getByRole("heading", { name: "Turn on two-step verification", level: 1 })).toBeFocused();
   await enterCode(page.getByLabel("Authenticator code", { exact: false }), "123456");
   await page.getByRole("button", { name: "Verify and turn on", exact: true }).click();
 }
@@ -165,11 +165,32 @@ test("status names the signed-in User and signs out from the footer", async ({ p
   await expect(changed).toHaveText(`Changed ${await page.evaluate(() => new Intl.DateTimeFormat(undefined, { day: "numeric", month: "long", year: "numeric" }).format(new Date("2026-07-01T09:30:00Z")))}`);
   await expect(page.getByRole("heading", { name: "Turn on two-step verification", level: 2 })).toBeVisible();
   await expect(page.getByRole("button", { name: "Verify this session" })).toHaveCount(0);
-  const footer = page.getByRole("contentinfo");
+  const footer = page.getByRole("banner");
   await expect(footer).toContainText("Signed in as Person");
   await footer.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
   expect(mutations(state, "/logout")).toHaveLength(1);
+});
+
+test("setup copies the ungrouped key and splits the code into two groups", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await mockSecurity(page);
+  await page.goto("/account/security");
+  await page.getByRole("button", { name: "Set up two-step verification", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Turn on two-step verification", level: 1 })).toBeFocused();
+
+  await page.getByRole("button", { name: "Copy setup key" }).click();
+  await expect(page.getByText("Setup key copied.")).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(setupKey);
+
+  // A wider gutter after the third slot reads the six digits as three and three.
+  const gaps = await page.locator("[data-proctor-otp-slot]").evaluateAll((slots) => {
+    const boxes = slots.map((slot) => slot.getBoundingClientRect());
+    return boxes.slice(1).map((box, index) => box.left - boxes[index].right);
+  });
+  expect(gaps).toHaveLength(5);
+  expect(gaps[2]).toBeGreaterThan(gaps[0] + 4);
+  expect(gaps[0]).toBeCloseTo(gaps[1], 0);
 });
 
 test("OTP supports leading zeroes, editing, paste, validation and explicit submission", { tag: "@cross-browser" }, async ({ page }) => {
@@ -282,7 +303,7 @@ test("enrollment shows codes once and requires acknowledgement before hiding the
   expect(state.requests.filter(({ method }) => method === "POST")).toHaveLength(0);
   await activate(page);
   await expect(page.getByRole("heading", { name: "Save your recovery codes", level: 1 })).toBeFocused();
-  await expect(page.getByText("Two-step verification", { exact: true }).first()).toBeVisible();
+  await expect(page.locator('[data-proctor-status-tone="success"]')).toHaveText("Two-step verification is on");
   await expect(page.getByRole("list", { name: "Recovery codes" }).getByRole("listitem")).toHaveText(recoveryCodes);
   const finish = page.getByRole("button", { name: "Done", exact: true });
   await expect(finish).toBeDisabled();
@@ -369,7 +390,7 @@ test("fresh password proof and MFA challenge return without replaying the securi
   await expect(page).toHaveURL(/\/account\/reauthenticate\?task=security$/);
   // The window comes from the server's configured value, not a client default.
   await expect(page.getByText("You won’t be asked again for 20 minutes.", { exact: false })).toBeVisible();
-  await expect(page.getByRole("contentinfo")).toContainText("Signed in as Person");
+  await expect(page.getByRole("banner")).toContainText("Signed in as Person");
   await page.getByRole("textbox", { name: "Password" }).fill("wrong-password");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page.getByText("That password isn’t right. Try again.")).toBeVisible();
@@ -414,7 +435,7 @@ test("recovery restriction remains visible with management disabled and offers o
   await expect(page.getByRole("button", { name: "Set up two-step verification", exact: true })).toHaveCount(0);
   const main = page.getByRole("main");
   await expect(main.getByRole("button")).toHaveText(["Check current status", "Sign out"]);
-  await expect(page.getByRole("contentinfo")).not.toContainText("Signed in as");
+  await expect(page.getByRole("banner")).not.toContainText("Signed in as");
   expect(state.requests.some(({ path }) => path === "/api/v1/users/me")).toBe(false);
   await page.goto("/account/reauthenticate?task=connect-provider");
   await expect(page.getByRole("link", { name: "Restore account access" })).toHaveAttribute("href", "/account/security");

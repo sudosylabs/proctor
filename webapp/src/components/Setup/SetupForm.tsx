@@ -8,9 +8,11 @@ import type {
 } from "../../features/setup/SetupApi";
 import { message } from "../../i18n/messages";
 import { richMessage } from "../../i18n/richMessage";
+import { RailItem, TaskRail } from "../AccessPageShell/AccessPageShell";
 import { AccessTaskIntro } from "../AccessTaskIntro/AccessTaskIntro";
 import { Button } from "../Button/Button";
 import { FormFeedback } from "../FormFeedback/FormFeedback";
+import { FormGroup } from "../FormGroup/FormGroup";
 import { InputField } from "../InputField/InputField";
 import { PasswordField } from "../InputField/PasswordField";
 import styles from "./Setup.module.css";
@@ -42,15 +44,22 @@ export interface SetupFormProps {
   submitSetup(submission: SetupSubmission): Promise<SetupSubmissionResult>;
 }
 
-/** The setup kind line, page heading, and lede. */
+/** The setup heading and lede, with the setup-key reminder for narrow screens. */
 export function SetupIntro() {
   return (
-    <AccessTaskIntro
-      kind={message("webapp.setup.kind")}
-      heading={message("webapp.setup.heading")}
-      headingID="setup-heading"
-      body={message("webapp.setup.lede")}
-    />
+    <>
+      <AccessTaskIntro
+        heading={message("webapp.setup.heading")}
+        headingID="setup-heading"
+        body={message("webapp.setup.lede")}
+        beforeTaskNote={message("webapp.setup.before.body")}
+      />
+      <TaskRail>
+        <RailItem beforeTask heading={message("webapp.setup.before.heading")}>
+          <p>{message("webapp.setup.before.body")}</p>
+        </RailItem>
+      </TaskRail>
+    </>
   );
 }
 
@@ -228,6 +237,7 @@ export function SetupForm({ onComplete, submitSetup }: SetupFormProps) {
           {liveMessage}
         </div>
 
+        <FormGroup number={1} headingID="setup-group-institution" heading={message("webapp.setup.group.institution")}>
         <InputField
           ref={institutionDisplayNameRef}
           id="institution-display-name"
@@ -270,7 +280,9 @@ export function SetupForm({ onComplete, submitSetup }: SetupFormProps) {
           value={institutionDescription}
           onChange={(event) => setInstitutionDescription(event.currentTarget.value)}
         />
+        </FormGroup>
 
+        <FormGroup number={2} headingID="setup-group-administrator" heading={message("webapp.setup.group.administrator")}>
         <InputField
           id="administrator-display-name"
           name="administrator_display_name"
@@ -336,7 +348,9 @@ export function SetupForm({ onComplete, submitSetup }: SetupFormProps) {
             clearFieldError("password");
           }}
         />
+        </FormGroup>
 
+        <FormGroup number={3} headingID="setup-group-authorization" heading={message("webapp.setup.group.authorization")}>
         <PasswordField
           ref={bootstrapSecretRef}
           id="bootstrap-secret"
@@ -359,6 +373,7 @@ export function SetupForm({ onComplete, submitSetup }: SetupFormProps) {
             clearFieldError("bootstrap_secret");
           }}
         />
+        </FormGroup>
 
         <div className={styles.submission}>
           <div className={styles.actions}>

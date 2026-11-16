@@ -1,6 +1,6 @@
 ---
 title: Errors and Problem Details
-description: Handle Proctor HTTP failures using RFC 9457 Problem Details and stable application error codes.
+description: Handle failed Proctor requests with RFC 9457 Problem Details and stable application error codes.
 audience: api-consumer
 maturity: preview
 sidebar_position: 3
@@ -8,13 +8,14 @@ sidebar_position: 3
 
 # Errors and Problem Details
 
-Public HTTP failures use RFC 9457 Problem Details. Branch on the HTTP status
-and Proctor's stable `code`; treat human-readable `title` and `detail` as text
-for operators or users, not as a machine interface.
+When a request fails, Proctor answers with RFC 9457 Problem Details. Branch
+on the HTTP status and on Proctor's stable `code`. The `title` and `detail`
+are text for operators and users to read, not something your program should
+parse.
 
 ```json
 {
-  "type": "https://proctor.sudosylabs.com/problems/exam.invalid",
+  "type": "https://docs.example.edu/problems/exam.invalid",
   "title": "Invalid request",
   "status": 400,
   "detail": "The request is invalid.",
@@ -27,19 +28,27 @@ for operators or users, not as a machine interface.
 }
 ```
 
-The exact `type` URI is documentation, while `code` is the bounded value an
-integration uses for program logic. Each endpoint page lists its possible
-codes in **Stable error codes**.
+The `code` comes from a fixed set and is what your integration uses in
+program logic. Each endpoint page lists the codes it can return under
+**Errors**.
 
-## Code Grammar
+The `type` links to the error's page on your installation's documentation
+site, at `<documentation site>/problems/<code>`. An operator sets the site
+with the server's `DocumentationURL` setting. When it isn't set, `type` is
+`about:blank`, so never rely on it to tell errors apart.
 
-Every code is `<domain>[.<subdomain>].<condition>`: lowercase segments
-separated by dots, each segment `snake_case`. The domain names the resource
-family, such as `exam`, `exam.attempt`, or `authentication.mfa`. The condition
-is the last segment; when it is qualified, the qualifier comes first and the
-condition word last, as in `revision_conflict` or `content_invalid`.
+## How codes are built
 
-The condition determines the HTTP status:
+Every code has the form `<domain>[.<subdomain>].<condition>`. Segments are
+lowercase, separated by dots, and each segment is `snake_case`.
+
+- The domain names the family of resources, such as `exam`, `exam.attempt`
+  or `authentication.mfa`.
+- The condition is the last segment. When it has a qualifier, the qualifier
+  comes first and the condition word last, as in `revision_conflict` or
+  `content_invalid`.
+
+The condition decides the HTTP status:
 
 | Condition word | Status |
 | --- | --- |
@@ -52,58 +61,70 @@ The condition determines the HTTP status:
 | `internal` | `500` |
 | `unavailable`, `busy` | `503` |
 
-A condition equal to a word in the table, or ending in `_` and that word,
-takes its status. Any other condition, such as `archived` or
-`deadline_reached`, names a resource state that rejects the request and
-returns `409`. A few codes are documented exceptions: credential failures in
-the `authentication` domain return `401` or `403`,
-`exam.attempt.continuity_invalid` returns `404` so an invalid credential
-reveals nothing, and the routing-kernel codes below use their HTTP-defined
-statuses.
+A condition that is one of these words, or ends in `_` followed by one of
+them, takes that status. Any other condition, such as `archived` or
+`deadline_reached`, names a resource state that rejects the request, and
+returns `409`.
 
-## Handling Rules
+A few codes are documented exceptions:
 
-- Parse a non-success response as Problem Details when its content type is
+- Credential failures in the `authentication` domain return `401` or `403`.
+- `exam.attempt.continuity_invalid` returns `404`, so an invalid credential
+  reveals nothing.
+- The routing codes described below use the statuses HTTP defines for them.
+
+## Handling errors
+
+- Parse a failed response as Problem Details when its content type is
   `application/problem+json`.
-- Use `status` for the broad transport outcome and `code` for the Proctor
+- Use `status` for the broad outcome and `code` for the exact Proctor
   condition.
-- Show `detail` and `fields` only after applying the same output-escaping rules
-  as any other untrusted response data.
-- Record `request_id` in a support trace, but do not attach credentials,
-  answers, or raw request bodies.
-- Treat an undocumented code as an unknown recoverable failure. Preserve the
-  HTTP status behavior and do not crash or reinterpret it as success.
+- Escape `detail` and `fields` before you show them, the same way you treat
+  any other untrusted response data.
+- Record `request_id` in your support trace. Don't attach credentials,
+  answers or raw request bodies.
+- Treat a code you don't recognize as an unknown failure you can recover
+  from. Keep the behavior its HTTP status implies, and never crash or treat
+  it as success.
 
-## Validation Failures
+## Validation failures
 
-When `fields` is present, its keys identify invalid request fields and its
-values explain the constraint. The object is optional: a client must still be
-able to handle validation failure without field-level details.
+When `fields` is present, its keys name the request fields that failed and
+its values explain the rule each one broke. The object is optional, so your
+client must still handle a validation failure that has no field details.
 
-Unknown JSON fields, multiple JSON values, and malformed input are failures.
+Unknown JSON fields, more than one JSON value and malformed input all fail.
 A body larger than the route's limit returns status `413` with code
-`request.too_large`, whichever operation received it. Fix the request rather
-than retrying it unchanged.
+`request.too_large`, whichever operation received it. Fix the request instead
+of retrying it unchanged.
 
-Every operation may also return `404` with code `route.not_found` for an
-unknown path, `405` with code `route.method_not_allowed`, with an `Allow`
-header, for an unsupported method, and `500` with code `server.internal` for
-an unexpected server fault. These kernel failures are not repeated in each
-endpoint's list of stable codes.
+Any operation may also return:
+
+- `404` with code `route.not_found` for an unknown path
+- `405` with code `route.method_not_allowed`, with an `Allow` header, for an
+  unsupported method
+- `500` with code `server.internal` for an unexpected server fault
+
+These routing failures aren't repeated in each endpoint's list of stable
+codes.
 
 ## Retries
 
-Retry only when both the operation semantics and failure permit it. For a
-mutation, use its documented idempotency behavior before retrying after a
-timeout or lost response. Authentication, authorization, validation, conflict,
-and assurance failures generally require a state or user-action change first.
+Retry only when both the operation and the failure allow it. Before you
+retry a mutation after a timeout or a lost response, follow its documented
+idempotency behavior. Authentication, authorization, validation, conflict and
+assurance failures usually need a change of state or an action from the user
+first.
 
-DPoP has one narrow retry branch: on `authentication.dpop.use_nonce`, retain
-the replacement `DPoP-Nonce`, create a completely new proof, and retry only if
-the operation is otherwise safe. `authentication.dpop.replayed` also requires
-a new proof identifier; resending the rejected proof can never recover. A
-revoked Desktop Registration or incompatible Desktop build requires a new
-human or installation action, not a token refresh loop.
+DPoP has one narrow retry path. On `authentication.dpop.use_nonce`, keep the
+new `DPoP-Nonce`, create a completely new proof, and retry only if the
+operation is otherwise safe to retry. `authentication.dpop.replayed` also
+needs a new proof identifier. Resending the rejected proof never works.
 
-WebSocket protocol failures use typed protocol envelopes instead of HTTP
-Problem Details after the connection is established. See [Realtime and Replay](./realtime.mdx).
+A revoked Desktop Registration or an incompatible Desktop build needs a
+person or the installation to act. Refreshing the token in a loop won't fix
+it.
+
+Once a WebSocket connection is open, protocol failures arrive as typed
+protocol messages instead of HTTP Problem Details. See
+[Realtime and replay](./realtime.mdx).

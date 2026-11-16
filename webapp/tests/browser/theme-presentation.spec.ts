@@ -102,6 +102,10 @@ for (const themeCase of [
       ),
     ).toBe(true);
 
+    // The 2.5D lockups are files rather than inlined data, so wait for the load.
+    await expect
+      .poll(() => lockup.evaluate((image: HTMLImageElement) => image.complete && image.currentSrc !== ""))
+      .toBe(true);
     const currentSource = await lockup.evaluate(
       (image: HTMLImageElement) => image.currentSrc,
     );
@@ -112,10 +116,9 @@ for (const themeCase of [
           : "fill='#161616'",
       );
     } else if (themeCase.effective === "dark") {
-      expect(currentSource).toContain("proctor-lockup-purple-white");
+      expect(currentSource).toContain("proctor-lockup-dark");
     } else {
-      expect(currentSource).toContain("proctor-lockup");
-      expect(currentSource).not.toContain("purple-white");
+      expect(currentSource).toContain("proctor-lockup-light");
     }
   });
 }

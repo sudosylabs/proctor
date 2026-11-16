@@ -15,7 +15,9 @@ paths:
       tags:
         - Submissions
       description: >-
-        Returns the narrow candidate-facing result only after an authorized manager has finalized review and explicitly released it. Private notes, manager rationale, integrity evidence, decisions, and unreleased grading data remain concealed.
+        Returns the candidate's result once a manager has finalized the review and released it. Until then
+        the result is not available. The result never includes private notes, manager reasons, integrity
+        evidence, decisions or unreleased grading data.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -50,7 +52,7 @@ paths:
 components:
   responses:
     StudentExamResultOK:
-      description: Narrow explicitly released candidate result without evidence or private manager content
+      description: The released result.
       headers:
         Cache-Control:
           schema:
@@ -60,9 +62,15 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/StudentExamResultResponse'
+          example:
+            submission_review_id: 5ebqfbnezgahdbx9oy7rfr6oro
+            submission_id: 39kqk53i4cswfzbi7hbai1r8qg
+            exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
+            student_remarks_markdown: Your submission was reviewed and no further action is needed.
+            released_at: '2026-12-18T15:20:00Z'
   schemas:
     StudentExamResultResponse:
-      description: Explicitly released candidate result with private review content omitted.
+      description: A released result. It contains only what the manager approved for the candidate.
       type: object
       additionalProperties: false
       required:
@@ -74,15 +82,20 @@ components:
       properties:
         submission_review_id:
           $ref: '#/components/schemas/ID'
+          description: The review the result comes from.
         submission_id:
           $ref: '#/components/schemas/ID'
+          description: The Submission that was reviewed.
         exam_attempt_id:
           $ref: '#/components/schemas/ID'
+          description: The candidate's Attempt.
         student_remarks_markdown:
           type: string
           maxLength: 8192
-          description: Approved candidate-facing Markdown remarks frozen at release.
+          description: >-
+            The manager's remarks for the candidate, in Markdown, cleaned of unsafe content before they are
+            returned. They can't change after release. Can be empty.
         released_at:
           type: string
           format: date-time
-          description: RFC 3339 timestamp at which the result projection was explicitly released.
+          description: When the result was released.

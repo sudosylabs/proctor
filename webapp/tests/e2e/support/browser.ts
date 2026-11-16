@@ -10,6 +10,16 @@ export async function submitCredentials(page: Page, loginID: string, password: s
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
 }
 
+// expectCredentialsRejected checks the form-level failure for a wrong email or
+// password: either value may be wrong, so neither field is marked invalid.
+export async function expectCredentialsRejected(page: Page): Promise<void> {
+  await expect(page.locator("[data-proctor-form-feedback]")).toHaveText(
+    "That email or password isn’t right. Check both and try again.",
+  );
+  await expect(page.locator("#password")).not.toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByLabel("Email or username")).not.toHaveAttribute("aria-invalid", "true");
+}
+
 export async function expectSignedIn(page: Page): Promise<void> {
   await expect(page).toHaveURL(`${serverURL}/authorization/complete`);
   await expect(page.getByRole("heading", { name: "You’re signed in" })).toBeVisible();

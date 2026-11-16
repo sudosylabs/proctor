@@ -1,0 +1,24 @@
+blocks:
+  - row:
+      - card: Browser Policy
+        text: Decides which pages open at the top level, by HTTPS address and path.
+      - card: Recorded events
+        via: Top-level only
+        items:
+          - Browser opened or closed
+          - Allowed navigation
+          - Blocked navigation
+      - card: Kept record
+        text: Time, reason, policy Revision and a cut-down address.
+        via: Kept to a minimum
+        accent: true
+    gap: wide
+  - row:
+      - card: Never collected
+        dashed: true
+        items:
+          - Query strings and fragments
+          - Page content and titles
+          - Headers, cookies and referrers
+          - Downloads and local paths
+          - Screenshots, webcam and clipboard

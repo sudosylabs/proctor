@@ -1,140 +1,144 @@
 ---
-title: Develop Files and Workspaces
-description: Preserve PostgreSQL metadata authority while streaming opaque VFS bytes and preserving acknowledged Attempt Workspace state.
+title: Files and Workspaces
+description: PostgreSQL decides what file metadata means, VFS streams the opaque bytes, and acknowledged Attempt Workspace state is never lost.
 audience: developer
 maturity: preview
 slug: /developers/server/files-workspaces/
 ---
 
-# Develop Files and Workspaces
+# Files and Workspaces
 
-Proctor separates semantic file state from physical bytes. PostgreSQL knows
-what content means, who owns it, whether it is available, and who may read it.
-VFS stores opaque bytes. PostgreSQL remains authoritative for Attempt Workspaces.
+Proctor keeps what a file means apart from the bytes in it. PostgreSQL knows
+what content means, who owns it, whether it is available and who may read it.
+VFS only stores opaque bytes. For Attempt Workspaces, PostgreSQL stays the
+authority.
 
-## Keep Metadata and Bytes in Their Places
+## Keep metadata and bytes in their places
 
 | Boundary | Owns | Must not own |
 | --- | --- | --- |
-| Application and domain | Purpose, owner, authorization, lifecycle, retention, publication, and events | Concrete VFS backend or object paths |
-| PostgreSQL | Stable identities, revisions, relationships, availability, leases, checksums, and authoritative selection | Raw streamed content |
-| File Content module | Bounded validation/transformation, renditions, private key derivation, exact reads, and physical purge over VFS | Domain authorization or infrastructure lifecycle |
-| `packages/vfs` | Backend-neutral streaming operations and opaque storage concurrency | Proctor domain meaning, discovery, or permission |
+| Application and domain | Purpose, owner, authorization, lifecycle, retention, publication and events | The concrete VFS backend or object paths |
+| PostgreSQL | Stable identities, revisions, relationships, availability, leases, checksums, and the authoritative choice of what is current | Raw streamed content |
+| File Content module | Bounded checks and transformations, renditions, private key derivation, exact reads and physical purge over VFS | Domain authorization or infrastructure lifecycle |
+| `packages/vfs` | Streaming operations that work on any backend, and opaque storage concurrency | Proctor domain meaning, discovery or permission |
 
-Never authorize from a VFS path, object key, bucket listing, local path, or
-backend revision. Object keys are private, unguessable, and independent of
-logical Workspace paths.
+Never authorize from a VFS path, object key, bucket listing, local path or
+backend revision. Object keys are private, impossible to guess, and have
+nothing to do with logical Workspace paths.
 
-## Choose the Correct Content Model
+## Choose the right content model
 
-A stable File Entry with immutable File Revisions fits content where retained
-generations have product meaning, such as profile pictures and Exam Resources.
-A File Revision can own several renditions without turning each size or format
-into another content change.
+A stable File Entry with immutable File Revisions suits content whose earlier
+generations mean something to the product, such as profile pictures and Exam
+Resources. A File Revision can own several renditions, so a new size or
+format doesn't count as a change to the content.
 
-An Attempt Workspace has a different model:
+An Attempt Workspace uses a different model:
 
-- Workspace Entry is stable identity;
-- Workspace Path is mutable logical location;
-- Workspace Content Version is an opaque comparison token for current bytes;
-- the journal retains bounded acknowledged changes; and
-- Submission pins one immutable manifest without copying bytes.
+- A Workspace Entry is a stable identity.
+- A Workspace Path is a logical location that can change.
+- A Workspace Content Version is an opaque token for comparing the current
+  bytes.
+- The journal keeps a bounded list of acknowledged changes.
+- A Submission pins one immutable manifest without copying any bytes.
 
-Do not turn every workspace save into a retained File Revision or use a path as
-entry identity. User Settings are another separate model: exact PostgreSQL
-source, not a generic file or VFS object.
+Don't turn every Workspace save into a retained File Revision, and don't use a
+path as an entry's identity. User Settings are a separate model again: the
+exact source lives in PostgreSQL, not in a generic file or VFS object.
 
-## Stage Fallible Byte Work Before Visibility
+## Do the byte work that can fail before anything is visible
 
-An upload normally follows this order:
+An upload usually runs in this order:
 
-1. validate the purpose and create a short-lived PostgreSQL Upload Lease with
-   preallocated identities and private storage keys;
-2. stream to a new immutable VFS object under a hard byte limit while computing
-   its checksum;
-3. decode, inspect, or derive every required rendition before publication;
-4. call one named Store operation that verifies the unexpired lease and commits
-   metadata, domain relationship, audit, and lease consumption; and
-5. publish safe effects only after commit.
+1. Check the purpose and create a short-lived PostgreSQL Upload Lease, with
+   identities and private storage keys allocated in advance.
+2. Stream the bytes into a new immutable VFS object under a hard byte limit,
+   computing the checksum as you go.
+3. Decode, inspect or derive every rendition you need before publishing.
+4. Call one named Store operation. It checks the lease hasn't expired, then
+   commits the metadata, the domain relationship, the audit and the use of the
+   lease together.
+5. Publish safe effects only after the commit.
 
-If the database outcome is unknown, do not delete the object immediately. It
-may now be referenced by a successful commit. Bounded cleanup resolves durable
-references and safety windows before idempotent physical deletion.
+If you don't know whether the database committed, don't delete the object
+straight away. A successful commit may now refer to it. Bounded cleanup first
+resolves durable references and waits out safety windows, then deletes the
+physical object idempotently.
 
-Visible metadata must never point to partial bytes. Only an Available revision
-may be downloaded, indexed, distributed, or projected. Pending, quarantined,
-and rejected states remain explicit even if the first inspection adapter is a
-no-op.
+Visible metadata must never point at partial bytes. Only an Available revision
+may be downloaded, indexed, distributed or projected. The pending, quarantined
+and rejected states stay explicit, even while the first inspection adapter
+does nothing.
 
-## Build Purpose-Specific HTTP Operations
+## Build HTTP operations for one purpose each
 
-Expose profile-picture, Exam Resource, Starter Workspace, Attempt Workspace, or
-Submission operations—not a generic endpoint that accepts caller-provided
-owner and purpose values.
+Expose operations for a profile picture, an Exam Resource, a Starter
+Workspace, an Attempt Workspace or a Submission. Don't expose a generic
+endpoint that takes the owner and purpose from the caller.
 
 For uploads:
 
-- apply the transport body limit before reading content;
-- verify media type from bytes rather than trusting the filename or header;
-- stream instead of buffering unbounded content;
-- reject malformed multipart order and extra parts;
-- require the exact authorization, revision, lease, and idempotency contract;
-  and
-- keep temporary identifiers, object keys, and backend failures out of the
+- Apply the transport body limit before reading any content.
+- Check the media type from the bytes, not from the filename or a header.
+- Stream rather than buffer content of unlimited size.
+- Reject multipart parts in the wrong order, and extra parts.
+- Require the exact authorization, revision, lease and idempotency contract.
+- Keep temporary identifiers, object keys and backend failures out of the
   response.
 
 For protected downloads:
 
-- resolve current semantic authorization before opening content;
-- select one exact Available rendition through PostgreSQL metadata;
-- return a named binary result with explicit media type, length, ETag, cache,
-  and `nosniff` behavior;
-- set private or no-store caching according to the purpose; and
-- never return a public or signed storage URL.
+- Resolve current authorization, by meaning, before opening any content.
+- Pick one exact Available rendition from the PostgreSQL metadata.
+- Return a named binary result with an explicit media type, length, ETag,
+  cache behavior and `nosniff`.
+- Set private or no-store caching to suit the purpose.
+- Never return a public or signed storage URL.
 
-The response writer must stop if the application cannot establish the complete
-result before headers are committed.
+If the application can't put together the complete result before the headers
+are committed, the response writer must stop.
 
-## Preserve Workspace Acknowledgement
+## Keep Workspace acknowledgements
 
-An acknowledged Attempt Workspace mutation survives loss of the client,
-or application node. Replacement stages new bytes, then
-conditionally swaps the PostgreSQL pointer and content version. A response is
-success only after that durable commit.
+An acknowledged change to an Attempt Workspace survives losing the client or
+the application node. A replacement first stages the new bytes, then
+conditionally swaps the PostgreSQL pointer and content version. The response
+reports success only after that durable commit.
 
-Every write is one batch of 1 to 128 mutations, applied in order and all or
-nothing. The editor and the execution environment use the same path. Access is
-checked once for the whole batch. The batch writes one idempotency outcome and
-one audit pair, and sends one realtime hint after commit. Capacity is checked
-against the state the whole batch leaves behind.
+Every write is one batch of 1 to 128 changes, applied in order, all or
+nothing. The editor and the execution environment write the same way. Access
+is checked once for the whole batch. The batch records one idempotency outcome
+and one audit pair, and sends one realtime hint after it commits. Capacity is
+checked against the state the whole batch leaves behind.
 
 A batch carries:
 
-- an idempotency key;
-- for each mutation, its expected Workspace Entry, Path, and Content Version
-  conditions;
-- the Workspace Cursor it starts from, when it deletes a directory recursively;
-- the active protected Attempt credential and Connection selector; and
-- explicit Participation identity and generation.
+- an idempotency key
+- for each change, the expected Workspace Entry, Path and Content Version
+  conditions
+- the Workspace Cursor it starts from, when it deletes a directory with
+  everything inside it
+- the active protected Attempt credential and the Connection selector
+- the explicit Participation identity and generation
 
-Reconnect consumes the ordered journal after the last acknowledged Workspace
-Cursor or refreshes a complete pinned manifest after a gap. A WebSocket event is
-only a targeted refetch hint; it contains no path, content, object selector, or
-credential.
+On reconnect, the client reads the ordered journal from just after its last
+acknowledged Workspace Cursor. After a gap, it refreshes a complete pinned
+manifest instead. A WebSocket event is only a hint to refetch a specific thing.
+It never contains a path, content, an object selector or a credential.
 
-## Review Files and Workspaces
+## Files and Workspaces checklist
 
-- Does PostgreSQL remain the only semantic authority?
-- Can an object identifier be changed without changing domain identity?
-- Is every upload bounded before and during streaming?
-- Can a database failure leave only invisible content?
-- Does cleanup wait through unknown outcomes and retained references?
-- Are protected reads purpose-specific and free of public storage URLs?
-- Can an acknowledged Workspace change survive every transient component loss?
-- Are paths, bytes, credentials, and private content absent from
-  ordinary logs, events, metrics, and unsafe audit fields?
+- Is PostgreSQL still the only authority on meaning?
+- Can an object identifier change without the domain identity changing?
+- Is every upload limited before and during streaming?
+- Can a database failure leave behind only content nobody can see?
+- Does cleanup wait out unknown outcomes and kept references?
+- Are protected reads specific to one purpose, with no public storage URLs?
+- Can an acknowledged Workspace change survive the loss of any transient
+  component?
+- Are paths, bytes, credentials and private content kept out of ordinary logs,
+  events, metrics and unsafe audit fields?
 
-Run the focused Store/VFS tests, the applicable dependency-backed
-integration targets, and the server architecture gate. Use
-[data and content troubleshooting](../troubleshooting/data-content.mdx) for
-local failures.
+Run the focused Store and VFS tests, the dependency-backed integration targets
+that apply, and the server architecture gate. For local failures, see
+[data and content troubleshooting](../troubleshooting/data-content.mdx).

@@ -10,10 +10,11 @@ import type {
 import { useHostedInstitution } from "../../auth/HostedInstitution";
 import { message } from "../../i18n/messages";
 import { richMessage } from "../../i18n/richMessage";
+import { RailItem, TaskRail } from "../AccessPageShell/AccessPageShell";
 import { AccessTaskIntro } from "../AccessTaskIntro/AccessTaskIntro";
 import { Button } from "../Button/Button";
 import { FormFeedback } from "../FormFeedback/FormFeedback";
-import { InputField, RequiredMark } from "../InputField/InputField";
+import { InputField } from "../InputField/InputField";
 import { PasswordField } from "../InputField/PasswordField";
 import styles from "./Registration.module.css";
 import { passwordRejectionMessage } from "../../auth/passwordRejection";
@@ -332,7 +333,6 @@ export function RegistrationForm({
             />
             <span>
               {message("webapp.register.form.acknowledgment")}
-              <RequiredMark />
             </span>
           </label>
           {fieldErrors.acknowledgment === undefined ? null : (
@@ -359,16 +359,18 @@ export function RegistrationForm({
         </div>
       </form>
 
-      <section className={styles.signIn} aria-labelledby="register-sign-in-heading">
-        <h2 id="register-sign-in-heading">
-          {message("webapp.register.sign_in.prompt")}
-        </h2>
-        <p>
-          {richMessage("webapp.register.sign_in.instead", {
-            Link: <a href="/login">{message("webapp.register.sign_in.action")}</a>,
-          })}
-        </p>
-      </section>
+      <TaskRail>
+        <RailItem heading={message("webapp.register.sign_in.prompt")}>
+          <p>
+            {richMessage("webapp.register.sign_in.instead", {
+              Link: <a href="/login">{message("webapp.register.sign_in.action")}</a>,
+            })}
+          </p>
+        </RailItem>
+        <RailItem heading={message("webapp.register.rail.classes.heading")}>
+          <p>{message("webapp.register.rail.classes.body")}</p>
+        </RailItem>
+      </TaskRail>
     </section>
   );
 }
@@ -378,7 +380,7 @@ export function RegistrationIntro() {
   const institution = useHostedInstitution();
   return (
     <AccessTaskIntro
-      kind={message("webapp.register.kind")}
+
       heading={message("webapp.register.heading")}
       headingID="register-heading"
       body={

@@ -15,7 +15,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Lists active Levels directly owned by one authorized Programme with bounded stable search. The collection excludes Classes and does not imply roster or permission access. The first page, read without a cursor, also reports `total`: the Programme Levels the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
+        Lists the active Programme Levels this Programme owns, ordered by name and then by identifier, optionally narrowed by `q`. The list does not include Classes, and seeing it does not give access to Class rosters or permissions. The first page, read without a cursor, also reports `total`, the number of Programme Levels the filters match across every page. It is exact below 10,000. At 10,000 counting stops and `total_is_lower_bound` is true. Later pages carry no total, so keep the first page's.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -40,7 +40,7 @@ paths:
         - name: q
           in: query
           required: false
-          description: Literal case-insensitive substring matched against name and display name.
+          description: Text to find in the Programme Level name or display name, matched literally and ignoring case.
           schema:
             type: string
         - $ref: '#/components/parameters/PageLimit'
@@ -66,7 +66,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Creates one Level under the exact Programme in the route after rechecking management authority. It does not create Classes, Academic Periods, enrollments, or permission grants.
+        Creates a Programme Level owned by the Programme in the path. The caller's management permission is checked again when the request is handled. It does not create Classes, Academic Periods, enrollments or permission grants.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -114,7 +114,7 @@ paths:
 components:
   requestBodies:
     CreateProgrammeLevel:
-      description: Canonical and human-facing presentation for a Level owned by the route Programme.
+      description: The machine name and display text for a Programme Level owned by the Programme in the path.
       required: true
       content:
         application/json:
@@ -131,15 +131,45 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ProgrammeLevelResponse'
+          example:
+            revision: 1
+            id: iqcx3qc9sbbt6ocshszfqgq6ci
+            created_at: '2026-08-03T10:00:00Z'
+            updated_at: '2026-08-03T10:00:00Z'
+            programme_id: g63dcrphk8idgyjgzbrpajosz6
+            name: level-100
+            display_name: Level 100
+            description: First year of the programme.
     ProgrammeLevelListOK:
       description: Programme Level collection
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ProgrammeLevelListResponse'
+          example:
+            items:
+              - revision: 1
+                id: iqcx3qc9sbbt6ocshszfqgq6ci
+                created_at: '2026-08-03T10:00:00Z'
+                updated_at: '2026-08-03T10:00:00Z'
+                programme_id: g63dcrphk8idgyjgzbrpajosz6
+                name: level-100
+                display_name: Level 100
+                description: First year of the programme.
+              - revision: 1
+                id: p6y6sf8ac6m5if373fkkebj7j6
+                created_at: '2026-08-03T10:05:00Z'
+                updated_at: '2026-08-03T10:05:00Z'
+                programme_id: g63dcrphk8idgyjgzbrpajosz6
+                name: level-200
+                display_name: Level 200
+                description: Second year of the programme.
+            next_cursor: eyJuYW1lIjoibGV2ZWwtMjAwIiwiaWQiOiJwNnk2c2Y4YWM2bTVpZjM3M2Zra2ViajdqNiIsImRpciI6ImFzYyJ9
+            total: 4
+            total_is_lower_bound: false
   schemas:
     ProgrammeLevelListResponse:
-      description: One page of the collection in its stable order.
+      description: One page of Programme Levels, ordered by name and then by identifier. Only the first page carries the total.
       type: object
       additionalProperties: false
       required:
@@ -149,6 +179,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProgrammeLevelResponse'
+          description: The Programme Levels on this page.
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
         total:
@@ -156,13 +187,13 @@ components:
           minimum: 0
           maximum: 10000
           description: >-
-            Programme Levels matching the filters across every page, present only on the first page. At 10,000 counting
-            stops and `total_is_lower_bound` is true.
+            How many Programme Levels match the filters across every page. Present only on the first page. Counting
+            stops at 10,000, and then `total_is_lower_bound` is true.
         total_is_lower_bound:
           type: boolean
-          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.
+          description: True when `total` reached 10,000 and there may be more. Present with `total`.
     CreateProgrammeLevelRequest:
-      description: Canonical and human-facing fields for a new Programme Level.
+      description: The machine name and display text for a new Programme Level.
       type: object
       additionalProperties: false
       required:
@@ -171,7 +202,12 @@ components:
       properties:
         name:
           type: string
+          description: >-
+            Machine name: lowercase letters, digits, hyphens and underscores, starting with a letter or digit, at
+            most 64 characters. It must be unique among the Programme's active Programme Levels.
         display_name:
           type: string
+          description: Name shown to people, 1 to 128 characters.
         description:
           type: string
+          description: Optional longer text shown to people, up to 1,024 characters.

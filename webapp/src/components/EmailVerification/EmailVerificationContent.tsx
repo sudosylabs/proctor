@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { EmailVerificationResult } from "../../features/verify-email/VerifyEmailApi";
 import { message, type MessageID } from "../../i18n/messages";
 import { richMessage } from "../../i18n/richMessage";
+import { RailItem, TaskRail } from "../AccessPageShell/AccessPageShell";
 import { Button, ButtonLink } from "../Button/Button";
 import {
   TaskState,
@@ -82,8 +83,7 @@ export function EmailVerificationContent({
         focusHeading={transitioned}
         heading={message(copy.heading)}
         headingID="verify-email-heading"
-        label={message("webapp.verify_email.kind")}
-        labelTone={copy.tone}
+        status={copy.tone === undefined || copy.status === undefined ? undefined : { label: message(copy.status), tone: copy.tone }}
       >
         <TaskStateActions className={styles.actions}>
           <VerificationActions
@@ -125,6 +125,13 @@ function VerificationActions({
           <a className={styles.quietLink} href="/login">
             {message("webapp.verify_email.sign_in")}
           </a>
+          {state === "ready" ? (
+            <TaskRail>
+              <RailItem heading={message("webapp.verify_email.rail.heading")}>
+                <p>{message("webapp.verify_email.rail.body")}</p>
+              </RailItem>
+            </TaskRail>
+          ) : null}
         </>
       );
     case "verified":
@@ -146,6 +153,7 @@ interface VerificationCopy {
   body: MessageID;
   heading: MessageID;
   tone?: "success" | "warning" | "danger";
+  status?: MessageID;
 }
 
 function copyFor(state: VerificationState): VerificationCopy {
@@ -162,18 +170,21 @@ function copyFor(state: VerificationState): VerificationCopy {
         heading: "webapp.verify_email.verified.heading",
         body: "webapp.verify_email.verified.body",
         tone: "success",
+        status: "webapp.verify_email.status.verified",
       };
     case "invalid":
       return {
         heading: "webapp.verify_email.invalid.heading",
         body: "webapp.verify_email.invalid.body",
         tone: "danger",
+        status: "webapp.verify_email.status.invalid",
       };
     case "unavailable":
       return {
         heading: "webapp.verify_email.unavailable.heading",
         body: "webapp.verify_email.unavailable.body",
         tone: "warning",
+        status: "webapp.verify_email.status.unavailable",
       };
   }
 }

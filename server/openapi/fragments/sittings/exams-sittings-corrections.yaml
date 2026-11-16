@@ -16,7 +16,13 @@ paths:
       tags:
         - Sittings
       description: >-
-        Resources is the complete desired ordered manifest. Omission removes an existing resource, array order becomes resource position, an item without stage_id retains its base content, and an item with stage_id selects that ready purpose-bound stage. Omitted instructions_markdown preserves the current instructions; a present empty string clears them. Policy, Starter Workspace, future default, and schedule cannot be changed here.
+        Publishes a corrected Exam Revision to an open or paused Sitting and switches the Sitting to it.
+        The new Revision can't change afterwards. `resources` is the full list of resources you want, in
+        order. A resource you leave out is removed, and its position in the array becomes its position in
+        the Exam. A resource without `stage_id` keeps its current content. A resource with `stage_id` takes
+        the content you uploaded to that stage. Leave out `instructions_markdown` to keep the current
+        instructions, or send an empty string to clear them. You can't change the policy, the Starter
+        Workspace, the Exam's default for future Sittings or the schedule here.
       x-proctor-auth: principal_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -77,7 +83,9 @@ paths:
 components:
   requestBodies:
     ApplyExamSittingCorrection:
-      description: Complete desired ordered resource manifest, optional instructions replacement, and exact Sitting and base Revision fences.
+      description: >-
+        The full ordered resource list, optional new instructions, the Sitting's current revision and the
+        Exam Revision the Sitting currently delivers.
       required: true
       content:
         application/json:
@@ -98,7 +106,7 @@ components:
                 stage_id: ybndrfg8ejkmcpqxot1uwisza5
   responses:
     ExamSittingCorrectionCreated:
-      description: Immutable live correction created and the affected Sitting retargeted
+      description: The correction was published and the Sitting now delivers the corrected Revision.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -106,6 +114,16 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamSittingCorrectionResponse'
+          example:
+            affected_capabilities: [submission, workspace]
+            exam_id: wj3drgzdpnf54rxf5d8qd3dqne
+            exam_sitting_id: 14j8umgczgrdp95w77zuxmxfu9
+            previous_revision_id: ih1r84kij94nrwis97rft6rduh
+            revision_id: 889766ufjgio6kbpzjbufozksq
+            revision_number: 3
+            sitting_revision: 9
+            sitting_state: open
+            effective_at: '2026-12-14T09:52:30Z'
   schemas:
     ExamSittingCorrectionResourceRequest:
       type: object
@@ -115,23 +133,29 @@ components:
         - display_name
         - description_markdown
       description: >-
-        An item without stage_id retains the exact base content. An item with stage_id selects the ready stage bound to this resource and correction target.
+        One resource in the corrected Exam. Without `stage_id` the resource keeps its current content.
+        With `stage_id` it takes the content uploaded to that stage, which must be ready and must have
+        been staged for this resource and this Sitting.
       properties:
         resource_id:
           $ref: '#/components/schemas/ID'
+          description: >-
+            The resource's ID. Use an existing resource's ID, or the `resource_id` returned when you staged
+            a new resource.
         display_name:
           type: string
           minLength: 1
           maxLength: 255
-          description: Trimmed UTF-8 with at most 255 Unicode scalar values.
+          description: The name candidates see, with no leading or trailing whitespace and at most 255 characters.
         description_markdown:
           type: string
           maxLength: 16384
-          description: Authored Markdown encoded as UTF-8 and limited to 16384 bytes.
+          description: A Markdown description shown with the resource, at most 16384 bytes of UTF-8. Can be empty.
         stage_id:
           $ref: '#/components/schemas/ID'
+          description: The staged upload whose content replaces or provides this resource's content.
     ApplyExamSittingCorrectionRequest:
-      description: Revision-fenced complete content correction for one open or paused Sitting.
+      description: The corrected content for one open or paused Sitting.
       type: object
       additionalProperties: false
       required:
@@ -147,36 +171,52 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: >-
+            The Sitting's current revision, as last read. The request fails with a conflict if the Sitting
+            has changed since.
         expected_current_revision_id:
           $ref: '#/components/schemas/ID'
+          description: >-
+            The Exam Revision the Sitting delivers now. The request fails with a conflict if another
+            correction replaced it first.
         instructions_markdown:
           type: string
           maxLength: 65536
           description: >-
-            Omitted preserves current instructions. A present empty string clears them; null is invalid. Authored Markdown is limited to 65536 UTF-8 bytes.
+            New instructions in Markdown, at most 65536 bytes of UTF-8. Leave it out to keep the current
+            instructions. Send an empty string to clear them. `null` is rejected.
         browser_policy:
           $ref: '#/components/schemas/BrowserPolicy'
-          description: Omitted preserves the current Browser Policy; a present object replaces it atomically with the other correction content.
+          description: >-
+            A new Browser Policy. Leave it out to keep the current one. If you send it, it replaces the
+            current policy together with the rest of the correction.
         affected_capabilities:
           $ref: '#/components/schemas/CorrectionCapabilitySelection'
         candidate_summary:
           type: string
           minLength: 1
           maxLength: 500
-          description: Required trimmed candidate-facing plain text, limited to 500 Unicode scalar values and 2000 UTF-8 bytes with no control characters.
+          description: >-
+            Plain text that tells candidates what changed. No leading or trailing whitespace and no control
+            characters: at most 500 characters and 2000 bytes.
         acknowledgement_required:
           type: boolean
+          description: >-
+            Whether candidates must acknowledge the correction. While an acknowledgement is pending, the
+            operations in `affected_capabilities` are blocked for that candidate.
         reason:
           type: string
           minLength: 1
           maxLength: 1000
           description: >-
-            Required already-trimmed private manager rationale; valid UTF-8, at most 1000 Unicode scalar values and 4000 bytes.
+            Why you are correcting the Exam. It is kept for audit and is never shown to candidates. Send
+            valid UTF-8 with no leading or trailing whitespace: at most 1000 characters and 4000 bytes.
         resources:
           type: array
           maxItems: 100
           description: >-
-            Required complete desired resource manifest. Omitted base resources are removed and array order becomes resource position. Resource and non-empty stage identities must each be unique.
+            Every resource the corrected Exam should have, in order. Resources you leave out are removed.
+            Each `resource_id`, and each `stage_id` you send, must appear only once.
           items:
             $ref: '#/components/schemas/ExamSittingCorrectionResourceRequest'
     CorrectionCapabilitySelection:
@@ -185,17 +225,21 @@ components:
       maxItems: 3
       uniqueItems: true
       description: >-
-        Explicit sorted selection. A Browser Policy change requires browser;
-        an instructions or resources change requires submission and workspace.
-        Supersets are permitted. The selection cannot create a correction without
-        an actual content change and remains present when acknowledgement is not required.
+        The candidate operations a correction affects, in sorted order. Changing the Browser Policy
+        requires `browser`. Changing the instructions or resources requires `submission` and `workspace`.
+        You may list more than the minimum. Listing capabilities without changing any content is rejected.
+        The list is required even when `acknowledgement_required` is false.
       items:
         $ref: '#/components/schemas/CandidateCapability'
     CandidateCapability:
       type: string
       enum: [browser, submission, workspace]
+      description: >-
+        A group of candidate operations that a live correction can hold back until it is acknowledged.
+        `browser` covers the exam browser, `submission` covers submitting the Attempt, and `workspace`
+        covers changing the Workspace.
     ExamSittingCorrectionResponse:
-      description: Immutable correction Revision and updated Sitting state committed by the transition.
+      description: The new corrected Revision and the Sitting's state after the correction.
       type: object
       additionalProperties: false
       required:
@@ -211,24 +255,33 @@ components:
       properties:
         affected_capabilities:
           $ref: '#/components/schemas/CorrectionCapabilitySelection'
+          description: The candidate operations this correction affects, as sent in the request.
         exam_id:
           $ref: '#/components/schemas/ID'
+          description: The Exam that was corrected.
         exam_sitting_id:
           $ref: '#/components/schemas/ID'
+          description: The Sitting that now delivers the corrected Revision.
         previous_revision_id:
           $ref: '#/components/schemas/ID'
+          description: The Exam Revision the Sitting delivered before this correction.
         revision_id:
           $ref: '#/components/schemas/ID'
+          description: The new corrected Exam Revision.
         revision_number:
           type: integer
           format: int64
           minimum: 1
+          description: The new Revision's number within the Exam.
         sitting_revision:
           type: integer
           format: int64
           minimum: 1
+          description: The Sitting's revision after the correction. Use it as `expected_revision` next time.
         sitting_state:
           $ref: '#/components/schemas/ExamSittingState'
+          description: The Sitting's state after the correction, either `open` or `paused`.
         effective_at:
           type: string
           format: date-time
+          description: When the correction took effect.

@@ -8,16 +8,34 @@
 components:
   responses:
     JobOK:
-      description: Safe durable Job projection
+      description: The Job's current state.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/JobResponse'
+          example:
+            id: wj3drgzdpnf54rxf5d8qd3dqne
+            type: exam_export.build
+            status: running
+            created_at: '2026-08-01T09:00:00Z'
+            updated_at: '2026-08-01T09:02:30Z'
+            available_at: '2026-08-01T09:00:00Z'
+            started_at: '2026-08-01T09:00:05Z'
+            attempt_count: 1
+            maximum_attempts: 5
+            progress:
+              current: 120
+              total: 300
+              stage: executing
+            revision: 4
+            created_by_user_id: 14j8umgczgrdp95w77zuxmxfu9
+            created_by_display_name: Ada Okafor
+            subject: Introduction to Databases final
   schemas:
     JobType:
       type: string
       description: >-
-        Stable type of a background Job. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+        Type of a background Job. The server only uses the values listed here, but later releases may add more. Clients choose their own labels and should show an unknown value in a generic way.
       enum:
         - academic_administration_preview.resolve
         - audit.attempt_sweep
@@ -50,7 +68,7 @@ components:
     JobStage:
       type: string
       description: >-
-        Stable name of a Job processing stage. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+        Name of a stage a Job works through. The server only uses the values listed here, but later releases may add more. Clients choose their own labels and should show an unknown value in a generic way.
       enum:
         - completed
         - executing
@@ -63,7 +81,7 @@ components:
     JobErrorCode:
       type: string
       description: >-
-        Stable safe failure category of a Job or Job Attempt. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+        Public reason a Job or Job Attempt failed. It never carries internal error detail. The server only uses the values listed here, but later releases may add more. Clients choose their own labels and should show an unknown value in a generic way.
       enum:
         - academic_administration_preview.authorization_lost
         - academic_administration_preview.target_conflict
@@ -111,7 +129,7 @@ components:
         - student_progression.target_conflict
         - user.not_found
     JobProgressResponse:
-      description: Bounded coarse progress reported by a Job implementation.
+      description: Approximate progress a running Job reports for its current stage.
       type: object
       additionalProperties: false
       required:
@@ -123,20 +141,21 @@ components:
           type: integer
           format: int64
           minimum: 0
-          description: Completed work units in the current stage.
+          description: Number of work units finished in the current stage.
         total:
           type: integer
           format: int64
           minimum: 1
-          description: Total work units expected in the current stage.
+          description: Number of work units the current stage expects to process.
         stage:
           type: string
           anyOf:
             - $ref: '#/components/schemas/JobStage'
             - type: string
-          description: Stable safe name of the current processing stage.
+          description: Name of the stage the Job is in.
     JobResponse:
-      description: Safe durable state of an allowlisted background Job.
+      description: >-
+        State of a background Job whose type the public API exposes. Private payloads, worker details and internal errors are never included.
       type: object
       additionalProperties: false
       required:
@@ -152,14 +171,17 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: ID of the Job.
         type:
           type: string
           anyOf:
             - $ref: '#/components/schemas/JobType'
             - type: string
-          description: Stable allowlisted Job type.
+          description: What kind of work the Job does.
         status:
           $ref: '#/components/schemas/JobStatus'
+          description: >-
+            Where the Job is in its lifecycle. `cancel_requested` means cancellation was asked for but the running work has not stopped yet.
         created_at:
           type: string
           format: date-time
@@ -167,40 +189,43 @@ components:
         updated_at:
           type: string
           format: date-time
-          description: Time of the latest durable Job change.
+          description: Time of the most recent change to the Job.
         available_at:
           type: string
           format: date-time
-          description: Time at or after which queued work may be claimed.
+          description: Earliest time a worker may pick up the Job while it is queued.
         started_at:
           type: string
           format: date-time
-          description: Time when the current or latest Attempt started.
+          description: Time the current or most recent Attempt started. Omitted until the first Attempt starts.
         completed_at:
           type: string
           format: date-time
-          description: Time when the Job reached a terminal state.
+          description: Time the Job finished, whether it succeeded, failed or was canceled. Omitted while it has not finished.
         public_error_code:
           type: string
           anyOf:
             - $ref: '#/components/schemas/JobErrorCode'
             - type: string
-          description: Stable safe failure category; private worker and infrastructure errors are never exposed.
+          description: >-
+            Public reason for the Job's most recent failure. Worker and infrastructure errors are never returned. Omitted when no failure is recorded.
         attempt_count:
           type: integer
           minimum: 0
-          description: Number of durable execution Attempts created so far.
+          description: Number of execution Attempts made so far.
         maximum_attempts:
           type: integer
           minimum: 1
-          description: Maximum execution Attempts allowed by this Job's retry policy.
+          description: Most execution Attempts this Job's retry policy allows.
         progress:
           $ref: '#/components/schemas/JobProgressResponse'
+          description: Latest progress the Job reported. Omitted when it has reported none.
         revision:
           type: integer
           format: int64
           minimum: 1
-          description: Monotonic durable Job revision for concurrency-aware consumers.
+          description: >-
+            Version number of the Job's state. It goes up with every change, so a client can tell a newer state from an older one.
         created_by_user_id:
           $ref: '#/components/schemas/ID'
           description: >-

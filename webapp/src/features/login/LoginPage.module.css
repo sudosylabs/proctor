@@ -18,7 +18,7 @@
     font-weight: var(--proctor-font-weight-semibold);
     line-height: var(--proctor-line-height-display);
     letter-spacing: var(--proctor-letter-spacing-display);
-    text-wrap: balance;
+    text-wrap: pretty;
   }
 
   .lede {
@@ -57,8 +57,24 @@
   }
 
   .providerGroup {
-    gap: var(--proctor-space-3);
-    align-items: flex-start;
+    gap: var(--proctor-space-4);
+  }
+
+  /* After the password form, other ways in sit under a hairline and a small heading. */
+  .afterLocal {
+    padding-block-start: var(--proctor-space-6);
+    border-block-start: var(--proctor-border-width-hairline) solid
+      var(--proctor-color-border-default);
+  }
+
+  .providerGroup h2 {
+    font-size: var(--proctor-font-size-heading-small);
+    font-weight: var(--proctor-font-weight-semibold);
+    line-height: var(--proctor-line-height-heading-small);
+  }
+
+  .provider {
+    inline-size: 100%;
   }
 
   .routeStateCopy {
@@ -89,53 +105,7 @@
     align-items: center;
   }
 
-  .providerGroup {
-    position: relative;
-    min-inline-size: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
-  }
 
-  .separator {
-    display: grid;
-    grid-template-columns: minmax(var(--proctor-space-6), 1fr) auto
-      minmax(var(--proctor-space-6), 1fr);
-    gap: var(--proctor-space-3);
-    align-items: center;
-    color: var(--proctor-color-foreground-muted);
-    font-size: var(--proctor-font-size-label);
-    line-height: var(--proctor-line-height-label);
-  }
-
-  .separator::before,
-  .separator::after {
-    block-size: var(--proctor-border-width-hairline);
-    background: var(--proctor-color-border-default);
-    content: "";
-  }
-
-  .newcomer {
-    display: flex;
-    flex-direction: column;
-    gap: var(--proctor-space-2);
-    margin-block-start: var(--proctor-space-4);
-    padding-block-start: var(--proctor-space-5);
-    border-block-start: var(--proctor-border-width-hairline) solid
-      var(--proctor-color-border-default);
-  }
-
-  .newcomer h2 {
-    font-size: var(--proctor-font-size-body);
-    font-weight: var(--proctor-font-weight-semibold);
-    line-height: var(--proctor-line-height-heading-small);
-  }
-
-  .newcomer p {
-    color: var(--proctor-color-foreground-subtle);
-    font-size: var(--proctor-font-size-body-small);
-    line-height: var(--proctor-line-height-body-small);
-  }
 
   .visuallyHidden {
     position: absolute;
@@ -150,26 +120,14 @@
   }
 
   @media (max-width: 30rem) {
-    .actions,
-    .providerGroup {
+    .actions {
       align-items: stretch;
       flex-direction: column;
     }
 
-    .actions > *,
-    .providerGroup > * {
+    .actions > * {
       inline-size: 100%;
     }
   }
 
-  @media (forced-colors: active) {
-    .separator::before,
-    .separator::after {
-      background: CanvasText;
-    }
-
-    .newcomer {
-      border-block-start-color: CanvasText;
-    }
-  }
 }

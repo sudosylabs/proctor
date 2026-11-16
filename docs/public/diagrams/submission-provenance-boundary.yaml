@@ -1,0 +1,26 @@
+blocks:
+  - row:
+      - card: Candidate submitted
+        text: The candidate finished the submit process themselves.
+      - card: Manager ended
+        text: An authorized Manager sealed the latest confirmed work early.
+      - card: Sitting closed
+        text: The Sitting closed and sealed unfinished Attempts.
+    links: none
+  - row:
+      - card: Submission
+        text: Sealed once. It can’t be reopened, resubmitted or viewed live.
+        accent: true
+        span: 2
+        items:
+          - Exam Revision and Workspace Cursor
+          - Every file’s version and checksum
+          - Discrepancies and how it ended
+      - card: No-show
+        text: No Attempt was created, so there is no Submission.
+        dashed: true
+    links: none
+    from:
+      - {from: 1, to: 1}
+      - {from: 2, to: 1}
+      - {from: 3, to: 1}

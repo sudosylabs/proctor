@@ -1,6 +1,6 @@
 ---
-title: Build the Academic Structure
-description: Create, verify, move, and archive Academic Units, Programmes, Programme Levels, Academic Periods, and Classes in ownership order.
+title: Build the academic structure
+description: Create Academic Units, Programmes, Programme Levels, Academic Periods and Classes in the order they own each other, then check, move and archive them.
 audience: api-consumer
 maturity: preview
 sidebar_position: 4
@@ -8,25 +8,26 @@ sidebar_position: 4
 
 import Link from '@docusaurus/Link';
 
-# Build the Academic Structure
+# Build the academic structure
 
-Create academic resources in ownership order. A Class is the concrete student
-roster; it belongs to one Programme Level and names one exact applicable
-Academic Period.
+Create academic resources parent first, in the order they own each other. The
+Class comes last. It is the actual student roster: it belongs to one Programme
+Level and names one exact Academic Period that applies to it.
 
 <GovernedFigure asset="academic-structure-ownership-map" />
 
-Every operation authorizes the actual typed resource. Programme, Programme
-Level, Academic Period, and Class resolve to Institution, Academic Unit, or
-Class binding scope through current PostgreSQL lineage. A visible parent is
-not proof that the caller can mutate a child.
+Proctor checks permissions against the exact resource each call touches.
+Programmes, Programme Levels, Academic Periods and Classes resolve to an
+Institution, Academic Unit or Class binding scope by following their current
+parents in PostgreSQL. Being able to see a parent does not mean the caller can
+change its children.
 
 ## 1. Create an Academic Unit
 
-Use <Link to="/api/reference/create-root-academic-unit">Create root Academic Unit</Link>,
+Call <Link to="/api/reference/create-root-academic-unit">Create root Academic Unit</Link>,
 or <Link to="/api/reference/create-academic-unit-child">create a child</Link>
-under an existing Unit. Retain the returned `id`; route scope, not an ID
-repeated in the request body, establishes the parent.
+under an existing Unit. Keep the `id` in the response. The route sets the
+parent. An ID repeated in the request body does not.
 
 ```json
 {
@@ -36,14 +37,14 @@ repeated in the request body, establishes the parent.
 }
 ```
 
-The hierarchy permits several generic levels but no cycle and no
-cross-Institution parent. Classifications such as faculty or department are
-presentation; they do not alter scope inheritance.
+You can nest Units several levels deep. Proctor rejects a cycle, and rejects a
+parent from another Institution. Labels such as faculty or department are for
+display only. They do not change how scope is inherited.
 
-## 2. Create a Programme and Level
+## 2. Create a Programme and its levels
 
 Call <Link to="/api/reference/create-programme">Create Programme</Link> with the
-Academic Unit ID in the path, then
+Academic Unit ID in the path. Then call
 <Link to="/api/reference/create-programme-level">Create Programme Level</Link>
 with the Programme ID in the path.
 
@@ -63,8 +64,8 @@ with the Programme ID in the path.
 
 ## 3. Create an Academic Period
 
-<Link to="/api/reference/create-academic-period">Create Academic Period</Link>
-can use the Institution or one Academic Unit as its owner. `start_at` and
+Call <Link to="/api/reference/create-academic-period">Create Academic Period</Link>
+with either the Institution or one Academic Unit as the owner. `start_at` and
 `end_at` are RFC 3339 timestamps.
 
 ```json
@@ -78,15 +79,16 @@ can use the Institution or one Academic Unit as its owner. `start_at` and
 }
 ```
 
-An Institution Period applies to every Academic Unit. A Unit Period applies to
-its owner and descendants. Period names are unique within the owner scope, but
-date ranges may overlap. Do not derive a current Period from dates or assume a
-Unit-owned Period overrides an Institution Period.
+A Period owned by the Institution applies to every Academic Unit. A Period
+owned by a Unit applies to that Unit and the Units below it. Names must be
+unique within the owner, but date ranges may overlap. Don't work out a
+"current" Period from dates, and don't assume a Unit's Period overrides the
+Institution's.
 
 ## 4. Create the Class
 
 Call <Link to="/api/reference/create-class">Create Class</Link> under the
-Programme Level and refer to the exact Academic Period in the body.
+Programme Level, and name the exact Academic Period in the body.
 
 ```json
 {
@@ -96,61 +98,65 @@ Programme Level and refer to the exact Academic Period in the body.
 }
 ```
 
-The server verifies that the Period is applicable to the Programme's Academic
-Unit. Keep the returned Class ID; names are presentation and discovery fields,
-not stable foreign keys.
+Proctor checks that the Period applies to the Programme's Academic Unit. Keep
+the Class ID from the response. Names are for display and search, and are not
+stable keys to store.
 
-## 5. Read Back the Lineage
+## 5. Read the structure back
 
-Verify each result through its exact read and bounded collection operations:
+Check each result with its own read call and its list call:
 
 - <Link to="/api/reference/list-academic-units">List Academic Units</Link> and
-  <Link to="/api/reference/list-academic-unit-children">List child Academic Units</Link>;
+  <Link to="/api/reference/list-academic-unit-children">List child Academic Units</Link>
 - <Link to="/api/reference/list-programmes">List Programmes</Link> and
-  <Link to="/api/reference/list-programme-levels">List Programme Levels</Link>;
-- <Link to="/api/reference/list-academic-periods">List Academic Periods</Link>;
-- <Link to="/api/reference/list-classes">List Classes</Link>.
+  <Link to="/api/reference/list-programme-levels">List Programme Levels</Link>
+- <Link to="/api/reference/list-academic-periods">List Academic Periods</Link>
+- <Link to="/api/reference/list-classes">List Classes</Link>
 
-Use keyset cursors exactly as returned. Do not fetch all resources and filter
-authorization in the client; collection visibility is already constrained by
-the caller's current scope.
+Pass each keyset cursor back exactly as you received it. Don't fetch everything
+and filter by permission in your client. Lists already show only what the
+caller's current scope allows.
 
-## 6. Update or Reparent With Current State
+## 6. Update or move a resource from its current state
 
-Presentation updates use the resource's update operation. Reparenting an
-Academic Unit is structurally significant: the application authorizes both
-lineages and atomically rejects a cycle, cross-Institution ownership, or a
-dependency that would become invalid. Inventory descendant Units, Programmes,
-Period applicability, memberships, and Role Bindings before moving it.
+To change display fields, use the resource's update call. Moving an Academic
+Unit to a new parent is a bigger change. Proctor checks permissions on both
+the old and new parents, and rejects the whole move if it would create a cycle,
+cross Institutions or break something that depends on the Unit. Before you move
+one, list the Units, Programmes, Period links, memberships and Role Bindings
+below it.
 
-If another administrator changed the resource, reread the exact representation
-and deliberately rebuild the intended request. A conflict is not a signal to
-blindly repeat stale input.
+If another administrator changed the resource first, read it again and build
+the request you actually mean from the new state. A conflict is not a cue to
+resend the old input unchanged.
 
-## 7. Archive From the Leaves Up
+## 7. Archive from the bottom up
 
-Archive retains identity, lineage, lifecycle timestamps, and audit history.
-It never cascades through active descendants or authority dependencies.
+Archiving keeps the resource's identity, parents, lifecycle timestamps and
+audit history. It never cascades to active children or to anything that
+depends on the resource for permissions. Work in this order:
 
-1. end or move active Class and Academic Unit memberships through their own
-   lifecycle;
-2. resolve Exam and Sitting dependencies;
-3. archive Classes before Programme Levels;
-4. archive Programme Levels before Programmes; and
-5. archive child Academic Units before their parent.
+1. End or move active Class and Academic Unit memberships through their own
+   lifecycle calls.
+2. Resolve any Exams and Sittings that depend on the resource.
+3. Archive Classes before their Programme Levels.
+4. Archive Programme Levels before their Programmes.
+5. Archive child Academic Units before their parent.
 
-An Academic Period remains blocked while exact Classes or relationships depend
-on it. Never present these operations to a user as destructive deletion.
+You can't archive an Academic Period while specific Classes or relationships
+still depend on it. Don't present any of these calls to your users as a
+delete.
 
-## Safe Retry and Diagnostics
+## Retries and diagnostics
 
-Create operations that declare optional idempotency should receive a unique
-`Idempotency-Key`. Reuse it only for a byte-equivalent business request after
-an ambiguous transport result. A different body with the same key is a
-conflict. Updates and archives without idempotency require a read-after-timeout
-before deciding whether to issue another mutation.
+Some create calls accept an optional `Idempotency-Key`. Send a unique one with
+each request. Reuse a key only to resend the identical request after you lost
+the response. Sending a different body with the same key is a conflict.
+Updates and archives don't take idempotency keys, so after a timeout read the
+resource first and then decide whether to send the change again.
 
-Record route template, status, stable error code, request ID, and safe resource
-IDs. Do not log profiles, rosters, Invitation data, or free-form descriptions.
-Do not use a Class as a permission grant: enrollment records roster membership;
-Roles and scoped Role Bindings grant permissions.
+In your logs, record the route template, status, stable error code, request ID
+and safe resource IDs. Don't log profiles, rosters, Invitation data or
+free-text descriptions. Don't use a Class to grant permissions. Enrollment
+records who is on the roster. Roles and scoped Role Bindings grant
+permissions.

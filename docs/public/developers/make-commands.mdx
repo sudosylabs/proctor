@@ -1,58 +1,58 @@
 ---
-title: Make Command Reference
-description: Choose the supported root or module-scoped Make command, understand what it starts or changes, and avoid destructive targets.
+title: Make commands
+description: Find the right root or module Make command, see what it starts or changes, and know which targets delete data.
 audience: developer
 maturity: preview
 slug: /developers/make-commands/
 ---
 
-# Make Command Reference
+# Make commands
 
-Run product commands from the repository root. The root Makefile is the
-supported interface for installing tools, running the local product, checking
-changes, exercising a cluster, and assembling release artifacts.
+Run product commands from the repository root. The root Makefile is how you
+install tools, run Proctor locally, check your changes, try out a cluster and
+build release artifacts.
 
 ```sh
 make help
 ```
 
-`make help` is the exact list for the checkout in front of you. This page
-explains how those commands fit together and which ones change local state.
-Targets omitted from `make help` are implementation steps, not a stable
-contributor interface.
+`make help` lists exactly the targets in the checkout you have. This page
+explains how they fit together and which ones change local state. A target
+that `make help` doesn't list is an internal step, and it may change or
+disappear without notice.
 
-## Choose the Right Command First
+## Find the command you need
 
 | I need to… | Start with |
 | --- | --- |
 | Prepare a new checkout | `make bootstrap` |
-| Start the complete single-node product | `make run-server` |
+| Start the whole product on one node | `make run-server` |
 | Start only the hosted webapp with hot reload | `make run-webapp` |
-| Find why the local environment is unhealthy | `make dev-doctor` |
-| Run the normal product gate | `make check` |
-| Run the complete CI-facing gate | `make ci` |
-| Preview or verify documentation | `make docs-start` or `make docs-check` |
-| Exercise three active application nodes | `make run-cluster` |
-| Build and verify a local release directory | `make package-verify` |
+| Find out why the local environment is unhealthy | `make dev-doctor` |
+| Run the normal product checks | `make check` |
+| Run the full set of checks that CI runs | `make ci` |
+| Preview or check the documentation | `make docs-start` or `make docs-check` |
+| Run three active application nodes | `make run-cluster` |
+| Build and check a local release directory | `make package-verify` |
 | See every supported root target | `make help` |
 
-Commands in this page use three kinds of effects:
+Each command on this page has one of three kinds of effect:
 
-- **read-only** commands inspect or verify without intentionally changing
-  source or durable development data;
-- **generated-output** commands install dependencies or write build,
-  diagnostic, package, or generated files; and
-- **runtime-state** commands start, stop, populate, or delete local services.
+- **Read-only** commands inspect or check things. They don't mean to change
+  source or long-lived development data.
+- **Generated-output** commands install dependencies or write build,
+  diagnostic, package or generated files.
+- **Runtime-state** commands start, stop, fill or delete local services.
 
-Some verification commands install locked dependencies before checking them.
-They remain read-only with respect to authored source, but they can replace a
-local `node_modules` tree or refresh ignored generated output.
+Some checks install locked dependencies before they run. They still leave your
+source alone, but they can replace a local `node_modules` tree or refresh
+ignored generated files.
 
-## Understand the Root Command Surface
+## How the root Makefile is organized
 
-The root `Makefile` includes smaller, responsibility-specific files from
-`build/make/`. Inclusion creates one root command surface; it does not create a
-second command that must be run from `build/`.
+The root `Makefile` includes smaller files from `build/make/`, one per area.
+Together they form a single set of root commands. You never need to run
+anything from `build/` itself.
 
 ```text
 Makefile
@@ -64,106 +64,104 @@ Makefile
 └── build/make/container.mk   maintainer and runtime images
 ```
 
-For example, run `make package` at the repository root even though its recipe
-is maintained in `build/make/release.mk`.
+For example, you run `make package` at the repository root, even though its
+recipe lives in `build/make/release.mk`.
 
-## Install and Inspect the Environment
+## Install and inspect the environment
 
 | Command | What it does and changes |
 | --- | --- |
-| `make help` | Prints the supported root targets and their current one-line descriptions. **Effect:** read-only. |
-| `make bootstrap` | Validates the host, installs the pinned Go tools, and installs the locked webapp and documentation dependencies. **Effect:** generated output. |
-| `make tools` | Installs the Go developer tools pinned by the isolated tool modules into `.build/bin`. **Effect:** generated output. |
-| `make tools-check` | Verifies that every pinned Go tool is installed at the expected version. **Effect:** read-only. |
-| `make dev-tools` | Checks the required Go, Node, npm, Docker, Compose, `jq`, and `curl` commands. **Effect:** read-only. |
-| `make dev-doctor` | Runs bounded checks of the host, generated artifacts, containers, and local health endpoints. It does not start or repair them. **Effect:** read-only. |
+| `make help` | Prints the supported root targets, each with a one-line description. **Effect:** read-only. |
+| `make bootstrap` | Checks the host, installs the pinned Go tools, and installs the locked webapp and documentation dependencies. **Effect:** generated output. |
+| `make tools` | Installs the Go developer tools pinned by the separate tool modules into `.build/bin`. **Effect:** generated output. |
+| `make tools-check` | Checks that every pinned Go tool is installed at the expected version. **Effect:** read-only. |
+| `make dev-tools` | Checks for the Go, Node, npm, Docker, Compose, `jq` and `curl` commands. **Effect:** read-only. |
+| `make dev-doctor` | Runs quick, time-limited checks of the host, generated files, containers and local health endpoints. It doesn't start or repair anything. **Effect:** read-only. |
 
-Use `make bootstrap` for first setup or after a pinned dependency changes. Use
-`make dev-doctor` when an already-prepared environment stops behaving as
-expected.
+Use `make bootstrap` the first time, and again after a pinned dependency
+changes. Use `make dev-doctor` when an environment that used to work stops
+behaving as you expect.
 
-## Run the Single-Node Product
+## Run Proctor on one node
 
 | Command | What it does and changes |
 | --- | --- |
 | `make webapp-build` | Installs locked webapp dependencies and builds the hosted application with the selected build identity. **Effect:** generated output. |
-| `make webapp-build-debug` | Builds the hosted application with the server debugger's `dev`/`unknown` identity. **Effect:** generated output. |
-| `make dev-up` | Creates development configuration and secrets, then starts PostgreSQL, Redis, MinIO, Mailpit, and observability services. **Effect:** runtime state. |
-| `make run` | Alias for the production-shaped `make run-server` lifecycle. **Effect:** runtime state. |
-| `make run-server` | Builds the webapp, starts local dependencies, and runs the Go server in the foreground. **Effect:** runtime state. |
-| `make run-webapp` | Runs Vite with hot reload and proxies API and WebSocket traffic to a separately running server. **Effect:** runtime state. |
-| `make dev-seed` | Creates or reports the guarded synthetic Institution, users, academic structure, Exam, and Sitting through the public API. **Effect:** runtime state. |
-| `make metrics-urls` | Prints the local Prometheus, Grafana, Loki, and Jaeger addresses. **Effect:** read-only. |
-| `make dev-logs` | Follows dependency and observability logs until interrupted. **Effect:** read-only. |
-| `make dev-down` | Stops the development services and preserves their volumes and generated state. **Effect:** runtime state. |
-| `make dev-reset` | Stops the development services, deletes their persistent volumes, and removes guarded seed state. **Effect:** **destructive runtime state.** |
+| `make webapp-build-debug` | Builds the hosted application with the `dev`/`unknown` identity that the server debugger uses. **Effect:** generated output. |
+| `make dev-up` | Creates development configuration and secrets, then starts PostgreSQL, Redis, MinIO, Mailpit and the observability services. **Effect:** runtime state. |
+| `make run` | Alias for `make run-server`, which runs Proctor the way production does. **Effect:** runtime state. |
+| `make run-server` | Builds the webapp, starts the local dependencies and runs the Go server in the foreground. **Effect:** runtime state. |
+| `make run-webapp` | Runs Vite with hot reload and passes API and WebSocket traffic to a server you run separately. **Effect:** runtime state. |
+| `make dev-seed` | Creates, or reports on, the protected synthetic Institution, users, academic structure, Exam and Sitting through the public API. **Effect:** runtime state. |
+| `make metrics-urls` | Prints the local Prometheus, Grafana, Loki and Jaeger addresses. **Effect:** read-only. |
+| `make dev-logs` | Follows dependency and observability logs until you stop it. **Effect:** read-only. |
+| `make dev-down` | Stops the development services and keeps their volumes and generated state. **Effect:** runtime state. |
+| `make dev-reset` | Stops the development services, deletes their persistent volumes and removes the protected seed state. **Effect:** **destructive runtime state.** |
 
-`make run-server` owns the ordinary first-run sequence. Do not start with
-`make dev-up` unless you deliberately want the dependencies without the
-application process. Use [local setup](./local-setup.mdx) for the full
-first-success path and [local services](./local-services.mdx) for the service
-boundaries.
+`make run-server` handles the usual first run from start to finish. Only start
+with `make dev-up` when you want the dependencies without the application
+process. See [local setup](./local-setup.mdx) for the full first run and
+[local services](./local-services.mdx) for what each service does.
 
 `make dev-reset` permanently deletes the local PostgreSQL Installation, MinIO
-objects, captured Mailpit messages, observability history, and Compose volumes.
-Use `make dev-down` when you only need to stop work.
+objects, captured Mailpit messages, observability history and Compose volumes.
+If you only want to stop work, use `make dev-down`.
 
-## Format, Analyze, and Secure Go Code
+## Format, lint and scan Go code
 
 | Command | What it does and changes |
 | --- | --- |
-| `make fmt` | Applies `gofmt` and the pinned `goimports` to versioned and unignored Go source. **Effect:** **modifies source.** |
-| `make fmt-check` | Fails when eligible Go source is not formatted. **Effect:** read-only. |
-| `make lint-config` | Validates the pinned golangci-lint configuration without analyzing source. **Effect:** read-only. |
-| `make lint` | Rejects findings introduced beyond the recorded Go linter baseline. **Effect:** read-only. |
-| `make lint-full` | Reports the complete existing and new Go linter backlog. **Effect:** read-only. |
-| `make lint-fix` | Applies safe automated fixes from the pinned linter suite. Review its diff. **Effect:** **modifies source.** |
-| `make vulncheck` | Scans every product Go module against the current vulnerability database. It requires network access. **Effect:** read-only. |
-| `make quality` | Runs `fmt-check` and the new-finding lint gate. **Effect:** read-only. |
+| `make fmt` | Runs `gofmt` and the pinned `goimports` over versioned and unignored Go source. **Effect:** **modifies source.** |
+| `make fmt-check` | Fails when any Go source it covers isn't formatted. **Effect:** read-only. |
+| `make lint-config` | Checks the pinned golangci-lint configuration without analyzing any source. **Effect:** read-only. |
+| `make lint` | Fails on findings beyond the recorded Go linter baseline. **Effect:** read-only. |
+| `make lint-full` | Reports every Go linter finding, old and new. **Effect:** read-only. |
+| `make lint-fix` | Applies the safe automatic fixes from the pinned linters. Review the diff afterwards. **Effect:** **modifies source.** |
+| `make vulncheck` | Scans every product Go module against the current vulnerability database. It needs network access. **Effect:** read-only. |
+| `make quality` | Runs `fmt-check` and the new-finding lint check. **Effect:** read-only. |
 | `make security` | Runs static analysis and the live vulnerability scan. **Effect:** read-only. |
-| `make precommit` | Runs build-script checks plus the fast repository formatting and lint gates. **Effect:** read-only. |
+| `make precommit` | Runs the build-script checks and the fast repository formatting and lint checks. **Effect:** read-only. |
 
-Run `make fmt` intentionally, inspect the resulting diff, then use
-`make quality` before a broader product gate. The live vulnerability result can
-change when the external vulnerability database changes even when the
-checkout does not.
+Run `make fmt` on purpose, look at the diff it produces, then run
+`make quality` before any broader check. The vulnerability result can change
+when the external database changes, even if your checkout hasn't.
 
-## Test and Verify the Product
+## Test and check the product
 
 | Command | What it proves and changes |
 | --- | --- |
-| `make check` | Build scripts, hosted webapp, documentation, transactional-mail template freshness and rendering, server architecture, OpenAPI agreement, localization, tests, race tests, and vet pass without dependency-backed integration suites. **Effect:** read-only authored source; refreshes ignored dependencies and generated output. |
-| `make brand-check` | Verifies that package-owned artwork copies match the approved brand files. **Effect:** read-only. |
-| `make brand-copy` | Refreshes the declared package-owned artwork copies from the approved brand files. Review the copied files and local digests, then run `make brand-check` and the affected package checks. **Effect:** **modifies source.** |
+| `make check` | Build scripts, hosted webapp, documentation, transactional-mail template freshness and rendering, server architecture, OpenAPI agreement, localization, tests, race tests and vet all pass, without the suites that need real dependencies. **Effect:** leaves authored source alone; refreshes ignored dependencies and generated output. |
+| `make brand-check` | Checks that the artwork copies inside each package match the approved brand files. **Effect:** read-only. |
+| `make brand-copy` | Refreshes the declared artwork copies inside each package from the approved brand files. Review the copied files and local digests, then run `make brand-check` and the checks for the packages it touched. **Effect:** **modifies source.** |
 | `make docs-start` | Installs locked docs dependencies and starts the Docusaurus development server in the foreground. **Effect:** generated output and runtime state. |
-| `make mail-templates-check` | Installs the locked MJML toolchain, then verifies that every tracked transactional-mail HTML file matches its MJML source and that the template tests pass. **Effect:** refreshes ignored dependencies |
-| `make docs-check` | Validates OpenAPI agreement, docs metadata and generators, TypeScript, and the production documentation build. **Effect:** generated output. |
-| `make integration` | Runs the server's dependency-backed suites plus reusable Redis-cache and SMTP-mail conformance. **Effect:** temporary runtime state. |
-| `make e2e` | Builds the webapp and server, starts one real node with disposable PostgreSQL and Mailpit on loopback, and runs the Chromium end-to-end journeys in `webapp/tests/e2e`; `E2E_ARGS` passes Playwright arguments. **Effect:** generated output and temporary runtime state, removed on exit. |
-| `make independent-modules` | Tests, race-tests, vets, and builds all four Go modules with workspace assistance disabled. **Effect:** read-only. |
+| `make mail-templates-check` | Installs the locked MJML toolchain, then checks that every tracked transactional-mail HTML file matches its MJML source and that the template tests pass. **Effect:** refreshes ignored dependencies |
+| `make docs-check` | Checks OpenAPI agreement, docs metadata and generators, TypeScript, and the production documentation build. **Effect:** generated output. |
+| `make integration` | Runs the server suites that need real dependencies, plus the shared Redis-cache and SMTP-mail conformance suites. **Effect:** temporary runtime state. |
+| `make e2e` | Builds the webapp and server, starts one real node with throwaway PostgreSQL and Mailpit on loopback, and runs the Chromium end-to-end journeys in `webapp/tests/e2e`. Use `E2E_ARGS` to pass arguments to Playwright. **Effect:** generated output and temporary runtime state, removed on exit. |
+| `make independent-modules` | Tests, race-tests, vets and builds all four Go modules with the Go workspace turned off. **Effect:** read-only. |
 | `make module-pins-check` | Fails when the server's `go.mod` pins a `packages/*` module at content that differs from the working tree, and prints the pin to use. **Effect:** read-only. |
-| `make ci` | Runs `check`, dependency-backed integration, independent-module verification, module-pin verification, and release-package verification. **Effect:** generated output and temporary runtime state. |
+| `make ci` | Runs `check`, the dependency-backed integration suites, the independent-module and module-pin checks, and the release-package check. **Effect:** generated output and temporary runtime state. |
 
-`make check` is the normal product-wide handoff gate. `make ci` is materially
-slower, starts dependency containers, and requires a fresh package output path.
-Use the [verification ladder](./testing.mdx) to choose the smallest honest gate
-for a change.
+`make check` is the normal product-wide check before you hand off a change.
+`make ci` is much slower, starts dependency containers and needs a package
+output path that doesn't exist yet. Use the [verification ladder](./testing.mdx)
+to pick the smallest check that honestly covers your change.
 
-## Debug, Profile, and Trace
+## Debug, profile and trace
 
 | Command | What it does |
 | --- | --- |
-| `make debug-ready` | Prepares tools, the debugger-matched webapp, dependencies, and the diagnostics directory without starting Delve. |
+| `make debug-ready` | Prepares the tools, the webapp build that matches the debugger, the dependencies and the diagnostics directory, without starting Delve. |
 | `make debug-server` | Runs the local server in an interactive Delve terminal session. |
-| `make debug-server-dap` | Starts a loopback-only Delve DAP listener for VS Code or Neovim. |
-| `make debug-server-headless` | Starts a loopback-only Delve API v2 listener for GoLand remote attach. |
-| `make debug-test` | Debugs one selected Go test through Delve. |
-| `make profile-test` | Captures a CPU, memory, mutex, or block profile for one selected Go test. |
-| `make profile-open` | Opens the selected captured profile with the pinned `pprof` viewer. |
-| `make trace-test` | Captures an execution trace for one selected Go test. |
-| `make trace-open` | Opens the most recently captured trace with the pinned trace viewer. |
+| `make debug-server-dap` | Starts a Delve DAP listener on loopback only, for VS Code or Neovim. |
+| `make debug-server-headless` | Starts a Delve API v2 listener on loopback only, for GoLand remote attach. |
+| `make debug-test` | Debugs one chosen Go test with Delve. |
+| `make profile-test` | Captures a CPU, memory, mutex or block profile for one chosen Go test. |
+| `make profile-open` | Opens the chosen captured profile in the pinned `pprof` viewer. |
+| `make trace-test` | Captures an execution trace for one chosen Go test. |
+| `make trace-open` | Opens the most recent captured trace in the pinned trace viewer. |
 
-Select a focused test without editing a Makefile:
+Pick a single test without editing a Makefile:
 
 ```sh
 make DEBUG_MODULE=server \
@@ -172,74 +170,75 @@ make DEBUG_MODULE=server \
   debug-test
 ```
 
-Set `DEBUG_PROFILE` to `cpu`, `memory`, `mutex`, or `block` for
-`profile-test` and `profile-open`. Diagnostics are written below
-`.build/dev/diagnostics`. See [tooling and debugging](./tooling-and-debugging.mdx)
-for editor attachment and listener-safety details.
+For `profile-test` and `profile-open`, set `DEBUG_PROFILE` to `cpu`, `memory`,
+`mutex` or `block`. Diagnostics go under `.build/dev/diagnostics`. See
+[tooling and debugging](./tooling-and-debugging.mdx) for attaching an editor
+and keeping debug listeners safe.
 
-## Exercise the Three-Node Topology
+## Run three nodes
 
 | Command | What it does and changes |
 | --- | --- |
-| `make cluster-up` | Builds the runtime image and starts three application nodes, HAProxy, shared dependencies, and observability. **Effect:** runtime state. |
-| `make run-cluster` | Runs `cluster-up`, then follows gateway and application-node logs. **Effect:** runtime state. |
-| `make run-haserver` | Mattermost-compatible alias for `make run-cluster`. Prefer the Proctor name in new guidance. **Effect:** runtime state. |
-| `make cluster-down` | Stops the cluster topology without deleting its persistent data. **Effect:** runtime state. |
-| `make cluster-logs` | Follows HAProxy and application-node logs. **Effect:** read-only. |
-| `make cluster-diagnostics` | Prints bounded container state and recent cluster logs for diagnosis. **Effect:** read-only. |
-| `make cluster-smoke` | Checks readiness, metrics, peer discovery, build identity, gateway traffic, and one-node failure recovery. **Effect:** temporary runtime state. |
+| `make cluster-up` | Builds the runtime image and starts three application nodes, HAProxy, the shared dependencies and observability. **Effect:** runtime state. |
+| `make run-cluster` | Runs `cluster-up`, then follows the gateway and application-node logs. **Effect:** runtime state. |
+| `make run-haserver` | Alias for `make run-cluster`, kept for Mattermost compatibility. Use the Proctor name in new guidance. **Effect:** runtime state. |
+| `make cluster-down` | Stops the cluster without deleting its persistent data. **Effect:** runtime state. |
+| `make cluster-logs` | Follows the HAProxy and application-node logs. **Effect:** read-only. |
+| `make cluster-diagnostics` | Prints container state and a limited slice of recent cluster logs to help you diagnose a problem. **Effect:** read-only. |
+| `make cluster-smoke` | Checks readiness, metrics, peer discovery, build identity, traffic through the gateway, and recovery after one node fails. **Effect:** temporary runtime state. |
 
-The single-node and clustered workflows share the default Compose project and
-authoritative state. Do not run both at once against that default project. The
-[cluster development guide](./cluster-development.mdx) explains the topology
-and the evidence produced by the smoke test.
+The single-node and cluster workflows use the same default Compose project and
+the same stored state. Don't run both at once against that default project.
+The [cluster development guide](./cluster-development.mdx) describes the
+cluster and what the smoke test shows.
 
-## Build Packages, Archives, and Images
+## Build packages, archives and images
 
 | Command | Output and important behavior |
 | --- | --- |
-| `make package` | Produces a current-platform release directory, defaulting to `dist/proctor`. Refuses to reuse its output directory. |
-| `make package-verify` | Produces the same package and verifies executables, metadata, configuration, hosted assets, and build identity. It runs `package` first and therefore also requires a fresh output directory. |
-| `make package-linux-amd64` | Produces a Linux amd64 release directory below `dist`, cross-compiled with CGO disabled. |
-| `make package-linux-arm64` | Produces a Linux arm64 release directory below `dist`, cross-compiled with CGO disabled. |
-| `make dist` | Produces deterministic Linux amd64/arm64 archives and `SHA256SUMS`. Both architecture package directories must be absent. |
-| `make clean-dist` | Removes the repository's complete `dist` directory. **Destructive: review anything under `dist` first.** |
-| `make buildenv` | Builds the pinned Go and Node maintainer image through Docker. |
-| `make buildenv-check` | Runs `make check` inside the pinned maintainer image with the checkout mounted at `/workspace`. |
-| `make buildenv-shell` | Opens an interactive shell in the pinned maintainer image with the checkout mounted at `/workspace`. |
-| `make container` | Packages Linux binaries for the host architecture with the same recipe as `make dist`, then builds the immutable, non-root runtime image from that package with the release Dockerfile. **Effect:** generated output below `.build/container`. |
-| `make container-load` | Compatibility alias for `make container`. Prefer `make container` in new automation. |
-| `make container-scan` | Saves the `CONTAINER_ARCH` platform (the host architecture by default) of `PROCTOR_RUNTIME_IMAGE` to an archive and scans it with the repository-pinned Trivy image. Fails on any critical vulnerability and on a high vulnerability that has a fixed version; unfixed high findings are listed but allowed. **Effect:** report below `.build/container-scan` and a vulnerability-database cache below `.build/trivy-cache`; downloads the database. |
+| `make package` | Builds a release directory for the current platform, `dist/proctor` by default. Refuses to reuse an existing output directory. |
+| `make package-verify` | Builds the same package, then checks the executables, metadata, configuration, hosted assets and build identity. It runs `package` first, so it also needs an output directory that doesn't exist yet. |
+| `make package-linux-amd64` | Builds a Linux amd64 release directory under `dist`, cross-compiled with CGO turned off. |
+| `make package-linux-arm64` | Builds a Linux arm64 release directory under `dist`, cross-compiled with CGO turned off. |
+| `make dist` | Builds reproducible Linux amd64 and arm64 archives and `SHA256SUMS`. Neither architecture's package directory may exist yet. |
+| `make clean-dist` | Removes the repository's whole `dist` directory. **Destructive: check what's under `dist` first.** |
+| `make buildenv` | Builds the pinned Go and Node maintainer image with Docker. |
+| `make buildenv-check` | Runs `make check` inside the pinned maintainer image, with the checkout mounted at `/workspace`. |
+| `make buildenv-shell` | Opens an interactive shell in the pinned maintainer image, with the checkout mounted at `/workspace`. |
+| `make container` | Packages Linux binaries for the host architecture with the same recipe as `make dist`, then builds the runtime image from that package with the release Dockerfile. The image is immutable and runs as a non-root user. **Effect:** generated output under `.build/container`. |
+| `make container-load` | Alias for `make container`, kept for compatibility. Use `make container` in new automation. |
+| `make container-scan` | Saves the `CONTAINER_ARCH` platform of `PROCTOR_RUNTIME_IMAGE` (the host architecture by default) to an archive and scans it with the Trivy image pinned by the repository. It fails on any critical vulnerability, and on any high vulnerability that has a fixed version. High findings without a fix are listed but allowed. **Effect:** a report under `.build/container-scan` and a vulnerability-database cache under `.build/trivy-cache`; downloads the database. |
 
-Package outputs deliberately refuse an existing destination. This protects an
-operator-owned configuration from being silently mixed into or overwritten by
-a new build. Choose a new `PACKAGE_DIR`, or inspect and remove obsolete output
-deliberately; do not turn the refusal into an automatic cleanup step.
+The package targets refuse to write into a directory that already exists. This
+stops a new build from quietly mixing with, or overwriting, configuration that
+an operator owns. Choose a new `PACKAGE_DIR`, or look at the old output and
+remove it yourself. Don't add an automatic cleanup step to get around the
+refusal.
 
-## Why `package` Appears Twice
+## Why there are two `package` targets
 
-There are two targets named `package`, but they belong to different Make
-invocations and have different responsibilities:
+Two targets are called `package`. They belong to different Make runs and do
+different jobs:
 
-| Command | Definition and responsibility |
+| Command | Where it's defined and what it does |
 | --- | --- |
-| `make package` | Defined in `build/make/release.mk`, which the root `Makefile` includes. This is the public product workflow: it builds the hosted webapp, asks the server module to assemble the core application tree, then adds deployment support and build metadata. |
-| `make -C server package` | Defined in `server/Makefile`. This is the lower-level server assembly: it compiles the binaries and copies the already-built webapp, configuration examples, licenses, and notices into a caller-selected directory. |
+| `make package` | Defined in `build/make/release.mk`, which the root `Makefile` includes. This is the product workflow you normally use. It builds the hosted webapp, asks the server module to put together the core application tree, then adds deployment support and build metadata. |
+| `make -C server package` | Defined in `server/Makefile`. This is the lower-level server step. It compiles the binaries and copies the already-built webapp, configuration examples, licenses and notices into a directory the caller chooses. |
 
-The root recipe invokes the server recipe with `$(MAKE) -C server package`.
-Make scopes target names to the current Makefile, so these definitions do not
-override or merge with one another.
+The root recipe calls the server recipe with `$(MAKE) -C server package`. Make
+only looks up target names in the Makefile it's reading, so the two
+definitions never override or merge with each other.
 
-Use `make package` or `make package-verify` from the repository root for a
-complete product artifact. Use `make -C server package` only when developing
-the packaging implementation itself: it expects a compatible webapp build to
-already exist and it does not add the root-owned deployment support or final
-build metadata.
+Use `make package` or `make package-verify` from the repository root to build
+a complete product artifact. Use `make -C server package` only when you're
+working on the packaging code itself. It expects a matching webapp build to
+exist already, and it doesn't add the deployment support or final build
+metadata that the root target adds.
 
-## Use Module-Scoped Commands Deliberately
+## Module commands
 
-The `-C` option tells Make to change directories before reading a Makefile.
-It is part of the command's identity:
+The `-C` option tells Make to change directory before it reads a Makefile, so
+it changes which command you're running:
 
 ```sh
 make check
@@ -247,46 +246,46 @@ make -C server check
 make -C packages/cache check
 ```
 
-These commands are not interchangeable. The first verifies the product; the
-second verifies only the server module; the third verifies only the reusable
+These three commands do different things. The first checks the whole product.
+The second checks only the server module. The third checks only the shared
 cache module.
 
 ### Server
 
 | Need | Command |
 | --- | --- |
-| Complete hermetic server gate | `make -C server check` |
+| Full server check, with no outside dependencies | `make -C server check` |
 | Dependency-direction and documentation architecture checks | `make -C server architecture` |
-| Server unit tests, race tests, vet, or build | `make -C server test`, `test-race`, `vet`, or `build` |
+| Server unit tests, race tests, vet or build | `make -C server test`, `test-race`, `vet`, or `build` |
 | Rerun every server code generator (error mapping, OpenAPI artifact, typed IDs, Store layers) | `make -C server generate` |
-| Rebuild or verify the OpenAPI artifact | `make -C server openapi-build` or `openapi-check` |
-| Rebuild or verify the realtime AsyncAPI artifact | `make -C server asyncapi-build` or `asyncapi-check` |
-| Regenerate or verify the HTTP error mapping | `make -C server errors-generate` or `errors-check` |
-| Verify server translation catalogs | `make -C server i18n-check` |
-| Verify the OpenAPI artifact and route agreement | `make -C server openapi-agreement` |
-| Run all tagged server integration tests | `make -C server integration-all` |
-| Run one dependency-backed boundary | `make -C server integration-postgres`, `integration-redis`, `integration-s3`, `integration-providers`, or `integration-realtime` |
-| Install the template toolchain, then generate and verify transactional-mail templates | `make -C server mail-templates-install`, `mail-templates-generate`, `mail-templates-check`, or `mail-templates-test` |
+| Rebuild or check the OpenAPI artifact | `make -C server openapi-build` or `openapi-check` |
+| Rebuild or check the realtime AsyncAPI artifact | `make -C server asyncapi-build` or `asyncapi-check` |
+| Regenerate or check the HTTP error mapping | `make -C server errors-generate` or `errors-check` |
+| Check the server translation catalogs | `make -C server i18n-check` |
+| Check that the OpenAPI artifact and the routes agree | `make -C server openapi-agreement` |
+| Run every tagged server integration test | `make -C server integration-all` |
+| Run the tests for one real dependency | `make -C server integration-postgres`, `integration-redis`, `integration-s3`, `integration-providers`, or `integration-realtime` |
+| Install the template toolchain, then generate and check transactional-mail templates | `make -C server mail-templates-install`, `mail-templates-generate`, `mail-templates-check`, or `mail-templates-test` |
 | Render synthetic transactional-mail previews | `make -C server mail-preview OUTPUT=/absolute/output/directory` |
 
-The server Makefile also contains narrow component and phase gates used by
-maintainers and CI. Prefer the task-specific developer guide over guessing a
-target from its name.
+The server Makefile also has narrow checks for single components and phases,
+which maintainers and CI use. Follow the developer guide for your task rather
+than guessing what a target does from its name.
 
-### Reusable Modules
+### Shared modules
 
 | Module | Commands |
 | --- | --- |
-| Cache | Hermetic gate: `make -C packages/cache check`. Redis conformance: `make -C packages/cache conformance-redis`. |
-| Mail | Hermetic gate: `make -C packages/mail check`. SMTP conformance: `make -C packages/mail conformance-smtp`. |
-| VFS | Run `GOWORK=off go test -race ./...` and `GOWORK=off go vet ./...` from `packages/vfs`. The server S3 integration gate exercises the product boundary. |
+| Cache | Self-contained check: `make -C packages/cache check`. Redis conformance: `make -C packages/cache conformance-redis`. |
+| Mail | Self-contained check: `make -C packages/mail check`. SMTP conformance: `make -C packages/mail conformance-smtp`. |
+| VFS | Run `GOWORK=off go test -race ./...` and `GOWORK=off go vet ./...` from `packages/vfs`. The server's S3 integration check covers how the product uses it. |
 
-VFS intentionally has no module Makefile at present. Do not infer that a root
-target with a similar name is its replacement.
+VFS has no Makefile of its own at the moment, on purpose. A root target with a
+similar name is not a replacement for one.
 
-## Override a Value Without Editing the Build
+## Override a value without editing the build
 
-GNU Make accepts a variable assignment with the invocation:
+GNU Make accepts variable assignments on the command line:
 
 ```sh
 make PROCTOR_SERVER_PORT=18080 run-server
@@ -294,34 +293,35 @@ make PACKAGE_DIR="$PWD/dist/proctor-review" package-verify
 make VERSION=0.1.0 COMMIT="$(git rev-parse HEAD)" package
 ```
 
-Frequently used selection variables are:
+The variables you're most likely to set are:
 
 | Variable | Used for |
 | --- | --- |
-| `DEBUG_MODULE`, `DEBUG_PACKAGE`, `DEBUG_TEST` | Focused debugging, profiling, and tracing |
-| `DEBUG_PROFILE` | `cpu`, `memory`, `mutex`, or `block` profile selection |
-| `PACKAGE_DIR`, `DIST_DIR` | Package and archive destinations |
-| `VERSION`, `COMMIT`, `BUILD_TIME`, `SOURCE_DATE_EPOCH` | Artifact identity and reproducibility |
+| `DEBUG_MODULE`, `DEBUG_PACKAGE`, `DEBUG_TEST` | Debugging, profiling and tracing a single test |
+| `DEBUG_PROFILE` | Choosing a `cpu`, `memory`, `mutex` or `block` profile |
+| `PACKAGE_DIR`, `DIST_DIR` | Where packages and archives go |
+| `VERSION`, `COMMIT`, `BUILD_TIME`, `SOURCE_DATE_EPOCH` | Artifact identity and reproducible builds |
 | `PROCTOR_RUNTIME_IMAGE`, `PROCTOR_BUILDENV_IMAGE` | Local Docker image names |
-| `PROCTOR_BUILDENV_RUN_FLAGS` | Additional deliberate Docker arguments for maintainer-container runs |
+| `PROCTOR_BUILDENV_RUN_FLAGS` | Extra Docker arguments you choose to pass to maintainer-container runs |
 
-Ports, origins, service image pins, precedence, and persistent workstation
-overrides are documented in [development configuration](./development-configuration.mdx).
-Repository-owned Go and toolchain settings ignore ambient and file-based
-overrides; change them only with an explicit Make command-line assignment for
-a deliberate experiment.
+Ports, addresses, service image pins, which setting wins, and lasting
+overrides for your own machine are covered in
+[development configuration](./development-configuration.mdx). Go and
+toolchain settings that the repository owns ignore values from your
+environment and from files. Change them only with an explicit assignment on
+the Make command line, as a deliberate experiment.
 
-## Before Running an Unfamiliar Target
+## Before you run a target you don't know
 
-1. Confirm your working directory and preserve any local authored changes.
-2. Read `make help`; for a scoped target, inspect that module's Makefile or
-   owning developer guide.
-3. Check whether the command starts containers, writes generated output, or
+1. Check which directory you're in, and keep a copy of any local changes.
+2. Read `make help`. For a module target, read that module's Makefile or the
+   developer guide for that area.
+3. Find out whether the command starts containers, writes generated files or
    removes state.
-4. Supply paths and selection variables explicitly rather than editing the
-   recipe for one workstation.
-5. After a modifying command, review `git status` and the generated output
-   before continuing.
+4. Pass paths and variables on the command line instead of editing the recipe
+   for your own machine.
+5. After a command that changes files, look at `git status` and the generated
+   output before you go on.
 
-Return to the [developer guide](./index.mdx) to choose a change workflow or use
-the [testing guide](./testing.mdx) to select the correct verification gate.
+Go back to the [developer guide](./index.mdx) to choose a workflow for your
+change, or use the [testing guide](./testing.mdx) to pick the right check.

@@ -10,7 +10,7 @@ paths:
     post:
       operationId: startDesktopReauthentication
       summary: Start confirming the Desktop Session's account in the system browser
-      description: Accepts only a Desktop Session whose request carries a valid DPoP proof from its registered key; Web Sessions and Personal Access Tokens are refused. Pins the exact loopback callback, state and S256 PKCE challenge, binds the handoff to the calling Session, Desktop Registration, key and User, and returns the hosted reauthentication page. The page accepts only the authentication method the Desktop Session itself used, and the handoff lives at most five minutes.
+      description: Starts confirming, in the system browser, that the person using a Desktop Session is still its account holder. Only a Desktop Session can call this, with a valid DPoP proof from its registered key. Web Sessions and Personal Access Tokens are refused. Proctor stores the loopback callback address, state and S256 PKCE challenge, ties the request to the calling Session, Desktop Registration, key and User, and returns the hosted reauthentication page. The page accepts only the sign-in method the Desktop Session itself used. The request lasts at most five minutes.
       tags: [Authentication]
       x-proctor-auth: session_required
       x-proctor-error-codes: [request.invalid, authentication.rate_limited, authentication.rate_limit_unavailable, authentication.desktop_reauthentication.invalid, authentication.internal, authentication.required, authentication.token_invalid, authentication.credential_ambiguous, authentication.dpop.invalid, authentication.dpop.replayed, authentication.dpop.use_nonce, authentication.dpop.unavailable, authentication.csrf.invalid]
@@ -33,7 +33,7 @@ paths:
     post:
       operationId: bindDesktopReauthenticationBrowser
       summary: Exchange the one-time fragment proof for an HttpOnly reauthentication binding
-      description: Exchanges the handle, fragment-delivered browser proof and pinned state exactly once for a host-only HttpOnly cookie scoped to the Desktop reauthentication route family. No credential material reaches rendered content.
+      description: The hosted page sends the request handle, the browser proof from the page address fragment and the state. This works once. Proctor then sets a host-only HttpOnly cookie that is sent only to the Desktop reauthentication routes. The response body is empty, so the page's own scripts never see a credential.
       tags: [Authentication]
       x-proctor-auth: public
       x-proctor-error-codes: [request.invalid, authentication.desktop_reauthentication.invalid, authentication.internal]
@@ -48,7 +48,7 @@ paths:
     get:
       operationId: getDesktopReauthenticationContext
       summary: Read the hosted Desktop reauthentication context
-      description: Resolves the scoped binding cookie and returns the Desktop Session's account display name, the one authentication method it accepts (a password, or the Desktop Session's own identity provider) and the handoff expiry. An existing browser Web Session is never offered as proof.
+      description: Uses the browser's reauthentication cookie to return the Desktop Session account's display name, the one sign-in method this request accepts and when the request expires. The method is either a password or the Desktop Session's own identity provider. A Web Session already open in the browser is never accepted as proof.
       tags: [Authentication]
       x-proctor-auth: public
       x-proctor-error-codes: [authentication.desktop_reauthentication.invalid, authentication.internal, authentication.credential_ambiguous]
@@ -63,7 +63,7 @@ paths:
     post:
       operationId: authenticateDesktopReauthenticationWithPassword
       summary: Prove the Desktop Session account's password
-      description: Checks the password of the Desktop Session's own User for a password Session only. It takes no login identifier, asks for no second factor, creates no Web Session and does not yet refresh the Desktop Session; the Desktop redeems the proof through the complete operation.
+      description: Checks the password of the Desktop Session's own User. It works only when the Desktop Session was signed in with a password. It takes no username, asks for no second factor and creates no Web Session. It also does not yet update the Desktop Session. The Desktop does that later by calling the complete operation.
       tags: [Authentication]
       x-proctor-auth: public
       x-proctor-error-codes: [request.invalid, authentication.desktop_reauthentication.invalid, authentication.reauthentication_method_required, authentication.desktop_reauthentication.denied, authentication.credentials_invalid, authentication.rate_limited, authentication.rate_limit_unavailable, authentication.internal, authentication.credential_ambiguous, audit.unavailable, service.busy]
@@ -83,14 +83,14 @@ paths:
     get:
       operationId: beginDesktopReauthenticationExternalAuthentication
       summary: Begin fresh provider authentication for this Desktop reauthentication
-      description: Accepts only the Desktop Session's own identity provider, asks it for fresh authentication, and returns to the hosted reauthentication page. The provider must prove the Desktop Session's own linked identity; proof of any other account denies the handoff and is audited. No User is provisioned and no Session is created.
+      description: Accepts only the Desktop Session's own identity provider. Proctor asks the provider for a new sign-in and then returns to the hosted reauthentication page. The provider must confirm the same linked identity the Desktop Session uses. If it confirms any other account, the request is denied and the denial is recorded in the audit log. No User is created and no Session is created.
       tags: [Authentication]
       parameters:
         - $ref: '#/components/parameters/ProviderID'
         - name: state
           in: query
           required: true
-          description: The exact opaque state pinned by the Desktop when it started this reauthentication.
+          description: The state value the Desktop sent when it started this reauthentication, passed through unchanged.
           schema: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
       x-proctor-auth: public
       x-proctor-error-codes: [request.invalid, authentication.desktop_reauthentication.invalid, authentication.reauthentication_method_required, authentication.internal, authentication.external.provider_not_found, authentication.external.request.invalid, authentication.external.unavailable, authentication.external.account_not_linked, authentication.external.rejected, authentication.desktop_authorization.invalid, authentication.token_invalid, authentication.rate_limited, authentication.rate_limit_unavailable, authentication.credential_ambiguous]
@@ -111,7 +111,7 @@ paths:
     post:
       operationId: approveDesktopReauthentication
       summary: Hand the confirmed proof back to Proctor Desktop
-      description: Requires the browser binding, the exact pinned state, a proved reauthentication and a still-live Desktop Session, then issues one single-use code that expires within a minute and returns the loopback redirect carrying only that code and the state.
+      description: Needs the browser's reauthentication cookie, the same state the Desktop sent, a successful proof and a Desktop Session that is still active. Proctor then issues one single-use code that expires within a minute. It returns the loopback address to send the browser to, which carries only that code and the state.
       tags: [Authentication]
       x-proctor-auth: public
       x-proctor-error-codes: [request.invalid, authentication.desktop_reauthentication.invalid, authentication.internal, authentication.credential_ambiguous]
@@ -127,7 +127,7 @@ paths:
     post:
       operationId: cancelDesktopReauthentication
       summary: Terminally cancel the browser-bound Desktop reauthentication
-      description: Validates the binding cookie and exact pinned state before terminally canceling the reauthentication and destroying every remaining browser proof.
+      description: Checks the browser's reauthentication cookie and the state, then cancels the reauthentication for good. Every remaining browser proof for it stops working.
       tags: [Authentication]
       x-proctor-auth: public
       x-proctor-error-codes: [request.invalid, authentication.desktop_reauthentication.invalid, authentication.internal, authentication.credential_ambiguous]
@@ -143,7 +143,7 @@ paths:
     post:
       operationId: completeDesktopReauthentication
       summary: Redeem the reauthentication code as recent authentication
-      description: Requires DPoP from the same Desktop Session and registered key that started the handoff. Verifies the S256 verifier, the pinned state, the code lifetime and single use, rechecks the proof and the live Session, then records fresh primary proof on that existing Session together with its audit. No Session is created and the Desktop Registration is unchanged; existing access credentials stay valid.
+      description: The Desktop redeems the code. The request must carry a DPoP proof from the same Desktop Session and registered key that started the reauthentication. Proctor checks the PKCE verifier, the state, that the code has not expired and has not been used, and checks the proof and the Session again. It then records the new proof time on that Session and saves the audit record with it. No Session is created, the Desktop Registration stays the same and the current access credentials keep working.
       tags: [Authentication]
       x-proctor-auth: session_required
       x-proctor-error-codes: [request.invalid, authentication.rate_limited, authentication.rate_limit_unavailable, authentication.desktop_reauthentication.invalid, authentication.credentials_invalid, authentication.internal, audit.unavailable, authentication.required, authentication.token_invalid, authentication.credential_ambiguous, authentication.dpop.invalid, authentication.dpop.replayed, authentication.dpop.use_nonce, authentication.dpop.unavailable, authentication.csrf.invalid]
@@ -165,46 +165,46 @@ paths:
 components:
   requestBodies:
     DesktopReauthenticationStart:
-      description: Exact loopback callback, state and S256 PKCE challenge to pin to the new reauthentication.
+      description: The loopback callback address, state and S256 PKCE challenge for the new reauthentication.
       required: true
       content:
         application/json:
           schema: {$ref: '#/components/schemas/DesktopReauthenticationStartRequest'}
           example:
-            callback_url: http://127.0.0.1:49152/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-            state: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-            code_challenge: CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+            callback_url: http://127.0.0.1:53108/Wm7xQ2cVb9LtRk4nYz6HdPs1FgJ8aEoU3iTkBvN5wQe
+            state: Rk2pV8mXc5LwTq9bNz3YhDs7FgJ1aEoU6iTkBvM4xWe
+            code_challenge: 47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU
     DesktopReauthenticationPassword:
-      description: The password of the Desktop Session's own account; there is no login identifier to choose.
+      description: The password of the Desktop Session's own account. There is no username to choose.
       required: true
       content:
         application/json:
           schema: {$ref: '#/components/schemas/DesktopReauthenticationPasswordRequest'}
           example:
-            password: synthetic-local-password
+            password: correct-horse-battery-staple-2026
     DesktopReauthenticationComplete:
-      description: The one-use code from the loopback redirect, the S256 verifier and the pinned state.
+      description: The one-time code from the loopback callback, the PKCE verifier and the state.
       required: true
       content:
         application/json:
           schema: {$ref: '#/components/schemas/DesktopReauthenticationCompleteRequest'}
           example:
-            code: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-            code_verifier: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-            state: CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+            code: Nc4wT7qXb1MvRk8zYh2HdPs5FgJ9aEoU6iTkBvL3xQe
+            code_verifier: M25iVXpKU3puUjFaYWg3T1NDTDQtcW1ROUY5YXlwalNoc0hhakxifmZHag
+            state: Rk2pV8mXc5LwTq9bNz3YhDs7FgJ1aEoU6iTkBvM4xWe
   responses:
     DesktopReauthenticationStarted:
-      description: Desktop reauthentication handoff created
+      description: The Desktop reauthentication request was created
       headers:
         Cache-Control: {$ref: '#/components/headers/NoStore'}
       content:
         application/json:
           schema: {$ref: '#/components/schemas/DesktopAuthorizationStartResponse'}
           example:
-            authorization_url: https://proctor.example.edu/reauthenticate/desktop?request=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&state=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB#proof=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+            authorization_url: 'https://proctor.example.edu/reauthenticate/desktop?request=Hs6nW1cQx8LmRv3tKb5YpZd9FgJ4aEoU2iTkBvM7xNe&state=Rk2pV8mXc5LwTq9bNz3YhDs7FgJ1aEoU6iTkBvM4xWe#proof=Ty9mK5wQz2LxRb7cNh1YdPs3FgJ6aEoU8iTkBvM4xWq'
             expires_at: '2026-08-01T09:05:00Z'
     DesktopReauthenticationContextOK:
-      description: Safe current hosted Desktop reauthentication context
+      description: What the hosted page needs to show for the current Desktop reauthentication
       headers:
         Cache-Control: {$ref: '#/components/headers/NoStore'}
       content:
@@ -215,8 +215,8 @@ components:
             display_name: Ada Candidate
             authentication_method: external
             provider:
-              id: campus
-              display_name: Campus sign-in
+              id: campus-sso
+              display_name: Campus single sign-on
               type: oidc
             expires_at: '2026-08-01T09:05:00Z'
     DesktopReauthenticationCompleted:
@@ -238,40 +238,40 @@ components:
           type: string
           format: uri
           maxLength: 1024
-          description: Exact HTTP loopback URL using 127.0.0.1 or [::1], a decimal port from 49152 through 65535, and one random token path, validated like Desktop Authorization.
-        state: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
-        code_challenge: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+          description: The Desktop's loopback callback address, checked by the same rules as Desktop authorization. It must use http, the host 127.0.0.1 or [::1], a port from 49152 through 65535, and a path made of one random token of 43 URL-safe base64 characters.
+        state: {description: "A random value the Desktop makes for this reauthentication: 32 random bytes as 43 URL-safe base64 characters. The hosted page and the complete call must send the same value back.", type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        code_challenge: {description: "The PKCE S256 challenge: the URL-safe base64 SHA-256 hash of the code_verifier the Desktop will send to the complete call, without padding.", type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
     DesktopReauthenticationPasswordRequest:
       type: object
       additionalProperties: false
       required: [password]
       properties:
-        password: {type: string, format: password, maxLength: 1024}
+        password: {description: "The local password of the Desktop Session's account. Treat it as a secret and keep it out of traces and logs.", type: string, format: password, maxLength: 1024}
     DesktopReauthenticationCompleteRequest:
       type: object
       additionalProperties: false
       required: [code, code_verifier, state]
       properties:
-        code: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
-        code_verifier: {type: string, minLength: 43, maxLength: 128, pattern: '^[A-Za-z0-9._~-]+$'}
-        state: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        code: {description: "The one-time code from the code query parameter Proctor added to the loopback callback address.", type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        code_verifier: {description: "The PKCE verifier whose S256 hash the Desktop sent as code_challenge.", type: string, minLength: 43, maxLength: 128, pattern: '^[A-Za-z0-9._~-]+$'}
+        state: {description: "The state value the Desktop sent when it started this reauthentication.", type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
     DesktopReauthenticationContextResponse:
       type: object
       additionalProperties: false
       required: [state, display_name, authentication_method, expires_at]
       properties:
-        state: {type: string, enum: [bound, authenticated]}
+        state: {description: "Where the reauthentication stands. bound means this browser holds the request but has not proved the account yet. authenticated means the proof succeeded and the request is waiting for approval.", type: string, enum: [bound, authenticated]}
         display_name:
           type: string
           description: The Desktop Session account's display name, so the person can see whose sign-in they are confirming.
         authentication_method:
           type: string
           enum: [password, external]
-          description: The one proof this reauthentication accepts, which is the Desktop Session's own method.
+          description: The one sign-in method this reauthentication accepts. It is always the method the Desktop Session itself used.
         provider:
           $ref: '#/components/schemas/ExternalAuthenticationProviderResponse'
-          description: The Desktop Session's own identity provider; present only for the external method.
-        expires_at: {type: string, format: date-time}
+          description: The Desktop Session's own identity provider. Present only when authentication_method is external.
+        expires_at: {description: "When this reauthentication request expires. It lasts at most five minutes.", type: string, format: date-time}
     DesktopReauthenticationCompleteResponse:
       type: object
       additionalProperties: false
@@ -280,4 +280,4 @@ components:
         recently_authenticated_until:
           type: string
           format: date-time
-          description: The instant after which recent-authentication operations again require reauthentication.
+          description: Until this time, actions that need a recent sign-in are allowed. After it, they ask for reauthentication again.

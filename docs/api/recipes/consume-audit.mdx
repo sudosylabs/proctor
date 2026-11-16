@@ -1,6 +1,6 @@
 ---
-title: Consume Audit History
-description: Page through authorized Proctor audit history without treating it as an unbounded event export.
+title: Read audit history
+description: Page through the Proctor audit history you're allowed to see, without treating it as an unlimited event export.
 audience: api-consumer
 maturity: preview
 sidebar_position: 8
@@ -8,22 +8,23 @@ sidebar_position: 8
 
 import Link from '@docusaurus/Link';
 
-# Consume Audit History
+# Read audit history
 
-<Link to="/api/reference/list-audit-events">List audit events</Link> returns only the history
-the current principal may view for the requested Institution or Academic Unit
-scope. Authentication never bypasses that resource authorization.
+<Link to="/api/reference/list-audit-events">List audit events</Link> returns
+only the history the current principal may see for the Institution or
+Academic Unit scope you ask for. Being authenticated never skips that check.
 
 Institution `audit.view` and scoped `academic_audit.view` are different
-authorities. The academic form is restricted to the caller's authorized Unit
-or Class subtree and the closed academic action catalog. It does not expose
-unrelated identity, provider, credential, or security history.
+permissions. The academic one covers only the caller's authorized Unit or
+Class subtree and a fixed list of academic actions. It doesn't show unrelated
+identity, provider, credential or security history.
 
-## Page Incrementally
+## Page through the results
 
-Choose a stable authorized filter set, request a bounded page, and
-follow `next_cursor` unchanged until it is absent. The audit response calls its
-array `events`; it is always present even when empty.
+Choose a fixed set of filters you're authorized for, ask for one page of
+limited size, and pass `next_cursor` back unchanged until it no longer
+appears. The response calls its array `events`. It is always present, even
+when empty.
 
 ```bash
 curl --get \
@@ -35,25 +36,26 @@ curl --get \
   --data-urlencode 'cursor=<next-cursor-if-present>'
 ```
 
-Check the endpoint reference for the current filters and their combinations.
-Changing a scope or filter invalidates the traversal; begin again without the
-old cursor.
+The endpoint reference lists the current filters and how you can combine
+them. If you change the scope or a filter, the old cursor no longer applies.
+Start again without it.
 
-## Interpret an Event
+## Read an event
 
-Use `action`, `resource`, and `status` as the durable audit facts. `request_id`
-can correlate a permitted operational trace. Optional actor, session, client,
-network, node, and error fields may be absent based on the event and caller's
-authorized projection.
+Rely on `action`, `resource` and `status` as the lasting facts of the event.
+`request_id` can link the event to an operational trace you're allowed to see.
+The actor, session, client, network, node and error fields are optional. They
+may be missing depending on the event and on what the caller is allowed to
+see.
 
-Audit history is not a stream of secret request payloads. Do not expect or
-attempt to reconstruct credentials, exam answers, protected content, or unsafe
-free-form fields from it. Make downstream ingestion idempotent by audit event
-ID and preserve the server's event timestamps and stable status rather than
-substituting collection time.
+Audit history doesn't contain secret request payloads. Don't expect to find,
+or try to rebuild, credentials, exam answers, protected content or unsafe
+free-text fields from it. Make your ingestion idempotent by audit event ID.
+Keep the server's event timestamps and status values, rather than replacing
+them with the time you collected the event.
 
-An `attempt` records the start of a security-sensitive mutation. `success` and
-`fail` are terminal mutation outcomes; `allow` and `deny` are authorization
-decisions. If operational logs suggest success but a required terminal audit
-record could not be completed, do not manufacture the missing event in a
-downstream system—escalate it for operator reconciliation.
+An `attempt` records the start of a security-sensitive change. `success` and
+`fail` are the final outcomes of a change. `allow` and `deny` are
+authorization decisions. If operational logs suggest a change succeeded but the
+required final audit record couldn't be completed, don't create the missing event in a
+downstream system. Escalate it to an operator to reconcile.

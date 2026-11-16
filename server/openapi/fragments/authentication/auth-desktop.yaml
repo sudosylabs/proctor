@@ -10,7 +10,7 @@ paths:
     post:
       operationId: startDesktopAuthorization
       summary: Create a purpose-bound Desktop browser authorization transaction
-      description: Starts the current protocol-1 system-browser handoff and pins its exact loopback callback, state, S256 PKCE challenge, and bounded device presentation. Authentication is selected only inside the hosted journey.
+      description: Starts a Desktop sign-in that finishes in the system browser, using version 1 of the handoff. Proctor stores the loopback callback address, state, S256 PKCE challenge, public key, build details and device details for this request, and none of them can change later. The Desktop then opens the returned authorization page in the browser, where the person chooses how to sign in. The request must pass the Desktop compatibility policy, and the Access Policy must allow at least one way to sign in.
       tags: [Authentication]
       x-proctor-auth: public
       x-proctor-error-codes: [request.invalid, authentication.rate_limited, authentication.rate_limit_unavailable, authentication.desktop_authorization.invalid, authentication.desktop_authorization.disabled, authentication.desktop_authorization.unavailable, authentication.desktop_authorization.incompatible, authentication.dpop.unavailable]
@@ -30,7 +30,7 @@ paths:
     post:
       operationId: bindDesktopAuthorizationBrowser
       summary: Exchange the one-time fragment proof for an HttpOnly browser binding
-      description: Exchanges the handle, fragment-delivered browser proof, and pinned state exactly once for a host-only HttpOnly binding cookie, then returns no credential material to rendered content.
+      description: The hosted page sends the request handle, the browser proof from the page address fragment and the state. This works once. Proctor then sets a host-only HttpOnly cookie that ties this browser to the request. The response body is empty, so the page's own scripts never see a credential.
       tags: [Authentication]
       x-proctor-auth: public
       x-proctor-error-codes: [request.invalid, authentication.desktop_authorization.invalid, authentication.desktop_authorization.rejected, authentication.desktop_authorization.unavailable]
@@ -48,7 +48,7 @@ paths:
     get:
       operationId: getDesktopAuthorizationContext
       summary: Read the safe current hosted-journey context
-      description: Resolves the scoped binding cookie and returns only the safe device, request time, authentication-choice, expiry, and confirmed-account presentation needed by the current hosted page. The account, including its own email address, appears only after this browser has authenticated as that account for the transaction.
+      description: Uses the browser's authorization cookie to return what the hosted page needs to show. That is the device name, when the request started, the allowed sign-in methods, when it expires and, once known, the account. The account and its email address appear only after this browser has signed in as that account for this request.
       tags: [Authentication]
       x-proctor-auth: public
       x-proctor-error-codes: [authentication.desktop_authorization.invalid, authentication.desktop_authorization.rejected, authentication.desktop_authorization.unavailable, authentication.credential_ambiguous]
@@ -65,7 +65,7 @@ paths:
     post:
       operationId: authenticateDesktopAuthorizationWithSession
       summary: Bind the current Web Session identity without approving the Desktop
-      description: Uses the current interactive Web Session only as account proof for the browser-bound Desktop transaction; it neither approves the request nor issues another Session.
+      description: Uses the browser's current Web Session to show which account is signing in for this Desktop request. It does not approve the request and does not create another Session.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -95,7 +95,7 @@ paths:
     post:
       operationId: authenticateDesktopAuthorizationWithPassword
       summary: Prove a local account for only this Desktop transaction
-      description: Validates local credentials and any required MFA code only for the browser-bound Desktop transaction, without creating a Web Session or approving the Desktop request.
+      description: Checks a local username or email address and password, plus a two-step verification code when the account needs one, for this Desktop request only. It does not create a Web Session and does not approve the request.
       tags: [Authentication]
       x-proctor-auth: public
       x-proctor-error-codes: [authentication.mfa.enrollment_required, request.invalid, authentication.desktop_authorization.invalid, authentication.desktop_authorization.rejected, authentication.desktop_authorization.unavailable, authentication.desktop_authorization.account_session_locked, service.busy, authentication.credentials_invalid, authentication.mfa.required, authentication.mfa.code_invalid, authentication.mfa.unavailable, authentication.rate_limited, authentication.rate_limit_unavailable, authentication.credential_ambiguous]
@@ -114,14 +114,14 @@ paths:
     get:
       operationId: beginDesktopAuthorizationExternalAuthentication
       summary: Begin provider authentication bound to this Desktop transaction
-      description: Creates a purpose-bound external-provider state for the exact browser-bound Desktop transaction and redirects without creating an ordinary Web login transaction.
+      description: Starts a sign-in with an external provider that can only finish this Desktop request, then redirects the browser to the provider. It does not start an ordinary Web sign-in.
       tags: [Authentication]
       parameters:
         - $ref: '#/components/parameters/ProviderID'
         - name: state
           in: query
           required: true
-          description: The exact opaque state pinned by the Desktop when it created this transaction.
+          description: The state value the Desktop sent when it started this request, passed through unchanged.
           schema: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
       x-proctor-auth: public
       x-proctor-error-codes: [request.invalid, authentication.desktop_authorization.invalid, authentication.desktop_authorization.rejected, authentication.desktop_authorization.unavailable, authentication.external.provider_not_found, authentication.external.request.invalid, authentication.external.unavailable, authentication.rate_limited, authentication.rate_limit_unavailable, authentication.credential_ambiguous, authentication.external.account_not_linked, authentication.external.rejected, authentication.token_invalid]
@@ -142,7 +142,7 @@ paths:
     post:
       operationId: resetDesktopAuthorizationAccount
       summary: Return the same hosted transaction to account selection
-      description: Removes only the authenticated-account proof from the browser-bound transaction so the same tab can select another method without changing the pinned Desktop request.
+      description: Forgets which account signed in for this request, so the same browser tab can sign in another way. The Desktop's request details stay as they were.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -166,7 +166,7 @@ paths:
     post:
       operationId: approveDesktopAuthorization
       summary: Explicitly approve the authenticated Desktop transaction
-      description: Requires the browser-bound transaction's confirmed account and exact pinned state, then issues one short-lived loopback code without exposing Session credentials to the browser.
+      description: Approves the request after an account has signed in for it. The state must match the one the Desktop sent. Proctor issues one short-lived code and returns the loopback address that hands it to the Desktop. The browser never sees Session credentials. The response also clears the browser's authorization cookie, and the approval is recorded in the audit log.
       tags: [Authentication]
       x-proctor-auth: public
       x-proctor-error-codes: [request.invalid, authentication.desktop_authorization.invalid, authentication.desktop_authorization.rejected, authentication.desktop_authorization.unavailable, audit.unavailable, authentication.credential_ambiguous]
@@ -184,7 +184,7 @@ paths:
     post:
       operationId: cancelDesktopAuthorization
       summary: Terminally cancel the browser-bound Desktop transaction
-      description: Validates the binding cookie and exact pinned state before terminally canceling the transaction and destroying every remaining browser and code proof.
+      description: Checks the browser's authorization cookie and the state, then cancels the request for good. Every remaining browser proof and code for it stops working, and the response clears the cookie.
       tags: [Authentication]
       x-proctor-auth: public
       x-proctor-error-codes: [request.invalid, authentication.desktop_authorization.invalid, authentication.desktop_authorization.rejected, authentication.desktop_authorization.unavailable, authentication.credential_ambiguous]
@@ -202,7 +202,7 @@ paths:
     post:
       operationId: exchangeDesktopAuthorizationCode
       summary: Exchange one Desktop code and S256 verifier for a Desktop Session
-      description: Atomically consumes the code only when state and PKCE match and no active Attempt currently owns the account Session lock.
+      description: The Desktop trades the one-time code for a Desktop Session. The code is used up in a single step, and only when the state matches, the code_verifier matches the earlier code_challenge, and no active Attempt is holding the account's Session lock. The public key and build details must match the ones sent at the start, and the DPoP header must carry a proof signed by that key. The response returns DPoP-bound tokens in the body.
       tags: [Authentication]
       parameters:
         - $ref: '#/components/parameters/DPoPProof'
@@ -225,110 +225,161 @@ components:
       name: DPoP
       in: header
       required: true
-      description: A fresh RFC 9449 ES256 proof JWT made by the public JWK bound to this authorization.
+      description: A new RFC 9449 DPoP proof, as an ES256-signed JWT, made with the private key of the public_jwk sent for this authorization.
       schema: {type: string, maxLength: 8192}
   requestBodies:
     DesktopAuthorizationStart:
-      description: Exact loopback, PKCE, public-key, device, and verified Desktop build declarations to pin to the new transaction.
+      description: The loopback callback address, PKCE challenge, public key, device details and Desktop build details for the new request.
       required: true
       content:
         application/json:
           schema: {$ref: '#/components/schemas/DesktopAuthorizationStartRequest'}
           example:
-            callback_url: http://127.0.0.1:49152/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-            state: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-            code_challenge: CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
-            device_id: exam-laptop
+            callback_url: http://127.0.0.1:51742/Tq8wKx2vNb5mRz7cYh4dPs1fLgJ9aEoU6iVkBtM3xWe
+            state: Jd3kQ9vLr2XwT7bNc5ZpYh8sMfA1gUeK0oRiVtEyWqC
+            code_challenge: E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
+            device_id: lab-3-workstation-12
             device_name: Exam laptop
             public_jwk:
               kty: EC
               crv: P-256
-              x: DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-              y: EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-            desktop_release: 1.0.0
-            desktop_build_id: darwin-arm64-1.0.0
+              x: f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU
+              y: x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0
+            desktop_release: 1.4.0
+            desktop_build_id: darwin-arm64-1.4.0
             platform: darwin
             architecture: arm64
             realtime_protocol: 1
     DesktopAuthorizationProof:
-      description: One-use handle, fragment proof, and pinned state presented by the hosted browser before it stores a scoped binding cookie.
+      description: The one-time request handle, the browser proof from the page address fragment and the state. The hosted page sends them before Proctor sets the authorization cookie.
       required: true
       content:
         application/json:
           schema: {$ref: '#/components/schemas/DesktopAuthorizationProofRequest'}
           example:
-            handle: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-            browser_proof: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-            state: CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+            handle: Pn4sW7cQx1LmRv9tKb3YhZd6FgJ2aEoU8iTkBvM5xNe
+            browser_proof: Vb8mK3wQz6LxRt1cNh5YdPs9FgJ4aEoU2iTkBvM7xWq
+            state: Jd3kQ9vLr2XwT7bNc5ZpYh8sMfA1gUeK0oRiVtEyWqC
     DesktopAuthorizationState:
-      description: Exact opaque state already pinned to the browser-bound Desktop transaction.
+      description: The state value the Desktop sent when it started this request.
       required: true
       content:
         application/json:
           schema: {$ref: '#/components/schemas/DesktopAuthorizationStateRequest'}
           example:
-            state: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+            state: Jd3kQ9vLr2XwT7bNc5ZpYh8sMfA1gUeK0oRiVtEyWqC
     DesktopAuthorizationLocalAuthentication:
-      description: Local account proof scoped to the bound Desktop transaction; an MFA code is supplied only after the server requires it.
+      description: The local account's username or email address and password, for this Desktop request only. Add the two-step verification code once the server asks for it.
       required: true
       content:
         application/json:
           schema: {$ref: '#/components/schemas/DesktopAuthorizationLocalAuthenticationRequest'}
           example:
             login_id: candidate@example.edu
-            password: synthetic-local-password
+            password: correct-horse-battery-staple-2026
             mfa_code: "123456"
     DesktopAuthorizationExchange:
-      description: One-use code, pinned state, S256 verifier, identical public key, and exact verified Desktop build declarations for Session issuance.
+      description: The one-time code, the state, the PKCE verifier, and the same public key and Desktop build details that were sent at the start.
       required: true
       content:
         application/json:
           schema: {$ref: '#/components/schemas/DesktopAuthorizationExchangeRequest'}
           example:
-            code: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-            state: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-            code_verifier: CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+            code: Lx5nT8qWc2MvRk7bYz1HdPs4FgJ6aEoU9iTkBvN3wQe
+            state: Jd3kQ9vLr2XwT7bNc5ZpYh8sMfA1gUeK0oRiVtEyWqC
+            code_verifier: dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk
             public_jwk:
               kty: EC
               crv: P-256
-              x: DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-              y: EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-            desktop_release: 1.0.0
-            desktop_build_id: darwin-arm64-1.0.0
+              x: f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU
+              y: x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0
+            desktop_release: 1.4.0
+            desktop_build_id: darwin-arm64-1.4.0
             platform: darwin
             architecture: arm64
             realtime_protocol: 1
   responses:
     DesktopAuthorizationStarted:
-      description: Desktop browser authorization transaction created
+      description: The Desktop authorization request was created. The DPoP-Nonce header carries the nonce the Desktop's first DPoP proof must use.
       headers:
         Cache-Control: {$ref: '#/components/headers/NoStore'}
         DPoP-Nonce: {$ref: '#/components/headers/DPoPNonce'}
       content:
         application/json:
           schema: {$ref: '#/components/schemas/DesktopAuthorizationStartResponse'}
+          example:
+            authorization_url: 'https://proctor.example.edu/authorize/desktop?request=Pn4sW7cQx1LmRv9tKb3YhZd6FgJ2aEoU8iTkBvM5xNe&state=Jd3kQ9vLr2XwT7bNc5ZpYh8sMfA1gUeK0oRiVtEyWqC#proof=Vb8mK3wQz6LxRt1cNh5YdPs9FgJ4aEoU2iTkBvM7xWq'
+            expires_at: '2026-08-01T08:05:00Z'
     DesktopAuthenticationOK:
-      description: DPoP-bound Desktop Session created
+      description: The Desktop Session was created. Its tokens are bound to the Desktop's key and must be sent with DPoP proofs.
       headers:
         Cache-Control: {$ref: '#/components/headers/NoStore'}
         DPoP-Nonce: {$ref: '#/components/headers/DPoPNonce'}
       content:
         application/json:
           schema: {$ref: '#/components/schemas/AuthenticationResponse'}
+          example:
+            session:
+              id: g63dcrphk8idgyjgzbrpajosz6
+              created_at: '2026-08-01T08:00:41Z'
+              updated_at: '2026-08-01T08:00:41Z'
+              user_id: wj3drgzdpnf54rxf5d8qd3dqne
+              client_type: desktop
+              desktop_registration_id: ih1r84kij94nrwis97rft6rduh
+              desktop_release: 1.4.0
+              desktop_build_id: darwin-arm64-1.4.0
+              desktop_platform: darwin
+              desktop_architecture: arm64
+              desktop_realtime_protocol: 1
+              device_id: lab-3-workstation-12
+              device_name: Exam laptop
+              authentication_method: password
+              authentication_strength: multi_factor
+              mfa_recovery_required: false
+              mfa_enrollment_required: false
+              authenticated_at: '2026-08-01T08:00:30Z'
+              mfa_completed_at: '2026-08-01T08:00:30Z'
+              last_activity_at: '2026-08-01T08:00:41Z'
+              idle_expires_at: '2026-08-08T08:00:41Z'
+              expires_at: '2026-08-31T08:00:41Z'
+            tokens:
+              token_type: DPoP
+              access_token: Hq2vR8kLm4XwT9bNc5ZpYd7sMfA3gUeK1oJiVtEyWqB
+              refresh_token: Zr6nP1cVx8LmQ4tKw2YbHs9dFgJ5aEoU3iTkBvM7xNe
+              access_expires_at: '2026-08-01T08:15:41Z'
+              refresh_expires_at: '2026-08-31T08:00:41Z'
     DesktopAuthorizationContextOK:
-      description: Safe current hosted Desktop authorization context
+      description: What the hosted page needs to show for the current Desktop authorization request
       headers:
         Cache-Control: {$ref: '#/components/headers/NoStore'}
       content:
         application/json:
           schema: {$ref: '#/components/schemas/DesktopAuthorizationContextResponse'}
+          example:
+            state: authenticated
+            account:
+              id: kq8rw3xhm1nzop5tdy9cbe6uaf
+              username: student.one
+              display_name: Ada Okafor
+              email: student.one@example.edu
+            local_login_enabled: true
+            external_providers:
+              - id: campus-sso
+                display_name: Campus single sign-on
+                type: oidc
+            device_name: Exam laptop
+            requested_at: '2026-08-01T08:00:00Z'
+            expires_at: '2026-08-01T08:05:00Z'
     DesktopAuthorizationApproved:
-      description: One-use Desktop code issued
+      description: The one-time Desktop code was issued
       headers:
         Cache-Control: {$ref: '#/components/headers/NoStore'}
       content:
         application/json:
           schema: {$ref: '#/components/schemas/DesktopAuthorizationApprovalResponse'}
+          example:
+            redirect_url: 'http://127.0.0.1:51742/Tq8wKx2vNb5mRz7cYh4dPs1fLgJ9aEoU6iVkBtM3xWe?code=Lx5nT8qWc2MvRk7bYz1HdPs4FgJ6aEoU9iTkBvN3wQe&state=Jd3kQ9vLr2XwT7bNc5ZpYh8sMfA1gUeK0oRiVtEyWqC'
+            expires_at: '2026-08-01T08:01:30Z'
   schemas:
     DesktopAuthorizationStartRequest:
       type: object
@@ -339,77 +390,77 @@ components:
           type: string
           format: uri
           maxLength: 1024
-          description: Exact HTTP loopback URL using 127.0.0.1 or [::1], a decimal port from 49152 through 65535, and one random token path. Leading zeroes in a valid port are preserved. No query, fragment, or user information is accepted.
-        state: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
-        code_challenge: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
-        device_id: {type: string, maxLength: 128}
-        device_name: {type: string, maxLength: 128}
-        public_jwk: {$ref: '#/components/schemas/DesktopPublicJWK'}
-        desktop_release: {type: string, maxLength: 64}
-        desktop_build_id: {type: string, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*$'}
-        platform: {type: string, enum: [darwin, win32, linux]}
-        architecture: {type: string, enum: [arm64, x64]}
-        realtime_protocol: {type: integer, minimum: 1}
+          description: The Desktop's loopback callback address. It must use http, the host 127.0.0.1 or [::1], a port from 49152 through 65535, and a path made of one random token of 43 URL-safe base64 characters. A query, fragment or user name is not allowed. Leading zeroes in a valid port are kept as sent.
+        state: {description: "A random value the Desktop makes for this sign-in: 32 random bytes as 43 URL-safe base64 characters. The hosted page and the code exchange must send the same value back.", type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        code_challenge: {description: "The PKCE S256 challenge: the URL-safe base64 SHA-256 hash of the code_verifier the Desktop will send to the token exchange, without padding.", type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        device_id: {description: "An identifier the Desktop chooses for its device, up to 128 bytes. It is recorded on the new Session.", type: string, maxLength: 128}
+        device_name: {description: "A readable device name, up to 128 characters. The hosted page shows it so the person can recognize the request, and Session management shows it later.", type: string, maxLength: 128}
+        public_jwk: {description: "The public half of the P-256 key the Desktop will sign its DPoP proofs with. The token exchange must send the same key.", $ref: '#/components/schemas/DesktopPublicJWK'}
+        desktop_release: {description: "The Desktop release version, such as 1.4.0. Proctor checks it against the Desktop compatibility policy.", type: string, maxLength: 64}
+        desktop_build_id: {description: "The identifier of the exact Desktop build. Proctor checks it against the Desktop compatibility policy.", type: string, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*$'}
+        platform: {description: "The operating system the Desktop runs on.", type: string, enum: [darwin, win32, linux]}
+        architecture: {description: "The processor architecture the Desktop was built for.", type: string, enum: [arm64, x64]}
+        realtime_protocol: {description: "The realtime protocol version the Desktop speaks. Proctor checks it against the Desktop compatibility policy.", type: integer, minimum: 1}
     DesktopAuthorizationProofRequest:
       type: object
       additionalProperties: false
       required: [handle, browser_proof, state]
       properties:
-        handle: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
-        browser_proof: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
-        state: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        handle: {description: "The one-time request handle from the request query parameter of the authorization page address.", type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        browser_proof: {description: "The one-time browser proof from the proof value in the authorization page address fragment.", type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        state: {description: "The state value from the authorization page address. It must match the state the Desktop sent when it started.", type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
     DesktopAuthorizationStateRequest:
       type: object
       additionalProperties: false
       required: [state]
       properties:
-        state: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        state: {description: "The state value the Desktop sent when it started this authorization.", type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
     DesktopAuthorizationLocalAuthenticationRequest:
       type: object
       additionalProperties: false
       required: [login_id, password]
       properties:
-        login_id: {type: string, maxLength: 254}
-        password: {type: string, format: password, maxLength: 1024}
-        mfa_code: {type: string, maxLength: 128}
+        login_id: {description: "The username or email address of the local account. Case and surrounding spaces are ignored.", type: string, maxLength: 254}
+        password: {description: "The account's local password. Treat it as a secret and keep it out of traces and logs.", type: string, format: password, maxLength: 1024}
+        mfa_code: {description: "A current six-digit authenticator code or one unused recovery code. Needed when the account uses two-step verification. Without it, the attempt fails with authentication.mfa.required.", type: string, maxLength: 128}
     DesktopAuthorizationExchangeRequest:
       type: object
       additionalProperties: false
       required: [code, state, code_verifier, public_jwk, desktop_release, desktop_build_id, platform, architecture, realtime_protocol]
       properties:
-        code: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
-        state: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
-        code_verifier: {type: string, minLength: 43, maxLength: 128, pattern: '^[A-Za-z0-9._~-]+$'}
-        public_jwk: {$ref: '#/components/schemas/DesktopPublicJWK'}
-        desktop_release: {type: string, maxLength: 64}
-        desktop_build_id: {type: string, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*$'}
-        platform: {type: string, enum: [darwin, win32, linux]}
-        architecture: {type: string, enum: [arm64, x64]}
-        realtime_protocol: {type: integer, minimum: 1}
+        code: {description: "The one-time code from the code query parameter Proctor added to the loopback callback address.", type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        state: {description: "The state value the Desktop sent when it started. It must also match the state on the loopback callback.", type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        code_verifier: {description: "The PKCE verifier whose S256 hash the Desktop sent as code_challenge.", type: string, minLength: 43, maxLength: 128, pattern: '^[A-Za-z0-9._~-]+$'}
+        public_jwk: {description: "The same public key the Desktop sent when it started. The DPoP proof header must be signed with its private key.", $ref: '#/components/schemas/DesktopPublicJWK'}
+        desktop_release: {description: "The Desktop release version. It must match the value sent when the authorization started.", type: string, maxLength: 64}
+        desktop_build_id: {description: "The Desktop build identifier. It must match the value sent when the authorization started.", type: string, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*$'}
+        platform: {description: "The operating system the Desktop runs on. It must match the value sent when the authorization started.", type: string, enum: [darwin, win32, linux]}
+        architecture: {description: "The processor architecture the Desktop was built for. It must match the value sent when the authorization started.", type: string, enum: [arm64, x64]}
+        realtime_protocol: {description: "The realtime protocol version the Desktop speaks. It must match the value sent when the authorization started.", type: integer, minimum: 1}
     DesktopPublicJWK:
       type: object
       additionalProperties: false
       required: [kty, crv, x, y]
       properties:
-        kty: {type: string, const: EC}
-        crv: {type: string, const: P-256}
-        x: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
-        y: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        kty: {description: "The key type. Always EC.", type: string, const: EC}
+        crv: {description: "The elliptic curve. Always P-256.", type: string, const: P-256}
+        x: {description: "The key's x coordinate, as 43 URL-safe base64 characters.", type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        y: {description: "The key's y coordinate, as 43 URL-safe base64 characters.", type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
     DesktopAuthorizationStartResponse:
       type: object
       additionalProperties: false
       required: [authorization_url, expires_at]
       properties:
-        authorization_url: {type: string, format: uri}
-        expires_at: {type: string, format: date-time}
+        authorization_url: {description: "The hosted authorization page to open in the system browser. Its query carries the request handle and state, and its fragment carries the one-time browser proof.", type: string, format: uri}
+        expires_at: {description: "When this authorization request expires. It lasts at most five minutes.", type: string, format: date-time}
     DesktopAuthorizationAccountResponse:
       type: object
       additionalProperties: false
       required: [id, username, display_name, email]
       properties:
-        id: {type: string, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$'}
-        username: {type: string}
-        display_name: {type: string}
+        id: {description: "The ID of the account the browser signed in as.", $ref: '#/components/schemas/ID'}
+        username: {description: "The account's username.", type: string}
+        display_name: {description: "The account's display name.", type: string}
         email:
           type: string
           format: email
@@ -419,23 +470,24 @@ components:
       additionalProperties: false
       required: [state, local_login_enabled, external_providers, device_name, requested_at, expires_at]
       properties:
-        state: {type: string, enum: [bound, authenticated]}
-        account: {$ref: '#/components/schemas/DesktopAuthorizationAccountResponse'}
-        local_login_enabled: {type: boolean}
+        state: {description: "Where the request stands. bound means this browser holds the request but no account is signed in for it yet. authenticated means an account is signed in and the request is waiting for approval.", type: string, enum: [bound, authenticated]}
+        account: {description: "The account that signed in for this request. Present only when state is authenticated.", $ref: '#/components/schemas/DesktopAuthorizationAccountResponse'}
+        local_login_enabled: {description: "Whether the page may offer username and password sign-in.", type: boolean}
         external_providers:
+          description: "The external sign-in providers the page may offer."
           type: array
           maxItems: 64
           items: {$ref: '#/components/schemas/ExternalAuthenticationProviderResponse'}
-        device_name: {type: string, maxLength: 128}
+        device_name: {description: "The device name the Desktop sent when it started, shown so the person can recognize the request. Empty when the Desktop sent none.", type: string, maxLength: 128}
         requested_at:
           type: string
           format: date-time
           description: When Proctor Desktop started this authorization request.
-        expires_at: {type: string, format: date-time}
+        expires_at: {description: "When this authorization request expires.", type: string, format: date-time}
     DesktopAuthorizationApprovalResponse:
       type: object
       additionalProperties: false
       required: [redirect_url, expires_at]
       properties:
-        redirect_url: {type: string, format: uri}
-        expires_at: {type: string, format: date-time}
+        redirect_url: {description: "The Desktop's loopback callback address with the one-time code and state added as query parameters. Send the browser there to hand the code to the Desktop.", type: string, format: uri}
+        expires_at: {description: "When the one-time code expires. It lasts at most one minute.", type: string, format: date-time}

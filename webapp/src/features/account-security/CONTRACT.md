@@ -37,28 +37,47 @@ sensitive operation that the server refuses for missing strong or fresh proof
 offers the bounded `/account/reauthenticate?task=security` journey beside the
 error.
 
-The turn-off confirmation uses the `danger` Button for the confirming action
-and a secondary “Keep it on” escape. Regeneration confirms before replacing
-codes.
+The turn-off confirmation states what changes before the irreversible
+action in a `FactList`: “Two-step verification: Turns off” and, while codes
+remain, “Recovery codes: {n} stop working”. It uses the `danger` Button for
+the confirming action and a text-action “Keep it on” escape. The “Moving to a
+new phone?” warning is a verification-rail item rather than a notice in the
+task column. Regeneration confirms before replacing codes.
+
+Status lines carry their own outcome word: “Two-step verification is on”
+(success) when recovery codes are shown after setup, and “Change not
+confirmed” (warning) when an outcome is uncertain. While two-step
+verification is on, the status view's rail offers “Other ways to sign in” with
+an “Add a sign-in method” link to `/account/connect-provider`. The recovery
+codes view adds rail items “You won’t see these again” and “Keep them apart
+from your phone”.
 
 A recovery-restricted Session sees the restriction as a warning notice. With
 the service available it offers setup; with the service disabled it says
 setup cannot be finished now and offers only what it can do: check the status
 again or sign out. Because a restricted Session has no confirmed name for the
-shell footer, its sign-out stays in the task column.
+shell masthead, its sign-out stays in the task column.
 
 An ordinary Session's display name is read from `GET /api/v1/users/me` only
 after the status confirms the Session is not restricted, and is shown only in
-the shell footer beside a quiet sign-out control.
+the shell masthead beside a quiet sign-out control.
 
 ## Secrets
 
 Setup keys, provisioning URIs, authenticator inputs, and recovery codes live only in component
 memory. They never enter navigation, browser storage, logs, or third-party
-requests. Setup renders a scannable QR code locally from the bounded server
+requests. The setup task's heading is “Turn on two-step verification”, followed by two
+numbered steps: `01` “Scan the code” (the QR code and setup key) and `02`
+“Enter the code it shows” (the code form with its deadline). “Keep this code
+and key private” is a `beforeTask` verification-rail item, repeated under the
+lede below `48rem`, followed by a rail item “Next, save your recovery codes”
+saying each code signs in once if the phone is lost. Setup renders a scannable QR code locally from the bounded server
 provisioning URI after validating its TOTP type, matching secret, and supported
 six-digit parameters. The setup key is always shown beside the QR code, grouped
-in fours in the data face, as the manual and nonvisual alternative. The setup
+in fours in the data face, as the manual and nonvisual alternative. A
+secondary “Copy setup key” button under it copies the ungrouped secret and
+announces “Setup key copied.” or “Couldn’t copy the key. Enter it in your app
+by hand instead.” in a polite status line. The setup
 deadline is stated relative to now (“Finish within 10 minutes”) from the
 server's `expires_at`, never as a timestamp, and describes the code field.
 The QR code and key share the existing setup lifetime and are discarded together.

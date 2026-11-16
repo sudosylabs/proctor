@@ -1,0 +1,534 @@
+/* Documentation diagrams: real text on the page, drawn with the site's own
+   type and colour tokens so they follow the light and dark themes. Below
+   600px of available width every row stacks top to bottom. */
+
+.diagram {
+  --d-ink: var(--proctor-ink);
+  --d-soft: var(--proctor-ink-soft);
+  --d-muted: var(--proctor-ink-muted);
+  --d-border: var(--proctor-border-strong);
+  --d-accent: var(--proctor-primary);
+  --d-line: var(--proctor-ink-muted);
+
+  color: var(--d-soft);
+  container-type: inline-size;
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.diagram p {
+  margin: 0;
+}
+
+.diagram strong {
+  color: var(--d-ink);
+  font-weight: 600;
+}
+
+.diagram code {
+  background: none;
+  border: 0;
+  color: var(--d-ink);
+  font-size: 12px;
+  padding: 0;
+}
+
+/* Rows */
+
+.row {
+  align-items: stretch;
+  display: grid;
+  margin-top: 32px;
+}
+
+.mixed {
+  align-items: center;
+}
+
+.diagram > :first-child,
+.connectors + .row {
+  margin-top: 0;
+}
+
+.cell {
+  display: flex;
+  min-width: 0;
+  position: relative;
+}
+
+/* Cards */
+
+.card {
+  border: 1px solid var(--d-border);
+  border-radius: 6px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: 12px 14px;
+}
+
+.title {
+  color: var(--d-ink);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 21px;
+}
+
+.text {
+  margin-top: 3px !important;
+}
+
+.items {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.items li + li {
+  margin-top: 2px;
+}
+
+ol.items {
+  counter-reset: item;
+}
+
+ol.items li {
+  counter-increment: item;
+  padding-left: 18px;
+  position: relative;
+}
+
+ol.items li::before {
+  color: var(--d-muted);
+  content: counter(item);
+  font-variant-numeric: tabular-nums;
+  left: 0;
+  position: absolute;
+}
+
+.card.accent {
+  border: 1.5px solid var(--d-accent);
+  padding: 11.5px 13.5px;
+}
+
+.accent > .title,
+.accent > .groupTitle strong {
+  color: var(--d-accent);
+}
+
+.dashed {
+  border-style: dashed !important;
+}
+
+.quiet {
+  border: 0;
+  padding: 2px 0;
+}
+
+/* Groups */
+
+.group {
+  border: 1px solid var(--d-border);
+  border-radius: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px 14px;
+}
+
+.group.accent {
+  border-color: var(--d-accent);
+}
+
+.groupTitle {
+  color: var(--d-muted);
+}
+
+.groupItems {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.groupItems .card {
+  padding: 9px 12px;
+}
+
+.groupItems .title {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* Branches: one spine fanning out to several outcomes. */
+
+.branch {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.branchTitle,
+.footer {
+  color: var(--d-muted);
+  padding-left: 28px;
+}
+
+.branchTitle {
+  margin-bottom: 10px !important;
+}
+
+.footer {
+  margin-top: 12px !important;
+}
+
+.outcomes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.outcomes li {
+  padding: 0 0 14px 28px;
+  position: relative;
+}
+
+.outcomes li:last-child {
+  padding-bottom: 0;
+}
+
+.outcomes li::before {
+  border-left: 1.5px solid var(--d-line);
+  bottom: 0;
+  content: '';
+  left: 0;
+  position: absolute;
+  top: 0;
+}
+
+.outcomes li:first-child::before {
+  top: 10px;
+}
+
+.outcomes li:last-child::before {
+  bottom: auto;
+  height: 10px;
+}
+
+.outcomes li::after {
+  border-top: 1.5px solid var(--d-line);
+  content: '';
+  left: 0;
+  position: absolute;
+  top: 10px;
+  width: 18px;
+}
+
+.outcomes .head {
+  color: var(--d-line);
+  left: 16px;
+  position: absolute;
+  top: 6.75px;
+}
+
+.outcomes .accent .title {
+  color: var(--d-accent);
+}
+
+/* Arrows */
+
+.head {
+  display: block;
+  fill: currentColor;
+  height: 8px;
+  width: 8px;
+}
+
+.side {
+  color: var(--d-line);
+  height: 0;
+  position: absolute;
+  right: 100%;
+  top: 50%;
+}
+
+.sideLine {
+  border-top: 1.5px solid currentColor;
+  left: 4px;
+  position: absolute;
+  right: 6px;
+  top: -0.75px;
+}
+
+.side .head {
+  position: absolute;
+  right: 0;
+  top: -4px;
+}
+
+.side .arrowLabel {
+  bottom: 7px;
+  left: 2px;
+  position: absolute;
+  right: 2px;
+  text-align: center;
+}
+
+.arrowLabel {
+  color: var(--d-muted);
+  font-size: 12px;
+  line-height: 16px;
+  overflow-wrap: normal;
+  word-break: keep-all;
+}
+
+.step {
+  color: var(--d-ink);
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.accentLine,
+.accentLine .arrowLabel,
+.accentLine .step {
+  color: var(--d-accent);
+}
+
+.accentLine .sideLine,
+.accentLine .span {
+  border-top-width: 2px;
+}
+
+.accentLine .stemTop,
+.accentLine .stemBottom,
+.accentLine .downLine {
+  border-left-width: 2px;
+}
+
+.dashedLine .sideLine,
+.dashedLine .span {
+  border-top-style: dashed;
+  border-top-width: 1px;
+}
+
+.dashedLine .stemTop,
+.dashedLine .stemBottom,
+.dashedLine .downLine {
+  border-left-style: dashed;
+  border-left-width: 1px;
+}
+
+.down {
+  color: var(--d-line);
+  display: none;
+  height: 40px;
+  position: relative;
+}
+
+.downLine {
+  border-left: 1.5px solid currentColor;
+  bottom: 7px;
+  left: 50%;
+  margin-left: -0.75px;
+  position: absolute;
+  top: 4px;
+}
+
+.down .head {
+  bottom: 1px;
+  left: calc(50% - 4px);
+  position: absolute;
+  transform: rotate(90deg);
+}
+
+.down .arrowLabel {
+  left: calc(50% + 12px);
+  max-width: calc(50% - 12px);
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.source {
+  color: var(--d-muted);
+}
+
+/* Connectors between two rows */
+
+.connectors {
+  color: var(--d-line);
+  height: 64px;
+  position: relative;
+}
+
+.connectors > div {
+  inset: 0;
+  position: absolute;
+}
+
+.stemTop,
+.stemBottom {
+  border-left: 1.5px solid currentColor;
+  margin-left: -0.75px;
+  position: absolute;
+}
+
+.stemTop {
+  height: 50%;
+  top: 0;
+}
+
+.stemBottom {
+  bottom: 7px;
+  top: 50%;
+}
+
+.stemBottom .head {
+  bottom: -7px;
+  left: -4.75px;
+  position: absolute;
+  transform: rotate(90deg);
+}
+
+.span {
+  border-top: 1.5px solid currentColor;
+  margin-top: -0.75px;
+  position: absolute;
+  top: 50%;
+}
+
+.connectorLabel {
+  margin-left: 12px;
+  position: absolute;
+  top: calc(50% + 6px);
+  white-space: nowrap;
+}
+
+/* Notes */
+
+.note {
+  color: var(--d-soft);
+  font-size: 14px;
+  line-height: 22px;
+  margin-top: 28px !important;
+  max-width: 68ch;
+  position: relative;
+}
+
+.rule-solid,
+.rule-dashed,
+.rule-bracket {
+  max-width: none;
+  padding-top: 18px;
+}
+
+.rule-solid {
+  border-top: 1px solid var(--d-border);
+}
+
+.rule-dashed {
+  border-top: 1px dashed var(--d-border);
+}
+
+.rule-bracket {
+  margin-top: 16px !important;
+  padding-top: 26px;
+}
+
+.rule-bracket::before {
+  border: 1px solid var(--d-border);
+  border-top: 0;
+  content: '';
+  height: 8px;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+/* Stacked rows: always for a stack, and for every row in a narrow column. */
+
+.stack {
+  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  row-gap: 0;
+}
+
+.stack .side {
+  display: none;
+}
+
+.stack .down {
+  display: block;
+}
+
+.stack > .cell + .cell {
+  margin-top: 12px;
+}
+
+@container (max-width: 599px) {
+  .row {
+    align-items: stretch;
+    display: flex;
+    flex-direction: column;
+    row-gap: 0;
+  }
+
+  .side,
+  .connectors {
+    display: none;
+  }
+
+  .down {
+    display: block;
+  }
+
+  .connectors + .row {
+    margin-top: 0;
+  }
+
+  .row > .cell + .cell {
+    margin-top: 12px;
+  }
+
+  .branch {
+    border: 1px solid var(--d-border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+
+  .branchTitle,
+  .footer {
+    padding-left: 0;
+  }
+
+  .outcomes li {
+    padding-left: 0;
+  }
+
+  .outcomes li::before,
+  .outcomes li::after,
+  .outcomes .head {
+    display: none;
+  }
+
+  .groupItems[data-columns='3'] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media print {
+  .diagram {
+    --d-ink: var(--proctor-print-ink);
+    --d-soft: var(--proctor-print-ink);
+    --d-muted: var(--proctor-print-ink);
+    --d-border: var(--proctor-print-border);
+    --d-accent: var(--proctor-print-primary);
+    --d-line: var(--proctor-print-ink);
+
+    break-inside: avoid;
+  }
+}

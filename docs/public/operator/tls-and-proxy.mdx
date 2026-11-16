@@ -1,53 +1,67 @@
 ---
-title: Configure TLS, Forwarding, and a Reverse Proxy
-description: Select external termination, static TLS, or single-node Let's Encrypt while preserving canonical origins, redirects, WebSocket, and private cluster boundaries.
+title: TLS and reverse proxies
+description: Choose who handles HTTPS, either a load balancer, Proctor with your certificate, or Proctor with Let's Encrypt, and set up the proxy in front of it.
 audience: operator
 maturity: preview
 ---
 
-# Configure TLS, Forwarding, and a Reverse Proxy
+# TLS and reverse proxies
 
-`Server.PublicURL` is the canonical public origin used for redirects, DPoP
-target binding, hosted authentication, cookies, and Desktop discovery. Set it
-to the exact HTTPS origin users and Desktop clients reach. Do not derive public
-authority from an inbound `Host` header.
+Start by setting `Server.PublicURL` to the exact HTTPS address that people and
+Proctor Desktop use, such as `https://proctor.example.edu`. Proctor builds
+redirects, cookies, sign-in, DPoP checks and Desktop discovery from this value.
+It never works out its own address from the `Host` header of a request.
 
-## Choose One Public TLS Model
+Then decide who handles HTTPS. There are three options.
 
-### External Termination
+## Choose who handles HTTPS
 
-Set `Server.TLS.Mode` to `disabled` only when a trusted reverse proxy or load
-balancer terminates public TLS. Restrict the application listener to the proxy
-network. Forward HTTP and WebSocket traffic without changing the public origin,
-request method, path, query, or upgrade semantics.
+| `Server.TLS.Mode` | Who holds the certificate | Several nodes |
+| --- | --- | --- |
+| `disabled` | Your load balancer or reverse proxy | Yes |
+| `static` | Proctor, using files you provide | Yes |
+| `lets_encrypt` | Proctor, renewed automatically | No, one node only |
 
-List every proxy or load-balancer address that connects to the application
-in `Server.TrustedProxies`. Only those peers may supply the client address
-through `X-Forwarded-For` and a correlation ID through `X-Request-ID`; the
-server takes the rightmost forwarded hop that is not itself a trusted proxy.
-A trusted proxy's `X-Request-ID` is accepted as is, and most proxies pass a
-client's header through unchanged, so configure each trusted proxy to
-overwrite (or strip) any incoming `X-Request-ID`; otherwise a client chooses
-the request ID recorded in logs and audit.
-Configure each proxy to append the connecting address to `X-Forwarded-For`.
-The `Forwarded` header is ignored. Without this setting, audit records and
-login rate limits attribute every request to the proxy.
+### Behind a load balancer or reverse proxy
 
-For active-active deployments, external termination and HTTP-to-HTTPS
-forwarding belong at the redundant load balancer. Use readiness for backend
-selection. Static TLS may still protect the proxy-to-node hop.
+Use `disabled` only when a proxy you trust handles HTTPS. Keep Proctor's own
+listener reachable from the proxy's network and nowhere else. The proxy should
+pass HTTP and WebSocket traffic through without changing the address, method,
+path, query or upgrade.
 
-### Static TLS
+List the address of every proxy or load balancer that connects to Proctor in
+`Server.TrustedProxies`. Only those addresses may tell Proctor the client's
+address, in `X-Forwarded-For`, and a request ID, in `X-Request-ID`. Proctor
+takes the rightmost address in `X-Forwarded-For` that isn't one of your
+proxies. It ignores the `Forwarded` header.
 
-Set mode `static` with a certificate and matching private key readable only by
-the service account. The runtime requires TLS 1.2 or newer. Optional HTTP
-forwarding binds a distinct listener and redirects to the configured public
-authority while preserving path and query: a non-challenge HTTP request
-receives `308 Permanent Redirect`.
+Set up each proxy to:
 
-Static TLS with port 80 forwarding looks like this in the `Server` section:
+- append the address it received the connection from to `X-Forwarded-For`;
+- overwrite or remove any `X-Request-ID` the client sent. Proctor accepts a
+  trusted proxy's request ID as it is, and most proxies pass the client's
+  value through, which would let a client choose the ID that appears in your
+  logs and audit records.
 
-```json
+Without `Server.TrustedProxies`, every request looks as if it came from the
+proxy. Audit records lose the real client, and everyone shares one sign-in
+rate limit.
+
+With several nodes, put HTTPS and the HTTP-to-HTTPS redirect on the load
+balancer, and route traffic by each node's readiness. You can still use
+`static` mode to encrypt the hop from the load balancer to each node.
+
+### With your own certificate
+
+Use `static` with a certificate and its private key. Only the account Proctor
+runs as should be able to read them. Proctor accepts TLS 1.2 and newer.
+
+To redirect plain HTTP as well, turn on `ForwardHTTPToHTTPS`. Proctor then
+listens on a second address and answers every HTTP request, apart from
+certificate challenges, with `308 Permanent Redirect` to the same path and
+query on your public address. In the `Server` section:
+
+```json title="config.json"
 {
   "ListenAddress": ":443",
   "PublicURL": "https://proctor.example.edu",
@@ -66,27 +80,31 @@ Static TLS with port 80 forwarding looks like this in the `Server` section:
 }
 ```
 
-Rotate files as one coherent identity; no restart is needed. A serving node
-checks both files for replacement at most every 30 seconds during TLS
-handshakes and reloads them immediately on `SIGHUP` (`systemctl reload
-proctor`). A replacement that does not parse as a matching pair is logged and
-the previous certificate stays in service, so write the new files and then
-signal, or replace them atomically. Validate the hostname, chain, expiry, key
-permissions, and client trust from the actual traffic path.
+You can replace the certificate without a restart. Each node checks for new
+files at most every 30 seconds while handling connections, and reloads them
+straight away on `SIGHUP` (`systemctl reload proctor`). If the new certificate
+and key don't load as a matching pair, Proctor logs the error and keeps
+serving the old ones. So replace both files together, either by writing them
+and then sending the signal, or by swapping them in one step.
 
-### Built-in Let's Encrypt
+Afterwards, check the hostname, certificate chain, expiry date and file
+permissions, and that clients trust the certificate, by connecting through
+the same path real traffic takes.
 
-Mode `lets_encrypt` is a single-node convenience. It requires an HTTPS
-`PublicURL` with one fully qualified DNS hostname, persistent private writable
-cache, HTTP forwarding, public DNS, and certificate-authority reachability on
-ports 80 and 443. Certificate maintenance starts and stops with HTTP serving.
+### With Let's Encrypt
+
+`lets_encrypt` is a convenience for a single node. It needs:
+
+- an HTTPS `PublicURL` with one fully qualified DNS name;
+- a private cache directory that survives restarts and that Proctor can write;
+- `ForwardHTTPToHTTPS` turned on;
+- public DNS, and Let's Encrypt able to reach the node on ports 80 and 443.
+
 Set `LetsEncrypt.AcceptTermsOfService` to `true` to record that you have read
-and accept the current Let's Encrypt Subscriber Agreement; the mode is rejected
-until you do.
+and accept the current Let's Encrypt Subscriber Agreement. Proctor refuses to
+start in this mode until you do.
 
-For automatic single-node certificates, change the `TLS` block to:
-
-```json
+```json title="The TLS block for Let's Encrypt"
 {
   "Mode": "lets_encrypt",
   "CertificateFile": "",
@@ -101,45 +119,57 @@ For automatic single-node certificates, change the `TLS` block to:
 }
 ```
 
-The account and certificate material stay in the node-local
-`LetsEncrypt.CacheDirectory`. Proctor creates that directory with mode `0700`,
-and startup rejects an existing cache directory that cannot be written or that
-exposes the private material to group or other users. Binding ports 80 and 443
-may need an operating-system capability or a supervisor that grants them.
+Proctor renews certificates only while it is serving HTTP. It keeps the
+account and certificates in `LetsEncrypt.CacheDirectory` on the node, and
+creates that directory with mode `0700`. If the directory already exists,
+Proctor refuses to start when it can't write to it or when other users or
+groups can read it. Listening on ports 80 and 443 may need an operating-system
+capability, or a supervisor such as systemd that grants it.
 
-Let's Encrypt is rejected in Memberlist mode because its cache, issuance, and
-renewal are node-local and uncoordinated. Active-active deployments put the
-public certificate, ACME, and HTTP forwarding on the redundant load balancer.
+Let's Encrypt mode isn't allowed with Memberlist, because each node would
+issue and renew its own certificate without coordinating with the others. With
+several nodes, put the certificate, ACME and the HTTP redirect on the load
+balancer instead.
 
 ### HTTP Strict Transport Security
 
-With `static` or `lets_encrypt`, every response carries
-`Strict-Transport-Security` with the max-age from
-`Server.TLS.StrictTransportSecurityMaxAge` (default 365 days; `0` disables it).
-Browsers then refuse plain HTTP to the public host for that period, so lower
-it before first enabling TLS if the host might return to HTTP. In `disabled`
-mode the header is not sent; configure HSTS on the terminating proxy.
+In `static` and `lets_encrypt` modes, every response includes
+`Strict-Transport-Security`. Its max-age comes from
+`Server.TLS.StrictTransportSecurityMaxAge`: 365 days by default, and `0` turns
+the header off. Browsers that see it refuse plain HTTP to your host for that
+long, so lower it before you first turn on TLS if the host might ever go back
+to HTTP. In `disabled` mode Proctor doesn't send the header; set it on your
+proxy instead.
 
-## Keep Other TLS Boundaries Separate
+## Other connections use their own TLS
 
-- a non-loopback metrics listener requires its own static TLS identity and
-  bearer token; its key pair rotates exactly like static TLS above (checked
-  during handshakes at most every 30 seconds, reloaded on `SIGHUP`, last good
-  pair kept on a bad replacement);
-- PostgreSQL, Redis, S3, SMTP, and providers use their own
-  client/server trust configuration;
-- Memberlist uses gossip encryption, not public TLS; and
-- no TLS private key may substitute for MFA, mail, DPoP, or cluster key material.
+The public certificate covers browser and Desktop traffic only.
 
-## Proxy Review Checklist
+- A metrics listener on anything other than loopback needs its own certificate
+  and a bearer token. Its certificate reloads the same way as `static` mode:
+  checked at most every 30 seconds, reloaded on `SIGHUP`, and the last good pair
+  kept if a replacement fails.
+- PostgreSQL, Redis, S3, SMTP and identity providers each have their own trust
+  settings.
+- Memberlist encrypts traffic between nodes with its gossip key, not with TLS.
+- A TLS private key never stands in for MFA, mail, DPoP or cluster keys.
 
-- preserve WebSocket upgrade and long-lived connection behavior;
-- do not cache authenticated, no-store, or candidate delivery responses;
-- preserve request size/time bounds rather than adding an unbounded buffer;
-- pass a stable request correlation mechanism without trusting client identity
-  headers as authentication; a proxy-supplied `X-Request-ID` is honored only
-  from a trusted proxy, which must overwrite any client-supplied value;
-- remove unready nodes before drain and allow the configured shutdown window;
-- restrict application and cluster listeners to intended networks; and
-- test public discovery, login cookies, DPoP target URI, redirects, upload,
-  WebSocket, and large-but-valid responses through the complete path.
+## Check the proxy
+
+Before sending real traffic through a proxy, check that it:
+
+- keeps WebSocket upgrades and long-lived connections open;
+- never caches signed-in pages, responses marked `no-store`, or anything sent to
+  a candidate;
+- keeps Proctor's own request size and time limits, rather than buffering
+  without a limit;
+- passes a request ID without treating any client header as proof of who the
+  client is. Proctor uses `X-Request-ID` only from a trusted proxy, which must
+  overwrite the client's value;
+- stops sending traffic to a node once it reports it isn't ready, and allows
+  the configured shutdown time;
+- exposes the application and cluster listeners only to the networks that need
+  them.
+
+Finally, test discovery, sign-in cookies, the DPoP target address, redirects,
+uploads, WebSocket and large responses through the whole path.

@@ -12,7 +12,7 @@ describe("TaskState", () => {
     const markup = renderToStaticMarkup(
       <TaskState
         headingID="task-heading"
-        label="Account recovery"
+        status={{ label: "Link sent", tone: "success" }}
         heading="Check your email"
         body="Use the message we sent."
       >
@@ -24,7 +24,9 @@ describe("TaskState", () => {
     expect(markup).toContain('aria-labelledby="task-heading"');
     expect(markup).toContain("<h1");
     expect(markup).toContain('id="task-heading"');
-    expect(markup.indexOf("Account recovery")).toBeLessThan(
+    expect(markup).toContain('data-proctor-status-tone="success"');
+    expect(markup).toContain('data-proctor-icon="stateSuccess"');
+    expect(markup.indexOf("Link sent")).toBeLessThan(
       markup.indexOf("Check your email"),
     );
     expect(markup.indexOf("Check your email")).toBeLessThan(

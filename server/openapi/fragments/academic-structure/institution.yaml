@@ -13,7 +13,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Returns the single Institution represented by this Proctor installation to an authorized principal. One installation never routes among tenants, and the projection exposes no deployment secrets or infrastructure configuration.
+        Returns the one Institution this Proctor installation serves, to a caller allowed to see it. An installation always serves exactly one Institution. The response contains no deployment secrets or infrastructure settings.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -54,7 +54,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Applies a partial update to the single Institution's canonical or human-facing presentation after Institution-wide authorization. It cannot change installation identity, create another tenant, or rewrite owned resource identifiers.
+        Changes some of the Institution's name and display fields or its Exam capacity limits. The caller needs permission on the whole Institution. The update can't change the installation's identity, add another Institution or change the identifiers of anything the Institution owns.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -102,7 +102,7 @@ paths:
 components:
   requestBodies:
     UpdateInstitution:
-      description: Partial canonical or human-facing update for the installation's single Institution.
+      description: The Institution fields to change. Fields you leave out or send as null stay as they are.
       required: true
       content:
         application/json:
@@ -118,9 +118,22 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/InstitutionResponse'
+          example:
+            id: wj3drgzdpnf54rxf5d8qd3dqne
+            created_at: '2026-07-01T08:00:00Z'
+            updated_at: '2026-08-14T09:30:00Z'
+            name: northbridge
+            display_name: Northbridge University
+            description: Teaching, learning, and examination services.
+            exam_capacity:
+              resource_maximum_count: 10
+              resource_maximum_bytes: 10485760
+              workspace_maximum_entries: 500
+              workspace_maximum_file_bytes: 10485760
+              workspace_maximum_total_bytes: 52428800
   schemas:
     UpdateInstitutionRequest:
-      description: Mutable Institution presentation fields; omitted or null values remain unchanged.
+      description: The Institution fields you can change. Fields you leave out or send as null stay as they are.
       type: object
       additionalProperties: false
       properties:
@@ -128,24 +141,31 @@ components:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged. An empty string is present and subject to validation.
+          description: >-
+            New machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. Omitted or
+            null leaves it unchanged. An empty string is rejected.
         display_name:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged. An empty string is present and subject to validation.
+          description: >-
+            New name shown to people, 1 to 128 characters. Omitted or null leaves it unchanged. An empty string is
+            rejected.
         description:
           type:
             - string
             - "null"
-          description: Omitted or null leaves the value unchanged. An empty string is present and subject to validation.
+          description: >-
+            New longer text, up to 1,024 characters. Omitted or null leaves it unchanged. An empty string clears
+            it.
         exam_capacity:
           type:
             - object
             - "null"
           additionalProperties: false
           description: >-
-            Omitted or null leaves the policy unchanged. A present object replaces the complete institution Exam capacity policy.
+            The Institution's Exam capacity limits. Omitted or null leaves them unchanged. An object replaces all five
+            limits at once, so send every member. Published Revisions keep the limits they were published with.
           required:
             - resource_maximum_count
             - resource_maximum_bytes
@@ -157,22 +177,27 @@ components:
               type: integer
               minimum: 1
               maximum: 100
+              description: Most Exam Resources one Exam may include.
             resource_maximum_bytes:
               type: integer
               format: int64
               minimum: 1
               maximum: 104857600
+              description: Largest size of one Exam Resource, in bytes.
             workspace_maximum_entries:
               type: integer
               minimum: 1
               maximum: 5000
+              description: Most entries, files and folders together, one Workspace may hold.
             workspace_maximum_file_bytes:
               type: integer
               format: int64
               minimum: 1
               maximum: 104857600
+              description: Largest size of one Workspace file, in bytes.
             workspace_maximum_total_bytes:
               type: integer
               format: int64
               minimum: 1
               maximum: 1073741824
+              description: Largest combined size of all files in one Workspace, in bytes.

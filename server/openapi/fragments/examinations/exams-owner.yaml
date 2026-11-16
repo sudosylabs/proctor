@@ -13,7 +13,7 @@ paths:
       operationId: transferExamOwnership
       summary: Transfer Exam ownership to an eligible current Manager
       description: >-
-        Transfers ownership to an eligible existing Manager only when the expected Exam revision still matches. The previous owner remains a Manager, creator provenance is unchanged, and the explicit audited transition never follows from membership alone.
+        Makes an existing, eligible Manager the owner of the Exam. The change is made only if expected_revision still matches the Exam's current revision. The previous owner stays a Manager, and the creator does not change. Ownership changes only through this audited operation, never because of someone's membership alone.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -74,13 +74,13 @@ components:
   requestBodies:
     TransferExamOwnership:
       required: true
-      description: Identifies the eligible current Manager who will become owner and the last observed Exam aggregate revision.
+      description: The Manager who will become the owner, and the Exam revision you last saw.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/TransferExamOwnershipRequest'
           example:
-            user_id: ybndrfg8ejkmcpqxot1uwisza3
+            user_id: hw5jrd1ypzt8nkq3xe7mcboa4g
             expected_revision: 5
   schemas:
     TransferExamOwnershipRequest:
@@ -92,7 +92,9 @@ components:
       properties:
         user_id:
           $ref: '#/components/schemas/ID'
+          description: The current Manager who will become the owner.
         expected_revision:
           type: integer
           format: int64
           minimum: 1
+          description: The Exam revision you last saw. If the Exam has changed since, the request fails with a conflict.

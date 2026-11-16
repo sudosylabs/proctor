@@ -1,0 +1,24 @@
+blocks:
+  - row:
+      - card: Integrity record
+        items:
+          - Observations
+          - Evidence
+          - Flags
+          - Gaps and discrepancies
+      - card: Private review
+        text: Managers decide each Flag is confirmed, dismissed or inconclusive.
+      - card: Finalize
+        text: Freezes the record that was reviewed.
+      - card: Release
+        text: The candidate sees only approved remarks and the release time.
+        accent: true
+  - row:
+      - card: Never released
+        dashed: true
+        items:
+          - Flags, evidence and discrepancies
+          - Decisions, rationale and private notes
+          - Workspace files
+          - Any grade, score or pass mark
+  - note: No observation, Flag or decision is a grade or a finding of guilt.

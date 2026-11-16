@@ -1,10 +1,19 @@
 import React from 'react';
 
 import assetRegistry from '../../../../public/assets.json';
+import Diagram from '@site/src/components/Diagram';
 import DocIcon from '@site/src/components/DocIcon';
 import styles from './styles.module.css';
 
-type AssetEntry = (typeof assetRegistry.assets)[number];
+type AssetEntry = {
+  id: string;
+  kind: string;
+  alt: string;
+  caption: string;
+  public_path?: string;
+  width?: number;
+  height?: number;
+};
 
 type GovernedFigureProps = {
   asset: string;
@@ -12,7 +21,7 @@ type GovernedFigureProps = {
 };
 
 const assetsByID = new Map<string, AssetEntry>(
-  assetRegistry.assets.map((entry) => [entry.id, entry]),
+  (assetRegistry.assets as AssetEntry[]).map((entry) => [entry.id, entry]),
 );
 
 export default function GovernedFigure({
@@ -23,6 +32,17 @@ export default function GovernedFigure({
 
   if (!entry) {
     throw new Error(`Unknown governed documentation asset: ${asset}`);
+  }
+
+  // A diagram is drawn on the page in the site's own type and colours, so it
+  // needs no plate and no separate full-size view.
+  if (entry.kind === 'diagram') {
+    return (
+      <figure className={`${styles.figure} ${styles.diagram}`} data-asset-id={entry.id}>
+        <Diagram id={entry.id} label={entry.alt} />
+        <figcaption className={styles.caption}>{entry.caption}</figcaption>
+      </figure>
+    );
   }
 
   return (
@@ -40,7 +60,6 @@ export default function GovernedFigure({
         />
       </div>
       <figcaption className={styles.caption}>
-        <span className={styles.kind}>{entry.kind}</span>
         <span>{entry.caption}</span>
         <a
           aria-label={`Open ${entry.kind} at full size in a new tab`}

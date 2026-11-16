@@ -1,20 +1,21 @@
 ---
-title: Exercise the Three-Node Development Cluster
-description: Start, certify, inspect, degrade, and recover Proctor's tracked HA development topology.
+title: Run the three-node development cluster
+description: Start, certify, inspect, break and recover the high-availability development topology that Proctor tracks in the repository.
 audience: developer
 maturity: preview
 slug: /developers/cluster-development/
 ---
 
-# Exercise the Three-Node Development Cluster
+# Run the three-node development cluster
 
-The tracked cluster answers a narrow engineering question: can three active
-Proctor nodes share authoritative state, discover compatible peers, expose
-independent readiness and metrics, and remain reachable when one node stops?
-It is a development certification topology—not a single-host production HA
-deployment.
+The tracked cluster answers one engineering question. Can three active Proctor
+nodes share the same durable state, find compatible peers, report their own
+readiness and metrics, and stay reachable when one node stops?
 
-## Understand the Topology
+It is a topology for certifying development work. It is not a production
+high-availability deployment on a single host.
+
+## What runs in the cluster
 
 | Component | Development responsibility |
 | --- | --- |
@@ -27,68 +28,73 @@ deployment.
 | Prometheus | Scrapes all three protected metrics listeners through generated cluster targets |
 | Grafana, Loki, Collector | Present metrics and aggregate per-node structured logs |
 
-HAProxy adds an `X-Proctor-Node` response header so a local request can identify
-its selected backend. It checks `/health/ready`; an unready node is removed
-without redefining application readiness.
+HAProxy adds an `X-Proctor-Node` header to each response, so you can see which
+node served a local request. It checks `/health/ready` and takes a node that
+isn't ready out of rotation. That doesn't change what readiness means to the
+application.
 
-The cluster's public URL, credentials, ports, and single Docker host are local
-test fixtures. Real high availability requires independent failure domains and
-redundant external infrastructure.
+The cluster's public URL, credentials and ports, and the single Docker host it
+runs on, are local test fixtures. Real high availability needs separate
+failure domains and redundant external infrastructure.
 
-## 1. Prepare the Repository
+## 1. Prepare the repository
 
-Complete the [single-node setup](./local-setup.mdx) first. At minimum,
-`make dev-tools` must succeed. If you want the synthetic users and Exam in the
-cluster, seed the single-node Installation before switching topologies; both
-topologies use the same default Compose project and persistent volumes.
+Finish the [single-node setup](./local-setup.mdx) first. At a minimum,
+`make dev-tools` must succeed.
 
-Stop the foreground single-node server with <kbd>Control</kbd>+<kbd>C</kbd>, then
-stop its containers without deleting state:
+If you want the synthetic users and Exam in the cluster, seed the single-node
+Installation before you switch. Both topologies use the same default Compose
+project and the same persistent volumes.
+
+Stop the single-node server running in the foreground with
+<kbd>Control</kbd>+<kbd>C</kbd>. Then stop its containers without deleting any
+state:
 
 ```sh
 make dev-down
 ```
 
-Do not run `make dev-reset` unless you intend to delete that Installation.
+Don't run `make dev-reset` unless you mean to delete that Installation.
 
-## 2. Start Three Active Nodes
+## 2. Start three active nodes
 
-Run in terminal 1:
+In terminal 1, run:
 
 ```sh
 make run-cluster
 ```
 
-The first run builds the server binary, hosted webapp, and minimal non-root
-runtime image. Compose then starts the shared dependencies, three Proctor nodes,
-observability, and HAProxy. The command follows gateway and node logs after all
-health checks pass.
+The first run builds the server binary, the hosted webapp and a minimal
+runtime image that doesn't run as root. Compose then starts the shared
+dependencies, the three Proctor nodes, observability and HAProxy. Once every
+health check passes, the command follows the gateway and node logs.
 
-In terminal 2, verify the gateway:
+In terminal 2, check the gateway:
 
 ```sh
 curl --fail --silent --show-error http://127.0.0.1:18065/health/ready
 ```
 
-Expected response:
+You should see:
 
 ```json
 {"status":"ok"}
 ```
 
-If you did not seed the shared Installation earlier, the guarded seed can use
-the gateway by mapping its loopback API port for this invocation:
+If you didn't seed the shared Installation earlier, you can run the guarded
+seed through the gateway by pointing its loopback API port at it for this one
+run:
 
 ```sh
 make PROCTOR_SERVER_PORT=18065 dev-seed
 ```
 
 The seed still reads captured invitations from the default Mailpit port. It
-does not need to know which healthy node HAProxy selects.
+doesn't need to know which healthy node HAProxy picks.
 
-## 3. Observe Load Balancing
+## 3. Watch the load balancing
 
-Inspect the backend header across several requests:
+Look at the backend header across several requests:
 
 ```sh
 for request in 1 2 3 4 5 6; do
@@ -99,11 +105,11 @@ for request in 1 2 3 4 5 6; do
 done
 ```
 
-After trimming terminal carriage returns, the sample should include `node-a`,
-`node-b`, and `node-c`. Exact ordering is not an API contract; the smoke test
-only requires that every healthy node receives traffic.
+Once you trim the terminal's carriage returns, the output should include
+`node-a`, `node-b` and `node-c`. The exact order is not part of any API
+contract. The smoke test only requires that every healthy node gets traffic.
 
-Prometheus should report three ready targets and two peers per node:
+Prometheus should report three ready targets, and two peers for each node:
 
 ```sh
 curl --fail --silent --get \
@@ -115,10 +121,10 @@ curl --fail --silent --get \
   http://127.0.0.1:19090/api/v1/query | jq '.data.result'
 ```
 
-Metrics are eventually observed. Allow several five-second scrape intervals
-after startup or recovery before treating an empty query as a defect.
+Metrics take time to show up. After startup or recovery, wait for several
+five-second scrape intervals before you treat an empty result as a bug.
 
-## 4. Run the Repository Certification
+## 4. Run the repository certification
 
 In terminal 2, run:
 
@@ -126,43 +132,43 @@ In terminal 2, run:
 make cluster-smoke
 ```
 
-The certification performs the complete invariant sequence:
+The certification runs these checks in order:
 
-1. all three metrics targets report up and ready;
-2. every node reports exactly two compatible peers;
-3. HAProxy routes across all three backends;
-4. the gateway exposes the expected build version and commit;
-5. `node-b` is stopped;
-6. HAProxy remains ready and stops routing to `node-b`; and
-7. `node-b` is restarted and the three-node metrics and peer view converge
-   again.
+1. All three metrics targets report that they are up and ready.
+2. Every node reports exactly two compatible peers.
+3. HAProxy routes requests to all three backends.
+4. The gateway reports the expected build version and commit.
+5. `node-b` is stopped.
+6. HAProxy stays ready and stops routing to `node-b`.
+7. `node-b` is restarted, and the metrics and peer view for all three nodes
+   agree again.
 
-The command intentionally interrupts one development node and restores it. It
-does not delete shared data or volumes.
+The command stops one development node on purpose and then brings it back. It
+doesn't delete shared data or volumes.
 
-## 5. Inspect Memberlist and Node Identity
+## 5. Inspect Memberlist and node identity
 
-The node definitions and seed addresses live in
-`build/compose/cluster.yaml`. Each node has:
+The node definitions and seed addresses are in `build/compose/cluster.yaml`.
+Each node has:
 
 - a stable `PROCTOR_CLUSTER_NODE_ID`;
-- a Memberlist advertise address using its Compose service name;
+- a Memberlist advertise address that uses its Compose service name;
 - one or more seed peers;
-- TCP and UDP port 7946 exposed only inside the development network; and
-- a node-specific generated configuration and log path.
+- TCP and UDP port 7946, open only inside the development network;
+- its own generated configuration and log path.
 
-Memberlist is a transient transport and discovery mechanism. PostgreSQL serving
-leases and authoritative records remain the durable coordination source. A
-single-node installation is the degenerate case of the same architecture, not
-a separate product edition.
+Memberlist is a transient way to carry messages and find peers. Durable
+coordination still comes from PostgreSQL: its serving leases and the records
+it holds as the source of truth. A single-node installation is the simplest case of the same
+architecture, not a separate edition of the product.
 
-Follow only application and gateway logs:
+To follow only the application and gateway logs, run:
 
 ```sh
 make cluster-logs
 ```
 
-Per-node structured files are available below:
+Each node also writes structured logs to a file:
 
 ```text
 .build/dev/logs/node-a/server.log
@@ -170,13 +176,13 @@ Per-node structured files are available below:
 .build/dev/logs/node-c/server.log
 ```
 
-Use the files and Loki for diagnosis; use PostgreSQL audit and application
-state—not logs—as durable evidence.
+Use these files and Loki to diagnose problems. For durable evidence, use the
+PostgreSQL audit records and application state, not logs.
 
-## 6. Reproduce and Recover One-Node Loss Manually
+## 6. Stop and recover a node by hand
 
-The automated smoke test is the normal proof. For a longer debugging window,
-stop one node explicitly:
+The automated smoke test is the normal way to prove recovery. If you need more
+time to debug, stop one node yourself:
 
 ```sh
 docker compose \
@@ -186,8 +192,8 @@ docker compose \
   stop node-b
 ```
 
-Confirm gateway readiness and inspect `X-Proctor-Node`; requests must continue
-through `node-a` and `node-c`. Then restore the node:
+Check that the gateway is still ready, and look at `X-Proctor-Node`. Requests
+must keep going through `node-a` and `node-c`. Then bring the node back:
 
 ```sh
 docker compose \
@@ -197,11 +203,11 @@ docker compose \
   up --detach --no-deps --wait node-b
 ```
 
-Re-run `make cluster-smoke` to prove complete convergence. A restarted node
-must recover from shared authoritative state; no manual cache copy or cluster
-message replay is valid.
+Run `make cluster-smoke` again to prove the cluster has fully recovered. A
+restarted node must recover from the shared durable state. Copying a cache by
+hand or replaying cluster messages doesn't count.
 
-## 7. Capture Bounded Diagnostics
+## 7. Capture diagnostics
 
 When startup or certification fails, run:
 
@@ -209,12 +215,12 @@ When startup or certification fails, run:
 make cluster-diagnostics
 ```
 
-The command prints Compose state and the last 300 log lines for HAProxy, all
-three nodes, Prometheus, and the Collector. This bound is intentional: it keeps
-failure evidence reviewable and reduces the chance of copying unrelated local
-data.
+The command prints the Compose state and the last 300 log lines for HAProxy,
+all three nodes, Prometheus and the Collector. The limit is deliberate. It
+keeps the evidence small enough to review, and makes it less likely that you
+copy unrelated local data.
 
-Interpret failures in this order:
+Work through failures in this order:
 
 | Symptom | First evidence to inspect |
 | --- | --- |
@@ -225,10 +231,11 @@ Interpret failures in this order:
 | Requests fail after one node stops | HAProxy backend state and whether the failure was actually shared PostgreSQL, Redis, or MinIO |
 | Restored node does not converge | stable node identity, serving lease, Memberlist admission, then PostgreSQL connectivity |
 
-Do not “fix” convergence by deleting PostgreSQL state or disabling compatibility
-checks. Capture the bounded evidence and identify the failed ownership boundary.
+Don't try to fix convergence by deleting PostgreSQL state or turning off the
+compatibility checks. Capture the diagnostics and find the boundary that
+failed.
 
-## 8. Stop While Preserving State
+## 8. Stop the cluster and keep its state
 
 Stop the cluster and its shared services:
 
@@ -236,13 +243,13 @@ Stop the cluster and its shared services:
 make cluster-down
 ```
 
-Named volumes and ignored generated state remain. Restart later with
-`make run-cluster`, or return to the single-node topology with
+The named volumes and the ignored generated state stay in place. Start again
+later with `make run-cluster`, or go back to the single-node topology with
 `make run-server`.
 
-Use `make dev-reset` only when you deliberately want to delete the shared local
-Installation, object data, captured mail, dashboards, logs stored in named
-volumes, and guarded seed credentials.
+Use `make dev-reset` only when you really want to delete the shared local
+Installation, object data, captured mail, dashboards, the logs stored in named
+volumes, and the guarded seed credentials.
 
-For ports, image pins, project names, and persistent local overrides, continue
+For ports, image pins, project names and persistent local overrides, continue
 with [development configuration](./development-configuration.mdx).

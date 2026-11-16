@@ -12,7 +12,7 @@ function ThemeColor(): null {
 
   useEffect(() => {
     const rootStyle = window.getComputedStyle(document.documentElement);
-    const navigation = rootStyle.getPropertyValue('--proctor-action').trim();
+    const navigation = rootStyle.getPropertyValue('--proctor-canvas').trim();
     let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     if (!meta) {
       meta = document.createElement('meta');
@@ -32,7 +32,7 @@ export default function Layout({children, ...props}: Props): React.JSX.Element {
   return (
     <OriginalLayout {...props}>
       <ThemeColor />
-      <div className={`${styles.shell} ${isHome ? styles.home : styles.reader}`}>
+      <div className={isHome ? `${styles.shell} ${styles.home}` : styles.shell}>
         {children}
       </div>
     </OriginalLayout>

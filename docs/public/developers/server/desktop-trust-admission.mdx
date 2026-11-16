@@ -1,94 +1,107 @@
 ---
-title: Develop Desktop Trust and Candidate Admission
-description: Preserve browser-mediated Desktop Authorization, DPoP request binding, compatibility policy, and the separate Participation admission boundary.
+title: Desktop trust and candidate admission
+description: How Desktop Authorization goes through the browser, how DPoP binds each request, how compatibility policy applies, and why Participation admission is a separate step.
 audience: developer
 maturity: preview
 slug: /developers/server/desktop-trust-admission/
 ---
 
-# Develop Desktop Trust and Candidate Admission
+# Desktop trust and candidate admission
 
-Candidate admission is not “login, then open a socket.” It is a chain of
-independently revocable proofs: Desktop Registration, registered-key Session,
-current Participation generation, and current Connection. Keep each proof at
-its owner so revoking one layer cannot be bypassed by another.
+Candidate admission is not "sign in, then open a socket". It is a chain of
+proofs, and each one can be revoked on its own:
+
+1. Desktop Registration
+2. a Session bound to the registered key
+3. the current Participation generation
+4. the current Connection
+
+Keep each proof with its owner, so that revoking one layer can't be got
+around through another.
 
 <GovernedFigure asset="candidate-trust-chain" />
 
-## Follow the Ownership Boundaries
+## Who owns what
 
-| Concern | Primary owner |
+| Concern | Main owner |
 | --- | --- |
 | Desktop Authorization lifecycle and compatibility evaluation | `server/app/identity/desktop_authorization*.go`, `desktop_compatibility.go` |
-| DPoP proof validation, nonce, replay, and registered-key principal | `server/app/dpop*.go` |
-| HTTP DTOs, loopback rules, and route declarations | `server/httpapi/desktop_*.go` |
-| Durable one-use transactions, Registration, Session, and policy state | `server/store` and `server/store/sqlstore` |
-| Candidate admission, Participation, and Connection | `server/app/exam/attempt` |
-| Versioned socket envelopes | the realtime transport and its explicit protocol catalog |
+| DPoP proof checks, nonce, replay and the registered-key principal | `server/app/dpop*.go` |
+| HTTP DTOs, loopback rules and route declarations | `server/httpapi/desktop_*.go` |
+| Durable one-use transactions, Registration, Session and policy state | `server/store` and `server/store/sqlstore` |
+| Candidate admission, Participation and Connection | `server/app/exam/attempt` |
+| Versioned socket envelopes | The realtime transport and its explicit protocol catalog |
 | Public wire contract | `server/openapi/fragments/authentication` and `access-policy` |
 
-Do not move compatibility or Participation decisions into DPoP middleware.
-DPoP proves possession for one request. It does not prove current Exam access,
-Sitting state, or candidate eligibility.
+Don't move compatibility or Participation decisions into DPoP middleware.
+DPoP proves possession of a key for one request. It does not prove current
+Exam access, Sitting state or that the candidate is eligible.
 
-## Preserve the Browser Handoff
+## Keep the browser handoff intact
 
-Desktop Authorization is a public-client flow. Desktop creates S256 PKCE,
-state, a P-256 key, and an exact loopback callback. The hosted browser binds the
-one-use request, authenticates the person, obtains explicit approval, and
-returns only a short-lived code and state. Desktop exchanges them using the
-same verifier and public key.
+Desktop Authorization is a public-client flow:
+
+1. Desktop creates an S256 PKCE pair, a state value, a P-256 key and an exact
+   loopback callback.
+2. The hosted browser page binds the one-use request, authenticates the
+   person and gets their explicit approval.
+3. The page returns only a short-lived code and the state.
+4. Desktop exchanges the code using the same verifier and public key.
 
 <GovernedFigure asset="desktop-authorization-handoff" />
 
-When changing this flow:
+When you change this flow:
 
-- keep the private key and PKCE verifier in Desktop;
-- accept only an exact IP-literal loopback callback and its pinned port/path;
-- bind approval and exchange to issuer, public key, build identity, request,
-  state, code hash, and expiration;
-- consume every code exactly once and retain terminal failure safely;
-- create the Registration and ordinary rotating Session atomically; and
-- publish effects only after durable commit.
+- Keep the private key and the PKCE verifier inside Desktop.
+- Accept only an exact IP-literal loopback callback, with its pinned port and
+  path.
+- Bind approval and exchange to the issuer, public key, build identity,
+  request, state, code hash and expiry.
+- Use every code exactly once, and keep a terminal failure safely.
+- Create the Registration and the ordinary rotating Session in one atomic
+  step.
+- Publish effects only after the durable commit.
 
 Loopback HTTP is a narrow local exception. A development option may allow an
-HTTP issuer only for explicit loopback development; it must never broaden to a
-LAN address or production origin.
+HTTP issuer, but only for explicit loopback development. It must never widen
+to a LAN address or a production address.
 
-## Walk the Hosted Browser States
+## The hosted browser states
 
-The hosted page is a purpose-specific state machine, not a generic login form.
-`webapp/src/app/HostedRoutes.tsx` removes the fragment proof and one-use
-`request` handle from browser history before rendering, retaining only the
-bounded opaque state in the URL. `DesktopAuthorizationPage.tsx` then moves
-through these server-backed states:
+The hosted page is a state machine built for this one purpose. It is not a
+general sign-in form. Before rendering, `webapp/src/app/HostedRoutes.tsx`
+removes the fragment proof and the one-use `request` handle from browser
+history, and leaves only the bounded opaque state in the URL.
+`DesktopAuthorizationPage.tsx` then moves through these states, each backed
+by the server:
 
-| State | Browser responsibility | Transition evidence |
+| State | What the browser does | What moves it on |
 | --- | --- | --- |
-| Initial binding | Submit the in-memory handle, proof, and state exactly once | route-scoped HttpOnly transaction cookie |
-| Account selection | Offer the current Web Session, local authentication, or configured provider | no Desktop credential and no new Web Session |
-| Authenticated confirmation | Show only Institution presentation, canonical username, and bounded device label | explicit approve, use-another-account, or cancel action |
-| Approved | Follow only the server-returned exact loopback redirect | short-lived code and original state return to Desktop |
-| Terminal rejection | Replace the task with canceled, expired, consumed, invalid, or active Attempt Session guidance | no retry using the old proof |
+| Initial binding | Sends the in-memory handle, proof and state exactly once | A route-scoped HttpOnly transaction cookie |
+| Account selection | Offers the current Web Session, local authentication or a configured provider | No Desktop credential and no new Web Session |
+| Authenticated confirmation | Shows only the Institution presentation, canonical username and a bounded device label | An explicit approve, use-another-account or cancel action |
+| Approved | Follows only the exact loopback redirect the server returned | The short-lived code and original state go back to Desktop |
+| Terminal rejection | Replaces the task with guidance for canceled, expired, consumed, invalid or active Attempt Session | No retry with the old proof |
 
-Local password authentication proves the account only for this transaction.
-Provider authentication leaves and returns in the same tab. “Use another
-account” clears the selected account without reconstructing the original proof.
-Action-caused terminal states focus and announce the replacement task;
-background checks do not steal focus.
+Signing in with a local password proves the account for this transaction only.
+Provider authentication leaves and comes back in the same tab. "Use another
+account" clears the chosen account without rebuilding the original proof.
+When a person's action leads to a terminal state, the page moves focus to the
+replacement task and announces it. Background checks don't steal focus.
 
-Review the page contract before changing a state:
-`webapp/src/features/desktop-authorization/CONTRACT.md`. The focused test map is:
+Read the page contract,
+`webapp/src/features/desktop-authorization/CONTRACT.md`, before you change a
+state. These tests cover it:
 
-- `webapp/src/app/HostedRoutes.test.tsx` for credential purpose, URL cleanup,
-  state bounds, and exhaustive route rendering;
+- `webapp/src/app/HostedRoutes.test.tsx` covers credential purpose, URL
+  cleanup, state limits and rendering of every route.
 - `webapp/src/features/desktop-authorization/DesktopAuthorizationContext.test.ts`
-  for public discovery plus transaction-context classification; and
-- `webapp/tests/browser/hosted-access.spec.ts` for exact binding, same-tab
+  covers public discovery and how the transaction context is classified.
+- `webapp/tests/browser/hosted-access.spec.ts` covers exact binding, same-tab
   authentication, account reset, explicit approval, cancellation, lockout,
-  focus, privacy, narrow viewport, and dark-theme behavior.
+  focus, privacy, narrow viewports and the dark theme.
 
-Run the component and Chromium browser evidence from `webapp/`:
+Run the component tests and the Chromium browser tests from `webapp/`:
 
 ```sh
 npm test -- src/app/HostedRoutes.test.tsx \
@@ -97,75 +110,102 @@ npx playwright test tests/browser/hosted-access.spec.ts \
   --project=chromium --grep 'Desktop'
 ```
 
-Add a browser case whenever a change introduces a visible state, a new way to
-enter or leave one, or new sensitive input. Assert sanitized history and the
-absence of proof, password, provider token, account identifier, and resulting
-Desktop credential from rendered text and URLs.
+Add a browser case whenever a change adds a visible state, a new way into or
+out of a state, or new sensitive input. Assert that history is clean, and that
+no proof, password, provider token, account identifier or resulting Desktop
+credential appears in rendered text or URLs.
 
-## Validate Every DPoP Request Anew
+## Check every DPoP request from scratch
 
 <GovernedFigure asset="desktop-dpop-boundary" />
 
 A proof binds the exact method, canonical target URI, access-credential hash,
-public key, issued time, unique identifier, and current nonce. The replay store
-and nonce state are security dependencies, not best-effort caches. If they are
-unavailable, authentication fails closed.
+public key, issue time, unique identifier and current nonce. The replay store
+and nonce state are security dependencies, not best-effort caches. If either
+is unavailable, authentication fails closed.
 
-On `authentication.dpop.use_nonce`, return the replacement nonce and require a
-newly signed proof. Never accept a replay of the rejected proof. Keep access and
-refresh credential rotation in the Session model; do not invent a Desktop-only
-authorization snapshot.
+On `authentication.dpop.use_nonce`, return the new nonce and require a freshly
+signed proof. Never accept a replay of the proof you rejected. Access and
+refresh credential rotation stay in the Session model. Don't invent an
+authorization snapshot just for Desktop.
 
-## Keep Compatibility Separate From Authorization
+## Keep compatibility apart from authorization
 
-`system/ping` and Desktop Authorization evaluate the exact release, build ID,
-platform, architecture, and realtime protocol against the current compatibility
-policy and compiled build catalog. The result may be compatible, update
-required, server incompatible, unsupported target, revoked build, or maintenance.
+`system/ping` and Desktop Authorization check the exact release, build ID,
+platform, architecture and realtime protocol against the current
+compatibility policy and the compiled build catalog. The result is one of:
 
-Compatibility is an admission prerequisite, not a Role permission. Updating a
-policy is a strong, recent, audited administrative mutation. A client-reported
-build string is untrusted input; it never selects server behavior by itself.
+- compatible
+- update required
+- server incompatible
+- unsupported target
+- revoked build
+- maintenance
 
-## Test a Client Under Development
+Compatibility is a precondition for admission, not a Role permission.
+Changing the policy is an administrative mutation that needs strong, recent
+authentication and is audited. A build string the client reports is untrusted
+input. On its own it never selects server behavior.
 
-From the server repository, run `make run-server`, then run `make dev-seed`
-in another terminal. From the Desktop checkout, run
-`npm run dev -- --allow-http-loopback` and connect to `http://localhost:8065`.
-The browser uses the seeded credentials and performs the real approval handoff.
+## Test a Desktop client you are developing
 
-`make run-server` compiles with the explicit `dev` Go build tag, so it
-defaults to the `dev` service environment, which skips Desktop login
-compatibility checks. No manifest or configuration entry is
-required. `PROCTOR_SERVICE_ENVIRONMENT=production make run-server` enables
-production checks locally. The process-only variable also accepts `test`,
-which enforces compatibility. Every build without that tag, including release
-packages, runtime images, and a plain `go build`, defaults to production
-behavior. Production compatibility uses the verified build catalog compiled
-from exact signed release tuples; until a release embeds verified Desktop
-artifacts that catalog is empty and every Desktop login is rejected as an
+1. From the server repository, run `make run-server`.
+2. In another terminal, run `make dev-seed`.
+3. From the Desktop checkout, run `npm run dev -- --allow-http-loopback` and
+   connect to `http://localhost:8065`.
+
+The browser uses the seeded credentials and goes through the real approval
+handoff.
+
+`make run-server` compiles with the explicit `dev` Go build tag. That makes it
+default to the `dev` service environment, which skips the Desktop login
+compatibility checks. You don't need a manifest or a configuration entry.
+
+- To turn on production checks locally, run
+  `PROCTOR_SERVICE_ENVIRONMENT=production make run-server`.
+- The variable is read from the process only. It also accepts `test`, which
+  enforces compatibility.
+- Every build without the tag defaults to production behavior. That includes
+  release packages, runtime images and a plain `go build`.
+
+Production compatibility uses the verified build catalog, which is compiled
+from exact signed release tuples. Until a release embeds verified Desktop
+artifacts, that catalog is empty, and every Desktop login is rejected as an
 unsupported build.
 
 Development still enforces request validity, readiness, maintenance, account
-access, PKCE, DPoP and Session checks. Protected Attempt admission requires a
+access, PKCE, DPoP and Session checks. Protected Attempt admission needs a
 verified native build in every service environment.
 
-## Admit an Attempt Only After Activity Entry
+## Admit an Attempt only after activity entry
 
-Candidate Exam Activity owns navigation and lazy creation of one Ready Attempt
-plus copy-on-write Workspace. Secure socket admission owns Participation and
-Connection creation. Do not recreate the Attempt during `exam_attempt.connect`
-or create Participation while merely listing activity.
+Two steps happen in two places:
 
-Admission rechecks authoritative Class membership, Sitting state, current
-Revision, Ready Attempt state, registered key and Session, compatibility,
-runtime posture, and the one-unresolved-Attempt-per-User-Session lock. It freezes
-one Attempt Configuration from the portable settings document and supported
-Desktop manifest. Reconnect and re-allow preserve that configuration.
+- Candidate Exam Activity owns navigation, and creates one Ready Attempt and
+  its copy-on-write Workspace lazily.
+- Secure socket admission creates the Participation and the Connection.
 
-## Tests That Define the Boundary
+Don't create the Attempt again during `exam_attempt.connect`, and don't create
+a Participation when the candidate is only listing activity.
 
-Run focused evidence from `server/`:
+Admission checks these again against authoritative state:
+
+- Class membership
+- Sitting state
+- the current Revision
+- Ready Attempt state
+- the registered key and Session
+- compatibility
+- runtime posture
+- the lock that allows one unresolved Attempt per User and Session
+
+It then freezes one Attempt Configuration from the portable settings document
+and the supported Desktop manifest. Reconnect and re-allow keep that
+configuration.
+
+## Tests that define the boundary
+
+Run the focused tests from `server/`:
 
 ```sh
 go test ./app -run 'TestDesktopAuthorization|TestDPoP|TestDesktopCompatibility'
@@ -175,7 +215,19 @@ go test ./store/sqlstore -run 'Test.*Desktop|Test.*Attempt'
 make architecture
 ```
 
-Include changed-code replay, wrong nonce, wrong method or target, mismatched
-key, expired code, callback mismatch, policy change, Registration revocation,
-stale membership, incompatible build, and cross-node continuation. Finish with
-OpenAPI agreement and the broader server gate appropriate to the change.
+Include these cases:
+
+- replay with a changed code
+- a wrong nonce
+- a wrong method or target
+- a mismatched key
+- an expired code
+- a callback mismatch
+- a policy change
+- Registration revocation
+- stale membership
+- an incompatible build
+- continuing on another node
+
+Finish with the OpenAPI agreement check and whichever broader server gate
+fits the change.

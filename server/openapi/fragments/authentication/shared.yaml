@@ -8,7 +8,7 @@
 components:
   headers:
     DPoPNonce:
-      description: Server-issued nonce required by every accepted Desktop DPoP proof.
+      description: A nonce from the server. The Desktop's next DPoP proof must include it, or the proof is refused.
       schema: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
   parameters:
     ProviderID:
@@ -18,10 +18,11 @@ components:
       schema:
         type: string
         pattern: ^[a-z0-9][a-z0-9._-]{0,63}$
-      description: The configured external authentication provider identifier.
+      description: The ID of a configured external sign-in provider, such as campus-sso.
   responses:
     AuthenticationOK:
-      description: Authenticated session
+      description: >-
+        The signed-in Session. Web and Desktop sign-ins and cookie refreshes set the credentials as cookies and leave tokens out of the body. A refresh leaves out the User profile.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -29,18 +30,58 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/AuthenticationResponse'
+          example:
+            user:
+              id: wj3drgzdpnf54rxf5d8qd3dqne
+              created_at: '2026-02-10T09:30:00Z'
+              updated_at: '2026-07-28T14:05:12Z'
+              username: student.one
+              email: student.one@example.edu
+              email_verified: true
+              display_name: Ada Okafor
+              first_name: Ada
+              last_name: Okafor
+              locale: en
+              timezone: Europe/London
+              last_login_at: '2026-08-01T08:00:00Z'
+              last_activity_at: '2026-08-01T08:00:00Z'
+              profile_picture_url: /api/v1/users/wj3drgzdpnf54rxf5d8qd3dqne/profile-picture
+              profile_picture_kind: default
+            session:
+              id: 1asb7sk89dp1ex339fkh3te5t4
+              created_at: '2026-08-01T08:00:00Z'
+              updated_at: '2026-08-01T08:00:00Z'
+              user_id: wj3drgzdpnf54rxf5d8qd3dqne
+              client_type: cli
+              device_id: lab-3-workstation-12
+              device_name: Exam workstation
+              authentication_method: password
+              authentication_strength: multi_factor
+              mfa_recovery_required: false
+              mfa_enrollment_required: false
+              authenticated_at: '2026-08-01T08:00:00Z'
+              mfa_completed_at: '2026-08-01T08:00:00Z'
+              last_activity_at: '2026-08-01T08:00:00Z'
+              idle_expires_at: '2026-08-08T08:00:00Z'
+              expires_at: '2026-08-31T08:00:00Z'
+            tokens:
+              token_type: Bearer
+              access_token: Kv3mT9qXc6LwRb2nYz8HdPs4FgJ1aEoU7iSkBvN5xQe
+              refresh_token: Wp8nR2cVx5LmQ7tKb1YhHs3dFgJ9aEoU6iTkBvM4xNz
+              access_expires_at: '2026-08-01T08:15:00Z'
+              refresh_expires_at: '2026-08-31T08:00:00Z'
     SensitiveAccepted:
-      description: Accepted
+      description: Accepted. The response body is empty.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
     SensitiveNoContent:
-      description: Completed
+      description: Done. The response body is empty.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
     BadGateway:
-      description: Upstream authentication provider failed
+      description: The external sign-in provider failed or sent back a response Proctor could not use
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -49,6 +90,33 @@ components:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
   schemas:
+    SessionRevocationReasonCode:
+      type: string
+      description: >-
+        Why a Session was revoked. The server only uses the values listed here, but later releases may add more.
+        Clients should show an unknown value in a generic way.
+      enum:
+        - access_policy_changed
+        - account_disabled
+        - administrator_all_sessions
+        - administrator_session
+        - authentication_audit_failed
+        - desktop_authorization_failed
+        - desktop_registration_revoked
+        - email_change_undone
+        - exam_attempt_session_lock
+        - expired
+        - external_identity_unlinked
+        - inactive_user
+        - password_changed
+        - password_removed
+        - mfa_reset
+        - password_reset
+        - refresh_replay
+        - user_all_sessions
+        - user_logout
+        - user_other_sessions
+        - user_session
     AuthenticationResponse:
       type: object
       additionalProperties: false
@@ -56,10 +124,13 @@ components:
         - session
       properties:
         user:
+          description: "The signed-in User's profile. Present after sign-in and left out after a refresh or Desktop code exchange."
           $ref: '#/components/schemas/UserProfileResponse'
         session:
+          description: "The Session that was created or refreshed."
           $ref: '#/components/schemas/SessionResponse'
         tokens:
+          description: "The access and refresh tokens. Left out when the credentials were set as browser cookies instead."
           $ref: '#/components/schemas/AuthenticationTokensResponse'
     SessionResponse:
       type: object
@@ -80,101 +151,107 @@ components:
         - expires_at
       properties:
         id:
+          description: "The Session ID."
           $ref: '#/components/schemas/ID'
         created_at:
+          description: "When the Session was created."
           type: string
           format: date-time
         updated_at:
+          description: "When the Session record last changed."
           type: string
           format: date-time
         archived_at:
+          description: "When the Session record was archived. Left out when it has not been archived."
           type: string
           format: date-time
         user_id:
+          description: "The ID of the User the Session belongs to."
           $ref: '#/components/schemas/ID'
         client_type:
+          description: "The kind of client the Session was created for."
           type: string
           enum:
             - desktop
             - cli
             - web
         desktop_registration_id:
+          description: "The ID of the Desktop Registration the Session is bound to. Present only for a desktop Session."
           $ref: '#/components/schemas/ID'
         desktop_release:
+          description: "The Desktop release version recorded when the Session was created. Present only for a desktop Session."
           type: string
         desktop_build_id:
+          description: "The Desktop build identifier recorded when the Session was created. Present only for a desktop Session."
           type: string
         desktop_platform:
+          description: "The operating system the Desktop runs on. Present only for a desktop Session."
           type: string
           enum: [darwin, win32, linux]
         desktop_architecture:
+          description: "The processor architecture the Desktop was built for. Present only for a desktop Session."
           type: string
           enum: [arm64, x64]
         desktop_realtime_protocol:
+          description: "The realtime protocol version the Desktop speaks. Present only for a desktop Session."
           type: integer
           minimum: 1
         device_id:
+          description: "The device identifier the client sent when it signed in. Left out when it sent none."
           type: string
         device_name:
+          description: "The readable device name the client sent when it signed in. Left out when it sent none."
           type: string
         authentication_method:
+          description: "How the Session was signed in: password for a local password, or the external provider's protocol, such as oidc or cas."
           type: string
         authentication_strength:
+          description: "single_factor when the Session was signed in with one factor, or multi_factor when it also passed two-step verification."
           type: string
         authenticated_at:
+          description: "When the Session was first signed in."
           type: string
           format: date-time
         mfa_recovery_required:
           type: boolean
-          description: Ordinary access remains unavailable until a new local authenticator is activated.
+          description: Whether the Session can't be used normally until the User sets up a new authenticator app for two-step verification.
         mfa_enrollment_required:
           type: boolean
           description: >-
-            Whether the Access Policy restricts this Web Session until its User sets up or completes two-step verification. Only setting up two-step verification, the second-factor challenge, reauthentication, the security status and sign-out accept it.
+            Whether the Access Policy limits this Web Session until its User sets up or completes two-step verification. While it is true, the Session can only set up two-step verification, answer the two-step verification challenge, reauthenticate, read the security status and sign out.
         reauthenticated_at:
           type: string
           format: date-time
-          description: Most recent verified fresh primary proof for the original Session method; does not replace initial authentication or MFA history.
+          description: When the User last proved who they are again on this Session, with the same method they signed in with. It does not change authenticated_at or mfa_completed_at. Left out when the Session has never reauthenticated.
         mfa_completed_at:
+          description: "When the Session last passed two-step verification. Left out when it never has."
           type: string
           format: date-time
         last_activity_at:
+          description: "When the Session was last used. Proctor records use at most once per activity update interval, so this can trail the latest request."
           type: string
           format: date-time
         idle_expires_at:
+          description: "When the Session ends if it stays unused. Each recorded use of the Session moves this later."
           type: string
           format: date-time
         expires_at:
+          description: "When the Session ends no matter how often it is used."
           type: string
           format: date-time
         revoked_at:
+          description: "When the Session was revoked. Left out while it is still active."
           type: string
           format: date-time
         revocation_reason_code:
+          description: "Why the Session was revoked. Present only when revoked_at is set."
           type: string
-          enum:
-            - mfa_reset
-            - account_disabled
-            - access_policy_changed
-            - administrator_all_sessions
-            - administrator_session
-            - authentication_audit_failed
-            - desktop_authorization_failed
-            - desktop_registration_revoked
-            - email_change_undone
-            - external_identity_unlinked
-            - inactive_user
-            - password_changed
-            - password_removed
-            - password_reset
-            - refresh_replay
-            - user_all_sessions
-            - user_logout
-            - user_other_sessions
-            - user_session
+          anyOf:
+            - $ref: '#/components/schemas/SessionRevocationReasonCode'
+            - type: string
         revocation_reason:
           type: string
-          description: Localized presentation of revocation_reason_code.
+          description: A readable explanation of revocation_reason_code in the request's language. Present only when the Session was revoked.
     AuthenticationTokensResponse:
       type: object
       additionalProperties: false
@@ -186,15 +263,20 @@ components:
         - refresh_expires_at
       properties:
         token_type:
+          description: "The authorization scheme to send the tokens with. Bearer for CLI Sessions. DPoP for Desktop Sessions, which must also send a DPoP proof with each request."
           type: string
           enum: [Bearer, DPoP]
         access_token:
+          description: "The access token for API requests. Treat it as a secret."
           type: string
         refresh_token:
+          description: "The refresh token. Use it once to get a new token pair. Treat it as a secret."
           type: string
         access_expires_at:
+          description: "When the access token stops working."
           type: string
           format: date-time
         refresh_expires_at:
+          description: "When the refresh token stops working."
           type: string
           format: date-time

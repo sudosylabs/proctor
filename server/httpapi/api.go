@@ -120,6 +120,7 @@ func compileAPI(
 		Tracing:                 settings.Tracing,
 		Localizer:               settings.Localizer,
 		PublicURL:               settings.PublicURL,
+		DocumentationURL:        settings.DocumentationURL,
 		MaxBodyBytes:            settings.MaxBodyBytes,
 		ReadTimeout:             settings.ReadTimeout,
 		WriteTimeout:            settings.WriteTimeout,

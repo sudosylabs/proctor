@@ -52,6 +52,9 @@ export const guides = [
   },
 ];
 
+export const sourceRepository = 'https://github.com/sudosylabs/Proctor';
+export const reportProblemUrl = `${sourceRepository}/issues/new`;
+
 export const referenceLinks = [
   {label: 'Glossary', to: '/glossary/'},
   {label: 'Configuration', to: '/reference/configuration'},
@@ -70,3 +73,13 @@ export const audienceLabels = {
   developer: 'Developer guide',
   'api-consumer': 'API guide',
 };
+
+// The reference shelf on the home page.
+export const homeReference = [
+  {label: 'API reference', description: 'Every endpoint, with its requirements, request and responses.', to: '/api/'},
+  {label: 'Error codes', description: 'What each error code means, what causes it and how to resolve it.', to: '/problems/'},
+  {label: 'Configuration', description: 'Every server setting, its default and accepted values.', to: '/reference/configuration'},
+  {label: 'Environment variables', description: 'Override any setting without editing the file.', to: '/reference/environment-variables'},
+  {label: 'Command line', description: 'The proctor commands for operators.', to: '/reference/command-line'},
+  {label: 'Glossary', description: 'The terms these docs use with a specific meaning.', to: '/glossary/'},
+];

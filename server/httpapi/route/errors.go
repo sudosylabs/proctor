@@ -208,7 +208,7 @@ func newProblem(
 	fields map[string]string,
 ) Problem {
 	return Problem{
-		Type:      ProblemType(code),
+		Type:      ProblemType(request, code),
 		Title:     title,
 		Status:    status,
 		Detail:    detail,

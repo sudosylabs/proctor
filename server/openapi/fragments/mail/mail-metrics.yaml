@@ -13,7 +13,7 @@ paths:
       tags:
         - Mail
       description: >-
-        Returns bounded aggregate delivery and queue health metrics for public allowlisted template categories. Metrics contain no recipient identity, message content, payload identifiers, credentials, or raw provider errors.
+        Returns delivery totals and queue health for the server that answers the request, grouped by template, state and outcome. Delivery totals count from when that server process started. Queue figures come from the most recent check by its mail maintenance monitor. Metrics never include recipients, message content, payload IDs, credentials or raw provider errors.
       x-proctor-auth: principal_required
       x-proctor-error-codes:
         - authorization.denied
@@ -51,7 +51,7 @@ paths:
 components:
   responses:
     MailMetricsOK:
-      description: Bounded safe mail delivery metrics
+      description: Mail delivery and queue metrics.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -59,9 +59,42 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/MailMetricsResponse'
+          example:
+            deliveries:
+              - template_key: exam.sitting_scheduled
+                state: accepted
+                outcome_code: mail.accepted
+                count: 412
+                attempt_count: 0
+                processing_latency_millis: 1854000
+                maximum_processing_latency_millis: 62000
+              - template_key: exam.sitting_scheduled
+                state: sending
+                outcome_code: mail.attempt_started
+                count: 0
+                attempt_count: 419
+                processing_latency_millis: 0
+                maximum_processing_latency_millis: 0
+              - template_key: identity.password_reset
+                state: failed
+                outcome_code: mail.transport.permanent
+                count: 3
+                attempt_count: 0
+                processing_latency_millis: 5400
+                maximum_processing_latency_millis: 2100
+            queues:
+              - template_key: exam.sitting_scheduled
+                state: queued
+                outcome_code: ''
+                count: 18
+                oldest_age_millis: 45000
+                health_code: mail.healthy
+                truncated: false
+            health_code: mail.healthy
   schemas:
     MailDeliveryMetricResponse:
-      description: Aggregate delivery outcome and processing latency for one bounded metric bucket.
+      description: >-
+        Totals for one template, state and outcome, counted since this server process started.
       type: object
       additionalProperties: false
       required:
@@ -78,34 +111,40 @@ components:
           anyOf:
             - $ref: '#/components/schemas/MailTemplateKey'
             - type: string
+          description: Template of the deliveries in this group.
         state:
           $ref: '#/components/schemas/MailDeliveryState'
+          description: State the deliveries in this group reached.
         outcome_code:
           type: string
           maxLength: 128
-          description: Stable safe outcome category for this metric bucket.
+          description: >-
+            Outcome this group counts: `mail.accepted` for messages the SMTP server accepted, a mail failure code for deliveries that failed, were suppressed, expired or will be retried, or `mail.attempt_started` for the group that counts send attempts.
         count:
           type: integer
           format: int64
           minimum: 0
-          description: Number of durable deliveries in the bucket.
+          description: Number of times a delivery of this template reached this state with this outcome.
         attempt_count:
           type: integer
           format: int64
           minimum: 0
-          description: Total delivery Attempts represented by the bucket.
+          description: >-
+            Number of send attempts started. Only the `mail.attempt_started` group counts attempts, and its `count` is 0. Every other group reports 0.
         processing_latency_millis:
           type: integer
           format: int64
           minimum: 0
-          description: Aggregate processing latency in milliseconds.
+          description: >-
+            Sum, in milliseconds, of the time each delivery in the group took from creation to reaching its state. Divide by `count` for the average.
         maximum_processing_latency_millis:
           type: integer
           format: int64
           minimum: 0
-          description: Highest single processing latency in milliseconds within the bucket.
+          description: Longest time, in milliseconds, any one delivery in the group took from creation to reaching its state.
     MailQueueMetricResponse:
-      description: Aggregate queue age and health for one bounded metric bucket.
+      description: >-
+        Size and age of the stored deliveries of one template, state and outcome, as the mail maintenance monitor last saw them.
       type: object
       additionalProperties: false
       required:
@@ -122,20 +161,24 @@ components:
           anyOf:
             - $ref: '#/components/schemas/MailTemplateKey'
             - type: string
+          description: Template of the deliveries in this group.
         state:
           $ref: '#/components/schemas/MailDeliveryState'
+          description: State of the deliveries in this group.
         outcome_code:
           type: string
           maxLength: 128
+          description: Public failure code the deliveries in this group carry. Empty when they carry none.
         count:
           type: integer
           format: int64
           minimum: 0
+          description: Number of deliveries in the group when the monitor last checked.
         oldest_age_millis:
           type: integer
           format: int64
           minimum: 0
-          description: Age in milliseconds of the oldest matching queued delivery.
+          description: Age, in milliseconds, of the oldest delivery in the group when the monitor last checked.
         health_code:
           type: string
           enum:
@@ -143,12 +186,13 @@ components:
             - mail.healthy
             - mail.smtp_outage
             - mail.queue_delayed
-          description: Stable safe operational classification for this queue bucket.
+          description: >-
+            Overall mail health the monitor decided during the same check. `mail.queue_delayed` means queued mail has waited too long. `mail.smtp_outage` means the SMTP server can't be reached.
         truncated:
           type: boolean
-          description: True when the bounded scan did not include every matching delivery.
+          description: True when the monitor's check stopped at its size limit, so these figures may not cover every delivery.
     MailMetricsResponse:
-      description: Bounded safe mail delivery and queue metrics.
+      description: Mail delivery totals and queue health for the server that answered the request.
       type: object
       additionalProperties: false
       required:
@@ -161,11 +205,13 @@ components:
           maxItems: 512
           items:
             $ref: '#/components/schemas/MailDeliveryMetricResponse'
+          description: Delivery totals since this server process started, one entry per template, state and outcome.
         queues:
           type: array
           maxItems: 512
           items:
             $ref: '#/components/schemas/MailQueueMetricResponse'
+          description: Queue figures from the monitor's most recent check, one entry per template, state and outcome.
         health_code:
           type: string
           enum:
@@ -174,4 +220,5 @@ components:
             - mail.healthy
             - mail.smtp_outage
             - mail.queue_delayed
-          description: Overall safe mail subsystem health classification.
+          description: >-
+            Overall mail health on this server. `mail.disabled` means mail is turned off in configuration. Empty when the monitor hasn't reported yet.

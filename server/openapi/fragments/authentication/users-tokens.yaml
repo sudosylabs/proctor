@@ -14,7 +14,7 @@ paths:
       operationId: listPersonalAccessTokens
       summary: List current-user Personal Access Tokens
       description: >-
-        Returns safe metadata for the current User's Personal Access Tokens, including scope, expiry, and lifecycle state. The token credential is returned only once at creation and never appears in this list.
+        Lists the current User's Personal Access Tokens, newest first, with their scopes, expiry and whether they are disabled or revoked. The secret token value is shown only once, when the token is created, and never appears in this list.
       tags:
         - Authentication
       x-proctor-auth: session_required
@@ -52,7 +52,7 @@ paths:
       operationId: createPersonalAccessToken
       summary: Create a Personal Access Token
       description: >-
-        Creates a bounded Personal Access Token after recent interactive authentication and returns its credential exactly once. Requested scopes and any Academic Unit boundary are validated against current authority and policy.
+        Creates a Personal Access Token with limited scopes and a fixed expiry. The interactive Session must have signed in or reauthenticated recently. The response shows the secret token value once, and Proctor never shows it again. Proctor checks that the current User may grant every requested scope at the requested Academic Unit, or across the Institution when no Academic Unit is given, and that the expiry is within the allowed lifetime.
       tags:
         - Authentication
       x-proctor-auth: recent_session_required
@@ -103,7 +103,7 @@ paths:
       operationId: listGrantablePersonalAccessTokenScopes
       summary: List grantable Personal Access Token scopes
       description: >-
-        Returns the Personal Access Token scopes the current User may grant right now, with a localized title and description for each. A scope with `institution_wide` set may be granted with no Academic Unit boundary or with any boundary. Otherwise it may be granted only with a boundary at one of its `academic_unit_ids` or at a unit below one of them. `academic_units` lists at most 50 of those delegable roots, ordered by display name; `academic_units_has_more` reports that more exist. Scopes the User cannot grant anywhere are omitted. Creation still rechecks current authority.
+        Returns the Personal Access Token scopes the current User may grant right now, each with a title and description in the request's language. A scope with `institution_wide` set can be granted without an Academic Unit limit, or limited to any Academic Unit. Any other scope can be granted only when limited to one of its `academic_unit_ids` or to a unit below one of them. `academic_units` lists at most 50 of those top Academic Units, sorted by display name, and `academic_units_has_more` says whether there are more. Scopes the User can't grant anywhere are left out. Creating a token checks the User's permissions again.
       x-codeSamples:
         - lang: Shell
           label: List grantable Personal Access Token scopes
@@ -149,7 +149,7 @@ paths:
       operationId: disablePersonalAccessToken
       summary: Disable a Personal Access Token
       description: >-
-        Temporarily disables the exact current-User Personal Access Token so its credential can no longer authenticate. The token record and audit history remain available for later review or re-enablement.
+        Disables one of the current User's Personal Access Tokens, so requests that use it stop working until it is enabled again. The token record and its audit history are kept, so it can be reviewed or enabled later.
       x-codeSamples:
         - lang: Shell
           label: Disable a Personal Access Token
@@ -204,7 +204,7 @@ paths:
       operationId: enablePersonalAccessToken
       summary: Enable a Personal Access Token
       description: >-
-        Re-enables a disabled, unexpired Personal Access Token after recent interactive authentication and a fresh scope-authority check. Revoked tokens cannot be enabled.
+        Enables a disabled Personal Access Token that has not expired. The interactive Session must have signed in or reauthenticated recently, and Proctor checks again that the User may still grant the token's scopes. A revoked token can't be enabled.
       x-codeSamples:
         - lang: Shell
           label: Enable a Personal Access Token
@@ -262,7 +262,7 @@ paths:
       operationId: revokePersonalAccessToken
       summary: Revoke a Personal Access Token
       description: >-
-        Permanently revokes the exact Personal Access Token belonging to the current User. Revocation is durable and audited; the credential cannot be restored or exchanged for a replacement.
+        Revokes one of the current User's Personal Access Tokens for good. The revocation is saved and recorded in the audit log. The token can't be restored or swapped for a replacement.
       x-codeSamples:
         - lang: Shell
           label: Revoke a Personal Access Token
@@ -318,11 +318,11 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/ID'
-      description: The Personal Access Token record identifier; this is not the token secret.
+      description: The ID of a Personal Access Token. This is not the secret token value.
   requestBodies:
     CreatePersonalAccessToken:
       required: true
-      description: Declares the human-facing purpose, bounded scopes, optional Academic Unit boundary, and absolute expiry for the new token.
+      description: What the new token is for, its scopes, an optional Academic Unit to limit it to, and when it expires.
       content:
         application/json:
           schema:
@@ -331,11 +331,11 @@ components:
             description: Read exams from the registrar tool
             scopes:
               - exam.view
-            academic_unit_id: ybndrfg8ejkmcpqxot1uwisza3
+            academic_unit_id: o87yi4tenx8kodmcuup1hmtsbo
             expires_at: '2027-01-01T00:00:00Z'
   responses:
     PersonalAccessTokenOK:
-      description: Personal Access Token
+      description: The Personal Access Token after the change
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -343,8 +343,20 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/PersonalAccessTokenResponse'
+          example:
+            id: dfa1x1n7mkthyoziwxnupsmyia
+            created_at: '2026-08-01T10:00:00Z'
+            updated_at: '2026-08-20T15:12:00Z'
+            user_id: wj3drgzdpnf54rxf5d8qd3dqne
+            description: Read exams from the registrar tool
+            scopes:
+              - exam.view
+            academic_unit_id: o87yi4tenx8kodmcuup1hmtsbo
+            expires_at: '2027-01-01T00:00:00Z'
+            last_used_at: '2026-08-19T07:45:00Z'
+            disabled_at: '2026-08-20T15:12:00Z'
     PersonalAccessTokenCreated:
-      description: Personal Access Token with one-time credential
+      description: The new Personal Access Token and its secret value, shown only this once
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -352,8 +364,20 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/PersonalAccessTokenCreationResponse'
+          example:
+            token:
+              id: dfa1x1n7mkthyoziwxnupsmyia
+              created_at: '2026-08-01T10:00:00Z'
+              updated_at: '2026-08-01T10:00:00Z'
+              user_id: wj3drgzdpnf54rxf5d8qd3dqne
+              description: Read exams from the registrar tool
+              scopes:
+                - exam.view
+              academic_unit_id: o87yi4tenx8kodmcuup1hmtsbo
+              expires_at: '2027-01-01T00:00:00Z'
+            credential: Fz7kQ3wNb8LmRc2vYt5HdPs9XgJ1aEoU6iSkBvM4xWe
     PersonalAccessTokenGrantableScopesOK:
-      description: Grantable Personal Access Token scopes
+      description: The Personal Access Token scopes the current User may grant
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -370,7 +394,7 @@ components:
                   - institution
                 institution_wide: true
                 academic_unit_ids:
-                  - ybndrfg8ejkmcpqxot1uwisza3
+                  - o87yi4tenx8kodmcuup1hmtsbo
               - name: exam.view
                 title: View exams
                 description: Read exams you manage, including drafts and revisions.
@@ -378,13 +402,13 @@ components:
                   - exam
                 institution_wide: false
                 academic_unit_ids:
-                  - ybndrfg8ejkmcpqxot1uwisza3
+                  - o87yi4tenx8kodmcuup1hmtsbo
             academic_units:
-              - id: ybndrfg8ejkmcpqxot1uwisza3
+              - id: o87yi4tenx8kodmcuup1hmtsbo
                 display_name: School of Computing
             academic_units_has_more: false
     PersonalAccessTokenListOK:
-      description: Personal Access Token collection
+      description: One page of the current User's Personal Access Tokens
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -392,6 +416,27 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/PersonalAccessTokenListResponse'
+          example:
+            items:
+              - id: dfa1x1n7mkthyoziwxnupsmyia
+                created_at: '2026-08-01T10:00:00Z'
+                updated_at: '2026-08-01T10:00:00Z'
+                user_id: wj3drgzdpnf54rxf5d8qd3dqne
+                description: Read exams from the registrar tool
+                scopes:
+                  - exam.view
+                academic_unit_id: o87yi4tenx8kodmcuup1hmtsbo
+                expires_at: '2027-01-01T00:00:00Z'
+                last_used_at: '2026-08-19T07:45:00Z'
+              - id: zq993bky9h3uj4saw8iywi38cy
+                created_at: '2026-03-02T12:00:00Z'
+                updated_at: '2026-06-01T12:00:00Z'
+                user_id: wj3drgzdpnf54rxf5d8qd3dqne
+                description: Nightly job export
+                scopes:
+                  - job.view
+                expires_at: '2026-06-01T12:00:00Z'
+                last_used_at: '2026-05-31T02:00:00Z'
   schemas:
     CreatePersonalAccessTokenRequest:
       type: object
@@ -403,15 +448,19 @@ components:
       properties:
         description:
           type: string
+          description: What the token is for, in up to 255 characters. It helps you recognize the token later.
         scopes:
           type: array
+          description: The actions the token may perform. The current User must be able to grant each one.
           items:
             $ref: '#/components/schemas/PersonalAccessTokenScope'
         academic_unit_id:
           $ref: '#/components/schemas/ID'
+          description: Limits the token to resources in this Academic Unit and the units below it. Leave it out for a token that works across the Institution.
         expires_at:
           type: string
           format: date-time
+          description: When the token stops working. It must fall within the server's allowed token lifetime, which is 1 hour to 90 days by default.
     PersonalAccessTokenScope:
       description: An action a Personal Access Token may carry. The grantable-scopes operation reports which of them the current User may grant.
       type: string
@@ -479,15 +528,16 @@ components:
       properties:
         scopes:
           type: array
+          description: The scopes the current User may grant somewhere. Scopes they can't grant anywhere are left out.
           items:
             $ref: '#/components/schemas/PersonalAccessTokenGrantableScope'
         academic_units:
-          description: At most 50 Academic Unit roots at which at least one scope is grantable, ordered by display name.
+          description: Up to 50 top Academic Units where at least one scope can be granted, sorted by display name.
           type: array
           items:
             $ref: '#/components/schemas/PersonalAccessTokenGrantableAcademicUnit'
         academic_units_has_more:
-          description: True when more grantable roots exist than are listed.
+          description: True when there are more such Academic Units than are listed.
           type: boolean
     PersonalAccessTokenGrantableScope:
       type: object
@@ -502,14 +552,15 @@ components:
       properties:
         name:
           type: string
+          description: The scope name to send in scopes when creating a token. A newer server may send a name this contract does not list yet.
           anyOf:
             - $ref: '#/components/schemas/PersonalAccessTokenScope'
             - type: string
         title:
-          description: Short localized title.
+          description: A short title in the request's language.
           type: string
         description:
-          description: One localized sentence explaining what the scope allows.
+          description: One sentence, in the request's language, explaining what the scope allows.
           type: string
         resource_types:
           description: The resource types the action applies to.
@@ -528,10 +579,10 @@ components:
               - submission
               - user
         institution_wide:
-          description: True when the scope may be granted without an Academic Unit boundary, or with any boundary.
+          description: True when the scope can be granted without an Academic Unit limit, or limited to any Academic Unit.
           type: boolean
         academic_unit_ids:
-          description: The listed `academic_units` at which the scope is grantable; it is also grantable at any unit below them.
+          description: The listed `academic_units` where the scope can be granted. It can also be granted at any unit below them.
           type: array
           items:
             $ref: '#/components/schemas/ID'
@@ -544,8 +595,10 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The Academic Unit ID.
         display_name:
           type: string
+          description: The Academic Unit's display name.
     PersonalAccessTokenResponse:
       type: object
       additionalProperties: false
@@ -560,37 +613,49 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The Personal Access Token ID. It is not the secret token value.
         created_at:
           type: string
           format: date-time
+          description: When the token was created.
         updated_at:
           type: string
           format: date-time
+          description: When the token record last changed.
         archived_at:
           type: string
           format: date-time
+          description: When the token record was archived. Left out when it has not been archived.
         user_id:
           $ref: '#/components/schemas/ID'
+          description: The ID of the User who owns the token.
         description:
           type: string
+          description: What the token is for, as its owner described it.
         scopes:
           type: array
+          description: The actions the token may perform.
           items:
             type: string
         academic_unit_id:
           $ref: '#/components/schemas/ID'
+          description: The Academic Unit the token is limited to, including the units below it. Left out for a token that works across the Institution.
         expires_at:
           type: string
           format: date-time
+          description: When the token stops working.
         last_used_at:
           type: string
           format: date-time
+          description: When a request last used the token. Use is recorded at most once per update interval, five minutes by default, so it can trail the latest request. Left out when the token has never been used.
         disabled_at:
           type: string
           format: date-time
+          description: When the token was disabled. Left out while it is enabled.
         revoked_at:
           type: string
           format: date-time
+          description: When the token was revoked. Left out unless it has been revoked.
     PersonalAccessTokenCreationResponse:
       type: object
       additionalProperties: false
@@ -600,8 +665,10 @@ components:
       properties:
         token:
           $ref: '#/components/schemas/PersonalAccessTokenResponse'
+          description: The new token's details.
         credential:
           type: string
+          description: The secret token value to send as a Bearer token. Store it safely now, because Proctor never shows it again.
     PersonalAccessTokenListResponse:
       description: One page of the collection in its stable order.
       type: object
@@ -611,7 +678,9 @@ components:
       properties:
         items:
           type: array
+          description: The tokens on this page, newest first.
           items:
             $ref: '#/components/schemas/PersonalAccessTokenResponse'
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
+          description: Pass this back as cursor to get the next page. Left out on the last page.

@@ -11,7 +11,7 @@ paths:
       operationId: listAuthenticationMethods
       summary: List the current User's authentication methods without credential material
       description: >-
-        Returns whether the current User has a local password and the safe presentation of linked external identities. Password hashes, provider subjects, tokens, and other credential material are never returned.
+        Returns whether the current User has a local password, and the name and type of each linked external identity. Password hashes, provider subject IDs, tokens and other credentials are never returned.
       tags:
         - Authentication
       x-proctor-auth: session_required
@@ -42,7 +42,7 @@ paths:
       operationId: enrollPassword
       summary: Enroll a policy-permitted local password after strong recent authentication
       description: >-
-        Adds a local password to the current User only when Access Policy permits it and the interactive Session has strong recent assurance. The password is stored through the credential contract and never returned.
+        Adds a local password to the current User. This works only when the Access Policy allows local passwords and the interactive Session has passed two-step verification and has signed in or reauthenticated recently. Proctor stores only a hash of the password and never returns it.
       tags:
         - Authentication
       x-proctor-auth: strong_recent_session_required
@@ -95,7 +95,7 @@ paths:
       operationId: removePassword
       summary: Remove the current User's local password while preserving another usable method
       description: >-
-        Removes the current User's local password after strong recent authentication, but fails closed if doing so would leave no usable authentication method. Existing Sessions are reconciled according to the authentication contract.
+        Removes the current User's local password. The interactive Session must have passed two-step verification and must have signed in or reauthenticated recently. If removing it would leave the User no way to sign in, the request is refused and nothing changes. On success, every Session that was signed in with the password is revoked and outstanding password-reset links stop working.
       x-codeSamples:
         - lang: Shell
           label: Remove the local password
@@ -150,7 +150,7 @@ paths:
       operationId: changePassword
       summary: Replace the current User's local password after strong recent authentication
       description: >-
-        Replaces the current User's existing local password when Access Policy permits local login and the interactive Session has strong recent assurance. The new password must satisfy the password policy: it must fit the configured length bounds and must not be a common password, a simple pattern, derived from the account's username, email local part, or name, or one of the account's recent passwords. The calling Session stays signed in; every other Session of the User is revoked, outstanding password-reset links stop working, and the account address receives a password-changed notice.
+        Replaces the current User's local password. This works only when the Access Policy allows local sign-in and the interactive Session has passed two-step verification and has signed in or reauthenticated recently. The new password must meet the password rules. It must fit the configured length limits and must not be a common password or a simple pattern. It must not contain the username, the part of the email address before the @, or the person's name, and it must not match one of the account's recent passwords. The calling Session stays signed in. Every other Session of the User is revoked, outstanding password-reset links stop working, and the account's email address receives a password-changed notice.
       x-codeSamples:
         - lang: Shell
           label: Change the local password
@@ -216,14 +216,14 @@ paths:
       - name: external_identity_id
         in: path
         required: true
-        description: Identifier of the exact linked external identity record to remove; this is not a provider subject or credential.
+        description: The ID of the linked external identity to remove, as listed in providers[].id. It is not the provider's subject ID or any credential.
         schema:
           $ref: '#/components/schemas/ID'
     delete:
       operationId: unlinkExternalIdentity
       summary: Unlink one exact provider identity while preserving another usable method
       description: >-
-        Unlinks the selected external identity after strong recent authentication, while failing closed if it is the User's last usable authentication method. Sessions established through the removed identity are revoked as required.
+        Unlinks one of the current User's external identities. The interactive Session must have passed two-step verification and must have signed in or reauthenticated recently. If this identity is the User's last way to sign in, the request is refused and nothing changes. On success, every Session that was signed in through this identity is revoked.
       x-codeSamples:
         - lang: Shell
           label: Unlink an external identity
@@ -278,7 +278,7 @@ components:
   requestBodies:
     EnrollPassword:
       required: true
-      description: Supplies the policy-compliant local password to enroll; clients must prevent it from entering logs, traces, or analytics.
+      description: The local password to add. It must meet the password rules. Keep it out of logs, traces and analytics.
       content:
         application/json:
           schema:
@@ -287,7 +287,7 @@ components:
             password: correct-horse-battery-staple-2026
     ChangePassword:
       required: true
-      description: Supplies the new policy-compliant local password; clients must prevent it from entering logs, traces, or analytics.
+      description: The new local password. It must meet the password rules. Keep it out of logs, traces and analytics.
       content:
         application/json:
           schema:
@@ -296,7 +296,7 @@ components:
             password: lantern-orchard-copper-tide
   responses:
     AuthenticationMethodListOK:
-      description: Current User authentication methods without subjects or credential material
+      description: The current User's sign-in methods, without provider subject IDs or credentials
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
@@ -304,6 +304,13 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/AuthenticationMethodResponse'
+          example:
+            password: true
+            providers:
+              - id: 889766ufjgio6kbpzjbufozksq
+                provider_id: campus-sso
+                display_name: Campus single sign-on
+                type: oidc
   schemas:
     ChangePasswordRequest:
       type: object
@@ -313,6 +320,7 @@ components:
       properties:
         password:
           type: string
+          description: "The new local password. It must meet the password rules and must not contain the username, the part of the email address before the @, or the person's name. When the server keeps a password history, it must not match a recent password."
     EnrollPasswordRequest:
       type: object
       additionalProperties: false
@@ -321,6 +329,7 @@ components:
       properties:
         password:
           type: string
+          description: "The local password to add. It must meet the password rules and must not contain the username, the part of the email address before the @, or the person's name."
     AuthenticationProviderMethodResponse:
       type: object
       additionalProperties: false
@@ -332,13 +341,17 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The ID of this linked external identity. Use it to unlink the identity.
         provider_id:
           type: string
+          description: The ID of the configured provider this identity signs in through.
           pattern: ^[a-z0-9][a-z0-9._-]{0,63}$
         display_name:
           type: string
+          description: The provider's display name.
         type:
           type: string
+          description: The provider's protocol, such as oidc or cas.
     AuthenticationMethodResponse:
       type: object
       additionalProperties: false
@@ -348,8 +361,10 @@ components:
       properties:
         password:
           type: boolean
+          description: Whether the User has a local password.
         providers:
           type: array
+          description: The external identities linked to the User.
           maxItems: 64
           items:
             $ref: '#/components/schemas/AuthenticationProviderMethodResponse'

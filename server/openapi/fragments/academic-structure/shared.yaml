@@ -12,7 +12,9 @@ components:
       in: header
       required: false
       description: >-
-        Opaque client key. Identical semantic commands replay the committed outcome for at least 24 hours; reuse with different input is a conflict.
+        A key you choose for this request. If you retry with the same key and the same body within 24 hours,
+        Proctor returns the result of the first request instead of acting again. Reusing a key with a different
+        body is a conflict. Treat the key as a plain string. The server gives it no other meaning.
       schema:
         type: string
         minLength: 1
@@ -36,7 +38,9 @@ components:
     ArchiveAcademic:
       required: false
       description: >-
-        Optional revision fence. A stale `expected_revision` returns the resource conflict error without archiving; a request without a body archives unconditionally.
+        Optional. Send `expected_revision` to archive only if the resource has not changed since you read it. If the
+        revision is out of date, the request fails with the resource's conflict error and nothing is archived.
+        Without a body, the resource is archived whatever its current revision.
       content:
         application/json:
           schema:
@@ -54,7 +58,8 @@ components:
             display_name: Computer Science
             description: Teaching and research in computing.
       description: >-
-        The canonical name and human-facing presentation for a new root Academic Unit. Server-owned identity, timestamps, Institution, and parent fields are ignored when sent for v1 compatibility.
+        The machine name and display text for the new Academic Unit. The server sets its identifier, timestamps,
+        Institution and parent. A body with any other member is rejected with `request.invalid`.
   responses:
     AcademicUnitCreated:
       description: Academic Unit created
@@ -62,18 +67,75 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/AcademicUnitResponse'
+          example:
+            revision: 1
+            id: 14j8umgczgrdp95w77zuxmxfu9
+            created_at: '2026-08-01T09:00:00Z'
+            updated_at: '2026-08-01T09:00:00Z'
+            institution_id: wj3drgzdpnf54rxf5d8qd3dqne
+            name: computer-science
+            display_name: Computer Science
+            description: Teaching and research in computing.
     AcademicUnitListOK:
       description: Academic Unit collection
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/AcademicUnitListResponse'
+          example:
+            items:
+              - revision: 2
+                id: 14j8umgczgrdp95w77zuxmxfu9
+                created_at: '2026-08-01T09:00:00Z'
+                updated_at: '2026-08-03T14:20:00Z'
+                institution_id: wj3drgzdpnf54rxf5d8qd3dqne
+                parent_id: ih1r84kij94nrwis97rft6rduh
+                name: computer-science
+                display_name: School of Computer Science
+                description: Computing teaching and research.
+              - revision: 1
+                id: 1asb7sk89dp1ex339fkh3te5t4
+                created_at: '2026-08-02T10:15:00Z'
+                updated_at: '2026-08-02T10:15:00Z'
+                institution_id: wj3drgzdpnf54rxf5d8qd3dqne
+                parent_id: ih1r84kij94nrwis97rft6rduh
+                name: software-engineering
+                display_name: Software Engineering
+                description: ''
+            next_cursor: eyJuYW1lIjoic29mdHdhcmUtZW5naW5lZXJpbmciLCJpZCI6IjFhc2I3c2s4OWRwMWV4MzM5ZmtoM3RlNXQ0IiwiZGlyIjoiYXNjIn0
     ClassListOK:
       description: Class collection
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ClassListResponse'
+          example:
+            items:
+              - revision: 1
+                id: 6xoche483hwrx5rpu8jzjoe7qg
+                created_at: '2026-08-05T08:30:00Z'
+                updated_at: '2026-08-05T08:30:00Z'
+                programme_level_id: iqcx3qc9sbbt6ocshszfqgq6ci
+                academic_period_id: sjebyge5cpbop1xwo4eds74ejb
+                name: cs-level-100-a
+                display_name: Computer Science Level 100 — A
+                description: First-year Class A.
+                student_count: 48
+                student_count_is_lower_bound: false
+              - revision: 3
+                id: 39kqk53i4cswfzbi7hbai1r8qg
+                created_at: '2026-08-05T08:35:00Z'
+                updated_at: '2026-08-20T16:10:00Z'
+                programme_level_id: iqcx3qc9sbbt6ocshszfqgq6ci
+                academic_period_id: sjebyge5cpbop1xwo4eds74ejb
+                name: cs-level-100-b
+                display_name: Computer Science Level 100 — B
+                description: First-year Class B.
+                student_count: 45
+                student_count_is_lower_bound: false
+            next_cursor: eyJuYW1lIjoiY3MtbGV2ZWwtMTAwLWIiLCJpZCI6IjM5a3FrNTNpNGNzd2Z6Ymk3aGJhaTFyOHFnIiwiZGlyIjoiYXNjIn0
+            total: 6
+            total_is_lower_bound: false
   schemas:
     ArchiveAcademicRequest:
       type: object
@@ -83,7 +145,9 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Revision from the last resource response.
+          description: >-
+            The `revision` from your last read of the resource. If the resource has changed since, nothing is
+            archived. Null is rejected.
     AcademicUnitResponse:
       type: object
       additionalProperties: false
@@ -101,30 +165,43 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Current aggregate revision. Supply it as expected_revision on an edit or archive to protect a client snapshot from concurrent changes.
+          description: >-
+            Starts at 1 and goes up with every change. Send it as `expected_revision` on an update or archive so the
+            change fails if someone else changed the Academic Unit first.
         id:
           $ref: '#/components/schemas/ID'
+          description: The Academic Unit identifier.
         created_at:
           type: string
           format: date-time
+          description: When the Academic Unit was created.
         updated_at:
           type: string
           format: date-time
+          description: When the Academic Unit last changed.
         archived_at:
           type: string
           format: date-time
+          description: When the Academic Unit was archived. Omitted while it is active.
         institution_id:
           $ref: '#/components/schemas/ID'
+          description: The Institution the Academic Unit belongs to.
         parent_id:
           $ref: '#/components/schemas/ID'
+          description: The Academic Unit this one sits directly under. Omitted for a top-level Academic Unit.
         name:
           type: string
+          description: >-
+            Machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. Unique among
+            the Institution's active Academic Units.
         display_name:
           type: string
+          description: Name shown to people, up to 128 characters.
         description:
           type: string
+          description: Longer text shown to people, up to 1,024 characters. Empty when none was given.
     AcademicUnitListResponse:
-      description: One page of the collection in its stable order.
+      description: One page of Academic Units, ordered by name and then by identifier.
       type: object
       additionalProperties: false
       required:
@@ -134,6 +211,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AcademicUnitResponse'
+          description: The Academic Units on this page.
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
     CreateAcademicUnitRequest:
@@ -145,13 +223,15 @@ components:
       properties:
         name:
           type: string
-          description: The owner-scoped canonical machine name.
+          description: >-
+            Machine name: lowercase letters, digits, hyphens and underscores, starting with a letter or digit, at
+            most 64 characters. It must be unique among the Institution's active Academic Units.
         display_name:
           type: string
-          description: The human-facing Academic Unit name.
+          description: Name shown to people, 1 to 128 characters.
         description:
           type: string
-          description: An optional human-facing description.
+          description: Optional longer text shown to people, up to 1,024 characters.
     ProgrammeResponse:
       type: object
       additionalProperties: false
@@ -169,26 +249,38 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Current aggregate revision. Supply it as expected_revision on an edit or archive to protect a client snapshot from concurrent changes.
+          description: >-
+            Starts at 1 and goes up with every change. Send it as `expected_revision` on an update or archive so the
+            change fails if someone else changed the Programme first.
         id:
           $ref: '#/components/schemas/ID'
+          description: The Programme identifier.
         created_at:
           type: string
           format: date-time
+          description: When the Programme was created.
         updated_at:
           type: string
           format: date-time
+          description: When the Programme last changed.
         archived_at:
           type: string
           format: date-time
+          description: When the Programme was archived. Omitted while it is active.
         academic_unit_id:
           $ref: '#/components/schemas/ID'
+          description: The Academic Unit that owns the Programme. It can't change.
         name:
           type: string
+          description: >-
+            Machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. Unique among
+            the Academic Unit's active Programmes.
         display_name:
           type: string
+          description: Name shown to people, up to 128 characters.
         description:
           type: string
+          description: Longer text shown to people, up to 1,024 characters. Empty when none was given.
     ProgrammeLevelResponse:
       type: object
       additionalProperties: false
@@ -206,26 +298,38 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Current aggregate revision. Supply it as expected_revision on an edit or archive to protect a client snapshot from concurrent changes.
+          description: >-
+            Starts at 1 and goes up with every change. Send it as `expected_revision` on an update or archive so the
+            change fails if someone else changed the Programme Level first.
         id:
           $ref: '#/components/schemas/ID'
+          description: The Programme Level identifier.
         created_at:
           type: string
           format: date-time
+          description: When the Programme Level was created.
         updated_at:
           type: string
           format: date-time
+          description: When the Programme Level last changed.
         archived_at:
           type: string
           format: date-time
+          description: When the Programme Level was archived. Omitted while it is active.
         programme_id:
           $ref: '#/components/schemas/ID'
+          description: The Programme that owns the Programme Level. It can't change.
         name:
           type: string
+          description: >-
+            Machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. Unique among
+            the Programme's active Programme Levels.
         display_name:
           type: string
+          description: Name shown to people, up to 128 characters.
         description:
           type: string
+          description: Longer text shown to people, up to 1,024 characters. Empty when none was given.
     ClassResponse:
       type: object
       additionalProperties: false
@@ -244,30 +348,43 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Current aggregate revision. Supply it as expected_revision on an edit or archive to protect a client snapshot from concurrent changes.
+          description: >-
+            Starts at 1 and goes up with every change. Send it as `expected_revision` on an update or archive so the
+            change fails if someone else changed the Class first.
         id:
           $ref: '#/components/schemas/ID'
+          description: The Class identifier.
         created_at:
           type: string
           format: date-time
+          description: When the Class was created.
         updated_at:
           type: string
           format: date-time
+          description: When the Class last changed.
         archived_at:
           type: string
           format: date-time
+          description: When the Class was archived. Omitted while it is active.
         programme_level_id:
           $ref: '#/components/schemas/ID'
+          description: The Programme Level the Class belongs to.
         academic_period_id:
           $ref: '#/components/schemas/ID'
+          description: The Academic Period the Class runs in.
         name:
           type: string
+          description: >-
+            Machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. Unique among
+            active Classes with the same Programme Level and Academic Period.
         display_name:
           type: string
+          description: Name shown to people, up to 128 characters.
         description:
           type: string
+          description: Longer text shown to people, up to 1,024 characters. Empty when none was given.
     ClassListResponse:
-      description: One page of the collection in its requested order; the first page carries its total.
+      description: One page of Classes in the requested order. Only the first page carries the total.
       type: object
       additionalProperties: false
       required:
@@ -277,6 +394,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ClassListItemResponse'
+          description: The Classes on this page.
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
         total:
@@ -284,14 +402,14 @@ components:
           minimum: 0
           maximum: 10000
           description: >-
-            Classes matching the filters across every page, present only on the first page. At 10,000 counting
-            stops and `total_is_lower_bound` is true.
+            How many Classes match the filters across every page. Present only on the first page. Counting stops at
+            10,000, and then `total_is_lower_bound` is true.
         total_is_lower_bound:
           type: boolean
-          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.
+          description: True when `total` reached 10,000 and there may be more. Present with `total`.
     ClassListItemResponse:
       description: >-
-        One Class of a Class listing: the Class projection, with its current student count when the caller holds
+        One Class in a Class listing. It includes the current student count when the caller holds
         class.members.view on the listing's scope.
       type: object
       additionalProperties: false
@@ -310,35 +428,48 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Current aggregate revision. Supply it as expected_revision on an edit or archive to protect a client snapshot from concurrent changes.
+          description: >-
+            Starts at 1 and goes up with every change. Send it as `expected_revision` on an update or archive so the
+            change fails if someone else changed the Class first.
         id:
           $ref: '#/components/schemas/ID'
+          description: The Class identifier.
         created_at:
           type: string
           format: date-time
+          description: When the Class was created.
         updated_at:
           type: string
           format: date-time
+          description: When the Class last changed.
         archived_at:
           type: string
           format: date-time
+          description: When the Class was archived. Omitted while it is active.
         programme_level_id:
           $ref: '#/components/schemas/ID'
+          description: The Programme Level the Class belongs to.
         academic_period_id:
           $ref: '#/components/schemas/ID'
+          description: The Academic Period the Class runs in.
         name:
           type: string
+          description: >-
+            Machine name: lowercase letters, digits, hyphens and underscores, at most 64 characters. Unique among
+            active Classes with the same Programme Level and Academic Period.
         display_name:
           type: string
+          description: Name shown to people, up to 128 characters.
         description:
           type: string
+          description: Longer text shown to people, up to 1,024 characters. Empty when none was given.
         student_count:
           type: integer
           minimum: 0
           maximum: 10000
           description: >-
-            The Class's current members, stopped at 10,000. Present only for a caller holding class.members.view on
-            the listing's scope; sort a page by it on the client.
+            How many members the Class has now, counted up to 10,000. Present only when the caller holds
+            class.members.view on the listing's scope. To sort a page by it, sort on the client.
         student_count_is_lower_bound:
           type: boolean
-          description: True when `student_count` reached the 10,000 bound. Present with `student_count`.
+          description: True when `student_count` reached 10,000. Present with `student_count`.

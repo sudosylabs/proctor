@@ -1,90 +1,93 @@
 ---
-title: Prepare a Contribution
-description: Scope, implement, verify, review, and hand off a Proctor change while preserving unrelated work, licensing, and source authority.
+title: Prepare a contribution
+description: Scope, build, check, review and hand off a Proctor change without disturbing other work, breaking licensing, or creating a second copy of a contract.
 audience: developer
 maturity: preview
 slug: /developers/contribution-checklist/
 ---
 
-# Prepare a Contribution
+# Prepare a contribution
 
-This checklist covers the repository-owned technical path from an understood
-change to a reviewable diff. Project governance, issue intake, the DCO,
-licensing, conduct, and review expectations are defined in the repository
+This checklist takes you from a change you understand to a diff that is ready
+for review. It covers the technical steps the repository expects. Governance,
+issue intake, the DCO, licensing, conduct and review expectations are in the
+repository's
 [contribution guide](https://github.com/sudosylabs/Proctor/blob/main/CONTRIBUTING.md).
 
-## 1. Establish the Scope
+## 1. Set the scope
 
-- State the user, operator, developer, or system outcome.
-- Identify the domain terms and invariants involved.
-- Find the current implementation, tests, nearest component contract, and
-  relevant public maturity statement.
-- Inspect `git status` and distinguish existing work from your change.
-- List affected public contracts, generated artifacts, and documentation
-  authorities before editing.
-- Stop and request a decision when missing information would materially change
-  behavior, security, compatibility, licensing, or deployment support.
+- Write down what changes for the user, operator, developer or system.
+- Identify the domain terms involved and the rules that must hold.
+- Find the current implementation, its tests, the nearest component contract,
+  and the public maturity statement that applies.
+- Run `git status` and tell existing work apart from your change.
+- Before you edit anything, list the public contracts, generated artifacts and
+  documentation sources your change touches.
+- Stop and ask for a decision when missing information would change behavior,
+  security, compatibility, licensing or deployment support in a meaningful way.
 
-## 2. Choose the Smallest Complete Slice
+## 2. Choose the smallest complete slice
 
-A complete slice crosses every boundary needed for one behavior and no more.
-It may include a model transition, application use case, Store operation, HTTP
-mapping, OpenAPI source, tests, and public guidance together.
+A complete slice crosses every boundary that one behavior needs, and no more.
+It can include a model transition, an application use case, a Store operation,
+an HTTP mapping, the OpenAPI source, tests and public guidance, all together.
 
-It should not include:
+Leave out:
 
 - placeholder packages or interfaces;
-- broad refactors justified only by symmetry or file size;
-- a second source of truth for an existing contract;
-- unrelated formatting or generated noise; or
-- speculative support for an unselected platform, provider, or workflow.
+- broad refactors whose only reason is symmetry or file size;
+- a second source of truth for a contract that already exists;
+- unrelated formatting changes or generated noise;
+- speculative support for a platform, provider or workflow nobody has chosen.
 
-## 3. Implement Through the Owner
+## 3. Make the change where it belongs
 
-Follow the applicable workflow:
+Follow the workflow that applies:
 
-- [server behavior](./server-workflow.mdx);
-- [hosted webapp](./webapp-workflow.mdx);
-- [reusable module](./reusable-modules.mdx);
-- [HTTP and OpenAPI](./http-and-openapi.mdx);
-- [persistence](./persistence.mdx); or
-- [documentation](./documentation.mdx).
+- [server behavior](./server-workflow.mdx)
+- [hosted webapp](./webapp-workflow.mdx)
+- [reusable module](./reusable-modules.mdx)
+- [HTTP and OpenAPI](./http-and-openapi.mdx)
+- [persistence](./persistence.mdx)
+- [documentation](./documentation.mdx)
 
-Update source and tests together. When a behavior or authority changes, update
-its component contract, public guide and maturity, API source, or owning
-tracked reference in the same slice.
+Change source and tests together. When a behavior, or the place that defines
+it, changes, update its component contract, its public guide and maturity, the
+API source, or the tracked reference that owns it, in the same slice.
 
-Add a line under `Unreleased` in the repository
-[changelog](https://github.com/sudosylabs/Proctor/blob/main/CHANGELOG.md) for
-a change that users, operators, or module consumers notice. Mark an
-incompatible change as breaking in the changelog and in the commit, using the
-breaking-change rules of the
+If users, operators or module consumers will notice the change, add a line
+under `Unreleased` in the repository
+[changelog](https://github.com/sudosylabs/Proctor/blob/main/CHANGELOG.md). Mark
+an incompatible change as breaking, both in the changelog and in the commit,
+following the breaking-change rules in the
 [versioning policy](https://github.com/sudosylabs/Proctor/blob/main/build/README.md#versioning-policy).
 
-## 4. Handle Upstream Work Correctly
+## 4. Handle upstream work correctly
 
-Mattermost is an eligible behavior and source reference, not an automatic
-template. Before copying or substantially adapting upstream expression:
+You may use Mattermost as a reference for behavior and source, but it is not a
+template to follow by default. Before you copy or substantially adapt upstream
+code or text:
 
-1. record the exact repository, revision, path, and governing license;
-2. confirm the license is compatible with the destination;
-3. rework the behavior through Proctor's domain, architecture, security, and
-   accessibility boundaries;
-4. preserve required notices and record provenance immediately; and
-5. review for copied branding, fixtures, secrets, and assumptions.
+1. Record the exact repository, revision, path and governing license.
+2. Confirm that the license is compatible with where the code is going.
+3. Rework the behavior to fit Proctor's domain, architecture, security and
+   accessibility boundaries.
+4. Keep any notices the license requires, and record where the work came from
+   straight away.
+5. Check for copied branding, fixtures, secrets and assumptions.
 
-Reusable Apache-2.0 modules cannot contain implementation copied from AGPL,
-source-available, or commercial Mattermost code. Mattermost-derived server
-work must be recorded in `server/NOTICE` when required.
+The reusable Apache-2.0 modules can't contain code copied from AGPL,
+source-available or commercial Mattermost code. When it is required, record
+Mattermost-derived server work in `server/NOTICE`.
 
-## 5. Verify in Increasing Scope
+## 5. Check in widening steps
 
-Run the focused test while developing, then the owning module gate, the
-relevant integration target, and the highest honest product gate. Use the
-[testing guide](./testing.mdx) instead of running every expensive suite
-after every edit.
+Run the focused test while you work. Then run the gate for the module that owns
+the change, the relevant integration target, and the highest product gate that
+honestly applies. Use the [testing guide](./testing.mdx) rather than running
+every expensive suite after every edit.
 
-At minimum before handoff:
+Before you hand off, run at least:
 
 ```sh
 git diff --check
@@ -92,37 +95,39 @@ git status --short
 make quality
 ```
 
-Run `make vulncheck` when Go source or module dependencies changed. The live
-database scan is separate from the hermetic product gate.
+Run `make vulncheck` when Go source or module dependencies changed. This scan
+against a live database is separate from the hermetic product gate.
 
-For server or documentation boundary changes:
+When you change server boundaries, or the documentation that describes them,
+also run:
 
 ```sh
 make -C server architecture
 ```
 
-## 6. Review the Diff as a Reviewer
+## 6. Review the diff as a reviewer would
 
-- Read the complete diff, including generated artifacts.
-- Confirm generated files match their human-owned inputs.
+- Read the whole diff, including generated artifacts.
+- Confirm that generated files match the human-written inputs they come from.
 - Search for credentials, tokens, private keys, real email addresses, student
-  data, Exam answers, local paths, hostnames, and oversized fixtures.
-- Check that errors, logs, metrics, audit values, and examples remain bounded.
-- Confirm unrelated user work was neither staged nor reformatted.
-- Re-read changed prose for promises not proved by released behavior.
-- Verify that removed authority was actually removed rather than left as a
-  stale compatibility copy.
+  data, Exam answers, local paths, hostnames and oversized fixtures.
+- Check that errors, logs, metrics, audit values and examples stay within
+  their limits.
+- Confirm that you neither staged nor reformatted anyone else's work.
+- Reread changed prose for promises that released behavior doesn't back up.
+- When you moved where something is defined, check that you removed the old
+  copy, rather than leaving it behind for compatibility.
 
-## 7. Hand Off Clearly
+## 7. Hand off clearly
 
 Report:
 
-1. the outcome, not only the files changed;
-2. the durable boundary or contract that now owns it;
+1. the outcome, not only the files you changed;
+2. the boundary or contract that now owns it;
 3. the focused and broad checks that passed;
-4. any integration or environment-dependent check not run; and
-5. every unresolved decision or source TODO that remains.
+4. any integration or environment-dependent check you didn't run;
+5. every decision or source TODO that is still open.
 
-Do not describe a preview behavior as generally available, a best-effort effect
-as durable, an integrity flag as a finding of guilt, or an inferred platform as
-supported.
+Don't describe a preview behavior as generally available, a best-effort effect
+as durable, an integrity flag as a finding of guilt, or a platform you only
+assumed as supported.

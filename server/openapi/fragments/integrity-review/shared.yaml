@@ -25,21 +25,31 @@ components:
       properties:
         participation_id:
           $ref: '#/components/schemas/ID'
+          description: The Participation in which the blocked navigations happened.
         policy_revision_id:
           $ref: '#/components/schemas/ID'
+          description: The Exam Revision whose Browser Policy contains the rule.
         rule_id:
           type: string
           minLength: 1
           maxLength: 64
+          description: The Browser Policy rule that the blocked navigations matched.
         overflow_first_received_at:
           type: string
           format: date-time
+          description: >-
+            When the server received the first matching event that was not kept as evidence. Present only
+            when some events were not kept, together with `overflow_last_received_at`.
         overflow_last_received_at:
           type: string
           format: date-time
+          description: >-
+            When the server received the last matching event that was not kept as evidence. Present only
+            when some events were not kept.
       description: >-
-        Frozen Browser rule group with server-received overflow times, omitted while the group has no overflow. Counts exclude unretained client
-        summaries.
+        The browser rule a `browser_navigation` Flag groups its evidence by, for one Participation and Browser
+        Policy. The overflow times are left out while every matching event was kept. Counts do not include
+        client summaries the server did not keep.
     BrowserIntegrityEvidence:
       type: object
       additionalProperties: false
@@ -52,18 +62,25 @@ components:
       properties:
         source_session_id:
           $ref: '#/components/schemas/BrowserSourceSessionID'
+          description: The browser session that reported the event.
         policy_revision_id:
           $ref: '#/components/schemas/ID'
+          description: The Exam Revision whose Browser Policy was in force.
         policy_digest:
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
+          description: The digest of that Browser Policy, as `sha256:` followed by lowercase hex.
         rule_id:
           type: string
           minLength: 1
           maxLength: 64
+          description: The Browser Policy rule the blocked navigation matched.
         event:
           $ref: '#/components/schemas/BrowserDeliveryRecord'
-      description: Immutable minimized evidence copy owning its policy revision and digest independently of ordinary Browser Activity retention.
+          description: The blocked navigation event, reduced to the minimum needed as evidence.
+      description: >-
+        A copy of one blocked navigation, kept as evidence. It can't change, and it carries its own policy
+        revision and digest, so it stays readable after ordinary browser activity is deleted.
     BrowserIntegrityOverflow:
       type: object
       additionalProperties: false
@@ -78,22 +95,27 @@ components:
           format: int64
           minimum: 1
           maximum: 9007199254740991
+          description: The number of valid events that were not kept.
         first_received_at:
           type: string
           format: date-time
+          description: When the server received the first event that was not kept.
         last_received_at:
           type: string
           format: date-time
+          description: When the server received the last event that was not kept.
         reason:
           type: string
           enum:
             - group_capacity
+          description: Why the events were not kept. `group_capacity` means the 256-group limit was reached.
       description: >-
-        Count of verified events omitted because the Attempt already has 256 Browser Flag groups. This is
-        neither another Flag nor a count of distinct omitted groups.
+        Valid browser events that were not kept because the Attempt already has 256 browser Flag groups.
+        This is not another Flag, and the count is of events, not of the groups they would have formed.
     NativeConditionInventory:
       type: object
       additionalProperties: false
+      description: A running count and digest of the native condition records kept for the Attempt.
       required:
         - records
         - digest
@@ -103,9 +125,13 @@ components:
           format: int64
           minimum: 0
           maximum: 200000
+          description: The number of native condition records kept.
         digest:
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
+          description: >-
+            A digest that changes with every record added, as `sha256:` followed by lowercase hex. Compare
+            it to detect any change in the records.
     AttemptEvidenceInventory:
       type: object
       additionalProperties: false

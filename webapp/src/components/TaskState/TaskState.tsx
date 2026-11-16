@@ -5,8 +5,35 @@ import {
   useRef,
 } from "react";
 
+import { Icon, type IconName } from "../Icon/Icon";
 import { Loading } from "../Loading/Loading";
 import styles from "./TaskState.module.css";
+
+export type TaskStatusTone = "success" | "warning" | "danger";
+
+/** A real outcome shown above a task heading: colour, icon, and a word together. */
+export interface TaskStatus {
+  label: ReactNode;
+  tone: TaskStatusTone;
+}
+
+const statusIcons: Record<TaskStatusTone, IconName> = {
+  success: "stateSuccess",
+  warning: "stateWarning",
+  danger: "stateDanger",
+};
+
+export function TaskStatusLine({ status }: { status: TaskStatus }) {
+  return (
+    <p
+      className={classes(styles.status, styles[status.tone])}
+      data-proctor-status-tone={status.tone}
+    >
+      <Icon name={statusIcons[status.tone]} size="small" />
+      <span>{status.label}</span>
+    </p>
+  );
+}
 
 export interface TaskStateProps {
   body: ReactNode;
@@ -16,9 +43,8 @@ export interface TaskStateProps {
   focusHeading?: boolean;
   heading: ReactNode;
   headingID: string;
-  label?: ReactNode;
-  /** Colours the purpose label only when it reports a true state outcome. */
-  labelTone?: "success" | "warning" | "danger";
+  /** Present only when the state reports a real outcome. */
+  status?: TaskStatus;
 }
 
 export function TaskState({
@@ -29,8 +55,7 @@ export function TaskState({
   focusHeading = false,
   heading,
   headingID,
-  label,
-  labelTone,
+  status,
 }: TaskStateProps) {
   return (
     <section
@@ -38,10 +63,8 @@ export function TaskState({
       aria-labelledby={headingID}
       className={classes(styles.state, className)}
     >
-      {label === undefined ? null : (
-        <p className={classes(styles.label, labelTone === undefined ? undefined : styles[labelTone])}>{label}</p>
-      )}
-      <TaskHeading className={busy ? styles.visuallyHidden : undefined} focus={focusHeading && !busy} id={headingID}>
+      {status === undefined ? null : <TaskStatusLine status={status} />}
+      <TaskHeading focus={focusHeading && !busy} id={headingID}>
         {heading}
       </TaskHeading>
       {busy ? (

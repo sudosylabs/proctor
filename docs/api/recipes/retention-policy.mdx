@@ -1,6 +1,6 @@
 ---
-title: Review and Enable Institution Retention
-description: Complete examination records, review retention eligibility, and explicitly approve bounded cleanup.
+title: Review and turn on Institution retention
+description: Complete examination records, check what is eligible for retention, and approve cleanup explicitly.
 audience: api-consumer
 maturity: preview
 sidebar_position: 5
@@ -8,40 +8,46 @@ sidebar_position: 5
 
 import Link from '@docusaurus/Link';
 
-# Review and Enable Institution Retention
+# Review and turn on Institution retention
 
-One Institution Retention Policy governs examination work, integrity evidence
-and Submission Reviews, audit history, and temporary examination exports across
-all server nodes. Cleanup starts disabled. Saving periods never enables it:
-a system administrator must approve a fresh preview for the exact policy
-revision with strong, recent interactive authentication.
+One Institution Retention Policy covers, across every server node:
 
-This workflow provides server APIs. Broader administration and examination
-interfaces belong to the future desktop client. Account deletion and general
-personal-data export are separate, unimplemented capabilities.
+- examination work;
+- integrity evidence and Submission Reviews;
+- audit history;
+- temporary examination exports.
 
-## Complete the Examination Records
+Cleanup starts turned off, and saving retention periods never turns it on. A
+system administrator has to approve a fresh preview for the exact policy
+revision, with a strong, recent interactive sign-in.
 
-After a Sitting is Closed, resolve its Reviews and use
+This recipe covers the server APIs. The wider administration and examination
+screens will live in the future desktop client. Deleting accounts and
+exporting general personal data are separate features that don't exist yet.
+
+## 1. Complete the examination records
+
+Once a Sitting is Closed, resolve its Reviews and call
 <Link to="/api/reference/complete-exam-sitting-records">Complete Sitting Records</Link>.
-The separate `exam.records.complete` permission follows the existing Exam
-Manager and scoped override rules. Every relevant Submission must have a
-finalized Review or an explicit, reasoned waiver. A manager cannot waive their
-own Submission or bypass an undecided Flag.
+The separate `exam.records.complete` permission follows the usual Exam Manager
+and scoped override rules. Every relevant Submission needs a finalized Review,
+or an explicit waiver with a reason. A manager can't waive their own Submission
+or skip a Flag that hasn't been decided.
 
-The completion event starts the examination retention clock. Newly accepted
-integrity evidence makes the Sitting's completion stale, cancels pending grace,
-and requires acknowledged completion again. The new completion restarts the
-clock. An exact duplicate does not. Retired categories reject further evidence;
-later completion cannot restore removed records.
+Completing the records starts the examination retention clock. If new
+integrity evidence is accepted, the Sitting's completion becomes stale, any
+pending grace is canceled, and someone has to complete it again. The new
+completion restarts the clock. An exact duplicate doesn't. Categories that
+have been retired reject further evidence, and completing again later can't
+bring back records that were removed.
 
-## Configure the Policy
+## 2. Set the policy
 
-Read <Link to="/api/reference/get-retention-policy">Get Retention Policy</Link>
-with a Session authorized for `retention_policy.view`. Retain the revision.
-Use <Link to="/api/reference/replace-retention-policy">Replace Retention Policy</Link>
-with a strong, recently authenticated system-administrator Session and a fresh
-`Idempotency-Key`. Cookie transport also requires CSRF proof.
+Call <Link to="/api/reference/get-retention-policy">Get Retention Policy</Link>
+with a Session that has `retention_policy.view`, and keep the revision. Then
+call <Link to="/api/reference/replace-retention-policy">Replace Retention Policy</Link>
+with a strong, recently authenticated system-administrator Session and a new
+`Idempotency-Key`. With cookies, also send CSRF proof.
 
 Send all seven periods. `candidate_notices` is optional and defaults to false:
 
@@ -59,123 +65,144 @@ Send all seven periods. `candidate_notices` is optional and defaults to false:
 }
 ```
 
-This example preserves examination and audit records indefinitely while
-configuring 24-hour exports and seven-day grace. Those two operational settings
-are recommendations, not chosen examination retention periods. The institution
-must select its own work, integrity, Browser Activity, security operational, and audit periods before approving cleanup.
+This example keeps examination and audit records with no end date, makes
+exports last 24 hours and sets seven days of grace. Those two operational
+values are suggestions, not examination retention periods anyone has chosen.
+The institution must choose its own periods for work, integrity, Browser
+Activity, security operational records and audit before it approves cleanup.
 
-Zero means no configured expiry or grace, never immediate deletion. Positive
-periods are durations in 24-hour days. Work, integrity, Browser Activity, security operational, audit and grace settings
-accept up to 36,500 days. Export retention accepts zero when unconfigured or a
-finite period of **1 through 7 days**. Configure a positive export period before
-creating an export. No operation silently shortens a configured period.
+How the values work:
 
-The policy, audit, and retry outcome commit together. An exact no-op preserves
-revision, timestamps, and approval. Every actual settings change pauses cleanup
-and cancels existing grace. A lost response can be retried with the same key
-and document. On `retention_policy.revision_conflict`, reread and review the
-current policy before submitting a new revision and key.
+- Zero means no expiry or grace is configured. It never means delete
+  immediately.
+- Positive periods count 24-hour days.
+- Work, integrity, Browser Activity, security operational, audit and grace
+  settings accept up to 36,500 days.
+- Export retention accepts zero when not configured, or a fixed period of
+  **1 through 7 days**. Set a positive export period before you create an
+  export.
+- No call shortens a configured period without telling you.
 
-## Review the Preview and Approve Cleanup
+The policy, its audit record and the retry outcome commit together. A request
+that changes nothing keeps the revision, timestamps and approval as they are.
+Any real change to the settings pauses cleanup and cancels existing grace. If
+you lose the response, retry with the same key and document. If you get
+`retention_policy.revision_conflict`, read and review the current policy again
+before you send a new revision with a new key.
 
-Use <Link to="/api/reference/create-retention-preview">Create Retention Preview</Link>
+## 3. Review the preview and approve cleanup
+
+Call <Link to="/api/reference/create-retention-preview">Create Retention Preview</Link>
 with the current policy revision and an idempotency key. A preview lasts one
-hour. It contains counts for work, integrity, Browser Activity, security operational, audit, and retirement receipts;
-it contains no answers, evidence text, or private reasons.
+hour. It holds counts for work, integrity, Browser Activity, security
+operational records, audit and retirement receipts. It holds no answers,
+evidence text or private reasons.
 
 <Link to="/api/reference/list-retention-records">List Retention Records</Link>
-provides bounded examination eligibility pages. Each Submission contributes four category records: work, integrity, Browser
-Activity and security operational. A page limit counts Submissions, so it can
-return up to four times that many category records. Follow its opaque cursor unchanged.
+pages through which examination records are eligible. Each Submission adds four
+category records: work, integrity, Browser Activity and security operational.
+The page limit counts Submissions, so a page can hold up to four times that
+many category records. Pass its opaque cursor back unchanged.
 
-Review the blockers before approving:
+Before you approve, review what can block cleanup:
 
-- Incomplete or stale Sitting completion prevents examination retirement.
-- Preservation holds protect their exact Exam, Sitting, or Submission scope.
-- Unconfigured periods preserve the affected category.
-- Retained integrity protects supporting work until both periods allow it.
-  Zero integrity retention can therefore preserve supporting work indefinitely.
-- An export under construction temporarily protects its exact source categories.
-- Shared published Exam materials keep their independent references.
-- Unfinished or referenced audit, incomplete purge, and active export references
-  can prevent audit or receipt expiry.
+- An incomplete or stale Sitting completion stops examination records from
+  retiring.
+- Preservation holds protect their exact Exam, Sitting or Submission.
+- A period that isn't configured keeps that category.
+- Integrity records that are still kept protect the work they support, until
+  both periods allow it to go. A zero integrity period can therefore keep that
+  work with no end date.
+- An export that is being built protects its exact source categories for a
+  while.
+- Shared published Exam materials keep their own separate references.
+- Unfinished or referenced audit, an incomplete purge and active export
+  references can stop audit records or receipts from expiring.
 
-Use <Link to="/api/reference/change-retention-control">Change Retention Control</Link>
-with `state: "enabled"`, the current control revision, current policy revision,
-and fresh preview ID. This requires `retention_cleanup.manage`, a protected
-system-administrator Session, strong recent authentication, and an idempotency
-key. At least one examination or audit period and positive grace must be
-configured. Every worker rechecks live policy and dependencies; a preview is
-not a frozen deletion command.
+Then call <Link to="/api/reference/change-retention-control">Change Retention Control</Link>
+with `state: "enabled"`, the current control revision, the current policy
+revision and the fresh preview ID. This needs `retention_cleanup.manage`, a
+protected system-administrator Session, a strong recent sign-in and an
+idempotency key. At least one examination or audit period, and a positive grace
+period, must be set. Every worker checks the live policy and dependencies
+again. A preview is not a frozen instruction to delete.
 
-## Grace, Holds, and Notices
+## 4. Grace, holds and notices
 
-Eligible records receive positive grace before retirement. Seven days is the
-recommended starting point. Use the control operation with `state: "paused"`
-to stop new retirement. A policy change, hold, new export source protection, or
-stale completion cancels the affected grace; resumed eligibility starts fresh
-grace rather than reusing an old deadline.
+Eligible records get a positive grace period before they retire. Seven days is
+a good starting point. To stop new retirements, call the control endpoint with
+`state: "paused"`. A policy change, a hold, a new export protecting its sources
+or a stale completion cancels the affected grace. When records become eligible
+again, they get a fresh grace period instead of the old deadline.
 
 <Link to="/api/reference/create-retention-hold">Create a Preservation Hold</Link>
-for an Exam, Sitting, or Submission with `exam.records.hold` through the manager
-or scoped override path. Holds also cover later records in that scope and do
-not expire automatically. A strong, recently authenticated system administrator
-must <Link to="/api/reference/release-retention-hold">release the hold</Link>
-with `retention_hold.release` and a recorded reason. A hold racing retirement
-either protects the record first or reports material already retired. It cannot
-restore data; broader holds still protect remaining descendants.
+on an Exam, Sitting or Submission with `exam.records.hold`, through the manager
+or scoped override route. A hold also covers records added to that scope later,
+and it doesn't expire on its own. A strong, recently authenticated system
+administrator must <Link to="/api/reference/release-retention-hold">release the hold</Link>
+with `retention_hold.release` and a recorded reason. If a hold races a
+retirement, it either protects the record first or reports that the material
+was already retired. A hold can't bring data back. Wider holds still protect
+whatever remains below them.
 
-Scheduling creates durable notices for responsible Exam Managers and active
-institution operators in the same transaction as grace. Candidate notices are
-opt-in. <Link to="/api/reference/list-retention-notices">List My Retention Notices</Link>
-returns only the current Session User's notices, including cancellation and
-mail-delivery state. It grants no examination access and does not acknowledge
-that a message was read.
+When grace is scheduled, Proctor creates lasting notices, in the same
+transaction, for the responsible Exam Managers and active institution
+operators. Notices to candidates are opt-in.
+<Link to="/api/reference/list-retention-notices">List My Retention Notices</Link>
+returns only the current Session User's notices, including whether they were
+canceled and their mail delivery state. It grants no access to examinations,
+and it doesn't mark a message as read.
 
-Mail preparation, queue, or SMTP failures remain visible without indefinitely
-blocking cleanup. A cancellation invalidates the notice date; a queued stale
-notice is suppressed before sending. An SMTP operation already started can
-finish. Retention and byte cleanup are proposed hourly; notice expansion is
-proposed every ten minutes, with durable retries after failures.
+Failures while preparing, queuing or sending notice mail over SMTP stay visible,
+but they don't hold up cleanup forever. A cancellation makes the notice's date
+invalid, and Proctor drops a queued notice that has gone stale before sending
+it. An SMTP send that has already started can finish. Retention and file
+cleanup are scheduled hourly, and notice expansion every ten minutes, with
+durable retries after a failure.
 
-## Retirement and Physical Cleanup
+## 5. Retirement and physical cleanup
 
-The retirement transaction is the irreversible boundary. It removes private
-category records, expires the corresponding retry copies, prevents ordinary
-reads and late ingestion, and leaves permanent retirement markers. All four examination categories retire independently. Browser and native
-operational retirement preserve separate Review evidence copies; integrity
-retirement removes those copies and prevents new integrity intake. A work-only
-read after integrity retirement
-reports `integrity_state: "retired"` and `integrity_retired_at`, with the old
-counters absent. Shared published Exam
-materials are preserved.
+Retirement is the step you can't undo. The retirement transaction:
 
-Minimal receipts contain identifiers, dates, and state. They and audit history
-follow the configured audit period from their own event, with positive grace.
-Zero preserves them indefinitely. Unfinished work and durable references remain
-explicit blockers. Eligible detailed cleanup audit can expire without being
-kept forever solely by its own receipt. Permanent retirement markers survive
-receipt expiry so expired records cannot become readable again.
+- removes the private category records;
+- expires their retry copies;
+- stops normal reads and late additions;
+- leaves permanent retirement markers.
 
-Physical removal is separate and retryable. A backend delete acknowledgement
-is insufficient: the server subsequently checks the exact current object key
-for absence. If a writer's completion is unknown, that key remains under repeat
-reconciliation and is still reported as pending, even after one absence
-observation, because a delayed write could appear later.
+The four examination categories retire separately. Retiring Browser or native
+operational records keeps the separate Review evidence copies. Retiring
+integrity records removes those copies and stops new integrity records from
+arriving. A read of the work after integrity has retired reports
+`integrity_state: "retired"` and `integrity_retired_at`, and leaves out the old
+counters. Shared published Exam materials are kept.
 
-Verified current-key absence does **not** certify secure media erasure,
-termination of an already-open download, or removal from backups, snapshots,
-historical object versions, or operator-managed replicas. Operators must manage
-those copies and their own backup lifecycle separately. These status labels
-make no broader erasure guarantee.
+Small receipts hold identifiers, dates and state. They follow the configured
+audit period from their own event, with positive grace, as audit history does.
+Zero keeps them with no end date. Unfinished work and lasting references still
+block them, explicitly. Detailed cleanup audit that is eligible can expire. Its
+own receipt alone doesn't keep it forever. Permanent retirement markers outlast
+the receipts, so expired records can never become readable again.
 
-## Exports and Other Cleanup
+Removing the stored files is a separate step that Proctor retries. A delete
+response from the storage backend isn't enough. Proctor then checks that the
+exact current object key is gone. If Proctor doesn't know whether a writer
+finished, it keeps checking that key and still reports it as pending, even after
+seeing it absent once, because a delayed write could appear later.
+
+Confirming the current key is gone does **not** prove the storage media was
+securely erased. It doesn't stop a download that has already started, and it
+doesn't remove copies in backups, snapshots, older object versions or replicas
+that operators manage. Operators must manage those copies and their own backup
+lifecycle separately. These status labels promise nothing more about erasure.
+
+## Exports and other cleanup
 
 Use the <Link to="/api/recipes/exam-exports">examination export workflow</Link>
-for explicit Submission or Sitting archives. Exports are requester-only,
-verifiable, independently expiring copies. They are not automatic prerequisites
-for deletion. Downloads, retries, and later holds do not extend their lifetime.
+for archives of a Submission or a Sitting. Only the requester can download an
+export. Each one can be checked, and expires on its own schedule. You don't
+need an export before records are deleted. Downloads, retries and later holds
+don't extend its lifetime.
 
-Operational token, upload-lease, abandoned-stage, ordinary retry-outcome,
-mail-history, and Job-history cleanup retain their own contracts. Institution
-retention settings do not replace those security and maintenance lifetimes.
+Cleanup of operational tokens, upload leases, abandoned stages, ordinary retry
+outcomes, mail history and Job history follows its own rules. Institution
+retention settings don't replace those security and maintenance lifetimes.

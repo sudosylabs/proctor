@@ -1,58 +1,62 @@
 ---
-title: Review Proctor Security
-description: Trace implemented controls and operator responsibilities across identity, authorization, data, content, and deployment trust boundaries.
+title: Review Proctor security
+description: Follow the controls Proctor enforces and the ones the operator provides, across identity, authorization, data, content and deployment.
 audience: security-reviewer
 maturity: preview
 slug: /security/
 ---
 
-# Review Proctor Security
+# Review Proctor security
 
-This review path separates controls Proctor enforces from controls an
-installation operator must supply. It describes implemented boundaries and
-explicitly marks product or production policy that has not been decided.
+This section separates the controls Proctor enforces itself from the ones an
+installation's operator has to provide. It describes what is built today, and
+it says clearly where product or production policy has not been decided yet.
 
 <Maturity state="preview">
-  The server controls described here are implemented and checked against current
-  code and configuration. Retention and purge schedules, legal hold, support
-  windows, stable deprecation, and a production encryption-at-rest policy beyond
-  existing operator and secret-sealing boundaries remain undecided.
+  The server controls on these pages exist and have been checked against the
+  current code and configuration. Some policy is still undecided: retention
+  and purge schedules, legal hold, support windows, stable deprecation, and a
+  production policy for encryption at rest that goes beyond the existing
+  operator and secret-sealing boundaries.
 </Maturity>
 
-## Follow the Review Surface
+## Read the pages in this order
 
-1. [Threat model and trust boundaries](./threat-model.mdx) defines protected
-   assets, actors, assumptions, and control ownership.
-2. [Credentials and authorization](./credentials-authorization.mdx) maps
-   credential proof and assurance separately from action/resource permission,
-   concealment, and durable audit.
+1. [Threat model and trust boundaries](./threat-model.mdx) sets out what is
+   protected, who the actors are, what is assumed, and who owns each control.
+2. [Credentials and authorization](./credentials-authorization.mdx) covers how
+   a credential is proved and how strong it is, separately from permission to
+   act on a resource, hiding protected resources, and durable audit.
 3. [Data and privacy](./data-privacy.mdx) classifies credentials, student and
-   Exam data, diagnostics, integrity evidence, and redaction.
-4. [Keys, certificates, and network](./keys-network.mdx) assigns Desktop, MFA,
-   mail, Memberlist, TLS, listener, and outbound dependency responsibility.
-5. [Content and workspace](./content-workspace.mdx) covers VFS, Workspace,
-   Submission and Browser Activity.
-6. [Errors, limits, and compatibility](./errors-limits-compatibility.mdx)
-   explains fail-closed public errors, bounded inputs, compatibility, and safe
-   recovery.
+   Exam data, diagnostics and integrity evidence, and explains redaction.
+4. [Keys, certificates and network](./keys-network.mdx) says who is
+   responsible for Desktop, MFA, mail, Memberlist and TLS keys, for listeners,
+   and for outbound connections.
+5. [Content and Workspace](./content-workspace.mdx) covers stored files
+   (VFS), the Workspace, Submission and Browser Activity.
+6. [Errors, limits and compatibility](./errors-limits-compatibility.mdx)
+   explains public errors that fail closed, input limits,
+   compatibility, and safe recovery.
 
-## Core Security Properties
+## Core security properties
 
-- Authentication establishes an immutable principal; it never embeds a
-  reusable permission snapshot.
-- Every application action resolves current authority on the canonical
-  resource and records required audit durably.
-- PostgreSQL is authority for durable state. Cache, cluster, and realtime effects are reconstructible.
-- Credentials, secrets, Exam answers, student content, private Review fields,
-  and unbounded input stay out of ordinary logs and unsafe audit fields.
-- Candidate delivery requires a registered-key Desktop Session plus the exact
-  current Attempt continuity fence.
-- Integrity signals are bounded evidence with explicit uncertainty, not a
-  verdict or academic outcome.
+- Authentication establishes a principal that never changes. It never carries
+  a reusable snapshot of permissions.
+- Every application action checks current permissions against the resource
+  itself, and writes any required audit record durably.
+- PostgreSQL is the source of truth for stored state. Anything in caches, the
+  cluster or realtime updates can be rebuilt from it.
+- Credentials, secrets, Exam answers, student content, private Review fields
+  and unlimited input are kept out of ordinary logs and unsafe audit fields.
+- Exam delivery to a candidate needs a Desktop Session with a registered
+  key, and must also pass the continuity check for the exact current
+  Attempt.
+- Integrity signals are limited evidence that states its own uncertainty. They
+  are not a verdict or an academic outcome.
 
 <GovernedFigure asset="protected-request-assurance-flow" />
 
-Use the checked [configuration](../reference/configuration.mdx), generated
-[environment variable](../reference/environment-variables.mdx), and
-[command-line](../reference/command-line.mdx) references while reviewing an
-installation.
+While you review an installation, use the checked
+[configuration](../reference/configuration.mdx) reference, the generated
+[environment variable](../reference/environment-variables.mdx) reference and
+the [command-line](../reference/command-line.mdx) reference.

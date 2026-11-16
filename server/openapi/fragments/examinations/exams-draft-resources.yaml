@@ -16,7 +16,7 @@ paths:
       operationId: listExamDraftResources
       summary: List the ordered protected resources in an Exam Draft
       description: >-
-        Returns the complete ordered resource manifest for the mutable Draft, including authored presentation metadata, content revision, media type, size, and digest. Protected bytes remain available only through the separately authorized inline content route.
+        Returns every Resource on the Draft, in order, with its name, description, content revision, media type, size and SHA-256 digest. It does not return the file content. Read the content through the separate content operation, which checks your access again.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -58,7 +58,7 @@ paths:
       operationId: createExamDraftResource
       summary: Upload and append a protected resource to an Exam Draft
       description: >-
-        Appends one protected resource to the Draft after validating the expected Draft revision, authored metadata, declared content size and digest, media policy, resource limits, and Idempotency-Key. The metadata-first multipart upload is committed atomically with its protected content reference.
+        Adds one Resource to the end of the Draft's Resource list. The upload is accepted only if expected_revision still matches the Draft's current revision, the metadata is valid, the content matches the size and digest you declared, the media type is allowed, and the Draft has room under its Resource limits. Send the metadata part first, then the content. The Resource and its content are saved together, or not at all. Send an Idempotency-Key so a retry can't add the Resource twice.
       x-codeSamples:
         - lang: Shell
           label: Append a protected PDF resource
@@ -110,7 +110,7 @@ paths:
         - $ref: '#/components/parameters/RequiredIdempotencyKey'
       requestBody:
         required: true
-        description: Contains strict resource metadata first and bounded protected content second; the declared byte length and SHA-256 digest must match the uploaded bytes.
+        description: A metadata part followed by a content part. The size and SHA-256 digest in the metadata must match the uploaded bytes.
         content:
           multipart/form-data:
             schema:
@@ -144,7 +144,7 @@ paths:
       operationId: reorderExamDraftResources
       summary: Replace the complete order of active Exam Draft resources
       description: >-
-        Replaces the full active resource order at the expected Draft revision. Every current resource identifier must appear exactly once, so stale or partial lists fail without changing any positions.
+        Sets a new order for all of the Draft's Resources. The change is made only if expected_revision still matches the Draft's current revision. List every current Resource ID exactly once. If the list is out of date or incomplete, the request fails and no Resource moves.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -208,7 +208,7 @@ paths:
       operationId: editExamDraftResourceMetadata
       summary: Edit one Exam Draft resource's authored metadata
       description: >-
-        Changes the display name and/or bounded Markdown description of one Draft resource at the expected Draft revision. Content bytes, digest, and order remain unchanged; omitted fields are preserved.
+        Changes the display name, the Markdown description, or both, for one Resource on the Draft. The change is made only if expected_revision still matches the Draft's current revision. The content, its digest and the Resource's position stay the same. A field you leave out stays as it is.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -268,7 +268,7 @@ paths:
       operationId: removeExamDraftResource
       summary: Remove one resource from the active Exam Draft
       description: >-
-        Removes the resource from the active Draft only when the expected Draft revision still matches, then closes the ordering gap atomically. Historical immutable Revisions retain their published resource snapshot.
+        Removes one Resource from the Draft. The change is made only if expected_revision still matches the Draft's current revision. The Resources after it move up to fill the gap in the same step. Revisions you already published keep their copy of the Resource.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -333,7 +333,7 @@ paths:
       tags:
         - Examinations
       description: >-
-        Returns only an authorized in-application content stream. This route is not a public URL or download/export capability and never exposes an object key.
+        Returns the Resource's content for display inside the application, after checking your access. It is not a public link and not a download or export, and it never reveals where the file is stored.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -358,7 +358,7 @@ paths:
         - name: If-None-Match
           in: header
           required: false
-          description: One or more entity tags from an earlier protected-content response; a match returns 304 without a body.
+          description: The ETag from an earlier response for this content. If it still matches, the server returns 304 with no body.
           schema:
             type: string
       responses:
@@ -382,7 +382,7 @@ paths:
       operationId: replaceExamDraftResourceContent
       summary: Replace an Exam Draft resource's protected content
       description: >-
-        Replaces one resource's protected bytes at the expected Draft revision after validating media type, length, digest, upload shape, and Idempotency-Key. Authored display metadata and resource order remain unchanged while a new content revision is recorded.
+        Replaces the content of one Resource. The upload is accepted only if expected_revision still matches the Draft's current revision, and the media type, size and digest you declared match the upload. Send the metadata part first, then the content. The display name, description and position stay the same, and the Resource gets a new content revision. Send an Idempotency-Key so a retry is safe.
       x-codeSamples:
         - lang: Shell
           label: Replace protected resource content
@@ -433,7 +433,7 @@ paths:
         - $ref: '#/components/parameters/RequiredIdempotencyKey'
       requestBody:
         required: true
-        description: Contains strict replacement metadata first and bounded protected content second; declared media type, size, and digest must match the uploaded bytes.
+        description: A metadata part followed by a content part. The media type, size and SHA-256 digest in the metadata must match the uploaded bytes.
         content:
           multipart/form-data:
             schema:
@@ -464,7 +464,7 @@ components:
   requestBodies:
     EditExamResourceMetadata:
       required: true
-      description: Supplies the expected Draft revision and at least one authored display-name or Markdown-description change.
+      description: The Draft revision you last saw, and a new display name, a new description, or both.
       content:
         application/json:
           schema:
@@ -474,7 +474,7 @@ components:
             display_name: Formula sheet, revision 2
     ReorderExamResources:
       required: true
-      description: Supplies the expected Draft revision and the complete ordered set of active resource identifiers.
+      description: The Draft revision you last saw, and every current Resource ID in the new order.
       content:
         application/json:
           schema:
@@ -482,11 +482,11 @@ components:
           example:
             expected_revision: 5
             resource_ids:
-              - ybndrfg8ejkmcpqxot1uwisza3
-              - ybndrfg8ejkmcpqxot1uwisza4
+              - ub3kx9eagmh7wd1qnr5ytcpzo8
+              - m5fb8wq3yxtnkzar1cdjo7ghe4
     RemoveExamResource:
       required: true
-      description: Supplies the last observed Draft revision required to remove the path resource without overwriting newer authoring work.
+      description: The Draft revision you last saw.
       content:
         application/json:
           schema:
@@ -495,7 +495,7 @@ components:
             expected_revision: 6
   responses:
     ExamResourceOK:
-      description: Exam Draft resource changed
+      description: The Resource after the change.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -503,8 +503,19 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamResourceResponse'
+          example:
+            id: m5fb8wq3yxtnkzar1cdjo7ghe4
+            display_name: Formula sheet, revision 2
+            description_markdown: Reference formulas for this examination.
+            position: 0
+            content_revision_id: ra9cw4kgdn1tmz7xbqp3yheu5o
+            media_type: application/pdf
+            size: 3072
+            sha256: 882cee600c38b827dd74beae6df9fe27d6457650053774f67301f9f7c7b57c68
+            updated_at: '2026-08-03T14:20:00Z'
+            draft_revision: 5
     ExamResourceCreated:
-      description: Exam Draft resource created
+      description: The new Resource.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -512,13 +523,24 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamResourceResponse'
+          example:
+            id: m5fb8wq3yxtnkzar1cdjo7ghe4
+            display_name: Formula sheet
+            description_markdown: Reference formulas for this examination.
+            position: 1
+            content_revision_id: d7nq1aowmt3gcz5hxkbr9ypes8
+            media_type: application/pdf
+            size: 2048
+            sha256: 9c5182f8be1b054637e64ab824df849735c721f43fb168720cb42688bd0e5b38
+            updated_at: '2026-08-01T11:30:00Z'
+            draft_revision: 4
     ExamResourceRemoved:
-      description: Exam Draft resource removed
+      description: The Resource was removed. There is no response body.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
     ExamResourceListOK:
-      description: Complete ordered Exam Draft resource catalog
+      description: The Draft's Resources, in order.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -526,17 +548,42 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamResourceListResponse'
+          example:
+            items:
+              - id: ub3kx9eagmh7wd1qnr5ytcpzo8
+                display_name: Sorting data set
+                description_markdown: Use this table for questions 3 and 4.
+                position: 0
+                content_revision_id: ra9cw4kgdn1tmz7xbqp3yheu5o
+                media_type: text/csv
+                size: 5120
+                sha256: 711a6108ba2ce6ca93dd47d6817f2361db10d8ab6eec89460b2dfc2c325efabe
+                updated_at: '2026-08-02T08:10:00Z'
+                draft_revision: 6
+              - id: m5fb8wq3yxtnkzar1cdjo7ghe4
+                display_name: Formula sheet
+                description_markdown: Reference formulas for this examination.
+                position: 1
+                content_revision_id: d7nq1aowmt3gcz5hxkbr9ypes8
+                media_type: application/pdf
+                size: 2048
+                sha256: 9c5182f8be1b054637e64ab824df849735c721f43fb168720cb42688bd0e5b38
+                updated_at: '2026-08-01T11:30:00Z'
+                draft_revision: 6
     ExamResourceProtectedContent:
-      description: Authorized inline Exam Resource content; not a public URL or export response
+      description: The Resource content, for display inside the application. This is not a public link or an export.
       headers:
         ETag:
+          description: The content's SHA-256 digest in quotes. Send it as If-None-Match to check for changes.
           schema:
             type: string
         Cache-Control:
+          description: Only the requesting browser may cache the content, for up to 5 minutes.
           schema:
             type: string
             const: private, max-age=300
         X-Content-Type-Options:
+          description: Stops browsers from guessing a different content type.
           schema:
             type: string
             const: nosniff
@@ -546,22 +593,26 @@ components:
             type: string
             format: binary
     ExamProtectedContentNotModified:
-      description: Protected Exam content has not changed
+      description: The content has not changed since the ETag you sent.
       headers:
         ETag:
+          description: The content's SHA-256 digest in quotes.
           schema:
             type: string
         Cache-Control:
+          description: Only the requesting browser may cache the content, for up to 5 minutes.
           schema:
             type: string
             const: private, max-age=300
         X-Content-Type-Options:
+          description: Stops browsers from guessing a different content type.
           schema:
             type: string
             const: nosniff
   schemas:
     ExamResourceUploadMetadata:
       type: object
+      description: The metadata part of a new Resource upload.
       additionalProperties: false
       required:
         - expected_revision
@@ -574,26 +625,31 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The Draft revision you last saw. If the Draft has changed since, the upload fails with a conflict.
         display_name:
           type: string
           minLength: 1
           maxLength: 255
-          description: Trimmed UTF-8 with at most 255 Unicode scalar values.
+          description: The name candidates see, up to 255 characters. Leading and trailing spaces are removed.
         description_markdown:
           type: string
           maxLength: 16384
-          description: Authored Markdown encoded as UTF-8 and limited to 16384 bytes.
+          description: An optional description, as Markdown. Up to 16,384 bytes of UTF-8.
         media_type:
           $ref: '#/components/schemas/ExamResourceMediaType'
+          description: The media type of the content.
         size:
           type: integer
           format: int64
           minimum: 0
           maximum: 104857600
+          description: The exact length of the content, in bytes. It must also fit the Draft's Resource size limit.
         sha256:
           $ref: '#/components/schemas/SHA256'
+          description: The SHA-256 digest of the content, as lowercase hex.
     ExamResourceContentReplacementMetadata:
       type: object
+      description: The metadata part of a Resource content replacement.
       additionalProperties: false
       required:
         - expected_revision
@@ -605,41 +661,49 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The Draft revision you last saw. If the Draft has changed since, the upload fails with a conflict.
         media_type:
           $ref: '#/components/schemas/ExamResourceMediaType'
+          description: The media type of the new content.
         size:
           type: integer
           format: int64
           minimum: 0
           maximum: 104857600
+          description: The exact length of the new content, in bytes. It must also fit the Draft's Resource size limit.
         sha256:
           $ref: '#/components/schemas/SHA256'
+          description: The SHA-256 digest of the new content, as lowercase hex.
     ExamResourceUploadMultipart:
       type: object
       additionalProperties: false
       required:
         - metadata
         - content
-      description: 'Exactly two parts in order: metadata first as application/json (maximum 32768 bytes), then content.'
+      description: 'Exactly two parts, in this order: metadata as application/json (up to 32,768 bytes), then content.'
       properties:
         metadata:
           $ref: '#/components/schemas/ExamResourceUploadMetadata'
+          description: The upload details, sent as the first part.
         content:
           type: string
           format: binary
+          description: The file content.
     ExamResourceContentReplacementMultipart:
       type: object
       additionalProperties: false
       required:
         - metadata
         - content
-      description: 'Exactly two parts in order: metadata first as application/json (maximum 32768 bytes), then content.'
+      description: 'Exactly two parts, in this order: metadata as application/json (up to 32,768 bytes), then content.'
       properties:
         metadata:
           $ref: '#/components/schemas/ExamResourceContentReplacementMetadata'
+          description: The upload details, sent as the first part.
         content:
           type: string
           format: binary
+          description: The new file content.
     EditExamResourceMetadataRequest:
       type: object
       additionalProperties: false
@@ -661,6 +725,7 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The Draft revision you last saw. If the Draft has changed since, the request fails with a conflict.
         display_name:
           type:
             - string
@@ -668,13 +733,16 @@ components:
           minLength: 1
           maxLength: 255
           description: >-
-            Omitted or null leaves the name unchanged; a present value is trimmed UTF-8 with at most 255 Unicode scalar values.
+            The new name, up to 255 characters. Leading and trailing spaces are removed. Leave it out or send null to
+            keep the current name.
         description_markdown:
           type:
             - string
             - "null"
           maxLength: 16384
-          description: Omitted or null leaves the Markdown unchanged; a present value is UTF-8 limited to 16384 bytes.
+          description: >-
+            The new description, as Markdown. Up to 16,384 bytes of UTF-8. Leave it out or send null to keep the
+            current description.
     ReorderExamResourcesRequest:
       type: object
       additionalProperties: false
@@ -686,10 +754,12 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The Draft revision you last saw. If the Draft has changed since, the request fails with a conflict.
         resource_ids:
           type: array
           maxItems: 100
           uniqueItems: true
+          description: Every current Resource ID on the Draft, each once, in the order you want.
           items:
             $ref: '#/components/schemas/ID'
     RemoveExamResourceRequest:
@@ -702,8 +772,10 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The Draft revision you last saw. If the Draft has changed since, the request fails with a conflict.
     ExamResourceResponse:
       type: object
+      description: One file attached to the Draft for candidates to read during the Exam.
       additionalProperties: false
       required:
         - id
@@ -719,36 +791,45 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The Resource ID.
         display_name:
           type: string
           minLength: 1
           maxLength: 255
+          description: The name candidates see.
         description_markdown:
           type: string
           maxLength: 16384
-          description: Authored Markdown encoded as UTF-8 and limited to 16384 bytes.
+          description: The description, as Markdown. Up to 16,384 bytes of UTF-8. Empty when there is none.
         position:
           type: integer
           minimum: 0
           maximum: 99
+          description: Where the Resource appears in the list, counting from 0.
         content_revision_id:
           $ref: '#/components/schemas/ID'
+          description: The ID of the current version of the content. It changes each time the content is replaced.
         media_type:
           $ref: '#/components/schemas/ExamResourceMediaType'
+          description: The media type of the content.
         size:
           type: integer
           format: int64
           minimum: 0
           maximum: 104857600
+          description: The length of the content, in bytes.
         sha256:
           $ref: '#/components/schemas/SHA256'
+          description: The SHA-256 digest of the content, as lowercase hex.
         updated_at:
           type: string
           format: date-time
+          description: When the Resource last changed.
         draft_revision:
           type: integer
           format: int64
           minimum: 1
+          description: The Draft's revision at the time of this response. Send it as expected_revision with your next Draft change.
     ExamResourceListResponse:
       type: object
       additionalProperties: false
@@ -758,7 +839,9 @@ components:
         items:
           type: array
           maxItems: 100
+          description: The Resources on this page, in list order.
           items:
             $ref: '#/components/schemas/ExamResourceResponse'
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
+          description: Send this back as cursor to get the next page. Omitted on the last page.

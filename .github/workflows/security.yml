@@ -104,9 +104,10 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: webapp/.nvmrc
-      # Like the webapp audit this reads only the lockfile and fails on high
-      # or critical advisories, except the ones docs/site/README.md accepts
-      # because no compatible fix exists. A failed or malformed audit fails.
+      # Like the webapp audit this reads only the lockfile and fails on any
+      # high or critical advisory. An advisory can be accepted only by listing
+      # its GHSA ID here and explaining it in docs/site/README.md. A failed or
+      # malformed audit fails.
       # --omit=dev audits the production dependencies, which hold the whole
       # Docusaurus build toolchain; the skipped development dependencies are
       # only TypeScript and type packages used for editor and type checks.
@@ -114,4 +115,4 @@ jobs:
         working-directory: docs/site
         run: |
           npm audit --omit=dev --json > "$RUNNER_TEMP/docs-audit.json" || true
-          node ../../build/ci/npm-audit.mjs "$RUNNER_TEMP/docs-audit.json" GHSA-vfj7-8cjw-p6xm GHSA-qxc2-j82w-r537
+          node ../../build/ci/npm-audit.mjs "$RUNNER_TEMP/docs-audit.json"

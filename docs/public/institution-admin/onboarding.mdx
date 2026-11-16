@@ -1,79 +1,99 @@
 ---
-title: Invite People Into the Institution
-description: Issue, replace, resend, revoke, and accept purpose-specific Invitations without placeholder accounts or email-based authority.
+title: Invite people into the Institution
+description: Send, replace, resend, revoke and accept Invitations that each have one purpose, with no placeholder accounts and no authority granted by email address.
 audience: institution-administrator
 maturity: preview
 ---
 
 import Link from '@docusaurus/Link';
 
-# Invite People Into the Institution
+# Invite people into the Institution
 
-An <Term id="invitation">Invitation</Term> is a durable pre-User package with
-one immutable purpose. It is not an email message and it is never an empty
-placeholder account. Creation records the package and durable mail intent
-atomically; acceptance creates or resolves the User and applies every frozen
-effect, or none.
+An <Term id="invitation">Invitation</Term> is a stored package that exists
+before the person has a User account. Each one has a single purpose that never
+changes. It is not an email, and it is never an empty placeholder account.
+
+When you create an Invitation, Proctor records the package and the intent to
+send its mail together, in one step. When someone accepts it, Proctor creates
+or finds their User and applies every effect fixed in the package. Either all
+the effects apply or none do.
 
 <GovernedFigure asset="invitation-lifecycle" />
 
-## Choose the Package From the Intended Effect
+## Pick the purpose that matches what you want to happen
 
-| Purpose | Effects after valid acceptance |
+| Purpose | What happens when it is accepted |
 | --- | --- |
-| student Class | student Affiliation when needed and membership in one exact Class |
-| teacher Academic Unit | teacher Affiliation when needed, Unit membership, and one selected scoped Role Binding |
-| Academic Unit Role | one approved Role Binding at the exact Unit scope for an existing User |
-| Institution Role | one approved Institution Role Binding for an existing User |
+| Student Class | A student Affiliation if the person doesn't have one, and membership in one specific Class |
+| Teacher Academic Unit | A teacher Affiliation if needed, membership in the Unit, and one chosen Role Binding at that scope |
+| Academic Unit Role | One approved Role Binding at that exact Unit, for an existing User |
+| Institution Role | One approved Institution Role Binding, for an existing User |
 
-The issuer needs authority for every effect at issue time. A Unit-scoped
-administrator cannot package a broader Role or delegate an action they do not
-hold. The committing acceptance rechecks current inviter authority, target and
-Role validity, Access Policy, account state, and academic invariants.
+When you send an Invitation, you need the authority for every effect it
+carries. An administrator scoped to one Unit cannot package a broader Role, or
+pass on an action they don't hold themselves.
 
-## Replace, Resend, and Revoke Mean Different Things
+When the person accepts, Proctor checks again, as part of the same step that
+applies the effects. It checks that the inviter still has the authority, that
+the target and the Role are still valid, and that the Access Policy, the
+account state and the academic rules all still allow it.
 
-- **Resend** preserves the package but rotates the secret and deadline. Every
-  previously delivered link becomes invalid.
-- **Replace** changes recipient, purpose, target, Role, or effective bounds by
-  creating a new Invitation and marking the old one superseded.
-- **Revoke** invalidates one Invitation immediately and cancels queued delivery
-  where possible. Mail already accepted by SMTP becomes harmless because the
-  hosted page reads authoritative Invitation state.
-- **Expire** is server-time lifecycle, not an email-client event. Expiry during
-  a provider round trip prevents acceptance.
+## Resend, replace, revoke and expire
 
-Never edit the semantic package behind a previously delivered claim. Never
-paste an Invitation claim into logs, a ticket, analytics, or provider state.
+These do different things.
 
-## Understand the Acceptance Branches
+- **Resend** keeps the same package but issues a new secret and a new
+  deadline. Every link sent before stops working.
+- **Replace** is how you change the recipient, purpose, target, Role or the
+  dates the access is valid. Proctor creates a new Invitation and marks the old
+  one as superseded.
+- **Revoke** cancels one Invitation straight away, and cancels any mail still
+  waiting to be sent where it can. If the SMTP server already accepted the
+  mail, the link in it is harmless, because the hosted page always reads the
+  Invitation's real current state.
+- **Expire** happens by the server's clock, not by anything in an email
+  client. If an Invitation expires while the person is away signing in with a
+  provider, they cannot accept it.
 
-The `/join` page removes the fragment credential before rendering and exchanges
-it once for a short-lived handle plus host-only HttpOnly proof. The page shows
-the address the Invitation was sent to, read-only, and for a student Class
-Invitation the Class display name; it never names an Academic Unit or Role.
-Depending on policy and package, the person may:
+Never change the contents of a package after a link to it has been sent. Never
+paste an Invitation claim into logs, a ticket, analytics or a provider's
+settings.
 
-- create a local credential;
-- prove an enabled provider identity; or
-- accept an existing-User package with the current Session.
+## What the person sees when they accept
 
-Provider email can prove mailbox control but never selects or merges an account
-by equality. A different verified provider mailbox is acceptable only when it
-does not belong to another User. Existing-User Role packages still require the
-claim; they create no credential, Session, membership, or welcome message.
+The `/join` page removes the credential from the URL fragment before it shows
+anything. It then exchanges that credential, once, for a short-lived handle
+and a host-only HttpOnly proof cookie. The page shows, read-only, the address
+the Invitation was sent to. For a student Class Invitation it also shows the
+Class's display name. It never names an Academic Unit or a Role.
 
-## Verify Without Exposing the Claim
+Depending on the policy and the package, the person may:
 
-Read the safe Invitation projection: purpose, recipient, target summary, Role
-name, inviter, lifecycle timestamps, accepted User when applicable, and bounded
-delivery state. Pending does not mean delivered, and SMTP acceptance does not
-prove inbox receipt.
+- create a local password;
+- prove who they are with an enabled sign-in provider;
+- accept, using their current Session, a package meant for an existing User.
 
-If acceptance fails, the claim remains unconsumed unless the lifecycle itself
-became terminal. The recipient sees a bounded message; the administrator uses
-the exact Invitation and audit record to resolve invalid targets, changed Role,
-lost inviter authority, policy, or delivery health.
+An email address from a provider can prove that the person controls that
+mailbox. Proctor never picks or merges an account because two email addresses
+match. A provider mailbox that differs from the invited address is accepted
+only if it is verified and doesn't belong to another User.
 
-For route-level integration, use
+Role packages for existing Users still need the claim. They create no
+password, Session, membership or welcome message.
+
+## Check an Invitation without exposing the claim
+
+Read the safe view of the Invitation. It shows the purpose, the recipient, a
+summary of the target, the Role name, who sent it, when each lifecycle step
+happened, the User who accepted it if anyone has, and a limited delivery
+status. "Pending" does not mean delivered. An SMTP server accepting the mail
+does not prove it reached the inbox.
+
+If an acceptance fails, the claim stays unused, unless the Invitation itself
+reached the end of its life. The recipient sees a short, limited message. You
+use the specific Invitation and its audit record to find the cause, which may
+be an invalid target, a changed Role, an inviter who lost their authority, the
+policy, or a mail delivery problem.
+
+For the API calls involved, see
 <Link to="/api/recipes/invite-and-link-users">Invite and Link Users</Link>.

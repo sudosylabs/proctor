@@ -11,7 +11,7 @@ paths:
       operationId: reauthenticatePassword
       summary: Refresh the current Session's password proof
       description: >-
-        Verifies the password of the exact current User and refreshes primary-proof recency for an existing password Session. Original authentication and MFA history, Session identity, credentials and expiry are preserved. A Session originally established by an external provider must use that provider's reauthentication journey. The final sensitive operation remains a separate explicit request. This operation is rate limited and its successful proof and required audit commit atomically.
+        Checks the current User's password again and records the time of this new proof on a Session that was signed in with a password. The Session keeps its ID, credentials and expiry times, and its original sign-in and two-step verification times stay as they were. A Session that was signed in through an external provider must reauthenticate with that provider instead. This call doesn't perform the sensitive action itself: the client sends that as its own request afterwards. The call is rate limited. A successful proof is saved together with its audit record, so neither is kept without the other.
       tags:
         - Authentication
       x-proctor-auth: mfa_recovery_session_required
@@ -62,7 +62,7 @@ paths:
       operationId: beginExternalReauthentication
       summary: Refresh the current Session's original provider proof
       description: >-
-        Starts fresh authentication with the original provider and binds the callback to the same User, external identity, Session and credential. OIDC requires a fresh auth_time using max_age=0 and prompt=login. CAS uses renew on login and ticket validation. Success refreshes primary-proof recency without replacing original authentication or MFA history. The selected hosted task is a closed continuation; its final sensitive action remains explicit.
+        Starts a new sign-in with the provider that the current Web Session originally used. The callback is accepted only for the same User, external identity, Session and credential. For OIDC, Proctor sends max_age=0 and prompt=login and requires a new auth_time. For CAS, it sets renew on both sign-in and ticket validation. On success, the Session records the time of this new proof, and its original sign-in and two-step verification times stay as they were. The task picks one of a fixed set of hosted pages to return to. That page still asks for the sensitive action as a separate request.
       tags: [Authentication]
       x-proctor-auth: mfa_recovery_session_required
       x-proctor-error-codes:
@@ -118,14 +118,14 @@ paths:
 components:
   requestBodies:
     PasswordReauthentication:
-      description: The current User's password, used to refresh primary proof for the existing password-authenticated Session before returning to the pending sensitive task.
+      description: The current User's password. It proves the person is still present on a Session that was signed in with a password, before the pending sensitive task continues.
       required: true
       content:
         application/json:
           schema: {$ref: '#/components/schemas/PasswordReauthenticationRequest'}
-          example: {password: '<redacted>'}
+          example: {password: correct-horse-battery-staple-2026}
     ExternalReauthentication:
-      description: The bounded hosted task to return to after fresh authentication with the current Session's original provider. The sensitive action remains a separate explicit request.
+      description: Which hosted page to return to after signing in again with the current Session's original provider. The sensitive action itself is still a separate request.
       required: true
       content:
         application/json:
@@ -139,8 +139,25 @@ components:
       content:
         application/json:
           schema: {$ref: '#/components/schemas/SessionResponse'}
+          example:
+            id: 14j8umgczgrdp95w77zuxmxfu9
+            created_at: '2026-08-01T08:00:00Z'
+            updated_at: '2026-08-01T09:12:05Z'
+            user_id: wj3drgzdpnf54rxf5d8qd3dqne
+            client_type: web
+            device_name: Chrome on macOS
+            authentication_method: password
+            authentication_strength: multi_factor
+            mfa_recovery_required: false
+            mfa_enrollment_required: false
+            authenticated_at: '2026-08-01T08:00:00Z'
+            reauthenticated_at: '2026-08-01T09:12:05Z'
+            mfa_completed_at: '2026-08-01T08:00:20Z'
+            last_activity_at: '2026-08-01T09:12:05Z'
+            idle_expires_at: '2026-08-08T09:12:05Z'
+            expires_at: '2026-08-31T08:00:00Z'
     ExternalReauthenticationStarted:
-      description: Provider redirect plus a short-lived HttpOnly browser-binding cookie.
+      description: The provider address to send the browser to. The response also sets a short-lived HttpOnly cookie that ties the sign-in to this browser.
       headers:
         Cache-Control: {$ref: '#/components/headers/NoStore'}
         Set-Cookie:
@@ -148,6 +165,8 @@ components:
       content:
         application/json:
           schema: {$ref: '#/components/schemas/ExternalReauthenticationResponse'}
+          example:
+            redirect_url: 'https://sso.example.edu/authorize?client_id=proctor&max_age=0&prompt=login&response_type=code&state=Jd3kQ9vLr2XwT7bNc5ZpYh8sMfA1gUeK0oRiVtEyWqC'
   schemas:
     ExternalReauthenticationRequest:
       type: object
@@ -156,13 +175,18 @@ components:
       properties:
         task:
           type: string
+          description: >-
+            The hosted page to return to: security for the account security page, or connect-provider to finish connecting another sign-in provider. connect-provider is refused while the Session must first recover two-step verification.
           enum: [security, connect-provider]
     ExternalReauthenticationResponse:
       type: object
       additionalProperties: false
       required: [redirect_url]
       properties:
-        redirect_url: {type: string, format: uri}
+        redirect_url:
+          type: string
+          format: uri
+          description: The provider's sign-in address. Send the browser there to sign in again.
     PasswordReauthenticationRequest:
       type: object
       additionalProperties: false
@@ -173,4 +197,4 @@ components:
           type: string
           minLength: 1
           writeOnly: true
-          description: The current User's password; never log or persist this input.
+          description: The current User's password. Never log or store it.

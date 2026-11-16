@@ -3,6 +3,15 @@
   max-width: 75rem;
 }
 
+.diagram {
+  margin: var(--proctor-space-7) 0 var(--proctor-space-8);
+}
+
+.diagram .caption {
+  display: block;
+  margin-top: var(--proctor-space-6);
+}
+
 .plate {
   background: var(--proctor-plate);
   border: var(--proctor-stroke-component) solid var(--proctor-border-strong);
@@ -25,16 +34,6 @@
   line-height: 1.55;
   margin: var(--proctor-space-4) 0 0;
   max-width: 82ch;
-}
-
-.kind {
-  color: var(--proctor-primary-strong);
-  flex: none;
-  font-family: var(--ifm-font-family-monospace);
-  font-size: var(--proctor-type-caption-size);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .fullSize {
@@ -78,8 +77,7 @@
     border-color: var(--proctor-print-border);
   }
 
-  .caption,
-  .kind {
+  .caption {
     color: var(--proctor-print-ink);
   }
 

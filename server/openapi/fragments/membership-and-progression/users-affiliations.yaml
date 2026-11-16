@@ -18,7 +18,9 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Lists the authorized current and historical relationship kinds attached to one User. Affiliations are non-exclusive descriptive relationships and never substitute for Role Bindings in permission checks.
+        Lists the current and past Affiliations of one User that you may see. A User can hold several Affiliations
+        at once. Affiliations describe the person and are never used in place of Role Bindings to check
+        permissions.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -60,7 +62,9 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Adds one effective-dated student, teacher, staff, or external relationship to an existing User. Other Affiliation kinds may coexist, and the transition grants no permissions or credentials by itself.
+        Adds one student, teacher, staff or external Affiliation to an existing User, with optional start and end
+        times. Other kinds of Affiliation can exist at the same time, and adding one grants no permissions or
+        credentials.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -108,7 +112,7 @@ paths:
 components:
   requestBodies:
     CreateAffiliation:
-      description: Relationship kind and optional effective interval for the route User.
+      description: The kind of Affiliation for the User in the path and, optionally, when it starts and ends.
       required: true
       content:
         application/json:
@@ -119,22 +123,42 @@ components:
             start_at: '2026-08-01T00:00:00Z'
   responses:
     AffiliationCreated:
-      description: Affiliation created
+      description: The new Affiliation.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/AffiliationResponse'
+          example:
+            id: 14j8umgczgrdp95w77zuxmxfu9
+            created_at: '2026-07-15T11:20:00Z'
+            updated_at: '2026-07-15T11:20:00Z'
+            user_id: wj3drgzdpnf54rxf5d8qd3dqne
+            kind: teacher
+            start_at: '2026-08-01T00:00:00Z'
     AffiliationListOK:
-      description: Affiliation collection
+      description: One page of the User's Affiliations.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/AffiliationListResponse'
           example:
-            items: []
+            items:
+              - id: 4z3cy1rp9cucq7qo1g9mq94dj3
+                created_at: '2023-09-01T08:00:00Z'
+                updated_at: '2026-07-01T00:00:00Z'
+                user_id: wj3drgzdpnf54rxf5d8qd3dqne
+                kind: student
+                start_at: '2023-09-01T08:00:00Z'
+                end_at: '2026-07-01T00:00:00Z'
+              - id: 14j8umgczgrdp95w77zuxmxfu9
+                created_at: '2026-07-15T11:20:00Z'
+                updated_at: '2026-07-15T11:20:00Z'
+                user_id: wj3drgzdpnf54rxf5d8qd3dqne
+                kind: teacher
+                start_at: '2026-08-01T00:00:00Z'
   schemas:
     AffiliationListResponse:
-      description: One page of the collection in its stable order.
+      description: One page of Affiliations, in a fixed order.
       type: object
       additionalProperties: false
       required:
@@ -142,6 +166,7 @@ components:
       properties:
         items:
           type: array
+          description: The Affiliations on this page.
           items:
             $ref: '#/components/schemas/AffiliationResponse'
         next_cursor:
@@ -154,9 +179,12 @@ components:
       properties:
         kind:
           $ref: '#/components/schemas/AffiliationKind'
+          description: The kind of Affiliation to add.
         start_at:
           type: string
           format: date-time
+          description: When the Affiliation starts. Omit it to start now.
         end_at:
           type: string
           format: date-time
+          description: When the Affiliation ends; it must be after the start. Omit it for no end.

@@ -1,58 +1,65 @@
 ---
-title: Finalize the Review and Release the Result
-description: Check completeness, freeze one bounded integrity inventory, and explicitly release only approved candidate-facing remarks.
+title: Finalize the Review and release the result
+description: Check the Review is complete, fix its list of integrity records, and then choose to release only the remarks approved for the candidate.
 audience: exam-manager
 maturity: preview
 ---
 
-# Finalize the Review and Release the Result
+# Finalize the Review and release the result
 
-Finalization and release are deliberately separate. Finalization freezes the
-manager's complete Review and its evidence inventory. Release makes only one
-narrow candidate projection visible.
+Finalizing and releasing are two separate steps, on purpose. Finalizing fixes
+your complete Review and its list of evidence. Releasing then makes one short
+result visible to the candidate.
 
-## Check Before Finalization
+## Check before you finalize
 
-Use a fresh Review snapshot and verify all of the following:
+Work from a freshly loaded copy of the Review, and check that:
 
-- integrity collection is terminal as `settled` or `gapped`;
+- integrity collection has finished, as either `settled` or `gapped`;
 - every current Flag has one current decision;
-- private notes contain no secrets, credentials, or unnecessary student data;
-- student remarks contain only text approved for the candidate; and
-- concurrent Review revision changes have been reconciled.
+- private notes contain no secrets, credentials or student data that isn't
+  needed;
+- the remarks for the student contain only text approved for the candidate;
+- you have worked in any changes other managers made to the Review revision at
+  the same time.
 
-Finalization locks the sealed Submission and freezes stable Flag, decision,
-evidence, and discrepancy identities in a canonical digest. The operation is
-bounded and includes Browser groups, retained copies, overflow counts and the
-native-condition inventory. An inventory limit cannot be bypassed by silently
-omitting records.
+Finalizing locks the sealed Submission. It also fixes the identities of the
+Flags, decisions, evidence and discrepancies, as they stand, in a digest
+calculated in a standard way. The operation has limits. It covers Browser
+groups, stored copies, counts of records beyond the limits, and the list of
+native conditions. Proctor never gets around a limit on that list by quietly
+leaving records out.
 
-Historical finalization snapshots stay immutable. New qualifying Browser evidence
-or native conditions arriving within the upload window withdraw current approval
-and withhold any released result. Inspect the changed inventory, refresh affected
-Browser Flag decisions, finalize and explicitly release again. Exact delivery
-replays do not trigger this process.
+Earlier finalized snapshots never change. If new qualifying Browser evidence
+or native conditions arrive during the upload window, the current approval is
+withdrawn and any released result is held back. Look at what changed in the
+list, update the affected Browser Flag decisions, then finalize and release
+again. A delivery that is an exact repeat doesn't start this process.
 
-## Release Is a Separate Decision
+## Releasing is a separate decision
 
-Release rechecks current Submission authority and the exact finalized Review
-revision. Until that transition succeeds, the candidate result is concealed as
-not found—not returned as an empty or “pending” private Review.
+When you release, Proctor checks again that the Submission is still current,
+and that you are releasing the exact finalized Review revision. Until the
+release succeeds, the candidate's result is answered as "not found". Proctor
+doesn't return it as an empty or “pending” private Review.
 
-The released projection contains only:
+The released result contains only:
 
-- Review, Submission, and Attempt identities;
-- sanitized approved student-facing Markdown remarks; and
+- the identifiers of the Review, the Submission and the Attempt;
+- the approved Markdown remarks for the student, cleaned up for display;
 - the release time.
 
-It never contains Flags, evidence, discrepancies, decisions, private rationale,
-manager notes, sealed Workspace content, grade, score, rubric, pass/fail, or an
-academic outcome. Proctor currently does not own those academic result models.
+It never contains Flags, evidence, discrepancies, decisions, private
+rationale, manager notes, sealed Workspace content, a grade, a score, a
+rubric, pass or fail, or any academic outcome. Proctor doesn't currently
+model any of those academic results.
 
-## Handle Uncertain Requests Safely
+## If you aren't sure a request went through
 
-Finalization and release require idempotency. If a response is lost, retry the
-exact operation with the same body and idempotency key after re-establishing the
-transport proof. A revision conflict means the Review changed and must be
-reread. A state conflict means a prerequisite is incomplete; it is not
-permission to bypass the missing decision or terminal collection state.
+Finalizing and releasing both need an idempotency key. If you lose the
+response, set up the transport proof again, then retry exactly the same
+operation with the same body and idempotency key.
+
+A revision conflict means the Review has changed, and you need to read it
+again. A state conflict means something it depends on isn't finished yet. It
+doesn't let you skip the missing decision or an unfinished collection state.

@@ -13,10 +13,11 @@ paths:
       tags:
         - Data retention
       description: >-
-        Requires a Session and the separate exam.records.complete action through current Exam Manager and
-        exact Academic Unit membership, or its scoped override action. Returns only lifecycle provenance and
-        bounded counts. Current completion is separate from delivery closure, and a stale completion blocks
-        retention. Retired integrity categories do not require recreated Reviews.
+        Needs a Session and the separate `exam.records.complete` action, held through current Exam Manager
+        status and membership of the exact Academic Unit, or through its scoped override. Returns the
+        completion history and counts only. Records completion is separate from closing the Sitting, and a
+        stale completion blocks retention. Integrity categories that were already retired don't need their
+        Reviews recreated.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -61,14 +62,15 @@ paths:
       tags:
         - Data retention
       description: >-
-        Requires a Session and the separate exam.records.complete action through current Exam Manager and
-        exact Academic Unit membership, or its scoped override action. The Sitting must be Closed and every
-        remaining Submission Review finalized or explicitly unnecessary for its exact current inventory. The
-        supplied revision and integrity revision must match. New accepted evidence or edits to a waived Review
-        make completion stale and require acknowledgement and renewed completion, restarting retention. Exact
-        replay and already-current completion do not restart the clock. Completion, current
-        credential/permission rechecks, durable audit and retry outcome commit together. It neither enables
-        cleanup nor releases holds.
+        Needs a Session and the separate `exam.records.complete` action, held through current Exam Manager
+        status and membership of the exact Academic Unit, or through its scoped override. The Sitting must be
+        Closed, and every remaining Submission Review must be finalized or marked unnecessary for the
+        Submission's current inventory. The revision and the integrity evidence revision you send must match
+        the current ones. Newly accepted evidence, or an edit to a waived Review, makes the completion stale.
+        You then acknowledge the change and complete again, which restarts the retention clock. An exact
+        retry, or completing when the completion is already current, doesn't restart the clock. The
+        completion, the fresh credential and permission checks, the audit record and the retry result are
+        saved together. Completing doesn't turn on cleanup or release Retention Holds.
       x-proctor-auth: session_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -127,10 +129,11 @@ paths:
       tags:
         - Data retention
       description: >-
-        Requires a Session and the separate exam.records.complete action through current Exam Manager and
-        exact Academic Unit membership, or its scoped override action. Returns the recorded private decision
-        or null. Its Review revision and discrepancy count identify the acknowledged inventory. Candidate
-        self-access is concealed; retired private decisions cannot be replayed.
+        Needs a Session and the separate `exam.records.complete` action, held through current Exam Manager
+        status and membership of the exact Academic Unit, or through its scoped override. Returns the recorded
+        private decision, or null when there is none. Its Review revision and discrepancy count identify the
+        inventory that was acknowledged. A candidate asking about their own Submission gets no answer that
+        reveals the waiver. A private decision that has been retired can't be replayed.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -176,13 +179,14 @@ paths:
       tags:
         - Data retention
       description: >-
-        Requires a Session and the separate exam.records.complete action through current Exam Manager and
-        exact Academic Unit membership, or its scoped override action. Requires a Closed Sitting and exact
-        current waiver, Review and discrepancy preconditions; zero waiver revision creates the first decision.
-        Prohibits candidate self-waivers, all undecided Flags and finalized Reviews. New accepted
-        discrepancies or later edits invalidate the waiver. The private rationale is stored only in the
-        dedicated record and protected retry outcome; audit contains the closed reason code and identifiers.
-        Retired integrity records reject this action and replay.
+        Needs a Session and the separate `exam.records.complete` action, held through current Exam Manager
+        status and membership of the exact Academic Unit, or through its scoped override. The Sitting must be
+        Closed, and the waiver revision, Review revision and discrepancy count you send must match the current
+        ones. Send waiver revision 0 to record the first decision. A candidate can't waive their own Review. A
+        waiver is rejected while Flags are still undecided, and for a Review that is already finalized. Newly
+        accepted discrepancies or later edits invalidate the waiver. The private reason is stored only in the
+        waiver record and the protected retry result. The audit record holds only the reason code and IDs.
+        Once the integrity records are retired, this action and its replay are rejected.
       x-proctor-auth: session_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -242,10 +246,11 @@ paths:
       tags:
         - Data retention
       description: >-
-        Requires a Session and exam.records.hold through current Exam Manager and exact Academic Unit
-        membership, or its scoped override. Lists exact or descendant scopes with applicable ancestor holds.
-        Holds have no automatic expiry. Creation-time retired counts identify content that the hold cannot
-        restore. Pages use a bounded scope-bound cursor.
+        Needs a Session and `exam.records.hold`, held through current Exam Manager status and membership of
+        the exact Academic Unit, or through its scoped override. Lists holds on the requested scope or below
+        it, together with the higher-level holds that cover it. Holds never expire on their own. The retired
+        counts recorded when each hold was created show content the hold can't bring back. The cursor is tied
+        to the requested scope.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -272,21 +277,23 @@ paths:
           in: query
           schema:
             $ref: '#/components/schemas/ID'
-          description: Optional exact Sitting filter; includes covering Exam holds.
+          description: Return only holds for this Sitting. Exam holds that cover it are included.
         - name: submission_id
           in: query
           schema:
             $ref: '#/components/schemas/ID'
-          description: Optional exact Submission filter, requiring exam_sitting_id; includes covering ancestor holds.
+          description: >-
+            Return only holds for this Submission. Needs `exam_sitting_id`. Holds on the Sitting and Exam that
+            cover it are included.
         - name: include_released
           in: query
           schema:
             type: boolean
             default: false
-          description: Only true or false is accepted.
+          description: Set to `true` to include released holds. Only `true` and `false` are accepted.
         - name: limit
           in: query
-          description: Maximum number of preservation holds to return in this page.
+          description: Maximum number of holds to return.
           schema:
             type: integer
             minimum: 1
@@ -297,7 +304,9 @@ paths:
           schema:
             type: string
             maxLength: 512
-          description: Opaque continuation bound to exact scope and include_released. Do not interpret or change it.
+          description: >-
+            The `next_cursor` value from the previous page, sent with the same scope and `include_released`.
+            Pass it unchanged and don't try to read it.
       responses:
         '200':
           $ref: '#/components/responses/RetentionHoldPageOK'
@@ -319,12 +328,13 @@ paths:
       tags:
         - Data retention
       description: >-
-        Requires a Session and exam.records.hold through current Exam Manager and exact Academic Unit
-        membership, or its scoped override. An Exam, Sitting or Submission hold covers current content and
-        future arrivals within its scope until explicit release. It prevents pending retirement but cannot
-        restore content already retired. Rejects a wholly retired exact Submission; broader holds still
-        preserve remaining descendants. Creation-time retired counts disclose partial retirement. The hold,
-        safe critical audit and retry outcome commit together after fresh authority checks.
+        Needs a Session and `exam.records.hold`, held through current Exam Manager status and membership of
+        the exact Academic Unit, or through its scoped override. A hold on an Exam, Sitting or Submission
+        covers its current content and anything added to that scope later, until someone releases it. It stops
+        pending retirement but can't bring back content that was already retired. A hold on a single
+        Submission that is fully retired is rejected. Broader holds still protect whatever remains below them.
+        The retired counts recorded at creation show any partial retirement. The hold, its critical audit
+        record and the retry result are saved together after authority is checked again.
       x-proctor-auth: session_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -382,11 +392,11 @@ paths:
       tags:
         - Data retention
       description: >-
-        Requires retention_hold.release on a protected system-administrator Session with strong recent
-        authentication. Supply the original exact scope and current hold revision. Release is manual, durably
-        audited and idempotent; authority and proof are rechecked inside the transaction and on replay. The
-        private release rationale does not enter ordinary audit. Removing a hold does not restore already
-        retired data or bypass fresh eligibility and grace.
+        Needs `retention_hold.release` on a protected system-administrator Session with a strong, recent
+        sign-in. The release is audited and idempotent. Authority and the sign-in proof are checked again
+        inside the transaction and on replay. The private release reason isn't written to the ordinary audit
+        log. Releasing a hold doesn't restore data already retired, and records must still become eligible and
+        pass a new grace period before cleanup.
       x-proctor-auth: strong_recent_session_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -448,12 +458,12 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/ID'
-      description: The preservation hold identifier.
+      description: ID of the Retention Hold.
   requestBodies:
     CompleteExamRecords:
       description: >-
-        Current completion revision and acknowledged evidence revision for the Closed Sitting whose Reviews
-        are finalized or explicitly waived.
+        The current completion revision and the integrity evidence revision you acknowledge, for a Closed
+        Sitting whose Reviews are all finalized or waived.
       required: true
       content:
         application/json:
@@ -464,8 +474,8 @@ components:
             acknowledged_evidence_revision: 0
     WaiveSubmissionReview:
       description: >-
-        Expected waiver and Review revisions, current discrepancy count, and the private reason for waiving a
-        Review of this exact inventory.
+        The waiver and Review revisions and the discrepancy count you expect, and the private reason for
+        waiving the Review of this Submission's current inventory.
       required: true
       content:
         application/json:
@@ -479,8 +489,8 @@ components:
             private_reason: Reviewed the current inventory; no finalized Review is needed.
     CreateRetentionHold:
       description: >-
-        Optional Sitting or Submission scope and a bounded private reason. Omitting both scope identifiers
-        preserves the entire Exam, including later descendants.
+        Optional Sitting or Submission scope and a private reason. Leave out both IDs to hold the whole Exam,
+        including anything added to it later.
       required: true
       content:
         application/json:
@@ -491,8 +501,8 @@ components:
             private_reason: Preserve records until the institution concludes its review.
     ReleaseRetentionHold:
       description: >-
-        Current hold revision and the reason authorizing release. Releasing a hold starts no immediate
-        deletion and cannot restore already retired records.
+        The hold's current revision and the reason for releasing it. Releasing doesn't start any deletion
+        right away and can't restore records already retired.
       required: true
       content:
         application/json:
@@ -505,8 +515,8 @@ components:
   responses:
     ExamRecordsCompletionOK:
       description: >-
-        The recorded completion result. Exact replay preserves its original timestamp; a separate current
-        snapshot may have changed.
+        The recorded completion result. An exact retry returns the original timestamp, even if the current
+        state has changed since.
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
@@ -515,15 +525,15 @@ components:
           schema:
             $ref: '#/components/schemas/ExamRecordsCompletionResponse'
           example:
-            exam_sitting_id: ybndrfg8ejkmcpqxot1uwisza3
-            revision: 2
-            evidence_revision: 0
-            completed_evidence_revision: 0
+            exam_sitting_id: 4z3cy1rp9cucq7qo1g9mq94dj3
+            revision: 4
+            evidence_revision: 2
+            completed_evidence_revision: 2
             current: true
             completed_at: '2026-09-01T10:00:00Z'
-            completed_by_user_id: bnndrfg8ejkmcpqxot1uwisza3
+            completed_by_user_id: dpbj4ddm3hw8fkicm7nuazihkg
     ExamRecordsSnapshotOK:
-      description: Current Sitting records lifecycle and bounded eligibility counts.
+      description: The Sitting's current records completion state and counts.
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
@@ -533,7 +543,7 @@ components:
             $ref: '#/components/schemas/ExamRecordsSnapshotResponse'
           example:
             completion:
-              exam_sitting_id: ybndrfg8ejkmcpqxot1uwisza3
+              exam_sitting_id: 4z3cy1rp9cucq7qo1g9mq94dj3
               revision: 1
               evidence_revision: 0
               completed_evidence_revision: 0
@@ -542,7 +552,7 @@ components:
             submission_count: 20
             pending_reviews: 2
     SubmissionReviewWaiverOK:
-      description: Private decision for the current inventory, or null when no decision exists.
+      description: The private decision for the current inventory, or null when none exists.
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
@@ -551,9 +561,19 @@ components:
           schema:
             $ref: '#/components/schemas/SubmissionReviewWaiverEnvelope'
           example:
-            waiver: null
+            waiver:
+              submission_id: o59e9myujxww7zfc3kx4rn6wk5
+              revision: 1
+              review_revision: 0
+              discrepancy_count: 0
+              actor_user_id: dpbj4ddm3hw8fkicm7nuazihkg
+              recorded_at: '2026-08-28T15:30:00Z'
+              reason_code: review_not_required
+              private_reason: Reviewed the current inventory; no finalized Review is needed.
+              inventory_invalidated: false
+              delivery_inventory_revision: 3
     RetentionHoldOK:
-      description: Released preservation hold with immutable creation-time coverage.
+      description: The released Retention Hold. The coverage counts recorded at creation don't change.
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
@@ -562,17 +582,22 @@ components:
           schema:
             $ref: '#/components/schemas/RetentionHoldResponse'
           example:
-            id: ybndrfg8ejkmcpqxot1uwisza3
-            exam_id: bnndrfg8ejkmcpqxot1uwisza3
-            revision: 1
+            id: yftfs48pasu5fd6czhcwz6b4x3
+            exam_id: xpq79ar61ncrjiouey6d9tgp91
+            exam_sitting_id: 4z3cy1rp9cucq7qo1g9mq94dj3
+            revision: 2
             created_at: '2026-09-01T10:00:00Z'
-            created_by_user_id: dnndrfg8ejkmcpqxot1uwisza3
+            created_by_user_id: dpbj4ddm3hw8fkicm7nuazihkg
             reason_code: institution_request
             private_reason: Preserve records until the institution concludes its review.
+            released_at: '2026-10-15T09:00:00Z'
+            released_by_user_id: nan7rdocriztinowtuyrbqg67a
+            release_reason_code: case_closed
+            release_private_reason: The institution has concluded its review and approved release.
             work_retired_submission_count: 0
             integrity_retired_submission_count: 0
     RetentionHoldCreated:
-      description: Manual preservation hold; creation-time counts disclose already retired content.
+      description: The new Retention Hold. Its creation-time counts show any content already retired.
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
@@ -581,17 +606,18 @@ components:
           schema:
             $ref: '#/components/schemas/RetentionHoldResponse'
           example:
-            id: ybndrfg8ejkmcpqxot1uwisza3
-            exam_id: bnndrfg8ejkmcpqxot1uwisza3
+            id: yftfs48pasu5fd6czhcwz6b4x3
+            exam_id: xpq79ar61ncrjiouey6d9tgp91
+            exam_sitting_id: 4z3cy1rp9cucq7qo1g9mq94dj3
             revision: 1
             created_at: '2026-09-01T10:00:00Z'
-            created_by_user_id: dnndrfg8ejkmcpqxot1uwisza3
+            created_by_user_id: dpbj4ddm3hw8fkicm7nuazihkg
             reason_code: institution_request
             private_reason: Preserve records until the institution concludes its review.
             work_retired_submission_count: 0
             integrity_retired_submission_count: 0
     RetentionHoldPageOK:
-      description: Bounded hold page, including ancestor holds that cover the requested descendant.
+      description: One page of Retention Holds, including higher-level holds that cover the requested scope.
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
@@ -600,9 +626,20 @@ components:
           schema:
             $ref: '#/components/schemas/RetentionHoldPageResponse'
           example:
-            items: []
+            items:
+              - id: yftfs48pasu5fd6czhcwz6b4x3
+                exam_id: xpq79ar61ncrjiouey6d9tgp91
+                exam_sitting_id: 4z3cy1rp9cucq7qo1g9mq94dj3
+                revision: 1
+                created_at: '2026-09-01T10:00:00Z'
+                created_by_user_id: dpbj4ddm3hw8fkicm7nuazihkg
+                reason_code: institution_request
+                private_reason: Preserve records until the institution concludes its review.
+                work_retired_submission_count: 0
+                integrity_retired_submission_count: 0
   schemas:
     ExamRecordsCompletionResponse:
+      description: Records completion state of one Sitting.
       type: object
       additionalProperties: false
       required:
@@ -614,29 +651,47 @@ components:
       properties:
         exam_sitting_id:
           $ref: '#/components/schemas/ID'
+          description: Sitting the completion belongs to.
         revision:
           type: integer
           format: int64
           minimum: 1
+          description: >-
+            Revision of the completion state. It goes up with each completion and each newly accepted
+            integrity change. Send it as `expected_revision` to complete.
         evidence_revision:
           type: integer
           format: int64
           minimum: 0
+          description: >-
+            Revision of the Sitting's accepted integrity evidence. It goes up each time new evidence is
+            accepted. Send it as `acknowledged_evidence_revision` to complete.
         completed_evidence_revision:
           type: integer
           format: int64
           minimum: 0
+          description: >-
+            Evidence revision acknowledged by the most recent completion. 0 before the first completion.
         current:
           type: boolean
+          description: >-
+            True when the Sitting's records are completed and no newer evidence has been accepted since.
+            Retention can only start from a current completion.
         completed_at:
           type: string
           format: date-time
+          description: Time of the most recent completion. Omitted before the first.
         completed_by_user_id:
           $ref: '#/components/schemas/ID'
+          description: User who made the most recent completion. Omitted before the first.
         stale_at:
           type: string
           format: date-time
+          description: >-
+            Time newly accepted evidence made the most recent completion stale. Omitted while the completion
+            is current, and before the first.
     ExamRecordsSnapshotResponse:
+      description: A Sitting's records completion state, with counts that show whether it can be completed.
       type: object
       additionalProperties: false
       required:
@@ -647,6 +702,7 @@ components:
       properties:
         completion:
           $ref: '#/components/schemas/ExamRecordsCompletionResponse'
+          description: Current records completion state.
         sitting_state:
           type: string
           enum:
@@ -656,15 +712,20 @@ components:
             - paused
             - closing
             - canceled
+          description: Delivery state of the Sitting. Records can only be completed once it is `closed`.
         submission_count:
           type: integer
           format: int64
           minimum: 0
+          description: Number of Submissions in the Sitting.
         pending_reviews:
           type: integer
           format: int64
           minimum: 0
+          description: >-
+            Number of Submission Reviews still to finalize or waive before the records can be completed.
     SubmissionReviewWaiverResponse:
+      description: A recorded decision that a Submission's current inventory needs no finalized Review.
       type: object
       additionalProperties: false
       required:
@@ -681,23 +742,29 @@ components:
       properties:
         submission_id:
           $ref: '#/components/schemas/ID'
+          description: Submission the waiver applies to.
         revision:
           type: integer
           format: int64
           minimum: 1
+          description: Revision of the waiver. Send it as `expected_revision` to record a new decision.
         review_revision:
           type: integer
           format: int64
           minimum: 0
+          description: Review revision the waiver acknowledged.
         discrepancy_count:
           type: integer
           format: int64
           minimum: 0
+          description: Number of integrity discrepancies the waiver acknowledged.
         actor_user_id:
           $ref: '#/components/schemas/ID'
+          description: User who recorded the waiver.
         recorded_at:
           type: string
           format: date-time
+          description: Time the waiver was recorded.
         reason_code:
           type: string
           enum:
@@ -708,24 +775,25 @@ components:
             - case_closed
             - mistake
             - other
-          description: Closed operational audit code. Write case-specific details only in private_reason.
+          description: Reason code for the audit log. Put case details only in the matching private reason field.
         private_reason:
           type: string
           minLength: 1
           maxLength: 1000
           description: >-
-            Private institutional rationale, without leading or trailing whitespace. Limited to 4000 UTF-8
-            bytes and excluded from ordinary audit.
+            Private reason from the Institution, with no leading or trailing spaces. At most 4,000 UTF-8 bytes.
+            It is never written to the ordinary audit log.
         inventory_invalidated:
           type: boolean
-          description: Accepted delivery changed after this waiver; renewed acknowledgement is required.
+          description: True when the accepted delivery changed after this waiver. The waiver must then be acknowledged again.
         delivery_inventory_revision:
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
-          description: Exact accepted delivery inventory acknowledged by this waiver.
+          description: Revision of the accepted delivery inventory that this waiver acknowledged.
     SubmissionReviewWaiverEnvelope:
+      description: Wrapper for a Submission's Review waiver.
       type: object
       additionalProperties: false
       required:
@@ -735,7 +803,9 @@ components:
           oneOf:
             - $ref: '#/components/schemas/SubmissionReviewWaiverResponse'
             - type: 'null'
+          description: The recorded waiver, or null when none exists.
     RetentionHoldResponse:
+      description: A Retention Hold on an Exam, a Sitting or a Submission.
       type: object
       additionalProperties: false
       required:
@@ -751,21 +821,28 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: ID of the hold.
         exam_id:
           $ref: '#/components/schemas/ID'
+          description: Exam the hold is on, or that contains the held Sitting or Submission.
         exam_sitting_id:
           $ref: '#/components/schemas/ID'
+          description: Held Sitting, or the Sitting of the held Submission. Omitted for an Exam hold.
         submission_id:
           $ref: '#/components/schemas/ID'
+          description: Held Submission. Present only for a Submission hold.
         revision:
           type: integer
           format: int64
           minimum: 1
+          description: Revision of the hold. Send it as `expected_revision` to release it.
         created_at:
           type: string
           format: date-time
+          description: Time the hold was created.
         created_by_user_id:
           $ref: '#/components/schemas/ID'
+          description: User who created the hold.
         reason_code:
           type: string
           enum:
@@ -776,19 +853,21 @@ components:
             - case_closed
             - mistake
             - other
-          description: Closed operational audit code. Write case-specific details only in private_reason.
+          description: Reason code for the audit log. Put case details only in the matching private reason field.
         private_reason:
           type: string
           minLength: 1
           maxLength: 1000
           description: >-
-            Private institutional rationale, without leading or trailing whitespace. Limited to 4000 UTF-8
-            bytes and excluded from ordinary audit.
+            Private reason from the Institution, with no leading or trailing spaces. At most 4,000 UTF-8 bytes.
+            It is never written to the ordinary audit log.
         released_at:
           type: string
           format: date-time
+          description: Time the hold was released. Omitted while it is active.
         released_by_user_id:
           $ref: '#/components/schemas/ID'
+          description: User who released the hold. Omitted while it is active.
         release_reason_code:
           type: string
           enum:
@@ -799,29 +878,30 @@ components:
             - case_closed
             - mistake
             - other
-          description: Closed operational audit code. Write case-specific details only in private_reason.
+          description: Reason code for the audit log. Put case details only in the matching private reason field.
         release_private_reason:
           type: string
           minLength: 1
           maxLength: 1000
           description: >-
-            Private institutional rationale, without leading or trailing whitespace. Limited to 4000 UTF-8
-            bytes and excluded from ordinary audit.
+            Private reason from the Institution, with no leading or trailing spaces. At most 4,000 UTF-8 bytes.
+            It is never written to the ordinary audit log.
         work_retired_submission_count:
           type: integer
           format: int64
           minimum: 0
           description: >-
-            Number of descendant Submissions whose work had already retired when this hold was created. These
-            records cannot be restored by the hold.
+            Number of Submissions in the hold's scope whose work was already retired when the hold was created.
+            The hold can't restore them.
         integrity_retired_submission_count:
           type: integer
           format: int64
           minimum: 0
           description: >-
-            Number of descendant Submissions whose integrity category had already retired when this hold was
-            created.
+            Number of Submissions in the hold's scope whose integrity records were already retired when the hold
+            was created. The hold can't restore them.
     RetentionHoldPageResponse:
+      description: One page of Retention Holds.
       type: object
       additionalProperties: false
       required:
@@ -832,10 +912,14 @@ components:
           maxItems: 200
           items:
             $ref: '#/components/schemas/RetentionHoldResponse'
+          description: Holds on this page.
         next_cursor:
           type: string
           maxLength: 512
+          description: >-
+            Token to pass as `cursor` to read the next page. Treat it as unreadable. Omitted on the last page.
     CompleteExamRecordsRequest:
+      description: Completes a Sitting's records.
       type: object
       additionalProperties: false
       required:
@@ -846,11 +930,16 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The completion `revision` you read. The request fails if it changed since.
         acknowledged_evidence_revision:
           type: integer
           format: int64
           minimum: 0
+          description: >-
+            The `evidence_revision` you reviewed. It must equal the current one, which confirms you have seen
+            all accepted evidence.
     WaiveSubmissionReviewRequest:
+      description: Records that a Submission's current inventory needs no finalized Review.
       type: object
       additionalProperties: false
       required:
@@ -864,14 +953,17 @@ components:
           type: integer
           format: int64
           minimum: 0
+          description: The waiver `revision` you read, or 0 when no waiver exists yet.
         expected_review_revision:
           type: integer
           format: int64
           minimum: 0
+          description: The Review revision you read. The request fails if the Review changed since.
         expected_discrepancy_count:
           type: integer
           format: int64
           minimum: 0
+          description: The number of integrity discrepancies you reviewed. The request fails if it changed.
         reason_code:
           type: string
           enum:
@@ -882,14 +974,14 @@ components:
             - case_closed
             - mistake
             - other
-          description: Closed operational audit code. Write case-specific details only in private_reason.
+          description: Reason code for the audit log. Put case details only in the matching private reason field.
         private_reason:
           type: string
           minLength: 1
           maxLength: 1000
           description: >-
-            Private institutional rationale, without leading or trailing whitespace. Limited to 4000 UTF-8
-            bytes and excluded from ordinary audit.
+            Private reason from the Institution, with no leading or trailing spaces. At most 4,000 UTF-8 bytes.
+            It is never written to the ordinary audit log.
         expected_delivery_inventory_revision:
           type: integer
           format: int64
@@ -897,8 +989,8 @@ components:
           maximum: 9007199254740991
           default: 0
           description: >-
-            Exact delivery_inventory_revision from the current private Review snapshot, including when no
-            Review exists. Omission means zero and conflicts after any late delivery change.
+            The `delivery_inventory_revision` from the current private Review snapshot, also when no Review
+            exists. Leaving it out means 0, which fails if the delivery changed late.
     CreateRetentionHoldRequest:
       type: object
       additionalProperties: false
@@ -908,8 +1000,10 @@ components:
       properties:
         exam_sitting_id:
           $ref: '#/components/schemas/ID'
+          description: Sitting to hold. Leave it out, together with `submission_id`, to hold the whole Exam.
         submission_id:
           $ref: '#/components/schemas/ID'
+          description: Submission to hold. Needs `exam_sitting_id`.
         reason_code:
           type: string
           enum:
@@ -920,17 +1014,17 @@ components:
             - case_closed
             - mistake
             - other
-          description: Closed operational audit code. Write case-specific details only in private_reason.
+          description: Reason code for the audit log. Put case details only in the matching private reason field.
         private_reason:
           type: string
           minLength: 1
           maxLength: 1000
           description: >-
-            Private institutional rationale, without leading or trailing whitespace. Limited to 4000 UTF-8
-            bytes and excluded from ordinary audit.
+            Private reason from the Institution, with no leading or trailing spaces. At most 4,000 UTF-8 bytes.
+            It is never written to the ordinary audit log.
       description: >-
-        Omit both nested IDs for an Exam hold, provide Sitting ID for a Sitting hold, or provide both for an
-        exact Submission hold. Explicit null and empty IDs are rejected.
+        Leave out both IDs for an Exam hold, send the Sitting ID for a Sitting hold, or send both for a single
+        Submission hold. null and empty IDs are rejected.
     ReleaseRetentionHoldRequest:
       type: object
       additionalProperties: false
@@ -941,12 +1035,15 @@ components:
       properties:
         exam_sitting_id:
           $ref: '#/components/schemas/ID'
+          description: Sitting the hold was created on, if any.
         submission_id:
           $ref: '#/components/schemas/ID'
+          description: Submission the hold was created on, if any.
         expected_revision:
           type: integer
           format: int64
           minimum: 1
+          description: The hold `revision` you read. The request fails if the hold changed since.
         reason_code:
           type: string
           enum:
@@ -957,14 +1054,14 @@ components:
             - case_closed
             - mistake
             - other
-          description: Closed operational audit code. Write case-specific details only in private_reason.
+          description: Reason code for the audit log. Put case details only in the matching private reason field.
         private_reason:
           type: string
           minLength: 1
           maxLength: 1000
           description: >-
-            Private institutional rationale, without leading or trailing whitespace. Limited to 4000 UTF-8
-            bytes and excluded from ordinary audit.
+            Private reason from the Institution, with no leading or trailing spaces. At most 4,000 UTF-8 bytes.
+            It is never written to the ordinary audit log.
       description: >-
-        Supply the same exact nested scope used to create this hold. Release never restores previously retired
-        content.
+        Send the same scope that was used to create the hold. Releasing never restores content already
+        retired.

@@ -15,7 +15,15 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Lists authorized student enrollments for one Class at the requested effective instant or across retained history. The roster projection contains relationship state and does not expand student credentials, answers, or unrestricted profile data. Bounded pages are ordered by `sort` and `dir`, by default the membership start (`enrolled`) ascending then identity. The first page also reports `total`, the memberships the filter matches across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. The next_cursor freezes the effective instant or history filter and the order, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests.
+        Lists the student enrollments of one Class that you may see: either those in effect at one instant, or the
+        full history. Each item describes the enrollment only. It never includes the student's credentials, answers
+        or other profile data.
+
+        Pages are ordered by `sort` and `dir`, by default by enrollment start (`enrolled`), oldest first, then by ID.
+        The first page also reports `total`, the number of enrollments the filter matches across all pages. It is
+        exact below 10,000; at 10,000 counting stops and `total_is_lower_bound` is true. A cursor keeps the first
+        page's instant or history filter and its order, but every page reads current data, so enrollments added or
+        changed between requests can change later pages.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -43,11 +51,16 @@ paths:
           schema:
             type: string
             format: date-time
-          description: RFC 3339 instant at which enrollment must be effective; ignored when history is true in legacy full-list mode. For paging, omit it with history=true and inherit the first page instant when following a cursor.
+          description: >-
+            Return the enrollments in effect at this instant. Defaults to now. It cannot be combined with
+            `history=true`. When following a cursor you may omit it, because the cursor keeps the first page's
+            instant.
         - name: history
           in: query
           required: false
-          description: When true, return enrollment history. Legacy full-list mode ignores active_at; paged requests must omit active_at with history=true.
+          description: >-
+            When true, return the full enrollment history instead of only the enrollments in effect at one instant.
+            It cannot be combined with `active_at`.
           schema:
             type: boolean
             default: false
@@ -55,9 +68,9 @@ paths:
           in: query
           required: false
           description: >-
-            The page order, each key then by membership identity: `enrolled` (the enrollment start, the default) or `name`
-            (the member's presented name, the display name or else the username, compared case-insensitively on
-            its first 64 characters). A cursor continues only the sort and direction that produced it; repeat both
+            The page order, each key followed by enrollment ID: `enrolled` (the enrollment start, the default) or
+            `name` (the student's display name, or their username when there is none, compared case-insensitively on
+            its first 64 characters). A cursor only continues the sort and direction that produced it, so repeat both
             when following it.
           schema:
             type: string
@@ -98,7 +111,9 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Enrolls an existing User in the route Class and atomically ends a conflicting active Class membership in the same Academic Period when the domain permits transfer or progression. The transaction preserves every prior enrollment interval.
+        Enrolls an existing User in the Class in the path. If the student already has an enrollment in effect in
+        another Class of the same Academic Period, and a transfer or progression is allowed, that enrollment is ended
+        in the same step. Every earlier enrollment keeps its dates.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -148,7 +163,7 @@ paths:
 components:
   requestBodies:
     EnrollClassMember:
-      description: Existing User and optional effective interval for enrollment in the route Class.
+      description: The existing User to enroll and, optionally, when the enrollment starts and ends.
       required: true
       content:
         application/json:
@@ -159,20 +174,58 @@ components:
             start_at: '2026-08-01T00:00:00Z'
   responses:
     ClassMemberListOK:
-      description: Class Member collection
+      description: One page of the Class's enrollments.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ClassMemberListResponse'
+          example:
+            items:
+              - id: ih1r84kij94nrwis97rft6rduh
+                created_at: '2026-07-28T10:00:00Z'
+                updated_at: '2026-07-28T10:00:00Z'
+                class_id: sjebyge5cpbop1xwo4eds74ejb
+                academic_period_id: p6y6sf8ac6m5if373fkkebj7j6
+                user_id: 5ebqfbnezgahdbx9oy7rfr6oro
+                start_at: '2026-09-01T00:00:00Z'
+              - id: xpq79ar61ncrjiouey6d9tgp91
+                created_at: '2026-07-28T10:00:02Z'
+                updated_at: '2026-07-28T10:00:02Z'
+                class_id: sjebyge5cpbop1xwo4eds74ejb
+                academic_period_id: p6y6sf8ac6m5if373fkkebj7j6
+                user_id: 17778cuf6b17rhtapprfjozet8
+                start_at: '2026-09-01T00:00:00Z'
+                end_at: '2027-07-01T00:00:00Z'
+            next_cursor: eyJhZnRlciI6InhwcTc5YXI2MW5jcmppb3VleTZkOXRncDkxIn0
+            total: 28
+            total_is_lower_bound: false
     ClassMemberEnrolled:
-      description: Enrollment or transfer completed
+      description: The new enrollment and, for a transfer, the enrollment it ended.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ClassEnrollmentResponse'
+          example:
+            membership:
+              id: zq993bky9h3uj4saw8iywi38cy
+              created_at: '2027-01-10T08:00:00Z'
+              updated_at: '2027-01-10T08:00:00Z'
+              class_id: 1ozr3arz5tdtgd1jxt5wcz5b3p
+              academic_period_id: p6y6sf8ac6m5if373fkkebj7j6
+              user_id: 5ebqfbnezgahdbx9oy7rfr6oro
+              start_at: '2027-01-10T08:00:00Z'
+            previous:
+              id: ih1r84kij94nrwis97rft6rduh
+              created_at: '2026-07-28T10:00:00Z'
+              updated_at: '2027-01-10T08:00:00Z'
+              class_id: sjebyge5cpbop1xwo4eds74ejb
+              academic_period_id: p6y6sf8ac6m5if373fkkebj7j6
+              user_id: 5ebqfbnezgahdbx9oy7rfr6oro
+              start_at: '2026-09-01T00:00:00Z'
+              end_at: '2027-01-10T08:00:00Z'
   schemas:
     ClassMemberListResponse:
-      description: One page of the collection in its requested order; the first page carries its total.
+      description: One page of enrollments in the requested order. Only the first page carries `total`.
       type: object
       additionalProperties: false
       required:
@@ -180,6 +233,7 @@ components:
       properties:
         items:
           type: array
+          description: The enrollments on this page.
           items:
             $ref: '#/components/schemas/ClassMemberResponse'
         next_cursor:
@@ -189,11 +243,11 @@ components:
           minimum: 0
           maximum: 10000
           description: >-
-            Memberships matching the effective instant or history filter across every page, present only on the
-            first page. At 10,000 counting stops and `total_is_lower_bound` is true.
+            How many enrollments match the instant or history filter across all pages. Present only on the first
+            page. Counting stops at 10,000, and then `total_is_lower_bound` is true.
         total_is_lower_bound:
           type: boolean
-          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.
+          description: True when counting stopped at 10,000 and there may be more. Present with `total`.
     ClassEnrollmentResponse:
       type: object
       additionalProperties: false
@@ -202,8 +256,12 @@ components:
       properties:
         membership:
           $ref: '#/components/schemas/ClassMemberResponse'
+          description: The new enrollment.
         previous:
           $ref: '#/components/schemas/ClassMemberResponse'
+          description: >-
+            The student's earlier enrollment in the same Academic Period that this request ended, for a transfer or
+            progression. Omitted when there was none.
     EnrollClassMemberRequest:
       type: object
       additionalProperties: false
@@ -212,9 +270,12 @@ components:
       properties:
         user_id:
           $ref: '#/components/schemas/ID'
+          description: The existing User to enroll.
         start_at:
           type: string
           format: date-time
+          description: When the enrollment starts. Omit it to start now.
         end_at:
           type: string
           format: date-time
+          description: When the enrollment ends; it must be after the start. Omit it for no end.

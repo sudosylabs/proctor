@@ -289,6 +289,17 @@ func (s *academicUnitRecords) Get(_ context.Context, id model.AcademicUnitID) (*
 	return &copied, nil
 }
 
+func (s *academicUnitRecords) ListAncestors(_ context.Context, id model.AcademicUnitID) ([]*model.AcademicUnit, error) {
+	var chain []*model.AcademicUnit
+	for unit, ok := s.byID[id]; ok; unit, ok = s.byID[unit.ParentID] {
+		chain = append(chain, unit)
+	}
+	if len(chain) == 0 {
+		return nil, store.NewErrNotFound("academic_unit", id.String())
+	}
+	return chain, nil
+}
+
 func (s *academicUnitRecords) Create(_ context.Context, input *store.AcademicUnitCreation) (*model.AcademicUnit, error) {
 	s.created = append(s.created, input)
 	copied := *input.Unit
@@ -504,6 +515,16 @@ type academicClassMemberRecords struct {
 	countOptions []store.ClassMemberPageOptions
 	enrollments  []*store.ClassMemberEnrollment
 	ends         []*store.ClassMemberEnd
+
+	// studentCounts answers a Class listing's count; countedClasses records
+	// the Classes each count asked for.
+	studentCounts  []store.ClassStudentCount
+	countedClasses [][]model.ClassID
+}
+
+func (s *academicClassMemberRecords) CountCurrentByClasses(_ context.Context, classIDs []model.ClassID, _ time.Time, _ int) ([]store.ClassStudentCount, error) {
+	s.countedClasses = append(s.countedClasses, slices.Clone(classIDs))
+	return s.studentCounts, nil
 }
 
 func (s *academicClassMemberRecords) Get(_ context.Context, id model.ClassMemberID) (*model.ClassMember, error) {

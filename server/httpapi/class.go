@@ -176,12 +176,11 @@ func (h classHandlers) list(request route.Request) (route.Result, error) {
 }
 
 // classListResult presents one name-ordered class page with its first-page
-// total and, when the application read them, each class's student count.
+// total and the student count of each class the application counted.
 func classListResult(page academic.ClassPage, query paging.NameQuery) (route.Result, error) {
 	present := func(class *model.Class) classListItemResponse {
 		item := classListItemResponse{classResponse: classResponseFromModel(class)}
-		if page.StudentCounts != nil {
-			count := page.StudentCounts[class.ID]
+		if count, counted := page.StudentCounts[class.ID]; counted {
 			lowerBound := count >= store.MaximumListCount
 			item.StudentCount, item.StudentCountIsLowerBound = &count, &lowerBound
 		}

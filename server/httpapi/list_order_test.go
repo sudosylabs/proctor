@@ -212,30 +212,41 @@ func TestRoleBindingListCountsItsFirstPage(t *testing.T) {
 }
 
 // TestClassListDirectionCountsAndStudentCounts pins the Class listings: dir
-// reaches the Store, a cursor resumes only its own direction, and the first
-// page carries its total. A non-empty page fails today (ANALYSIS section 10):
-// the service asks class.members.view of the listing's unit or Level, which
-// that action does not accept, so student counts never reach the handler.
+// reaches the Store, a cursor resumes only its own direction, the first page
+// carries its total, and student counts appear only for a caller holding
+// class.members.view over the listed Classes.
 func TestClassListDirectionCountsAndStudentCounts(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := academicCaller()
+	viewer, reader := academicCaller(), academicCaller()
 	world := newAcademicWorld()
 	fixture := newAcademicFixture(t, academicOptions{
-		Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, world.unit.ID, model.ActionClassView, model.ActionClassMembersView)},
-		Units:  world.units(),
+		Grants: []accesstest.Grant{
+			inAcademicUnit(viewer.UserID, world.unit.ID, model.ActionClassView, model.ActionClassMembersView),
+			inAcademicUnit(reader.UserID, world.unit.ID, model.ActionClassView),
+		},
+		Units: world.units(),
 	})
 	fixture.hold(world)
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classResource(fixture.service))
+	full := &model.Class{ID: model.NewClassID(), Name: "zeta", ProgrammeLevelID: world.level.ID, AcademicPeriodID: world.period.ID}
+	empty := &model.Class{ID: model.NewClassID(), Name: "alpha", ProgrammeLevelID: world.level.ID, AcademicPeriodID: world.period.ID}
+	for _, class := range []*model.Class{full, empty} {
+		fixture.classes.unitOf[class.ID] = world.unit.ID
+	}
+	fixture.classes.search.listed = []*model.Class{full, empty}
+	fixture.classes.byLevel.listed = []*model.Class{full, empty}
+	fixture.classMembers.studentCounts = []store.ClassStudentCount{{ClassID: full.ID, Count: store.MaximumListCount}}
 	unitPath := "/api/v1/academic-units/" + world.unit.ID.String() + "/classes"
 	levelPath := "/api/v1/programme-levels/" + world.level.ID.String() + "/classes"
-	serve := func(target string) *httptest.ResponseRecorder {
+	serveAs := func(principal model.Principal, target string) *httptest.ResponseRecorder {
+		httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classResource(fixture.service))
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)
 		request.Header.Set("Authorization", "Bearer credential")
 		response := httptest.NewRecorder()
 		httpAPI.ServeHTTP(response, request)
 		return response
 	}
+	serve := func(target string) *httptest.ResponseRecorder { return serveAs(viewer, target) }
 	decode := func(response *httptest.ResponseRecorder) route.CountedList[map[string]json.RawMessage] {
 		t.Helper()
 		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
@@ -244,20 +255,25 @@ func TestClassListDirectionCountsAndStudentCounts(t *testing.T) {
 		return page
 	}
 
-	page := decode(serve(unitPath + "?dir=desc"))
+	page := decode(serveAs(reader, unitPath+"?dir=desc"))
 	require.True(t, fixture.classes.search.lastList(t).Descending, "dir=desc reaches the Store")
 	require.NotNil(t, page.Total)
-	require.Equal(t, 0, *page.Total)
-	require.Empty(t, page.Items)
+	require.Equal(t, 2, *page.Total)
+	for _, item := range page.Items {
+		require.NotContains(t, item, "student_count", "no count without class.members.view")
+		require.NotContains(t, item, "student_count_is_lower_bound")
+	}
+	require.Empty(t, fixture.classMembers.countedClasses, "no student count is read without class.members.view")
 
 	page = decode(serve(levelPath))
 	require.False(t, fixture.classes.byLevel.lastList(t).Descending, "names ascend by default")
 	require.NotNil(t, page.Total)
-
-	full := &model.Class{ID: model.NewClassID(), Name: "zeta", ProgrammeLevelID: world.level.ID, AcademicPeriodID: world.period.ID}
-	empty := &model.Class{ID: model.NewClassID(), Name: "alpha", ProgrammeLevelID: world.level.ID, AcademicPeriodID: world.period.ID}
-	fixture.classes.byLevel.listed = []*model.Class{full, empty}
-	assertHTTPProblem(t, serve(levelPath), http.StatusBadRequest, "authorization.request.invalid")
+	require.Equal(t, 2, *page.Total)
+	require.JSONEq(t, "10000", string(page.Items[0]["student_count"]))
+	require.JSONEq(t, "true", string(page.Items[0]["student_count_is_lower_bound"]))
+	require.JSONEq(t, "0", string(page.Items[1]["student_count"]), "a listed Class with no current member counts zero")
+	require.JSONEq(t, "false", string(page.Items[1]["student_count_is_lower_bound"]))
+	require.Equal(t, [][]model.ClassID{{full.ID, empty.ID}}, fixture.classMembers.countedClasses)
 
 	descending, err := route.EncodeCursor(academicNameCursor{Name: full.Name, ID: full.ID.String(), Dir: listDescending}, academicNameCursorSpec())
 	require.NoError(t, err)

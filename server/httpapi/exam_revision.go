@@ -87,6 +87,8 @@ func examRevisionResource(app ExamRevisionApplication) route.Resource {
 				"exam.draft.revision_conflict",
 				"exam.revision.no_changes",
 				"exam.revision.capacity_exceeded",
+				"exam.execution.disabled",
+				"exam.execution.profile_unusable",
 				"exam.unavailable",
 				"idempotency.key_required",
 				"idempotency.key_invalid",

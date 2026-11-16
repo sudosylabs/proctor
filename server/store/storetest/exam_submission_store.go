@@ -115,33 +115,21 @@ func TestExamSubmissionStore(t *testing.T, ss store.Store, submissions store.Exa
 		examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "submission-connect", "submission-connect"))
 	require.NoError(t, err)
 
-	workspaceAccess := store.ExamAttemptWorkspaceMutationAccess{AttemptID: connected.Attempt.ID,
+	workspaceAccess := store.ExamAttemptWorkspaceEditorAccess{AttemptID: connected.Attempt.ID,
 		ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation,
 		CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID,
 		DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint,
 		ConnectionID: connected.Connection.ID, ContinuityCredentialHash: credentialHash}
-	object, err := ss.ExamAttemptWorkspace().ReserveObject(ctx, &store.ExamAttemptWorkspaceObjectReservation{
-		Access: workspaceAccess, ObjectID: model.NewAttemptWorkspaceObjectID(),
-	})
-	require.NoError(t, err)
-	object, err = ss.ExamAttemptWorkspace().MarkObjectReady(ctx, &store.ExamAttemptWorkspaceObjectReady{
-		Access: workspaceAccess, ObjectID: object.ID, ContentVersion: model.NewWorkspaceContentVersion(),
-		Content: model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: 7, SHA256: strings.Repeat("b", 64)},
-	})
-	require.NoError(t, err)
-	attemptEntryID := model.NewAttemptWorkspaceEntryID()
-	mutation, err := ss.ExamAttemptWorkspace().ApplyMutation(ctx, &store.ExamAttemptWorkspaceMutation{
-		Access: workspaceAccess, Operation: model.AttemptWorkspaceMutationCreateFile, EntryID: attemptEntryID,
-		DestinationPath: "answer.txt", ObjectID: object.ID,
-		AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC(),
-	}, examCommand(fixture.candidate.ID, store.ExamAttemptWorkspaceMutationOperation, "submission-file", "submission-file"))
-	require.NoError(t, err)
+	object, written := createAttemptWorkspaceTestFile(t, ctx, ss, fixture, workspaceAccess, "answer.txt",
+		model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: 7, SHA256: strings.Repeat("b", 64)}, "submission-file")
+	attemptEntryID := written.Changes[0].EntryID
+	writtenCursor := written.Changes[0].Cursor
 
 	access := store.ExamSubmissionSealAccess{
 		AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID,
 		Generation: connected.Participation.Generation, ConnectionID: connected.Connection.ID,
 		CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID,
-		ContinuityCredentialHash: credentialHash, ExpectedWorkspaceCursor: mutation.Change.Cursor,
+		ContinuityCredentialHash: credentialHash, ExpectedWorkspaceCursor: writtenCursor,
 		ExpectedCurrentRevisionID: fixture.sitting.ExamRevisionID,
 	}
 	target, err := submissions.ResolveSealTarget(ctx, access)
@@ -167,7 +155,7 @@ func TestExamSubmissionStore(t *testing.T, ss store.Store, submissions store.Exa
 	require.Equal(t, input.ReceiptCode, sealed.Receipt.ReceiptCode, "the seal persists the proposed receipt code")
 	require.Equal(t, connected.Attempt.ID, sealed.Receipt.AttemptID)
 	require.Equal(t, model.ExamAttemptSubmitted, sealed.Receipt.State)
-	require.Equal(t, mutation.Change.Cursor, sealed.Receipt.WorkspaceCursor)
+	require.Equal(t, writtenCursor, sealed.Receipt.WorkspaceCursor)
 	require.True(t, validStoretestDigest(sealed.Receipt.ManifestDigest))
 	require.True(t, sealed.Receipt.SubmittedAt.Equal(input.Notice.Occurrence.CreatedAt))
 	require.Equal(t, fixture.examID, sealed.ExamID)
@@ -213,7 +201,7 @@ func TestExamSubmissionStore(t *testing.T, ss store.Store, submissions store.Exa
 	require.Equal(t, input.ReceiptCode, header.ReceiptCode)
 	require.Equal(t, connected.Attempt.ID, header.AttemptID)
 	require.Equal(t, connected.Workspace.ID, header.WorkspaceID)
-	require.Equal(t, mutation.Change.Cursor, header.WorkspaceCursor)
+	require.Equal(t, writtenCursor, header.WorkspaceCursor)
 	require.Equal(t, sealed.Receipt.ManifestDigest, header.ManifestDigest)
 	require.Equal(t, 3, header.ManifestEntryCount)
 	require.Equal(t, int64(20), header.ManifestTotalFileBytes)
@@ -274,10 +262,13 @@ func TestExamSubmissionStore(t *testing.T, ss store.Store, submissions store.Exa
 	require.Equal(t, model.AttemptWorkspaceStorageAttempt, attemptSelector.StorageOrigin)
 	require.True(t, attemptSelector.AttemptObjectID.IsValid())
 	require.True(t, attemptSelector.StarterObjectID.IsZero())
-	require.Equal(t, object.ID, attemptSelector.AttemptObjectID)
+	require.Equal(t, object.ObjectID, attemptSelector.AttemptObjectID)
 	require.Equal(t, object.ContentVersion, attemptSelector.ContentVersion)
 	_, err = submissions.ResolveFile(ctx, header.ID, directory.EntryID)
 	require.True(t, store.IsNotFound(err), "ResolveFile(directory) error")
+	require.Equal(t, workspaceAccess.WorkspaceAuthor(), attemptFile.Author, "the Submission seals who made the entry's last change")
+	require.Equal(t, model.AttemptWorkspaceAuthor{}, starterFile.Author, "an unchanged Starter entry has no author")
+	require.Equal(t, model.AttemptWorkspaceAuthor{}, directory.Author, "an unchanged Starter directory has no author")
 
 	_, err = ss.ExamAttemptWorkspace().List(ctx, store.CandidateWorkspaceListOptions{Access: store.CandidateAttemptAccess{
 		AttemptID: access.AttemptID, CandidateUserID: access.CandidateUserID, SessionID: access.SessionID,
@@ -337,6 +328,7 @@ func TestExamSubmissionStore(t *testing.T, ss store.Store, submissions store.Exa
 	testExamSubmissionAccessFences(t, ctx, ss, submissions)
 	testExamCorrectionAcknowledgement(t, ctx, ss, submissions)
 	testManagerEndedExamSubmission(t, ctx, ss, submissions)
+	testEnvironmentChangesBeforeTheSeal(t, ctx, ss, submissions)
 	testAutomaticExamSubmissionSealing(t, ctx, ss, submissions, probes...)
 
 	if len(probes) != 0 {

@@ -53,6 +53,3 @@ func (h *formatRecordingHost) AddExportFormat(format plugin.ExportFormat) error 
 	h.formats = append(h.formats, format)
 	return nil
 }
-func (*formatRecordingHost) AddEventHandler(plugin.EventTopic, plugin.EventHandler) error {
-	return errors.New("not offered")
-}

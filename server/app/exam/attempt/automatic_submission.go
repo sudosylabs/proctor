@@ -100,6 +100,14 @@ func (s *Service) SealForSittingClose(
 	if preparation == nil || preparation.SealAt.IsZero() {
 		return AutomaticSubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("invalid automatic Submission preparation"))
 	}
+	// The closing Sitting asked every environment to settle and its sealing
+	// Job waited the settle budget, so this normally finds it settled. It
+	// asks for no new settle: one still pending waits only what is left of
+	// its budget, then has its gap recorded before the seal, so a Sitting
+	// of unreachable hosts seals without a budget per Attempt.
+	if !preparation.Replayed && s.settler != nil {
+		s.settler.AwaitPendingSettle(ctx, target.AttemptID)
+	}
 
 	auditID, err := s.systemAuditor.Begin(
 		ctx,

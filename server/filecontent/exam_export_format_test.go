@@ -188,9 +188,6 @@ func (h *formatRecordingHost) AddExportFormat(format plugin.ExportFormat) error 
 	h.formats = append(h.formats, format)
 	return nil
 }
-func (*formatRecordingHost) AddEventHandler(plugin.EventTopic, plugin.EventHandler) error {
-	return errors.New("not offered")
-}
 
 // zipFormat activates the built-in zip export plugin, as the server does, and
 // returns the format it offers.

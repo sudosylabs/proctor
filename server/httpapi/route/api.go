@@ -42,6 +42,7 @@ type API struct {
 	cookies                 Cookies
 	browserRequests         browserRequestPolicy
 	recentAuthenticationTTL time.Duration
+	apiPrefix               string
 	routes                  []Entry
 	routeMatchers           []routeMatcher
 	maxBodyBytes            int64
@@ -258,7 +259,7 @@ func (a *API) writeMethodNotAllowed(writer http.ResponseWriter, request *http.Re
 func (a *API) allowedMethods(request *http.Request) []string {
 	allowed := make(map[string]struct{})
 	for _, matcher := range a.routeMatchers {
-		if matcher.pathRegexp.MatchString(request.URL.Path) {
+		if matcher.serves(request.URL.Path) {
 			allowed[matcher.route.Method] = struct{}{}
 		}
 	}

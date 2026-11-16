@@ -381,6 +381,12 @@ components:
         browser:
           $ref: '#/components/schemas/BrowserIntegrityEvidence'
           description: The blocked navigation. Only for `browser_navigation`.
+        detail:
+          type: object
+          additionalProperties: true
+          description: >-
+            A capability's own evidence, one JSON object of at most 64 KiB that the server stores as given and does
+            not interpret. Present only for capability and native kinds.
     ExamIntegrityEvidenceListResponse:
       description: One page of evidence records for a Flag.
       type: object

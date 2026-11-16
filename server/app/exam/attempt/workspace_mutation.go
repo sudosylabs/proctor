@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -21,16 +20,16 @@ import (
 func workspaceMutationSelector(
 	inv invocation.Invocation,
 	mutationAccess WorkspaceMutationAccess,
-) (store.ExamAttemptWorkspaceMutationAccess, error) {
+) (store.ExamAttemptWorkspaceEditorAccess, error) {
 	read, err := candidateSelector(inv, mutationAccess.CandidateAccess)
 	if err != nil {
-		return store.ExamAttemptWorkspaceMutationAccess{}, err
+		return store.ExamAttemptWorkspaceEditorAccess{}, err
 	}
 	if !mutationAccess.ParticipationID.IsValid() || mutationAccess.Generation < 1 {
-		return store.ExamAttemptWorkspaceMutationAccess{}, apperror.Invalid("exam.attempt.invalid", "workspace_access")
+		return store.ExamAttemptWorkspaceEditorAccess{}, apperror.Invalid("exam.attempt.invalid", "workspace_access")
 	}
 
-	return store.ExamAttemptWorkspaceMutationAccess{
+	return store.ExamAttemptWorkspaceEditorAccess{
 		AttemptID:                read.AttemptID,
 		ParticipationID:          mutationAccess.ParticipationID,
 		Generation:               mutationAccess.Generation,
@@ -43,94 +42,62 @@ func workspaceMutationSelector(
 	}, nil
 }
 
-func validWorkspaceTarget(target *store.ExamAttemptWorkspaceMutationTarget, workspaceAccess store.ExamAttemptWorkspaceMutationAccess) bool {
+// validWorkspaceTarget checks the resolved target, and that it names the
+// writer's candidate when the writer names one.
+func validWorkspaceTarget(target *store.ExamAttemptWorkspaceMutationTarget, candidate model.UserID) bool {
 	return target != nil &&
 		target.ExamID.IsValid() &&
 		target.SittingID.IsValid() &&
 		target.ClassID.IsValid() &&
-		target.CandidateUserID == workspaceAccess.CandidateUserID &&
+		target.CandidateUserID.IsValid() &&
+		(candidate.IsZero() || target.CandidateUserID == candidate) &&
 		target.WorkspaceID.IsValid()
 }
 
-func projectWorkspaceMutation(
-	stored *store.ExamAttemptWorkspaceMutationResult,
-	attemptID model.ExamAttemptID,
-	operation model.AttemptWorkspaceMutationKind,
-) (WorkspaceMutationResult, error) {
-	if operation == model.AttemptWorkspaceMutationDeleteEntry {
-		if stored.Entry != nil {
-			return WorkspaceMutationResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("deleted Workspace entry remained visible"))
-		}
-		return WorkspaceMutationResult{
-			AttemptID:       attemptID,
-			SittingID:       stored.SittingID,
-			CandidateUserID: stored.CandidateUserID,
-			WorkspaceID:     stored.WorkspaceID,
-			Change:          stored.Change,
-			Replayed:        stored.Replayed,
-		}, nil
+func (s *Service) applyWorkspaceBatch(
+	ctx context.Context,
+	writer workspaceWriter,
+	target *store.ExamAttemptWorkspaceMutationTarget,
+	batch *store.ExamAttemptWorkspaceBatch,
+	commandIdempotency *store.CommandIdempotency,
+) (WorkspaceBatchResult, error) {
+	value := map[string]any{
+		"exam_attempt_id": batch.Access.WorkspaceAttemptID().String(),
+		"mutation_count":  len(batch.Mutations),
+		"author_kind":     string(batch.Access.WorkspaceAuthor().Kind),
+		"author_ref":      batch.Access.WorkspaceAuthor().Ref,
+	}
+	if environment, ok := batch.Access.(store.ExamAttemptWorkspaceEnvironmentAccess); ok {
+		value["environment_lease_fence"] = environment.Fence
+	}
+	auditID, err := writer.beginAudit(ctx, target, value)
+	if err != nil {
+		return WorkspaceBatchResult{}, err
 	}
 
-	entry := *stored.Entry
-	return WorkspaceMutationResult{
-		AttemptID:       attemptID,
+	batch.AuditEventID, batch.AuditAt = auditID, model.TimeUTC(s.now())
+	stored, err := s.workspaces.ApplyBatch(ctx, batch, commandIdempotency)
+	if err != nil {
+		return WorkspaceBatchResult{}, s.failAudit(ctx, auditID, workspaceBatchStoreError(err))
+	}
+	if !stored.ConsistentWith(target, batch.Access.WorkspaceAuthor(), batch.Mutations) {
+		return WorkspaceBatchResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt Workspace batch result"))
+	}
+
+	result := WorkspaceBatchResult{
+		AttemptID:       batch.Access.WorkspaceAttemptID(),
 		SittingID:       stored.SittingID,
 		CandidateUserID: stored.CandidateUserID,
 		WorkspaceID:     stored.WorkspaceID,
-		Entry:           &entry,
-		Change:          stored.Change,
+		Changes:         stored.Changes,
 		Replayed:        stored.Replayed,
-	}, nil
-}
-
-func (s *Service) resolveWorkspaceMutationTarget(
-	ctx context.Context,
-	workspaceAccess store.ExamAttemptWorkspaceMutationAccess,
-) (*store.ExamAttemptWorkspaceMutationTarget, error) {
-	target, err := s.workspaces.ResolveMutationTarget(ctx, workspaceAccess)
-	if err != nil {
-		return nil, storeError(storeErrors, err)
-	}
-	if !validWorkspaceTarget(target, workspaceAccess) {
-		return nil, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt Workspace mutation target"))
-	}
-
-	return target, nil
-}
-
-func (s *Service) applyWorkspaceMutation(
-	ctx context.Context,
-	inv invocation.Invocation,
-	target *store.ExamAttemptWorkspaceMutationTarget,
-	mutation *store.ExamAttemptWorkspaceMutation,
-	commandIdempotency *store.CommandIdempotency,
-) (WorkspaceMutationResult, error) {
-	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: inv,
-		Action:     model.ActionExamSittingParticipate,
-		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
-		ScopeType:  model.RoleScopeClass,
-		ScopeID:    target.ClassID.String(),
-		Operation:  store.ExamAttemptWorkspaceMutationOperation,
-		Value: map[string]any{"exam_attempt_id": mutation.Access.AttemptID.String(),
-			"operation": string(mutation.Operation)},
-	})
-	if err != nil {
-		return WorkspaceMutationResult{}, err
-	}
-
-	mutation.AuditEventID, mutation.AuditAt = auditID, model.TimeUTC(s.now())
-	stored, err := s.workspaces.ApplyMutation(ctx, mutation, commandIdempotency)
-	if err != nil {
-		return WorkspaceMutationResult{}, s.failAudit(ctx, auditID, err)
-	}
-
-	result, err := projectWorkspaceMutation(stored, mutation.Access.AttemptID, mutation.Operation)
-	if err != nil {
-		return WorkspaceMutationResult{}, err
 	}
 
 	if !result.Replayed {
+		// The environment's own writes need no wake; its owner made them.
+		if s.environments != nil && batch.Access.WorkspaceAuthor().Kind == model.AttemptWorkspaceAuthorCandidate {
+			s.environments.Wake(result.AttemptID)
+		}
 		if effectErr := s.publishWorkspaceChanged(ctx, result); effectErr != nil {
 			s.publisher.Report(ctx, "exam_attempt_workspace_changed", effectErr)
 		}

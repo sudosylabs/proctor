@@ -663,6 +663,30 @@ type CandidateAttemptAccess struct {
 	ContinuityCredentialHash string
 }
 
+// CandidateAttemptAccessTarget is what a verified CandidateAttemptAccess
+// resolves to: the Candidate's active Attempt, its Sitting and Class, and the
+// active Participation generation the open Connection belongs to.
+type CandidateAttemptAccessTarget struct {
+	AttemptID       model.ExamAttemptID
+	SittingID       model.ExamSittingID
+	ClassID         model.ClassID
+	CandidateUserID model.UserID
+	ParticipationID model.AttemptParticipationID
+	Generation      int64
+}
+
+// ConsistentWith reports whether the target is valid and names the Attempt
+// and Candidate of access.
+func (t *CandidateAttemptAccessTarget) ConsistentWith(access CandidateAttemptAccess) bool {
+	return t != nil &&
+		t.AttemptID == access.AttemptID &&
+		t.CandidateUserID == access.CandidateUserID &&
+		t.SittingID.IsValid() &&
+		t.ClassID.IsValid() &&
+		t.ParticipationID.IsValid() &&
+		t.Generation > 0
+}
+
 type ExamAttemptCorrectionAcknowledgement struct {
 	Access                    CandidateAttemptAccess
 	ParticipationID           model.AttemptParticipationID
@@ -979,7 +1003,7 @@ type CandidateAttemptWorkspaceItem struct {
 // require a nonnegative exact ExpectedCursor and a valid AfterEntryID. An
 // advanced aggregate returns RefreshRequired with no Items. Limit is 1..200.
 type CandidateWorkspaceListOptions struct {
-	Access         CandidateAttemptAccess
+	Access         ExamAttemptWorkspaceReadAccess
 	ExpectedCursor int64
 	AfterEntryID   model.AttemptWorkspaceEntryID
 	Limit          int
@@ -1241,8 +1265,18 @@ type SittingCandidateSuspension struct {
 	ReallowAvailable bool
 }
 
+// SittingCandidateEnvironment is a candidate's execution environment as
+// the Sitting's managers see it.
+type SittingCandidateEnvironment struct {
+	State        model.AttemptEnvironmentState
+	Desired      model.AttemptEnvironmentDesired
+	Incarnation  int64
+	WaitingSince model.OptionalTime
+}
+
 type SittingCandidateStatusItem struct {
 	NativeSecurity          *model.NativeSecuritySummary
+	Environment             *SittingCandidateEnvironment
 	Candidate               SittingCandidateIdentity
 	CurrentClassMembership  bool
 	Attempt                 *SittingCandidateStatusAttempt
@@ -1257,7 +1291,10 @@ type SittingCandidateStatusPage struct {
 	SittingID       model.ExamSittingID
 	SittingState    model.ExamSittingState
 	SittingRevision int64
-	Items           []SittingCandidateStatusItem
+	// EnvironmentsWaitingCapacity counts the Sitting's environments waiting
+	// for an execution host with room, across every page.
+	EnvironmentsWaitingCapacity int64
+	Items                       []SittingCandidateStatusItem
 }
 
 // ConsistentWith reports whether the page is for the given Exam and Sitting,
@@ -1409,6 +1446,10 @@ type ExamAttemptStore interface {
 	// GetCandidatePresentation returns the Exam content, capacity and runtime
 	// capabilities the Candidate sees for their live Attempt.
 	GetCandidatePresentation(context.Context, CandidateAttemptAccess) (*CandidateExamPresentation, error)
+	// ResolveCandidateAccess verifies the Candidate's live Attempt access
+	// and returns the Attempt, Sitting, Class and current Participation it
+	// resolves to.
+	ResolveCandidateAccess(context.Context, CandidateAttemptAccess) (*CandidateAttemptAccessTarget, error)
 	// ResolveCandidateResource returns the stored file behind an Exam Resource
 	// the Candidate's live Attempt may read.
 	ResolveCandidateResource(context.Context, CandidateAttemptAccess, model.ExamResourceID) (*CandidateResourceContent, error)

@@ -178,19 +178,21 @@ func runLayerConformance(
 		{"AccessPolicy", func(t *testing.T, decorated store.Store) {
 			storetest.TestAccessPolicyStore(t, decorated)
 		}},
+		{"AttemptEnvironment", storetest.TestAttemptEnvironmentStore},
 		{"AccessPolicyRoleHolderMFA", storetest.TestAccessPolicyRoleHolderMFAStore},
 		{"AccessPolicySessionLength", func(t *testing.T, decorated store.Store) {
 			storetest.TestAccessPolicySessionLengthStore(t, decorated)
 		}},
 		{"DesktopCompatibilityPolicy", storetest.TestDesktopCompatibilityPolicyStore},
 		{"PluginSettings", storetest.TestPluginSettingsStore},
+		{"EnvironmentProfile", storetest.TestEnvironmentProfileStore},
 		{"RetentionPolicy", storetest.TestRetentionPolicyStore},
 		{"CommandOutcome", storetest.TestCommandOutcomeStore},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			switch test.name {
-			case "Installation", "AdministratorMFAReset", "AdministratorMFAResetExternal", "AccessPolicy", "AccessPolicyRoleHolderMFA", "AccessPolicySessionLength", "DesktopCompatibilityPolicy", "PluginSettings", "RetentionPolicy", "RetentionExpiry", "RetentionCleanupAuditExpiry":
+			case "Installation", "AdministratorMFAReset", "AdministratorMFAResetExternal", "AccessPolicy", "AccessPolicyRoleHolderMFA", "AccessPolicySessionLength", "DesktopCompatibilityPolicy", "PluginSettings", "EnvironmentProfile", "RetentionPolicy", "RetentionExpiry", "RetentionCleanupAuditExpiry":
 				resetPristineTestStore(t, sqlStore)
 			case "PasswordCredential":
 				resetPristineTestStore(t, sqlStore)
@@ -528,8 +530,13 @@ func examSubmissionSQLProbe(t *testing.T, persistence *SQLStore) storetest.ExamS
 			workspaceStore := NewSQLExamAttemptWorkspaceStore(persistence)
 			attemptObjectID, err := model.ParseAttemptWorkspaceObjectID(selectors.AttemptID)
 			require.NoError(t, err)
-			err = workspaceStore.MarkObjectReclaimable(ctx, attemptObjectID)
-			require.True(t, store.IsConflict(err), "MarkObjectReclaimable(Submission pinned) error")
+			// The bulk release silently skips an object a Submission still
+			// references, so the pinned object stays staged.
+			require.NoError(t, workspaceStore.MarkObjectsReclaimable(ctx, []model.AttemptWorkspaceObjectID{attemptObjectID}))
+			var pinnedState string
+			require.NoError(t, persistence.GetMaster().Get(ctx, &pinnedState,
+				`SELECT state FROM exam_attempt_workspace_objects WHERE id=?`, selectors.AttemptID))
+			require.Equal(t, "staged", pinnedState, "MarkObjectsReclaimable(Submission pinned) released the object")
 			_, err = runSQLTransaction(ctx, persistence.GetMaster().Begin, "make Submission object cleanup due", func(ctx context.Context, tx *sqlxTxWrapper) (struct{}, error) {
 				if _, execErr := tx.Exec(ctx, `ALTER TABLE exam_attempt_workspace_objects DISABLE TRIGGER exam_attempt_workspace_objects_immutable`); execErr != nil {
 					return struct{}{}, execErr
@@ -617,6 +624,16 @@ func examAttemptWorkspaceSQLProbe(t *testing.T, persistence *SQLStore) storetest
 	t.Helper()
 	return storetest.ExamAttemptWorkspaceSQLProbe{
 		SetParticipationLeaseExpired: examAttemptSQLProbe(t, persistence).SetParticipationLeaseExpired,
+		PassSittingScheduledEnd: func(t *testing.T, ctx context.Context, id model.ExamSittingID) {
+			t.Helper()
+			result, err := persistence.GetMaster().Exec(ctx, `UPDATE exam_sittings
+				SET scheduled_end_at=GREATEST(scheduled_start_at+INTERVAL '1 microsecond',statement_timestamp()-INTERVAL '1 second')
+				WHERE id=?`, id.String())
+			require.NoError(t, err)
+			affected, err := result.RowsAffected()
+			require.NoError(t, err)
+			require.Equal(t, int64(1), affected, "pass Sitting scheduled end affected")
+		},
 		MakeObjectCleanupDue: func(t *testing.T, ctx context.Context, id model.AttemptWorkspaceObjectID) {
 			t.Helper()
 			_, err := persistence.GetMaster().Exec(ctx, `UPDATE exam_attempt_workspace_objects
@@ -686,9 +703,9 @@ func examAttemptWorkspaceSQLProbe(t *testing.T, persistence *SQLStore) storetest
 					return struct{}{}, getErr
 				}
 				if _, execErr := tx.Exec(ctx, `INSERT INTO exam_attempt_workspace_journal
-				(workspace_id,cursor,entry_id,entry_kind,operation,old_path,new_path,mutation_key_digest,changed_at)
-				VALUES (?,?,?,?,'move_entry','gap-old','gap-new',?,statement_timestamp())`, workspaceID.String(), cursor,
-					entry.ID, entry.Kind, bytes.Repeat([]byte{1}, 32)); execErr != nil {
+				(workspace_id,cursor,entry_id,entry_kind,operation,old_path,new_path,mutation_key_digest,changed_at,author_kind,author_ref)
+				VALUES (?,?,?,?,'move_entry','gap-old','gap-new',?,statement_timestamp(),'candidate',?)`, workspaceID.String(), cursor,
+					entry.ID, entry.Kind, bytes.Repeat([]byte{1}, 32), model.NewAttemptConnectionID().String()); execErr != nil {
 					return struct{}{}, execErr
 				}
 				return struct{}{}, nil
@@ -1414,6 +1431,10 @@ func TestDesktopCompatibilityPolicyStore(t *testing.T) {
 
 func TestPluginSettingsStore(t *testing.T) {
 	PristineStoreTest(t, storetest.TestPluginSettingsStore)
+}
+
+func TestEnvironmentProfileStore(t *testing.T) {
+	PristineStoreTest(t, storetest.TestEnvironmentProfileStore)
 }
 
 func TestRetentionPolicyStore(t *testing.T) {

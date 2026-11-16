@@ -250,9 +250,54 @@ CREATE TABLE domain_events (
     data jsonb NOT NULL,
     occurred_at timestamptz NOT NULL,
     CONSTRAINT domain_events_id_canonical_check CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
-    CONSTRAINT domain_events_topic_check CHECK (topic IN ('exam.attempt.submitted')),
+    CONSTRAINT domain_events_topic_check CHECK (topic IN (
+        'exam.attempt.submitted', 'exam.attempt.participation.started', 'exam.attempt.participation.ended',
+        'exam.sitting.paused', 'exam.sitting.resumed', 'exam.sitting.closing'
+    )),
     CONSTRAINT domain_events_data_check CHECK (jsonb_typeof(data) = 'object' AND octet_length(data::text) <= 4096)
 );
+
+-- new_opaque_id mints an identifier in the form model.NewID does: a random
+-- version 4 UUID in unpadded z-base-32, 26 characters.
+CREATE FUNCTION new_opaque_id() RETURNS varchar
+LANGUAGE plpgsql VOLATILE AS $$
+DECLARE
+    raw bytea := uuid_send(gen_random_uuid());
+    alphabet constant text := 'ybndrfg8ejkmcpqxot1uwisza345h769';
+    encoded text := '';
+    buffer integer := 0;
+    bits integer := 0;
+BEGIN
+    FOR i IN 0..15 LOOP
+        buffer := (buffer << 8) | get_byte(raw, i);
+        bits := bits + 8;
+        WHILE bits >= 5 LOOP
+            encoded := encoded || substr(alphabet, ((buffer >> (bits - 5)) & 31) + 1, 1);
+            bits := bits - 5;
+        END LOOP;
+        buffer := buffer & ((1 << bits) - 1);
+    END LOOP;
+    RETURN encoded || substr(alphabet, ((buffer << (5 - bits)) & 31) + 1, 1);
+END;
+$$;
+
+-- enqueue_domain_event writes one outbox row and its queued dispatch Job,
+-- deduplicated by the event ID, in the calling transaction. The schema
+-- triggers that describe lifecycle changes call it; the Submission seals
+-- write their row and Job from the application instead. The Job's type,
+-- attempt budget and command document are model.NewDomainEventDispatchJob's.
+CREATE FUNCTION enqueue_domain_event(event_topic varchar, event_data jsonb, event_at timestamptz) RETURNS void
+LANGUAGE plpgsql AS $$
+DECLARE
+    event_id varchar(26) := new_opaque_id();
+BEGIN
+    INSERT INTO domain_events (id, topic, data, occurred_at) VALUES (event_id, event_topic, event_data, event_at);
+    INSERT INTO jobs (id, type, status, created_at, updated_at, available_at, command, dedupe_key, dedupe_policy,
+        maximum_attempts, revision)
+    VALUES (new_opaque_id(), 'domain_event.dispatch', 'queued', event_at, event_at, event_at,
+        jsonb_build_object('event_id', event_id), event_id, 'active', 8, 1);
+END;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Identity domain
@@ -1416,6 +1461,30 @@ CREATE TABLE exam_sittings (
     )
 );
 
+-- Pausing, resuming and entering Closing record their domain event in the
+-- transaction that changes the state, whichever path changes it.
+CREATE FUNCTION record_exam_sitting_state_event() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+    sitting_data jsonb := jsonb_build_object('sitting_id', NEW.id, 'exam_id', NEW.exam_id);
+BEGIN
+    IF NEW.state = OLD.state THEN
+        RETURN NEW;
+    END IF;
+    IF NEW.state = 'paused' THEN
+        PERFORM enqueue_domain_event('exam.sitting.paused', sitting_data, NEW.paused_at);
+    ELSIF OLD.state = 'paused' AND NEW.state = 'open' THEN
+        PERFORM enqueue_domain_event('exam.sitting.resumed', sitting_data, NEW.updated_at);
+    ELSIF NEW.state = 'closing' THEN
+        PERFORM enqueue_domain_event('exam.sitting.closing', sitting_data, NEW.closing_at);
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER exam_sittings_state_events
+    AFTER UPDATE OF state ON exam_sittings FOR EACH ROW
+    EXECUTE FUNCTION record_exam_sitting_state_event();
+
 CREATE INDEX exam_sittings_exam_schedule_idx
     ON exam_sittings (exam_id, scheduled_start_at DESC, id DESC);
 CREATE INDEX exam_sittings_exam_class_schedule_idx
@@ -1908,10 +1977,17 @@ CREATE TABLE exam_attempt_workspace_entries (
     kind varchar(16) NOT NULL CHECK (kind IN ('file', 'directory')),
     path text NOT NULL CHECK (octet_length(path) BETWEEN 1 AND 1024),
     current_object_id varchar(26),
+    -- The author of the entry's last change; both are null for an entry
+    -- seeded from the Starter Workspace and never changed since.
+    last_author_kind varchar(16) CHECK (last_author_kind IN ('candidate', 'environment')),
+    last_author_ref varchar(96) CHECK (octet_length(last_author_ref) BETWEEN 1 AND 96),
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
     UNIQUE (workspace_id, source_starter_entry_id),
     UNIQUE (workspace_id, id),
+    CONSTRAINT exam_attempt_workspace_entries_last_author_check CHECK (
+        (last_author_kind IS NULL) = (last_author_ref IS NULL)
+    ),
     CONSTRAINT exam_attempt_workspace_entries_workspace_fkey
         FOREIGN KEY (workspace_id, admission_revision_id)
         REFERENCES exam_attempt_workspaces(id, admission_revision_id),
@@ -1930,6 +2006,11 @@ CREATE TABLE exam_attempt_workspace_entries (
 
 CREATE UNIQUE INDEX exam_attempt_workspace_entries_path_key
     ON exam_attempt_workspace_entries (workspace_id, path);
+-- Object reclaim and cleanup ask whether any entry still points at an object;
+-- without this they scan every entry of every Workspace.
+CREATE INDEX exam_attempt_workspace_entries_current_object_idx
+    ON exam_attempt_workspace_entries (current_object_id)
+    WHERE current_object_id IS NOT NULL;
 
 CREATE TABLE exam_attempt_workspace_journal (
     workspace_id varchar(26) NOT NULL REFERENCES exam_attempt_workspaces(id),
@@ -1943,6 +2024,11 @@ CREATE TABLE exam_attempt_workspace_journal (
     mutation_key_digest bytea NOT NULL CHECK (octet_length(mutation_key_digest) = 32),
     changed_at timestamptz NOT NULL,
     recursive boolean NOT NULL DEFAULT false,
+    -- Who made the change: the kind of author and a reference within it (the
+    -- candidate's Attempt Connection, or the environment incarnation and the
+    -- writing process's tag).
+    author_kind varchar(16) NOT NULL CHECK (author_kind IN ('candidate', 'environment')),
+    author_ref varchar(96) NOT NULL CHECK (octet_length(author_ref) BETWEEN 1 AND 96),
     CONSTRAINT exam_attempt_workspace_journal_recursive_check CHECK (
         NOT recursive OR (operation = 'delete_entry' AND entry_kind = 'directory')
     ),
@@ -2255,6 +2341,50 @@ $$;
 CREATE TRIGGER exam_attempt_participations_guard
     BEFORE UPDATE ON exam_attempt_participations FOR EACH ROW
     EXECUTE FUNCTION guard_attempt_participation_mutation();
+
+-- attempt_participation_event_data is the identifier-only document of the
+-- Participation events: model's examAttemptParticipationData.
+CREATE FUNCTION attempt_participation_event_data(participation exam_attempt_participations) RETURNS jsonb
+LANGUAGE sql STABLE AS $$
+    SELECT jsonb_build_object('attempt_id', a.id, 'participation_id', participation.id,
+        'generation', participation.generation, 'sitting_id', a.exam_sitting_id, 'exam_id', a.exam_id,
+        'exam_revision_id', a.admission_revision_id)
+      FROM exam_attempts a
+     WHERE a.id = participation.exam_attempt_id
+$$;
+
+-- A Participation generation becomes active only by being inserted, at
+-- admission, including the admission that follows a re-allow.
+CREATE FUNCTION start_attempt_participation_generation() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM enqueue_domain_event('exam.attempt.participation.started', attempt_participation_event_data(NEW),
+        NEW.started_at);
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER exam_attempt_participations_started
+    AFTER INSERT ON exam_attempt_participations FOR EACH ROW
+    EXECUTE FUNCTION start_attempt_participation_generation();
+
+-- Every path that ends a Participation generation (lease expiry, Kick, policy
+-- suspension, Session revocation, Submission, manager end, automatic seal)
+-- records the exam.attempt.participation.ended event in the same
+-- transaction. One trigger covers them all, so paths added later are covered
+-- too.
+CREATE FUNCTION end_attempt_participation_generation() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF OLD.state = 'active' AND NEW.state = 'ended' THEN
+        PERFORM enqueue_domain_event('exam.attempt.participation.ended',
+            attempt_participation_event_data(NEW) || jsonb_build_object('reason', NEW.end_reason), NEW.ended_at);
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER exam_attempt_participations_ended
+    AFTER UPDATE OF state ON exam_attempt_participations FOR EACH ROW
+    EXECUTE FUNCTION end_attempt_participation_generation();
 
 CREATE FUNCTION guard_attempt_connection_mutation() RETURNS trigger
 LANGUAGE plpgsql AS $$
@@ -2745,8 +2875,15 @@ CREATE TABLE exam_submission_manifest_entries (
     starter_object_id varchar(26),
     attempt_object_id varchar(26),
     workspace_object_id varchar(26),
+    -- The author of the entry's last change when it was sealed; both are null
+    -- for an entry unchanged since the Starter Workspace.
+    author_kind varchar(16) CHECK (author_kind IN ('candidate', 'environment')),
+    author_ref varchar(96) CHECK (octet_length(author_ref) BETWEEN 1 AND 96),
     PRIMARY KEY (submission_id, entry_id),
     UNIQUE (submission_id, path),
+    CONSTRAINT exam_submission_manifest_entries_author_check CHECK (
+        (author_kind IS NULL) = (author_ref IS NULL)
+    ),
     CONSTRAINT exam_submission_manifest_entries_submission_fkey
         FOREIGN KEY (submission_id, workspace_id)
         REFERENCES exam_submissions(id, workspace_id),
@@ -3845,6 +3982,13 @@ CREATE INDEX command_outcomes_expires_at_idx
 CREATE INDEX command_outcomes_original_audit_event_idx
     ON command_outcomes (original_audit_event_id) WHERE original_audit_event_id IS NOT NULL;
 
+-- Attempt Workspace object reclaim and cleanup ask whether a retained batch
+-- outcome still protects an object. Without this every check scans every
+-- retained batch outcome.
+CREATE INDEX command_outcomes_workspace_objects_idx
+    ON command_outcomes USING gin ((outcome->'o'))
+    WHERE operation = 'exam.attempt.workspace.batch';
+
 ALTER TABLE exam_starter_workspace_objects
     ADD CONSTRAINT exam_starter_workspace_objects_retirement_fkey
     FOREIGN KEY (retired_by_audit_event_id) REFERENCES audit_events(id);
@@ -3933,6 +4077,47 @@ CREATE TABLE plugin_settings (
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL CHECK (updated_at >= created_at)
 );
+
+-- The administrator-managed recipes Attempt Environments are created from.
+-- A profile is never edited or deleted: a change is a new profile and the old
+-- one is retired, so a published Exam Revision always names a profile that
+-- still exists. The name is unique among the profiles that are not retired.
+CREATE TABLE environment_profiles (
+    id varchar(26) PRIMARY KEY CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    name varchar(63) NOT NULL CHECK (name ~ '^[a-z][a-z0-9-]{0,62}$'),
+    image varchar(64) NOT NULL CHECK (image ~ '^[A-Za-z0-9._:-]{1,64}$'),
+    cpu_millis bigint NOT NULL CHECK (cpu_millis BETWEEN 100 AND 64000),
+    memory_bytes bigint NOT NULL CHECK (memory_bytes BETWEEN 134217728 AND 68719476736),
+    disk_bytes bigint NOT NULL CHECK (disk_bytes BETWEEN 67108864 AND 274877906944),
+    network varchar(16) NOT NULL CHECK (network IN ('none', 'allowlist')),
+    idle_window_seconds integer NOT NULL CHECK (idle_window_seconds BETWEEN 60 AND 86400),
+    max_terminals smallint NOT NULL CHECK (max_terminals BETWEEN 1 AND 8),
+    created_by_user_id varchar(26) NOT NULL REFERENCES users(id),
+    created_at timestamptz NOT NULL,
+    retired_at timestamptz CHECK (retired_at IS NULL OR retired_at >= created_at)
+);
+CREATE UNIQUE INDEX environment_profiles_live_name_key
+    ON environment_profiles (name) WHERE retired_at IS NULL;
+CREATE INDEX environment_profiles_created_by_user_id_idx ON environment_profiles (created_by_user_id);
+
+CREATE FUNCTION guard_environment_profile_mutation() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'environment profiles are never deleted' USING ERRCODE = '55000';
+    END IF;
+    IF OLD.retired_at IS NOT NULL OR NEW.retired_at IS NULL OR
+       ROW(NEW.id, NEW.name, NEW.image, NEW.cpu_millis, NEW.memory_bytes, NEW.disk_bytes, NEW.network,
+           NEW.idle_window_seconds, NEW.max_terminals, NEW.created_by_user_id, NEW.created_at) IS DISTINCT FROM
+       ROW(OLD.id, OLD.name, OLD.image, OLD.cpu_millis, OLD.memory_bytes, OLD.disk_bytes, OLD.network,
+           OLD.idle_window_seconds, OLD.max_terminals, OLD.created_by_user_id, OLD.created_at) THEN
+        RAISE EXCEPTION 'an environment profile only retires' USING ERRCODE = '55000';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER environment_profiles_guard BEFORE UPDATE OR DELETE ON environment_profiles
+    FOR EACH ROW EXECUTE FUNCTION guard_environment_profile_mutation();
 
 CREATE TABLE access_policy_transitions (
     access_policy_id varchar(26) NOT NULL REFERENCES access_policies(id) ON DELETE CASCADE,
@@ -5461,7 +5646,224 @@ BEGIN
 END $$;
 CREATE TRIGGER native_condition_evidence_guard BEFORE UPDATE OR DELETE ON native_condition_evidence FOR EACH ROW EXECUTE FUNCTION guard_native_condition_evidence();
 
+-- Attempt evidence is the core's append-only record of what happened in an
+-- Attempt's execution environment: bounded canonical records of one closed
+-- kind, never a Flag. A gap record marks missing coverage. A record belongs
+-- to the Attempt, not to a Participation, and names the author that produced
+-- it. The kind, author and sequence identify a record, so a repeated append
+-- finds the stored one. Records are accepted only before the Attempt's
+-- Submission exists and leave only with integrity retirement.
+CREATE TABLE exam_attempt_evidence (
+    id varchar(26) PRIMARY KEY,
+    exam_attempt_id varchar(26) NOT NULL REFERENCES exam_attempts(id),
+    kind varchar(32) NOT NULL CHECK (kind IN (
+        'execution.process', 'execution.input', 'execution.gap', 'execution.overwritten', 'execution.refused'
+    )),
+    author_kind varchar(16) NOT NULL CHECK (author_kind IN ('candidate', 'environment')),
+    author_ref varchar(96) NOT NULL CHECK (octet_length(author_ref) BETWEEN 1 AND 96),
+    sequence bigint NOT NULL CHECK (sequence BETWEEN 1 AND 9007199254740991),
+    canonical bytea NOT NULL CHECK (octet_length(canonical) BETWEEN 1 AND 67584),
+    recorded_at timestamptz NOT NULL,
+    UNIQUE (exam_attempt_id, kind, author_kind, author_ref, sequence),
+    CONSTRAINT exam_attempt_evidence_id_canonical_check CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$')
+);
+CREATE INDEX exam_attempt_evidence_attempt_idx ON exam_attempt_evidence (exam_attempt_id, id);
+
+-- The running inventory of an Attempt's evidence: counts, bytes, gaps,
+-- refused appends and a digest chained over the kept records. The Submission
+-- seal fixes it: inserting the Submission binds the inventory to it, creating
+-- an empty one when the Attempt has none, and from then on it never changes.
+-- It leaves only with integrity retirement.
+CREATE TABLE exam_attempt_evidence_inventories (
+    exam_attempt_id varchar(26) PRIMARY KEY REFERENCES exam_attempts(id),
+    records bigint NOT NULL CHECK (records BETWEEN 0 AND 4096),
+    bytes bigint NOT NULL CHECK (bytes BETWEEN 0 AND 8388608),
+    gaps bigint NOT NULL CHECK (gaps BETWEEN 0 AND records),
+    overflow bigint NOT NULL CHECK (overflow BETWEEN 0 AND 9007199254740991),
+    digest varchar(71) NOT NULL CHECK (digest ~ '^sha256:[0-9a-f]{64}$'),
+    submission_id varchar(26) UNIQUE REFERENCES exam_submissions(id)
+);
+
+CREATE FUNCTION attempt_evidence_retired(attempt_id varchar) RETURNS boolean
+LANGUAGE sql STABLE AS $$
+    SELECT EXISTS (
+        SELECT 1
+          FROM retention_retirements r
+          JOIN exam_submissions sub ON sub.id = r.submission_id
+         WHERE sub.exam_attempt_id = attempt_id AND r.category = 'integrity' AND r.state = 'retired'
+    )
+$$;
+
+CREATE FUNCTION guard_attempt_evidence() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        IF EXISTS (SELECT 1 FROM exam_submissions WHERE exam_attempt_id = NEW.exam_attempt_id) THEN
+            RAISE EXCEPTION 'Attempt evidence is sealed with the Submission' USING ERRCODE = '55000';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF TG_OP = 'DELETE' AND attempt_evidence_retired(OLD.exam_attempt_id) THEN
+        RETURN OLD;
+    END IF;
+    RAISE EXCEPTION 'Attempt evidence is immutable' USING ERRCODE = '55000';
+END;
+$$;
+CREATE TRIGGER exam_attempt_evidence_guard BEFORE INSERT OR UPDATE OR DELETE ON exam_attempt_evidence
+    FOR EACH ROW EXECUTE FUNCTION guard_attempt_evidence();
+
+CREATE FUNCTION guard_attempt_evidence_inventory() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        IF attempt_evidence_retired(OLD.exam_attempt_id) THEN
+            RETURN OLD;
+        END IF;
+    ELSIF OLD.submission_id IS NULL AND
+          (NEW.submission_id IS NULL OR
+           ROW(NEW.records, NEW.bytes, NEW.gaps, NEW.overflow, NEW.digest) =
+           ROW(OLD.records, OLD.bytes, OLD.gaps, OLD.overflow, OLD.digest)) THEN
+        RETURN NEW;
+    END IF;
+    RAISE EXCEPTION 'sealed Attempt evidence inventory is immutable' USING ERRCODE = '55000';
+END;
+$$;
+CREATE TRIGGER exam_attempt_evidence_inventories_guard
+    BEFORE UPDATE OR DELETE ON exam_attempt_evidence_inventories
+    FOR EACH ROW EXECUTE FUNCTION guard_attempt_evidence_inventory();
+
+-- Every seal path (voluntary, manager end, automatic) inserts the Submission;
+-- this binds the Attempt's evidence inventory to it in the same transaction.
+-- The empty digest is model.NewAttemptEvidenceInventory's.
+CREATE FUNCTION seal_attempt_evidence_inventory() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO exam_attempt_evidence_inventories (
+        exam_attempt_id, records, bytes, gaps, overflow, digest, submission_id
+    ) VALUES (
+        NEW.exam_attempt_id, 0, 0, 0, 0,
+        'sha256:' || encode(sha256(convert_to('proctor.attempt_evidence', 'UTF8')), 'hex'), NEW.id
+    )
+    ON CONFLICT (exam_attempt_id) DO UPDATE SET submission_id = EXCLUDED.submission_id;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER exam_submissions_seal_attempt_evidence
+    AFTER INSERT ON exam_submissions
+    FOR EACH ROW EXECUTE FUNCTION seal_attempt_evidence_inventory();
+
+-- One execution environment per Attempt whose Revision enables execution,
+-- created at the first admission. The profile it was created from is copied
+-- in. Desired follows Attempt facts and only moves forward to ended; State is
+-- what the owner made of it. Revision fences the owner's writes, which also
+-- require the owner's current runtime lease.
+CREATE TABLE exam_attempt_environments (
+    exam_attempt_id varchar(26) PRIMARY KEY REFERENCES exam_attempts(id),
+    exam_sitting_id varchar(26) NOT NULL REFERENCES exam_sittings(id),
+    environment_profile_id varchar(26) NOT NULL REFERENCES environment_profiles(id),
+    image varchar(64) NOT NULL CHECK (image ~ '^[A-Za-z0-9._:-]{1,64}$'),
+    cpu_millis bigint NOT NULL CHECK (cpu_millis BETWEEN 100 AND 64000),
+    memory_bytes bigint NOT NULL CHECK (memory_bytes BETWEEN 134217728 AND 68719476736),
+    disk_bytes bigint NOT NULL CHECK (disk_bytes BETWEEN 67108864 AND 274877906944),
+    network varchar(16) NOT NULL CHECK (network IN ('none', 'allowlist')),
+    idle_window_seconds integer NOT NULL CHECK (idle_window_seconds BETWEEN 60 AND 86400),
+    terminals smallint NOT NULL CHECK (terminals BETWEEN 1 AND 8),
+    record_input boolean NOT NULL,
+    desired varchar(16) NOT NULL CHECK (desired IN ('running', 'frozen', 'ended')),
+    state varchar(24) NOT NULL CHECK (state IN (
+        'pending', 'creating', 'running', 'frozen', 'suspended', 'waiting_capacity', 'lost', 'ended'
+    )),
+    generation bigint NOT NULL CHECK (generation > 0),
+    incarnation bigint NOT NULL CHECK (incarnation >= 0),
+    host varchar(63),
+    grant_id varchar(128),
+    epoch varchar(128),
+    control_fence bigint NOT NULL CHECK (control_fence >= 0),
+    projection_cursor bigint NOT NULL CHECK (projection_cursor >= 0),
+    observation_cursor bigint NOT NULL CHECK (observation_cursor >= 0),
+    process_cursor bigint NOT NULL CHECK (process_cursor >= 0),
+    -- The content version of each file the machine holds at
+    -- projection_cursor, as {entry ID: version}.
+    projected_versions jsonb NOT NULL CHECK (jsonb_typeof(projected_versions) = 'object'),
+    evidence_sequence bigint NOT NULL CHECK (evidence_sequence >= 0),
+    waiting_since timestamptz,
+    -- Settles asked before a seal, and the last one finished or given up.
+    settle_requested bigint NOT NULL DEFAULT 0 CHECK (settle_requested >= 0),
+    settle_completed bigint NOT NULL DEFAULT 0
+        CHECK (settle_completed >= 0 AND settle_completed <= settle_requested),
+    -- When the last settle was asked; its budget counts from then.
+    settle_requested_at timestamptz,
+    -- The latest sync status of guest paths the owner did not store, oldest
+    -- first: [{"path", "status", "reason"}]. Derived state, never audited.
+    sync_paths jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(sync_paths) = 'array'),
+    -- A manager's replacement: the owner replaces the machine until its
+    -- incarnation reaches this one.
+    replace_before bigint NOT NULL DEFAULT 0
+        CHECK (replace_before >= 0 AND replace_before <= incarnation + 1),
+    revision bigint NOT NULL CHECK (revision > 0),
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL CHECK (updated_at >= created_at),
+    CONSTRAINT exam_attempt_environments_grant_check CHECK (
+        (host IS NULL) = (grant_id IS NULL) AND (grant_id IS NULL) = (epoch IS NULL)
+    ),
+    CONSTRAINT exam_attempt_environments_ended_check CHECK (state <> 'ended' OR desired = 'ended'),
+    CONSTRAINT exam_attempt_environments_settle_asked_check CHECK (
+        (settle_requested = 0) = (settle_requested_at IS NULL)
+    )
+);
+CREATE INDEX exam_attempt_environments_sitting_idx ON exam_attempt_environments (exam_sitting_id);
+CREATE INDEX exam_attempt_environments_profile_idx ON exam_attempt_environments (environment_profile_id);
+CREATE INDEX exam_attempt_environments_live_idx ON exam_attempt_environments (exam_attempt_id)
+    WHERE NOT (desired = 'ended' AND state = 'ended');
+
+-- Fences for attempt_runtime_leases. One sequence for every Attempt keeps
+-- an Attempt's fences growing after its lease is released and deleted.
+CREATE SEQUENCE attempt_runtime_fences AS bigint;
+
+-- One node's fenced, PostgreSQL-clocked claim to own one Attempt's runtime,
+-- such as its execution environment. Disposable: an expired row is free to
+-- claim, and the claim takes the next fence.
+CREATE TABLE attempt_runtime_leases (
+    exam_attempt_id varchar(26) PRIMARY KEY REFERENCES exam_attempts(id),
+    node_id varchar(128) NOT NULL CHECK (char_length(node_id) > 0),
+    fence bigint NOT NULL CHECK (fence > 0),
+    acquired_at timestamptz NOT NULL,
+    renewed_at timestamptz NOT NULL,
+    expires_at timestamptz NOT NULL,
+    CONSTRAINT attempt_runtime_leases_lifetime_check
+        CHECK (renewed_at >= acquired_at AND expires_at > renewed_at)
+);
+
 -- Canonical domain identifiers remain constrained independently of foreign keys.
+-- Execution environments, runtime leases, profiles and Attempt evidence.
+ALTER TABLE attempt_runtime_leases
+    ADD CONSTRAINT attempt_runtime_leases_exam_attempt_id_canonical_check
+    CHECK (exam_attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+
+ALTER TABLE environment_profiles
+    ADD CONSTRAINT environment_profiles_id_canonical_check
+    CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT environment_profiles_created_by_user_id_canonical_check
+    CHECK (created_by_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+
+ALTER TABLE exam_attempt_environments
+    ADD CONSTRAINT exam_attempt_environments_exam_attempt_id_canonical_check
+    CHECK (exam_attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT exam_attempt_environments_exam_sitting_id_canonical_check
+    CHECK (exam_sitting_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT exam_attempt_environments_environment__88f165ae_canonical_check
+    CHECK (environment_profile_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+
+ALTER TABLE exam_attempt_evidence
+    ADD CONSTRAINT exam_attempt_evidence_exam_attempt_id_canonical_check
+    CHECK (exam_attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+
+ALTER TABLE exam_attempt_evidence_inventories
+    ADD CONSTRAINT exam_attempt_evidence_inventories_exam_1af13dd9_canonical_check
+    CHECK (exam_attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT exam_attempt_evidence_inventories_submission_id_canonical_check
+    CHECK (submission_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+
 ALTER TABLE exam_security_preflights
     ADD CONSTRAINT exam_security_preflights_session_id_canonical_check
     CHECK (session_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),

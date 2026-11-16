@@ -101,6 +101,9 @@ type examSubmissionManifestItemResponse struct {
 	MediaType      string `json:"media_type,omitempty"`
 	Size           *int64 `json:"size,omitempty"`
 	SHA256         string `json:"sha256,omitempty"`
+	// Author made the entry's last change: the candidate's editor or the
+	// execution environment.
+	Author workspaceAuthorResponse `json:"author"`
 }
 
 type examSubmissionManifestResponse struct {
@@ -248,6 +251,7 @@ func (h examAttemptHandlers) listSubmissionManifest(request route.Request) (rout
 			ContentVersion: item.ContentVersion.String(),
 			MediaType:      item.MediaType,
 			SHA256:         item.SHA256,
+			Author:         workspaceAuthorResponse{Kind: string(item.Author.Kind), Ref: item.Author.Ref},
 		}
 		if item.Kind == model.StarterWorkspaceEntryFile {
 			size := item.SizeBytes

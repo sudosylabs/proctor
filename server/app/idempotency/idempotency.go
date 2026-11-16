@@ -64,6 +64,26 @@ func Prepare(call invocation.Invocation, operation, key string, semantic any) (*
 	return identity(userID, operation, key, canonical), nil
 }
 
+// RequireFor is Require for a command keyed under a named User rather than
+// the caller's Principal. Its use is trusted core work done on a User's
+// behalf without a request of theirs, such as an execution environment
+// writing the candidate's Workspace, whose outcome belongs to that User as
+// their own command's would. An empty key is idempotency.key_required and an
+// invalid User is idempotency.key_invalid.
+func RequireFor(userID model.UserID, operation, key string, semantic any) (*store.CommandIdempotency, error) {
+	if key == "" {
+		return nil, apperror.New("idempotency.key_required")
+	}
+	if !userID.IsValid() {
+		return nil, apperror.New("idempotency.key_invalid").Wrap(errors.New("idempotency requires a valid user"))
+	}
+	canonical, err := json.Marshal(semantic)
+	if err != nil {
+		return nil, apperror.New("request.invalid").Wrap(fmt.Errorf("encode idempotency semantics: %w", err))
+	}
+	return identity(userID, operation, key, canonical), nil
+}
+
 func identity(userID model.UserID, operation, key string, canonical []byte) *store.CommandIdempotency {
 	keyDigest := sha256.Sum256([]byte(key))
 	fingerprintInput := append([]byte(operation+"\x00"), canonical...)

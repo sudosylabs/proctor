@@ -13,6 +13,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
+	"github.com/sudosylabs/proctor/server/app/exam/environment"
 	"github.com/sudosylabs/proctor/server/app/exam/resource"
 	"github.com/sudosylabs/proctor/server/app/exam/review"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
@@ -63,6 +64,9 @@ type App struct {
 	// Attempts holds the candidate side, from joining a Sitting to sealing a
 	// Submission, plus manager inspection of Attempts.
 	Attempts *attempt.Service
+	// Terminals serves a candidate's terminals in the Attempt's execution
+	// environment; it is nil when the installation runs none.
+	Terminals *environment.Terminals
 	// Reviews holds post-Submission Integrity review and result release; it
 	// does not grade.
 	Reviews *review.Service

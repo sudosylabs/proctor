@@ -13,9 +13,13 @@
 //
 // A plugin implements Plugin. While the server starts, it activates each
 // enabled plugin, and the plugin registers what it offers on the Host it is
-// given: an IdentityProviderType, an ExportFormat or an EventHandler. The
-// Host grows one typed method per capability, added when a plugin needs it.
-// There is no broad API that every plugin can reach.
+// given: an IdentityProviderType or an ExportFormat. The Host grows one
+// typed method per capability, added when a plugin needs it. There is no
+// broad API that every plugin can reach, and no plugin touches the database.
+//
+// Plugins are edge adapters that never act on an Attempt. Features that
+// touch admission, the Attempt Workspace, Submission or evidence, such as
+// code execution, are part of the core.
 //
 // Because plugins are trusted, reviewed code, they run in process and are
 // called through plain Go interfaces. There is no separate process, RPC,
@@ -28,14 +32,4 @@
 //   - Authority. The core keeps the decisions it owns. It resolves accounts
 //     and opens Sessions for an identity provider's Assertion, and it
 //     chooses, bounds and verifies every file an export format writes.
-//   - Commit order. Event handlers run after the change they describe has
-//     committed, never inside it, so they cannot block or alter it.
-//   - Minimal events. By default an Event carries identifiers, not answers,
-//     Workspace content or integrity evidence. A handler that needs more
-//     asks for it through a capability that authorizes and audits the
-//     request.
-//
-// These are defaults for the capabilities that exist today. A future
-// capability that lets a plugin act on Attempt content does so through the
-// same use cases as a person, authorized and audited in the plugin's name.
 package plugin

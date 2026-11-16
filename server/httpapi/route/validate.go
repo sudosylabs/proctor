@@ -28,7 +28,28 @@ const (
 	WebSocketPath         = "websocket"
 )
 
+// BinarySocketProtocolSuffix ends the protocol name of every binary socket
+// upgrade, such as a terminal's, whose path ends in /socket.
+const BinarySocketProtocolSuffix = "-socket"
+
+// reservedUpgrade reports whether an upgrade endpoint is one the catalog
+// admits: the WebSocket handshake, or a binary socket. Both are a GET that
+// requires a Session.
+func reservedUpgrade(apiPrefix, resourceName string, route Endpoint, path string) bool {
+	if route.Auth != AuthSessionRequired || route.Method != http.MethodGet {
+		return false
+	}
+	if resourceName == WebSocketResourceName {
+		return route.ProtocolName == WebSocketProtocolName && path == apiPrefix+"/"+WebSocketPath
+	}
+	return strings.HasSuffix(route.ProtocolName, BinarySocketProtocolSuffix) && strings.HasSuffix(path, "/socket")
+}
+
 func validateResourceCatalog(apiPrefix string, resources []Resource) error {
+	return validateCatalog(apiPrefix, resources)
+}
+
+func validateCatalog(apiPrefix string, resources []Resource) error {
 	if err := validateDeclaredKernelCodes(resources); err != nil {
 		return err
 	}
@@ -100,13 +121,8 @@ func validateResourceCatalog(apiPrefix string, resources []Resource) error {
 				return fmt.Errorf("resource %q %s path: %w", resource.Name, route.Method, err)
 			}
 
-			if upgrade &&
-				(resource.Name != WebSocketResourceName ||
-					route.ProtocolName != WebSocketProtocolName ||
-					route.Auth != AuthSessionRequired ||
-					route.Method != http.MethodGet ||
-					path != apiPrefix+"/"+WebSocketPath) {
-				return fmt.Errorf("resource %q %s %s is not the reserved WebSocket upgrade", resource.Name, route.Method, path)
+			if upgrade && !reservedUpgrade(apiPrefix, resource.Name, route, path) {
+				return fmt.Errorf("resource %q %s %s is not the reserved WebSocket upgrade or a binary socket", resource.Name, route.Method, path)
 			}
 
 			key := route.Method + " " + normalized

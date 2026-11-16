@@ -91,6 +91,9 @@ components:
                 new_path: answers/main.go
                 content_version: kVcIsgUpj6Sg9aheovEZXzUjpw
                 changed_at: '2026-08-01T09:12:40Z'
+                author:
+                  kind: candidate
+                  ref: c8xmq7t4h1rz6a3kpedn5yw9fo
               - cursor: 16
                 entry_id: saqjfmjqqy9mo1yj4zwed73333
                 kind: file
@@ -99,6 +102,9 @@ components:
                 new_path: answers/notes.txt
                 content_version: VhOGu5NgyvhwvSuqK4dWGlgnoA
                 changed_at: '2026-08-01T09:14:05Z'
+                author:
+                  kind: environment
+                  ref: 0/terminal:1
             next_cursor: eyJhZnRlcl93b3Jrc3BhY2VfY3Vyc29yIjoxNn0
             refresh_required: false
   schemas:
@@ -112,6 +118,7 @@ components:
         - kind
         - operation
         - changed_at
+        - author
       properties:
         cursor:
           description: Workspace Cursor of this change. Cursors go up by one with each change, with no gaps.
@@ -152,6 +159,27 @@ components:
         recursive:
           type: boolean
           description: True when this deletion removes the directory at old_path and everything inside it, meaning every path that starts with old_path followed by a slash. Apply the whole removal at this one cursor.
+        author:
+          $ref: '#/components/schemas/WorkspaceAuthor'
+    WorkspaceAuthor:
+      type: object
+      additionalProperties: false
+      description: Who made a Workspace change. Every author writes on behalf of the candidate; the kind says which actor it was.
+      required:
+        - kind
+        - ref
+      properties:
+        kind:
+          type: string
+          enum:
+            - candidate
+            - environment
+          description: '`candidate` is the candidate''s own editor. `environment` is the Attempt''s execution environment, writing back what its programs changed.'
+        ref:
+          type: string
+          minLength: 1
+          maxLength: 96
+          description: The reference within the kind. For `candidate`, the Attempt Connection the editor wrote through. For `environment`, the environment incarnation in decimal, followed by a slash and the tag of the writing process, such as `terminal:1`, when it is known.
     CandidateWorkspaceJournalResponse:
       description: One page of Workspace changes after the requested cursor.
       type: object

@@ -174,12 +174,14 @@ func connectionClosedCalls(t *testing.T, result ConnectionClosedResult) []realti
 	}
 }
 
-// workspaceChangedCalls is the one call of an Attempt Workspace mutation.
-func workspaceChangedCalls(t *testing.T, result WorkspaceMutationResult) []realtimetest.Call {
+// workspaceChangedCalls is the one call of an Attempt Workspace batch: its
+// first and last journal cursors.
+func workspaceChangedCalls(t *testing.T, result WorkspaceBatchResult) []realtimetest.Call {
 	t.Helper()
+	first, last := result.Changes[0], result.Changes[len(result.Changes)-1]
 	return []realtimetest.Call{
 		published(t)(realtime.NewCandidateExamAttemptWorkspaceChangedEvent(result.SittingID, result.AttemptID, result.CandidateUserID,
-			result.Change.EntryID, result.Change.Operation, result.Change.Cursor, result.Change.ChangedAt)),
+			first.Cursor, last.Cursor, last.ChangedAt)),
 	}
 }
 

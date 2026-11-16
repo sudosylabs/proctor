@@ -53,12 +53,17 @@ type Auditor interface {
 	Complete(context.Context, model.AuditEventID, map[string]any) error
 }
 
-// SystemAuditor creates actor-less audit attempts for trusted periodic
-// continuity enforcement. A runtime scanner must never manufacture a User
-// Principal merely to persist this system decision.
+// SystemAuditor creates audit attempts for trusted core work that has no
+// Principal. Begin is actor-less, for periodic continuity enforcement: a
+// runtime scanner must never manufacture a User Principal merely to persist
+// this system decision. BeginOnBehalf names the User whose work it is, for an
+// execution environment writing the candidate's Workspace on their behalf.
 // access.SystemAuditAdapter satisfies it and tests substitute a fake.
 type SystemAuditor interface {
 	Begin(context.Context, model.Action, model.Resource, model.RoleScopeType, string, string, map[string]any) (model.AuditEventID, error)
+	BeginOnBehalf(
+		context.Context, model.UserID, model.Action, model.Resource, model.RoleScopeType, string, string, map[string]any,
+	) (model.AuditEventID, error)
 	Fail(context.Context, model.AuditEventID, string) error
 }
 
@@ -173,6 +178,36 @@ type Dependencies struct {
 	NewDomainEvent func() model.DomainEventID
 	NewJob         func() model.JobID
 	Operational    OperationalRecorder
+	// EnvironmentWaker wakes the owner of an Attempt's execution environment
+	// after a candidate changes its Workspace. It is optional: without one,
+	// the owner's backstop finds the change.
+	EnvironmentWaker EnvironmentWaker
+	// EnvironmentSettler brings an execution environment's last guest
+	// changes into the Workspace before a voluntary, manager or automatic
+	// seal. It is optional: without one, nothing is settled.
+	EnvironmentSettler EnvironmentSettler
+	// Environments are the Attempt Environments a manager replaces. It is
+	// optional: without it, no Attempt has one.
+	Environments store.AttemptEnvironmentStore
+}
+
+// EnvironmentSettler settles an Attempt's execution environment before its
+// seal: the owner harvests every change the guest made. Settle asks for a
+// settle and returns once it is done or its bounded budget is spent;
+// AwaitPendingSettle asks for none and waits, within what is left of its
+// budget, for the settle a closing Sitting already asked. An incomplete
+// settle is recorded as an execution gap, never returned as a refusal, so
+// the seal always goes ahead. An Attempt without an environment, or with
+// nothing pending, settles at once.
+type EnvironmentSettler interface {
+	Settle(ctx context.Context, attemptID model.ExamAttemptID)
+	AwaitPendingSettle(ctx context.Context, attemptID model.ExamAttemptID)
+}
+
+// EnvironmentWaker wakes the owner of an Attempt's execution environment,
+// wherever it runs. It never blocks.
+type EnvironmentWaker interface {
+	Wake(attemptID model.ExamAttemptID)
 }
 
 // OperationalRecorder receives the outcome of each use case the module
@@ -204,6 +239,10 @@ type Service struct {
 	desktopBuilds DesktopBuildResolver
 	now           func() time.Time
 	operational   OperationalRecorder
+	environments  EnvironmentWaker
+	settler       EnvironmentSettler
+	// environmentStore holds the Attempt Environments; nil when none exist.
+	environmentStore store.AttemptEnvironmentStore
 
 	newAttemptID         func() model.ExamAttemptID
 	newWorkspaceID       func() model.ExamAttemptWorkspaceID
@@ -224,6 +263,7 @@ type Service struct {
 
 	liveControls     controlAdmission
 	deliveryControls controlAdmission
+	workspaceBudget  *workspaceWriteBudget
 }
 
 // New builds the Service, or fails when a required collaborator is missing.
@@ -284,6 +324,9 @@ func New(deps Dependencies) (*Service, error) {
 		desktopBuilds:        deps.DesktopBuilds,
 		now:                  deps.Now,
 		operational:          deps.Operational,
+		environments:         deps.EnvironmentWaker,
+		settler:              deps.EnvironmentSettler,
+		environmentStore:     deps.Environments,
 		newAttemptID:         deps.NewAttemptID,
 		newWorkspaceID:       deps.NewWorkspaceID,
 		newParticipationID:   deps.NewParticipation,
@@ -302,5 +345,6 @@ func New(deps Dependencies) (*Service, error) {
 		newJobID:             deps.NewJob,
 		liveControls:         controlAdmission{lane: liveControlLane},
 		deliveryControls:     controlAdmission{lane: deliveryControlLane},
+		workspaceBudget:      newWorkspaceWriteBudget(workspaceWriteRateFor),
 	}, nil
 }

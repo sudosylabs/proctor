@@ -834,12 +834,12 @@ func createExamAuthoring(
 	}
 
 	if _, err := tx.NamedExec(ctx, `INSERT INTO exam_drafts (
-			exam_id, title, instructions_markdown, policy, browser_policy, base_revision_id,
-				updated_at, revision
+			exam_id, title, instructions_markdown, policy, browser_policy,
+				base_revision_id, updated_at, revision
 		)
 		VALUES (
-			:id, :draft_title, :instructions_markdown, :policy, :browser_policy, :base_revision_id,
-				:draft_updated_at, :draft_revision
+			:id, :draft_title, :instructions_markdown, :policy, :browser_policy,
+				:base_revision_id, :draft_updated_at, :draft_revision
 		)`, &row); err != nil {
 		return nil, fmt.Errorf("create exam draft: %w", translateError("exam_draft", input.Exam.ID.String(), err))
 	}

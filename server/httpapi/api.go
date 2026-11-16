@@ -33,10 +33,11 @@ func New(application *app.App, settings Settings) (*route.API, error) {
 		return nil, fmt.Errorf("configure browser cookies: %w", err)
 	}
 
-	return newAPI(
+	return compileAPI(
 		settings,
 		application.Identity,
-		productionResources(application, settings.Health, settings.BuildInfo, settings.Plugins, cookies, settings.WebSocket)...,
+		productionResources(application, settings.Health, settings.BuildInfo, settings.Plugins, cookies, settings.WebSocket,
+			settings.BinarySockets, settings.Logger)...,
 	)
 }
 
@@ -80,10 +81,14 @@ func requireApplication(application *app.App) error {
 	return nil
 }
 
-// newAPI validates the settings and hands the resources to the routing
+// compileAPI validates the settings and hands the resources to the routing
 // kernel, which compiles them into the sealed route catalog. New passes the
 // production inventory; handler tests pass resources built over their fakes.
-func newAPI(settings Settings, authenticator route.Authenticator, resources ...route.Resource) (*route.API, error) {
+func compileAPI(
+	settings Settings,
+	authenticator route.Authenticator,
+	resources ...route.Resource,
+) (*route.API, error) {
 	if settings.Logger == nil {
 		return nil, errors.New("logger is required")
 	}
@@ -109,7 +114,7 @@ func newAPI(settings Settings, authenticator route.Authenticator, resources ...r
 		return nil, errors.New("websocket transport is required")
 	}
 
-	return route.New(route.Settings{
+	routeSettings := route.Settings{
 		Logger:                  settings.Logger,
 		Metrics:                 settings.Metrics,
 		Tracing:                 settings.Tracing,
@@ -121,5 +126,6 @@ func newAPI(settings Settings, authenticator route.Authenticator, resources ...r
 		WriteTimeout:            settings.WriteTimeout,
 		TrustedProxies:          settings.TrustedProxies,
 		RecentAuthenticationTTL: settings.RecentAuthenticationTTL,
-	}, authenticator, resources...)
+	}
+	return route.New(routeSettings, authenticator, resources...)
 }

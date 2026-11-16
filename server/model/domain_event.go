@@ -25,12 +25,42 @@ const DomainEventDispatchMaximumAttempts = 8
 // DomainEventTopic names a kind of domain event. The vocabulary is closed.
 type DomainEventTopic string
 
-// DomainEventTopicExamAttemptSubmitted is recorded when a seal commits a new
-// Submission: the candidate submitted, a manager ended the Attempt, or the
-// Sitting closed.
-const DomainEventTopicExamAttemptSubmitted DomainEventTopic = "exam.attempt.submitted"
+// The closed vocabulary. The seal operations write exam.attempt.submitted
+// themselves. The schema writes the others from triggers on the state change
+// they describe, so every path that makes the change, including the Session
+// revocation fence that runs in SQL, writes its event in the same
+// transaction.
+const (
+	// DomainEventTopicExamAttemptSubmitted is recorded when a seal commits a
+	// new Submission: the candidate submitted, a manager ended the Attempt,
+	// or the Sitting closed.
+	DomainEventTopicExamAttemptSubmitted DomainEventTopic = "exam.attempt.submitted"
+	// DomainEventTopicExamAttemptParticipationStarted is recorded when a
+	// Participation generation becomes active: at admission, including the
+	// admission that follows a re-allow.
+	DomainEventTopicExamAttemptParticipationStarted DomainEventTopic = "exam.attempt.participation.started"
+	// DomainEventTopicExamAttemptParticipationEnded is recorded when a
+	// Participation generation ends, on every path that ends one. It freezes
+	// the Attempt's execution environment, or ends it with the seal.
+	DomainEventTopicExamAttemptParticipationEnded DomainEventTopic = "exam.attempt.participation.ended"
+	// DomainEventTopicExamSittingPaused is recorded when a Sitting pauses.
+	DomainEventTopicExamSittingPaused DomainEventTopic = "exam.sitting.paused"
+	// DomainEventTopicExamSittingResumed is recorded when a paused Sitting
+	// opens again.
+	DomainEventTopicExamSittingResumed DomainEventTopic = "exam.sitting.resumed"
+	// DomainEventTopicExamSittingClosing is recorded when a Sitting enters
+	// Closing, before its unfinished Attempts are sealed.
+	DomainEventTopicExamSittingClosing DomainEventTopic = "exam.sitting.closing"
+)
 
-var domainEventTopics = []DomainEventTopic{DomainEventTopicExamAttemptSubmitted}
+var domainEventTopics = []DomainEventTopic{
+	DomainEventTopicExamAttemptSubmitted,
+	DomainEventTopicExamAttemptParticipationStarted,
+	DomainEventTopicExamAttemptParticipationEnded,
+	DomainEventTopicExamSittingPaused,
+	DomainEventTopicExamSittingResumed,
+	DomainEventTopicExamSittingClosing,
+}
 
 // IsValid reports whether t is a known domain event topic.
 func (t DomainEventTopic) IsValid() bool { return slices.Contains(domainEventTopics, t) }
@@ -58,6 +88,50 @@ type examAttemptSubmittedData struct {
 func (d examAttemptSubmittedData) valid() bool {
 	return d.SubmissionID.IsValid() && d.AttemptID.IsValid() && d.SittingID.IsValid() && d.ExamID.IsValid()
 }
+
+// examAttemptParticipationData is the canonical Data of
+// DomainEventTopicExamAttemptParticipationStarted. ExamRevisionID is the
+// Revision the Attempt was admitted to, whose frozen plugin sections apply.
+type examAttemptParticipationData struct {
+	AttemptID       ExamAttemptID          `json:"attempt_id"`
+	ParticipationID AttemptParticipationID `json:"participation_id"`
+	Generation      int64                  `json:"generation"`
+	SittingID       ExamSittingID          `json:"sitting_id"`
+	ExamID          ExamID                 `json:"exam_id"`
+	ExamRevisionID  ExamRevisionID         `json:"exam_revision_id"`
+}
+
+func (d examAttemptParticipationData) valid() bool {
+	return d.AttemptID.IsValid() && d.ParticipationID.IsValid() && d.Generation > 0 && securitySafeInt(d.Generation) &&
+		d.SittingID.IsValid() && d.ExamID.IsValid() && d.ExamRevisionID.IsValid()
+}
+
+// examAttemptParticipationEndedData is the canonical Data of
+// DomainEventTopicExamAttemptParticipationEnded: the started members and the
+// generation's closed end reason.
+type examAttemptParticipationEndedData struct {
+	AttemptID       ExamAttemptID                 `json:"attempt_id"`
+	ParticipationID AttemptParticipationID        `json:"participation_id"`
+	Generation      int64                         `json:"generation"`
+	SittingID       ExamSittingID                 `json:"sitting_id"`
+	ExamID          ExamID                        `json:"exam_id"`
+	ExamRevisionID  ExamRevisionID                `json:"exam_revision_id"`
+	Reason          AttemptParticipationEndReason `json:"reason"`
+}
+
+func (d examAttemptParticipationEndedData) valid() bool {
+	return examAttemptParticipationData{AttemptID: d.AttemptID, ParticipationID: d.ParticipationID,
+		Generation: d.Generation, SittingID: d.SittingID, ExamID: d.ExamID, ExamRevisionID: d.ExamRevisionID}.valid() &&
+		d.Reason.IsValid()
+}
+
+// examSittingData is the canonical Data of the Sitting topics.
+type examSittingData struct {
+	SittingID ExamSittingID `json:"sitting_id"`
+	ExamID    ExamID        `json:"exam_id"`
+}
+
+func (d examSittingData) valid() bool { return d.SittingID.IsValid() && d.ExamID.IsValid() }
 
 // ExamAttemptSubmittedEvent identifies the sealed Submission that an
 // exam.attempt.submitted event announces.
@@ -95,12 +169,23 @@ func (e *DomainEvent) Validate() error {
 	if len(e.Data) == 0 || len(e.Data) > DomainEventMaximumDataBytes {
 		return invalidModelError("DomainEvent.Validate", "domain_event", "data", "invalid domain event data size", "")
 	}
+	var valid bool
 	switch e.Topic {
 	case DomainEventTopicExamAttemptSubmitted:
 		var data examAttemptSubmittedData
-		if !decodeStrictDomainEventData(e.Data, &data) || !data.valid() {
-			return invalidModelError("DomainEvent.Validate", "domain_event", "data", "invalid exam.attempt.submitted data", "")
-		}
+		valid = decodeStrictDomainEventData(e.Data, &data) && data.valid()
+	case DomainEventTopicExamAttemptParticipationStarted:
+		var data examAttemptParticipationData
+		valid = decodeStrictDomainEventData(e.Data, &data) && data.valid()
+	case DomainEventTopicExamAttemptParticipationEnded:
+		var data examAttemptParticipationEndedData
+		valid = decodeStrictDomainEventData(e.Data, &data) && data.valid()
+	case DomainEventTopicExamSittingPaused, DomainEventTopicExamSittingResumed, DomainEventTopicExamSittingClosing:
+		var data examSittingData
+		valid = decodeStrictDomainEventData(e.Data, &data) && data.valid()
+	}
+	if !valid {
+		return invalidModelError("DomainEvent.Validate", "domain_event", "data", "invalid "+string(e.Topic)+" data", "")
 	}
 	return nil
 }

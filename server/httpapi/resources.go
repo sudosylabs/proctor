@@ -12,6 +12,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/logging"
 )
 
 // productionResources is the single, visible and policy-free inventory of HTTP
@@ -24,6 +25,8 @@ func productionResources(
 	plugins Plugins,
 	cookies route.Cookies,
 	webSocket WebSocketTransport,
+	binarySockets BinarySocketTransport,
+	logger *logging.Logger,
 ) []route.Resource {
 	return []route.Resource{
 		systemResourceWithApplication(health, buildInfo, plugins, application.Identity, time.Now),
@@ -32,6 +35,7 @@ func productionResources(
 		desktopCompatibilityPolicyResource(application.Identity),
 		retentionPolicyResource(application.Administration),
 		pluginAdministrationResource(application.Administration),
+		environmentProfileResource(application.Administration),
 		retentionResource(application.Administration),
 		examRecordsResource(application.ExamRecords),
 		examExportsResource(application.ExamExports),
@@ -60,6 +64,7 @@ func productionResources(
 		examResourceResource(application.Resources),
 		examStarterWorkspaceResource(application.StarterWorkspaces),
 		examAttemptResource(application.Attempts),
+		examAttemptTerminalResource(application.Terminals, binarySockets, logger),
 		securityPreflightResource(application.Attempts),
 		nativeDeliveryResource(application.Attempts),
 		browserDeliveryResource(application.Attempts),

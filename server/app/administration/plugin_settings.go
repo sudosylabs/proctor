@@ -246,6 +246,8 @@ func pluginSettingsError(err error) error {
 }
 
 var pluginSettingsStoreErrors = apperror.StoreTable{
-	Constraints: map[string]apperror.Code{"actor_not_system_administrator": "authorization.denied"},
+	Constraints: map[string]apperror.Code{
+		"actor_not_system_administrator": "authorization.denied",
+	},
 	Unavailable: "plugin.unavailable",
 }

@@ -178,7 +178,6 @@ func replacePluginSettings(
 	if currentRevision != input.ExpectedRevision {
 		return pluginSettingsReplacementOutcome{}, &store.ErrPluginSettingsRevisionConflict{CurrentRevision: currentRevision}
 	}
-
 	var outcome pluginSettingsReplacementOutcome
 	if !saved {
 		created, createErr := model.NewPluginSettings(input.PluginID, input.Change, databaseNow)

@@ -765,11 +765,11 @@ func insertAutomaticExamSubmission(
 			`INSERT INTO exam_submission_manifest_entries (
 				submission_id, workspace_id, entry_id, kind, path, content_version, media_type,
 				size_bytes, sha256, storage_origin, starter_object_id, attempt_object_id,
-				workspace_object_id
+				workspace_object_id, author_kind, author_ref
 			)
 			VALUES (
 				?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, NULLIF(?, ''), NULLIF(?, ''),
-				NULLIF(?, ''), NULLIF(?, ''), ?
+				NULLIF(?, ''), NULLIF(?, ''), ?, NULLIF(?, ''), NULLIF(?, '')
 			)`,
 			submission.ID.String(),
 			submission.WorkspaceID.String(),
@@ -784,6 +784,8 @@ func insertAutomaticExamSubmission(
 			entry.StarterObjectID.String(),
 			entry.AttemptObjectID.String(),
 			persisted.WorkspaceObjectID,
+			string(entry.Author.Kind),
+			entry.Author.Ref,
 		); err != nil {
 			return fmt.Errorf(
 				"insert automatic Exam Submission manifest Entry: %w",

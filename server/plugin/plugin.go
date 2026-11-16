@@ -146,9 +146,6 @@ type Host interface {
 	// another plugin already offers the same media type, or after Activate
 	// has returned.
 	AddExportFormat(ExportFormat) error
-	// AddEventHandler subscribes handler to topic. A plugin subscribes at
-	// most one handler to each topic, during Activate.
-	AddEventHandler(topic EventTopic, handler EventHandler) error
 }
 
 // PresentDocument returns document, or nil when it is absent, empty or JSON

@@ -220,3 +220,7 @@ func (f *reviewMailFake) PrepareResultRelease(_ context.Context,
 func (f *reviewStoreFake) ListNativeConditions(context.Context, store.NativeConditionListOptions) (*store.NativeConditionPage, error) {
 	return &store.NativeConditionPage{Items: []model.NativeConditionEvidence{}}, nil
 }
+
+func (f *reviewStoreFake) ListAttemptEvidence(context.Context, store.AttemptEvidenceListOptions) (*store.AttemptEvidencePage, error) {
+	return &store.AttemptEvidencePage{Items: []model.AttemptEvidence{}}, nil
+}

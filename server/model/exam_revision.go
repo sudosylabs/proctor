@@ -277,8 +277,8 @@ func NewExamRevision(spec ExamRevisionSpecification) (*ExamRevision, error) {
 
 // NewLiveCorrectionExamRevision derives one immutable live correction from an
 // already published Revision. Only candidate-visible instructions and the
-// complete ordered resource manifest may change; policy and Starter Workspace
-// remain pinned byte-for-byte to the base Revision.
+// complete ordered resource manifest may change; policy, plugin sections and
+// Starter Workspace remain pinned byte-for-byte to the base Revision.
 type LiveCorrectionExamRevisionSpecification struct {
 	ID                   ExamRevisionID
 	Number               int64

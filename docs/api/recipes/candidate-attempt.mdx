@@ -97,18 +97,40 @@ content routes for this Attempt.
 
 ## 4. Save Workspace changes
 
-Every Workspace change includes `participation_id` and `generation`. For
-uploads, put those values in the `metadata` part. Keep the Workspace cursor and
-content version from each acknowledged change. Send an idempotency key where
-the endpoint requires one.
+Every change to the Workspace goes through
+<Link to="/api/reference/apply-candidate-exam-workspace-batch">Apply a Workspace batch</Link>.
+One batch holds 1 to 128 changes, applied in order, all or nothing: create a
+file or directory, replace a file, move or rename an entry, or delete one.
+Gather what the candidate saved in a short window, such as "save all" or
+autosave, into one batch. It costs the server far less than one request per
+file.
+
+The body is multipart. The `manifest` part comes first and names the
+Participation, its generation and the changes. Then comes one `content` part
+for each `create_file` and `replace_file`, in manifest order. Every batch needs
+an idempotency key.
 
 ```json
 {
   "participation_id": "<participation-id>",
   "generation": 2,
-  "path": "answers"
+  "mutations": [
+    { "operation": "create_directory", "path": "answers" },
+    {
+      "operation": "create_file",
+      "path": "answers/main.go",
+      "media_type": "text/plain",
+      "size": 128,
+      "sha256": "<sha256>"
+    }
+  ]
 }
 ```
+
+The response holds one journal change per change in the batch, at consecutive
+cursors. Keep the last cursor and each new content version. If one change
+refuses the batch, nothing changes and the problem's `item` field names it by
+position. Fix that change and send the batch again.
 
 After the client recovers from an interruption, call
 <Link to="/api/reference/list-candidate-exam-workspace-changes">Workspace changes</Link>

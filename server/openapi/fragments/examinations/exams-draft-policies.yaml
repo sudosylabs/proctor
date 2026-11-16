@@ -128,6 +128,85 @@ paths:
           $ref: '#/components/responses/InternalError'
         "503":
           $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exams/{exam_id}/draft/policies/execution:
+    parameters:
+      - $ref: '#/components/parameters/ExamID'
+    put:
+      operationId: configureExamDraftExecution
+      summary: Replace the execution policy on the active Exam Draft
+      description: >-
+        Replaces the execution policy on the mutable Draft at the expected revision: whether Attempts get an
+        execution environment, the environment profile they are created from, whether terminal input is
+        recorded, and how many terminals a candidate may open. An enabled policy must name a profile that exists,
+        is not retired and allows that many terminals, or the change fails with exam.execution.profile_unusable.
+        A disabled policy names no profile, records nothing and opens no terminal. Publication checks the profile
+        again and requires the installation to allow execution.
+      tags:
+        - Examinations
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: required
+      x-proctor-error-codes:
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - request.invalid
+        - resource.not_found
+        - exam.invalid
+        - exam.archived
+        - exam.draft.revision_conflict
+        - exam.draft.no_changes
+        - exam.execution.profile_unusable
+        - exam.unavailable
+        - idempotency.key_required
+        - idempotency.key_invalid
+        - idempotency.conflict
+        - idempotency.in_progress
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        description: Supplies the expected Draft revision and the complete replacement execution policy.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigureExamDraftExecutionRequest'
+            example:
+              expected_revision: 4
+              execution:
+                enabled: true
+                profile_id: ybndrfg8ejkmcpqxot1uwisza3
+                record_input: false
+                terminals: 2
+      responses:
+        "200":
+          $ref: '#/components/responses/ExamOK'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
 components:
   requestBodies:
     ConfigureExamDraftBrowserPolicy:
@@ -172,6 +251,19 @@ components:
             window_milliseconds: 300000
             outcome: flag_and_warn
   schemas:
+    ConfigureExamDraftExecutionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+        - execution
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+        execution:
+          $ref: '#/components/schemas/ExecutionPolicy'
     ConfigureExamDraftBrowserPolicyRequest:
       type: object
       additionalProperties: false

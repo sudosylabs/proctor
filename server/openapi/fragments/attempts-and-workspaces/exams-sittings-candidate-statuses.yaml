@@ -89,6 +89,7 @@ components:
             exam_sitting_id: 889766ufjgio6kbpzjbufozksq
             sitting_state: open
             sitting_revision: 4
+            environments_waiting_capacity: 0
             items:
               - candidate:
                   user_id: nybc6xhg593upqice3sdeyro5k
@@ -306,6 +307,31 @@ components:
         native_security:
           description: Native security summary for the Attempt. Omitted when the candidate has no Attempt.
           $ref: '#/components/schemas/NativeSecuritySummary'
+        environment:
+          $ref: '#/components/schemas/SittingCandidateEnvironmentResponse'
+    SittingCandidateEnvironmentResponse:
+      type: object
+      additionalProperties: false
+      description: >-
+        The candidate's execution environment, present once the Attempt has one. Incarnation counts the
+        machines it has had; a manager names it to replace the current one.
+      required:
+        - state
+        - desired
+        - incarnation
+      properties:
+        state:
+          $ref: '#/components/schemas/AttemptEnvironmentState'
+        desired:
+          $ref: '#/components/schemas/AttemptEnvironmentDesired'
+        incarnation:
+          type: integer
+          format: int64
+          minimum: 0
+        waiting_since:
+          type: string
+          format: date-time
+          description: When the current wait for an execution host with room began.
     ExamSittingCandidateStatusesResponse:
       description: One page of the candidate-status board for a Sitting.
       type: object
@@ -316,6 +342,7 @@ components:
         - exam_sitting_id
         - sitting_state
         - sitting_revision
+        - environments_waiting_capacity
         - items
       properties:
         server_time:
@@ -336,6 +363,11 @@ components:
           type: integer
           format: int64
           minimum: 1
+        environments_waiting_capacity:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many of the Sitting's execution environments wait for a host with room, across every page.
         items:
           description: Candidate rows, in ascending order of candidate User ID.
           type: array

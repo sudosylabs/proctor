@@ -363,9 +363,15 @@ components:
                 media_type: text/x-python
                 size: 2214
                 sha256: 702f63d705f0030f2b4832aff9e6a6de6923d3ef5e450ae12a4479b4adf22f8c
+                author:
+                  kind: environment
+                  ref: 0/terminal:1
               - entry_id: f6tcxyfofj3n3buuqfjaw9j1jn
                 kind: directory
                 path: src
+                author:
+                  kind: candidate
+                  ref: c8xmq7t4h1rz6a3kpedn5yw9fo
             next_cursor: eyJhZnRlcl9lbnRyeV9pZCI6ImY2dGN4eWZvZmozbjNidXVxZmphdzlqMWpuIn0
     ExamSubmissionFileContent:
       description: The file's bytes, served inline. This is not a public link or an export.
@@ -532,6 +538,7 @@ components:
         - entry_id
         - kind
         - path
+        - author
       properties:
         entry_id:
           $ref: '#/components/schemas/ID'
@@ -545,6 +552,8 @@ components:
         path:
           $ref: '#/components/schemas/StarterWorkspacePath'
           description: The entry's path relative to the Workspace root.
+        author:
+          $ref: '#/components/schemas/WorkspaceAuthor'
         content_version:
           $ref: '#/components/schemas/WorkspaceContentVersion'
           description: The version token of the sealed file content. Files only.

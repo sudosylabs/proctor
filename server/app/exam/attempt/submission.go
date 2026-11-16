@@ -334,6 +334,11 @@ func (s *Service) SubmitExamAttempt(
 	if !validSubmissionTarget(target, sealAccess) {
 		return store.ExamSubmissionReceipt{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Submission seal target"))
 	}
+	// The environment's last changes join the Workspace before the seal;
+	// the seal's expected cursor fences only the candidate's own changes.
+	if !target.Replayed && s.settler != nil {
+		s.settler.Settle(ctx, sealAccess.AttemptID)
+	}
 
 	submissionID, receiptCode := s.newSubmissionID(), s.newReceiptCode()
 	if !submissionID.IsValid() {

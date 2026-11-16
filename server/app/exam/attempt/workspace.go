@@ -11,8 +11,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strconv"
 	"strings"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -27,400 +29,397 @@ type WorkspaceMutationAccess struct {
 	Generation      int64
 }
 
-type CreateWorkspaceDirectoryCommand struct {
-	Access         WorkspaceMutationAccess
-	Path           string
-	IdempotencyKey string
-}
-
-type CreateWorkspaceFileCommand struct {
-	Access         WorkspaceMutationAccess
-	Path           string
-	MediaType      string
-	ExpectedSHA256 string
-	Body           io.Reader
-	Size           int64
-	IdempotencyKey string
-}
-
-type ReplaceWorkspaceFileCommand struct {
-	Access                 WorkspaceMutationAccess
+// WorkspaceBatchMutation is one change in a Workspace batch.
+//
+//   - create_file: DestinationPath, MediaType, SHA256 and Size; the batch's
+//     content supplies the body.
+//   - create_directory: DestinationPath.
+//   - replace_file: EntryID, ExpectedPath, ExpectedContentVersion, MediaType,
+//     SHA256 and Size; the batch's content supplies the body.
+//   - move_entry: EntryID, ExpectedPath and DestinationPath.
+//   - delete_entry: EntryID and ExpectedPath, plus ExpectedContentVersion for
+//     a file. Recursive deletes a directory and everything under it, and
+//     needs the batch's ExpectedWorkspaceCursor.
+//
+// A create names its entry by path; the server chooses its EntryID, so a
+// later mutation in the same batch reaches it by path, not by ID.
+type WorkspaceBatchMutation struct {
+	Operation              model.AttemptWorkspaceMutationKind
 	EntryID                model.AttemptWorkspaceEntryID
 	ExpectedPath           string
+	DestinationPath        string
 	ExpectedContentVersion model.WorkspaceContentVersion
+	Recursive              bool
 	MediaType              string
-	ExpectedSHA256         string
-	Body                   io.Reader
+	SHA256                 string
 	Size                   int64
-	IdempotencyKey         string
 }
 
-type MoveWorkspaceEntryCommand struct {
-	Access          WorkspaceMutationAccess
-	EntryID         model.AttemptWorkspaceEntryID
-	ExpectedPath    string
-	DestinationPath string
-	IdempotencyKey  string
+func (m WorkspaceBatchMutation) carriesContent() bool {
+	return m.Operation == model.AttemptWorkspaceMutationCreateFile || m.Operation == model.AttemptWorkspaceMutationReplaceFile
 }
 
-type DeleteWorkspaceEntryCommand struct {
+// WorkspaceBatchContent supplies the bodies of a batch's file mutations, one
+// per create_file or replace_file, in batch order. Next is called at most once
+// per file mutation; the returned reader is read to its declared size before
+// Next is called again.
+type WorkspaceBatchContent interface {
+	Next(context.Context) (io.Reader, error)
+}
+
+// ApplyWorkspaceBatchCommand changes the candidate's Attempt Workspace with
+// 1..AttemptWorkspaceBatchMaximumMutations mutations, all or nothing.
+type ApplyWorkspaceBatchCommand struct {
 	Access                  WorkspaceMutationAccess
-	EntryID                 model.AttemptWorkspaceEntryID
-	ExpectedPath            string
-	ExpectedContentVersion  model.WorkspaceContentVersion
-	Recursive               bool
+	Mutations               []WorkspaceBatchMutation
 	ExpectedWorkspaceCursor *int64
+	Content                 WorkspaceBatchContent
 	IdempotencyKey          string
 }
 
-// WorkspaceMutationResult is the entry a Workspace mutation produced and the
-// journal change it recorded. Replayed is true when an exact retry returned
+// WorkspaceBatchResult is the journal change each mutation recorded, in
+// order, at consecutive cursors. Replayed is true when an exact retry returned
 // the stored result.
-type WorkspaceMutationResult struct {
+type WorkspaceBatchResult struct {
 	AttemptID       model.ExamAttemptID
 	SittingID       model.ExamSittingID
 	CandidateUserID model.UserID
 	WorkspaceID     model.ExamAttemptWorkspaceID
-	Entry           *store.CandidateAttemptWorkspaceItem
-	Change          model.AttemptWorkspaceJournalEntry
+	Changes         []model.AttemptWorkspaceJournalEntry
 	Replayed        bool
 }
 
-// CreateCandidateExamWorkspaceDirectory idempotently creates a directory at a
-// normalized path in the candidate's Attempt Workspace, fenced by
-// participation generation.
-func (s *Service) CreateCandidateExamWorkspaceDirectory(
+// ApplyCandidateExamWorkspaceBatch is the candidate's own write from the
+// editor. It checks write access once, stages every file body, verifies each
+// against its declared SHA-256, then applies every mutation in one
+// transaction, fenced by Participation generation. A failure names the
+// mutation that refused the batch in the "item" field, and nothing changes.
+func (s *Service) ApplyCandidateExamWorkspaceBatch(
 	ctx context.Context,
 	inv invocation.Invocation,
-	command CreateWorkspaceDirectoryCommand,
-) (_ WorkspaceMutationResult, resultErr error) {
+	command ApplyWorkspaceBatchCommand,
+) (_ WorkspaceBatchResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	workspaceAccess, err := workspaceMutationSelector(inv, command.Access)
 	if err != nil {
-		return WorkspaceMutationResult{}, err
+		return WorkspaceBatchResult{}, err
 	}
 
-	path, err := model.NormalizeAttemptWorkspacePath(command.Path)
-	if err != nil || path != command.Path {
-		return WorkspaceMutationResult{}, apperror.Invalid("exam.attempt.invalid", "workspace_command").Wrap(err)
-	}
-
-	commandIdempotency, err := prepareWorkspaceMutationIdempotency(
-		inv,
-		command.IdempotencyKey,
-		workspaceAccess.AttemptID,
-		model.AttemptWorkspaceMutationCreateDirectory,
-		struct {
-			Path string `json:"path"`
-		}{path},
-	)
-	if err != nil {
-		return WorkspaceMutationResult{}, err
-	}
-
-	entryID := s.newWorkspaceEntryID()
-	if !entryID.IsValid() {
-		return WorkspaceMutationResult{}, apperror.Invalid("exam.attempt.invalid", "workspace_entry_id")
-	}
-
-	target, err := s.resolveWorkspaceMutationTarget(ctx, workspaceAccess)
-	if err != nil {
-		return WorkspaceMutationResult{}, err
-	}
-
-	return s.applyWorkspaceMutation(ctx, inv, target, &store.ExamAttemptWorkspaceMutation{
-		Access:          workspaceAccess,
-		Operation:       model.AttemptWorkspaceMutationCreateDirectory,
-		EntryID:         entryID,
-		DestinationPath: path,
-	}, commandIdempotency)
-}
-
-// CreateCandidateExamWorkspaceFile idempotently stages and creates a new file
-// in the candidate's Attempt Workspace, verifying the uploaded body against
-// its expected SHA-256.
-func (s *Service) CreateCandidateExamWorkspaceFile(
-	ctx context.Context,
-	inv invocation.Invocation,
-	command CreateWorkspaceFileCommand,
-) (_ WorkspaceMutationResult, resultErr error) {
-	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	entryID := s.newWorkspaceEntryID()
-	return s.stageWorkspaceFile(
-		ctx,
-		inv,
-		command.Access,
-		entryID,
-		"",
-		command.Path,
-		"",
-		command.MediaType,
-		command.ExpectedSHA256,
-		command.Body,
-		command.Size,
-		command.IdempotencyKey,
-		model.AttemptWorkspaceMutationCreateFile,
-	)
-}
-
-// ReplaceCandidateExamWorkspaceFile idempotently replaces a file's content in
-// the candidate's Attempt Workspace, fenced by its expected path and
-// Workspace Content Version.
-func (s *Service) ReplaceCandidateExamWorkspaceFile(
-	ctx context.Context,
-	inv invocation.Invocation,
-	command ReplaceWorkspaceFileCommand,
-) (_ WorkspaceMutationResult, resultErr error) {
-	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	return s.stageWorkspaceFile(
-		ctx,
-		inv,
-		command.Access,
-		command.EntryID,
-		command.ExpectedPath,
-		"",
-		command.ExpectedContentVersion,
-		command.MediaType,
-		command.ExpectedSHA256,
-		command.Body,
-		command.Size,
-		command.IdempotencyKey,
-		model.AttemptWorkspaceMutationReplaceFile,
-	)
-}
-
-// MoveCandidateExamWorkspaceEntry idempotently moves a Workspace Entry from
-// its expected path to a destination path, preserving its identity.
-func (s *Service) MoveCandidateExamWorkspaceEntry(
-	ctx context.Context,
-	inv invocation.Invocation,
-	command MoveWorkspaceEntryCommand,
-) (_ WorkspaceMutationResult, resultErr error) {
-	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	workspaceAccess, err := workspaceMutationSelector(inv, command.Access)
-	if err != nil {
-		return WorkspaceMutationResult{}, err
-	}
-
-	expected, destination, err := validateWorkspaceMove(command.EntryID, command.ExpectedPath, command.DestinationPath)
-	if err != nil {
-		return WorkspaceMutationResult{}, err
-	}
-
-	commandIdempotency, err := prepareWorkspaceMutationIdempotency(
-		inv,
-		command.IdempotencyKey,
-		workspaceAccess.AttemptID,
-		model.AttemptWorkspaceMutationMoveEntry,
-		struct{ EntryID, ExpectedPath, DestinationPath string }{
-			command.EntryID.String(),
-			expected,
-			destination,
+	return s.applyWorkspaceWrite(ctx, workspaceWriter{
+		access:    workspaceAccess,
+		candidate: workspaceAccess.CandidateUserID,
+		beginAudit: func(ctx context.Context, target *store.ExamAttemptWorkspaceMutationTarget, value map[string]any) (model.AuditEventID, error) {
+			return s.auditor.Begin(ctx, access.Mutation{
+				Invocation: inv,
+				Action:     model.ActionExamSittingParticipate,
+				Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
+				ScopeType:  model.RoleScopeClass,
+				ScopeID:    target.ClassID.String(),
+				Operation:  store.ExamAttemptWorkspaceBatchOperation,
+				Value:      value,
+			})
 		},
-	)
-	if err != nil {
-		return WorkspaceMutationResult{}, err
-	}
-
-	target, err := s.resolveWorkspaceMutationTarget(ctx, workspaceAccess)
-	if err != nil {
-		return WorkspaceMutationResult{}, err
-	}
-
-	return s.applyWorkspaceMutation(ctx, inv, target, &store.ExamAttemptWorkspaceMutation{
-		Access:          workspaceAccess,
-		Operation:       model.AttemptWorkspaceMutationMoveEntry,
-		EntryID:         command.EntryID,
-		ExpectedPath:    expected,
-		DestinationPath: destination,
-	}, commandIdempotency)
-}
-
-// DeleteCandidateExamWorkspaceEntry idempotently deletes a Workspace Entry at
-// its expected path. A recursive directory delete requires
-// ExpectedWorkspaceCursor; a non-recursive delete must not set it.
-func (s *Service) DeleteCandidateExamWorkspaceEntry(
-	ctx context.Context,
-	inv invocation.Invocation,
-	command DeleteWorkspaceEntryCommand,
-) (_ WorkspaceMutationResult, resultErr error) {
-	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	workspaceAccess, err := workspaceMutationSelector(inv, command.Access)
-	if err != nil {
-		return WorkspaceMutationResult{}, err
-	}
-
-	if (command.Recursive &&
-		(command.ExpectedWorkspaceCursor == nil ||
-			*command.ExpectedWorkspaceCursor < 0 ||
-			!command.ExpectedContentVersion.IsZero())) ||
-		(!command.Recursive && command.ExpectedWorkspaceCursor != nil) {
-		return WorkspaceMutationResult{}, apperror.Invalid("exam.attempt.invalid", "workspace_recursive_delete")
-	}
-
-	expected, err := validateWorkspaceEntryFence(command.EntryID, command.ExpectedPath)
-	if err != nil {
-		return WorkspaceMutationResult{}, err
-	}
-
-	commandIdempotency, err := prepareWorkspaceMutationIdempotency(
-		inv,
-		command.IdempotencyKey,
-		workspaceAccess.AttemptID,
-		model.AttemptWorkspaceMutationDeleteEntry,
-		struct {
-			EntryID, ExpectedPath, ExpectedContentVersion string
-			Recursive                                     bool   `json:"recursive,omitempty"`
-			ExpectedWorkspaceCursor                       *int64 `json:"expected_workspace_cursor,omitempty"`
-		}{command.EntryID.String(), expected, command.ExpectedContentVersion.String(), command.Recursive, command.ExpectedWorkspaceCursor},
-	)
-	if err != nil {
-		return WorkspaceMutationResult{}, err
-	}
-
-	target, err := s.resolveWorkspaceMutationTarget(ctx, workspaceAccess)
-	if err != nil {
-		return WorkspaceMutationResult{}, err
-	}
-
-	return s.applyWorkspaceMutation(ctx, inv, target, &store.ExamAttemptWorkspaceMutation{
-		Access:                  workspaceAccess,
-		Operation:               model.AttemptWorkspaceMutationDeleteEntry,
-		EntryID:                 command.EntryID,
-		ExpectedPath:            expected,
-		ExpectedContentVersion:  command.ExpectedContentVersion,
-		Recursive:               command.Recursive,
+	}, workspaceWrite{
+		Mutations:               command.Mutations,
 		ExpectedWorkspaceCursor: command.ExpectedWorkspaceCursor,
-	}, commandIdempotency)
+		Content:                 command.Content,
+		IdempotencyKey:          command.IdempotencyKey,
+	})
 }
 
-func (s *Service) stageWorkspaceFile(
-	ctx context.Context,
-	inv invocation.Invocation,
-	mutationAccess WorkspaceMutationAccess,
-	entryID model.AttemptWorkspaceEntryID,
-	expectedPath, destinationPath string,
-	expectedVersion model.WorkspaceContentVersion,
-	mediaType, expectedSHA string,
-	body io.Reader,
-	size int64,
-	idempotencyKey string,
-	operation model.AttemptWorkspaceMutationKind,
-) (WorkspaceMutationResult, error) {
-	workspaceAccess, err := workspaceMutationSelector(inv, mutationAccess)
-	if err != nil {
-		return WorkspaceMutationResult{}, err
+// workspaceWriter is who writes a batch. Both kinds write as the candidate;
+// they differ only in how the Store proves them, which candidate they name
+// before the Store resolves one (zero for the environment), and how the audit
+// attempt records the candidate as actor.
+type workspaceWriter struct {
+	access    store.ExamAttemptWorkspaceWriteAccess
+	candidate model.UserID
+	// resources are the environment's profile, which size its budget; zero
+	// for the editor.
+	resources  model.EnvironmentResources
+	beginAudit func(context.Context, *store.ExamAttemptWorkspaceMutationTarget, map[string]any) (model.AuditEventID, error)
+}
+
+// workspaceWrite is the batch a writer asks for.
+type workspaceWrite struct {
+	Mutations               []WorkspaceBatchMutation
+	ExpectedWorkspaceCursor *int64
+	Content                 WorkspaceBatchContent
+	IdempotencyKey          string
+}
+
+// applyWorkspaceWrite is the one batch write path, for every writer: it
+// validates, spends the Attempt's budget, reserves, stages and applies.
+func (s *Service) applyWorkspaceWrite(ctx context.Context, writer workspaceWriter, write workspaceWrite) (WorkspaceBatchResult, error) {
+	attemptID := writer.access.WorkspaceAttemptID()
+	if len(write.Mutations) == 0 || len(write.Mutations) > model.AttemptWorkspaceBatchMaximumMutations {
+		return WorkspaceBatchResult{}, apperror.Invalid("exam.attempt.invalid", "workspace_batch")
 	}
 
-	if !entryID.IsValid() ||
-		body == nil ||
-		size < 0 ||
-		size > model.AttemptWorkspaceMaximumFileBytes ||
-		mediaType == "" ||
-		strings.TrimSpace(mediaType) != mediaType ||
-		len(mediaType) > 255 ||
-		!store.IsValidWorkspaceSHA256(expectedSHA) {
-		return WorkspaceMutationResult{}, apperror.Invalid("exam.attempt.invalid", "workspace_file")
-	}
-
-	if operation == model.AttemptWorkspaceMutationCreateFile {
-		destinationPath, err = validateWorkspacePath(destinationPath)
-	} else {
-		expectedPath, err = validateWorkspacePath(expectedPath)
-		if err == nil && !expectedVersion.IsValid() {
-			err = errors.New("content version is required")
+	recursive, files, bytes := false, 0, int64(0)
+	for index, mutation := range write.Mutations {
+		if err := validateWorkspaceBatchMutation(mutation); err != nil {
+			return WorkspaceBatchResult{}, workspaceBatchItemError(err, index)
+		}
+		recursive = recursive || mutation.Recursive
+		if mutation.carriesContent() {
+			files++
+			bytes += mutation.Size
 		}
 	}
 
+	if recursive != (write.ExpectedWorkspaceCursor != nil) ||
+		(write.ExpectedWorkspaceCursor != nil && *write.ExpectedWorkspaceCursor < 0) {
+		return WorkspaceBatchResult{}, apperror.Invalid("exam.attempt.invalid", "workspace_recursive_delete")
+	}
+	if files > 0 && write.Content == nil {
+		return WorkspaceBatchResult{}, apperror.Invalid("exam.attempt.invalid", "workspace_content")
+	}
+	if write.IdempotencyKey == "" {
+		return WorkspaceBatchResult{}, apperror.New("idempotency.key_required")
+	}
+
+	// The budget is spent before anything is reserved or staged, so a writer
+	// that outruns it costs storage nothing. An exact retry spends again.
+	if !s.workspaceBudget.spend(attemptID, writer.access.WorkspaceAuthor().Kind, writer.resources, len(write.Mutations),
+		bytes, s.now()) {
+		return WorkspaceBatchResult{}, apperror.New("exam.attempt.workspace.rate_limited")
+	}
+
+	mutations, objects, err := s.identifyWorkspaceBatch(write.Mutations)
 	if err != nil {
-		return WorkspaceMutationResult{}, apperror.Invalid("exam.attempt.invalid", "workspace_file").Wrap(err)
+		return WorkspaceBatchResult{}, err
 	}
 
-	var semantic any
-	if operation == model.AttemptWorkspaceMutationCreateFile {
-		semantic = struct {
-			Path, MediaType, SHA256 string
-			Size                    int64
-		}{destinationPath, mediaType, expectedSHA, size}
-	} else {
-		semantic = struct {
-			EntryID, Path, Version, MediaType, SHA256 string
-			Size                                      int64
-		}{entryID.String(), expectedPath, expectedVersion.String(), mediaType, expectedSHA, size}
+	objectIDs := make([]model.AttemptWorkspaceObjectID, len(objects))
+	for index, object := range objects {
+		objectIDs[index] = object.ObjectID
 	}
 
-	commandIdempotency, err := prepareWorkspaceMutationIdempotency(inv, idempotencyKey, workspaceAccess.AttemptID, operation, semantic)
+	target, err := s.workspaces.ReserveObjects(ctx, &store.ExamAttemptWorkspaceObjectReservation{
+		Access:    writer.access,
+		ObjectIDs: objectIDs,
+	})
 	if err != nil {
-		return WorkspaceMutationResult{}, err
+		return WorkspaceBatchResult{}, storeError(storeErrors, err)
+	}
+	if !validWorkspaceTarget(target, writer.candidate) {
+		return WorkspaceBatchResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt Workspace mutation target"))
 	}
 
-	target, err := s.resolveWorkspaceMutationTarget(ctx, workspaceAccess)
+	// The outcome is the candidate's, whoever writes on their behalf.
+	commandIdempotency, err := prepareWorkspaceBatchIdempotency(
+		target.CandidateUserID,
+		writer.access.WorkspaceAuthor().Kind,
+		write.IdempotencyKey,
+		attemptID,
+		write.Mutations,
+		write.ExpectedWorkspaceCursor,
+	)
 	if err != nil {
-		return WorkspaceMutationResult{}, err
+		s.reclaimWorkspaceObjects(ctx, objectIDs, err)
+		return WorkspaceBatchResult{}, err
 	}
 
-	objectID, version := s.newWorkspaceObjectID(), s.newWorkspaceVersion()
-	if !objectID.IsValid() || !version.IsValid() {
-		return WorkspaceMutationResult{}, apperror.Invalid("exam.attempt.invalid", "workspace_identity")
+	if err = s.stageWorkspaceBatch(ctx, writer.access, write, objects); err != nil {
+		s.reclaimWorkspaceObjects(ctx, objectIDs, err)
+		return WorkspaceBatchResult{}, err
 	}
 
-	if _, err = s.workspaces.ReserveObject(
-		ctx,
-		&store.ExamAttemptWorkspaceObjectReservation{Access: workspaceAccess, ObjectID: objectID},
-	); err != nil {
-		return WorkspaceMutationResult{}, storeError(storeErrors, err)
-	}
-
-	staged, err := s.content.StageAttemptWorkspaceObject(ctx, objectID, body, size, mediaType)
-	if err != nil {
-		_ = s.workspaces.MarkObjectReclaimable(ctx, objectID)
-		if isInvalidAttemptWorkspaceContent(err) {
-			return WorkspaceMutationResult{}, apperror.Invalid("exam.attempt.invalid", "workspace_content").Wrap(err)
-		}
-
-		return WorkspaceMutationResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
-	}
-
-	if staged == nil || staged.Validate() != nil || staged.SHA256 != expectedSHA {
-		_ = s.workspaces.MarkObjectReclaimable(ctx, objectID)
-		return WorkspaceMutationResult{}, apperror.Invalid("exam.attempt.invalid", "workspace_sha256")
-	}
-
-	if _, err = s.workspaces.MarkObjectReady(ctx, &store.ExamAttemptWorkspaceObjectReady{
-		Access:         workspaceAccess,
-		ObjectID:       objectID,
-		ContentVersion: version,
-		Content:        *staged,
-	}); err != nil {
-		mapped := storeError(storeErrors, err)
-		if !isAttemptUnavailable(mapped) {
-			_ = s.workspaces.MarkObjectReclaimable(ctx, objectID)
-		}
-
-		return WorkspaceMutationResult{}, mapped
-	}
-
-	result, err := s.applyWorkspaceMutation(ctx, inv, target, &store.ExamAttemptWorkspaceMutation{
-		Access:                 workspaceAccess,
-		Operation:              operation,
-		EntryID:                entryID,
-		ExpectedPath:           expectedPath,
-		DestinationPath:        destinationPath,
-		ExpectedContentVersion: expectedVersion,
-		ObjectID:               objectID,
+	result, err := s.applyWorkspaceBatch(ctx, writer, target, &store.ExamAttemptWorkspaceBatch{
+		Access:                  writer.access,
+		Mutations:               mutations,
+		ExpectedWorkspaceCursor: write.ExpectedWorkspaceCursor,
 	}, commandIdempotency)
 	if err != nil {
-		if !isAttemptUnavailable(err) {
-			_ = s.workspaces.MarkObjectReclaimable(ctx, objectID)
-		}
-		return WorkspaceMutationResult{}, err
+		s.reclaimWorkspaceObjects(ctx, objectIDs, err)
+		return WorkspaceBatchResult{}, err
 	}
 
 	if result.Replayed {
-		_ = s.workspaces.MarkObjectReclaimable(ctx, objectID)
+		s.reclaimWorkspaceObjects(ctx, objectIDs, nil)
 	}
 
 	return result, nil
+}
+
+// workspaceBatchObject is the identity chosen for one file mutation's body.
+type workspaceBatchObject struct {
+	Index    int
+	ObjectID model.AttemptWorkspaceObjectID
+	Version  model.WorkspaceContentVersion
+}
+
+// identifyWorkspaceBatch chooses the EntryID of every create and the object
+// and content version of every file body, and builds the store mutations.
+func (s *Service) identifyWorkspaceBatch(
+	commands []WorkspaceBatchMutation,
+) ([]store.ExamAttemptWorkspaceMutation, []workspaceBatchObject, error) {
+	mutations := make([]store.ExamAttemptWorkspaceMutation, len(commands))
+	objects := make([]workspaceBatchObject, 0, len(commands))
+	for index, command := range commands {
+		mutation := store.ExamAttemptWorkspaceMutation{
+			Operation:              command.Operation,
+			EntryID:                command.EntryID,
+			ExpectedPath:           command.ExpectedPath,
+			DestinationPath:        command.DestinationPath,
+			ExpectedContentVersion: command.ExpectedContentVersion,
+			Recursive:              command.Recursive,
+		}
+		if command.Operation == model.AttemptWorkspaceMutationCreateFile ||
+			command.Operation == model.AttemptWorkspaceMutationCreateDirectory {
+			mutation.EntryID = s.newWorkspaceEntryID()
+		}
+		if !mutation.EntryID.IsValid() {
+			return nil, nil, apperror.Invalid("exam.attempt.invalid", "workspace_identity")
+		}
+
+		if command.carriesContent() {
+			object := workspaceBatchObject{Index: index, ObjectID: s.newWorkspaceObjectID(), Version: s.newWorkspaceVersion()}
+			if !object.ObjectID.IsValid() || !object.Version.IsValid() {
+				return nil, nil, apperror.Invalid("exam.attempt.invalid", "workspace_identity")
+			}
+			mutation.ObjectID = object.ObjectID
+			objects = append(objects, object)
+		}
+
+		mutations[index] = mutation
+	}
+
+	return mutations, objects, nil
+}
+
+// stageWorkspaceBatch streams every file body to its reserved object, checks
+// each against its declared size and SHA-256, and records them all ready.
+func (s *Service) stageWorkspaceBatch(
+	ctx context.Context,
+	workspaceAccess store.ExamAttemptWorkspaceWriteAccess,
+	command workspaceWrite,
+	objects []workspaceBatchObject,
+) error {
+	if len(objects) == 0 {
+		return nil
+	}
+
+	ready := make([]store.ExamAttemptWorkspaceReadyObject, len(objects))
+	for position, object := range objects {
+		mutation := command.Mutations[object.Index]
+		body, err := command.Content.Next(ctx)
+		if err != nil {
+			return workspaceBatchItemError(apperror.Invalid("exam.attempt.invalid", "workspace_content").Wrap(err), object.Index)
+		}
+		if body == nil {
+			return workspaceBatchItemError(apperror.Invalid("exam.attempt.invalid", "workspace_content"), object.Index)
+		}
+
+		staged, err := s.content.StageAttemptWorkspaceObject(ctx, object.ObjectID, body, mutation.Size, mutation.MediaType)
+		if err != nil {
+			if isInvalidAttemptWorkspaceContent(err) {
+				return workspaceBatchItemError(apperror.Invalid("exam.attempt.invalid", "workspace_content").Wrap(err), object.Index)
+			}
+
+			return apperror.New("exam.attempt.unavailable").Wrap(err)
+		}
+		if staged == nil || staged.Validate() != nil || staged.SHA256 != mutation.SHA256 {
+			return workspaceBatchItemError(apperror.Invalid("exam.attempt.invalid", "workspace_sha256"), object.Index)
+		}
+
+		ready[position] = store.ExamAttemptWorkspaceReadyObject{
+			ObjectID:       object.ObjectID,
+			ContentVersion: object.Version,
+			Content:        *staged,
+		}
+	}
+
+	if err := s.workspaces.MarkObjectsReady(ctx, &store.ExamAttemptWorkspaceObjectsReady{
+		Access:  workspaceAccess,
+		Objects: ready,
+	}); err != nil {
+		return workspaceBatchStoreError(err)
+	}
+
+	return nil
+}
+
+// reclaimWorkspaceObjects gives back objects a batch will not consume. A batch
+// whose outcome is unknown keeps them: the store may yet have consumed them.
+func (s *Service) reclaimWorkspaceObjects(ctx context.Context, objectIDs []model.AttemptWorkspaceObjectID, cause error) {
+	if len(objectIDs) == 0 || (cause != nil && isAttemptUnavailable(cause)) {
+		return
+	}
+	_ = s.workspaces.MarkObjectsReclaimable(ctx, objectIDs)
+}
+
+func validateWorkspaceBatchMutation(mutation WorkspaceBatchMutation) error {
+	var err error
+	switch mutation.Operation {
+	case model.AttemptWorkspaceMutationCreateFile, model.AttemptWorkspaceMutationCreateDirectory:
+		if !mutation.EntryID.IsZero() || mutation.ExpectedPath != "" || !mutation.ExpectedContentVersion.IsZero() || mutation.Recursive {
+			return apperror.Invalid("exam.attempt.invalid", "workspace_command")
+		}
+		if _, err = validateWorkspacePath(mutation.DestinationPath); err != nil {
+			return apperror.Invalid("exam.attempt.invalid", "workspace_path").Wrap(err)
+		}
+	case model.AttemptWorkspaceMutationReplaceFile:
+		if _, err = validateWorkspaceEntryFence(mutation.EntryID, mutation.ExpectedPath); err != nil {
+			return err
+		}
+		if mutation.DestinationPath != "" || !mutation.ExpectedContentVersion.IsValid() || mutation.Recursive {
+			return apperror.Invalid("exam.attempt.invalid", "workspace_command")
+		}
+	case model.AttemptWorkspaceMutationMoveEntry:
+		if _, _, err = validateWorkspaceMove(mutation.EntryID, mutation.ExpectedPath, mutation.DestinationPath); err != nil {
+			return err
+		}
+		if !mutation.ExpectedContentVersion.IsZero() || mutation.Recursive {
+			return apperror.Invalid("exam.attempt.invalid", "workspace_command")
+		}
+	case model.AttemptWorkspaceMutationDeleteEntry:
+		if _, err = validateWorkspaceEntryFence(mutation.EntryID, mutation.ExpectedPath); err != nil {
+			return err
+		}
+		if mutation.DestinationPath != "" ||
+			(mutation.Recursive && !mutation.ExpectedContentVersion.IsZero()) ||
+			(!mutation.ExpectedContentVersion.IsZero() && !mutation.ExpectedContentVersion.IsValid()) {
+			return apperror.Invalid("exam.attempt.invalid", "workspace_command")
+		}
+	default:
+		return apperror.Invalid("exam.attempt.invalid", "workspace_operation")
+	}
+
+	if mutation.carriesContent() {
+		if mutation.Size < 0 ||
+			mutation.Size > model.AttemptWorkspaceMaximumFileBytes ||
+			mutation.MediaType == "" ||
+			strings.TrimSpace(mutation.MediaType) != mutation.MediaType ||
+			len(mutation.MediaType) > 255 ||
+			!store.IsValidWorkspaceSHA256(mutation.SHA256) {
+			return apperror.Invalid("exam.attempt.invalid", "workspace_file")
+		}
+	} else if mutation.MediaType != "" || mutation.SHA256 != "" || mutation.Size != 0 {
+		return apperror.Invalid("exam.attempt.invalid", "workspace_command")
+	}
+
+	return nil
+}
+
+// workspaceBatchItemError names the mutation that refused the batch.
+func workspaceBatchItemError(err error, index int) error {
+	var fault *apperror.Error
+	if errors.As(err, &fault) {
+		return fault.WithField("item", strconv.Itoa(index))
+	}
+	return err
+}
+
+// workspaceBatchStoreError maps a store failure and, when one mutation caused
+// it, names that mutation.
+func workspaceBatchStoreError(err error) error {
+	var item *store.ErrAttemptWorkspaceBatchItem
+	if errors.As(err, &item) {
+		return workspaceBatchItemError(storeError(storeErrors, item.Err), item.Index)
+	}
+	return storeError(storeErrors, err)
 }
 
 func isInvalidAttemptWorkspaceContent(err error) bool {

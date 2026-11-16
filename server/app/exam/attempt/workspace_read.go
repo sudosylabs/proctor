@@ -64,18 +64,30 @@ func (s *Service) ListCandidateExamWorkspace(
 		return WorkspacePage{}, err
 	}
 
-	if query.Limit < 1 ||
-		query.Limit > model.AttemptWorkspaceJournalReadMaximum ||
-		query.ExpectedCursor < -1 ||
-		(query.ExpectedCursor == -1 && !query.AfterEntryID.IsZero()) {
+	return s.listWorkspace(ctx, selector, query.ExpectedCursor, query.AfterEntryID, query.Limit)
+}
+
+// listWorkspace reads one manifest page through a candidate's or an
+// environment's read access.
+func (s *Service) listWorkspace(
+	ctx context.Context,
+	readAccess store.ExamAttemptWorkspaceReadAccess,
+	expectedCursor int64,
+	afterEntryID model.AttemptWorkspaceEntryID,
+	limit int,
+) (WorkspacePage, error) {
+	if limit < 1 ||
+		limit > model.AttemptWorkspaceJournalReadMaximum ||
+		expectedCursor < -1 ||
+		(expectedCursor == -1 && !afterEntryID.IsZero()) {
 		return WorkspacePage{}, apperror.Invalid("exam.attempt.invalid", "workspace_list")
 	}
 
 	page, err := s.workspaces.List(ctx, store.CandidateWorkspaceListOptions{
-		Access:         selector,
-		ExpectedCursor: query.ExpectedCursor,
-		AfterEntryID:   query.AfterEntryID,
-		Limit:          query.Limit,
+		Access:         readAccess,
+		ExpectedCursor: expectedCursor,
+		AfterEntryID:   afterEntryID,
+		Limit:          limit,
 	})
 	if err != nil {
 		return WorkspacePage{}, storeError(storeErrors, err)
@@ -110,15 +122,26 @@ func (s *Service) OpenCandidateExamWorkspaceFile(
 	if err != nil {
 		return OpenedContent{}, err
 	}
-	if !query.EntryID.IsValid() {
+
+	return s.openWorkspaceFile(ctx, selector, query.EntryID)
+}
+
+// openWorkspaceFile opens one file through a candidate's or an environment's
+// read access.
+func (s *Service) openWorkspaceFile(
+	ctx context.Context,
+	readAccess store.ExamAttemptWorkspaceReadAccess,
+	entryID model.AttemptWorkspaceEntryID,
+) (OpenedContent, error) {
+	if !entryID.IsValid() {
 		return OpenedContent{}, apperror.Invalid("exam.attempt.invalid", "attempt_workspace_entry_id")
 	}
 
-	resolved, err := s.workspaces.ResolveFile(ctx, selector, query.EntryID)
+	resolved, err := s.workspaces.ResolveFile(ctx, readAccess, entryID)
 	if err != nil {
 		return OpenedContent{}, storeError(storeErrors, err)
 	}
-	if resolved == nil || resolved.Entry.EntryID != query.EntryID || resolved.ContentVersion.IsZero() {
+	if resolved == nil || resolved.Entry.EntryID != entryID || resolved.ContentVersion.IsZero() {
 		return OpenedContent{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("incomplete candidate Workspace selector"))
 	}
 

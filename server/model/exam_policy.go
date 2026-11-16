@@ -42,6 +42,38 @@ type ExamPolicySet struct {
 	ConnectionLoss ConnectionLossPolicy
 	FocusLoss      FocusLossPolicy
 	Native         NativeSecurityPolicy
+	Execution      ExecutionPolicy
+}
+
+// ExecutionPolicy says whether an Exam's Attempts get an execution
+// environment, and which. Profile names the environment profile Attempts are
+// created from; publication requires it to exist and not be retired, and
+// Terminals to be within its maximum. RecordInput records terminal input as
+// evidence; output is never recorded. A disabled policy names no profile.
+type ExecutionPolicy struct {
+	Enabled     bool
+	Profile     EnvironmentProfileID
+	RecordInput bool
+	Terminals   int
+}
+
+// Validate checks the policy on its own; the profile's own limits are
+// checked at publication.
+func (p ExecutionPolicy) Validate() error {
+	if !p.Enabled {
+		if !p.Profile.IsZero() || p.RecordInput || p.Terminals != 0 {
+			return invalidModelError("ExecutionPolicy.Validate", "exam_policy_set", "execution",
+				"a disabled execution policy names no profile, records nothing and opens no terminal", "")
+		}
+		return nil
+	}
+	if !p.Profile.IsValid() {
+		return invalidModelError("ExecutionPolicy.Validate", "exam_policy_set", "execution", "requires an environment profile", "")
+	}
+	if p.Terminals < 1 || p.Terminals > EnvironmentProfileMaximumTerminals {
+		return invalidModelError("ExecutionPolicy.Validate", "exam_policy_set", "execution", "terminals must be from 1 to 8", "")
+	}
+	return nil
 }
 
 func DefaultExamPolicySet() ExamPolicySet {
@@ -94,13 +126,21 @@ func (p ExamPolicySet) Validate() error {
 		return invalidModelError("ExamPolicySet.Validate", "exam_policy_set", "", "focus loss outcome is invalid", "")
 	}
 
-	return nil
+	return p.Execution.Validate()
 }
 
 type examPolicyWire struct {
 	Native         NativeSecurityPolicy     `json:"native"`
 	ConnectionLoss examConnectionPolicyWire `json:"connection_loss"`
 	FocusLoss      examFocusPolicyWire      `json:"focus_loss"`
+	Execution      examExecutionPolicyWire  `json:"execution"`
+}
+
+type examExecutionPolicyWire struct {
+	Enabled     bool   `json:"enabled"`
+	ProfileID   string `json:"profile_id"`
+	RecordInput bool   `json:"record_input"`
+	Terminals   int    `json:"terminals"`
 }
 
 type examConnectionPolicyWire struct {
@@ -128,6 +168,12 @@ func EncodeExamPolicySet(policy ExamPolicySet) ([]byte, error) {
 			IncidentCount:               policy.FocusLoss.IncidentCount,
 			WindowMilliseconds:          policy.FocusLoss.Window.Milliseconds(),
 			Outcome:                     policy.FocusLoss.Outcome,
+		},
+		Execution: examExecutionPolicyWire{
+			Enabled:     policy.Execution.Enabled,
+			ProfileID:   policy.Execution.Profile.String(),
+			RecordInput: policy.Execution.RecordInput,
+			Terminals:   policy.Execution.Terminals,
 		},
 	})
 	if err != nil {
@@ -161,6 +207,12 @@ func DecodeExamPolicySet(data []byte) (ExamPolicySet, error) {
 			WindowMilliseconds          *int64            `json:"window_milliseconds"`
 			Outcome                     *IntegrityOutcome `json:"outcome"`
 		} `json:"focus_loss"`
+		Execution *struct {
+			Enabled     *bool   `json:"enabled"`
+			ProfileID   *string `json:"profile_id"`
+			RecordInput *bool   `json:"record_input"`
+			Terminals   *int    `json:"terminals"`
+		} `json:"execution"`
 	}
 	if err := decoder.Decode(&wire); err != nil {
 		return ExamPolicySet{}, invalidModelError("DecodeExamPolicySet", "exam_policy", "", "decode exam policy", "").wrap(err)
@@ -177,7 +229,12 @@ func DecodeExamPolicySet(data []byte) (ExamPolicySet, error) {
 		wire.FocusLoss.MinimumDurationMilliseconds == nil ||
 		wire.FocusLoss.IncidentCount == nil ||
 		wire.FocusLoss.WindowMilliseconds == nil ||
-		wire.FocusLoss.Outcome == nil {
+		wire.FocusLoss.Outcome == nil ||
+		wire.Execution == nil ||
+		wire.Execution.Enabled == nil ||
+		wire.Execution.ProfileID == nil ||
+		wire.Execution.RecordInput == nil ||
+		wire.Execution.Terminals == nil {
 		return ExamPolicySet{}, invalidModelError("DecodeExamPolicySet", "exam_policy", "", "exam policy document is incomplete", "")
 	}
 
@@ -198,6 +255,12 @@ func DecodeExamPolicySet(data []byte) (ExamPolicySet, error) {
 			IncidentCount:   *wire.FocusLoss.IncidentCount,
 			Window:          time.Duration(*wire.FocusLoss.WindowMilliseconds) * time.Millisecond,
 			Outcome:         *wire.FocusLoss.Outcome,
+		},
+		Execution: ExecutionPolicy{
+			Enabled:     *wire.Execution.Enabled,
+			Profile:     EnvironmentProfileID(*wire.Execution.ProfileID),
+			RecordInput: *wire.Execution.RecordInput,
+			Terminals:   *wire.Execution.Terminals,
 		},
 	}
 	if err := policy.Validate(); err != nil {

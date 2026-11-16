@@ -17,30 +17,51 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-func TestExamAttemptWorkspaceMutationContractUsesSelectiveFencesAndSafeResults(t *testing.T) {
+func TestExamAttemptWorkspaceBatchContractUsesSelectiveFencesAndSafeResults(t *testing.T) {
 	t.Parallel()
-	access := ExamAttemptWorkspaceMutationAccess{AttemptID: model.NewExamAttemptID(),
+	access := ExamAttemptWorkspaceEditorAccess{AttemptID: model.NewExamAttemptID(),
 		ParticipationID: model.NewAttemptParticipationID(), Generation: 2, CandidateUserID: model.NewUserID(),
 		SessionID: model.NewSessionID(), DesktopRegistrationID: model.NewDesktopRegistrationID(),
 		DPoPKeyThumbprint: strings.Repeat("A", 43), ConnectionID: model.NewAttemptConnectionID(),
 		ContinuityCredentialHash: model.HashToken(model.NewCredentialToken())}
 	entryID := model.NewAttemptWorkspaceEntryID()
 	workspaceID := model.NewExamAttemptWorkspaceID()
-	mutation := ExamAttemptWorkspaceMutation{Access: access, Operation: model.AttemptWorkspaceMutationReplaceFile,
+	mutation := ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationReplaceFile,
 		EntryID: entryID, ExpectedPath: "cmd/main.go", ExpectedContentVersion: model.NewWorkspaceContentVersion(),
 		ObjectID: model.NewAttemptWorkspaceObjectID()}
-	result := ExamAttemptWorkspaceMutationResult{WorkspaceID: workspaceID,
-		Change: model.AttemptWorkspaceJournalEntry{WorkspaceID: workspaceID, Cursor: 7,
+	batch := ExamAttemptWorkspaceBatch{Access: access, Mutations: []ExamAttemptWorkspaceMutation{mutation}}
+	result := ExamAttemptWorkspaceBatchResult{WorkspaceID: workspaceID,
+		Changes: []model.AttemptWorkspaceJournalEntry{{WorkspaceID: workspaceID, Cursor: 7,
 			EntryID: entryID, EntryKind: model.StarterWorkspaceEntryFile, Operation: mutation.Operation,
 			OldPath: mutation.ExpectedPath, NewPath: mutation.ExpectedPath,
-			ContentVersion: model.NewWorkspaceContentVersion(), ChangedAt: model.NowUTC()}, Replayed: true}
-	require.Equal(t, int64(2), mutation.Access.Generation, "Workspace mutation contract = %#v / %#v", mutation, result)
-	require.Empty(t, mutation.DestinationPath, "Workspace mutation contract = %#v / %#v", mutation, result)
-	require.True(t, result.Replayed, "Workspace mutation contract = %#v / %#v", mutation, result)
-	require.Equal(t, int64(7), result.Change.Cursor, "Workspace mutation contract = %#v / %#v", mutation, result)
+			ContentVersion: model.NewWorkspaceContentVersion(), ChangedAt: model.NowUTC()}}, Replayed: true}
+	require.Equal(t, int64(2), batch.Access.(ExamAttemptWorkspaceEditorAccess).Generation, "Workspace batch contract = %#v / %#v", batch, result)
+	require.Nil(t, batch.ExpectedWorkspaceCursor, "a batch without recursive deletion carries no cursor fence")
+	require.Empty(t, batch.Mutations[0].DestinationPath, "Workspace batch contract = %#v / %#v", batch, result)
+	require.True(t, result.Replayed, "Workspace batch contract = %#v / %#v", batch, result)
+	require.Equal(t, int64(7), result.Changes[0].Cursor, "Workspace batch contract = %#v / %#v", batch, result)
 	assertNoWorkspaceSecrets(t, reflect.TypeOf(result))
-	_, exists := reflect.TypeOf((*ExamAttemptWorkspaceStore)(nil)).Elem().MethodByName("ApplyMutation")
-	require.True(t, exists, "ExamAttemptWorkspaceStore is missing ApplyMutation")
+	_, exists := reflect.TypeOf(mutation).FieldByName("Access")
+	require.False(t, exists, "a batch mutation carries its own access")
+	_, exists = reflect.TypeOf(mutation).FieldByName("ExpectedWorkspaceCursor")
+	require.False(t, exists, "a batch mutation carries its own cursor fence")
+	_, exists = reflect.TypeOf((*ExamAttemptWorkspaceStore)(nil)).Elem().MethodByName("ApplyBatch")
+	require.True(t, exists, "ExamAttemptWorkspaceStore is missing ApplyBatch")
+	require.Equal(t, "exam.attempt.workspace.batch", ExamAttemptWorkspaceBatchOperation)
+}
+
+func TestErrAttemptWorkspaceBatchItemNamesTheMutationAndUnwraps(t *testing.T) {
+	t.Parallel()
+	conflict := NewErrConflict("attempt_workspace_entry", "attempt_workspace_path", nil)
+	var err error = &ErrAttemptWorkspaceBatchItem{Index: 3, Err: conflict}
+	require.Contains(t, err.Error(), "mutation 3")
+	require.True(t, IsConflict(err))
+	var item *ErrAttemptWorkspaceBatchItem
+	require.ErrorAs(t, err, &item)
+	require.Equal(t, 3, item.Index)
+	var unwrapped *ErrConflict
+	require.ErrorAs(t, err, &unwrapped)
+	require.Same(t, conflict, unwrapped)
 }
 
 func TestCandidateWorkspaceRecoveryCursorsNeverCarryPaths(t *testing.T) {
@@ -65,44 +86,50 @@ func TestCandidateWorkspaceRecoveryCursorsNeverCarryPaths(t *testing.T) {
 	require.False(t, exists, "candidate manifest cursor exposes a Workspace Path")
 }
 
-func TestExamAttemptWorkspaceMutationResolvesSafeAuditAndEffectScope(t *testing.T) {
+func TestExamAttemptWorkspaceBatchResolvesSafeAuditAndEffectScope(t *testing.T) {
 	t.Parallel()
-	access := ExamAttemptWorkspaceMutationAccess{AttemptID: model.NewExamAttemptID(), ParticipationID: model.NewAttemptParticipationID(),
+	access := ExamAttemptWorkspaceEditorAccess{AttemptID: model.NewExamAttemptID(), ParticipationID: model.NewAttemptParticipationID(),
 		Generation: 2, CandidateUserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		DesktopRegistrationID: model.NewDesktopRegistrationID(), DPoPKeyThumbprint: strings.Repeat("A", 43),
 		ConnectionID: model.NewAttemptConnectionID(), ContinuityCredentialHash: model.HashToken(model.NewCredentialToken())}
 	target := ExamAttemptWorkspaceMutationTarget{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(),
 		ClassID: model.NewClassID(), CandidateUserID: access.CandidateUserID, WorkspaceID: model.NewExamAttemptWorkspaceID()}
-	input := ExamAttemptWorkspaceMutation{Access: access, Operation: model.AttemptWorkspaceMutationCreateDirectory,
-		EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "cmd", AuditEventID: model.NewAuditEventID(), AuditAt: model.NowUTC()}
-	result := ExamAttemptWorkspaceMutationResult{SittingID: target.SittingID, ClassID: target.ClassID,
+	input := ExamAttemptWorkspaceBatch{Access: access, Mutations: []ExamAttemptWorkspaceMutation{{
+		Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "cmd",
+	}}, AuditEventID: model.NewAuditEventID(), AuditAt: model.NowUTC()}
+	result := ExamAttemptWorkspaceBatchResult{SittingID: target.SittingID, ClassID: target.ClassID,
 		CandidateUserID: target.CandidateUserID, WorkspaceID: target.WorkspaceID}
 	require.NotEmpty(t, input.AuditEventID, "target=%#v input=%#v result=%#v", target, input, result)
 	require.False(t, input.AuditAt.IsZero(), "target=%#v input=%#v result=%#v", target, input, result)
 	require.Equal(t, target.SittingID, result.SittingID, "target=%#v input=%#v result=%#v", target, input, result)
 	require.Equal(t, target.ClassID, result.ClassID, "target=%#v input=%#v result=%#v", target, input, result)
 	require.Equal(t, access.CandidateUserID, result.CandidateUserID, "target=%#v input=%#v result=%#v", target, input, result)
-	_, exists := reflect.TypeOf((*ExamAttemptWorkspaceStore)(nil)).Elem().MethodByName("ResolveMutationTarget")
-	require.True(t, exists, "ExamAttemptWorkspaceStore is missing ResolveMutationTarget")
+	_, exists := reflect.TypeOf((*ExamAttemptWorkspaceStore)(nil)).Elem().MethodByName("ReserveObjects")
+	require.True(t, exists, "ExamAttemptWorkspaceStore is missing ReserveObjects, which also resolves the target")
 	assertNoWorkspaceSecrets(t, reflect.TypeOf(target))
 }
 
 func TestExamAttemptWorkspaceObjectContractSeparatesStagingFromCleanup(t *testing.T) {
 	t.Parallel()
-	access := ExamAttemptWorkspaceMutationAccess{AttemptID: model.NewExamAttemptID(), ParticipationID: model.NewAttemptParticipationID(),
+	access := ExamAttemptWorkspaceEditorAccess{AttemptID: model.NewExamAttemptID(), ParticipationID: model.NewAttemptParticipationID(),
 		Generation: 3, CandidateUserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		DesktopRegistrationID: model.NewDesktopRegistrationID(), DPoPKeyThumbprint: strings.Repeat("A", 43),
 		ConnectionID: model.NewAttemptConnectionID(), ContinuityCredentialHash: model.HashToken(model.NewCredentialToken())}
 	objectID := model.NewAttemptWorkspaceObjectID()
-	reservation := ExamAttemptWorkspaceObjectReservation{Access: access, ObjectID: objectID}
-	ready := ExamAttemptWorkspaceObjectReady{Access: access, ObjectID: objectID, ContentVersion: model.NewWorkspaceContentVersion(),
-		Content: model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: 7, SHA256: strings.Repeat("a", 64)}}
-	require.Equal(t, ready.ObjectID, reservation.ObjectID, "reservation=%#v ready=%#v", reservation, ready)
-	require.Equal(t, int64(7), ready.Content.SizeBytes, "reservation=%#v ready=%#v", reservation, ready)
+	reservation := ExamAttemptWorkspaceObjectReservation{Access: access, ObjectIDs: []model.AttemptWorkspaceObjectID{objectID}}
+	ready := ExamAttemptWorkspaceObjectsReady{Access: access, Objects: []ExamAttemptWorkspaceReadyObject{{ObjectID: objectID,
+		ContentVersion: model.NewWorkspaceContentVersion(),
+		Content:        model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: 7, SHA256: strings.Repeat("a", 64)}}}}
+	require.Equal(t, ready.Objects[0].ObjectID, reservation.ObjectIDs[0], "reservation=%#v ready=%#v", reservation, ready)
+	require.Equal(t, int64(7), ready.Objects[0].Content.SizeBytes, "reservation=%#v ready=%#v", reservation, ready)
 	methods := reflect.TypeOf((*ExamAttemptWorkspaceStore)(nil)).Elem()
-	for _, name := range []string{"ReserveObject", "MarkObjectReady", "MarkObjectReclaimable", "ClaimObjectsForCleanup", "CompleteObjectCleanup", "ReleaseObjectCleanup"} {
+	for _, name := range []string{"ReserveObjects", "MarkObjectsReady", "MarkObjectsReclaimable", "ClaimObjectsForCleanup", "CompleteObjectCleanup", "ReleaseObjectCleanup"} {
 		_, exists := methods.MethodByName(name)
 		require.True(t, exists, "ExamAttemptWorkspaceStore is missing %s", name)
+	}
+	for _, removed := range []string{"ResolveMutationTarget", "ReserveObject", "MarkObjectReady", "ApplyMutation", "MarkObjectReclaimable"} {
+		_, exists := methods.MethodByName(removed)
+		require.False(t, exists, "ExamAttemptWorkspaceStore still has the single-mutation %s", removed)
 	}
 }
 

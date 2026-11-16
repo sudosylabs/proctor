@@ -93,7 +93,51 @@ func TestDomainEventValidateRejectsInvalidState(t *testing.T) {
 	}
 }
 
+func TestParticipationAndSittingEventDataIsStrict(t *testing.T) {
+	participation := `"attempt_id":"` + NewExamAttemptID().String() + `","participation_id":"` +
+		NewAttemptParticipationID().String() + `","generation":3,"sitting_id":"` + NewExamSittingID().String() +
+		`","exam_id":"` + NewExamID().String() + `","exam_revision_id":"` + NewExamRevisionID().String() + `"`
+	sitting := `"sitting_id":"` + NewExamSittingID().String() + `","exam_id":"` + NewExamID().String() + `"`
+	tests := []struct {
+		name  string
+		topic DomainEventTopic
+		data  string
+		valid bool
+	}{
+		{"started", DomainEventTopicExamAttemptParticipationStarted, `{` + participation + `}`, true},
+		{"started with a reason", DomainEventTopicExamAttemptParticipationStarted, `{` + participation + `,"reason":"submitted"}`, false},
+		{"started at generation zero", DomainEventTopicExamAttemptParticipationStarted,
+			strings.Replace(`{`+participation+`}`, `"generation":3`, `"generation":0`, 1), false},
+		{"started with a text generation", DomainEventTopicExamAttemptParticipationStarted,
+			strings.Replace(`{`+participation+`}`, `"generation":3`, `"generation":"3"`, 1), false},
+		{"ended", DomainEventTopicExamAttemptParticipationEnded, `{` + participation + `,"reason":"kicked"}`, true},
+		{"ended without a reason", DomainEventTopicExamAttemptParticipationEnded, `{` + participation + `}`, false},
+		{"ended for an unknown reason", DomainEventTopicExamAttemptParticipationEnded, `{` + participation + `,"reason":"reallowed"}`, false},
+		{"ended naming the candidate", DomainEventTopicExamAttemptParticipationEnded,
+			`{` + participation + `,"reason":"kicked","candidate_user_id":"` + NewUserID().String() + `"}`, false},
+		{"paused", DomainEventTopicExamSittingPaused, `{` + sitting + `}`, true},
+		{"resumed", DomainEventTopicExamSittingResumed, `{` + sitting + `}`, true},
+		{"closing", DomainEventTopicExamSittingClosing, `{` + sitting + `}`, true},
+		{"closing without its Exam", DomainEventTopicExamSittingClosing, `{"sitting_id":"` + NewExamSittingID().String() + `"}`, false},
+		{"paused with a Participation", DomainEventTopicExamSittingPaused, `{` + sitting + `,"generation":1}`, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			event := &DomainEvent{ID: NewDomainEventID(), Topic: test.topic, OccurredAt: NowUTC(), Data: json.RawMessage(test.data)}
+			if test.valid {
+				require.NoError(t, event.Validate())
+			} else {
+				require.Error(t, event.Validate())
+			}
+		})
+	}
+}
+
 func TestDomainEventTopicVocabularyIsClosed(t *testing.T) {
+	require.Len(t, domainEventTopics, 6)
+	for _, topic := range domainEventTopics {
+		require.True(t, topic.IsValid(), "topic %q", topic)
+	}
 	require.True(t, DomainEventTopicExamAttemptSubmitted.IsValid())
 	require.Equal(t, "exam.attempt.submitted", string(DomainEventTopicExamAttemptSubmitted))
 	require.False(t, DomainEventTopic("").IsValid())

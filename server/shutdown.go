@@ -78,6 +78,7 @@ func (s *Server) runShutdown(plan stopPlan, endRun context.CancelFunc) error {
 			return nil
 		},
 		draining(s.components.jobs),
+		draining(s.components.environments),
 		draining(s.components.websocket),
 		closing(s.components.transport),
 		func(ctx context.Context) error {

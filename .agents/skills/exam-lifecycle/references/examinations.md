@@ -361,6 +361,23 @@ generation, so an absent candidate receives no unused credential and stale
 credentials, renewals, and mutations cannot revive prior access. Individual
 Attempt Connections remain durable children of their Participation and every
 committed open/close emits a bounded manager notification after commit.
+An Attempt's execution environment outlives its generations: every
+transition that ends a Participation (lease expiry, Kick, policy suspension,
+Session revocation) freezes it through the
+`exam.attempt.participation.ended` event, and the next generation thaws the
+same environment. Only the Submission ends it. Its owner writes under its
+runtime lease, not under a generation.
+
+The same triggers write the identifier-only domain events plugins receive
+after commit. Inserting a generation writes
+`exam.attempt.participation.started`; its active-to-ended transition writes
+`exam.attempt.participation.ended` with the closed end reason, in the one
+trigger function that ends the binding, so the event and the binding can never
+disagree. A Sitting's change to Paused, from Paused back to Open, and to
+Closing writes `exam.sitting.paused`, `exam.sitting.resumed` and
+`exam.sitting.closing`. Each event and its dispatch Job are written in the
+transaction of the change by `enqueue_domain_event`; the seals write
+`exam.attempt.submitted` themselves. No plugin code runs before commit.
 
 The first secure admission freezes the complete proposed Attempt Configuration
 under the current User Settings revision and exact admitted Desktop build,
@@ -504,7 +521,11 @@ outcome protection; published or submitted content pins survive.
 
 Every Workspace write rechecks the Open Sitting, active Attempt, current Class
 membership, exact active Participation generation and credential, and the
-owning Session-bound open Connection. Command idempotency is Attempt-scoped so
+owning Session-bound open Connection. An execution environment write is the
+candidate's own work made on their behalf: it requires only its owner's
+current runtime lease and environment incarnation and an Attempt with no
+Submission, records the `environment` journal author, and is audited as the
+candidate. Command idempotency is Attempt-scoped so
 an exact retry can recover its retained outcome after reconnect or re-allow;
 the current access selector is reauthorized separately and is not part of the
 semantic fingerprint. Stable losing stages become reclaimable, while an
@@ -918,6 +939,30 @@ prevents new intake. Operational retirement removes delivery state while
 preserving separately retained integrity material. Native evidence rows remain
 bounded by admitted native record quotas; SQL physical copies are not
 additional client receipt or quota allocations.
+
+Attempt evidence is the core's append-only record of an Attempt's execution
+environment, such as the command log. Its kinds are a closed set in `model`:
+`execution.process`, `execution.input`, `execution.gap`,
+`execution.overwritten` and `execution.refused`. A record belongs to the
+Attempt, not to a Participation, names the author that produced it (an
+environment incarnation today), and is stamped with PostgreSQL time and
+stored as canonical JSON. The kind, author and the author's stream sequence
+identify a record: the same claim repeats it, a different one conflicts. A
+new incarnation is a new author with streams of its own. Today the append is
+authorized by the environment owner's lease and incarnation. It never raises a
+Flag; missing coverage is a record of kind `execution.gap` whose detail names
+the gap. One Attempt keeps at most 4,096 records
+and 8 MiB; a refused append is counted. A per-Attempt inventory (records,
+bytes, gaps, refusals and a digest chained in append order) extends in the
+append's transaction. Inserting the Submission binds the inventory to it,
+creating an empty one if needed, and from then on the schema refuses new
+records and any change to the inventory, so the seal fixes the set without
+reading it. Review finalization binds the sealed inventory's digest; the
+review snapshot carries it and a separate reviewer-only list pages the
+records. The integrity export category carries the records and the sealed
+inventory, which the bounds keep within export limits. Integrity retirement
+deletes both. Large payloads such as terminal input recordings are to become
+VFS chunks a record references; today a record is only its bounded detail.
 
 Current live controls validate all Browser watermark selectors and claimed
 contiguous receipts before processing. Owned closed sources and position limits

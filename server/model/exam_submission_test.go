@@ -46,6 +46,7 @@ func TestNewExamSubmissionSealsCanonicalManifestAndIntegrity(t *testing.T) {
 		SHA256:          strings.Repeat("9", 64),
 		StorageOrigin:   AttemptWorkspaceStorageAttempt,
 		AttemptObjectID: AttemptWorkspaceObjectID(strings.Repeat("h", IDLength)),
+		Author:          NewEnvironmentWorkspaceAuthor(1, "terminal:1"),
 	}
 	input := []ExamSubmissionManifestEntry{starter, directory, attempt}
 	manifest, err := NewExamSubmissionManifest(41, input)
@@ -54,7 +55,7 @@ func TestNewExamSubmissionSealsCanonicalManifestAndIntegrity(t *testing.T) {
 	require.True(t, slices.Equal(got, []AttemptWorkspaceEntryID{directory.EntryID, attempt.EntryID, starter.EntryID}), "canonical Entry order = %v", got)
 	require.Equal(t, ExamSubmissionManifestSchemaVersion, manifest.SchemaVersion)
 	require.Equal(t, int64(41), manifest.WorkspaceCursor)
-	require.Equal(t, "d1527073b4fa44425a1309a42e4444ab22180877a59c21e88d4d05057d3f4495", manifest.SHA256)
+	require.Equal(t, "aab64d3665f4c07e0475054e650eb13deaf83ab5178e25d0e623ef83a8890cf5", manifest.SHA256)
 	require.Equal(t, 3, manifest.EntryCount)
 	require.Equal(t, int64(19), manifest.TotalFileBytes)
 	input[0].Path = "caller-mutation.go"
@@ -62,6 +63,14 @@ func TestNewExamSubmissionSealsCanonicalManifestAndIntegrity(t *testing.T) {
 	reordered, err := NewExamSubmissionManifest(41, []ExamSubmissionManifestEntry{attempt, starter, directory})
 	require.NoError(t, err, "row-order-independent digest")
 	require.Equal(t, manifest.SHA256, reordered.SHA256, "row-order-independent digest")
+	edited := attempt
+	edited.Author = NewCandidateWorkspaceAuthor(AttemptConnectionID(strings.Repeat("n", IDLength)))
+	byEditor, err := NewExamSubmissionManifest(41, []ExamSubmissionManifestEntry{starter, directory, edited})
+	require.NoError(t, err)
+	require.NotEqual(t, manifest.SHA256, byEditor.SHA256, "the digest seals who made each entry's last change")
+	edited.Author = AttemptWorkspaceAuthor{Kind: AttemptWorkspaceAuthorCandidate, Ref: "not-a-connection"}
+	_, err = NewExamSubmissionManifest(41, []ExamSubmissionManifestEntry{starter, directory, edited})
+	require.Error(t, err, "a manifest entry with a malformed author is refused")
 
 	submission, err := NewExamSubmission(ExamSubmissionSpecification{
 		ID: modelSubmissionID("j"), ReceiptCode: NewSubmissionReceiptCode(), AttemptID: ExamAttemptID(strings.Repeat("k", IDLength)),

@@ -48,20 +48,32 @@ func (s *Service) ListCandidateExamWorkspaceJournal(
 	if err != nil {
 		return WorkspaceJournalPage{}, err
 	}
-	if query.AfterCursor < 0 || query.Limit < 1 || query.Limit > model.AttemptWorkspaceJournalReadMaximum {
+
+	return s.listWorkspaceJournal(ctx, candidateAccess, query.AfterCursor, query.Limit)
+}
+
+// listWorkspaceJournal reads journal entries through a candidate's or an
+// environment's read access.
+func (s *Service) listWorkspaceJournal(
+	ctx context.Context,
+	readAccess store.ExamAttemptWorkspaceReadAccess,
+	afterCursor int64,
+	limit int,
+) (WorkspaceJournalPage, error) {
+	if afterCursor < 0 || limit < 1 || limit > model.AttemptWorkspaceJournalReadMaximum {
 		return WorkspaceJournalPage{}, apperror.Invalid("exam.attempt.invalid", "workspace_journal")
 	}
 
 	stored, err := s.workspaces.ListJournal(ctx, store.CandidateWorkspaceJournalOptions{
-		Access:      candidateAccess,
-		AfterCursor: query.AfterCursor,
-		Limit:       query.Limit,
+		Access:      readAccess,
+		AfterCursor: afterCursor,
+		Limit:       limit,
 	})
 	if err != nil {
 		return WorkspaceJournalPage{}, storeError(storeErrors, err)
 	}
 
-	if !stored.NotBehind(query.AfterCursor) {
+	if !stored.NotBehind(afterCursor) {
 		return WorkspaceJournalPage{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt Workspace journal page"))
 	}
 
@@ -69,7 +81,7 @@ func (s *Service) ListCandidateExamWorkspaceJournal(
 	for index, entry := range stored.Entries {
 		if entry.Validate() != nil ||
 			entry.WorkspaceID != stored.WorkspaceID ||
-			entry.Cursor <= query.AfterCursor ||
+			entry.Cursor <= afterCursor ||
 			entry.Cursor > stored.CurrentCursor ||
 			(index > 0 && entry.Cursor != entries[index-1].Cursor+1) {
 			return WorkspaceJournalPage{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt Workspace journal entry"))

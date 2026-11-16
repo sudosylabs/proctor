@@ -36,10 +36,6 @@ func (*recordingHost) AddExportFormat(plugin.ExportFormat) error {
 	return errors.New("not offered")
 }
 
-func (*recordingHost) AddEventHandler(plugin.EventTopic, plugin.EventHandler) error {
-	return errors.New("not offered")
-}
-
 func TestPluginOffersTheProviderTypeThatBuildsConfiguredProviders(t *testing.T) {
 	t.Parallel()
 

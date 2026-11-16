@@ -262,8 +262,7 @@ type managerExamAttemptReallowedData struct {
 type candidateExamAttemptWorkspaceChangedData struct {
 	ExamSittingID string `json:"exam_sitting_id"`
 	ExamAttemptID string `json:"exam_attempt_id"`
-	EntryID       string `json:"entry_id"`
-	Operation     string `json:"operation"`
+	FirstCursor   int64  `json:"first_workspace_cursor"`
 	Cursor        int64  `json:"workspace_cursor"`
 	ChangedAt     string `json:"changed_at"`
 }
@@ -719,24 +718,22 @@ func NewExamAttemptIntegrityFlaggedEvent(
 	}, nil
 }
 
-// NewCandidateExamAttemptWorkspaceChangedEvent publishes only a targeted
-// refetch hint. Logical paths, content metadata, object selectors, continuity
-// selectors, and mutation bodies remain confined to protected HTTP responses.
+// NewCandidateExamAttemptWorkspaceChangedEvent publishes one targeted refetch
+// hint per committed batch, naming the cursors it took. Logical paths, content
+// metadata, object selectors, continuity selectors, and mutation bodies remain
+// confined to protected HTTP responses.
 func NewCandidateExamAttemptWorkspaceChangedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
-	entryID model.AttemptWorkspaceEntryID,
-	operation model.AttemptWorkspaceMutationKind,
-	cursor int64,
+	firstCursor, lastCursor int64,
 	changedAt time.Time,
 ) (Event, error) {
 	if !sittingID.IsValid() ||
 		!attemptID.IsValid() ||
 		!candidateID.IsValid() ||
-		!entryID.IsValid() ||
-		!operation.IsValid() ||
-		cursor < 1 ||
+		firstCursor < 1 ||
+		lastCursor < firstCursor ||
 		changedAt.IsZero() {
 		return Event{}, errors.New("candidate Exam Attempt Workspace event requires valid bounded metadata")
 	}
@@ -744,9 +741,8 @@ func NewCandidateExamAttemptWorkspaceChangedEvent(
 	data, err := json.Marshal(candidateExamAttemptWorkspaceChangedData{
 		ExamSittingID: sittingID.String(),
 		ExamAttemptID: attemptID.String(),
-		EntryID:       entryID.String(),
-		Operation:     string(operation),
-		Cursor:        cursor,
+		FirstCursor:   firstCursor,
+		Cursor:        lastCursor,
 		ChangedAt:     model.FormatRFC3339(changedAt),
 	})
 	if err != nil {

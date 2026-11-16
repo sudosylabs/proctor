@@ -9,6 +9,7 @@ package model
 
 import (
 	"math"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -20,15 +21,28 @@ const (
 	AttemptWorkspaceMaximumPathBytes    = 1024
 	AttemptWorkspaceMaximumFileBytes    = ExamWorkspaceMaximumFileBytes
 	AttemptWorkspaceMaximumTotalBytes   = ExamWorkspaceMaximumTotalBytes
-	// AttemptWorkspaceMaximumRequestBytes leaves 64 KiB for the bounded
-	// multipart/JSON envelope around one maximum-size staged file.
-	AttemptWorkspaceMaximumRequestBytes = AttemptWorkspaceMaximumFileBytes + (64 << 10)
-	AttemptWorkspaceJournalRetention    = 4096
-	AttemptWorkspaceJournalReadMaximum  = 200
-	AttemptWorkspaceStageLifetime       = time.Hour
-	AttemptWorkspaceReclaimSafetyWindow = 24 * time.Hour
-	AttemptWorkspaceCleanupClaimLease   = 5 * time.Minute
-	AttemptWorkspaceClaimTokenMaxBytes  = 128
+	// AttemptWorkspaceJournalRetention is how many journal entries an
+	// Attempt Workspace keeps at least. While its execution environment has
+	// not ended, the journal also reaches back to the environment's
+	// projection cursor, up to AttemptWorkspaceJournalCeiling entries; a
+	// reader past what is kept refreshes from the manifest.
+	AttemptWorkspaceJournalRetention = 4096
+	AttemptWorkspaceJournalCeiling   = 65536
+	// AttemptWorkspaceBatchMaximumMutations bounds one atomic Workspace batch,
+	// the only way Workspace content changes. It matches the execution
+	// environment's journal batch, so one harvest is at most one batch.
+	AttemptWorkspaceBatchMaximumMutations = 128
+	// AttemptWorkspaceBatchManifestMaximumBytes bounds the JSON manifest of
+	// one batch: 128 mutations with two maximal paths each fit.
+	AttemptWorkspaceBatchManifestMaximumBytes = 512 << 10
+	// AttemptWorkspaceBatchMaximumRequestBytes bounds one batch request: its
+	// manifest and, together, the bodies of its files.
+	AttemptWorkspaceBatchMaximumRequestBytes = AttemptWorkspaceMaximumFileBytes + AttemptWorkspaceBatchManifestMaximumBytes
+	AttemptWorkspaceJournalReadMaximum       = 200
+	AttemptWorkspaceStageLifetime            = time.Hour
+	AttemptWorkspaceReclaimSafetyWindow      = 24 * time.Hour
+	AttemptWorkspaceCleanupClaimLease        = 5 * time.Minute
+	AttemptWorkspaceClaimTokenMaxBytes       = 128
 )
 
 type AttemptWorkspaceObjectState string
@@ -438,6 +452,93 @@ func (k AttemptWorkspaceMutationKind) IsValid() bool {
 	}
 }
 
+// AttemptWorkspaceAuthorKind names the kind of actor that made a Workspace
+// change. Every kind writes on behalf of the candidate; the kind decides only
+// how the writer is proved. A new actor is a new kind, never a new write path.
+type AttemptWorkspaceAuthorKind string
+
+const (
+	// AttemptWorkspaceAuthorCandidate is the candidate's own editor, writing
+	// through one Attempt Connection.
+	AttemptWorkspaceAuthorCandidate AttemptWorkspaceAuthorKind = "candidate"
+	// AttemptWorkspaceAuthorEnvironment is the Attempt's execution
+	// environment, writing back what its programs changed.
+	AttemptWorkspaceAuthorEnvironment AttemptWorkspaceAuthorKind = "environment"
+)
+
+func (k AttemptWorkspaceAuthorKind) IsValid() bool {
+	return k == AttemptWorkspaceAuthorCandidate || k == AttemptWorkspaceAuthorEnvironment
+}
+
+// AttemptWorkspaceAuthorRefMaximumBytes bounds an author reference.
+const AttemptWorkspaceAuthorRefMaximumBytes = 96
+
+// AttemptWorkspaceAuthor is who made one Workspace change: a kind and a
+// reference within it. A candidate's reference is the Attempt Connection the
+// editor wrote through. An environment's is its incarnation, in decimal,
+// followed by a slash and the tag of the process that wrote the path when
+// that is known.
+type AttemptWorkspaceAuthor struct {
+	Kind AttemptWorkspaceAuthorKind `json:"kind"`
+	Ref  string                     `json:"ref"`
+}
+
+// NewCandidateWorkspaceAuthor names the candidate's editor on one Connection.
+func NewCandidateWorkspaceAuthor(connectionID AttemptConnectionID) AttemptWorkspaceAuthor {
+	return AttemptWorkspaceAuthor{Kind: AttemptWorkspaceAuthorCandidate, Ref: connectionID.String()}
+}
+
+// NewEnvironmentWorkspaceAuthor names one environment incarnation and, when
+// processTag is not empty, the process that wrote the change.
+func NewEnvironmentWorkspaceAuthor(incarnation int64, processTag AttemptEnvironmentProcessTag) AttemptWorkspaceAuthor {
+	ref := strconv.FormatInt(incarnation, 10)
+	if processTag != "" {
+		ref += "/" + string(processTag)
+	}
+	return AttemptWorkspaceAuthor{Kind: AttemptWorkspaceAuthorEnvironment, Ref: ref}
+}
+
+// IsValid reports whether the reference is well formed for the kind.
+func (a AttemptWorkspaceAuthor) IsValid() bool {
+	switch a.Kind {
+	case AttemptWorkspaceAuthorCandidate:
+		id, err := ParseAttemptConnectionID(a.Ref)
+		return err == nil && id.String() == a.Ref
+	case AttemptWorkspaceAuthorEnvironment:
+		if len(a.Ref) > AttemptWorkspaceAuthorRefMaximumBytes {
+			return false
+		}
+		incarnation, tag, tagged := strings.Cut(a.Ref, "/")
+		value, err := strconv.ParseInt(incarnation, 10, 64)
+		if err != nil || value < 0 || strconv.FormatInt(value, 10) != incarnation {
+			return false
+		}
+		return !tagged || AttemptEnvironmentProcessTag(tag).IsValid()
+	default:
+		return false
+	}
+}
+
+// AttemptEnvironmentProcessTag names one process the core started in an
+// environment, such as terminal:1. The empty tag names no process.
+type AttemptEnvironmentProcessTag string
+
+// IsValid reports whether the tag is a lowercase letter, then up to 63
+// lowercase letters, digits, colons, hyphens or underscores.
+func (t AttemptEnvironmentProcessTag) IsValid() bool {
+	if t == "" || len(t) > 64 || t[0] < 'a' || t[0] > 'z' {
+		return false
+	}
+	for index := 1; index < len(t); index++ {
+		character := t[index]
+		if (character < 'a' || character > 'z') && (character < '0' || character > '9') &&
+			character != ':' && character != '-' && character != '_' {
+			return false
+		}
+	}
+	return true
+}
+
 // AttemptWorkspaceJournalEntry is one safe acknowledged change in the
 // Attempt-scoped ordered recovery stream. It contains logical metadata only:
 // no object selector, backend revision, credential, Session, or content body.
@@ -453,6 +554,7 @@ type AttemptWorkspaceJournalEntry struct {
 	ChangedAt      time.Time
 	// Recursive deletes OldPath and every descendant separated by a slash.
 	Recursive bool
+	Author    AttemptWorkspaceAuthor
 }
 
 func (e AttemptWorkspaceJournalEntry) Validate() error {
@@ -460,6 +562,7 @@ func (e AttemptWorkspaceJournalEntry) Validate() error {
 		e.Cursor < 1 ||
 		!e.EntryID.IsValid() ||
 		!e.Operation.IsValid() ||
+		!e.Author.IsValid() ||
 		e.ChangedAt.IsZero() {
 		return invalidModelError(
 			"AttemptWorkspaceJournalEntry.Validate",

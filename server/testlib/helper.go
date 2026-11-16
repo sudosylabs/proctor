@@ -28,6 +28,8 @@ import (
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform"
+	"github.com/sudosylabs/proctor/server/platform/executionhost"
+	"github.com/sudosylabs/proctor/server/plugin"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
@@ -39,6 +41,8 @@ type setupOptions struct {
 	configuredMailer   bool
 	buildInfo          httpapi.BuildInfo
 	desktopBuilds      []model.DesktopBuildTuple
+	plugins            []plugin.Plugin
+	executionHostDial  executionhost.Dialer
 }
 
 // Option customizes one concern in the test graph; everything else is
@@ -98,6 +102,22 @@ func WithBuildInfo(buildInfo httpapi.BuildInfo) Option {
 func WithDesktopBuildCatalog(builds ...model.DesktopBuildTuple) Option {
 	return func(options *setupOptions) {
 		options.desktopBuilds = append([]model.DesktopBuildTuple(nil), builds...)
+	}
+}
+
+// WithPlugins activates plugins as if they were compiled in: one with a
+// built-in plugin's ID replaces it, and the others follow the built-in ones.
+// WithExecutionHostDial makes the node reach its configured execution hosts
+// through dial, such as in-process hosts.
+func WithExecutionHostDial(dial executionhost.Dialer) Option {
+	return func(options *setupOptions) {
+		options.executionHostDial = dial
+	}
+}
+
+func WithPlugins(plugins ...plugin.Plugin) Option {
+	return func(options *setupOptions) {
+		options.plugins = append(options.plugins, plugins...)
 	}
 }
 
@@ -217,6 +237,8 @@ func Setup(tb testing.TB, options ...Option) *Helper {
 		BuildInfo:           settings.buildInfo,
 		DesktopBuildCatalog: settings.desktopBuilds,
 		ServiceEnvironment:  settings.serviceEnvironment,
+		Plugins:             settings.plugins,
+		ExecutionHostDial:   settings.executionHostDial,
 	})
 	require.NoError(tb, err)
 	helper := &Helper{
@@ -256,9 +278,12 @@ func NewLifecycleStore() *LifecycleStore {
 	return &LifecycleStore{}
 }
 
-func (s *LifecycleStore) Institution() store.InstitutionStore       { return lifecycleInstitutionStore{} }
-func (s *LifecycleStore) AccessPolicy() store.AccessPolicyStore     { return lifecycleAccessPolicyStore{} }
-func (s *LifecycleStore) PluginSettings() store.PluginSettingsStore { return nil }
+func (s *LifecycleStore) Institution() store.InstitutionStore                 { return lifecycleInstitutionStore{} }
+func (s *LifecycleStore) AccessPolicy() store.AccessPolicyStore               { return lifecycleAccessPolicyStore{} }
+func (s *LifecycleStore) PluginSettings() store.PluginSettingsStore           { return nil }
+func (s *LifecycleStore) EnvironmentProfile() store.EnvironmentProfileStore   { return nil }
+func (s *LifecycleStore) AttemptEnvironment() store.AttemptEnvironmentStore   { return nil }
+func (s *LifecycleStore) AttemptRuntimeLease() store.AttemptRuntimeLeaseStore { return nil }
 func (s *LifecycleStore) DesktopCompatibilityPolicy() store.DesktopCompatibilityPolicyStore {
 	return lifecycleDesktopCompatibilityPolicyStore{}
 }

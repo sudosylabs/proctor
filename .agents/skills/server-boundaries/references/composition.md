@@ -86,8 +86,10 @@ standard library. `pluginhost` runs them and imports only `server/plugin`. The
 root names every built-in in `builtinPlugins()`, the one place a plugin is
 listed.
 
-- Activate plugins once persistence and telemetry exist, before anything
-  that consumes what they register, with the settings an administrator saved.
+- Activate plugins once persistence is fully decorated, telemetry exists and
+  the cluster transport is constructed, before anything that consumes what
+  they register, with the settings an administrator saved. The cluster node
+  ID names this node in the leases plugin workers hold.
   A plugin that fails to activate is left out and never fails construction.
   Only a configuration mistake does, such as secrets for a plugin that is not
   compiled in, or saved settings that cannot be read.
@@ -97,13 +99,15 @@ listed.
   application use case can read them first. Changing them goes through
   `app/administration`, audited, like any other mutation.
 - Hand what plugins registered to its consumer from the root, as plain
-  contracts: identity provider types to `externalauth`, the export format to
-  `filecontent`, event subscriptions to `app/events`. The host wraps each one
+  contracts: identity provider types to `externalauth` and the export format
+  to `filecontent`. The host wraps each one
   so that a panic is contained and a failed plugin answers
   `plugin.ErrUnavailable`. Consumers never see the host.
 - Add a capability as one typed `Host` method with a contained wrapper, and
   only when a plugin needs it. Plugins get no broad API, store contract or
-  `platform.Service`.
+  `platform.Service`. Plugins are edge adapters that never act on an
+  Attempt; a feature that touches admission, the Attempt Workspace,
+  Submission or evidence, such as code execution, is part of the core.
 - Deactivate plugins once nothing can call them: after Jobs and transports
   stop, or when a failed construction is released.
 

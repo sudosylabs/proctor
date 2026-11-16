@@ -16,7 +16,13 @@ import (
 
 type ExamRevisionPublication struct {
 	// InstitutionOrigin is installation configuration supplied by the application, never request data.
-	InstitutionOrigin     string
+	InstitutionOrigin string
+	// ExecutionEnabled is installation configuration: whether Exams may
+	// publish with an execution environment. Publishing a Draft whose
+	// execution policy is enabled while it is false conflicts with
+	// execution_disabled; an enabled policy must also name a usable
+	// environment profile (environment_profile_unusable).
+	ExecutionEnabled      bool
 	RevisionID            model.ExamRevisionID
 	ExamID                model.ExamID
 	ActorUserID           model.UserID
@@ -84,8 +90,8 @@ type ExamRevisionListOptions struct {
 // materializes and validates all active resources and Starter Workspace state,
 // canonically freezes them, writes immutable history, selects the new default,
 // rebases and advances the Draft, advances Exam revision, completes audit and
-// records the small idempotent outcome. GetSnapshot is an internal exact read;
-// public callers use GetSummary/List and never receive authored content.
+// records the small idempotent outcome. GetSnapshot is an internal exact
+// read; public callers use GetSummary/List and receive no authored content.
 type ExamRevisionStore interface {
 	Publish(context.Context, *ExamRevisionPublication, *CommandIdempotency) (*ExamRevisionPublicationResult, error)
 	GetSummary(context.Context, model.ExamID, model.ExamRevisionID) (*ExamRevisionSummary, error)

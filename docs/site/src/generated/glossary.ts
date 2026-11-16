@@ -136,6 +136,20 @@ export const glossaryTerms = [
     "avoid": "Deployment configuration, executable policy"
   },
   {
+    "id": "environment-profile",
+    "term": "Environment Profile",
+    "section": "Examinations",
+    "definition": "An installation-level, administrator-managed recipe for the execution environments of an exam's attempts: the execution image, resources, network, idle window and most terminals per attempt. A profile is never edited; a change is a new profile and the old one is retired, and an exam's execution policy names one profile.",
+    "avoid": "Execution host, container image, deployment configuration"
+  },
+  {
+    "id": "attempt-environment",
+    "term": "Attempt Environment",
+    "section": "Examinations",
+    "definition": "The one isolated execution machine of an exam attempt whose revision enables execution, created from the frozen environment profile and kept in step with the attempt workspace. It freezes when the candidate's participation ends and thaws when they return; only the submission ends it. Its changes are the candidate's own work.",
+    "avoid": "Terminal, execution grant, shared sandbox"
+  },
+  {
     "id": "exam-capacity-policy",
     "term": "Exam Capacity Policy",
     "section": "Examinations",

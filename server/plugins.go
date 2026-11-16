@@ -33,6 +33,24 @@ func builtinPlugins() []plugin.Plugin {
 	}
 }
 
+// withTestPlugins returns the built-in plugins with each extra plugin in
+// place of the built-in of the same ID, and the rest of extra after them.
+func withTestPlugins(builtin, extra []plugin.Plugin) []plugin.Plugin {
+	plugins := append([]plugin.Plugin(nil), builtin...)
+	for _, added := range extra {
+		replaced := false
+		for index, existing := range plugins[:len(builtin)] {
+			if existing.Manifest().ID == added.Manifest().ID {
+				plugins[index], replaced = added, true
+			}
+		}
+		if !replaced {
+			plugins = append(plugins, added)
+		}
+	}
+	return plugins
+}
+
 // activatePlugins activates the built-in plugins, then any a test adds,
 // with the settings an administrator saved and the secrets in the Plugins
 // configuration section. It returns the host and the settings change count
@@ -48,7 +66,7 @@ func activatePlugins(
 	recorder pluginhost.Recorder,
 	extra []plugin.Plugin,
 ) (*pluginhost.Host, int64, error) {
-	plugins := append(builtinPlugins(), extra...)
+	plugins := withTestPlugins(builtinPlugins(), extra)
 	known := pluginIDSet(plugins, func(p plugin.Plugin) string { return p.Manifest().ID })
 	for id := range cfg.Plugins {
 		if _, ok := known[id]; !ok {

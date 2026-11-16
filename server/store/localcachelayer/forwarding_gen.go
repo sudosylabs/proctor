@@ -118,6 +118,12 @@ type localCacheStores struct {
 	desktopCompatibilityPolicyOnce sync.Once
 	pluginSettings                 store.PluginSettingsStore
 	pluginSettingsOnce             sync.Once
+	environmentProfile             store.EnvironmentProfileStore
+	environmentProfileOnce         sync.Once
+	attemptEnvironment             store.AttemptEnvironmentStore
+	attemptEnvironmentOnce         sync.Once
+	attemptRuntimeLease            store.AttemptRuntimeLeaseStore
+	attemptRuntimeLeaseOnce        sync.Once
 	retentionPolicy                store.RetentionPolicyStore
 	retentionPolicyOnce            sync.Once
 	retention                      store.RetentionStore
@@ -382,6 +388,21 @@ type desktopCompatibilityPolicyStore struct {
 
 type pluginSettingsStore struct {
 	store.PluginSettingsStore
+	layer *Layer
+}
+
+type environmentProfileStore struct {
+	store.EnvironmentProfileStore
+	layer *Layer
+}
+
+type attemptEnvironmentStore struct {
+	store.AttemptEnvironmentStore
+	layer *Layer
+}
+
+type attemptRuntimeLeaseStore struct {
+	store.AttemptRuntimeLeaseStore
 	layer *Layer
 }
 
@@ -920,6 +941,36 @@ func (l *Layer) PluginSettings() store.PluginSettingsStore {
 	return l.stores.pluginSettings
 }
 
+func (l *Layer) EnvironmentProfile() store.EnvironmentProfileStore {
+	l.stores.environmentProfileOnce.Do(func() {
+		next := l.Store.EnvironmentProfile()
+		if next != nil {
+			l.stores.environmentProfile = &environmentProfileStore{EnvironmentProfileStore: next, layer: l}
+		}
+	})
+	return l.stores.environmentProfile
+}
+
+func (l *Layer) AttemptEnvironment() store.AttemptEnvironmentStore {
+	l.stores.attemptEnvironmentOnce.Do(func() {
+		next := l.Store.AttemptEnvironment()
+		if next != nil {
+			l.stores.attemptEnvironment = &attemptEnvironmentStore{AttemptEnvironmentStore: next, layer: l}
+		}
+	})
+	return l.stores.attemptEnvironment
+}
+
+func (l *Layer) AttemptRuntimeLease() store.AttemptRuntimeLeaseStore {
+	l.stores.attemptRuntimeLeaseOnce.Do(func() {
+		next := l.Store.AttemptRuntimeLease()
+		if next != nil {
+			l.stores.attemptRuntimeLease = &attemptRuntimeLeaseStore{AttemptRuntimeLeaseStore: next, layer: l}
+		}
+	})
+	return l.stores.attemptRuntimeLease
+}
+
 func (l *Layer) RetentionPolicy() store.RetentionPolicyStore {
 	l.stores.retentionPolicyOnce.Do(func() {
 		next := l.Store.RetentionPolicy()
@@ -1023,6 +1074,9 @@ var (
 	_ store.AccessPolicyStore               = (*accessPolicyStore)(nil)
 	_ store.DesktopCompatibilityPolicyStore = (*desktopCompatibilityPolicyStore)(nil)
 	_ store.PluginSettingsStore             = (*pluginSettingsStore)(nil)
+	_ store.EnvironmentProfileStore         = (*environmentProfileStore)(nil)
+	_ store.AttemptEnvironmentStore         = (*attemptEnvironmentStore)(nil)
+	_ store.AttemptRuntimeLeaseStore        = (*attemptRuntimeLeaseStore)(nil)
 	_ store.RetentionPolicyStore            = (*retentionPolicyStore)(nil)
 	_ store.RetentionStore                  = (*retentionStore)(nil)
 	_ store.ClusterDiscoveryStore           = (*clusterDiscoveryStore)(nil)

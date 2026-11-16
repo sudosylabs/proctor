@@ -84,6 +84,10 @@ type AttemptParticipationID string
 // AttemptConnectionID identifies one transport connection admitted to an Attempt Participation.
 type AttemptConnectionID string
 
+// EnvironmentProfileID identifies one immutable environment profile: the
+// image, resources and limits an Attempt Environment is created with.
+type EnvironmentProfileID string
+
 // FocusLossSignalID identifies one durably accepted Focus Loss claim and its outcome.
 type FocusLossSignalID string
 

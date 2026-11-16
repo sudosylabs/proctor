@@ -117,6 +117,17 @@
           "type": "string"
         }
       },
+      "CandidateTerminalNumber": {
+        "description": "The terminal's number on the Attempt's current machine, from 1; terminal 1 has the tag terminal:1.",
+        "in": "path",
+        "name": "terminal",
+        "required": true,
+        "schema": {
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
       "ClassID": {
         "description": "The Class identifier.",
         "in": "path",
@@ -1150,22 +1161,6 @@
         "description": "The kind of Affiliation for the User in the path and, optionally, when it starts and ends.",
         "required": true
       },
-      "CreateCandidateWorkspaceDirectory": {
-        "content": {
-          "application/json": {
-            "example": {
-              "generation": 2,
-              "participation_id": "ybndrfg8ejkmcpqxot1uwisza3",
-              "path": "answers/part-a"
-            },
-            "schema": {
-              "$ref": "#/components/schemas/CreateCandidateWorkspaceDirectoryRequest"
-            }
-          }
-        },
-        "description": "The active Participation and its generation, and the Workspace Path of the new empty directory.",
-        "required": true
-      },
       "CreateClass": {
         "content": {
           "application/json": {
@@ -1369,23 +1364,6 @@
           }
         },
         "description": "Closed bounded native delivery control; unknown, missing, duplicate, and invalid members are rejected.",
-        "required": true
-      },
-      "DeleteCandidateWorkspaceEntry": {
-        "content": {
-          "application/json": {
-            "example": {
-              "expected_content_version": "ybndrfg8ejkmcpqxot1uwisza4",
-              "expected_path": "answers/draft.txt",
-              "generation": 2,
-              "participation_id": "ybndrfg8ejkmcpqxot1uwisza3"
-            },
-            "schema": {
-              "$ref": "#/components/schemas/DeleteCandidateWorkspaceEntryRequest"
-            }
-          }
-        },
-        "description": "The active Participation and its generation, and the state the entry must still have for the delete to go ahead.",
         "required": true
       },
       "DesktopAuthorizationExchange": {
@@ -1735,23 +1713,6 @@
         "description": "A current six-digit authenticator code or, where the operation allows it, one unused recovery code. Treat it as a secret.",
         "required": true
       },
-      "MoveCandidateWorkspaceEntry": {
-        "content": {
-          "application/json": {
-            "example": {
-              "destination_path": "answers/final.txt",
-              "expected_path": "answers/draft.txt",
-              "generation": 2,
-              "participation_id": "ybndrfg8ejkmcpqxot1uwisza3"
-            },
-            "schema": {
-              "$ref": "#/components/schemas/MoveCandidateWorkspaceEntryRequest"
-            }
-          }
-        },
-        "description": "The active Participation and its generation, the entry's current path, and the path to move it to.",
-        "required": true
-      },
       "MoveExamStarterWorkspaceEntry": {
         "content": {
           "application/json": {
@@ -1790,6 +1751,21 @@
           }
         },
         "description": "Exact original native batch, 1..64 closed records and at most 256 KiB. Retries preserve prior_acknowledgement and all canonical content.",
+        "required": true
+      },
+      "OpenCandidateTerminal": {
+        "content": {
+          "application/json": {
+            "example": {
+              "cols": 120,
+              "rows": 32
+            },
+            "schema": {
+              "$ref": "#/components/schemas/OpenCandidateTerminalRequest"
+            }
+          }
+        },
+        "description": "The window the terminal starts with. Both members are optional together; without them the terminal is 80 columns by 24 rows.",
         "required": true
       },
       "PasswordReauthentication": {
@@ -2062,6 +2038,20 @@
         "description": "The whole new policy, with the `expected_revision` it is based on. Every setting is required, even when it is empty.",
         "required": true
       },
+      "ReplaceExamAttemptEnvironment": {
+        "content": {
+          "application/json": {
+            "example": {
+              "expected_incarnation": 0
+            },
+            "schema": {
+              "$ref": "#/components/schemas/ReplaceExamAttemptEnvironmentRequest"
+            }
+          }
+        },
+        "description": "Names the incarnation of the machine to replace, as the candidate-status board showed it.",
+        "required": true
+      },
       "ReplaceInvitation": {
         "content": {
           "application/json": {
@@ -2305,6 +2295,20 @@
           }
         },
         "description": "Complete bounded minimized preflight report, with no native content or inventory.",
+        "required": true
+      },
+      "SignalCandidateTerminal": {
+        "content": {
+          "application/json": {
+            "example": {
+              "signal": "interrupt"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/SignalCandidateTerminalRequest"
+            }
+          }
+        },
+        "description": "The signal to send; a candidate may only interrupt.",
         "required": true
       },
       "StartMFARekey": {
@@ -3245,6 +3249,27 @@
         },
         "description": "One page of the User's Affiliations."
       },
+      "AttemptEvidenceListOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "items": []
+            },
+            "schema": {
+              "$ref": "#/components/schemas/AttemptEvidenceListResponse"
+            }
+          }
+        },
+        "description": "Bounded private Attempt evidence, never a Flag or a guilt finding.",
+        "headers": {
+          "Cache-Control": {
+            "schema": {
+              "const": "no-store",
+              "type": "string"
+            }
+          }
+        }
+      },
       "AuditListOK": {
         "content": {
           "application/json": {
@@ -3869,6 +3894,21 @@
         },
         "description": "Build information"
       },
+      "CandidateEnvironment": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CandidateEnvironmentResponse"
+            }
+          }
+        },
+        "description": "The Attempt's execution environment",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
       "CandidateExamActivityOK": {
         "content": {
           "application/json": {
@@ -4186,6 +4226,66 @@
           }
         }
       },
+      "CandidateTerminalOpened": {
+        "content": {
+          "application/json": {
+            "example": {
+              "input_offset": 0,
+              "number": 2,
+              "output_offset": 0,
+              "running": true,
+              "started_at": "2026-08-01T09:12:30Z",
+              "tag": "terminal:2"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/CandidateTerminal"
+            }
+          }
+        },
+        "description": "The terminal that opened",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "CandidateTerminals": {
+        "content": {
+          "application/json": {
+            "example": {
+              "terminal_limit": 2,
+              "terminals": [
+                {
+                  "exit_code": 0,
+                  "input_offset": 921,
+                  "number": 1,
+                  "output_offset": 18342,
+                  "running": false,
+                  "started_at": "2026-08-01T09:02:11Z",
+                  "tag": "terminal:1"
+                },
+                {
+                  "input_offset": 37,
+                  "number": 2,
+                  "output_offset": 2048,
+                  "running": true,
+                  "started_at": "2026-08-01T09:12:30Z",
+                  "tag": "terminal:2"
+                }
+              ]
+            },
+            "schema": {
+              "$ref": "#/components/schemas/CandidateTerminals"
+            }
+          }
+        },
+        "description": "The candidate's terminals on the current machine, and how many may run at once",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
       "CandidateWorkspaceJournalOK": {
         "content": {
           "application/json": {
@@ -4193,6 +4293,10 @@
               "current_cursor": 17,
               "items": [
                 {
+                  "author": {
+                    "kind": "candidate",
+                    "ref": "c8xmq7t4h1rz6a3kpedn5yw9fo"
+                  },
                   "changed_at": "2026-08-01T09:12:40Z",
                   "content_version": "kVcIsgUpj6Sg9aheovEZXzUjpw",
                   "cursor": 15,
@@ -4203,6 +4307,10 @@
                   "operation": "replace_file"
                 },
                 {
+                  "author": {
+                    "kind": "environment",
+                    "ref": "0/terminal:1"
+                  },
                   "changed_at": "2026-08-01T09:14:05Z",
                   "content_version": "VhOGu5NgyvhwvSuqK4dWGlgnoA",
                   "cursor": 16,
@@ -4223,64 +4331,6 @@
           }
         },
         "description": "One page of Workspace changes in order, or a signal to reload the full file list.",
-        "headers": {
-          "Cache-Control": {
-            "$ref": "#/components/headers/NoStore"
-          }
-        }
-      },
-      "CandidateWorkspaceMutationCreated": {
-        "content": {
-          "application/json": {
-            "example": {
-              "entry": {
-                "content_version": "EcTl31uGQ_dFCGAtmNtc0mRau8",
-                "id": "g63dcrphk8idgyjgzbrpajosz6",
-                "kind": "file",
-                "media_type": "text/x-go",
-                "path": "answers/main_test.go",
-                "sha256": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35",
-                "size": 912
-              },
-              "operation": "create_file",
-              "workspace_cursor": 18,
-              "workspace_id": "wj3drgzdpnf54rxf5d8qd3dqne"
-            },
-            "schema": {
-              "$ref": "#/components/schemas/CandidateWorkspaceMutationResponse"
-            }
-          }
-        },
-        "description": "The server accepted and recorded the new Workspace entry.",
-        "headers": {
-          "Cache-Control": {
-            "$ref": "#/components/headers/NoStore"
-          }
-        }
-      },
-      "CandidateWorkspaceMutationOK": {
-        "content": {
-          "application/json": {
-            "example": {
-              "entry": {
-                "content_version": "VhOGu5NgyvhwvSuqK4dWGlgnoA",
-                "id": "saqjfmjqqy9mo1yj4zwed73333",
-                "kind": "file",
-                "media_type": "text/plain",
-                "path": "answers/final.txt",
-                "sha256": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
-                "size": 640
-              },
-              "operation": "move_entry",
-              "workspace_cursor": 19,
-              "workspace_id": "wj3drgzdpnf54rxf5d8qd3dqne"
-            },
-            "schema": {
-              "$ref": "#/components/schemas/CandidateWorkspaceMutationResponse"
-            }
-          }
-        },
-        "description": "The server accepted and recorded the Workspace change.",
         "headers": {
           "Cache-Control": {
             "$ref": "#/components/headers/NoStore"
@@ -4984,6 +5034,51 @@
           }
         }
       },
+      "EnvironmentProfileListOK": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/EnvironmentProfileListResponse"
+            }
+          }
+        },
+        "description": "The environment profiles.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
+      "EnvironmentProfileOK": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/EnvironmentProfileResponse"
+            }
+          }
+        },
+        "description": "The environment profile.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
+      "ExamAttemptEnvironmentReplaced": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ReplaceExamAttemptEnvironmentResponse"
+            }
+          }
+        },
+        "description": "The environment after the replacement was asked",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
       "ExamAttemptManagerListOK": {
         "content": {
           "application/json": {
@@ -5274,6 +5369,11 @@
                 "policy": {
                   "connection_loss": {
                     "outcome": "flag_and_suspend"
+                  },
+                  "execution": {
+                    "enabled": false,
+                    "record_input": false,
+                    "terminals": 0
                   },
                   "focus_loss": {
                     "enabled": true,
@@ -5727,6 +5827,13 @@
         "content": {
           "application/json": {
             "example": {
+              "attempt_evidence": {
+                "bytes": 0,
+                "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "gaps": 0,
+                "overflow": 0,
+                "records": 0
+              },
               "browser_activity": {
                 "incomplete_source_count": 0,
                 "inventory_revision": 1,
@@ -5933,6 +6040,11 @@
                 "policy": {
                   "connection_loss": {
                     "outcome": "flag_and_suspend"
+                  },
+                  "execution": {
+                    "enabled": false,
+                    "record_input": false,
+                    "terminals": 0
                   },
                   "focus_loss": {
                     "enabled": true,
@@ -6381,6 +6493,7 @@
         "content": {
           "application/json": {
             "example": {
+              "environments_waiting_capacity": 0,
               "exam_id": "39kqk53i4cswfzbi7hbai1r8qg",
               "exam_sitting_id": "889766ufjgio6kbpzjbufozksq",
               "items": [
@@ -6899,6 +7012,10 @@
             "example": {
               "items": [
                 {
+                  "author": {
+                    "kind": "environment",
+                    "ref": "0/terminal:1"
+                  },
                   "content_version": "nan7rdocriztinowtuyrbqg67a",
                   "entry_id": "dfa1x1n7mkthyoziwxnupsmyia",
                   "kind": "file",
@@ -6908,6 +7025,10 @@
                   "size": 2214
                 },
                 {
+                  "author": {
+                    "kind": "candidate",
+                    "ref": "c8xmq7t4h1rz6a3kpedn5yw9fo"
+                  },
                   "entry_id": "f6tcxyfofj3n3buuqfjaw9j1jn",
                   "kind": "directory",
                   "path": "src"
@@ -12512,6 +12633,151 @@
         ],
         "type": "string"
       },
+      "AttemptEnvironmentDesired": {
+        "description": "What the Attempt's facts ask the execution environment to be.",
+        "enum": [
+          "ended",
+          "frozen",
+          "running"
+        ],
+        "type": "string"
+      },
+      "AttemptEnvironmentState": {
+        "description": "What the execution environment's machine is doing now.",
+        "enum": [
+          "creating",
+          "ended",
+          "frozen",
+          "lost",
+          "pending",
+          "running",
+          "suspended",
+          "waiting_capacity"
+        ],
+        "type": "string"
+      },
+      "AttemptEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "attempt_id": {
+            "maxLength": 26,
+            "minLength": 26,
+            "type": "string"
+          },
+          "author": {
+            "$ref": "#/components/schemas/WorkspaceAuthor"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "description": "The author's own evidence object of at most 64 KiB, stored as given.",
+            "type": "object"
+          },
+          "id": {
+            "maxLength": 26,
+            "minLength": 26,
+            "type": "string"
+          },
+          "kind": {
+            "description": "`execution.process` is a slice of the command log, `execution.input` recorded terminal input, `execution.gap` missing coverage, `execution.overwritten` a guest change lost to a newer Workspace version, and `execution.refused` a guest change the Workspace refused.",
+            "enum": [
+              "execution.process",
+              "execution.input",
+              "execution.gap",
+              "execution.overwritten",
+              "execution.refused"
+            ],
+            "type": "string"
+          },
+          "observed_at": {
+            "description": "The author's observation time, never later than recorded_at.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "sequence": {
+            "description": "The position of the record in its author's stream of this kind.",
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "attempt_id",
+          "kind",
+          "author",
+          "sequence",
+          "detail",
+          "observed_at",
+          "recorded_at"
+        ],
+        "type": "object"
+      },
+      "AttemptEvidenceInventory": {
+        "additionalProperties": false,
+        "description": "The Attempt evidence the Submission seal fixed: kept records and their canonical bytes, how many are gaps, how many appends were refused over the per-Attempt bounds, and a digest chained over the kept records in order. Review finalization binds it.",
+        "properties": {
+          "bytes": {
+            "format": "int64",
+            "maximum": 8388608,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "gaps": {
+            "format": "int64",
+            "maximum": 4096,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "overflow": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "records": {
+            "format": "int64",
+            "maximum": 4096,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "records",
+          "bytes",
+          "gaps",
+          "overflow",
+          "digest"
+        ],
+        "type": "object"
+      },
+      "AttemptEvidenceListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AttemptEvidence"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "AttemptParticipationEndReason": {
         "description": "Why a Participation ended.",
         "enum": [
@@ -12566,6 +12832,7 @@
           "desktop_compatibility_policy.manage",
           "desktop_registration.rename",
           "desktop_registration.revoke",
+          "environment_profile.manage",
           "exam.attempt.browser_activity.view",
           "exam.create",
           "exam.create.override",
@@ -14782,6 +15049,86 @@
         ],
         "type": "object"
       },
+      "CandidateEnvironmentPath": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "description": "The path under /workspace.",
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string"
+          },
+          "reason": {
+            "description": "For ignored, what ignored it: .proctorignore, default (the default patterns, while the Workspace has no .proctorignore that parses) or parent_not_synced. For refused, the Workspace's public error code, such as exam.attempt.workspace.size_limit or exam.attempt.workspace.content_conflict.",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "status": {
+            "description": "ignored stays on the machine; refused was not accepted by the Workspace.",
+            "enum": [
+              "ignored",
+              "refused"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "status",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "CandidateEnvironmentResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "desired": {
+            "$ref": "#/components/schemas/AttemptEnvironmentDesired"
+          },
+          "incarnation": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "paths": {
+            "description": "The guest paths that are not in the Attempt Workspace, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/CandidateEnvironmentPath"
+            },
+            "maxItems": 256,
+            "type": "array"
+          },
+          "projection_cursor": {
+            "description": "The Workspace journal cursor the machine holds.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AttemptEnvironmentState"
+          },
+          "terminal_limit": {
+            "maximum": 8,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "waiting_since": {
+            "description": "When the current wait for an execution host with room began.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "desired",
+          "incarnation",
+          "projection_cursor",
+          "terminal_limit",
+          "paths"
+        ],
+        "type": "object"
+      },
       "CandidateExamAccessState": {
         "description": "Whether the candidate can enter now, and if not, why. `joinable` and `resumable` mean they can start or continue. `sitting_paused` means the Sitting is paused, and `await_reallow` means the Attempt is suspended until a manager lets the candidate back in. `blocked_by_other_attempt` means another unfinished Attempt is in the way, and `not_eligible` means the candidate can't take part, for example because they left the Class or manage the Exam. `not_open`, `submitted`, `result_available` and `ended` follow the Sitting and Submission.",
         "enum": [
@@ -15490,35 +15837,174 @@
         ],
         "type": "object"
       },
-      "CandidateWorkspaceFileUploadMetadata": {
+      "CandidateTerminal": {
         "additionalProperties": false,
         "properties": {
+          "exit_code": {
+            "description": "The exit status of a terminal that exited on its own.",
+            "type": "integer"
+          },
+          "exit_signal": {
+            "description": "The signal that ended a terminal that exited by one.",
+            "type": "integer"
+          },
+          "input_offset": {
+            "description": "How many bytes of input the terminal has taken; the next INPUT is written at it.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "number": {
+            "description": "The terminal's number on the current machine, which addresses it in the terminal routes.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "output_offset": {
+            "description": "How many bytes the terminal has written; an ATTACH from it streams only new output.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "tag": {
+            "description": "The terminal's process tag, which the command log names as the origin of every command it ran.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "tag",
+          "running",
+          "output_offset",
+          "input_offset"
+        ],
+        "type": "object"
+      },
+      "CandidateTerminals": {
+        "additionalProperties": false,
+        "properties": {
+          "terminal_limit": {
+            "description": "How many terminals the Exam lets the candidate run at once.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "terminals": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateTerminal"
+            },
+            "maxItems": 64,
+            "type": "array"
+          }
+        },
+        "required": [
+          "terminal_limit",
+          "terminals"
+        ],
+        "type": "object"
+      },
+      "CandidateWorkspaceBatchManifest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_workspace_cursor": {
+            "description": "Required exactly when a mutation deletes a directory recursively; the Workspace Cursor the batch starts from.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
           "generation": {
-            "description": "Participation Generation of the active Participation. A write from an older generation is rejected.",
             "format": "int64",
             "minimum": 1,
             "type": "integer"
           },
+          "mutations": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateWorkspaceBatchMutation"
+            },
+            "maxItems": 128,
+            "minItems": 1,
+            "type": "array"
+          },
+          "participation_id": {
+            "$ref": "#/components/schemas/ID"
+          }
+        },
+        "required": [
+          "participation_id",
+          "generation",
+          "mutations"
+        ],
+        "type": "object"
+      },
+      "CandidateWorkspaceBatchMultipart": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "description": "One body per create_file and replace_file mutation, in manifest order.",
+            "items": {
+              "format": "binary",
+              "maxLength": 104857600,
+              "type": "string"
+            },
+            "maxItems": 128,
+            "type": "array"
+          },
+          "manifest": {
+            "$ref": "#/components/schemas/CandidateWorkspaceBatchManifest"
+          }
+        },
+        "required": [
+          "manifest"
+        ],
+        "type": "object"
+      },
+      "CandidateWorkspaceBatchMutation": {
+        "additionalProperties": false,
+        "description": "create_file takes path, media_type, size and sha256. create_directory takes path. replace_file takes entry_id, expected_path, expected_content_version, media_type, size and sha256. move_entry takes entry_id, expected_path and destination_path. delete_entry takes entry_id and expected_path, plus expected_content_version for a file; recursive deletes a directory and everything under it. A create names its entry by path only: the server chooses its entry_id, returned in the change.",
+        "properties": {
+          "destination_path": {
+            "$ref": "#/components/schemas/StarterWorkspacePath"
+          },
+          "entry_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "expected_content_version": {
+            "$ref": "#/components/schemas/WorkspaceContentVersion"
+          },
+          "expected_path": {
+            "$ref": "#/components/schemas/StarterWorkspacePath"
+          },
           "media_type": {
-            "description": "Media type of the file content.",
             "maxLength": 255,
             "minLength": 1,
             "type": "string"
           },
-          "participation_id": {
-            "$ref": "#/components/schemas/ID",
-            "description": "ID of the active Attempt Participation, returned when the candidate connected to the Attempt."
+          "operation": {
+            "enum": [
+              "create_file",
+              "create_directory",
+              "replace_file",
+              "move_entry",
+              "delete_entry"
+            ],
+            "type": "string"
           },
           "path": {
-            "$ref": "#/components/schemas/StarterWorkspacePath",
-            "description": "Workspace Path of the new file. Its parent directory must already exist and nothing may exist at the path yet."
+            "$ref": "#/components/schemas/StarterWorkspacePath"
+          },
+          "recursive": {
+            "type": "boolean"
           },
           "sha256": {
-            "$ref": "#/components/schemas/SHA256",
-            "description": "Lowercase hexadecimal SHA-256 digest of the content. The server rejects the upload if the content does not match."
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
           },
           "size": {
-            "description": "Exact length of the content in bytes. It must fit both the limit of the Exam Revision and the API limit.",
             "format": "int64",
             "maximum": 104857600,
             "minimum": 0,
@@ -15526,32 +16012,41 @@
           }
         },
         "required": [
-          "participation_id",
-          "generation",
-          "path",
-          "media_type",
-          "size",
-          "sha256"
+          "operation"
         ],
         "type": "object"
       },
-      "CandidateWorkspaceFileUploadMultipart": {
+      "CandidateWorkspaceBatchResponse": {
         "additionalProperties": false,
-        "description": "Exactly two parts, in order: the JSON metadata, then the file content. The whole request may be at most 100 MiB plus 64 KiB.",
         "properties": {
-          "content": {
-            "description": "The file content. It must be the second part and match the size and digest in metadata.",
-            "format": "binary",
-            "type": "string"
+          "changes": {
+            "description": "One journal change per mutation, in batch order, at consecutive cursors.",
+            "items": {
+              "$ref": "#/components/schemas/CandidateWorkspaceJournalEntryResponse"
+            },
+            "maxItems": 128,
+            "minItems": 1,
+            "type": "array"
           },
-          "metadata": {
-            "$ref": "#/components/schemas/CandidateWorkspaceFileUploadMetadata",
-            "description": "JSON metadata that describes the file. It must be the first part."
+          "first_workspace_cursor": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "workspace_cursor": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "workspace_id": {
+            "$ref": "#/components/schemas/ID"
           }
         },
         "required": [
-          "metadata",
-          "content"
+          "workspace_id",
+          "first_workspace_cursor",
+          "workspace_cursor",
+          "changes"
         ],
         "type": "object"
       },
@@ -15559,6 +16054,9 @@
         "additionalProperties": false,
         "description": "One change the server accepted in the Attempt Workspace.",
         "properties": {
+          "author": {
+            "$ref": "#/components/schemas/WorkspaceAuthor"
+          },
           "changed_at": {
             "description": "When the server accepted the change.",
             "format": "date-time",
@@ -15615,7 +16113,8 @@
           "entry_id",
           "kind",
           "operation",
-          "changed_at"
+          "changed_at",
+          "author"
         ],
         "type": "object"
       },
@@ -15654,43 +16153,6 @@
           "current_cursor",
           "items",
           "refresh_required"
-        ],
-        "type": "object"
-      },
-      "CandidateWorkspaceMutationResponse": {
-        "additionalProperties": false,
-        "description": "The change the server accepted and recorded in the Workspace.",
-        "properties": {
-          "entry": {
-            "$ref": "#/components/schemas/CandidateExamWorkspaceItemResponse",
-            "description": "The entry as it is after the change. Omitted when the entry was deleted."
-          },
-          "operation": {
-            "description": "The kind of change the server applied.",
-            "enum": [
-              "create_file",
-              "create_directory",
-              "replace_file",
-              "move_entry",
-              "delete_entry"
-            ],
-            "type": "string"
-          },
-          "workspace_cursor": {
-            "description": "Workspace Cursor of this change. Keep it to continue the change listing from this point.",
-            "format": "int64",
-            "minimum": 1,
-            "type": "integer"
-          },
-          "workspace_id": {
-            "$ref": "#/components/schemas/ID",
-            "description": "ID of the Attempt Workspace that changed."
-          }
-        },
-        "required": [
-          "workspace_id",
-          "workspace_cursor",
-          "operation"
         ],
         "type": "object"
       },
@@ -16053,6 +16515,24 @@
         ],
         "type": "object"
       },
+      "ConfigureExamDraftExecutionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "execution": {
+            "$ref": "#/components/schemas/ExecutionPolicy"
+          },
+          "expected_revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "execution"
+        ],
+        "type": "object"
+      },
       "ConfigureExamDraftFocusLossRequest": {
         "additionalProperties": false,
         "properties": {
@@ -16258,31 +16738,6 @@
         },
         "required": [
           "kind"
-        ],
-        "type": "object"
-      },
-      "CreateCandidateWorkspaceDirectoryRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "generation": {
-            "description": "Participation Generation of the active Participation. A write from an older generation is rejected.",
-            "format": "int64",
-            "minimum": 1,
-            "type": "integer"
-          },
-          "participation_id": {
-            "$ref": "#/components/schemas/ID",
-            "description": "ID of the active Attempt Participation, returned when the candidate connected to the Attempt."
-          },
-          "path": {
-            "$ref": "#/components/schemas/StarterWorkspacePath",
-            "description": "Workspace Path of the new directory. Its parent must already exist and nothing may exist at the path yet."
-          }
-        },
-        "required": [
-          "participation_id",
-          "generation",
-          "path"
         ],
         "type": "object"
       },
@@ -16946,77 +17401,6 @@
           "allocated_through_sequence",
           "ranges",
           "reason"
-        ],
-        "type": "object"
-      },
-      "DeleteCandidateWorkspaceEntryRequest": {
-        "additionalProperties": false,
-        "allOf": [
-          {
-            "else": {
-              "not": {
-                "required": [
-                  "expected_workspace_cursor"
-                ]
-              }
-            },
-            "if": {
-              "properties": {
-                "recursive": {
-                  "const": true
-                }
-              },
-              "required": [
-                "recursive"
-              ]
-            },
-            "then": {
-              "not": {
-                "required": [
-                  "expected_content_version"
-                ]
-              },
-              "required": [
-                "expected_workspace_cursor"
-              ]
-            }
-          }
-        ],
-        "properties": {
-          "expected_content_version": {
-            "$ref": "#/components/schemas/WorkspaceContentVersion",
-            "description": "Workspace Content Version the file must still have. Required to delete a file. Leave it out for a directory."
-          },
-          "expected_path": {
-            "$ref": "#/components/schemas/StarterWorkspacePath",
-            "description": "Path the entry must still have. If it has moved since the client last saw it, the request fails."
-          },
-          "expected_workspace_cursor": {
-            "description": "Workspace Cursor of the client's current file list. Send it only when recursive is true. If any other change happened after this cursor, the request fails with a conflict.",
-            "format": "int64",
-            "minimum": 0,
-            "type": "integer"
-          },
-          "generation": {
-            "description": "Participation Generation of the active Participation. A write from an older generation is rejected.",
-            "format": "int64",
-            "minimum": 1,
-            "type": "integer"
-          },
-          "participation_id": {
-            "$ref": "#/components/schemas/ID",
-            "description": "ID of the active Attempt Participation, returned when the candidate connected to the Attempt."
-          },
-          "recursive": {
-            "default": false,
-            "description": "When true, deletes this directory and everything inside it in a single step. Needs expected_workspace_cursor and can't be used on a file.",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "participation_id",
-          "generation",
-          "expected_path"
         ],
         "type": "object"
       },
@@ -19463,6 +19847,154 @@
         ],
         "type": "object"
       },
+      "EnvironmentProfileListResponse": {
+        "additionalProperties": false,
+        "description": "One page of the collection in its stable order.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EnvironmentProfileResponse"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "EnvironmentProfileRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "cpu_millis": {
+            "description": "CPU time per second; 1000 is one full CPU.",
+            "format": "int64",
+            "maximum": 64000,
+            "minimum": 100,
+            "type": "integer"
+          },
+          "disk_bytes": {
+            "format": "int64",
+            "maximum": 274877906944,
+            "minimum": 67108864,
+            "type": "integer"
+          },
+          "idle_window_seconds": {
+            "description": "How long an environment may stay frozen before it is suspended to disk.",
+            "format": "int64",
+            "maximum": 86400,
+            "minimum": 60,
+            "type": "integer"
+          },
+          "image": {
+            "description": "The execution image the hosts offer, by name.",
+            "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+            "type": "string"
+          },
+          "max_terminals": {
+            "description": "The most terminals one Attempt may open.",
+            "maximum": 8,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "memory_bytes": {
+            "format": "int64",
+            "maximum": 68719476736,
+            "minimum": 134217728,
+            "type": "integer"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "type": "string"
+          },
+          "network": {
+            "description": "`none` gives the environment no network; `allowlist` gives it only the execution host's configured allowlist.",
+            "enum": [
+              "none",
+              "allowlist"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "image",
+          "cpu_millis",
+          "memory_bytes",
+          "disk_bytes",
+          "network",
+          "idle_window_seconds",
+          "max_terminals"
+        ],
+        "type": "object"
+      },
+      "EnvironmentProfileResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "cpu_millis": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "disk_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "idle_window_seconds": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "image": {
+            "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+            "type": "string"
+          },
+          "max_terminals": {
+            "type": "integer"
+          },
+          "memory_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "type": "string"
+          },
+          "network": {
+            "enum": [
+              "none",
+              "allowlist"
+            ],
+            "type": "string"
+          },
+          "retired_at": {
+            "description": "Present once the profile is retired.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "image",
+          "cpu_millis",
+          "memory_bytes",
+          "disk_bytes",
+          "network",
+          "idle_window_seconds",
+          "max_terminals",
+          "created_at"
+        ],
+        "type": "object"
+      },
       "ErrorCode": {
         "description": "Machine-readable error code. Later versions may add values. Show your own label for each value, and a general message for one you don't recognize.",
         "enum": [
@@ -19567,6 +20099,11 @@
           "desktop_registration.invalid",
           "desktop_registration.revoked",
           "desktop_registration.unavailable",
+          "environment_profile.invalid",
+          "environment_profile.limit_reached",
+          "environment_profile.name_in_use",
+          "environment_profile.not_found",
+          "environment_profile.unavailable",
           "exam.archived",
           "exam.attempt.already_connected",
           "exam.attempt.browser_activity_conflict",
@@ -19580,6 +20117,11 @@
           "exam.attempt.continuity_invalid",
           "exam.attempt.correction_conflict",
           "exam.attempt.desktop_incompatible",
+          "exam.attempt.environment_changed",
+          "exam.attempt.environment_ended",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_not_running",
+          "exam.attempt.environment_unavailable",
           "exam.attempt.focus_loss_conflict",
           "exam.attempt.invalid",
           "exam.attempt.management_authority_conflict",
@@ -19594,6 +20136,9 @@
           "exam.attempt.sitting_not_open",
           "exam.attempt.state_conflict",
           "exam.attempt.suspension_conflict",
+          "exam.attempt.terminal_exited",
+          "exam.attempt.terminal_limit_reached",
+          "exam.attempt.terminal_not_found",
           "exam.attempt.unavailable",
           "exam.attempt.workspace.content_conflict",
           "exam.attempt.workspace.cursor_conflict",
@@ -19602,6 +20147,7 @@
           "exam.attempt.workspace.entry_limit",
           "exam.attempt.workspace.object_conflict",
           "exam.attempt.workspace.path_conflict",
+          "exam.attempt.workspace.rate_limited",
           "exam.attempt.workspace.size_limit",
           "exam.browser.source_budget_exhausted",
           "exam.conflict",
@@ -19618,6 +20164,8 @@
           "exam.delivery.upload_expired",
           "exam.draft.no_changes",
           "exam.draft.revision_conflict",
+          "exam.execution.disabled",
+          "exam.execution.profile_unusable",
           "exam.export.claim_lost",
           "exam.export.conflict",
           "exam.export.expired",
@@ -20710,6 +21258,11 @@
             "$ref": "#/components/schemas/BrowserIntegrityEvidence",
             "description": "The blocked navigation. Only for `browser_navigation`."
           },
+          "detail": {
+            "additionalProperties": true,
+            "description": "A capability's own evidence, one JSON object of at most 64 KiB that the server stores as given and does not interpret. Present only for capability and native kinds.",
+            "type": "object"
+          },
           "duration_milliseconds": {
             "description": "How long focus was lost, in milliseconds. 0 for other kinds.",
             "format": "int64",
@@ -20988,6 +21541,9 @@
         "additionalProperties": false,
         "description": "A Submission's integrity state, its Review if one exists, and the current decisions.",
         "properties": {
+          "attempt_evidence": {
+            "$ref": "#/components/schemas/AttemptEvidenceInventory"
+          },
           "browser_activity": {
             "$ref": "#/components/schemas/BrowserSubmissionSettlement"
           },
@@ -21064,7 +21620,8 @@
           "decisions",
           "browser_activity",
           "delivery_inventory_revision",
-          "native_conditions"
+          "native_conditions",
+          "attempt_evidence"
         ],
         "type": "object"
       },
@@ -21170,6 +21727,10 @@
             "$ref": "#/components/schemas/ConnectionLossPolicy",
             "description": "What happens when the server loses its connection to an Attempt."
           },
+          "execution": {
+            "$ref": "#/components/schemas/ExecutionPolicy",
+            "description": "Whether the Attempts get an execution environment, from which profile, and how many terminals."
+          },
           "focus_loss": {
             "$ref": "#/components/schemas/FocusLossPolicy",
             "description": "When leaving the Exam window counts against the candidate."
@@ -21182,7 +21743,8 @@
         "required": [
           "native",
           "connection_loss",
-          "focus_loss"
+          "focus_loss",
+          "execution"
         ],
         "type": "object"
       },
@@ -21673,6 +22235,12 @@
         "additionalProperties": false,
         "description": "One page of the candidate-status board for a Sitting.",
         "properties": {
+          "environments_waiting_capacity": {
+            "description": "How many of the Sitting's execution environments wait for a host with room, across every page.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
           "exam_id": {
             "$ref": "#/components/schemas/ID",
             "description": "ID of the Exam."
@@ -21714,6 +22282,7 @@
           "exam_sitting_id",
           "sitting_state",
           "sitting_revision",
+          "environments_waiting_capacity",
           "items"
         ],
         "type": "object"
@@ -22635,6 +23204,9 @@
           }
         ],
         "properties": {
+          "author": {
+            "$ref": "#/components/schemas/WorkspaceAuthor"
+          },
           "content_version": {
             "$ref": "#/components/schemas/WorkspaceContentVersion",
             "description": "The version token of the sealed file content. Files only."
@@ -22676,7 +23248,8 @@
         "required": [
           "entry_id",
           "kind",
-          "path"
+          "path",
+          "author"
         ],
         "type": "object"
       },
@@ -23035,6 +23608,34 @@
           "sitting_count",
           "matching_sitting_count",
           "sitting_summary"
+        ],
+        "type": "object"
+      },
+      "ExecutionPolicy": {
+        "additionalProperties": false,
+        "description": "Whether the Exam's Attempts get an execution environment and which. A disabled policy names no profile, records nothing and opens no terminal. Terminal output is never recorded.",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "profile_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "record_input": {
+            "description": "Whether terminal input is recorded as evidence.",
+            "type": "boolean"
+          },
+          "terminals": {
+            "description": "How many terminals a candidate may open, from 1 to the profile's maximum; 0 when disabled.",
+            "maximum": 8,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "record_input",
+          "terminals"
         ],
         "type": "object"
       },
@@ -25746,36 +26347,6 @@
         ],
         "type": "string"
       },
-      "MoveCandidateWorkspaceEntryRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "destination_path": {
-            "$ref": "#/components/schemas/StarterWorkspacePath",
-            "description": "New Workspace Path for the entry. It must differ from expected_path, nothing may exist there, and its parent directory must exist."
-          },
-          "expected_path": {
-            "$ref": "#/components/schemas/StarterWorkspacePath",
-            "description": "Path the entry must still have. If it has moved since the client last saw it, the request fails."
-          },
-          "generation": {
-            "description": "Participation Generation of the active Participation. A write from an older generation is rejected.",
-            "format": "int64",
-            "minimum": 1,
-            "type": "integer"
-          },
-          "participation_id": {
-            "$ref": "#/components/schemas/ID",
-            "description": "ID of the active Attempt Participation, returned when the candidate connected to the Attempt."
-          }
-        },
-        "required": [
-          "participation_id",
-          "generation",
-          "expected_path",
-          "destination_path"
-        ],
-        "type": "object"
-      },
       "MoveExamStarterWorkspaceEntryRequest": {
         "additionalProperties": false,
         "properties": {
@@ -28453,6 +29024,24 @@
         ],
         "type": "object"
       },
+      "OpenCandidateTerminalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "cols": {
+            "description": "Columns; supply it with rows.",
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "rows": {
+            "description": "Rows; supply it with cols.",
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "PasswordReauthenticationRequest": {
         "additionalProperties": false,
         "properties": {
@@ -29577,73 +30166,50 @@
         ],
         "type": "object"
       },
-      "ReplaceCandidateWorkspaceFileMetadata": {
+      "ReplaceExamAttemptEnvironmentRequest": {
         "additionalProperties": false,
         "properties": {
-          "expected_content_version": {
-            "$ref": "#/components/schemas/WorkspaceContentVersion",
-            "description": "Workspace Content Version the client last received for this file. If the file changed since then, the request fails instead of overwriting the newer content."
-          },
-          "expected_path": {
-            "$ref": "#/components/schemas/StarterWorkspacePath",
-            "description": "Path the file must still have before its content can be replaced."
-          },
-          "generation": {
-            "description": "Participation Generation of the active Participation. A write from an older generation is rejected.",
+          "expected_incarnation": {
             "format": "int64",
-            "minimum": 1,
-            "type": "integer"
-          },
-          "media_type": {
-            "description": "Media type of the replacement content.",
-            "maxLength": 255,
-            "minLength": 1,
-            "type": "string"
-          },
-          "participation_id": {
-            "$ref": "#/components/schemas/ID",
-            "description": "ID of the active Attempt Participation, returned when the candidate connected to the Attempt."
-          },
-          "sha256": {
-            "$ref": "#/components/schemas/SHA256",
-            "description": "Lowercase hexadecimal SHA-256 digest of the replacement content. The server rejects the upload if the content does not match."
-          },
-          "size": {
-            "description": "Exact length of the replacement content in bytes. It must fit both the limit of the Exam Revision and the API limit.",
-            "format": "int64",
-            "maximum": 104857600,
             "minimum": 0,
             "type": "integer"
           }
         },
         "required": [
-          "participation_id",
-          "generation",
-          "expected_path",
-          "expected_content_version",
-          "media_type",
-          "size",
-          "sha256"
+          "expected_incarnation"
         ],
         "type": "object"
       },
-      "ReplaceCandidateWorkspaceFileMultipart": {
+      "ReplaceExamAttemptEnvironmentResponse": {
         "additionalProperties": false,
-        "description": "Exactly two parts, in order: the JSON replacement metadata, then the file content.",
         "properties": {
-          "content": {
-            "description": "The replacement file content. It must be the second part and match the size and digest in metadata.",
-            "format": "binary",
-            "type": "string"
+          "desired": {
+            "$ref": "#/components/schemas/AttemptEnvironmentDesired"
           },
-          "metadata": {
-            "$ref": "#/components/schemas/ReplaceCandidateWorkspaceFileMetadata",
-            "description": "JSON metadata that describes the replacement. It must be the first part."
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "incarnation": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "replace_before": {
+            "description": "The incarnation the owner moves to; the replacement is done once incarnation reaches it.",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AttemptEnvironmentState"
           }
         },
         "required": [
-          "metadata",
-          "content"
+          "exam_attempt_id",
+          "state",
+          "desired",
+          "incarnation",
+          "replace_before"
         ],
         "type": "object"
       },
@@ -32443,6 +33009,21 @@
         ],
         "type": "string"
       },
+      "SignalCandidateTerminalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "signal": {
+            "enum": [
+              "interrupt"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "signal"
+        ],
+        "type": "object"
+      },
       "SittingCandidateAttemptResponse": {
         "additionalProperties": false,
         "description": "The candidate's Exam Attempt.",
@@ -32496,6 +33077,34 @@
           "created_at",
           "updated_at",
           "submission"
+        ],
+        "type": "object"
+      },
+      "SittingCandidateEnvironmentResponse": {
+        "additionalProperties": false,
+        "description": "The candidate's execution environment, present once the Attempt has one. Incarnation counts the machines it has had; a manager names it to replace the current one.",
+        "properties": {
+          "desired": {
+            "$ref": "#/components/schemas/AttemptEnvironmentDesired"
+          },
+          "incarnation": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AttemptEnvironmentState"
+          },
+          "waiting_since": {
+            "description": "When the current wait for an execution host with room began.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "desired",
+          "incarnation"
         ],
         "type": "object"
       },
@@ -32583,6 +33192,9 @@
           "current_class_membership": {
             "description": "Whether the candidate is still a member of the Sitting's Class.",
             "type": "boolean"
+          },
+          "environment": {
+            "$ref": "#/components/schemas/SittingCandidateEnvironmentResponse"
           },
           "integrity_attention_count": {
             "description": "Number of integrity issues on the Attempt that still need attention, such as discrepancies not covered by a finalized Submission Review or gaps in the delivered integrity data. Zero when there is no Attempt.",
@@ -34215,6 +34827,31 @@
           "expected_discrepancy_count",
           "reason_code",
           "private_reason"
+        ],
+        "type": "object"
+      },
+      "WorkspaceAuthor": {
+        "additionalProperties": false,
+        "description": "Who made a Workspace change. Every author writes on behalf of the candidate; the kind says which actor it was.",
+        "properties": {
+          "kind": {
+            "description": "`candidate` is the candidate's own editor. `environment` is the Attempt's execution environment, writing back what its programs changed.",
+            "enum": [
+              "candidate",
+              "environment"
+            ],
+            "type": "string"
+          },
+          "ref": {
+            "description": "The reference within the kind. For `candidate`, the Attempt Connection the editor wrote through. For `environment`, the environment incarnation in decimal, followed by a slash and the tag of the writing process, such as `terminal:1`, when it is known.",
+            "maxLength": 96,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "ref"
         ],
         "type": "object"
       },
@@ -40279,6 +40916,281 @@
         "x-proctor-idempotency": "none"
       }
     },
+    "/api/v1/environment-profiles": {
+      "get": {
+        "description": "Lists the environment profiles that are not retired, and with include_retired=true the retired ones too, ordered by name. An environment profile is the recipe an Exam's execution environments are created from: the execution image, resources, network, idle window and the most terminals one Attempt may open. A Session with environment_profile.manage is required; Personal Access Tokens cannot read it.",
+        "operationId": "listEnvironmentProfiles",
+        "parameters": [
+          {
+            "description": "Whether retired profiles are listed too.",
+            "in": "query",
+            "name": "include_retired",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/EnvironmentProfileListOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List the environment profiles",
+        "tags": [
+          "Administration"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "environment_profile.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "post": {
+        "description": "Saves a new environment profile. Requires a strong recent interactive system-administrator Session, an Idempotency-Key, and durable audit. A profile is never edited: to change one, create a new profile and retire the old. Its name is unique among the profiles that are not retired.",
+        "operationId": "createEnvironmentProfile",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "cpu_millis": 1000,
+                "disk_bytes": 2147483648,
+                "idle_window_seconds": 600,
+                "image": "python-3.12",
+                "max_terminals": 4,
+                "memory_bytes": 1073741824,
+                "name": "python-small",
+                "network": "none"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/EnvironmentProfileRequest"
+              }
+            }
+          },
+          "description": "The complete profile. Every member is required.",
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/EnvironmentProfileOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Create an environment profile",
+        "tags": [
+          "Administration"
+        ],
+        "x-proctor-auth": "strong_recent_session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "environment_profile.invalid",
+          "environment_profile.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "environment_profile.name_in_use",
+          "environment_profile.limit_reached",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid",
+          "authentication.strong_required",
+          "authentication.reauthentication_required"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
+    "/api/v1/environment-profiles/{environment_profile_id}/retire": {
+      "parameters": [
+        {
+          "description": "The environment profile to retire.",
+          "in": "path",
+          "name": "environment_profile_id",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/ID"
+          }
+        }
+      ],
+      "post": {
+        "description": "Retires one environment profile so that new Exam Revisions can no longer name it. Revisions already published keep using it. Retiring a retired profile changes nothing. Requires a strong recent interactive system-administrator Session, an Idempotency-Key, and durable audit.",
+        "operationId": "retireEnvironmentProfile",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/EnvironmentProfileOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Retire an environment profile",
+        "tags": [
+          "Administration"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/environment-profiles/ybndrfg8ejkmcpqxot1uwisza3/retire' \\\n  --header 'Authorization: Bearer \u003cinteractive-system-administrator-session\u003e' \\\n  --header 'Idempotency-Key: docs-environment-profile-retire-001'"
+          }
+        ],
+        "x-proctor-auth": "strong_recent_session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "environment_profile.invalid",
+          "environment_profile.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "environment_profile.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid",
+          "authentication.strong_required",
+          "authentication.reauthentication_required"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
     "/api/v1/exam-attempts/{exam_attempt_id}/browser-activity/sources": {
       "get": {
         "description": "Returns up to 49 browser activity source statuses for one Participation you own, in the order the sources started. The response is at most 1 MiB. You need a Session for the registered key that owns the Participation. If any source is still live, you also need the current Connection headers. Use this to recover sources after a lost response. It gives no access to Browser Activity history.",
@@ -41337,6 +42249,446 @@
         ],
         "x-proctor-idempotency": "required"
       }
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/environment": {
+      "get": {
+        "description": "Returns what the Attempt's execution environment does and the sync status of its files in both directions. A Workspace entry whose last journal change is past projection_cursor is not in the machine yet, which a client can mark as not yet synced. A guest change waits about a second at most before it is saved; paths lists the guest paths the environment did not save, each ignored (by the Workspace's .proctorignore, the default patterns, or a parent directory that is not saved) or refused with the Workspace's reason, such as a quota or a conflict the Workspace won. Every other guest path is synced. The list keeps the latest status of at most 256 paths, the newest last, and a path leaves it once a later change to it is saved or the guest removes it.",
+        "operationId": "getCandidateEnvironment",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CandidateEnvironment"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Read the Attempt's execution environment",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ]
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/environment/terminals": {
+      "get": {
+        "description": "Lists the candidate's terminals on the Attempt's current machine, running or exited, in number order, with where each one's output and input stand. A client reconnecting after a restart reads it to reattach. A new machine, after the old one was lost or replaced, starts with no terminals.",
+        "operationId": "listCandidateTerminals",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CandidateTerminals"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List the terminals in the Attempt's execution environment",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_not_running",
+          "exam.attempt.environment_unavailable",
+          "exam.attempt.terminal_limit_reached",
+          "exam.attempt.terminal_not_found",
+          "exam.attempt.terminal_exited",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ],
+      "post": {
+        "description": "Starts a terminal running the image's login shell on the Attempt's current machine and answers with its number and tag. Terminals are numbered in the order the machine opened them, terminal:1, terminal:2 and so on, and a number is never reused on that machine. At most the Exam's number of terminals run at once; past it the request fails with exam.attempt.terminal_limit_reached. The environment must be running: while it starts, waits for capacity or is frozen the request fails with exam.attempt.environment_not_running. A request whose response was lost may have opened a terminal, so a client lists the terminals before opening another. Every command a terminal runs is in the Attempt's command log, and when the Exam records terminal input the input is kept too; output never is.",
+        "operationId": "openCandidateTerminal",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/OpenCandidateTerminal"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/CandidateTerminalOpened"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Open a terminal in the Attempt's execution environment",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/exam-attempts/\u003cexam-attempt-id\u003e/environment/terminals' \\\n  --header 'Authorization: DPoP \u003cdesktop-session-access-credential\u003e' \\\n  --header 'DPoP: \u003cfresh-proof-for-this-post-target-and-current-nonce\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003cattempt-credential\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e' \\\n  --header 'Content-Type: application/json' \\\n  --data '{\"cols\":120,\"rows\":32}'"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_not_running",
+          "exam.attempt.environment_unavailable",
+          "exam.attempt.terminal_limit_reached",
+          "exam.attempt.terminal_not_found",
+          "exam.attempt.terminal_exited",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/environment/terminals/{terminal}/signal": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        },
+        {
+          "$ref": "#/components/parameters/CandidateTerminalNumber"
+        }
+      ],
+      "post": {
+        "description": "Sends the terminal an interrupt, as Ctrl+C does in a terminal that reads its keys. A candidate may only interrupt; the server ends terminals itself when the machine ends. An exited terminal fails with exam.attempt.terminal_exited, and a number the current machine never opened with exam.attempt.terminal_not_found.",
+        "operationId": "signalCandidateTerminal",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/SignalCandidateTerminal"
+        },
+        "responses": {
+          "204": {
+            "description": "The terminal was interrupted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Interrupt what a terminal runs",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/exam-attempts/\u003cexam-attempt-id\u003e/environment/terminals/1/signal' \\\n  --header 'Authorization: DPoP \u003cdesktop-session-access-credential\u003e' \\\n  --header 'DPoP: \u003cfresh-proof-for-this-post-target-and-current-nonce\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003cattempt-credential\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e' \\\n  --header 'Content-Type: application/json' \\\n  --data '{\"signal\":\"interrupt\"}'"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_not_running",
+          "exam.attempt.environment_unavailable",
+          "exam.attempt.terminal_limit_reached",
+          "exam.attempt.terminal_not_found",
+          "exam.attempt.terminal_exited",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/environment/terminals/{terminal}/socket": {
+      "get": {
+        "description": "Upgrades to a binary WebSocket attached to one terminal. Any Proctor node serves it by reaching the execution machine itself, so a reconnect may land on another node and resume exactly. The terminal is attached before the upgrade: a refusal answers as a problem.\n\nEvery message is one binary frame whose first byte is its type; integers are big-endian. The client's first message is ATTACH or SCREEN.\n\nClient frames:\n- `0x01` ATTACH `offset:u64`: stream output from offset. A reconnecting client sends the output offset it holds, and output still in the terminal's history is replayed, so full-screen programs come back intact.\n- `0x02` SCREEN: answer with the screen. As the first message, also stream output from the screen's offset; a client with no screen of its own draws it, then continues.\n- `0x03` INPUT `offset:u64` `data` (1 to 16,384 bytes): input written at offset. Bytes the terminal already took are dropped, so after a lost connection the client resends everything after the last INPUT offset it saw, and nothing types twice.\n- `0x04` RESIZE `cols:u16` `rows:u16`: the terminal's new window, 1 to 1,000 each way.\n\nServer frames:\n- `0x81` OUTPUT `offset:u64` `data`: output bytes at offset, at most 32 KiB.\n- `0x82` TRUNCATED `from:u64` `to:u64`: output from to to that the history no longer holds.\n- `0x83` EXIT `code:i32` `signal:i32`: the terminal exited; the socket then closes normally.\n- `0x84` INPUT `offset:u64`: the terminal's input offset after an INPUT, accepted or not.\n- `0x85` SCREEN `offset:u64` `cols:u16` `rows:u16` `cursor_row:u16` `cursor_col:u16` `flags:u8` `data`: the screen as of offset; flag bit 0 is the alternate screen, bit 1 a hidden cursor, and data redraws it on a blank terminal of that size.\n- `0x86` ERROR `code`: a refused frame, by its public error code in UTF-8, such as exam.attempt.invalid for input past the terminal's input offset; the socket stays open.\n\nSeveral sockets may read one terminal, such as the candidate's two windows; they share one input offset. The socket closes normally after EXIT or a malformed frame, with 4003 once the Attempt is sealed, its Participation ends, or its machine ends or is replaced, and with 1011 on a server failure. Access is checked again every 15 seconds while the socket is open. Terminal bytes never travel between Proctor nodes, and output is never recorded.",
+        "operationId": "connectCandidateTerminal",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching Protocols to the terminal socket"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Upgrade to a terminal's binary socket",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "websocat --binary \\\n  --header='Authorization: DPoP \u003cdesktop-session-access-credential\u003e' \\\n  --header='DPoP: \u003cfresh-proof-for-this-get-target-and-current-nonce\u003e' \\\n  --header='X-Proctor-Attempt-Credential: \u003cattempt-credential\u003e' \\\n  --header='X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e' \\\n  'wss://proctor.example.edu/api/v1/exam-attempts/\u003cexam-attempt-id\u003e/environment/terminals/1/socket'"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "exam.attempt.environment_not_found",
+          "exam.attempt.environment_not_running",
+          "exam.attempt.environment_unavailable",
+          "exam.attempt.terminal_limit_reached",
+          "exam.attempt.terminal_not_found",
+          "exam.attempt.terminal_exited",
+          "websocket.origin.invalid",
+          "websocket.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        },
+        {
+          "$ref": "#/components/parameters/CandidateTerminalNumber"
+        }
+      ]
     },
     "/api/v1/exam-attempts/{exam_attempt_id}/presentation": {
       "get": {
@@ -43035,6 +44387,146 @@
         }
       ]
     },
+    "/api/v1/exam-attempts/{exam_attempt_id}/workspace/batches": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ],
+      "post": {
+        "description": "The one way the candidate's Attempt Workspace changes. A batch holds 1 to 128 mutations, applied in order and all or nothing: create a file or directory, replace a file, move or rename an entry, or delete one. Each mutation keeps its own fence, so unrelated entries commute; a recursive directory delete also fences the batch on expected_workspace_cursor. The body is multipart: a strict JSON manifest first, then one content part for each create_file and replace_file mutation, in manifest order. Access is checked once for the whole batch against the Session-bound Attempt credential, open Connection and active Participation generation. When one mutation refuses the batch, nothing changes and the problem's item field names it by its position. One audit record and one realtime hint cover the whole batch. Each Attempt may change its Workspace only so fast, by mutations and by bytes, whoever writes; a faster writer gets 429 with Retry-After and nothing is staged.",
+        "operationId": "applyCandidateExamWorkspaceBatch",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "encoding": {
+                "content": {
+                  "contentType": "application/octet-stream"
+                },
+                "manifest": {
+                  "contentType": "application/json"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/CandidateWorkspaceBatchMultipart"
+              }
+            }
+          },
+          "description": "A strict JSON manifest part first, then exactly one content part per create_file and replace_file mutation, in manifest order, and no other part. The manifest and every body together are bounded by the hard API limit; each file is also bounded by the admitted Revision. The Attempt credential and Connection remain headers, never form fields.",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateWorkspaceBatchResponse"
+                }
+              }
+            },
+            "description": "Every mutation of the batch was acknowledged",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Apply one atomic batch of Workspace changes",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/exam-attempts/\u003cexam-attempt-id\u003e/workspace/batches' \\\n  --header 'Authorization: DPoP \u003cdesktop-session-access-credential\u003e' \\\n  --header 'DPoP: \u003cfresh-proof-for-this-post-target-and-current-nonce\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003cattempt-credential\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e' \\\n  --header 'Idempotency-Key: docs-workspace-batch-019' \\\n  --form 'manifest={\"participation_id\":\"\u003cparticipation-id\u003e\",\"generation\":2,\"mutations\":[{\"operation\":\"create_directory\",\"path\":\"answers\"},{\"operation\":\"create_file\",\"path\":\"answers/main.go\",\"media_type\":\"text/plain\",\"size\":128,\"sha256\":\"\u003csha256\u003e\"}]};type=application/json' \\\n  --form 'content=@main.go;type=application/octet-stream'"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.sitting_not_open",
+          "exam.attempt.state_conflict",
+          "exam.attempt.connection_closed",
+          "exam.attempt.conflict",
+          "exam.attempt.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "exam.attempt.workspace.path_conflict",
+          "exam.attempt.workspace.entry_conflict",
+          "exam.attempt.workspace.content_conflict",
+          "exam.attempt.workspace.directory_not_empty",
+          "exam.attempt.workspace.cursor_conflict",
+          "exam.attempt.workspace.entry_limit",
+          "exam.attempt.workspace.size_limit",
+          "exam.attempt.workspace.object_conflict",
+          "exam.attempt.workspace.rate_limited",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
     "/api/v1/exam-attempts/{exam_attempt_id}/workspace/changes": {
       "get": {
         "description": "Returns the Workspace changes the server accepted after workspace_cursor, in order, for the candidate's active Attempt. If the server no longer keeps enough history to continue from that cursor, the response tells the client to reload the full file list instead.",
@@ -43131,415 +44623,6 @@
           "$ref": "#/components/parameters/ExamAttemptID"
         }
       ]
-    },
-    "/api/v1/exam-attempts/{exam_attempt_id}/workspace/directories": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/ExamAttemptID"
-        }
-      ],
-      "post": {
-        "description": "Creates one empty directory at the given Workspace Path for the active Participation Generation. The request needs the Attempt credential bound to the Session, an open Connection, CSRF protection when you use a session cookie, and an Idempotency-Key so a retry is safe.",
-        "operationId": "createCandidateExamWorkspaceDirectory",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/CandidateAttemptCredential"
-          },
-          {
-            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
-          },
-          {
-            "$ref": "#/components/parameters/RequiredIdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "$ref": "#/components/requestBodies/CreateCandidateWorkspaceDirectory"
-        },
-        "responses": {
-          "201": {
-            "$ref": "#/components/responses/CandidateWorkspaceMutationCreated"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "dpopAuth": []
-          },
-          {
-            "csrfToken": [],
-            "sessionCookie": []
-          }
-        ],
-        "summary": "Create one acknowledged empty Workspace directory",
-        "tags": [
-          "Attempts and workspaces"
-        ],
-        "x-proctor-auth": "session_required",
-        "x-proctor-error-codes": [
-          "audit.unavailable",
-          "request.invalid",
-          "resource.not_found",
-          "exam.attempt.invalid",
-          "exam.attempt.sitting_not_open",
-          "exam.attempt.state_conflict",
-          "exam.attempt.connection_closed",
-          "exam.attempt.conflict",
-          "exam.attempt.unavailable",
-          "idempotency.key_required",
-          "idempotency.key_invalid",
-          "idempotency.conflict",
-          "idempotency.in_progress",
-          "exam.attempt.workspace.path_conflict",
-          "exam.attempt.workspace.entry_conflict",
-          "exam.attempt.workspace.entry_limit",
-          "exam.attempt.registered_desktop_required",
-          "exam.delivery.metadata_capacity",
-          "authentication.required",
-          "authentication.token_invalid",
-          "authentication.credential_ambiguous",
-          "authentication.dpop.invalid",
-          "authentication.dpop.replayed",
-          "authentication.dpop.use_nonce",
-          "authentication.dpop.unavailable",
-          "authentication.csrf.invalid"
-        ],
-        "x-proctor-idempotency": "required"
-      }
-    },
-    "/api/v1/exam-attempts/{exam_attempt_id}/workspace/entries/{attempt_workspace_entry_id}": {
-      "delete": {
-        "description": "Deletes one Workspace entry, but only when its expected path still matches and, for a file, its expected Workspace Content Version still matches. A directory must be empty unless recursive is true. A recursive delete needs the expected_workspace_cursor from the client's file list. It fails if any other Workspace change happened after that cursor. Otherwise it removes the directory and everything inside it in a single step, recorded as one recursive change. No other change needs a Workspace Cursor.",
-        "operationId": "deleteCandidateExamWorkspaceEntry",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/CandidateAttemptCredential"
-          },
-          {
-            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
-          },
-          {
-            "$ref": "#/components/parameters/RequiredIdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "$ref": "#/components/requestBodies/DeleteCandidateWorkspaceEntry"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/CandidateWorkspaceMutationOK"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "dpopAuth": []
-          },
-          {
-            "csrfToken": [],
-            "sessionCookie": []
-          }
-        ],
-        "summary": "Delete a Workspace entry or a guarded directory subtree",
-        "tags": [
-          "Attempts and workspaces"
-        ],
-        "x-proctor-auth": "session_required",
-        "x-proctor-error-codes": [
-          "audit.unavailable",
-          "request.invalid",
-          "resource.not_found",
-          "exam.attempt.invalid",
-          "exam.attempt.sitting_not_open",
-          "exam.attempt.state_conflict",
-          "exam.attempt.connection_closed",
-          "exam.attempt.conflict",
-          "exam.attempt.unavailable",
-          "idempotency.key_required",
-          "idempotency.key_invalid",
-          "idempotency.conflict",
-          "idempotency.in_progress",
-          "exam.attempt.workspace.path_conflict",
-          "exam.attempt.workspace.entry_conflict",
-          "exam.attempt.workspace.content_conflict",
-          "exam.attempt.workspace.directory_not_empty",
-          "exam.attempt.workspace.cursor_conflict",
-          "exam.attempt.registered_desktop_required",
-          "exam.delivery.metadata_capacity",
-          "authentication.required",
-          "authentication.token_invalid",
-          "authentication.credential_ambiguous",
-          "authentication.dpop.invalid",
-          "authentication.dpop.replayed",
-          "authentication.dpop.use_nonce",
-          "authentication.dpop.unavailable",
-          "authentication.csrf.invalid"
-        ],
-        "x-proctor-idempotency": "required"
-      },
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/ExamAttemptID"
-        },
-        {
-          "$ref": "#/components/parameters/AttemptWorkspaceEntryID"
-        }
-      ],
-      "patch": {
-        "description": "Renames or moves one file or directory from its expected path to a new path in the active Workspace, in a single step. If the path is out of date, the move would put a directory inside itself, or something already exists at the destination, the request fails and the Workspace is left unchanged. The parent directory of the destination must already exist.",
-        "operationId": "moveCandidateExamWorkspaceEntry",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/CandidateAttemptCredential"
-          },
-          {
-            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
-          },
-          {
-            "$ref": "#/components/parameters/RequiredIdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "$ref": "#/components/requestBodies/MoveCandidateWorkspaceEntry"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/CandidateWorkspaceMutationOK"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "dpopAuth": []
-          },
-          {
-            "csrfToken": [],
-            "sessionCookie": []
-          }
-        ],
-        "summary": "Rename or move one Workspace entry",
-        "tags": [
-          "Attempts and workspaces"
-        ],
-        "x-proctor-auth": "session_required",
-        "x-proctor-error-codes": [
-          "audit.unavailable",
-          "request.invalid",
-          "resource.not_found",
-          "exam.attempt.invalid",
-          "exam.attempt.sitting_not_open",
-          "exam.attempt.state_conflict",
-          "exam.attempt.connection_closed",
-          "exam.attempt.conflict",
-          "exam.attempt.unavailable",
-          "idempotency.key_required",
-          "idempotency.key_invalid",
-          "idempotency.conflict",
-          "idempotency.in_progress",
-          "exam.attempt.workspace.path_conflict",
-          "exam.attempt.workspace.entry_conflict",
-          "exam.attempt.registered_desktop_required",
-          "exam.delivery.metadata_capacity",
-          "authentication.required",
-          "authentication.token_invalid",
-          "authentication.credential_ambiguous",
-          "authentication.dpop.invalid",
-          "authentication.dpop.replayed",
-          "authentication.dpop.use_nonce",
-          "authentication.dpop.unavailable",
-          "authentication.csrf.invalid"
-        ],
-        "x-proctor-idempotency": "required"
-      }
-    },
-    "/api/v1/exam-attempts/{exam_attempt_id}/workspace/files": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/ExamAttemptID"
-        }
-      ],
-      "post": {
-        "description": "Uploads one new file to the candidate's active Attempt Workspace. The request is multipart, with the metadata part first. Its size is limited both by the API and by the Exam Revision the Attempt uses. It needs the Attempt credential bound to the Session, an open Connection, the active Participation Generation, a SHA-256 digest of the content, and an Idempotency-Key.",
-        "operationId": "createCandidateExamWorkspaceFile",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/CandidateAttemptCredential"
-          },
-          {
-            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
-          },
-          {
-            "$ref": "#/components/parameters/RequiredIdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "encoding": {
-                "content": {
-                  "contentType": "application/octet-stream"
-                },
-                "metadata": {
-                  "contentType": "application/json"
-                }
-              },
-              "schema": {
-                "$ref": "#/components/schemas/CandidateWorkspaceFileUploadMultipart"
-              }
-            }
-          },
-          "description": "Exactly two multipart parts, in order: the JSON metadata, then the file content. The Attempt credential and Connection go in headers, never in form fields.",
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "$ref": "#/components/responses/CandidateWorkspaceMutationCreated"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "dpopAuth": []
-          },
-          {
-            "csrfToken": [],
-            "sessionCookie": []
-          }
-        ],
-        "summary": "Stage and acknowledge one Workspace file",
-        "tags": [
-          "Attempts and workspaces"
-        ],
-        "x-codeSamples": [
-          {
-            "lang": "Shell",
-            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/exam-attempts/\u003cexam-attempt-id\u003e/workspace/files' \\\n  --header 'Authorization: DPoP \u003cdesktop-session-access-credential\u003e' \\\n  --header 'DPoP: \u003cfresh-proof-for-this-post-target-and-current-nonce\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003cattempt-credential\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e' \\\n  --header 'Idempotency-Key: docs-workspace-file-019' \\\n  --form 'metadata={\"participation_id\":\"\u003cparticipation-id\u003e\",\"generation\":2,\"path\":\"answers/main.go\",\"media_type\":\"text/plain\",\"size\":128,\"sha256\":\"\u003csha256\u003e\"};type=application/json' \\\n  --form 'content=@main.go;type=application/octet-stream'"
-          }
-        ],
-        "x-proctor-auth": "session_required",
-        "x-proctor-error-codes": [
-          "audit.unavailable",
-          "request.invalid",
-          "resource.not_found",
-          "exam.attempt.invalid",
-          "exam.attempt.sitting_not_open",
-          "exam.attempt.state_conflict",
-          "exam.attempt.connection_closed",
-          "exam.attempt.conflict",
-          "exam.attempt.unavailable",
-          "idempotency.key_required",
-          "idempotency.key_invalid",
-          "idempotency.conflict",
-          "idempotency.in_progress",
-          "exam.attempt.workspace.path_conflict",
-          "exam.attempt.workspace.entry_conflict",
-          "exam.attempt.workspace.entry_limit",
-          "exam.attempt.workspace.size_limit",
-          "exam.attempt.workspace.object_conflict",
-          "exam.attempt.registered_desktop_required",
-          "exam.delivery.metadata_capacity",
-          "authentication.required",
-          "authentication.token_invalid",
-          "authentication.credential_ambiguous",
-          "authentication.dpop.invalid",
-          "authentication.dpop.replayed",
-          "authentication.dpop.use_nonce",
-          "authentication.dpop.unavailable",
-          "authentication.csrf.invalid"
-        ],
-        "x-proctor-idempotency": "required"
-      }
     },
     "/api/v1/exam-attempts/{exam_attempt_id}/workspace/files/{attempt_workspace_entry_id}/content": {
       "get": {
@@ -43639,122 +44722,7 @@
         {
           "$ref": "#/components/parameters/AttemptWorkspaceEntryID"
         }
-      ],
-      "put": {
-        "description": "Replaces the content of one Workspace file, but only when its expected path and Workspace Content Version still match. The server checks the multipart upload (metadata part first), the digest, the active Participation Generation, the open Connection and the Idempotency-Key before it accepts the new content.",
-        "operationId": "replaceCandidateExamWorkspaceFile",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/CandidateAttemptCredential"
-          },
-          {
-            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
-          },
-          {
-            "$ref": "#/components/parameters/RequiredIdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "encoding": {
-                "content": {
-                  "contentType": "application/octet-stream"
-                },
-                "metadata": {
-                  "contentType": "application/json"
-                }
-              },
-              "schema": {
-                "$ref": "#/components/schemas/ReplaceCandidateWorkspaceFileMultipart"
-              }
-            }
-          },
-          "description": "The replacement metadata first, then the file content. Both parts must describe the same content, and the server checks them before it accepts the change.",
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/CandidateWorkspaceMutationOK"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "dpopAuth": []
-          },
-          {
-            "csrfToken": [],
-            "sessionCookie": []
-          }
-        ],
-        "summary": "Replace one exact Workspace file content state",
-        "tags": [
-          "Attempts and workspaces"
-        ],
-        "x-codeSamples": [
-          {
-            "label": "Replace acknowledged Workspace content",
-            "lang": "Shell",
-            "source": "curl --request PUT \\\n  --header \"Authorization: DPoP $PROCTOR_DESKTOP_ACCESS_CREDENTIAL\" \\\n  --header \"DPoP: $PROCTOR_DPOP_PROOF\" \\\n  --header \"X-Proctor-Attempt-Credential: $ATTEMPT_CREDENTIAL\" \\\n  --header \"X-Proctor-Attempt-Connection-ID: $ATTEMPT_CONNECTION_ID\" \\\n  --header \"Idempotency-Key: workspace-replace-020\" \\\n  --form 'metadata={\"participation_id\":\"ybndrfg8ejkmcpqxot1uwisza3\",\"generation\":2,\"expected_path\":\"answers/main.go\",\"expected_content_version\":3,\"media_type\":\"text/plain\",\"size\":128,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"};type=application/json' \\\n  --form 'content=@./main.go;type=application/octet-stream' \\\n  https://proctor.example.edu/api/v1/exam-attempts/ybndrfg8ejkmcpqxot1uwisza4/workspace/files/ybndrfg8ejkmcpqxot1uwisza5/content"
-          }
-        ],
-        "x-proctor-auth": "session_required",
-        "x-proctor-error-codes": [
-          "audit.unavailable",
-          "request.invalid",
-          "resource.not_found",
-          "exam.attempt.invalid",
-          "exam.attempt.sitting_not_open",
-          "exam.attempt.state_conflict",
-          "exam.attempt.connection_closed",
-          "exam.attempt.conflict",
-          "exam.attempt.unavailable",
-          "idempotency.key_required",
-          "idempotency.key_invalid",
-          "idempotency.conflict",
-          "idempotency.in_progress",
-          "exam.attempt.workspace.path_conflict",
-          "exam.attempt.workspace.entry_conflict",
-          "exam.attempt.workspace.content_conflict",
-          "exam.attempt.workspace.size_limit",
-          "exam.attempt.workspace.object_conflict",
-          "exam.attempt.registered_desktop_required",
-          "exam.delivery.metadata_capacity",
-          "authentication.required",
-          "authentication.token_invalid",
-          "authentication.credential_ambiguous",
-          "authentication.dpop.invalid",
-          "authentication.dpop.replayed",
-          "authentication.dpop.use_nonce",
-          "authentication.dpop.unavailable",
-          "authentication.csrf.invalid"
-        ],
-        "x-proctor-idempotency": "required"
-      }
+      ]
     },
     "/api/v1/exam-sittings/{exam_sitting_id}/security-policy": {
       "get": {
@@ -44501,6 +45469,111 @@
           "exam.archived",
           "exam.draft.revision_conflict",
           "exam.draft.no_changes",
+          "exam.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
+    "/api/v1/exams/{exam_id}/draft/policies/execution": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamID"
+        }
+      ],
+      "put": {
+        "description": "Replaces the execution policy on the mutable Draft at the expected revision: whether Attempts get an execution environment, the environment profile they are created from, whether terminal input is recorded, and how many terminals a candidate may open. An enabled policy must name a profile that exists, is not retired and allows that many terminals, or the change fails with exam.execution.profile_unusable. A disabled policy names no profile, records nothing and opens no terminal. Publication checks the profile again and requires the installation to allow execution.",
+        "operationId": "configureExamDraftExecution",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "execution": {
+                  "enabled": true,
+                  "profile_id": "ybndrfg8ejkmcpqxot1uwisza3",
+                  "record_input": false,
+                  "terminals": 2
+                },
+                "expected_revision": 4
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ConfigureExamDraftExecutionRequest"
+              }
+            }
+          },
+          "description": "Supplies the expected Draft revision and the complete replacement execution policy.",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ExamOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Replace the execution policy on the active Exam Draft",
+        "tags": [
+          "Examinations"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.invalid",
+          "exam.archived",
+          "exam.draft.revision_conflict",
+          "exam.draft.no_changes",
+          "exam.execution.profile_unusable",
           "exam.unavailable",
           "idempotency.key_required",
           "idempotency.key_invalid",
@@ -46770,6 +47843,8 @@
           "exam.draft.revision_conflict",
           "exam.revision.no_changes",
           "exam.revision.capacity_exceeded",
+          "exam.execution.disabled",
+          "exam.execution.profile_unusable",
           "exam.unavailable",
           "idempotency.key_required",
           "idempotency.key_invalid",
@@ -47598,6 +48673,103 @@
           "exam.attempt.state_conflict",
           "exam.attempt.sitting_not_open",
           "exam.attempt.management_authority_conflict",
+          "exam.attempt.conflict",
+          "exam.attempt.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "exam.delivery.metadata_capacity",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
+    "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/environment/replace": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamSittingID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ],
+      "post": {
+        "description": "An Exam Manager's repair for an execution environment that misbehaves. Names the incarnation the manager saw on the candidate-status board; the environment's owner then replaces that machine with a new incarnation built from the Attempt Workspace and records the restart as an execution.gap. Nothing the candidate saved is lost; processes, terminals and ignored files that only the old machine held are. Repeating the request for the same incarnation changes nothing; a newer incarnation fails with exam.attempt.environment_changed and an ended environment with exam.attempt.environment_ended. Like a kick, it is refused once the Sitting is closing.",
+        "operationId": "replaceExamAttemptEnvironment",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ReplaceExamAttemptEnvironment"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ExamAttemptEnvironmentReplaced"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Replace a candidate's execution environment with a new machine",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.environment_changed",
+          "exam.attempt.environment_ended",
+          "exam.attempt.sitting_not_open",
           "exam.attempt.conflict",
           "exam.attempt.unavailable",
           "idempotency.key_required",
@@ -56001,6 +57173,96 @@
       "parameters": [
         {
           "$ref": "#/components/parameters/StudentProgressionID"
+        }
+      ]
+    },
+    "/api/v1/submissions/{submission_id}/attempt-evidence": {
+      "get": {
+        "description": "Requires the same current Submission integrity-view authorization as detailed evidence. Returns the append-only records the core kept for the Attempt, such as the execution environment's command log, in identity order. They raise no Flag and carry no decision: a record of kind `execution.gap` says coverage was missing. Each item names its kind, the author that produced it, the author's stream sequence, and its bounded detail object, which the server stores as given. The Submission seal fixed the set, whose inventory the Review response carries. Pages contain at most 100 records. Integrity retirement removes them. No-store; cursors are purpose-specific opaque keysets.",
+        "operationId": "listAttemptEvidence",
+        "parameters": [
+          {
+            "description": "Maximum number of Attempt evidence records to return.",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque continuation from the preceding Attempt evidence page.",
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "description": "Opaque Attempt evidence identity cursor.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AttemptEvidenceListOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Inspect the Attempt evidence sealed with a Submission",
+        "tags": [
+          "Integrity review"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.integrity_review.invalid",
+          "exam.integrity_review.unavailable",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SubmissionID"
         }
       ]
     },

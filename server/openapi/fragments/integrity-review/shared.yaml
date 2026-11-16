@@ -132,3 +132,40 @@ components:
           description: >-
             A digest that changes with every record added, as `sha256:` followed by lowercase hex. Compare
             it to detect any change in the records.
+    AttemptEvidenceInventory:
+      type: object
+      additionalProperties: false
+      description: >-
+        The Attempt evidence the Submission seal fixed: kept records and their canonical bytes, how many are
+        gaps, how many appends were refused over the per-Attempt bounds, and a digest chained over the kept
+        records in order. Review finalization binds it.
+      required:
+        - records
+        - bytes
+        - gaps
+        - overflow
+        - digest
+      properties:
+        records:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 4096
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 8388608
+        gaps:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 4096
+        overflow:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 9007199254740991
+        digest:
+          type: string
+          pattern: ^sha256:[0-9a-f]{64}$

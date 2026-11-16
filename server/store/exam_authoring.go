@@ -272,6 +272,21 @@ type ExamDraftFocusLossUpdate struct {
 	AuditAt          time.Time
 }
 
+// ExamDraftExecutionUpdate replaces only the Draft's execution policy. An
+// enabled policy must name an environment profile that exists, is not
+// retired, and allows the policy's terminals; otherwise the update conflicts
+// with environment_profile_unusable.
+type ExamDraftExecutionUpdate struct {
+	ExamID           model.ExamID
+	ActorUserID      model.UserID
+	ManagerOverride  bool
+	ExpectedRevision int64
+	Execution        model.ExecutionPolicy
+	UpdatedAt        time.Time
+	AuditEventID     model.AuditEventID
+	AuditAt          time.Time
+}
+
 // ExamDraftNativePolicyUpdate atomically replaces the exact native union under
 // current Manager and Draft revision fences, preserving Focus/Connection Loss.
 type ExamDraftNativePolicyUpdate struct {
@@ -312,6 +327,7 @@ type ExamAuthoringStore interface {
 	Create(context.Context, *ExamAuthoringCreation, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftText(context.Context, *ExamDraftTextUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftFocusLoss(context.Context, *ExamDraftFocusLossUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
+	UpdateDraftExecution(context.Context, *ExamDraftExecutionUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftNativePolicy(context.Context, *ExamDraftNativePolicyUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	UpdateDraftBrowserPolicy(context.Context, *ExamDraftBrowserPolicyUpdate, *CommandIdempotency) (*ExamAuthoringCommandResult, error)
 	// List returns at most Limit summaries in descending (UpdatedAt, ExamID)

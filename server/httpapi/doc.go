@@ -21,9 +21,12 @@
 // from the application service that owns its use cases and hands them to
 // route.New, which compiles every route into one fixed catalog and fails on
 // an ambiguous or invalid route, so nothing is registered after construction.
+// The one exception is the plugin routes under /api/v1/plugins/<id>/, which
+// plugin_routes.go mounts as live routes behind a closed guard table and
+// replaces after every plugin change.
 //
 // Where to look:
-//   - api.go: New, and newAPI, which handler tests call with fakes
+//   - api.go: New, and compileAPI, which handler tests call with fakes
 //   - settings.go: Settings and the ports composition supplies
 //   - resources.go: every resource in the production API, in order
 //   - route/doc.go: the guide to declaring endpoints and writing handlers
@@ -32,6 +35,7 @@
 //
 // To add a route, add it to its resource file, list any new resource in
 // resources.go, and update the OpenAPI sources under server/openapi.
-// The WebSocket upgrade is the only route handed the raw ResponseWriter,
-// because the websocket package takes over the connection.
+// The WebSocket upgrade and plugin socket routes are the only routes handed
+// the raw ResponseWriter, because the websocket package takes over the
+// connection.
 package httpapi

@@ -75,21 +75,21 @@ func testCorrectionCapabilityGates(t *testing.T, ss store.Store) {
 			require.Len(t, presentation.LiveCorrections, 1)
 			require.True(t, slices.Equal(presentation.LiveCorrections[0].AffectedCapabilities, test.selected))
 			require.Equal(t, blocked(model.CandidateCapabilityBrowser), presentation.BrowserPolicy == nil, "usable browser policy escaped its gate")
-			workspaceAccess := store.ExamAttemptWorkspaceMutationAccess{AttemptID: connected.Attempt.ID,
+			workspaceAccess := store.ExamAttemptWorkspaceEditorAccess{AttemptID: connected.Attempt.ID,
 				ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation,
 				CandidateUserID: access.CandidateUserID, SessionID: access.SessionID, DesktopRegistrationID: access.DesktopRegistrationID,
 				DPoPKeyThumbprint: access.DPoPKeyThumbprint, ConnectionID: access.ConnectionID, ContinuityCredentialHash: access.ContinuityCredentialHash}
-			mutation := &store.ExamAttemptWorkspaceMutation{Access: workspaceAccess, Operation: model.AttemptWorkspaceMutationCreateDirectory,
-				EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "after-correction",
-				AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
-			changed, err := ss.ExamAttemptWorkspace().ApplyMutation(ctx, mutation,
-				examCommand(fixture.candidate.ID, store.ExamAttemptWorkspaceMutationOperation, "correction-workspace", "correction-workspace"))
+			batch := newAttemptWorkspaceBatch(t, ctx, ss, fixture, workspaceAccess, store.ExamAttemptWorkspaceMutation{
+				Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: model.NewAttemptWorkspaceEntryID(),
+				DestinationPath: "after-correction"})
+			changed, err := ss.ExamAttemptWorkspace().ApplyBatch(ctx, batch,
+				attemptWorkspaceBatchCommand(fixture.candidate.ID, "correction-workspace"))
 			cursor := connected.Workspace.Cursor
 			if blocked(model.CandidateCapabilityWorkspace) {
 				requireConflictConstraint(t, err, "exam_correction_acknowledgement_required")
 			} else {
 				require.NoError(t, err)
-				cursor = changed.Change.Cursor
+				cursor = changed.Changes[0].Cursor
 			}
 			source := browserSourceID(501 + caseIndex)
 			_, err = startBrowserSourceFixture(t, ctx, ss, &store.BrowserActivitySourceStart{Access: access,
@@ -131,23 +131,23 @@ func testCorrectionPublicationWorkspaceRace(t *testing.T, ss store.Store) {
 		AffectedCapabilities: []model.CandidateCapability{model.CandidateCapabilitySubmission, model.CandidateCapabilityWorkspace},
 		PrivateReason:        "Verify correction and Workspace serialization", AppliedAt: model.NowUTC(),
 		AuditEventID: saveExamSittingAudit(t, ctx, ss, fixture.manager.ID, fixture.examID, fixture.unitID).ID, AuditAt: model.NowUTC()}
-	write := &store.ExamAttemptWorkspaceMutation{Access: store.ExamAttemptWorkspaceMutationAccess{
+	write := newAttemptWorkspaceBatch(t, ctx, ss, fixture, store.ExamAttemptWorkspaceEditorAccess{
 		AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation,
 		CandidateUserID: access.CandidateUserID, SessionID: access.SessionID, DesktopRegistrationID: access.DesktopRegistrationID,
 		DPoPKeyThumbprint: access.DPoPKeyThumbprint, ConnectionID: access.ConnectionID, ContinuityCredentialHash: access.ContinuityCredentialHash},
-		Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "racing-correction",
-		AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
+		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
+			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "racing-correction"})
 	correctionKey := examCommand(fixture.manager.ID, "exam.sitting.correction.apply", "publication-race", "publication-race")
-	writeKey := examCommand(fixture.candidate.ID, store.ExamAttemptWorkspaceMutationOperation, "write-race", "write-race")
+	writeKey := attemptWorkspaceBatchCommand(fixture.candidate.ID, "write-race")
 	type writeOutcome struct {
-		value *store.ExamAttemptWorkspaceMutationResult
+		value *store.ExamAttemptWorkspaceBatchResult
 		err   error
 	}
 	start := make(chan struct{})
 	completed := make(chan writeOutcome, 1)
 	go func() {
 		<-start
-		value, err := ss.ExamAttemptWorkspace().ApplyMutation(ctx, write, writeKey)
+		value, err := ss.ExamAttemptWorkspace().ApplyBatch(ctx, write, writeKey)
 		completed <- writeOutcome{value, err}
 	}()
 	close(start)
@@ -155,14 +155,14 @@ func testCorrectionPublicationWorkspaceRace(t *testing.T, ss store.Store) {
 	outcome := <-completed
 	require.NoError(t, publishErr)
 	if outcome.err == nil {
-		require.False(t, outcome.value.Change.ChangedAt.After(published.EffectiveAt), "Workspace write passed a correction already in effect")
+		require.False(t, outcome.value.Changes[0].ChangedAt.After(published.EffectiveAt), "Workspace write passed a correction already in effect")
 	} else {
 		requireConflictConstraint(t, outcome.err, "exam_correction_acknowledgement_required")
 	}
 	// Once publication returns, both a new write and an exact previously
 	// accepted replay must see the current Workspace gate.
 	write.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
-	_, err := ss.ExamAttemptWorkspace().ApplyMutation(ctx, write, writeKey)
+	_, err := ss.ExamAttemptWorkspace().ApplyBatch(ctx, write, writeKey)
 	requireConflictConstraint(t, err, "exam_correction_acknowledgement_required")
 	presentation, err := ss.ExamAttempt().GetCandidatePresentation(ctx, access)
 	require.NoError(t, err)

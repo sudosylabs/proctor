@@ -26,15 +26,20 @@ import (
 // the same credential requirement and security, idempotency and its header,
 // and public error codes, each with a Problem Details response. Request and
 // response bodies are held to their DTOs by TestOpenAPISchemasAgreeWithDTOs.
+// No plugin is mounted here, so a plugin's operations are held to their
 func TestOpenAPIAgreesWithRuntime(t *testing.T) {
 	t.Parallel()
 
-	document := readOpenAPIDocument(t)
-	runtimeAPI := newProductionCatalogAPI(t)
+	requireOpenAPIAgreement(t, readOpenAPIDocument(t), newProductionCatalogAPI(t).Routes())
+}
+
+// requireOpenAPIAgreement holds document to the catalog routes.
+func requireOpenAPIAgreement(t *testing.T, document openAPIDocument, catalog []route.Entry) {
+	t.Helper()
 
 	runtimeRoutes := make(map[string]route.Entry)
 	runtimeOperations := make(map[string]route.AuthRequirement)
-	for _, entry := range runtimeAPI.Routes() {
+	for _, entry := range catalog {
 		key := entry.Method + " " + normalizeRuntimeRoutePath(entry.Path)
 		_, exists := runtimeOperations[key]
 		assert.False(t, exists, "runtime catalog repeats %s", key)

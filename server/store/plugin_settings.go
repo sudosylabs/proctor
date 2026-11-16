@@ -45,6 +45,7 @@ type PluginSettingsStore interface {
 	// ChangeCount grows whenever any plugin's settings change, so a node can
 	// notice a change cheaply and reload the list.
 	ChangeCount(context.Context) (int64, error)
+	// Replace saves the change behind the revision and idempotency fences.
 	Replace(context.Context, *PluginSettingsReplacement, *CommandIdempotency) (*PluginSettingsReplacementResult, error)
 }
 

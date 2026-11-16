@@ -72,7 +72,7 @@ exists.
 | generic store layers | `store/timerlayer` and below, `store/retrylayer` and below | `model`, `store` | none | infrastructure |
 | concrete jobs | `app/jobs` and below | `model`, `store`, `secretseal`, `app/invocation`, `app/job`, `app/mail`, `app/user`, `app/exam`, `app/exam/attempt`, `app/exam/sitting`, `app/events` | none | infrastructure |
 | job engine | `app/job` and below | `logging`, `model`, `store`, `app/access`, `app/apperror`, `app/invocation` | none | infrastructure |
-| domain event dispatch | `app/events` and below | `model`, `plugin` | none | infrastructure |
+| domain event dispatch | `app/events` and below | `model` | none | infrastructure |
 | realtime application | `app/realtime` and below | `logging`, `model`, `app/apperror` | none | infrastructure |
 | mail application | `app/mail` and below | `model`, `store`, `secretseal`, `app/exam`, `localization`, `app/access`, `app/apperror`, `app/invocation`, `app/paging` | `golang.org/x/net/html` | infrastructure except `io/fs` |
 | application error vocabulary | `app/apperror` | `model`, `store` | none | infrastructure |
@@ -82,6 +82,7 @@ exists.
 | exam Sitting application | `app/exam/sitting` | `app/access`, `app/apperror`, `app/idempotency`, `app/invocation`, `app/exam/manageraccess`, `app/mail`, `app/realtime`, `model`, `store` | none | infrastructure |
 | exam manager access consumers | `app/exam`, `app/exam/correction`, `app/exam/resource`, `app/exam/workspace` | `app/access`, `app/apperror`, `app/idempotency`, `app/invocation`, `app/exam/manageraccess`, `app/realtime`, `model`, `store` | none | infrastructure |
 | exam mail and safe Markdown consumers | `app/exam/attempt`, `app/exam/review` | `app/access`, `app/apperror`, `app/idempotency`, `app/invocation`, `app/mail`, `app/realtime`, `model`, `store`, `app/exam/safemarkdown` | none | infrastructure |
+| exam execution environment | `app/exam/environment` | `app/apperror`, `app/invocation`, `model`, `store` | none | infrastructure |
 | safe Markdown | `app/exam/safemarkdown` | none | none | infrastructure |
 | file-content adapter | `filecontent` and below | `app/exam`, `app/user`, `model`, `plugin`, `packages/vfs` | `github.com/HugoSmits86/nativewebp`, `github.com/disintegration/imaging`, below `github.com/pdfcpu/pdfcpu`, `golang.org/x/image/webp` | infrastructure except `os` |
 | Desktop release verification | `desktoprelease` | `model`, `internal/canonicaljson`, `internal/factschema` | none | infrastructure |
@@ -106,7 +107,8 @@ exists.
 | metrics | `metrics` | `config`, `internal/tlscert`, `store/timerlayer`, `store/localcachelayer`, `platform`, `cluster`, `packages/vfs`, `packages/mail` | `github.com/prometheus/client_golang` and below | none |
 | tracing | `tracing` | `config` | `go.opentelemetry.io/otel` and below | none |
 | external-auth adapters | `platform/externalauth` and below | `config`, `model`, `plugin` | any | none |
-| platform lifecycle | `platform` | any except below `packages/cache`, below `packages/mail`, below `packages/vfs`, below `cluster`, below `platform/externalauth`, `store/sqlstore`, `metrics`, `app` and below, `httpapi` and below, `websocket` and below | none | none |
+| execution host adapter | `platform/executionhost` and below | `app/exam/environment`, `config`, `model` | `github.com/sudosylabs/execenv` and below | none |
+| platform lifecycle | `platform` | any except below `packages/cache`, below `packages/mail`, below `packages/vfs`, below `cluster`, below `platform/externalauth`, `platform/executionhost` and below, `store/sqlstore`, `metrics`, `app` and below, `httpapi` and below, `websocket` and below | none | none |
 | healthcheck executable | `cmd/proctor-healthcheck` | none | none | none |
 | offline operator commands | `operator` | `config`, `model`, `store`, `store/sqlstore` | none | infrastructure |
 | operator executable | `cmd/proctor` | `cmd/proctor/commands` | none | none |

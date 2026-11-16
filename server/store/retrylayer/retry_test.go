@@ -203,12 +203,12 @@ type examAttemptWorkspaceRetryStub struct {
 	err              error
 }
 
-func (s *examAttemptWorkspaceRetryStub) ApplyMutation(context.Context, *store.ExamAttemptWorkspaceMutation, *store.CommandIdempotency) (*store.ExamAttemptWorkspaceMutationResult, error) {
+func (s *examAttemptWorkspaceRetryStub) ApplyBatch(context.Context, *store.ExamAttemptWorkspaceBatch, *store.CommandIdempotency) (*store.ExamAttemptWorkspaceBatchResult, error) {
 	s.applyAttempts++
 	return nil, s.err
 }
 
-func (s *examAttemptWorkspaceRetryStub) MarkObjectReclaimable(context.Context, model.AttemptWorkspaceObjectID) error {
+func (s *examAttemptWorkspaceRetryStub) MarkObjectsReclaimable(context.Context, []model.AttemptWorkspaceObjectID) error {
 	s.markAttempts++
 	return s.err
 }
@@ -441,7 +441,7 @@ func TestRetryReadsButDoesNotAutomaticallyRetryAuditedFocusLossMutation(t *testi
 	require.Equal(t, 1, stub.recordFocusAttempts, "Focus Loss attempts resolve/record")
 }
 
-func TestRetryOnlyRetriesExamAttemptWorkspaceMutationWithDurableCommandOutcome(t *testing.T) {
+func TestRetryOnlyRetriesExamAttemptWorkspaceBatchWithDurableCommandOutcome(t *testing.T) {
 	t.Parallel()
 
 	transientErr := errors.New("unknown commit outcome")
@@ -453,12 +453,12 @@ func TestRetryOnlyRetriesExamAttemptWorkspaceMutationWithDurableCommandOutcome(t
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	_, got := layer.ExamAttemptWorkspace().ApplyMutation(ctx, &store.ExamAttemptWorkspaceMutation{}, &store.CommandIdempotency{})
+	_, got := layer.ExamAttemptWorkspace().ApplyBatch(ctx, &store.ExamAttemptWorkspaceBatch{}, &store.CommandIdempotency{})
 	require.Equal(t, transientErr, got)
-	require.Equal(t, 3, stub.applyAttempts, "ApplyMutation() attempts with command")
-	_, got = layer.ExamAttemptWorkspace().ApplyMutation(ctx, &store.ExamAttemptWorkspaceMutation{}, nil)
+	require.Equal(t, 3, stub.applyAttempts, "ApplyBatch() attempts with command")
+	_, got = layer.ExamAttemptWorkspace().ApplyBatch(ctx, &store.ExamAttemptWorkspaceBatch{}, nil)
 	require.Equal(t, transientErr, got)
-	require.Equal(t, 4, stub.applyAttempts, "ApplyMutation() attempts without command")
+	require.Equal(t, 4, stub.applyAttempts, "ApplyBatch() attempts without command")
 }
 
 func TestRetryForwardsExamAttemptWorkspaceCleanupMutationsOnce(t *testing.T) {
@@ -474,7 +474,7 @@ func TestRetryForwardsExamAttemptWorkspaceCleanupMutationsOnce(t *testing.T) {
 
 	ctx := context.Background()
 	objectID := model.NewAttemptWorkspaceObjectID()
-	_ = layer.ExamAttemptWorkspace().MarkObjectReclaimable(ctx, objectID)
+	_ = layer.ExamAttemptWorkspace().MarkObjectsReclaimable(ctx, []model.AttemptWorkspaceObjectID{objectID})
 	_, _ = layer.ExamAttemptWorkspace().ClaimObjectsForCleanup(ctx, &store.AttemptWorkspaceCleanupClaim{Limit: 1, ClaimToken: "claim"})
 	_ = layer.ExamAttemptWorkspace().CompleteObjectCleanup(ctx, &store.AttemptWorkspaceCleanupCompletion{ObjectID: objectID, ClaimToken: "claim"})
 	_ = layer.ExamAttemptWorkspace().ReleaseObjectCleanup(ctx, &store.AttemptWorkspaceCleanupRelease{ObjectID: objectID, ClaimToken: "claim"})

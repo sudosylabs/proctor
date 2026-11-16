@@ -53,19 +53,44 @@ func (a *API) compileRoutes(apiPrefix string, maxBodyBytes int64, resources ...R
 	}
 
 	a.maxBodyBytes = maxBodyBytes
+	compiled, err := a.compileCatalog(apiPrefix, nil, resources...)
+	if err != nil {
+		return err
+	}
+
+	a.apiPrefix = apiPrefix
+	a.router = compiled.router
+	a.routes = compiled.routes
+	a.routeMatchers = compiled.matchers
+	a.handler = withMiddleware(http.HandlerFunc(a.serveRoutes), a.logger, a.middleware)
+	return nil
+}
+
+// compiledCatalog is one compiled route set: its router, its sorted
+// manifest, and the matchers that answer which methods a path allows.
+type compiledCatalog struct {
+	router   *mux.Router
+	routes   []Entry
+	matchers []routeMatcher
+}
+
+// compileCatalog compiles validated resources into a router. available, when
+// set, gates each resource's routes: a route of a resource it reports false
+// for answers as if it did not exist.
+func (a *API) compileCatalog(apiPrefix string, available []func() bool, resources ...Resource) (compiledCatalog, error) {
 	router := mux.NewRouter()
 	routeKeys := make(map[string]struct{})
-	var (
-		routes   []Entry
-		matchers []routeMatcher
-	)
-
-	for _, resource := range resources {
+	var compiled compiledCatalog
+	for index, resource := range resources {
+		var gate func() bool
+		if available != nil {
+			gate = available[index]
+		}
 		for _, definition := range resource.Endpoints {
 			definition.Idempotency = EffectiveIdempotency(definition.Idempotency)
 			path, _, err := definition.CompilePath(apiPrefix)
 			if err != nil {
-				return fmt.Errorf("compile resource %q: %w", resource.Name, err)
+				return compiledCatalog{}, fmt.Errorf("compile resource %q: %w", resource.Name, err)
 			}
 
 			errorCodes := definition.errorCodes()
@@ -94,20 +119,23 @@ func (a *API) compileRoutes(apiPrefix string, maxBodyBytes int64, resources ...R
 			if a.middleware.tracing != nil {
 				handler = nameRequestSpan(handler, path)
 			}
+			if gate != nil {
+				handler = a.gateRoute(handler, gate)
+			}
 
 			registered := router.Handle(path, handler).Methods(definition.Method)
 			if registerErr := registered.GetError(); registerErr != nil {
-				return fmt.Errorf("compile resource %q %s %s: %w", resource.Name, definition.Method, path, registerErr)
+				return compiledCatalog{}, fmt.Errorf("compile resource %q %s %s: %w", resource.Name, definition.Method, path, registerErr)
 			}
 
 			pathRegexp, err := registered.GetPathRegexp()
 			if err != nil {
-				return fmt.Errorf("compile resource %q %s %s matcher: %w", resource.Name, definition.Method, path, err)
+				return compiledCatalog{}, fmt.Errorf("compile resource %q %s %s matcher: %w", resource.Name, definition.Method, path, err)
 			}
 
 			compiledRegexp, err := regexp.Compile(pathRegexp)
 			if err != nil {
-				return fmt.Errorf("compile resource %q %s %s regexp: %w", resource.Name, definition.Method, path, err)
+				return compiledCatalog{}, fmt.Errorf("compile resource %q %s %s regexp: %w", resource.Name, definition.Method, path, err)
 			}
 
 			// Validation already refused two routes with the same normalized
@@ -115,7 +143,7 @@ func (a *API) compileRoutes(apiPrefix string, maxBodyBytes int64, resources ...R
 			// which different templates can produce.
 			key := definition.Method + " " + pathRegexp
 			if _, exists := routeKeys[key]; exists {
-				return fmt.Errorf("compile resource %q %s %s: duplicate route shape", resource.Name, definition.Method, path)
+				return compiledCatalog{}, fmt.Errorf("compile resource %q %s %s: duplicate route shape", resource.Name, definition.Method, path)
 			}
 
 			route := Entry{
@@ -129,17 +157,24 @@ func (a *API) compileRoutes(apiPrefix string, maxBodyBytes int64, resources ...R
 			}
 			sort.Strings(route.ErrorCodes)
 			routeKeys[key] = struct{}{}
-			routes = append(routes, route)
-			matchers = append(matchers, routeMatcher{route: route, pathRegexp: compiledRegexp})
+			compiled.routes = append(compiled.routes, route)
+			compiled.matchers = append(compiled.matchers, routeMatcher{route: route, pathRegexp: compiledRegexp, available: gate})
 		}
 	}
+	sortRoutes(compiled.routes)
+	compiled.router = router
+	return compiled, nil
+}
 
-	sortRoutes(routes)
-	a.router = router
-	a.routes = routes
-	a.routeMatchers = matchers
-	a.handler = withMiddleware(http.HandlerFunc(a.serveRoutes), a.logger, a.middleware)
-	return nil
+// gateRoute answers 404 while available reports false.
+func (a *API) gateRoute(next http.Handler, available func() bool) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if !available() {
+			a.handleNotFound(writer, request)
+			return
+		}
+		next.ServeHTTP(writer, request)
+	})
 }
 
 // Entry is one compiled route as API.Routes reports it. Path is the router
@@ -158,6 +193,12 @@ type Entry struct {
 type routeMatcher struct {
 	route      Entry
 	pathRegexp *regexp.Regexp
+	// available is nil for a catalog route, which always serves.
+	available func() bool
+}
+
+func (m routeMatcher) serves(path string) bool {
+	return m.pathRegexp.MatchString(path) && (m.available == nil || m.available())
 }
 
 func sortRoutes(routes []Entry) {

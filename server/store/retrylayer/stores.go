@@ -290,6 +290,19 @@ func (s *examAuthoringStore) UpdateDraftFocusLoss(
 	})
 }
 
+func (s *examAuthoringStore) UpdateDraftExecution(
+	ctx context.Context,
+	input *store.ExamDraftExecutionUpdate,
+	command *store.CommandIdempotency,
+) (*store.ExamAuthoringCommandResult, error) {
+	if command == nil {
+		return s.ExamAuthoringStore.UpdateDraftExecution(ctx, input, command)
+	}
+	return retryCall1(ctx, s.layer, func() (*store.ExamAuthoringCommandResult, error) {
+		return s.ExamAuthoringStore.UpdateDraftExecution(ctx, input, command)
+	})
+}
+
 func (s *examAuthoringStore) List(ctx context.Context, options store.ExamListOptions) ([]store.ExamSummary, error) {
 	return retryCall1(ctx, s.layer, func() ([]store.ExamSummary, error) {
 		return s.ExamAuthoringStore.List(ctx, options)
@@ -592,6 +605,15 @@ func (s *examAttemptStore) GetCandidatePresentation(
 	})
 }
 
+func (s *examAttemptStore) ResolveCandidateAccess(
+	ctx context.Context,
+	access store.CandidateAttemptAccess,
+) (*store.CandidateAttemptAccessTarget, error) {
+	return retryCall1(ctx, s.layer, func() (*store.CandidateAttemptAccessTarget, error) {
+		return s.ExamAttemptStore.ResolveCandidateAccess(ctx, access)
+	})
+}
+
 func (s *examAttemptStore) ResolveCandidateResource(
 	ctx context.Context,
 	access store.CandidateAttemptAccess,
@@ -613,7 +635,7 @@ func (s *examAttemptWorkspaceStore) List(
 
 func (s *examAttemptWorkspaceStore) ResolveFile(
 	ctx context.Context,
-	access store.CandidateAttemptAccess,
+	access store.ExamAttemptWorkspaceReadAccess,
 	entryID model.AttemptWorkspaceEntryID,
 ) (*store.CandidateWorkspaceContent, error) {
 	return retryCall1(ctx, s.layer, func() (*store.CandidateWorkspaceContent, error) {
@@ -630,48 +652,39 @@ func (s *examAttemptWorkspaceStore) ListJournal(
 	})
 }
 
-func (s *examAttemptWorkspaceStore) ResolveMutationTarget(
-	ctx context.Context,
-	access store.ExamAttemptWorkspaceMutationAccess,
-) (*store.ExamAttemptWorkspaceMutationTarget, error) {
-	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptWorkspaceMutationTarget, error) {
-		return s.ExamAttemptWorkspaceStore.ResolveMutationTarget(ctx, access)
-	})
-}
-
-func (s *examAttemptWorkspaceStore) ReserveObject(
+func (s *examAttemptWorkspaceStore) ReserveObjects(
 	ctx context.Context,
 	input *store.ExamAttemptWorkspaceObjectReservation,
-) (*model.AttemptWorkspaceObject, error) {
-	return retryCall1(ctx, s.layer, func() (*model.AttemptWorkspaceObject, error) {
-		return s.ExamAttemptWorkspaceStore.ReserveObject(ctx, input)
+) (*store.ExamAttemptWorkspaceMutationTarget, error) {
+	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptWorkspaceMutationTarget, error) {
+		return s.ExamAttemptWorkspaceStore.ReserveObjects(ctx, input)
 	})
 }
 
-func (s *examAttemptWorkspaceStore) MarkObjectReady(
+func (s *examAttemptWorkspaceStore) MarkObjectsReady(
 	ctx context.Context,
-	input *store.ExamAttemptWorkspaceObjectReady,
-) (*model.AttemptWorkspaceObject, error) {
-	return retryCall1(ctx, s.layer, func() (*model.AttemptWorkspaceObject, error) {
-		return s.ExamAttemptWorkspaceStore.MarkObjectReady(ctx, input)
+	input *store.ExamAttemptWorkspaceObjectsReady,
+) error {
+	return retryCall0(ctx, s.layer, func() error {
+		return s.ExamAttemptWorkspaceStore.MarkObjectsReady(ctx, input)
 	})
 }
 
-func (s *examAttemptWorkspaceStore) ApplyMutation(
+func (s *examAttemptWorkspaceStore) ApplyBatch(
 	ctx context.Context,
-	input *store.ExamAttemptWorkspaceMutation,
+	input *store.ExamAttemptWorkspaceBatch,
 	command *store.CommandIdempotency,
-) (*store.ExamAttemptWorkspaceMutationResult, error) {
+) (*store.ExamAttemptWorkspaceBatchResult, error) {
 	if command == nil {
-		return s.ExamAttemptWorkspaceStore.ApplyMutation(ctx, input, command)
+		return s.ExamAttemptWorkspaceStore.ApplyBatch(ctx, input, command)
 	}
-	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptWorkspaceMutationResult, error) {
-		return s.ExamAttemptWorkspaceStore.ApplyMutation(ctx, input, command)
+	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptWorkspaceBatchResult, error) {
+		return s.ExamAttemptWorkspaceStore.ApplyBatch(ctx, input, command)
 	})
 }
 
-func (s *examAttemptWorkspaceStore) MarkObjectReclaimable(ctx context.Context, objectID model.AttemptWorkspaceObjectID) error {
-	return s.ExamAttemptWorkspaceStore.MarkObjectReclaimable(ctx, objectID)
+func (s *examAttemptWorkspaceStore) MarkObjectsReclaimable(ctx context.Context, objectIDs []model.AttemptWorkspaceObjectID) error {
+	return s.ExamAttemptWorkspaceStore.MarkObjectsReclaimable(ctx, objectIDs)
 }
 
 func (s *examAttemptWorkspaceStore) ClaimObjectsForCleanup(
@@ -1244,6 +1257,27 @@ func (s *servingNodeLeaseStore) Upsert(ctx context.Context, claim *store.Serving
 }
 
 // Delete withdraws only the exact incarnation, so replay is idempotent.
+// Get is a read.
+func (s *attemptEnvironmentStore) Get(ctx context.Context, attemptID model.ExamAttemptID) (*model.AttemptEnvironment, error) {
+	return retryCall1(ctx, s.layer, func() (*model.AttemptEnvironment, error) { return s.AttemptEnvironmentStore.Get(ctx, attemptID) })
+}
+
+// Renew only extends the caller's exact fence, so a replay after a lost
+// commit extends the same lease again or reports it lost.
+func (s *attemptRuntimeLeaseStore) Renew(
+	ctx context.Context,
+	renewal *store.AttemptRuntimeLeaseRenewal,
+) (*store.AttemptRuntimeLease, error) {
+	return retryCall1(ctx, s.layer, func() (*store.AttemptRuntimeLease, error) {
+		return s.AttemptRuntimeLeaseStore.Renew(ctx, renewal)
+	})
+}
+
+// Release deletes only the caller's exact fence, so a replay is idempotent.
+func (s *attemptRuntimeLeaseStore) Release(ctx context.Context, release *store.AttemptRuntimeLeaseRelease) error {
+	return retryCall0(ctx, s.layer, func() error { return s.AttemptRuntimeLeaseStore.Release(ctx, release) })
+}
+
 func (s *servingNodeLeaseStore) Delete(ctx context.Context, input *store.ServingNodeLeaseDeletion) error {
 	nodeID := input.NodeID
 	leaseID := input.LeaseID

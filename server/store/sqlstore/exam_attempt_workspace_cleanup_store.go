@@ -16,59 +16,17 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// MarkObjectReclaimable schedules a staged Attempt-owned Workspace object for
-// cleanup after the reclaim safety window when no entry, Submission manifest
-// or recorded mutation outcome still references it.
-func (s *SQLExamAttemptWorkspaceStore) MarkObjectReclaimable(ctx context.Context, objectID model.AttemptWorkspaceObjectID) error {
-	if !objectID.IsValid() {
-		return store.NewErrInvalidInput("attempt_workspace_object", "reclaim", nil)
-	}
-
-	result, err := s.GetMaster().Exec(
-		ctx,
-		`UPDATE exam_attempt_workspace_objects objects
-		SET state = 'reclaimable', updated_at = GREATEST(objects.updated_at, statement_timestamp()),
-			reclaim_after = statement_timestamp()+(? * INTERVAL '1 millisecond')
-		WHERE objects.id = ?
-			AND objects.storage_origin = 'attempt'
-			AND objects.state = 'staged'
-			AND NOT EXISTS (
-				SELECT 1
-				FROM exam_attempt_workspace_entries entries
-				WHERE entries.current_object_id = objects.id
-			)
-			AND NOT EXISTS (
-				SELECT 1
-				FROM exam_submission_manifest_entries submitted
-				WHERE submitted.attempt_object_id = objects.id
-			)
-			AND NOT EXISTS (
-				SELECT 1
-				FROM command_outcomes outcomes
-				WHERE outcomes.operation = ?
-					AND jsonb_exists(outcomes.outcome->'o', objects.id)
-			)
-			AND NOT EXISTS (
-				SELECT 1
-				FROM command_outcomes outcomes
-				WHERE outcomes.original_audit_event_id = objects.retired_by_audit_event_id
-			)`,
-		model.AttemptWorkspaceReclaimSafetyWindow.Milliseconds(),
-		objectID.String(),
-		store.ExamAttemptWorkspaceMutationOperation,
-	)
-	if err != nil {
-		return fmt.Errorf("mark Attempt Workspace object reclaimable: %w", err)
-	}
-
-	if affected, rowsErr := result.RowsAffected(); rowsErr != nil {
-		return fmt.Errorf("inspect Attempt Workspace object reclamation: %w", rowsErr)
-	} else if affected != 1 {
-		return store.NewErrConflict("attempt_workspace_object", "attempt_workspace_object_state", nil)
-	}
-
-	return nil
-}
+// attemptWorkspaceOutcomeProtects is true while a retained batch outcome still
+// names objects.id among the objects it protects. The literal operation and the
+// containment test match the partial GIN index
+// command_outcomes_workspace_objects_idx, so the check is an index probe rather
+// than a scan of every retained outcome.
+const attemptWorkspaceOutcomeProtects = `EXISTS (
+	SELECT 1
+	FROM command_outcomes outcomes
+	WHERE outcomes.operation = '` + store.ExamAttemptWorkspaceBatchOperation + `'
+		AND outcomes.outcome->'o' @> to_jsonb(objects.id::text)
+)`
 
 // ClaimObjectsForCleanup claims up to the input limit of due Attempt Workspace objects for physical cleanup under the input claim token.
 func (s *SQLExamAttemptWorkspaceStore) ClaimObjectsForCleanup(
@@ -124,12 +82,7 @@ func (s *SQLExamAttemptWorkspaceStore) ClaimObjectsForCleanup(
 					FROM exam_submission_manifest_entries submitted
 					WHERE submitted.attempt_object_id = objects.id
 				)
-				AND NOT EXISTS (
-					SELECT 1
-					FROM command_outcomes outcomes
-					WHERE outcomes.operation = ?
-						AND jsonb_exists(outcomes.outcome->'o', objects.id)
-				)
+				AND NOT `+attemptWorkspaceOutcomeProtects+`
 				AND NOT EXISTS (
 					SELECT 1
 					FROM command_outcomes outcomes
@@ -152,7 +105,6 @@ func (s *SQLExamAttemptWorkspaceStore) ClaimObjectsForCleanup(
 			objects.expires_at, objects.reclaim_after, objects.claim_token, objects.claimed_at`,
 		model.AttemptWorkspaceReclaimSafetyWindow.Milliseconds(),
 		model.AttemptWorkspaceCleanupClaimLease.Milliseconds(),
-		store.ExamAttemptWorkspaceMutationOperation,
 		limit,
 		claimToken,
 	)
@@ -198,12 +150,7 @@ func (s *SQLExamAttemptWorkspaceStore) CompleteObjectCleanup(ctx context.Context
 				FROM exam_submission_manifest_entries submitted
 				WHERE submitted.attempt_object_id = objects.id
 			)
-			AND NOT EXISTS (
-				SELECT 1
-				FROM command_outcomes outcomes
-				WHERE outcomes.operation = ?
-					AND jsonb_exists(outcomes.outcome->'o', objects.id)
-			)
+			AND NOT `+attemptWorkspaceOutcomeProtects+`
 			AND NOT EXISTS (
 				SELECT 1
 				FROM command_outcomes outcomes
@@ -211,7 +158,6 @@ func (s *SQLExamAttemptWorkspaceStore) CompleteObjectCleanup(ctx context.Context
 			)`,
 		objectID.String(),
 		claimToken,
-		store.ExamAttemptWorkspaceMutationOperation,
 	)
 	if err != nil {
 		return fmt.Errorf("complete Attempt Workspace object cleanup: %w", translateError("attempt_workspace_object", objectID.String(), err))

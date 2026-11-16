@@ -105,10 +105,19 @@ the application node. A replacement first stages the new bytes, then
 conditionally swaps the PostgreSQL pointer and content version. The response
 reports success only after that durable commit.
 
-Each change carries:
+Every write is one batch of 1 to 128 changes, applied in order, all or
+nothing. The editor and the execution environment write the same way. Access
+is checked once for the whole batch. The batch records one idempotency outcome
+and one audit pair, and sends one realtime hint after it commits. Capacity is
+checked against the state the whole batch leaves behind.
+
+A batch carries:
 
 - an idempotency key
-- the expected Workspace Entry, Path and Content Version conditions
+- for each change, the expected Workspace Entry, Path and Content Version
+  conditions
+- the Workspace Cursor it starts from, when it deletes a directory with
+  everything inside it
 - the active protected Attempt credential and the Connection selector
 - the explicit Participation identity and generation
 

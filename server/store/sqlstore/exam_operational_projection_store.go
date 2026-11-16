@@ -601,6 +601,10 @@ type sittingCandidateStatusRow struct {
 	SuspensionReason         sql.NullString `db:"suspension_reason"`
 	ActiveSuspensionCount    int64          `db:"active_suspension_count"`
 	IntegrityAttention       int64          `db:"integrity_attention_count"`
+	EnvironmentState         sql.NullString `db:"environment_state"`
+	EnvironmentDesired       sql.NullString `db:"environment_desired"`
+	EnvironmentIncarnation   sql.NullInt64  `db:"environment_incarnation"`
+	EnvironmentWaitingSince  sql.NullTime   `db:"environment_waiting_since"`
 }
 
 // ListSittingCandidateStatuses returns one page of the Sitting's Candidates,
@@ -659,6 +663,12 @@ func listSittingCandidateStatuses(
 	page, err := candidateStatusPageHeader(header)
 	if err != nil {
 		return nil, err
+	}
+
+	if err = tx.Get(ctx, &page.EnvironmentsWaitingCapacity, `SELECT COUNT(*)
+		FROM exam_attempt_environments
+		WHERE exam_sitting_id = ? AND state = 'waiting_capacity'`, options.SittingID.String()); err != nil {
+		return nil, fmt.Errorf("count environments waiting for capacity: %w", err)
 	}
 
 	page.Items = make([]store.SittingCandidateStatusItem, 0, len(rows))
@@ -840,7 +850,9 @@ func sittingCandidateStatusQuery(
 			COALESCE(clips.recording, 0) AS clips_recording,
 			COALESCE(clips.uploading, 0) AS clips_uploading,
 			COALESCE(clips.ready, 0) AS clips_ready,
-			COALESCE(clips.failed, 0) AS clips_failed
+			COALESCE(clips.failed, 0) AS clips_failed,
+			environment.state AS environment_state, environment.desired AS environment_desired,
+			environment.incarnation AS environment_incarnation, environment.waiting_since AS environment_waiting_since
 		FROM population
 		JOIN users candidate ON candidate.id = population.candidate_user_id
 		LEFT JOIN exam_attempts a ON a.exam_sitting_id = ?
@@ -867,6 +879,7 @@ func sittingCandidateStatusQuery(
 		) clips ON TRUE
 		LEFT JOIN exam_attempt_suspensions suspension ON suspension.exam_attempt_id = a.id
 			AND suspension.state = 'active'
+		LEFT JOIN exam_attempt_environments environment ON environment.exam_attempt_id = a.id
 		WHERE candidate.id > ?
 			AND candidate.id <> ?
 		ORDER BY candidate.id
@@ -1130,6 +1143,25 @@ func (row sittingCandidateStatusRow) item(
 			"terminal_fence",
 			errors.New("non-active Attempt retains active transport"),
 		)
+	}
+
+	if row.EnvironmentState.Valid {
+		environment := &store.SittingCandidateEnvironment{
+			State:       model.AttemptEnvironmentState(row.EnvironmentState.String),
+			Desired:     model.AttemptEnvironmentDesired(row.EnvironmentDesired.String),
+			Incarnation: row.EnvironmentIncarnation.Int64,
+		}
+		if !environment.State.IsValid() || !environment.Desired.IsValid() || environment.Incarnation < 0 {
+			return store.SittingCandidateStatusItem{}, invalidPersistedState(
+				"sitting_candidate_status",
+				"environment",
+				errors.New("invalid environment fields"),
+			)
+		}
+		if row.EnvironmentWaitingSince.Valid {
+			environment.WaitingSince = model.OptionalTimeFrom(model.TimeUTC(row.EnvironmentWaitingSince.Time))
+		}
+		item.Environment = environment
 	}
 
 	return item, nil

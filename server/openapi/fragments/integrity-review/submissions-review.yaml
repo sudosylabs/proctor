@@ -408,6 +408,12 @@ components:
             native_conditions:
               records: 0
               digest: sha256:b29f78624e0ba2ee6710a9b4e892d0ed2b66077bcc9ba397eb22d3302cfdcbb5
+            attempt_evidence:
+              records: 0
+              bytes: 0
+              gaps: 0
+              overflow: 0
+              digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
     ExamIntegrityReviewMutationOK:
       description: >-
         The change was saved. Repeating the request with the same Idempotency-Key returns the same
@@ -706,6 +712,7 @@ components:
         - browser_activity
         - delivery_inventory_revision
         - native_conditions
+        - attempt_evidence
       properties:
         submission_id:
           $ref: '#/components/schemas/ID'
@@ -758,6 +765,8 @@ components:
         native_conditions:
           $ref: '#/components/schemas/NativeConditionInventory'
           description: The count and digest of native condition records kept for the Attempt.
+        attempt_evidence:
+          $ref: '#/components/schemas/AttemptEvidenceInventory'
     ExamIntegrityReviewMutationResponse:
       description: The Review after the change, and the decision when the change saved one.
       type: object

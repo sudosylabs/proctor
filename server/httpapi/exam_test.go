@@ -379,6 +379,7 @@ type examHTTPApplication struct {
 	configureFocusLoss     exam.ConfigureDraftFocusLossCommand
 	configureNativePolicy  exam.ConfigureDraftNativePolicyCommand
 	configureBrowserPolicy exam.ConfigureDraftBrowserPolicyCommand
+	configureExecution     exam.ConfigureDraftExecutionCommand
 	list                   exam.ListQuery
 	catalog                exam.CatalogPage
 	archive                exam.ArchiveCommand
@@ -443,6 +444,11 @@ func (a *examHTTPApplication) ConfigureExamDraftNativePolicy(_ context.Context, 
 
 func (a *examHTTPApplication) ConfigureExamDraftFocusLoss(_ context.Context, _ invocation.Invocation, command exam.ConfigureDraftFocusLossCommand) (exam.View, error) {
 	a.configureFocusLoss = command
+	return a.view, nil
+}
+
+func (a *examHTTPApplication) ConfigureExamDraftExecution(_ context.Context, _ invocation.Invocation, command exam.ConfigureDraftExecutionCommand) (exam.View, error) {
+	a.configureExecution = command
 	return a.view, nil
 }
 

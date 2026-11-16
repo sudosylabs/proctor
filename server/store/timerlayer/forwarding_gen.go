@@ -121,6 +121,12 @@ type timedStores struct {
 	desktopCompatibilityPolicyOnce sync.Once
 	pluginSettings                 store.PluginSettingsStore
 	pluginSettingsOnce             sync.Once
+	environmentProfile             store.EnvironmentProfileStore
+	environmentProfileOnce         sync.Once
+	attemptEnvironment             store.AttemptEnvironmentStore
+	attemptEnvironmentOnce         sync.Once
+	attemptRuntimeLease            store.AttemptRuntimeLeaseStore
+	attemptRuntimeLeaseOnce        sync.Once
 	retentionPolicy                store.RetentionPolicyStore
 	retentionPolicyOnce            sync.Once
 	retention                      store.RetentionStore
@@ -386,6 +392,21 @@ type timedDesktopCompatibilityPolicyStore struct {
 type timedPluginSettingsStore struct {
 	layer *Layer
 	next  store.PluginSettingsStore
+}
+
+type timedEnvironmentProfileStore struct {
+	layer *Layer
+	next  store.EnvironmentProfileStore
+}
+
+type timedAttemptEnvironmentStore struct {
+	layer *Layer
+	next  store.AttemptEnvironmentStore
+}
+
+type timedAttemptRuntimeLeaseStore struct {
+	layer *Layer
+	next  store.AttemptRuntimeLeaseStore
 }
 
 type timedRetentionPolicyStore struct {
@@ -923,6 +944,36 @@ func (l *Layer) PluginSettings() store.PluginSettingsStore {
 	return l.stores.pluginSettings
 }
 
+func (l *Layer) EnvironmentProfile() store.EnvironmentProfileStore {
+	l.stores.environmentProfileOnce.Do(func() {
+		next := l.next.EnvironmentProfile()
+		if next != nil {
+			l.stores.environmentProfile = &timedEnvironmentProfileStore{layer: l, next: next}
+		}
+	})
+	return l.stores.environmentProfile
+}
+
+func (l *Layer) AttemptEnvironment() store.AttemptEnvironmentStore {
+	l.stores.attemptEnvironmentOnce.Do(func() {
+		next := l.next.AttemptEnvironment()
+		if next != nil {
+			l.stores.attemptEnvironment = &timedAttemptEnvironmentStore{layer: l, next: next}
+		}
+	})
+	return l.stores.attemptEnvironment
+}
+
+func (l *Layer) AttemptRuntimeLease() store.AttemptRuntimeLeaseStore {
+	l.stores.attemptRuntimeLeaseOnce.Do(func() {
+		next := l.next.AttemptRuntimeLease()
+		if next != nil {
+			l.stores.attemptRuntimeLease = &timedAttemptRuntimeLeaseStore{layer: l, next: next}
+		}
+	})
+	return l.stores.attemptRuntimeLease
+}
+
 func (l *Layer) RetentionPolicy() store.RetentionPolicyStore {
 	l.stores.retentionPolicyOnce.Do(func() {
 		next := l.next.RetentionPolicy()
@@ -1252,6 +1303,12 @@ func (s *timedExamAuthoringStore) UpdateDraftText(arg0 context.Context, arg1 *st
 func (s *timedExamAuthoringStore) UpdateDraftFocusLoss(arg0 context.Context, arg1 *store.ExamDraftFocusLossUpdate, arg2 *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodUpdateDraftFocusLoss), func(callCtx context.Context) (*store.ExamAuthoringCommandResult, error) {
 		return s.next.UpdateDraftFocusLoss(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedExamAuthoringStore) UpdateDraftExecution(arg0 context.Context, arg1 *store.ExamDraftExecutionUpdate, arg2 *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAuthoring, methodUpdateDraftExecution), func(callCtx context.Context) (*store.ExamAuthoringCommandResult, error) {
+		return s.next.UpdateDraftExecution(callCtx, arg1, arg2)
 	})
 }
 
@@ -1645,6 +1702,12 @@ func (s *timedExamAttemptStore) GetCandidatePresentation(arg0 context.Context, a
 	})
 }
 
+func (s *timedExamAttemptStore) ResolveCandidateAccess(arg0 context.Context, arg1 store.CandidateAttemptAccess) (*store.CandidateAttemptAccessTarget, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodResolveCandidateAccess), func(callCtx context.Context) (*store.CandidateAttemptAccessTarget, error) {
+		return s.next.ResolveCandidateAccess(callCtx, arg1)
+	})
+}
+
 func (s *timedExamAttemptStore) ResolveCandidateResource(arg0 context.Context, arg1 store.CandidateAttemptAccess, arg2 model.ExamResourceID) (*store.CandidateResourceContent, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodResolveCandidateResource), func(callCtx context.Context) (*store.CandidateResourceContent, error) {
 		return s.next.ResolveCandidateResource(callCtx, arg1, arg2)
@@ -1843,13 +1906,25 @@ func (s *timedDeliveryBudgetStore) ExpireDelivery(arg0 context.Context, arg1 *st
 	})
 }
 
+func (s *timedExamAttemptWorkspaceStore) AppendAttemptEvidence(arg0 context.Context, arg1 *store.ExamAttemptEvidenceAppend) (*store.ExamAttemptEvidenceAppendResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodAppendAttemptEvidence), func(callCtx context.Context) (*store.ExamAttemptEvidenceAppendResult, error) {
+		return s.next.AppendAttemptEvidence(callCtx, arg1)
+	})
+}
+
+func (s *timedExamAttemptWorkspaceStore) AppendTerminalInput(arg0 context.Context, arg1 *store.ExamAttemptTerminalInputAppend) (*store.ExamAttemptEvidenceAppendResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodAppendTerminalInput), func(callCtx context.Context) (*store.ExamAttemptEvidenceAppendResult, error) {
+		return s.next.AppendTerminalInput(callCtx, arg1)
+	})
+}
+
 func (s *timedExamAttemptWorkspaceStore) List(arg0 context.Context, arg1 store.CandidateWorkspaceListOptions) (*store.CandidateAttemptWorkspacePage, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodList), func(callCtx context.Context) (*store.CandidateAttemptWorkspacePage, error) {
 		return s.next.List(callCtx, arg1)
 	})
 }
 
-func (s *timedExamAttemptWorkspaceStore) ResolveFile(arg0 context.Context, arg1 store.CandidateAttemptAccess, arg2 model.AttemptWorkspaceEntryID) (*store.CandidateWorkspaceContent, error) {
+func (s *timedExamAttemptWorkspaceStore) ResolveFile(arg0 context.Context, arg1 store.ExamAttemptWorkspaceReadAccess, arg2 model.AttemptWorkspaceEntryID) (*store.CandidateWorkspaceContent, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodResolveFile), func(callCtx context.Context) (*store.CandidateWorkspaceContent, error) {
 		return s.next.ResolveFile(callCtx, arg1, arg2)
 	})
@@ -1861,33 +1936,27 @@ func (s *timedExamAttemptWorkspaceStore) ListJournal(arg0 context.Context, arg1 
 	})
 }
 
-func (s *timedExamAttemptWorkspaceStore) ResolveMutationTarget(arg0 context.Context, arg1 store.ExamAttemptWorkspaceMutationAccess) (*store.ExamAttemptWorkspaceMutationTarget, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodResolveMutationTarget), func(callCtx context.Context) (*store.ExamAttemptWorkspaceMutationTarget, error) {
-		return s.next.ResolveMutationTarget(callCtx, arg1)
+func (s *timedExamAttemptWorkspaceStore) ReserveObjects(arg0 context.Context, arg1 *store.ExamAttemptWorkspaceObjectReservation) (*store.ExamAttemptWorkspaceMutationTarget, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodReserveObjects), func(callCtx context.Context) (*store.ExamAttemptWorkspaceMutationTarget, error) {
+		return s.next.ReserveObjects(callCtx, arg1)
 	})
 }
 
-func (s *timedExamAttemptWorkspaceStore) ReserveObject(arg0 context.Context, arg1 *store.ExamAttemptWorkspaceObjectReservation) (*model.AttemptWorkspaceObject, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodReserveObject), func(callCtx context.Context) (*model.AttemptWorkspaceObject, error) {
-		return s.next.ReserveObject(callCtx, arg1)
+func (s *timedExamAttemptWorkspaceStore) MarkObjectsReady(arg0 context.Context, arg1 *store.ExamAttemptWorkspaceObjectsReady) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodMarkObjectsReady), func(callCtx context.Context) error {
+		return s.next.MarkObjectsReady(callCtx, arg1)
 	})
 }
 
-func (s *timedExamAttemptWorkspaceStore) MarkObjectReady(arg0 context.Context, arg1 *store.ExamAttemptWorkspaceObjectReady) (*model.AttemptWorkspaceObject, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodMarkObjectReady), func(callCtx context.Context) (*model.AttemptWorkspaceObject, error) {
-		return s.next.MarkObjectReady(callCtx, arg1)
+func (s *timedExamAttemptWorkspaceStore) ApplyBatch(arg0 context.Context, arg1 *store.ExamAttemptWorkspaceBatch, arg2 *store.CommandIdempotency) (*store.ExamAttemptWorkspaceBatchResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodApplyBatch), func(callCtx context.Context) (*store.ExamAttemptWorkspaceBatchResult, error) {
+		return s.next.ApplyBatch(callCtx, arg1, arg2)
 	})
 }
 
-func (s *timedExamAttemptWorkspaceStore) ApplyMutation(arg0 context.Context, arg1 *store.ExamAttemptWorkspaceMutation, arg2 *store.CommandIdempotency) (*store.ExamAttemptWorkspaceMutationResult, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodApplyMutation), func(callCtx context.Context) (*store.ExamAttemptWorkspaceMutationResult, error) {
-		return s.next.ApplyMutation(callCtx, arg1, arg2)
-	})
-}
-
-func (s *timedExamAttemptWorkspaceStore) MarkObjectReclaimable(arg0 context.Context, arg1 model.AttemptWorkspaceObjectID) error {
-	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodMarkObjectReclaimable), func(callCtx context.Context) error {
-		return s.next.MarkObjectReclaimable(callCtx, arg1)
+func (s *timedExamAttemptWorkspaceStore) MarkObjectsReclaimable(arg0 context.Context, arg1 []model.AttemptWorkspaceObjectID) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateExamAttemptWorkspace, methodMarkObjectsReclaimable), func(callCtx context.Context) error {
+		return s.next.MarkObjectsReclaimable(callCtx, arg1)
 	})
 }
 
@@ -1984,6 +2053,12 @@ func (s *timedExamSubmissionStore) ResolveFile(arg0 context.Context, arg1 model.
 func (s *timedExamIntegrityReviewStore) ListNativeConditions(arg0 context.Context, arg1 store.NativeConditionListOptions) (*store.NativeConditionPage, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamIntegrityReview, methodListNativeConditions), func(callCtx context.Context) (*store.NativeConditionPage, error) {
 		return s.next.ListNativeConditions(callCtx, arg1)
+	})
+}
+
+func (s *timedExamIntegrityReviewStore) ListAttemptEvidence(arg0 context.Context, arg1 store.AttemptEvidenceListOptions) (*store.AttemptEvidencePage, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamIntegrityReview, methodListAttemptEvidence), func(callCtx context.Context) (*store.AttemptEvidencePage, error) {
+		return s.next.ListAttemptEvidence(callCtx, arg1)
 	})
 }
 
@@ -4009,6 +4084,90 @@ func (s *timedPluginSettingsStore) Replace(arg0 context.Context, arg1 *store.Plu
 	})
 }
 
+func (s *timedEnvironmentProfileStore) Create(arg0 context.Context, arg1 *store.EnvironmentProfileCreation, arg2 *store.CommandIdempotency) (*store.EnvironmentProfileCommandResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateEnvironmentProfile, methodCreate), func(callCtx context.Context) (*store.EnvironmentProfileCommandResult, error) {
+		return s.next.Create(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedEnvironmentProfileStore) Retire(arg0 context.Context, arg1 *store.EnvironmentProfileRetirement, arg2 *store.CommandIdempotency) (*store.EnvironmentProfileCommandResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateEnvironmentProfile, methodRetire), func(callCtx context.Context) (*store.EnvironmentProfileCommandResult, error) {
+		return s.next.Retire(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedEnvironmentProfileStore) Get(arg0 context.Context, arg1 model.EnvironmentProfileID) (*model.EnvironmentProfile, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateEnvironmentProfile, methodGet), func(callCtx context.Context) (*model.EnvironmentProfile, error) {
+		return s.next.Get(callCtx, arg1)
+	})
+}
+
+func (s *timedEnvironmentProfileStore) List(ctx context.Context, includeRetired bool) ([]*model.EnvironmentProfile, error) {
+	return timeStoreCall1(ctx, s.layer, storeOperation(aggregateEnvironmentProfile, methodList), func(callCtx context.Context) ([]*model.EnvironmentProfile, error) {
+		return s.next.List(callCtx, includeRetired)
+	})
+}
+
+func (s *timedAttemptEnvironmentStore) ApplyFact(arg0 context.Context, arg1 model.AttemptEnvironmentFact) (*store.AttemptEnvironmentFactResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAttemptEnvironment, methodApplyFact), func(callCtx context.Context) (*store.AttemptEnvironmentFactResult, error) {
+		return s.next.ApplyFact(callCtx, arg1)
+	})
+}
+
+func (s *timedAttemptEnvironmentStore) Get(arg0 context.Context, arg1 model.ExamAttemptID) (*model.AttemptEnvironment, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAttemptEnvironment, methodGet), func(callCtx context.Context) (*model.AttemptEnvironment, error) {
+		return s.next.Get(callCtx, arg1)
+	})
+}
+
+func (s *timedAttemptEnvironmentStore) SaveOwner(arg0 context.Context, arg1 *store.AttemptEnvironmentOwnerSave) (*model.AttemptEnvironment, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAttemptEnvironment, methodSaveOwner), func(callCtx context.Context) (*model.AttemptEnvironment, error) {
+		return s.next.SaveOwner(callCtx, arg1)
+	})
+}
+
+func (s *timedAttemptEnvironmentStore) RequestSettle(arg0 context.Context, arg1 model.ExamAttemptID) (int64, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAttemptEnvironment, methodRequestSettle), func(callCtx context.Context) (int64, error) {
+		return s.next.RequestSettle(callCtx, arg1)
+	})
+}
+
+func (s *timedAttemptEnvironmentStore) RecordSettleIncomplete(arg0 context.Context, arg1 *store.AttemptEnvironmentSettleGap) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateAttemptEnvironment, methodRecordSettleIncomplete), func(callCtx context.Context) error {
+		return s.next.RecordSettleIncomplete(callCtx, arg1)
+	})
+}
+
+func (s *timedAttemptEnvironmentStore) Replace(arg0 context.Context, arg1 *store.AttemptEnvironmentReplacement, arg2 *store.CommandIdempotency) (*store.AttemptEnvironmentReplacementResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAttemptEnvironment, methodReplace), func(callCtx context.Context) (*store.AttemptEnvironmentReplacementResult, error) {
+		return s.next.Replace(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedAttemptRuntimeLeaseStore) Claim(arg0 context.Context, arg1 *store.AttemptRuntimeLeaseClaim) (*store.AttemptRuntimeLease, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAttemptRuntimeLease, methodClaim), func(callCtx context.Context) (*store.AttemptRuntimeLease, error) {
+		return s.next.Claim(callCtx, arg1)
+	})
+}
+
+func (s *timedAttemptRuntimeLeaseStore) ClaimAvailable(arg0 context.Context, arg1 *store.AttemptRuntimeLeaseAvailableClaim) ([]store.AttemptRuntimeLease, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAttemptRuntimeLease, methodClaimAvailable), func(callCtx context.Context) ([]store.AttemptRuntimeLease, error) {
+		return s.next.ClaimAvailable(callCtx, arg1)
+	})
+}
+
+func (s *timedAttemptRuntimeLeaseStore) Renew(arg0 context.Context, arg1 *store.AttemptRuntimeLeaseRenewal) (*store.AttemptRuntimeLease, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAttemptRuntimeLease, methodRenew), func(callCtx context.Context) (*store.AttemptRuntimeLease, error) {
+		return s.next.Renew(callCtx, arg1)
+	})
+}
+
+func (s *timedAttemptRuntimeLeaseStore) Release(arg0 context.Context, arg1 *store.AttemptRuntimeLeaseRelease) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateAttemptRuntimeLease, methodRelease), func(callCtx context.Context) error {
+		return s.next.Release(callCtx, arg1)
+	})
+}
+
 func (s *timedRetentionPolicyStore) Get(arg0 context.Context) (*model.RetentionPolicy, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRetentionPolicy, methodGet), func(callCtx context.Context) (*model.RetentionPolicy, error) {
 		return s.next.Get(callCtx)
@@ -4206,6 +4365,9 @@ var (
 	_ store.AccessPolicyStore               = (*timedAccessPolicyStore)(nil)
 	_ store.DesktopCompatibilityPolicyStore = (*timedDesktopCompatibilityPolicyStore)(nil)
 	_ store.PluginSettingsStore             = (*timedPluginSettingsStore)(nil)
+	_ store.EnvironmentProfileStore         = (*timedEnvironmentProfileStore)(nil)
+	_ store.AttemptEnvironmentStore         = (*timedAttemptEnvironmentStore)(nil)
+	_ store.AttemptRuntimeLeaseStore        = (*timedAttemptRuntimeLeaseStore)(nil)
 	_ store.RetentionPolicyStore            = (*timedRetentionPolicyStore)(nil)
 	_ store.RetentionStore                  = (*timedRetentionStore)(nil)
 	_ store.ClusterDiscoveryStore           = (*timedClusterDiscoveryStore)(nil)

@@ -348,6 +348,8 @@ type candidateAttemptGuard struct {
 	SittingState        string `db:"sitting_state"`
 	AdmissionRevisionID string `db:"admission_revision_id"`
 	RevisionID          string `db:"revision_id"`
+	ParticipationID     string `db:"participation_id"`
+	Generation          int64  `db:"generation"`
 }
 
 func (s *SQLExamAttemptStore) candidateGuard(ctx context.Context, access store.CandidateAttemptAccess) (candidateAttemptGuard, error) {
@@ -366,7 +368,8 @@ func (s *SQLExamAttemptStore) candidateGuard(ctx context.Context, access store.C
 		ctx,
 		&guard,
 		`SELECT a.id AS attempt_id, a.exam_id, a.exam_sitting_id AS sitting_id, s.class_id,
-			s.state AS sitting_state, a.admission_revision_id, s.exam_revision_id AS revision_id
+			s.state AS sitting_state, a.admission_revision_id, s.exam_revision_id AS revision_id,
+			p.id AS participation_id, p.generation
 		FROM exam_attempts a
 		JOIN exam_sittings s ON s.id = a.exam_sitting_id
 			AND s.exam_id = a.exam_id
@@ -451,7 +454,7 @@ func lockCandidateGuard(
 		&row,
 		`SELECT a.id AS attempt_id, a.exam_id, a.exam_sitting_id AS sitting_id, s.class_id,
 			s.state AS sitting_state, a.admission_revision_id, s.exam_revision_id AS revision_id,
-			a.state AS attempt_state, s.state AS sitting_state, s.scheduled_end_at,
+			p.id AS participation_id, p.generation, a.state AS attempt_state, s.state AS sitting_state, s.scheduled_end_at,
 			p.state AS participation_state, p.continuity_credential_hash, p.lease_expires_at,
 			c.state AS connection_state, se.archived_at AS session_archived_at,
 			se.revoked_at AS session_revoked_at, se.idle_expires_at AS session_idle_expires_at,
@@ -698,7 +701,7 @@ func (s *SQLExamAttemptStore) listCandidateWorkspace(
 		ctx context.Context,
 		tx *sqlxTxWrapper,
 	) (*store.CandidateAttemptWorkspacePage, error) {
-		if _, err := lockCandidateGuard(ctx, tx, options.Access); err != nil {
+		if err := lockAttemptWorkspaceReadGuard(ctx, tx, options.Access); err != nil {
 			return nil, err
 		}
 		return listCandidateWorkspaceSnapshot(ctx, tx, options, continuation)
@@ -722,9 +725,9 @@ func listCandidateWorkspaceSnapshot(
 		FROM exam_attempt_workspaces
 		WHERE exam_attempt_id = ?
 		FOR SHARE`,
-		options.Access.AttemptID.String(),
+		options.Access.WorkspaceAttemptID().String(),
 	); err != nil {
-		return nil, translateError("attempt_workspace", options.Access.AttemptID.String(), err)
+		return nil, translateError("attempt_workspace", options.Access.WorkspaceAttemptID().String(), err)
 	}
 
 	workspaceID, err := model.ParseExamAttemptWorkspaceID(workspace.ID)
@@ -770,7 +773,7 @@ func listCandidateWorkspaceSnapshot(
 		LEFT JOIN exam_attempt_workspace_objects o ON o.id = e.current_object_id
 			AND o.workspace_id = e.workspace_id
 		WHERE w.exam_attempt_id = ?`
-	args := []any{options.Access.AttemptID.String()}
+	args := []any{options.Access.WorkspaceAttemptID().String()}
 	if continuation {
 		query += ` AND (e.path, e.id) > (?, ?)`
 		args = append(args, afterPath, options.AfterEntryID.String())
@@ -814,6 +817,44 @@ func listCandidateWorkspaceSnapshot(
 	}
 
 	return &store.CandidateAttemptWorkspacePage{WorkspaceID: workspaceID, Cursor: workspace.Cursor, Items: result, HasMore: hasMore}, nil
+}
+
+// ResolveCandidateAccess verifies the Candidate's live Attempt access under
+// the same locked checks as the presentation read and returns what it
+// resolves to.
+func (s *SQLExamAttemptStore) ResolveCandidateAccess(
+	ctx context.Context,
+	access store.CandidateAttemptAccess,
+) (*store.CandidateAttemptAccessTarget, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "resolve candidate Exam Attempt access", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.CandidateAttemptAccessTarget, error) {
+		guard, err := lockCandidateGuard(ctx, tx, access)
+		if err != nil {
+			return nil, err
+		}
+		sittingID, err := model.ParseExamSittingID(guard.SittingID)
+		if err != nil {
+			return nil, invalidPersistedState("exam_attempt", "exam_sitting_id", err)
+		}
+		classID, err := model.ParseClassID(guard.ClassID)
+		if err != nil {
+			return nil, invalidPersistedState("exam_sitting", "class_id", err)
+		}
+		participationID, err := model.ParseAttemptParticipationID(guard.ParticipationID)
+		if err != nil || guard.Generation < 1 {
+			return nil, invalidPersistedState("exam_attempt_participation", "id", err)
+		}
+		return &store.CandidateAttemptAccessTarget{
+			AttemptID:       access.AttemptID,
+			SittingID:       sittingID,
+			ClassID:         classID,
+			CandidateUserID: access.CandidateUserID,
+			ParticipationID: participationID,
+			Generation:      guard.Generation,
+		}, nil
+	})
 }
 
 // ResolveCandidateResource returns the metadata and stored file rendition of an
@@ -881,7 +922,7 @@ func (s *SQLExamAttemptStore) ResolveCandidateResource(
 func resolveCandidateWorkspaceFile(
 	ctx context.Context,
 	executor sqlxExecutor,
-	access store.CandidateAttemptAccess,
+	attemptID model.ExamAttemptID,
 	entryID model.AttemptWorkspaceEntryID,
 ) (*store.CandidateWorkspaceContent, error) {
 	var row struct {
@@ -905,7 +946,7 @@ func resolveCandidateWorkspaceFile(
 			AND o.workspace_id = e.workspace_id
 		WHERE w.exam_attempt_id = ?
 			AND e.id = ?
-			AND e.kind = 'file'`, access.AttemptID.String(), entryID.String())
+			AND e.kind = 'file'`, attemptID.String(), entryID.String())
 	if err != nil {
 		return nil, translateError("attempt_workspace_entry", entryID.String(), err)
 	}

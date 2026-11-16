@@ -539,6 +539,50 @@ func (s *Auditor) BeginSystemCriticalActionAtScope(
 	return saved, nil
 }
 
+// BeginOnBehalfAtScope persists a critical mutation attempt that trusted core
+// work performs on a User's behalf, outside any request of theirs. The User
+// is the actor; there is no Session, client or request identity. It is
+// distinct from both the principal-bearing path, so no Principal is
+// fabricated, and from the actorless system path, so the work is attributed
+// to the person whose work it is.
+func (s *Auditor) BeginOnBehalfAtScope(
+	ctx context.Context,
+	actor model.UserID,
+	action model.Action,
+	resource model.Resource,
+	scopeType model.RoleScopeType,
+	scopeID string,
+	parameters any,
+) (*model.AuditEvent, error) {
+	if !actor.IsValid() {
+		return nil, apperror.New("audit.internal")
+	}
+	if s.deps.Audits == nil {
+		return nil, AuditUnavailable(store.NewErrNotFound("audit_store", ""))
+	}
+
+	encodedParameters, err := model.EncodeAuditData(parameters)
+	if err != nil {
+		return nil, apperror.DomainInvalid("audit.internal", err)
+	}
+
+	saved, err := s.deps.Audits.Save(ctx, &model.AuditEvent{
+		ActorID:    actor,
+		Action:     string(action),
+		Resource:   resource,
+		ScopeType:  scopeType,
+		ScopeID:    scopeID,
+		Status:     model.AuditStatusAttempt,
+		NodeID:     s.deps.NodeID,
+		Parameters: encodedParameters,
+	})
+	if err != nil {
+		return nil, AuditUnavailable(err)
+	}
+
+	return saved, nil
+}
+
 // AccountAuditActor is the proved account behind an authentication handoff
 // whose request carries no Principal yet, such as Desktop approval or code
 // exchange. It is never fabricated from user-controlled input.

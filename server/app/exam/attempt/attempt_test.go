@@ -111,6 +111,7 @@ func TestContentSelectorsPreserveCandidateAccessErrors(t *testing.T) {
 }
 
 type fixture struct {
+	settler                   *settlerFake
 	service                   *Service
 	inv                       invocation.Invocation
 	userID                    model.UserID
@@ -144,7 +145,7 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	f := &fixture{userID: model.NewUserID(), attemptID: model.NewExamAttemptID(), connectionID: model.NewAttemptConnectionID(),
-		at: time.Date(2026, time.August, 17, 9, 0, 0, 0, time.UTC)}
+		at: time.Date(2026, time.August, 17, 9, 0, 0, 0, time.UTC), settler: &settlerFake{}}
 	f.sitting = &model.ExamSitting{ID: model.NewExamSittingID(), ExamID: model.NewExamID(), ExamRevisionID: model.NewExamRevisionID(),
 		ClassID: model.NewClassID(), State: model.ExamSittingOpen, ScheduledStartAt: f.at.Add(-time.Hour), ScheduledEndAt: f.at.Add(time.Hour),
 		CreatedAt: f.at.Add(-2 * time.Hour), UpdatedAt: f.at, Revision: 2}
@@ -210,8 +211,9 @@ func newFixture(t *testing.T) *fixture {
 			}
 			return model.NewSubmissionReceiptCode()
 		},
-		NewDomainEvent: model.NewDomainEventID,
-		NewJob:         model.NewJobID,
+		NewDomainEvent:     model.NewDomainEventID,
+		NewJob:             model.NewJobID,
+		EnvironmentSettler: f.settler,
 	})
 	require.NoError(t, err)
 	f.service = service
@@ -339,6 +341,21 @@ type systemAuditFake struct {
 	f          *fixture
 	values     map[string]any
 	failedCode string
+	actor      model.UserID
+	action     model.Action
+	resource   model.Resource
+	scopeType  model.RoleScopeType
+	scopeID    string
+	operation  string
+}
+
+func (f *systemAuditFake) BeginOnBehalf(_ context.Context, actor model.UserID, action model.Action, resource model.Resource,
+	scopeType model.RoleScopeType, scopeID, operation string, values map[string]any,
+) (model.AuditEventID, error) {
+	f.f.order = append(f.f.order, "system.audit.on_behalf")
+	f.actor, f.action, f.resource, f.scopeType, f.scopeID, f.operation, f.values =
+		actor, action, resource, scopeType, scopeID, operation, values
+	return model.NewAuditEventID(), nil
 }
 
 func (f *systemAuditFake) Begin(_ context.Context, _ model.Action, _ model.Resource, _ model.RoleScopeType, _, _ string, values map[string]any) (model.AuditEventID, error) {
@@ -461,4 +478,19 @@ func chainHasCode(err error, code string) bool {
 		err = failure.Unwrap()
 	}
 	return false
+}
+
+// settlerFake records the Attempts it was asked to settle, and those whose
+// pending settle it was asked to wait for.
+type settlerFake struct {
+	settled []model.ExamAttemptID
+	awaited []model.ExamAttemptID
+}
+
+func (s *settlerFake) Settle(_ context.Context, attemptID model.ExamAttemptID) {
+	s.settled = append(s.settled, attemptID)
+}
+
+func (s *settlerFake) AwaitPendingSettle(_ context.Context, attemptID model.ExamAttemptID) {
+	s.awaited = append(s.awaited, attemptID)
 }

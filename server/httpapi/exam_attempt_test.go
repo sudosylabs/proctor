@@ -18,7 +18,9 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -589,6 +591,30 @@ func TestManagerSuspendExamAttemptUsesRevisionFenceAndNeverReturnsPrivateReason(
 	require.Equal(t, http.StatusBadRequest, invalid.Code, "invalid revision status = %d body=%s", invalid.Code, invalid.Body.String())
 }
 
+func TestManagerReplaceEnvironmentNamesTheIncarnationSeen(t *testing.T) {
+	t.Parallel()
+	fake := newExamAttemptHTTPFake(t)
+	httpAPI := newExamAttemptFocusedAPI(t, fake)
+	path := "/api/v1/exams/" + fake.attempt.ExamID.String() + "/sittings/" + fake.attempt.SittingID.String() +
+		"/attempts/" + fake.attempt.ID.String() + "/environment/replace"
+	send := func(body, key string) *httptest.ResponseRecorder {
+		request := newJSONRequest(http.MethodPost, path, strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer credential")
+		request.Header.Set("Idempotency-Key", key)
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response
+	}
+	response := send(`{"expected_incarnation":0}`, "replace-once")
+	require.Equal(t, http.StatusOK, response.Code, "body=%s", response.Body.String())
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	require.Equal(t, fake.attempt.ID, fake.replaceEnvironment.AttemptID)
+	require.Equal(t, int64(0), fake.replaceEnvironment.ExpectedIncarnation)
+	require.Equal(t, "replace-once", fake.replaceEnvironment.IdempotencyKey)
+	require.Contains(t, response.Body.String(), `"replace_before":1`)
+	require.Equal(t, http.StatusBadRequest, send(`{"expected_incarnation":-1}`, "replace-negative").Code)
+}
+
 func TestManagerScreenClipRequestNeverReturnsItsPrivateReason(t *testing.T) {
 	t.Parallel()
 	fake := newExamAttemptHTTPFake(t)
@@ -774,12 +800,11 @@ func TestManagerAttemptRefetchExposesPrivateFreeActiveSuspensionIdentity(t *test
 	require.NotContains(t, response.Body.String(), "private_reason", "manager suspension response")
 }
 
-func TestCandidateWorkspaceJournalAndAllHTTPMutationsMapExactProtectedCommands(t *testing.T) {
+func TestCandidateWorkspaceJournalPagesExactProtectedQueries(t *testing.T) {
 	t.Parallel()
 	fake := newExamAttemptHTTPFake(t)
 	httpAPI := newExamAttemptFocusedAPI(t, fake)
 	base := "/api/v1/exam-attempts/" + fake.attempt.ID.String() + "/workspace"
-	participationID := fake.participation.ID.String()
 
 	journalRequest := fake.candidateRequest(t, http.MethodGet, base+"/changes?workspace_cursor=3&limit=20")
 	journalResponse := httptest.NewRecorder()
@@ -788,16 +813,21 @@ func TestCandidateWorkspaceJournalAndAllHTTPMutationsMapExactProtectedCommands(t
 	require.Equal(t, int64(3), fake.journalQuery.AfterCursor, "journal=%d %s query=%#v", journalResponse.Code, journalResponse.Body.String(), fake.journalQuery)
 	require.Equal(t, 20, fake.journalQuery.Limit, "journal=%d %s query=%#v", journalResponse.Code, journalResponse.Body.String(), fake.journalQuery)
 	require.Contains(t, journalResponse.Body.String(), `"current_cursor":5`, "journal=%d %s query=%#v", journalResponse.Code, journalResponse.Body.String(), fake.journalQuery)
+	require.Contains(t, journalResponse.Body.String(), `"author":{"kind":"candidate","ref":"`+fake.connection.ID.String()+`"}`,
+		"every change names its author")
 	require.Contains(t, journalResponse.Header().Get("Cache-Control"), "no-store", "journal=%d %s query=%#v", journalResponse.Code, journalResponse.Body.String(), fake.journalQuery)
 	fake.journalPage.Entries[0].Operation = model.AttemptWorkspaceMutationDeleteEntry
 	fake.journalPage.Entries[0].EntryKind = model.StarterWorkspaceEntryDirectory
 	fake.journalPage.Entries[0].OldPath = "src"
 	fake.journalPage.Entries[0].NewPath, fake.journalPage.Entries[0].ContentVersion = "", ""
 	fake.journalPage.Entries[0].Recursive = true
+	fake.journalPage.Entries[0].Author = model.NewEnvironmentWorkspaceAuthor(2, "terminal:1")
 	journalResponse = httptest.NewRecorder()
 	httpAPI.ServeHTTP(journalResponse, fake.candidateRequest(t, http.MethodGet, base+"/changes?workspace_cursor=3&limit=20"))
 	require.Equal(t, http.StatusOK, journalResponse.Code, "recursive journal")
 	require.Contains(t, journalResponse.Body.String(), `"recursive":true`, "recursive journal")
+	require.Contains(t, journalResponse.Body.String(), `"author":{"kind":"environment","ref":"2/terminal:1"}`,
+		"an environment change names its author and the process that wrote it")
 	require.Contains(t, journalResponse.Body.String(), `"old_path":"src"`, "recursive journal")
 	fake.journalPage.HasMore = true
 	journalResponse = httptest.NewRecorder()
@@ -816,123 +846,354 @@ func TestCandidateWorkspaceJournalAndAllHTTPMutationsMapExactProtectedCommands(t
 	httpAPI.ServeHTTP(journalResponse, fake.candidateRequest(t, http.MethodGet, base+"/changes?workspace_cursor=3&cursor="+journal.NextCursor))
 	require.Equal(t, http.StatusBadRequest, journalResponse.Code, "a continuation cannot restart at another Workspace Cursor")
 	fake.journalPage.HasMore = false
-
-	directoryBody := strings.NewReader(`{"participation_id":"` + participationID + `","generation":1,"path":"src"}`)
-	directoryRequest := candidateWorkspaceRequest(fake, http.MethodPost, base+"/directories", directoryBody, "application/json", "mkdir-once")
-	directoryResponse := httptest.NewRecorder()
-	httpAPI.ServeHTTP(directoryResponse, directoryRequest)
-	assertCandidateWorkspaceMutationHTTP(t, fake, directoryResponse, http.StatusCreated)
-	require.Equal(t, "src", fake.workspaceDirectory.Path)
-	require.Equal(t, fake.participation.ID, fake.workspaceDirectory.Access.ParticipationID)
-	require.Equal(t, int64(1), fake.workspaceDirectory.Access.Generation)
-	require.Equal(t, "mkdir-once", fake.workspaceDirectory.IdempotencyKey)
-
-	fileMetadata := map[string]any{"participation_id": participationID, "generation": 1, "path": "empty.txt",
-		"media_type": "text/plain", "size": 0, "sha256": strings.Repeat("e", 64)}
-	fileBody, fileType := candidateWorkspaceMultipart(t, fileMetadata, nil)
-	fileRequest := candidateWorkspaceRequest(fake, http.MethodPost, base+"/files", fileBody, fileType, "file-once")
-	fileResponse := httptest.NewRecorder()
-	httpAPI.ServeHTTP(fileResponse, fileRequest)
-	assertCandidateWorkspaceMutationHTTP(t, fake, fileResponse, http.StatusCreated)
-	require.Equal(t, int64(0), fake.workspaceFile.Size, "file command=%#v uploaded", fake.workspaceFile)
-	require.Equal(t, "empty.txt", fake.workspaceFile.Path, "file command=%#v uploaded", fake.workspaceFile)
-	require.Empty(t, fake.uploaded, "file command=%#v uploaded", fake.workspaceFile)
-	require.Equal(t, "file-once", fake.workspaceFile.IdempotencyKey, "file command=%#v uploaded", fake.workspaceFile)
-
-	entryID := fake.workspacePage.Items[0].EntryID
-	moveBody := strings.NewReader(`{"participation_id":"` + participationID + `","generation":1,"expected_path":"cmd/main.go","destination_path":"src/main.go"}`)
-	moveRequest := candidateWorkspaceRequest(fake, http.MethodPatch, base+"/entries/"+entryID.String(), moveBody, "application/json", "move-once")
-	moveResponse := httptest.NewRecorder()
-	httpAPI.ServeHTTP(moveResponse, moveRequest)
-	assertCandidateWorkspaceMutationHTTP(t, fake, moveResponse, http.StatusOK)
-	require.Equal(t, entryID, fake.workspaceMove.EntryID)
-	require.Equal(t, "cmd/main.go", fake.workspaceMove.ExpectedPath)
-	require.Equal(t, "src/main.go", fake.workspaceMove.DestinationPath)
-
-	version := fake.workspacePage.Items[0].ContentVersion
-	replaceMetadata := map[string]any{"participation_id": participationID, "generation": 1, "expected_path": "cmd/main.go",
-		"expected_content_version": version.String(), "media_type": "text/plain", "size": 3, "sha256": strings.Repeat("f", 64)}
-	replaceBody, replaceType := candidateWorkspaceMultipart(t, replaceMetadata, []byte("new"))
-	replaceRequest := candidateWorkspaceRequest(fake, http.MethodPut, base+"/files/"+entryID.String()+"/content", replaceBody, replaceType, "replace-once")
-	replaceResponse := httptest.NewRecorder()
-	httpAPI.ServeHTTP(replaceResponse, replaceRequest)
-	assertCandidateWorkspaceMutationHTTP(t, fake, replaceResponse, http.StatusOK)
-	require.Equal(t, entryID, fake.workspaceReplace.EntryID, "replace command=%#v uploaded", fake.workspaceReplace)
-	require.Equal(t, version, fake.workspaceReplace.ExpectedContentVersion, "replace command=%#v uploaded", fake.workspaceReplace)
-	require.Equal(t, "new", string(fake.uploaded), "replace command=%#v uploaded", fake.workspaceReplace)
-
-	deleteBody := strings.NewReader(`{"participation_id":"` + participationID + `","generation":1,"expected_path":"cmd/main.go","expected_content_version":"` + version.String() + `"}`)
-	deleteRequest := candidateWorkspaceRequest(fake, http.MethodDelete, base+"/entries/"+entryID.String(), deleteBody, "application/json", "delete-once")
-	deleteResponse := httptest.NewRecorder()
-	httpAPI.ServeHTTP(deleteResponse, deleteRequest)
-	assertCandidateWorkspaceMutationHTTP(t, fake, deleteResponse, http.StatusOK)
-	require.Equal(t, entryID, fake.workspaceDelete.EntryID)
-	require.Equal(t, "cmd/main.go", fake.workspaceDelete.ExpectedPath)
-	require.Equal(t, version, fake.workspaceDelete.ExpectedContentVersion)
 }
 
-func TestCandidateWorkspaceMutationsRejectMissingIdempotencyDuplicateJSONAndMissingMultipartSize(t *testing.T) {
+func TestCandidateWorkspaceBatchMapsEveryMutationAndStreamsBodiesInOrder(t *testing.T) {
+	t.Parallel()
+	fake := newExamAttemptHTTPFake(t)
+	httpAPI := newExamAttemptFocusedAPI(t, fake)
+	entryID := fake.workspacePage.Items[0].EntryID
+	version := fake.workspacePage.Items[0].ContentVersion
+	directoryID := model.NewAttemptWorkspaceEntryID()
+	manifest := fake.workspaceManifest(4,
+		map[string]any{"operation": "create_directory", "path": "src"},
+		map[string]any{"operation": "create_file", "path": "src/a.txt", "media_type": "text/plain", "size": 5, "sha256": strings.Repeat("e", 64)},
+		map[string]any{"operation": "replace_file", "entry_id": entryID.String(), "expected_path": "cmd/main.go",
+			"expected_content_version": version.String(), "media_type": "text/x-go", "size": 3, "sha256": strings.Repeat("f", 64)},
+		map[string]any{"operation": "move_entry", "entry_id": entryID.String(), "expected_path": "cmd/main.go", "destination_path": "src/main.go"},
+		map[string]any{"operation": "delete_entry", "entry_id": directoryID.String(), "expected_path": "old",
+			"expected_content_version": version.String(), "recursive": true},
+	)
+	body, contentType := candidateWorkspaceBatch(t, manifest, []byte("hello"), []byte("new"))
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, candidateWorkspaceBatchRequest(fake, body, contentType, "batch-once"))
+	assertCandidateWorkspaceMutationHTTP(t, fake, response, http.StatusOK)
+
+	command := fake.workspaceBatch
+	require.Equal(t, 1, fake.workspaceBatchCalls)
+	require.Equal(t, fake.attempt.ID, command.Access.AttemptID)
+	require.Equal(t, fake.connection.ID, command.Access.ConnectionID)
+	require.Equal(t, fake.credential, command.Access.ContinuityCredential)
+	require.Equal(t, fake.participation.ID, command.Access.ParticipationID)
+	require.Equal(t, int64(1), command.Access.Generation)
+	require.Equal(t, "batch-once", command.IdempotencyKey)
+	require.NotNil(t, command.ExpectedWorkspaceCursor)
+	require.Equal(t, int64(4), *command.ExpectedWorkspaceCursor)
+	require.Equal(t, []attempt.WorkspaceBatchMutation{
+		{Operation: model.AttemptWorkspaceMutationCreateDirectory, DestinationPath: "src"},
+		{Operation: model.AttemptWorkspaceMutationCreateFile, DestinationPath: "src/a.txt", MediaType: "text/plain", Size: 5, SHA256: strings.Repeat("e", 64)},
+		{Operation: model.AttemptWorkspaceMutationReplaceFile, EntryID: entryID, ExpectedPath: "cmd/main.go",
+			ExpectedContentVersion: version, MediaType: "text/x-go", Size: 3, SHA256: strings.Repeat("f", 64)},
+		{Operation: model.AttemptWorkspaceMutationMoveEntry, EntryID: entryID, ExpectedPath: "cmd/main.go", DestinationPath: "src/main.go"},
+		{Operation: model.AttemptWorkspaceMutationDeleteEntry, EntryID: directoryID, ExpectedPath: "old",
+			ExpectedContentVersion: version, Recursive: true},
+	}, command.Mutations)
+	require.Equal(t, [][]byte{[]byte("hello"), []byte("new")}, fake.workspaceBodies, "bodies reach the application in manifest order")
+	require.NoError(t, fake.workspaceContentErr)
+
+	var shape map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &shape))
+	require.ElementsMatch(t, []string{"workspace_id", "first_workspace_cursor", "workspace_cursor", "changes"}, mapKeys(shape))
+	var result candidateWorkspaceBatchResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
+	require.Equal(t, fake.workspace.ID.String(), result.WorkspaceID)
+	require.Equal(t, int64(5), result.FirstWorkspaceCursor)
+	require.Equal(t, int64(9), result.WorkspaceCursor)
+	require.Len(t, result.Changes, 5)
+	for index, change := range result.Changes {
+		require.Equal(t, int64(5+index), change.Cursor, "change %d", index)
+		require.Equal(t, string(command.Mutations[index].Operation), change.Operation, "change %d", index)
+		require.Equal(t, model.FormatRFC3339(fake.workspaceChangedAt), change.ChangedAt, "change %d", index)
+	}
+	require.Equal(t, "src", result.Changes[0].NewPath)
+	require.Equal(t, string(model.StarterWorkspaceEntryDirectory), result.Changes[0].Kind)
+	require.Equal(t, entryID.String(), result.Changes[3].EntryID)
+	require.Equal(t, "cmd/main.go", result.Changes[3].OldPath)
+	require.Equal(t, "src/main.go", result.Changes[3].NewPath)
+	require.True(t, result.Changes[4].Recursive)
+	require.Contains(t, response.Body.String(), `"recursive":true`)
+}
+
+func TestCandidateWorkspaceBatchWithoutFilesNeedsNoContentPart(t *testing.T) {
+	t.Parallel()
+	fake := newExamAttemptHTTPFake(t)
+	httpAPI := newExamAttemptFocusedAPI(t, fake)
+	body, contentType := candidateWorkspaceBatch(t, fake.workspaceManifest(-1, map[string]any{"operation": "create_directory", "path": "src"}))
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, candidateWorkspaceBatchRequest(fake, body, contentType, "mkdir-once"))
+	assertCandidateWorkspaceMutationHTTP(t, fake, response, http.StatusOK)
+	require.Equal(t, "src", fake.workspaceBatch.Mutations[0].DestinationPath)
+	require.Nil(t, fake.workspaceBatch.ExpectedWorkspaceCursor)
+	require.Empty(t, fake.workspaceBodies)
+
+	empty := fake.workspaceManifest(-1, map[string]any{"operation": "create_file", "path": "empty.txt",
+		"media_type": "text/plain", "size": 0, "sha256": strings.Repeat("e", 64)})
+	body, contentType = candidateWorkspaceBatch(t, empty, []byte{})
+	response = httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, candidateWorkspaceBatchRequest(fake, body, contentType, "empty-once"))
+	assertCandidateWorkspaceMutationHTTP(t, fake, response, http.StatusOK)
+	require.Equal(t, int64(0), fake.workspaceBatch.Mutations[0].Size, "an empty file declares size zero")
+	require.Equal(t, [][]byte{{}}, fake.workspaceBodies)
+}
+
+func TestCandidateWorkspaceBatchRejectsMalformedRequestsBeforeTheApplication(t *testing.T) {
+	t.Parallel()
+	probe := newExamAttemptHTTPFake(t)
+	participationID := probe.participation.ID.String()
+	entryID := model.NewAttemptWorkspaceEntryID().String()
+	directory := map[string]any{"operation": "create_directory", "path": "src"}
+	file := func(operation string, extra map[string]any) map[string]any {
+		mutation := map[string]any{"operation": operation, "media_type": "text/plain", "size": 1, "sha256": strings.Repeat("a", 64)}
+		if operation == "create_file" {
+			mutation["path"] = "a.txt"
+		} else {
+			mutation["entry_id"], mutation["expected_path"] = entryID, "a.txt"
+		}
+		for key, value := range extra {
+			if value == nil {
+				delete(mutation, key)
+				continue
+			}
+			mutation[key] = value
+		}
+		return mutation
+	}
+	manifest := func(mutations ...any) map[string]any {
+		if mutations == nil {
+			mutations = []any{}
+		}
+		return map[string]any{"participation_id": participationID, "generation": 1, "mutations": mutations}
+	}
+	tooMany := make([]any, model.AttemptWorkspaceBatchMaximumMutations+1)
+	for index := range tooMany {
+		tooMany[index] = map[string]any{"operation": "create_directory", "path": fmt.Sprintf("d%d", index)}
+	}
+	validManifest, err := json.Marshal(manifest(directory))
+	require.NoError(t, err)
+	oversized := `{"participation_id":"` + participationID + `","generation":1,"mutations":[{"operation":"create_directory","path":"src"}]` +
+		strings.Repeat(" ", model.AttemptWorkspaceBatchManifestMaximumBytes) + `}`
+
+	for _, test := range []struct {
+		name  string
+		parts []candidateWorkspacePart
+		raw   string
+	}{
+		{name: "not multipart", raw: string(validManifest)},
+		{name: "missing manifest part", parts: []candidateWorkspacePart{}},
+		{name: "manifest not first", parts: []candidateWorkspacePart{{name: "content", body: []byte("x")}, {name: "manifest", body: validManifest}}},
+		{name: "manifest sent as a file", parts: []candidateWorkspacePart{{name: "manifest", filename: "manifest.json", body: validManifest}}},
+		{name: "manifest over 512 KiB", parts: []candidateWorkspacePart{{name: "manifest", body: []byte(oversized)}}},
+		{name: "duplicate top-level key", parts: []candidateWorkspacePart{{name: "manifest", body: []byte(
+			`{"participation_id":"` + participationID + `","generation":1,"generation":2,"mutations":[{"operation":"create_directory","path":"src"}]}`)}}},
+		{name: "trailing JSON value", parts: []candidateWorkspacePart{{name: "manifest", body: append(append([]byte{}, validManifest...), []byte(`{}`)...)}}},
+		{name: "unknown top-level field", parts: candidateWorkspaceManifestParts(t, map[string]any{"participation_id": participationID, "generation": 1, "mutations": []any{directory}, "extra": true})},
+		{name: "unknown mutation field", parts: candidateWorkspaceManifestParts(t, manifest(map[string]any{"operation": "create_directory", "path": "src", "mode": "0755"}))},
+		{name: "no mutations", parts: candidateWorkspaceManifestParts(t, manifest())},
+		{name: "129 mutations", parts: candidateWorkspaceManifestParts(t, manifest(tooMany...))},
+		{name: "unknown operation", parts: candidateWorkspaceManifestParts(t, manifest(map[string]any{"operation": "chmod_entry", "entry_id": entryID}))},
+		{name: "create with entry_id", parts: candidateWorkspaceManifestParts(t, manifest(map[string]any{"operation": "create_directory", "path": "src", "entry_id": entryID}))},
+		{name: "create with destination_path", parts: candidateWorkspaceManifestParts(t, manifest(map[string]any{"operation": "create_directory", "path": "src", "destination_path": "dst"}))},
+		{name: "non-create with path", parts: candidateWorkspaceManifestParts(t, manifest(map[string]any{"operation": "move_entry", "entry_id": entryID, "path": "a", "expected_path": "a", "destination_path": "b"}))},
+		{name: "non-create with invalid entry_id", parts: candidateWorkspaceManifestParts(t, manifest(map[string]any{"operation": "delete_entry", "entry_id": "not-an-id", "expected_path": "a"}))},
+		{name: "invalid expected_content_version", parts: candidateWorkspaceManifestParts(t, manifest(file("replace_file", map[string]any{"expected_content_version": "v1"})))},
+		{name: "create_file without size", parts: candidateWorkspaceManifestParts(t, manifest(file("create_file", map[string]any{"size": nil})), []byte("x"))},
+		{name: "replace_file without size", parts: candidateWorkspaceManifestParts(t, manifest(file("replace_file", map[string]any{"size": nil})), []byte("x"))},
+		{name: "non-file operation with size", parts: candidateWorkspaceManifestParts(t, manifest(map[string]any{"operation": "create_directory", "path": "src", "size": 0}))},
+		{name: "content part in a batch without files", parts: candidateWorkspaceManifestParts(t, manifest(directory), []byte("x"))},
+		{name: "any part in a batch without files", parts: append(candidateWorkspaceManifestParts(t, manifest(directory)), candidateWorkspacePart{name: "note", body: []byte("x")})},
+		{name: "null expected_workspace_cursor", parts: candidateWorkspaceManifestParts(t, map[string]any{"participation_id": participationID, "generation": 1,
+			"expected_workspace_cursor": nil, "mutations": []any{map[string]any{"operation": "delete_entry", "entry_id": entryID, "expected_path": "src", "recursive": true}}})},
+		{name: "invalid participation", parts: candidateWorkspaceManifestParts(t, map[string]any{"participation_id": "bad", "generation": 1, "mutations": []any{directory}})},
+		{name: "zero generation", parts: candidateWorkspaceManifestParts(t, map[string]any{"participation_id": participationID, "generation": 0, "mutations": []any{directory}})},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			fake := newExamAttemptHTTPFake(t)
+			fake.participation = probe.participation
+			httpAPI := newExamAttemptFocusedAPI(t, fake)
+			var request *http.Request
+			if test.parts == nil {
+				request = candidateWorkspaceBatchRequest(fake, strings.NewReader(test.raw), "application/json", "malformed")
+			} else {
+				body, contentType := candidateWorkspaceMultipart(t, test.parts...)
+				request = candidateWorkspaceBatchRequest(fake, body, contentType, "malformed")
+			}
+			response := httptest.NewRecorder()
+			httpAPI.ServeHTTP(response, request)
+			problem := requireCandidateWorkspaceProblem(t, response, http.StatusBadRequest, "request.invalid")
+			require.Empty(t, problem.Fields["item"])
+			require.Equal(t, 0, fake.workspaceBatchCalls, "a malformed batch reached the application")
+		})
+	}
+}
+
+func TestCandidateWorkspaceBatchRefusesFileBodiesThatDoNotMatchTheManifest(t *testing.T) {
+	t.Parallel()
+	probe := newExamAttemptHTTPFake(t)
+	twoFiles := probe.workspaceManifest(-1,
+		map[string]any{"operation": "create_file", "path": "a.txt", "media_type": "text/plain", "size": 1, "sha256": strings.Repeat("a", 64)},
+		map[string]any{"operation": "create_file", "path": "b.txt", "media_type": "text/plain", "size": 1, "sha256": strings.Repeat("b", 64)},
+	)
+	manifest := candidateWorkspaceManifestParts(t, twoFiles)
+	for _, test := range []struct {
+		name   string
+		parts  []candidateWorkspacePart
+		item   string
+		bodies [][]byte
+	}{
+		{name: "missing content part", parts: append(append([]candidateWorkspacePart{}, manifest...), candidateWorkspacePart{name: "content", body: []byte("a")}),
+			item: "1", bodies: [][]byte{[]byte("a")}},
+		{name: "part not named content", parts: append(append([]candidateWorkspacePart{}, manifest...),
+			candidateWorkspacePart{name: "content", body: []byte("a")}, candidateWorkspacePart{name: "body", body: []byte("b")}),
+			item: "1", bodies: [][]byte{[]byte("a")}},
+		{name: "extra part after the last body", parts: append(append([]candidateWorkspacePart{}, manifest...),
+			candidateWorkspacePart{name: "content", body: []byte("a")}, candidateWorkspacePart{name: "content", body: []byte("b")},
+			candidateWorkspacePart{name: "content", body: []byte("c")}),
+			item: "1", bodies: [][]byte{[]byte("a")}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			fake := newExamAttemptHTTPFake(t)
+			fake.participation = probe.participation
+			httpAPI := newExamAttemptFocusedAPI(t, fake)
+			body, contentType := candidateWorkspaceMultipart(t, test.parts...)
+			response := httptest.NewRecorder()
+			httpAPI.ServeHTTP(response, candidateWorkspaceBatchRequest(fake, body, contentType, "bodies"))
+			require.Error(t, fake.workspaceContentErr, "the batch content accepted a body the manifest does not declare")
+			require.Equal(t, test.bodies, fake.workspaceBodies)
+			problem := requireCandidateWorkspaceProblem(t, response, http.StatusBadRequest, "exam.attempt.invalid")
+			require.Equal(t, "workspace_content", problem.Fields["field"])
+			require.Equal(t, test.item, problem.Fields["item"])
+		})
+	}
+}
+
+func TestCandidateWorkspaceBatchRequiresIdempotencyAndProtectionHeaders(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		mutate func(*http.Request)
+		code   string
+	}{
+		{name: "missing idempotency key", mutate: func(request *http.Request) { request.Header.Del("Idempotency-Key") }, code: "idempotency.key_required"},
+		{name: "missing Attempt credential", mutate: func(request *http.Request) { request.Header.Del(candidateAttemptCredentialHeader) }, code: "request.invalid"},
+		{name: "duplicate Attempt Connection", mutate: func(request *http.Request) {
+			request.Header.Add(candidateAttemptConnectionHeader, model.NewAttemptConnectionID().String())
+		}, code: "request.invalid"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			fake := newExamAttemptHTTPFake(t)
+			httpAPI := newExamAttemptFocusedAPI(t, fake)
+			body, contentType := candidateWorkspaceBatch(t, fake.workspaceManifest(-1, map[string]any{"operation": "create_directory", "path": "src"}))
+			request := candidateWorkspaceBatchRequest(fake, body, contentType, "headers")
+			test.mutate(request)
+			response := httptest.NewRecorder()
+			httpAPI.ServeHTTP(response, request)
+			_ = requireCandidateWorkspaceProblem(t, response, http.StatusBadRequest, test.code)
+			require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+			require.Equal(t, 0, fake.workspaceBatchCalls, "an unprotected batch reached the application")
+		})
+	}
+}
+
+func TestCandidateWorkspaceBatchPresentsTheRefusingItem(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		err    error
+		status int
+		fields map[string]string
+	}{
+		{name: "path conflict", err: apperror.New("exam.attempt.workspace.path_conflict").WithField("item", "1"),
+			status: http.StatusConflict, fields: map[string]string{"item": "1"}},
+		{name: "invalid path", err: apperror.Invalid("exam.attempt.invalid", "workspace_path").WithField("item", "0"),
+			status: http.StatusBadRequest, fields: map[string]string{"field": "workspace_path", "item": "0"}},
+		{name: "batch capacity names no item", err: apperror.New("exam.attempt.workspace.entry_limit"),
+			status: http.StatusConflict},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			fake := newExamAttemptHTTPFake(t)
+			fake.workspaceBatchErr = test.err
+			httpAPI := newExamAttemptFocusedAPI(t, fake)
+			body, contentType := candidateWorkspaceBatch(t, fake.workspaceManifest(-1,
+				map[string]any{"operation": "create_directory", "path": "src"},
+				map[string]any{"operation": "create_directory", "path": "src"}))
+			response := httptest.NewRecorder()
+			httpAPI.ServeHTTP(response, candidateWorkspaceBatchRequest(fake, body, contentType, "refused"))
+			var fault *apperror.Error
+			require.ErrorAs(t, test.err, &fault)
+			problem := requireCandidateWorkspaceProblem(t, response, test.status, fault.Code())
+			require.Equal(t, test.fields, problem.Fields)
+		})
+	}
+}
+
+func TestCandidateWorkspaceBatchForwardsTheRecursiveDeleteSnapshot(t *testing.T) {
+	t.Parallel()
+	zero, negative := int64(0), int64(-1)
+	for _, test := range []struct {
+		name, fields string
+		recursive    bool
+		want         *int64
+	}{
+		{name: "zero cursor", fields: `,"expected_workspace_cursor":0`, recursive: true, want: &zero},
+		{name: "missing cursor", recursive: true},
+		{name: "negative cursor", fields: `,"expected_workspace_cursor":-1`, recursive: true, want: &negative},
+		{name: "cursor without recursion", fields: `,"expected_workspace_cursor":0`, want: &zero},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			fake := newExamAttemptHTTPFake(t)
+			httpAPI := newExamAttemptFocusedAPI(t, fake)
+			entryID := model.NewAttemptWorkspaceEntryID()
+			raw := `{"participation_id":"` + fake.participation.ID.String() + `","generation":1` + test.fields +
+				`,"mutations":[{"operation":"delete_entry","entry_id":"` + entryID.String() + `","expected_path":"src"` +
+				fmt.Sprintf(`,"recursive":%t}]}`, test.recursive)
+			body, contentType := candidateWorkspaceMultipart(t, candidateWorkspacePart{name: "manifest", body: []byte(raw)})
+			response := httptest.NewRecorder()
+			httpAPI.ServeHTTP(response, candidateWorkspaceBatchRequest(fake, body, contentType, "recursive"))
+			assertCandidateWorkspaceMutationHTTP(t, fake, response, http.StatusOK)
+			require.Equal(t, test.recursive, fake.workspaceBatch.Mutations[0].Recursive)
+			require.Equal(t, entryID, fake.workspaceBatch.Mutations[0].EntryID)
+			require.Equal(t, test.want, fake.workspaceBatch.ExpectedWorkspaceCursor, "the application owns the cursor rule")
+		})
+	}
+}
+
+func TestCandidateWorkspaceBatchRefusesToPresentAResultWithoutOneChangePerMutation(t *testing.T) {
+	t.Parallel()
+	fake := newExamAttemptHTTPFake(t)
+	fake.workspaceBatchResult = &attempt.WorkspaceBatchResult{WorkspaceID: fake.workspace.ID}
+	httpAPI := newExamAttemptFocusedAPI(t, fake)
+	body, contentType := candidateWorkspaceBatch(t, fake.workspaceManifest(-1, map[string]any{"operation": "create_directory", "path": "src"}))
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, candidateWorkspaceBatchRequest(fake, body, contentType, "empty-result"))
+	require.Equal(t, http.StatusInternalServerError, response.Code, "response=%d body=%s", response.Code, response.Body.String())
+	require.Equal(t, 1, fake.workspaceBatchCalls)
+}
+
+func TestCandidateWorkspaceSingleMutationRoutesAreGone(t *testing.T) {
 	t.Parallel()
 	fake := newExamAttemptHTTPFake(t)
 	httpAPI := newExamAttemptFocusedAPI(t, fake)
 	base := "/api/v1/exam-attempts/" + fake.attempt.ID.String() + "/workspace"
-	participationID := fake.participation.ID.String()
-	for _, test := range []struct {
-		name, path, contentType, key string
-		body                         io.Reader
-	}{
-		{name: "missing idempotency", path: base + "/directories", contentType: "application/json",
-			body: strings.NewReader(`{"participation_id":"` + participationID + `","generation":1,"path":"src"}`)},
-		{name: "duplicate JSON", path: base + "/directories", contentType: "application/json", key: "dup-once",
-			body: strings.NewReader(`{"participation_id":"` + participationID + `","generation":1,"generation":2,"path":"src"}`)},
+	entryID := fake.workspacePage.Items[0].EntryID.String()
+	for _, test := range []struct{ method, path string }{
+		{http.MethodPost, base + "/directories"},
+		{http.MethodPost, base + "/files"},
+		{http.MethodPatch, base + "/entries/" + entryID},
+		{http.MethodPut, base + "/files/" + entryID + "/content"},
+		{http.MethodDelete, base + "/entries/" + entryID},
 	} {
-		t.Run(test.name, func(t *testing.T) {
-			request := candidateWorkspaceRequest(fake, http.MethodPost, test.path, test.body, test.contentType, test.key)
-			response := httptest.NewRecorder()
-			httpAPI.ServeHTTP(response, request)
-			require.Equal(t, http.StatusBadRequest, response.Code, "response=%d %s", response.Code, response.Body.String())
-		})
+		body := strings.NewReader(`{"participation_id":"` + fake.participation.ID.String() + `","generation":1,"path":"src"}`)
+		request := candidateWorkspaceRequest(fake, test.method, test.path, body, "application/json", "gone")
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		require.Contains(t, []int{http.StatusNotFound, http.StatusMethodNotAllowed}, response.Code, "%s %s = %d %s", test.method, test.path, response.Code, response.Body.String())
 	}
-	metadata := map[string]any{"participation_id": participationID, "generation": 1, "path": "x", "media_type": "text/plain", "sha256": strings.Repeat("a", 64)}
-	body, contentType := candidateWorkspaceMultipart(t, metadata, []byte("x"))
-	request := candidateWorkspaceRequest(fake, http.MethodPost, base+"/files", body, contentType, "missing-size")
-	response := httptest.NewRecorder()
-	httpAPI.ServeHTTP(response, request)
-	require.Equal(t, http.StatusBadRequest, response.Code, "missing size=%d %s", response.Code, response.Body.String())
-}
-
-func TestCandidateRecursiveWorkspaceDeletionRequiresSnapshot(t *testing.T) {
-	t.Parallel()
-	for _, test := range []struct {
-		name, fields string
-		status       int
-	}{
-		{"zero cursor", `,"recursive":true,"expected_workspace_cursor":0`, http.StatusOK},
-		{"missing cursor", `,"recursive":true`, http.StatusBadRequest},
-		{"null cursor", `,"recursive":true,"expected_workspace_cursor":null`, http.StatusBadRequest},
-		{"negative cursor", `,"recursive":true,"expected_workspace_cursor":-1`, http.StatusBadRequest},
-		{"cursor without recursion", `,"expected_workspace_cursor":0`, http.StatusBadRequest},
-		{"null cursor without recursion", `,"expected_workspace_cursor":null`, http.StatusBadRequest},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			fake := newExamAttemptHTTPFake(t)
-			api := newExamAttemptFocusedAPI(t, fake)
-			entryID := model.NewAttemptWorkspaceEntryID()
-			path := "/api/v1/exam-attempts/" + fake.attempt.ID.String() + "/workspace/entries/" + entryID.String()
-			body := strings.NewReader(`{"participation_id":"` + fake.participation.ID.String() + `","generation":1,"expected_path":"src"` + test.fields + `}`)
-			response := httptest.NewRecorder()
-			api.ServeHTTP(response, candidateWorkspaceRequest(fake, http.MethodDelete, path, body, "application/json", "recursive"))
-			require.Equal(t, test.status, response.Code, "status=%d body=%s", response.Code, response.Body.String())
-			if test.status == http.StatusOK {
-				require.True(t, fake.workspaceDelete.Recursive)
-				require.NotNil(t, fake.workspaceDelete.ExpectedWorkspaceCursor)
-				require.Equal(t, int64(0), *fake.workspaceDelete.ExpectedWorkspaceCursor)
-			}
-			if test.status == http.StatusBadRequest {
-				require.False(t, fake.workspaceDelete.EntryID.IsValid(), "invalid recursive request reached application")
-			}
-		})
-	}
+	require.Equal(t, 0, fake.workspaceBatchCalls)
 }
 
 func candidateWorkspaceRequest(fake *examAttemptHTTPFake, method, path string, body io.Reader, contentType, key string) *http.Request {
@@ -947,21 +1208,85 @@ func candidateWorkspaceRequest(fake *examAttemptHTTPFake, method, path string, b
 	return request
 }
 
-func candidateWorkspaceMultipart(t *testing.T, metadata any, content []byte) (*bytes.Buffer, string) {
+func candidateWorkspaceBatchRequest(fake *examAttemptHTTPFake, body io.Reader, contentType, key string) *http.Request {
+	return candidateWorkspaceRequest(fake, http.MethodPost, "/api/v1/exam-attempts/"+fake.attempt.ID.String()+"/workspace/batches", body, contentType, key)
+}
+
+// workspaceManifest is a valid manifest for the fake's Participation. A
+// negative cursor leaves expected_workspace_cursor out.
+func (f *examAttemptHTTPFake) workspaceManifest(cursor int64, mutations ...map[string]any) map[string]any {
+	manifest := map[string]any{"participation_id": f.participation.ID.String(), "generation": 1, "mutations": mutations}
+	if cursor >= 0 {
+		manifest["expected_workspace_cursor"] = cursor
+	}
+	return manifest
+}
+
+type candidateWorkspacePart struct {
+	name, filename string
+	body           []byte
+}
+
+func candidateWorkspaceManifestParts(t *testing.T, manifest any, bodies ...[]byte) []candidateWorkspacePart {
+	t.Helper()
+	raw, err := json.Marshal(manifest)
+	require.NoError(t, err)
+	parts := []candidateWorkspacePart{{name: "manifest", body: raw}}
+	for _, body := range bodies {
+		parts = append(parts, candidateWorkspacePart{name: "content", filename: "workspace", body: body})
+	}
+	return parts
+}
+
+func candidateWorkspaceBatch(t *testing.T, manifest any, bodies ...[]byte) (*bytes.Buffer, string) {
+	t.Helper()
+	return candidateWorkspaceMultipart(t, candidateWorkspaceManifestParts(t, manifest, bodies...)...)
+}
+
+func candidateWorkspaceMultipart(t *testing.T, parts ...candidateWorkspacePart) (*bytes.Buffer, string) {
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	metadataPart, err := writer.CreateFormField("metadata")
-	require.NoError(t, err)
-	err = json.NewEncoder(metadataPart).Encode(metadata)
-	require.NoError(t, err)
-	contentPart, err := writer.CreateFormFile("content", "workspace")
-	require.NoError(t, err)
-	_, err = contentPart.Write(content)
-	require.NoError(t, err)
-	err = writer.Close()
-	require.NoError(t, err)
+	for _, part := range parts {
+		var (
+			target io.Writer
+			err    error
+		)
+		switch {
+		case part.filename != "":
+			target, err = writer.CreateFormFile(part.name, part.filename)
+		case part.name == "manifest":
+			header := make(textproto.MIMEHeader)
+			header.Set("Content-Disposition", `form-data; name="manifest"`)
+			header.Set("Content-Type", "application/json")
+			target, err = writer.CreatePart(header)
+		default:
+			target, err = writer.CreateFormField(part.name)
+		}
+		require.NoError(t, err)
+		_, err = target.Write(part.body)
+		require.NoError(t, err)
+	}
+	require.NoError(t, writer.Close())
 	return &body, writer.FormDataContentType()
+}
+
+func requireCandidateWorkspaceProblem(t *testing.T, response *httptest.ResponseRecorder, status int, code string) route.Problem {
+	t.Helper()
+	require.Equal(t, status, response.Code, "response=%d body=%s", response.Code, response.Body.String())
+	require.Equal(t, "application/problem+json", response.Header().Get("Content-Type"))
+	var problem route.Problem
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
+	require.Equal(t, code, problem.Code, "problem=%s", response.Body.String())
+	return problem
+}
+
+func mapKeys[V any](values map[string]V) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 func assertCandidateWorkspaceMutationHTTP(t *testing.T, fake *examAttemptHTTPFake, response *httptest.ResponseRecorder, status int) {
@@ -1005,6 +1330,7 @@ type examAttemptHTTPFake struct {
 	workspaceOpen           attempt.OpenWorkspaceFileQuery
 	reallow                 attempt.ReallowCommand
 	suspend                 attempt.ManualSuspensionCommand
+	replaceEnvironment      attempt.ReplaceEnvironmentCommand
 	screenClip              attempt.RequestScreenClipCommand
 	takenClip               model.ScreenClipID
 	clipUpload              model.ScreenClipUpload
@@ -1016,12 +1342,13 @@ type examAttemptHTTPFake struct {
 	playedClip              model.ScreenClipID
 	journalQuery            attempt.WorkspaceJournalQuery
 	journalPage             attempt.WorkspaceJournalPage
-	workspaceDirectory      attempt.CreateWorkspaceDirectoryCommand
-	workspaceFile           attempt.CreateWorkspaceFileCommand
-	workspaceReplace        attempt.ReplaceWorkspaceFileCommand
-	workspaceMove           attempt.MoveWorkspaceEntryCommand
-	workspaceDelete         attempt.DeleteWorkspaceEntryCommand
-	workspaceMutation       attempt.WorkspaceMutationResult
+	workspaceBatch          attempt.ApplyWorkspaceBatchCommand
+	workspaceBatchCalls     int
+	workspaceBatchErr       error
+	workspaceBatchResult    *attempt.WorkspaceBatchResult
+	workspaceBodies         [][]byte
+	workspaceContentErr     error
+	workspaceChangedAt      time.Time
 	submit                  attempt.SubmitCommand
 	submissionReceipt       store.ExamSubmissionReceipt
 	submissionView          attempt.ManagedSubmission
@@ -1029,7 +1356,6 @@ type examAttemptHTTPFake struct {
 	submissionGet           attempt.GetSubmissionQuery
 	submissionManifestQuery attempt.ListSubmissionManifestQuery
 	submissionOpen          attempt.OpenSubmissionFileQuery
-	uploaded                []byte
 }
 
 func newExamAttemptHTTPFake(t *testing.T) *examAttemptHTTPFake {
@@ -1063,9 +1389,9 @@ func newExamAttemptHTTPFake(t *testing.T) *examAttemptHTTPFake {
 		workspaceContentVersion: model.NewWorkspaceContentVersion()}
 	change := model.AttemptWorkspaceJournalEntry{WorkspaceID: workspace.ID, Cursor: 5, EntryID: workspaceItem.EntryID,
 		EntryKind: workspaceItem.Kind, Operation: model.AttemptWorkspaceMutationReplaceFile, OldPath: workspaceItem.Path,
-		NewPath: workspaceItem.Path, ContentVersion: workspaceItem.ContentVersion, ChangedAt: at}
-	fake.workspaceMutation = attempt.WorkspaceMutationResult{AttemptID: examAttempt.ID, SittingID: examAttempt.SittingID,
-		CandidateUserID: examAttempt.CandidateUserID, WorkspaceID: workspace.ID, Entry: &workspaceItem, Change: change}
+		NewPath: workspaceItem.Path, ContentVersion: workspaceItem.ContentVersion, ChangedAt: at,
+		Author: model.NewCandidateWorkspaceAuthor(fake.connection.ID)}
+	fake.workspaceChangedAt = at
 	fake.journalPage = attempt.WorkspaceJournalPage{WorkspaceID: workspace.ID, CurrentCursor: 5,
 		Entries: []model.AttemptWorkspaceJournalEntry{change}}
 	sourceID := model.BrowserSourceSessionID("01912ed5-d4f7-4f02-9b97-928b5e8d3f21")
@@ -1297,6 +1623,13 @@ func (f *examAttemptHTTPFake) SuspendExamAttempt(_ context.Context, inv invocati
 			StartedAt: examAttempt.UpdatedAt, SuspendedByUserID: inv.Principal().UserID}}, nil
 }
 
+func (f *examAttemptHTTPFake) ReplaceExamAttemptEnvironment(_ context.Context, _ invocation.Invocation, command attempt.ReplaceEnvironmentCommand) (attempt.ReplaceEnvironmentResult, error) {
+	f.replaceEnvironment = command
+	return attempt.ReplaceEnvironmentResult{Environment: model.AttemptEnvironment{AttemptID: command.AttemptID,
+		State: model.AttemptEnvironmentRunning, Desired: model.AttemptEnvironmentDesiredRunning,
+		Incarnation: command.ExpectedIncarnation}, ReplaceBefore: command.ExpectedIncarnation + 1}, nil
+}
+
 func (f *examAttemptHTTPFake) GetCandidateExamPresentation(_ context.Context, _ invocation.Invocation, access attempt.CandidateAccess) (attempt.Presentation, error) {
 	f.presentationAccess, f.presentationCalls = access, f.presentationCalls+1
 	return f.presentation, nil
@@ -1312,34 +1645,58 @@ func (f *examAttemptHTTPFake) ListCandidateExamWorkspaceJournal(_ context.Contex
 	return f.journalPage, nil
 }
 
-func (f *examAttemptHTTPFake) CreateCandidateExamWorkspaceDirectory(_ context.Context, _ invocation.Invocation, command attempt.CreateWorkspaceDirectoryCommand) (attempt.WorkspaceMutationResult, error) {
-	f.workspaceDirectory = command
-	return f.workspaceMutation, nil
-}
+// ApplyCandidateExamWorkspaceBatch reads every file body through the batch
+// content, in order, as the application does, and refuses an unreadable body
+// with the problem the application presents for it.
+func (f *examAttemptHTTPFake) ApplyCandidateExamWorkspaceBatch(ctx context.Context, _ invocation.Invocation, command attempt.ApplyWorkspaceBatchCommand) (attempt.WorkspaceBatchResult, error) {
+	f.workspaceBatch, f.workspaceBatchCalls = command, f.workspaceBatchCalls+1
+	f.workspaceBodies, f.workspaceContentErr = nil, nil
+	for index, mutation := range command.Mutations {
+		if mutation.Operation != model.AttemptWorkspaceMutationCreateFile && mutation.Operation != model.AttemptWorkspaceMutationReplaceFile {
+			continue
+		}
+		body, err := command.Content.Next(ctx)
+		if err == nil {
+			var raw []byte
+			if raw, err = io.ReadAll(body); err == nil {
+				f.workspaceBodies = append(f.workspaceBodies, raw)
+			}
+		}
+		if err != nil {
+			f.workspaceContentErr = err
+			return attempt.WorkspaceBatchResult{}, apperror.Invalid("exam.attempt.invalid", "workspace_content").
+				WithField("item", strconv.Itoa(index)).Wrap(err)
+		}
+	}
+	if f.workspaceBatchErr != nil {
+		return attempt.WorkspaceBatchResult{}, f.workspaceBatchErr
+	}
+	if f.workspaceBatchResult != nil {
+		return *f.workspaceBatchResult, nil
+	}
 
-func (f *examAttemptHTTPFake) CreateCandidateExamWorkspaceFile(_ context.Context, _ invocation.Invocation, command attempt.CreateWorkspaceFileCommand) (attempt.WorkspaceMutationResult, error) {
-	f.workspaceFile = command
-	f.uploaded, _ = io.ReadAll(command.Body)
-	return f.workspaceMutation, nil
-}
-
-func (f *examAttemptHTTPFake) ReplaceCandidateExamWorkspaceFile(_ context.Context, _ invocation.Invocation, command attempt.ReplaceWorkspaceFileCommand) (attempt.WorkspaceMutationResult, error) {
-	f.workspaceReplace = command
-	f.uploaded, _ = io.ReadAll(command.Body)
-	return f.workspaceMutation, nil
-}
-
-func (f *examAttemptHTTPFake) MoveCandidateExamWorkspaceEntry(_ context.Context, _ invocation.Invocation, command attempt.MoveWorkspaceEntryCommand) (attempt.WorkspaceMutationResult, error) {
-	f.workspaceMove = command
-	return f.workspaceMutation, nil
-}
-
-func (f *examAttemptHTTPFake) DeleteCandidateExamWorkspaceEntry(_ context.Context, _ invocation.Invocation, command attempt.DeleteWorkspaceEntryCommand) (attempt.WorkspaceMutationResult, error) {
-	f.workspaceDelete = command
-	result := f.workspaceMutation
-	result.Entry = nil
-	result.Change.Operation = model.AttemptWorkspaceMutationDeleteEntry
-	result.Change.NewPath, result.Change.ContentVersion = "", ""
+	result := attempt.WorkspaceBatchResult{AttemptID: f.attempt.ID, SittingID: f.attempt.SittingID,
+		CandidateUserID: f.attempt.CandidateUserID, WorkspaceID: f.workspace.ID}
+	for index, mutation := range command.Mutations {
+		change := model.AttemptWorkspaceJournalEntry{WorkspaceID: f.workspace.ID, Cursor: int64(5 + index), EntryID: mutation.EntryID,
+			EntryKind: model.StarterWorkspaceEntryFile, Operation: mutation.Operation, OldPath: mutation.ExpectedPath,
+			NewPath: mutation.DestinationPath, ChangedAt: f.workspaceChangedAt, Recursive: mutation.Recursive,
+			Author: model.NewCandidateWorkspaceAuthor(f.connection.ID)}
+		switch mutation.Operation {
+		case model.AttemptWorkspaceMutationCreateDirectory, model.AttemptWorkspaceMutationCreateFile:
+			change.EntryID = model.NewAttemptWorkspaceEntryID()
+			if mutation.Operation == model.AttemptWorkspaceMutationCreateDirectory {
+				change.EntryKind = model.StarterWorkspaceEntryDirectory
+			}
+		case model.AttemptWorkspaceMutationReplaceFile:
+			change.NewPath, change.ContentVersion = mutation.ExpectedPath, model.NewWorkspaceContentVersion()
+		case model.AttemptWorkspaceMutationDeleteEntry:
+			if mutation.Recursive {
+				change.EntryKind = model.StarterWorkspaceEntryDirectory
+			}
+		}
+		result.Changes = append(result.Changes, change)
+	}
 	return result, nil
 }
 
@@ -1526,9 +1883,7 @@ func TestExamAttemptOpenAPIDocument(t *testing.T) {
 	presentation := candidateBase + "/presentation"
 	workspace := candidateBase + "/workspace"
 	workspaceChanges := workspace + "/changes"
-	workspaceDirectories := workspace + "/directories"
-	workspaceFiles := workspace + "/files"
-	workspaceEntry := workspace + "/entries/{attempt_workspace_entry_id}"
+	workspaceBatches := workspace + "/batches"
 	resourceContent := candidateBase + "/resources/{exam_resource_id}/content"
 	workspaceContent := candidateBase + "/workspace/files/{attempt_workspace_entry_id}/content"
 	candidateSubmissions := candidateBase + "/submissions"
@@ -1538,19 +1893,13 @@ func TestExamAttemptOpenAPIDocument(t *testing.T) {
 	managerSubmissionContent := managerSubmission + "/files/{attempt_workspace_entry_id}/content"
 
 	document := readOpenAPIDocument(t)
-	for _, path := range []string{presentation, workspace, workspaceChanges, workspaceDirectories, workspaceFiles, workspaceEntry, resourceContent, workspaceContent, candidateSubmissions, correctionAcknowledgement} {
+	for _, path := range []string{presentation, workspace, workspaceChanges, workspaceBatches, resourceContent, workspaceContent, candidateSubmissions, correctionAcknowledgement} {
 		method := "get"
-		if path == workspaceDirectories || path == workspaceFiles {
-			method = "post"
-		}
-		if path == candidateSubmissions {
+		if path == workspaceBatches || path == candidateSubmissions {
 			method = "post"
 		}
 		if path == correctionAcknowledgement {
 			method = "put"
-		}
-		if path == workspaceEntry {
-			method = "patch"
 		}
 		operation := decodeExamContentOpenAPIOperation(t, document, path, method)
 		for _, expected := range []struct{ name, ref string }{

@@ -1566,6 +1566,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/environment-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the environment profiles
+         * @description Lists the environment profiles that are not retired, and with include_retired=true the retired ones too, ordered by name. An environment profile is the recipe an Exam's execution environments are created from: the execution image, resources, network, idle window and the most terminals one Attempt may open. A Session with environment_profile.manage is required; Personal Access Tokens cannot read it.
+         */
+        get: operations["listEnvironmentProfiles"];
+        put?: never;
+        /**
+         * Create an environment profile
+         * @description Saves a new environment profile. Requires a strong recent interactive system-administrator Session, an Idempotency-Key, and durable audit. A profile is never edited: to change one, create a new profile and retire the old. Its name is unique among the profiles that are not retired.
+         */
+        post: operations["createEnvironmentProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environment-profiles/{environment_profile_id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The environment profile to retire. */
+                environment_profile_id: components["schemas"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire an environment profile
+         * @description Retires one environment profile so that new Exam Revisions can no longer name it. Revisions already published keep using it. Retiring a retired profile changes nothing. Requires a strong recent interactive system-administrator Session, an Idempotency-Key, and durable audit.
+         */
+        post: operations["retireEnvironmentProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/exam-attempts/{exam_attempt_id}/browser-activity/sources": {
         parameters: {
             query?: never;
@@ -1804,6 +1851,124 @@ export interface paths {
          * @description Stops detailed delivery for one family, native or browser, for the current Participation, because the client has run out of room to track lost records. You need the live registered Desktop Connection and an Idempotency-Key. The stop can't be undone. It fixes the reserved positions where they are and marks the rest as permanently missing, without making up receipts. The response holds the current budget and the affected statuses: at most one native stream or 49 browser sources, within 1 MiB. A retry with the same key checks live authority again and never affects a later Participation Generation. No quota is given back. This request alone never creates an Integrity Flag, a Suspension or a block on interaction.
          */
         post: operations["stopDeliveryDetails"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exam-attempts/{exam_attempt_id}/environment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read the Attempt's execution environment
+         * @description Returns what the Attempt's execution environment does and the sync status of its files in both directions. A Workspace entry whose last journal change is past projection_cursor is not in the machine yet, which a client can mark as not yet synced. A guest change waits about a second at most before it is saved; paths lists the guest paths the environment did not save, each ignored (by the Workspace's .proctorignore, the default patterns, or a parent directory that is not saved) or refused with the Workspace's reason, such as a quota or a conflict the Workspace won. Every other guest path is synced. The list keeps the latest status of at most 256 paths, the newest last, and a path leaves it once a later change to it is saved or the guest removes it.
+         */
+        get: operations["getCandidateEnvironment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exam-attempts/{exam_attempt_id}/environment/terminals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List the terminals in the Attempt's execution environment
+         * @description Lists the candidate's terminals on the Attempt's current machine, running or exited, in number order, with where each one's output and input stand. A client reconnecting after a restart reads it to reattach. A new machine, after the old one was lost or replaced, starts with no terminals.
+         */
+        get: operations["listCandidateTerminals"];
+        put?: never;
+        /**
+         * Open a terminal in the Attempt's execution environment
+         * @description Starts a terminal running the image's login shell on the Attempt's current machine and answers with its number and tag. Terminals are numbered in the order the machine opened them, terminal:1, terminal:2 and so on, and a number is never reused on that machine. At most the Exam's number of terminals run at once; past it the request fails with exam.attempt.terminal_limit_reached. The environment must be running: while it starts, waits for capacity or is frozen the request fails with exam.attempt.environment_not_running. A request whose response was lost may have opened a terminal, so a client lists the terminals before opening another. Every command a terminal runs is in the Attempt's command log, and when the Exam records terminal input the input is kept too; output never is.
+         */
+        post: operations["openCandidateTerminal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exam-attempts/{exam_attempt_id}/environment/terminals/{terminal}/signal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The terminal's number on the Attempt's current machine, from 1; terminal 1 has the tag terminal:1. */
+                terminal: components["parameters"]["CandidateTerminalNumber"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Interrupt what a terminal runs
+         * @description Sends the terminal an interrupt, as Ctrl+C does in a terminal that reads its keys. A candidate may only interrupt; the server ends terminals itself when the machine ends. An exited terminal fails with exam.attempt.terminal_exited, and a number the current machine never opened with exam.attempt.terminal_not_found.
+         */
+        post: operations["signalCandidateTerminal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exam-attempts/{exam_attempt_id}/environment/terminals/{terminal}/socket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The terminal's number on the Attempt's current machine, from 1; terminal 1 has the tag terminal:1. */
+                terminal: components["parameters"]["CandidateTerminalNumber"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Upgrade to a terminal's binary socket
+         * @description Upgrades to a binary WebSocket attached to one terminal. Any Proctor node serves it by reaching the execution machine itself, so a reconnect may land on another node and resume exactly. The terminal is attached before the upgrade: a refusal answers as a problem.
+         *
+         *     Every message is one binary frame whose first byte is its type; integers are big-endian. The client's first message is ATTACH or SCREEN.
+         *
+         *     Client frames:
+         *     - `0x01` ATTACH `offset:u64`: stream output from offset. A reconnecting client sends the output offset it holds, and output still in the terminal's history is replayed, so full-screen programs come back intact.
+         *     - `0x02` SCREEN: answer with the screen. As the first message, also stream output from the screen's offset; a client with no screen of its own draws it, then continues.
+         *     - `0x03` INPUT `offset:u64` `data` (1 to 16,384 bytes): input written at offset. Bytes the terminal already took are dropped, so after a lost connection the client resends everything after the last INPUT offset it saw, and nothing types twice.
+         *     - `0x04` RESIZE `cols:u16` `rows:u16`: the terminal's new window, 1 to 1,000 each way.
+         *
+         *     Server frames:
+         *     - `0x81` OUTPUT `offset:u64` `data`: output bytes at offset, at most 32 KiB.
+         *     - `0x82` TRUNCATED `from:u64` `to:u64`: output from to to that the history no longer holds.
+         *     - `0x83` EXIT `code:i32` `signal:i32`: the terminal exited; the socket then closes normally.
+         *     - `0x84` INPUT `offset:u64`: the terminal's input offset after an INPUT, accepted or not.
+         *     - `0x85` SCREEN `offset:u64` `cols:u16` `rows:u16` `cursor_row:u16` `cursor_col:u16` `flags:u8` `data`: the screen as of offset; flag bit 0 is the alternate screen, bit 1 a hidden cursor, and data redraws it on a blank terminal of that size.
+         *     - `0x86` ERROR `code`: a refused frame, by its public error code in UTF-8, such as exam.attempt.invalid for input past the terminal's input offset; the socket stays open.
+         *
+         *     Several sockets may read one terminal, such as the candidate's two windows; they share one input offset. The socket closes normally after EXIT or a malformed frame, with 4003 once the Attempt is sealed, its Participation ends, or its machine ends or is replaced, and with 1011 on a server failure. Access is checked again every 15 seconds while the socket is open. Terminal bytes never travel between Proctor nodes, and output is never recorded.
+         */
+        get: operations["connectCandidateTerminal"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2229,6 +2394,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/exam-attempts/{exam_attempt_id}/workspace/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply one atomic batch of Workspace changes
+         * @description The one way the candidate's Attempt Workspace changes. A batch holds 1 to 128 mutations, applied in order and all or nothing: create a file or directory, replace a file, move or rename an entry, or delete one. Each mutation keeps its own fence, so unrelated entries commute; a recursive directory delete also fences the batch on expected_workspace_cursor. The body is multipart: a strict JSON manifest first, then one content part for each create_file and replace_file mutation, in manifest order. Access is checked once for the whole batch against the Session-bound Attempt credential, open Connection and active Participation generation. When one mutation refuses the batch, nothing changes and the problem's item field names it by its position. One audit record and one realtime hint cover the whole batch. Each Attempt may change its Workspace only so fast, by mutations and by bytes, whoever writes; a faster writer gets 429 with Retry-After and nothing is staged.
+         */
+        post: operations["applyCandidateExamWorkspaceBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/exam-attempts/{exam_attempt_id}/workspace/changes": {
         parameters: {
             query?: never;
@@ -2252,81 +2440,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/exam-attempts/{exam_attempt_id}/workspace/directories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The Exam Attempt identifier. */
-                exam_attempt_id: components["parameters"]["ExamAttemptID"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create one acknowledged empty Workspace directory
-         * @description Creates one empty directory at the given Workspace Path for the active Participation Generation. The request needs the Attempt credential bound to the Session, an open Connection, CSRF protection when you use a session cookie, and an Idempotency-Key so a retry is safe.
-         */
-        post: operations["createCandidateExamWorkspaceDirectory"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/exam-attempts/{exam_attempt_id}/workspace/entries/{attempt_workspace_entry_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The Exam Attempt identifier. */
-                exam_attempt_id: components["parameters"]["ExamAttemptID"];
-                /** @description The identifier of an entry in the Attempt Workspace. */
-                attempt_workspace_entry_id: components["parameters"]["AttemptWorkspaceEntryID"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Delete a Workspace entry or a guarded directory subtree
-         * @description Deletes one Workspace entry, but only when its expected path still matches and, for a file, its expected Workspace Content Version still matches. A directory must be empty unless recursive is true. A recursive delete needs the expected_workspace_cursor from the client's file list. It fails if any other Workspace change happened after that cursor. Otherwise it removes the directory and everything inside it in a single step, recorded as one recursive change. No other change needs a Workspace Cursor.
-         */
-        delete: operations["deleteCandidateExamWorkspaceEntry"];
-        options?: never;
-        head?: never;
-        /**
-         * Rename or move one Workspace entry
-         * @description Renames or moves one file or directory from its expected path to a new path in the active Workspace, in a single step. If the path is out of date, the move would put a directory inside itself, or something already exists at the destination, the request fails and the Workspace is left unchanged. The parent directory of the destination must already exist.
-         */
-        patch: operations["moveCandidateExamWorkspaceEntry"];
-        trace?: never;
-    };
-    "/api/v1/exam-attempts/{exam_attempt_id}/workspace/files": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The Exam Attempt identifier. */
-                exam_attempt_id: components["parameters"]["ExamAttemptID"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Stage and acknowledge one Workspace file
-         * @description Uploads one new file to the candidate's active Attempt Workspace. The request is multipart, with the metadata part first. Its size is limited both by the API and by the Exam Revision the Attempt uses. It needs the Attempt credential bound to the Session, an open Connection, the active Participation Generation, a SHA-256 digest of the content, and an Idempotency-Key.
-         */
-        post: operations["createCandidateExamWorkspaceFile"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/exam-attempts/{exam_attempt_id}/workspace/files/{attempt_workspace_entry_id}/content": {
         parameters: {
             query?: never;
@@ -2344,11 +2457,7 @@ export interface paths {
          * @description Streams one file from the active Workspace. Before it sends anything, the server checks the Session, the Attempt credential, the open Connection, the current Participation, and that the Attempt can still be read. The response never reveals where the file is stored. Responses are private and not cached (no-store), use nosniff, carry an ETag, and return 304 when the content has not changed.
          */
         get: operations["getCandidateExamWorkspaceContent"];
-        /**
-         * Replace one exact Workspace file content state
-         * @description Replaces the content of one Workspace file, but only when its expected path and Workspace Content Version still match. The server checks the multipart upload (metadata part first), the digest, the active Participation Generation, the open Connection and the Idempotency-Key before it accepts the new content.
-         */
-        put: operations["replaceCandidateExamWorkspaceFile"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -2511,6 +2620,29 @@ export interface paths {
          * @description Replaces the whole Browser Policy on the Draft. The change is made only if expected_revision still matches the Draft's current revision. A disabled policy has no rules. An enabled policy lists the sites candidates may open, and Proctor matches pages against them by host and path in a fixed order.
          */
         put: operations["configureExamDraftBrowserPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exams/{exam_id}/draft/policies/execution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam identifier. */
+                exam_id: components["parameters"]["ExamID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace the execution policy on the active Exam Draft
+         * @description Replaces the execution policy on the mutable Draft at the expected revision: whether Attempts get an execution environment, the environment profile they are created from, whether terminal input is recorded, and how many terminals a candidate may open. An enabled policy must name a profile that exists, is not retired and allows that many terminals, or the change fails with exam.execution.profile_unusable. A disabled policy names no profile, records nothing and opens no terminal. Publication checks the profile again and requires the installation to allow execution.
+         */
+        put: operations["configureExamDraftExecution"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3126,6 +3258,33 @@ export interface paths {
          * @description Ends one active, ready or suspended Attempt on behalf of the candidate. The candidate's last acknowledged Workspace state is sealed as a Submission in the same step. Your reason is kept for audit and is never shown to the candidate. Once the Sitting deadline is reached, scheduled closure seals the Attempt instead.
          */
         post: operations["endExamAttemptByManager"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/environment/replace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam identifier. */
+                exam_id: components["parameters"]["ExamID"];
+                /** @description The Exam Sitting identifier. */
+                exam_sitting_id: components["parameters"]["ExamSittingID"];
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replace a candidate's execution environment with a new machine
+         * @description An Exam Manager's repair for an execution environment that misbehaves. Names the incarnation the manager saw on the candidate-status board; the environment's owner then replaces that machine with a new incarnation built from the Attempt Workspace and records the restart as an execution.gap. Nothing the candidate saved is lost; processes, terminals and ignored files that only the old machine held are. Repeating the request for the same incarnation changes nothing; a newer incarnation fails with exam.attempt.environment_changed and an ended environment with exam.attempt.environment_ended. Like a kick, it is refused once the Sitting is closing.
+         */
+        post: operations["replaceExamAttemptEnvironment"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4992,6 +5151,29 @@ export interface paths {
          * @description Downloads the report for one progression preview or result as CSV. Values a spreadsheet would run as formulas are neutralized, so they show as plain text. The report holds the progression's rows and no internal Job data, credentials or database selectors.
          */
         get: operations["downloadStudentProgressionReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/submissions/{submission_id}/attempt-evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Submission identifier. */
+                submission_id: components["parameters"]["SubmissionID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Inspect the Attempt evidence sealed with a Submission
+         * @description Requires the same current Submission integrity-view authorization as detailed evidence. Returns the append-only records the core kept for the Attempt, such as the execution environment's command log, in identity order. They raise no Flag and carry no decision: a record of kind `execution.gap` says coverage was missing. Each item names its kind, the author that produced it, the author's stream sequence, and its bounded detail object, which the server stores as given. The Submission seal fixed the set, whose inventory the Review response carries. Pages contain at most 100 records. Integrity retirement removes them. No-store; cursors are purpose-specific opaque keysets.
+         */
+        get: operations["listAttemptEvidence"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6979,6 +7161,58 @@ export interface components {
          */
         AttemptConnectionState: "open" | "closed";
         /**
+         * @description What the Attempt's facts ask the execution environment to be.
+         * @enum {string}
+         */
+        AttemptEnvironmentDesired: "ended" | "frozen" | "running";
+        /**
+         * @description What the execution environment's machine is doing now.
+         * @enum {string}
+         */
+        AttemptEnvironmentState: "creating" | "ended" | "frozen" | "lost" | "pending" | "running" | "suspended" | "waiting_capacity";
+        AttemptEvidence: {
+            attempt_id: string;
+            author: components["schemas"]["WorkspaceAuthor"];
+            /** @description The author's own evidence object of at most 64 KiB, stored as given. */
+            detail: {
+                [key: string]: unknown;
+            };
+            id: string;
+            /**
+             * @description `execution.process` is a slice of the command log, `execution.input` recorded terminal input, `execution.gap` missing coverage, `execution.overwritten` a guest change lost to a newer Workspace version, and `execution.refused` a guest change the Workspace refused.
+             * @enum {string}
+             */
+            kind: "execution.process" | "execution.input" | "execution.gap" | "execution.overwritten" | "execution.refused";
+            /**
+             * Format: date-time
+             * @description The author's observation time, never later than recorded_at.
+             */
+            observed_at: string;
+            /** Format: date-time */
+            recorded_at: string;
+            /**
+             * Format: int64
+             * @description The position of the record in its author's stream of this kind.
+             */
+            sequence: number;
+        };
+        /** @description The Attempt evidence the Submission seal fixed: kept records and their canonical bytes, how many are gaps, how many appends were refused over the per-Attempt bounds, and a digest chained over the kept records in order. Review finalization binds it. */
+        AttemptEvidenceInventory: {
+            /** Format: int64 */
+            bytes: number;
+            digest: string;
+            /** Format: int64 */
+            gaps: number;
+            /** Format: int64 */
+            overflow: number;
+            /** Format: int64 */
+            records: number;
+        };
+        AttemptEvidenceListResponse: {
+            items: components["schemas"]["AttemptEvidence"][];
+            next_cursor?: string;
+        };
+        /**
          * @description Why a Participation ended.
          * @enum {string}
          */
@@ -6992,7 +7226,7 @@ export interface components {
          * @description Name of an audited action. Later versions may add values. Show your own label for each value, and a general message for one you don't recognize.
          * @enum {string}
          */
-        AuditAction: "academic.progression.manage" | "academic_audit.view" | "academic_period.manage" | "academic_period.view" | "academic_unit.manage" | "academic_unit.members.manage" | "academic_unit.members.view" | "academic_unit.view" | "access_policy.manage" | "access_policy.view" | "audit.view" | "authentication.administrator_mfa_reset" | "authentication.administrator_recovery" | "authentication.desktop_authorization" | "authentication.desktop_session_issue" | "authentication.email_change.undo" | "authentication.email_verification.complete" | "authentication.email_verification.request" | "authentication.external_login" | "authentication.external_provision" | "authentication.login" | "authentication.password_reset.complete" | "authentication.password_reset.request" | "authentication.public_registration" | "authentication.reauthenticate" | "class.manage" | "class.members.manage" | "class.members.view" | "class.view" | "desktop_compatibility_policy.manage" | "desktop_registration.rename" | "desktop_registration.revoke" | "exam.attempt.browser_activity.view" | "exam.create" | "exam.create.override" | "exam.manage" | "exam.manage.override" | "exam.publish" | "exam.publish.override" | "exam.records.complete" | "exam.records.complete.override" | "exam.records.export" | "exam.records.export.override" | "exam.records.hold" | "exam.records.hold.override" | "exam.sitting.create" | "exam.sitting.create.override" | "exam.sitting.manage" | "exam.sitting.manage.override" | "exam.sitting.participate" | "exam.sitting.view" | "exam.sitting.view.override" | "exam.view" | "exam.view.override" | "external_identity.manage" | "installation.bootstrap" | "institution.manage" | "invitation.accept" | "invitation.create" | "invitation.manage" | "invitation.view" | "job.manage" | "job.view" | "mail.manage" | "mail.rekey" | "mail.view" | "mfa.activate" | "mfa.challenge" | "mfa.disable" | "mfa.recovery_codes.regenerate" | "mfa.rekey" | "mfa.setup" | "onboarding_batch.manage" | "onboarding_batch.view" | "personal_access_token.create" | "personal_access_token.disable" | "personal_access_token.enable" | "personal_access_token.revoke" | "plugin.manage" | "programme.manage" | "programme.view" | "programme_level.manage" | "programme_level.view" | "retention_cleanup.manage" | "retention_hold.release" | "retention_policy.manage" | "retention_policy.view" | "role.manage" | "role.system_admin.reconcile" | "role.view" | "role_binding.manage" | "role_binding.view" | "session.manage" | "session.view" | "submission.release" | "submission.release.override" | "submission.review" | "submission.review.override" | "submission.view" | "submission.view.override" | "user.manage" | "user.mfa.reset" | "user.profile_picture.manage" | "user.search" | "user.settings.replace" | "user.view";
+        AuditAction: "academic.progression.manage" | "academic_audit.view" | "academic_period.manage" | "academic_period.view" | "academic_unit.manage" | "academic_unit.members.manage" | "academic_unit.members.view" | "academic_unit.view" | "access_policy.manage" | "access_policy.view" | "audit.view" | "authentication.administrator_mfa_reset" | "authentication.administrator_recovery" | "authentication.desktop_authorization" | "authentication.desktop_session_issue" | "authentication.email_change.undo" | "authentication.email_verification.complete" | "authentication.email_verification.request" | "authentication.external_login" | "authentication.external_provision" | "authentication.login" | "authentication.password_reset.complete" | "authentication.password_reset.request" | "authentication.public_registration" | "authentication.reauthenticate" | "class.manage" | "class.members.manage" | "class.members.view" | "class.view" | "desktop_compatibility_policy.manage" | "desktop_registration.rename" | "desktop_registration.revoke" | "environment_profile.manage" | "exam.attempt.browser_activity.view" | "exam.create" | "exam.create.override" | "exam.manage" | "exam.manage.override" | "exam.publish" | "exam.publish.override" | "exam.records.complete" | "exam.records.complete.override" | "exam.records.export" | "exam.records.export.override" | "exam.records.hold" | "exam.records.hold.override" | "exam.sitting.create" | "exam.sitting.create.override" | "exam.sitting.manage" | "exam.sitting.manage.override" | "exam.sitting.participate" | "exam.sitting.view" | "exam.sitting.view.override" | "exam.view" | "exam.view.override" | "external_identity.manage" | "installation.bootstrap" | "institution.manage" | "invitation.accept" | "invitation.create" | "invitation.manage" | "invitation.view" | "job.manage" | "job.view" | "mail.manage" | "mail.rekey" | "mail.view" | "mfa.activate" | "mfa.challenge" | "mfa.disable" | "mfa.recovery_codes.regenerate" | "mfa.rekey" | "mfa.setup" | "onboarding_batch.manage" | "onboarding_batch.view" | "personal_access_token.create" | "personal_access_token.disable" | "personal_access_token.enable" | "personal_access_token.revoke" | "plugin.manage" | "programme.manage" | "programme.view" | "programme_level.manage" | "programme_level.view" | "retention_cleanup.manage" | "retention_hold.release" | "retention_policy.manage" | "retention_policy.view" | "role.manage" | "role.system_admin.reconcile" | "role.view" | "role_binding.manage" | "role_binding.view" | "session.manage" | "session.view" | "submission.release" | "submission.release.override" | "submission.review" | "submission.review.override" | "submission.view" | "submission.view.override" | "user.manage" | "user.mfa.reset" | "user.profile_picture.manage" | "user.search" | "user.settings.replace" | "user.view";
         /** @description One audit record you can see, without sensitive detail. */
         AuditEventResponse: {
             /** @description The action that was attempted, named like a permission, such as `class.members.manage`. */
@@ -7891,6 +8125,36 @@ export interface components {
              */
             reason: "attempt_in_progress";
         };
+        CandidateEnvironmentPath: {
+            /** @description The path under /workspace. */
+            path: string;
+            /** @description For ignored, what ignored it: .proctorignore, default (the default patterns, while the Workspace has no .proctorignore that parses) or parent_not_synced. For refused, the Workspace's public error code, such as exam.attempt.workspace.size_limit or exam.attempt.workspace.content_conflict. */
+            reason: string;
+            /**
+             * @description ignored stays on the machine; refused was not accepted by the Workspace.
+             * @enum {string}
+             */
+            status: "ignored" | "refused";
+        };
+        CandidateEnvironmentResponse: {
+            desired: components["schemas"]["AttemptEnvironmentDesired"];
+            /** Format: int64 */
+            incarnation: number;
+            /** @description The guest paths that are not in the Attempt Workspace, oldest first. */
+            paths: components["schemas"]["CandidateEnvironmentPath"][];
+            /**
+             * Format: int64
+             * @description The Workspace journal cursor the machine holds.
+             */
+            projection_cursor: number;
+            state: components["schemas"]["AttemptEnvironmentState"];
+            terminal_limit: number;
+            /**
+             * Format: date-time
+             * @description When the current wait for an execution host with room began.
+             */
+            waiting_since?: string;
+        };
         /**
          * @description Whether the candidate can enter now, and if not, why. `joinable` and `resumable` mean they can start or continue. `sitting_paused` means the Sitting is paused, and `await_reallow` means the Attempt is suspended until a manager lets the candidate back in. `blocked_by_other_attempt` means another unfinished Attempt is in the way, and `not_eligible` means the candidate can't take part, for example because they left the Class or manage the Exam. `not_open`, `submitted`, `result_available` and `ended` follow the Sitting and Submission.
          * @enum {string}
@@ -8154,38 +8418,77 @@ export interface components {
             /** @description Whether the candidate may change the Workspace now. False while the Sitting is paused or a correction that affects the Workspace awaits acknowledgement. */
             workspace_mutation_allowed: boolean;
         };
-        CandidateWorkspaceFileUploadMetadata: {
+        CandidateTerminal: {
+            /** @description The exit status of a terminal that exited on its own. */
+            exit_code?: number;
+            /** @description The signal that ended a terminal that exited by one. */
+            exit_signal?: number;
             /**
              * Format: int64
-             * @description Participation Generation of the active Participation. A write from an older generation is rejected.
+             * @description How many bytes of input the terminal has taken; the next INPUT is written at it.
              */
-            generation: number;
-            /** @description Media type of the file content. */
-            media_type: string;
-            /** @description ID of the active Attempt Participation, returned when the candidate connected to the Attempt. */
-            participation_id: components["schemas"]["ID"];
-            /** @description Workspace Path of the new file. Its parent directory must already exist and nothing may exist at the path yet. */
-            path: components["schemas"]["StarterWorkspacePath"];
-            /** @description Lowercase hexadecimal SHA-256 digest of the content. The server rejects the upload if the content does not match. */
-            sha256: components["schemas"]["SHA256"];
+            input_offset: number;
+            /** @description The terminal's number on the current machine, which addresses it in the terminal routes. */
+            number: number;
             /**
              * Format: int64
-             * @description Exact length of the content in bytes. It must fit both the limit of the Exam Revision and the API limit.
+             * @description How many bytes the terminal has written; an ATTACH from it streams only new output.
              */
-            size: number;
+            output_offset: number;
+            running: boolean;
+            /** Format: date-time */
+            started_at?: string;
+            /** @description The terminal's process tag, which the command log names as the origin of every command it ran. */
+            tag: string;
         };
-        /** @description Exactly two parts, in order: the JSON metadata, then the file content. The whole request may be at most 100 MiB plus 64 KiB. */
-        CandidateWorkspaceFileUploadMultipart: {
+        CandidateTerminals: {
+            /** @description How many terminals the Exam lets the candidate run at once. */
+            terminal_limit: number;
+            terminals: components["schemas"]["CandidateTerminal"][];
+        };
+        CandidateWorkspaceBatchManifest: {
             /**
-             * Format: binary
-             * @description The file content. It must be the second part and match the size and digest in metadata.
+             * Format: int64
+             * @description Required exactly when a mutation deletes a directory recursively; the Workspace Cursor the batch starts from.
              */
-            content: string;
-            /** @description JSON metadata that describes the file. It must be the first part. */
-            metadata: components["schemas"]["CandidateWorkspaceFileUploadMetadata"];
+            expected_workspace_cursor?: number;
+            /** Format: int64 */
+            generation: number;
+            mutations: components["schemas"]["CandidateWorkspaceBatchMutation"][];
+            participation_id: components["schemas"]["ID"];
+        };
+        CandidateWorkspaceBatchMultipart: {
+            /** @description One body per create_file and replace_file mutation, in manifest order. */
+            content?: string[];
+            manifest: components["schemas"]["CandidateWorkspaceBatchManifest"];
+        };
+        /** @description create_file takes path, media_type, size and sha256. create_directory takes path. replace_file takes entry_id, expected_path, expected_content_version, media_type, size and sha256. move_entry takes entry_id, expected_path and destination_path. delete_entry takes entry_id and expected_path, plus expected_content_version for a file; recursive deletes a directory and everything under it. A create names its entry by path only: the server chooses its entry_id, returned in the change. */
+        CandidateWorkspaceBatchMutation: {
+            destination_path?: components["schemas"]["StarterWorkspacePath"];
+            entry_id?: components["schemas"]["ID"];
+            expected_content_version?: components["schemas"]["WorkspaceContentVersion"];
+            expected_path?: components["schemas"]["StarterWorkspacePath"];
+            media_type?: string;
+            /** @enum {string} */
+            operation: "create_file" | "create_directory" | "replace_file" | "move_entry" | "delete_entry";
+            path?: components["schemas"]["StarterWorkspacePath"];
+            recursive?: boolean;
+            sha256?: string;
+            /** Format: int64 */
+            size?: number;
+        };
+        CandidateWorkspaceBatchResponse: {
+            /** @description One journal change per mutation, in batch order, at consecutive cursors. */
+            changes: components["schemas"]["CandidateWorkspaceJournalEntryResponse"][];
+            /** Format: int64 */
+            first_workspace_cursor: number;
+            /** Format: int64 */
+            workspace_cursor: number;
+            workspace_id: components["schemas"]["ID"];
         };
         /** @description One change the server accepted in the Attempt Workspace. */
         CandidateWorkspaceJournalEntryResponse: {
+            author: components["schemas"]["WorkspaceAuthor"];
             /**
              * Format: date-time
              * @description When the server accepted the change.
@@ -8230,23 +8533,6 @@ export interface components {
             /** @description True when the server can't continue from the requested cursor, because the cursor is ahead of the Workspace or older than the history the server keeps. The page is then empty, and the client must reload the full file list. */
             refresh_required: boolean;
             /** @description ID of the Attempt Workspace. */
-            workspace_id: components["schemas"]["ID"];
-        };
-        /** @description The change the server accepted and recorded in the Workspace. */
-        CandidateWorkspaceMutationResponse: {
-            /** @description The entry as it is after the change. Omitted when the entry was deleted. */
-            entry?: components["schemas"]["CandidateExamWorkspaceItemResponse"];
-            /**
-             * @description The kind of change the server applied.
-             * @enum {string}
-             */
-            operation: "create_file" | "create_directory" | "replace_file" | "move_entry" | "delete_entry";
-            /**
-             * Format: int64
-             * @description Workspace Cursor of this change. Keep it to continue the change listing from this point.
-             */
-            workspace_cursor: number;
-            /** @description ID of the Attempt Workspace that changed. */
             workspace_id: components["schemas"]["ID"];
         };
         ChangePasswordRequest: {
@@ -8423,6 +8709,11 @@ export interface components {
              */
             expected_revision: number;
         };
+        ConfigureExamDraftExecutionRequest: {
+            execution: components["schemas"]["ExecutionPolicy"];
+            /** Format: int64 */
+            expected_revision: number;
+        };
         ConfigureExamDraftFocusLossRequest: {
             /** @description True to apply the rule during Attempts. */
             enabled: boolean;
@@ -8520,17 +8811,6 @@ export interface components {
              * @description When the Affiliation starts. Omit it to start now.
              */
             start_at?: string;
-        };
-        CreateCandidateWorkspaceDirectoryRequest: {
-            /**
-             * Format: int64
-             * @description Participation Generation of the active Participation. A write from an older generation is rejected.
-             */
-            generation: number;
-            /** @description ID of the active Attempt Participation, returned when the candidate connected to the Attempt. */
-            participation_id: components["schemas"]["ID"];
-            /** @description Workspace Path of the new directory. Its parent must already exist and nothing may exist at the path yet. */
-            path: components["schemas"]["StarterWorkspacePath"];
         };
         /** @description The Academic Period and display fields for a new Class. */
         CreateClassRequest: {
@@ -8805,29 +9085,6 @@ export interface components {
             /** @enum {string} */
             reason: "spool_corrupt" | "spool_lost" | "local_capacity_exhausted";
         };
-        DeleteCandidateWorkspaceEntryRequest: {
-            /** @description Workspace Content Version the file must still have. Required to delete a file. Leave it out for a directory. */
-            expected_content_version?: components["schemas"]["WorkspaceContentVersion"];
-            /** @description Path the entry must still have. If it has moved since the client last saw it, the request fails. */
-            expected_path: components["schemas"]["StarterWorkspacePath"];
-            /**
-             * Format: int64
-             * @description Workspace Cursor of the client's current file list. Send it only when recursive is true. If any other change happened after this cursor, the request fails with a conflict.
-             */
-            expected_workspace_cursor?: number;
-            /**
-             * Format: int64
-             * @description Participation Generation of the active Participation. A write from an older generation is rejected.
-             */
-            generation: number;
-            /** @description ID of the active Attempt Participation, returned when the candidate connected to the Attempt. */
-            participation_id: components["schemas"]["ID"];
-            /**
-             * @description When true, deletes this directory and everything inside it in a single step. Needs expected_workspace_cursor and can't be used on a file.
-             * @default false
-             */
-            recursive: boolean;
-        } & unknown;
         /** @description Delivery usage of one Participation and of its Attempt. */
         DeliveryBudgetSnapshot: {
             /** @description Usage for browser activity delivery. */
@@ -9489,11 +9746,65 @@ export interface components {
             /** @description The local password to add. It must meet the password rules and must not contain the username, the part of the email address before the @, or the person's name. */
             password: string;
         };
+        /** @description One page of the collection in its stable order. */
+        EnvironmentProfileListResponse: {
+            items: components["schemas"]["EnvironmentProfileResponse"][];
+            next_cursor?: components["schemas"]["NextCursor"];
+        };
+        EnvironmentProfileRequest: {
+            /**
+             * Format: int64
+             * @description CPU time per second; 1000 is one full CPU.
+             */
+            cpu_millis: number;
+            /** Format: int64 */
+            disk_bytes: number;
+            /**
+             * Format: int64
+             * @description How long an environment may stay frozen before it is suspended to disk.
+             */
+            idle_window_seconds: number;
+            /** @description The execution image the hosts offer, by name. */
+            image: string;
+            /** @description The most terminals one Attempt may open. */
+            max_terminals: number;
+            /** Format: int64 */
+            memory_bytes: number;
+            name: string;
+            /**
+             * @description `none` gives the environment no network; `allowlist` gives it only the execution host's configured allowlist.
+             * @enum {string}
+             */
+            network: "none" | "allowlist";
+        };
+        EnvironmentProfileResponse: {
+            /** Format: int64 */
+            cpu_millis: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            disk_bytes: number;
+            id: components["schemas"]["ID"];
+            /** Format: int64 */
+            idle_window_seconds: number;
+            image: string;
+            max_terminals: number;
+            /** Format: int64 */
+            memory_bytes: number;
+            name: string;
+            /** @enum {string} */
+            network: "none" | "allowlist";
+            /**
+             * Format: date-time
+             * @description Present once the profile is retired.
+             */
+            retired_at?: string;
+        };
         /**
          * @description Machine-readable error code. Later versions may add values. Show your own label for each value, and a general message for one you don't recognize.
          * @enum {string}
          */
-        ErrorCode: "academic_administration_preview.authorization_lost" | "academic_administration_preview.conflict" | "academic_administration_preview.expired" | "academic_administration_preview.target_conflict" | "academic_administration_preview.too_many_users" | "academic_period.conflict" | "academic_period.invalid" | "academic_unit.conflict" | "academic_unit.invalid" | "academic_unit_member.conflict" | "academic_unit_member.invalid" | "access_policy.blocked" | "access_policy.invalid" | "access_policy.revision_conflict" | "access_policy.unavailable" | "administration.unavailable" | "administrator_recovery.invalid" | "administrator_recovery.unavailable" | "affiliation.conflict" | "affiliation.invalid" | "affiliation.student_has_active_enrollment" | "audit.internal" | "audit.query.invalid" | "audit.unavailable" | "authentication.account_recovery.unavailable" | "authentication.account_token.invalid" | "authentication.client_type.invalid" | "authentication.credential_ambiguous" | "authentication.credentials_invalid" | "authentication.csrf.invalid" | "authentication.desktop_authorization.account_session_locked" | "authentication.desktop_authorization.disabled" | "authentication.desktop_authorization.incompatible" | "authentication.desktop_authorization.invalid" | "authentication.desktop_authorization.rejected" | "authentication.desktop_authorization.unavailable" | "authentication.desktop_reauthentication.denied" | "authentication.desktop_reauthentication.invalid" | "authentication.dpop.invalid" | "authentication.dpop.replayed" | "authentication.dpop.unavailable" | "authentication.dpop.use_nonce" | "authentication.email_change_undo.conflict" | "authentication.external.account_conflict" | "authentication.external.account_not_linked" | "authentication.external.invalid" | "authentication.external.provider_not_found" | "authentication.external.rejected" | "authentication.external.request.invalid" | "authentication.external.unavailable" | "authentication.internal" | "authentication.method.conflict" | "authentication.method.disabled" | "authentication.method.last_usable" | "authentication.method.not_found" | "authentication.method.provider_conflict" | "authentication.method.unavailable" | "authentication.mfa.code_invalid" | "authentication.mfa.conflict" | "authentication.mfa.disabled" | "authentication.mfa.enrollment_required" | "authentication.mfa.not_found" | "authentication.mfa.rekey.conflict" | "authentication.mfa.rekey.invalid" | "authentication.mfa.required" | "authentication.mfa.reset_invalid" | "authentication.mfa.unavailable" | "authentication.password.common_invalid" | "authentication.password.identity_invalid" | "authentication.password.invalid" | "authentication.password.pattern_invalid" | "authentication.password.reused" | "authentication.rate_limit_unavailable" | "authentication.rate_limited" | "authentication.reauthentication_method_required" | "authentication.reauthentication_required" | "authentication.registration.invalid" | "authentication.registration.invitation_required" | "authentication.registration.unavailable" | "authentication.required" | "authentication.session.invalid" | "authentication.session_required" | "authentication.sessions.maximum_reached" | "authentication.strong_required" | "authentication.token_invalid" | "authentication.user.conflict" | "authentication.user.invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "class.conflict" | "class.enrollment_conflict" | "class.invalid" | "class_member.invalid" | "class_member.student_affiliation_required" | "desktop_compatibility_policy.invalid" | "desktop_compatibility_policy.revision_conflict" | "desktop_compatibility_policy.unavailable" | "desktop_registration.invalid" | "desktop_registration.revoked" | "desktop_registration.unavailable" | "exam.archived" | "exam.attempt.already_connected" | "exam.attempt.browser_activity_conflict" | "exam.attempt.configuration_frozen" | "exam.attempt.configuration_required" | "exam.attempt.configuration_stale" | "exam.attempt.configuration_unsupported" | "exam.attempt.conflict" | "exam.attempt.connection_closed" | "exam.attempt.connection_lost" | "exam.attempt.continuity_invalid" | "exam.attempt.correction_conflict" | "exam.attempt.desktop_incompatible" | "exam.attempt.focus_loss_conflict" | "exam.attempt.invalid" | "exam.attempt.management_authority_conflict" | "exam.attempt.not_found" | "exam.attempt.registered_desktop_required" | "exam.attempt.renewal_conflict" | "exam.attempt.revision_conflict" | "exam.attempt.screen_clip_incomplete" | "exam.attempt.screen_clip_limit_reached" | "exam.attempt.screen_clip_too_large" | "exam.attempt.screen_recording_off" | "exam.attempt.sitting_not_open" | "exam.attempt.state_conflict" | "exam.attempt.suspension_conflict" | "exam.attempt.unavailable" | "exam.attempt.workspace.content_conflict" | "exam.attempt.workspace.cursor_conflict" | "exam.attempt.workspace.directory_not_empty" | "exam.attempt.workspace.entry_conflict" | "exam.attempt.workspace.entry_limit" | "exam.attempt.workspace.object_conflict" | "exam.attempt.workspace.path_conflict" | "exam.attempt.workspace.size_limit" | "exam.browser.source_budget_exhausted" | "exam.conflict" | "exam.delivery.append_rate_limited" | "exam.delivery.batch_conflict" | "exam.delivery.control_rate_limited" | "exam.delivery.declaration_conflict" | "exam.delivery.detail_budget_exhausted" | "exam.delivery.metadata_capacity" | "exam.delivery.pending_capacity" | "exam.delivery.replay_window_exceeded" | "exam.delivery.sequence_limit" | "exam.delivery.summary_rate_limited" | "exam.delivery.upload_expired" | "exam.draft.no_changes" | "exam.draft.revision_conflict" | "exam.export.claim_lost" | "exam.export.conflict" | "exam.export.expired" | "exam.export.limit" | "exam.export.not_found" | "exam.export.not_ready" | "exam.export.policy_unconfigured" | "exam.export.scope_changed" | "exam.export.source_retired" | "exam.export.unavailable" | "exam.integrity_review.incomplete" | "exam.integrity_review.invalid" | "exam.integrity_review.not_found" | "exam.integrity_review.revision_conflict" | "exam.integrity_review.state_conflict" | "exam.integrity_review.too_large" | "exam.integrity_review.unavailable" | "exam.invalid" | "exam.manager.candidate_conflict" | "exam.manager.exists" | "exam.manager.ineligible" | "exam.manager.not_found" | "exam.manager.owner_protected" | "exam.not_found" | "exam.owner.no_changes" | "exam.resource.conflict" | "exam.resource.content_invalid" | "exam.resource.invalid" | "exam.resource.limit" | "exam.resource.no_changes" | "exam.resource.not_found" | "exam.resource.order_invalid" | "exam.resource.revision_conflict" | "exam.resource.unavailable" | "exam.resource.upload_invalid" | "exam.revision.capacity_exceeded" | "exam.revision.no_changes" | "exam.revision_conflict" | "exam.security.attempt_not_ready" | "exam.security.catalog_missing" | "exam.security.configuration_unsupported" | "exam.security.control_conflict" | "exam.security.interaction_blocked" | "exam.security.policy_changed" | "exam.security.preflight_consumed" | "exam.security.preflight_expired" | "exam.security.preflight_rate_limited" | "exam.security.preflight_report_changed" | "exam.security.preflight_required" | "exam.security.preflight_superseded" | "exam.security.readiness_unmet" | "exam.security.resume_required" | "exam.security.session_changed" | "exam.security.unsupported_capability" | "exam.sitting.class_ineligible" | "exam.sitting.conflict" | "exam.sitting.correction.conflict" | "exam.sitting.correction.content_invalid" | "exam.sitting.correction.invalid" | "exam.sitting.correction.limit" | "exam.sitting.correction.manifest_conflict" | "exam.sitting.correction.no_changes" | "exam.sitting.correction.not_found" | "exam.sitting.correction.stage_conflict" | "exam.sitting.correction.unavailable" | "exam.sitting.deadline_reached" | "exam.sitting.extension_not_later" | "exam.sitting.invalid" | "exam.sitting.no_changes" | "exam.sitting.not_found" | "exam.sitting.revision_conflict" | "exam.sitting.schedule_not_future" | "exam.sitting.schedule_outside_period" | "exam.sitting.state_conflict" | "exam.sitting.unavailable" | "exam.starter_workspace.conflict" | "exam.starter_workspace.content_conflict" | "exam.starter_workspace.directory_not_empty" | "exam.starter_workspace.entry_kind" | "exam.starter_workspace.entry_limit" | "exam.starter_workspace.invalid" | "exam.starter_workspace.move_conflict" | "exam.starter_workspace.no_changes" | "exam.starter_workspace.not_found" | "exam.starter_workspace.object_conflict" | "exam.starter_workspace.parent_not_found" | "exam.starter_workspace.path_conflict" | "exam.starter_workspace.total_size_limit" | "exam.starter_workspace.unavailable" | "exam.starter_workspace.upload_expired" | "exam.unavailable" | "health.not_live" | "health.not_ready" | "idempotency.conflict" | "idempotency.in_progress" | "idempotency.key_invalid" | "idempotency.key_required" | "idempotency.not_supported" | "installation.already_initialized" | "installation.bootstrap_denied" | "installation.unavailable" | "institution.conflict" | "institution.invalid" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.query.invalid" | "invitation.role_not_delegable" | "invitation.unavailable" | "invitation.user_invalid" | "job.cancel.unsupported" | "job.conflict" | "job.query.invalid" | "job.retry.unsupported" | "job.unavailable" | "mail.conflict" | "mail.query.invalid" | "mail.recipient_ineligible" | "mail.recipient_unverified" | "mail.rekey.conflict" | "mail.rekey.invalid" | "mail.test.rate_limited" | "mail.unavailable" | "mfa.required_by_policy" | "onboarding_batch.duplicate" | "onboarding_import.conflict" | "onboarding_import.file_invalid" | "onboarding_import.unavailable" | "personal_access_token.invalid" | "personal_access_token.maximum_reached" | "personal_access_token.unavailable" | "plugin.invalid" | "plugin.not_found" | "plugin.required" | "plugin.revision_conflict" | "plugin.unavailable" | "profile_picture.invalid" | "profile_picture.unavailable" | "programme.conflict" | "programme.invalid" | "programme_level.conflict" | "programme_level.invalid" | "request.invalid" | "request.too_large" | "resource.not_found" | "retention.conflict" | "retention.invalid" | "retention.unavailable" | "retention_policy.invalid" | "retention_policy.revision_conflict" | "retention_policy.unavailable" | "role.built_in.protected" | "role.conflict" | "role.invalid" | "role.permission.invalid" | "role_binding.conflict" | "role_binding.invalid" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "route.method_not_allowed" | "route.not_found" | "search.query.invalid" | "server.internal" | "service.busy" | "session.desktop_named_by_registration" | "session.id.invalid" | "session.invalid" | "session.not_found" | "student_progression.conflict" | "student_progression.effective_date_conflict" | "student_progression.lineage_conflict" | "student_progression.roster_too_large" | "student_progression.target_conflict" | "student_progression.unavailable" | "user.conflict" | "user.invalid" | "user.last_system_admin" | "user_settings.format_unsupported" | "user_settings.invalid" | "user_settings.revision_conflict" | "user_settings.unavailable" | "websocket.action.unknown" | "websocket.internal" | "websocket.origin.invalid" | "websocket.rate_limited" | "websocket.request.invalid" | "websocket.subscription.invalid" | "websocket.subscription.limit" | "websocket.unavailable";
+        ErrorCode: "academic_administration_preview.authorization_lost" | "academic_administration_preview.conflict" | "academic_administration_preview.expired" | "academic_administration_preview.target_conflict" | "academic_administration_preview.too_many_users" | "academic_period.conflict" | "academic_period.invalid" | "academic_unit.conflict" | "academic_unit.invalid" | "academic_unit_member.conflict" | "academic_unit_member.invalid" | "access_policy.blocked" | "access_policy.invalid" | "access_policy.revision_conflict" | "access_policy.unavailable" | "administration.unavailable" | "administrator_recovery.invalid" | "administrator_recovery.unavailable" | "affiliation.conflict" | "affiliation.invalid" | "affiliation.student_has_active_enrollment" | "audit.internal" | "audit.query.invalid" | "audit.unavailable" | "authentication.account_recovery.unavailable" | "authentication.account_token.invalid" | "authentication.client_type.invalid" | "authentication.credential_ambiguous" | "authentication.credentials_invalid" | "authentication.csrf.invalid" | "authentication.desktop_authorization.account_session_locked" | "authentication.desktop_authorization.disabled" | "authentication.desktop_authorization.incompatible" | "authentication.desktop_authorization.invalid" | "authentication.desktop_authorization.rejected" | "authentication.desktop_authorization.unavailable" | "authentication.desktop_reauthentication.denied" | "authentication.desktop_reauthentication.invalid" | "authentication.dpop.invalid" | "authentication.dpop.replayed" | "authentication.dpop.unavailable" | "authentication.dpop.use_nonce" | "authentication.email_change_undo.conflict" | "authentication.external.account_conflict" | "authentication.external.account_not_linked" | "authentication.external.invalid" | "authentication.external.provider_not_found" | "authentication.external.rejected" | "authentication.external.request.invalid" | "authentication.external.unavailable" | "authentication.internal" | "authentication.method.conflict" | "authentication.method.disabled" | "authentication.method.last_usable" | "authentication.method.not_found" | "authentication.method.provider_conflict" | "authentication.method.unavailable" | "authentication.mfa.code_invalid" | "authentication.mfa.conflict" | "authentication.mfa.disabled" | "authentication.mfa.enrollment_required" | "authentication.mfa.not_found" | "authentication.mfa.rekey.conflict" | "authentication.mfa.rekey.invalid" | "authentication.mfa.required" | "authentication.mfa.reset_invalid" | "authentication.mfa.unavailable" | "authentication.password.common_invalid" | "authentication.password.identity_invalid" | "authentication.password.invalid" | "authentication.password.pattern_invalid" | "authentication.password.reused" | "authentication.rate_limit_unavailable" | "authentication.rate_limited" | "authentication.reauthentication_method_required" | "authentication.reauthentication_required" | "authentication.registration.invalid" | "authentication.registration.invitation_required" | "authentication.registration.unavailable" | "authentication.required" | "authentication.session.invalid" | "authentication.session_required" | "authentication.sessions.maximum_reached" | "authentication.strong_required" | "authentication.token_invalid" | "authentication.user.conflict" | "authentication.user.invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "class.conflict" | "class.enrollment_conflict" | "class.invalid" | "class_member.invalid" | "class_member.student_affiliation_required" | "desktop_compatibility_policy.invalid" | "desktop_compatibility_policy.revision_conflict" | "desktop_compatibility_policy.unavailable" | "desktop_registration.invalid" | "desktop_registration.revoked" | "desktop_registration.unavailable" | "environment_profile.invalid" | "environment_profile.limit_reached" | "environment_profile.name_in_use" | "environment_profile.not_found" | "environment_profile.unavailable" | "exam.archived" | "exam.attempt.already_connected" | "exam.attempt.browser_activity_conflict" | "exam.attempt.configuration_frozen" | "exam.attempt.configuration_required" | "exam.attempt.configuration_stale" | "exam.attempt.configuration_unsupported" | "exam.attempt.conflict" | "exam.attempt.connection_closed" | "exam.attempt.connection_lost" | "exam.attempt.continuity_invalid" | "exam.attempt.correction_conflict" | "exam.attempt.desktop_incompatible" | "exam.attempt.environment_changed" | "exam.attempt.environment_ended" | "exam.attempt.environment_not_found" | "exam.attempt.environment_not_running" | "exam.attempt.environment_unavailable" | "exam.attempt.focus_loss_conflict" | "exam.attempt.invalid" | "exam.attempt.management_authority_conflict" | "exam.attempt.not_found" | "exam.attempt.registered_desktop_required" | "exam.attempt.renewal_conflict" | "exam.attempt.revision_conflict" | "exam.attempt.screen_clip_incomplete" | "exam.attempt.screen_clip_limit_reached" | "exam.attempt.screen_clip_too_large" | "exam.attempt.screen_recording_off" | "exam.attempt.sitting_not_open" | "exam.attempt.state_conflict" | "exam.attempt.suspension_conflict" | "exam.attempt.terminal_exited" | "exam.attempt.terminal_limit_reached" | "exam.attempt.terminal_not_found" | "exam.attempt.unavailable" | "exam.attempt.workspace.content_conflict" | "exam.attempt.workspace.cursor_conflict" | "exam.attempt.workspace.directory_not_empty" | "exam.attempt.workspace.entry_conflict" | "exam.attempt.workspace.entry_limit" | "exam.attempt.workspace.object_conflict" | "exam.attempt.workspace.path_conflict" | "exam.attempt.workspace.rate_limited" | "exam.attempt.workspace.size_limit" | "exam.browser.source_budget_exhausted" | "exam.conflict" | "exam.delivery.append_rate_limited" | "exam.delivery.batch_conflict" | "exam.delivery.control_rate_limited" | "exam.delivery.declaration_conflict" | "exam.delivery.detail_budget_exhausted" | "exam.delivery.metadata_capacity" | "exam.delivery.pending_capacity" | "exam.delivery.replay_window_exceeded" | "exam.delivery.sequence_limit" | "exam.delivery.summary_rate_limited" | "exam.delivery.upload_expired" | "exam.draft.no_changes" | "exam.draft.revision_conflict" | "exam.execution.disabled" | "exam.execution.profile_unusable" | "exam.export.claim_lost" | "exam.export.conflict" | "exam.export.expired" | "exam.export.limit" | "exam.export.not_found" | "exam.export.not_ready" | "exam.export.policy_unconfigured" | "exam.export.scope_changed" | "exam.export.source_retired" | "exam.export.unavailable" | "exam.integrity_review.incomplete" | "exam.integrity_review.invalid" | "exam.integrity_review.not_found" | "exam.integrity_review.revision_conflict" | "exam.integrity_review.state_conflict" | "exam.integrity_review.too_large" | "exam.integrity_review.unavailable" | "exam.invalid" | "exam.manager.candidate_conflict" | "exam.manager.exists" | "exam.manager.ineligible" | "exam.manager.not_found" | "exam.manager.owner_protected" | "exam.not_found" | "exam.owner.no_changes" | "exam.resource.conflict" | "exam.resource.content_invalid" | "exam.resource.invalid" | "exam.resource.limit" | "exam.resource.no_changes" | "exam.resource.not_found" | "exam.resource.order_invalid" | "exam.resource.revision_conflict" | "exam.resource.unavailable" | "exam.resource.upload_invalid" | "exam.revision.capacity_exceeded" | "exam.revision.no_changes" | "exam.revision_conflict" | "exam.security.attempt_not_ready" | "exam.security.catalog_missing" | "exam.security.configuration_unsupported" | "exam.security.control_conflict" | "exam.security.interaction_blocked" | "exam.security.policy_changed" | "exam.security.preflight_consumed" | "exam.security.preflight_expired" | "exam.security.preflight_rate_limited" | "exam.security.preflight_report_changed" | "exam.security.preflight_required" | "exam.security.preflight_superseded" | "exam.security.readiness_unmet" | "exam.security.resume_required" | "exam.security.session_changed" | "exam.security.unsupported_capability" | "exam.sitting.class_ineligible" | "exam.sitting.conflict" | "exam.sitting.correction.conflict" | "exam.sitting.correction.content_invalid" | "exam.sitting.correction.invalid" | "exam.sitting.correction.limit" | "exam.sitting.correction.manifest_conflict" | "exam.sitting.correction.no_changes" | "exam.sitting.correction.not_found" | "exam.sitting.correction.stage_conflict" | "exam.sitting.correction.unavailable" | "exam.sitting.deadline_reached" | "exam.sitting.extension_not_later" | "exam.sitting.invalid" | "exam.sitting.no_changes" | "exam.sitting.not_found" | "exam.sitting.revision_conflict" | "exam.sitting.schedule_not_future" | "exam.sitting.schedule_outside_period" | "exam.sitting.state_conflict" | "exam.sitting.unavailable" | "exam.starter_workspace.conflict" | "exam.starter_workspace.content_conflict" | "exam.starter_workspace.directory_not_empty" | "exam.starter_workspace.entry_kind" | "exam.starter_workspace.entry_limit" | "exam.starter_workspace.invalid" | "exam.starter_workspace.move_conflict" | "exam.starter_workspace.no_changes" | "exam.starter_workspace.not_found" | "exam.starter_workspace.object_conflict" | "exam.starter_workspace.parent_not_found" | "exam.starter_workspace.path_conflict" | "exam.starter_workspace.total_size_limit" | "exam.starter_workspace.unavailable" | "exam.starter_workspace.upload_expired" | "exam.unavailable" | "health.not_live" | "health.not_ready" | "idempotency.conflict" | "idempotency.in_progress" | "idempotency.key_invalid" | "idempotency.key_required" | "idempotency.not_supported" | "installation.already_initialized" | "installation.bootstrap_denied" | "installation.unavailable" | "institution.conflict" | "institution.invalid" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.query.invalid" | "invitation.role_not_delegable" | "invitation.unavailable" | "invitation.user_invalid" | "job.cancel.unsupported" | "job.conflict" | "job.query.invalid" | "job.retry.unsupported" | "job.unavailable" | "mail.conflict" | "mail.query.invalid" | "mail.recipient_ineligible" | "mail.recipient_unverified" | "mail.rekey.conflict" | "mail.rekey.invalid" | "mail.test.rate_limited" | "mail.unavailable" | "mfa.required_by_policy" | "onboarding_batch.duplicate" | "onboarding_import.conflict" | "onboarding_import.file_invalid" | "onboarding_import.unavailable" | "personal_access_token.invalid" | "personal_access_token.maximum_reached" | "personal_access_token.unavailable" | "plugin.invalid" | "plugin.not_found" | "plugin.required" | "plugin.revision_conflict" | "plugin.unavailable" | "profile_picture.invalid" | "profile_picture.unavailable" | "programme.conflict" | "programme.invalid" | "programme_level.conflict" | "programme_level.invalid" | "request.invalid" | "request.too_large" | "resource.not_found" | "retention.conflict" | "retention.invalid" | "retention.unavailable" | "retention_policy.invalid" | "retention_policy.revision_conflict" | "retention_policy.unavailable" | "role.built_in.protected" | "role.conflict" | "role.invalid" | "role.permission.invalid" | "role_binding.conflict" | "role_binding.invalid" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "route.method_not_allowed" | "route.not_found" | "search.query.invalid" | "server.internal" | "service.busy" | "session.desktop_named_by_registration" | "session.id.invalid" | "session.invalid" | "session.not_found" | "student_progression.conflict" | "student_progression.effective_date_conflict" | "student_progression.lineage_conflict" | "student_progression.roster_too_large" | "student_progression.target_conflict" | "student_progression.unavailable" | "user.conflict" | "user.invalid" | "user.last_system_admin" | "user_settings.format_unsupported" | "user_settings.invalid" | "user_settings.revision_conflict" | "user_settings.unavailable" | "websocket.action.unknown" | "websocket.internal" | "websocket.origin.invalid" | "websocket.rate_limited" | "websocket.request.invalid" | "websocket.subscription.invalid" | "websocket.subscription.limit" | "websocket.unavailable";
         /** @description An Attempt Connection. */
         ExamAttemptConnectionResponse: {
             /** @description Why the Connection closed. Present only when state is closed. */
@@ -9970,6 +10281,10 @@ export interface components {
         ExamIntegrityEvidenceResponse: {
             /** @description The blocked navigation. Only for `browser_navigation`. */
             browser?: components["schemas"]["BrowserIntegrityEvidence"];
+            /** @description A capability's own evidence, one JSON object of at most 64 KiB that the server stores as given and does not interpret. Present only for capability and native kinds. */
+            detail?: {
+                [key: string]: unknown;
+            };
             /**
              * Format: int64
              * @description How long focus was lost, in milliseconds. 0 for other kinds.
@@ -10106,6 +10421,7 @@ export interface components {
         };
         /** @description A Submission's integrity state, its Review if one exists, and the current decisions. */
         ExamIntegrityReviewResponse: {
+            attempt_evidence: components["schemas"]["AttemptEvidenceInventory"];
             browser_activity: components["schemas"]["BrowserSubmissionSettlement"];
             /** @description Browser events not kept as evidence because of the group limit. Omitted when none were dropped. */
             browser_evidence_overflow?: components["schemas"]["BrowserIntegrityOverflow"];
@@ -10180,6 +10496,8 @@ export interface components {
         ExamPolicySet: {
             /** @description What happens when the server loses its connection to an Attempt. */
             connection_loss: components["schemas"]["ConnectionLossPolicy"];
+            /** @description Whether the Attempts get an execution environment, from which profile, and how many terminals. */
+            execution: components["schemas"]["ExecutionPolicy"];
             /** @description When leaving the Exam window counts against the candidate. */
             focus_loss: components["schemas"]["FocusLossPolicy"];
             /** @description What Proctor Desktop watches or blocks on the candidate's computer. */
@@ -10414,6 +10732,11 @@ export interface components {
         };
         /** @description One page of the candidate-status board for a Sitting. */
         ExamSittingCandidateStatusesResponse: {
+            /**
+             * Format: int64
+             * @description How many of the Sitting's execution environments wait for a host with room, across every page.
+             */
+            environments_waiting_capacity: number;
             /** @description ID of the Exam. */
             exam_id: components["schemas"]["ID"];
             /** @description ID of the Exam Sitting. */
@@ -10839,6 +11162,7 @@ export interface components {
         };
         /** @description One file or directory in a sealed Submission. File entries carry `content_version`, `media_type`, `size` and `sha256`. Directory entries have none of them. */
         ExamSubmissionManifestItemResponse: {
+            author: components["schemas"]["WorkspaceAuthor"];
             /** @description The version token of the sealed file content. Files only. */
             content_version?: components["schemas"]["WorkspaceContentVersion"];
             /** @description The entry's ID. Use it to download a file's content. */
@@ -11039,6 +11363,15 @@ export interface components {
              * @description When the Exam record last changed. The list is sorted by this value, newest first.
              */
             updated_at: string;
+        };
+        /** @description Whether the Exam's Attempts get an execution environment and which. A disabled policy names no profile, records nothing and opens no terminal. Terminal output is never recorded. */
+        ExecutionPolicy: {
+            enabled: boolean;
+            profile_id?: components["schemas"]["ID"];
+            /** @description Whether terminal input is recorded as evidence. */
+            record_input: boolean;
+            /** @description How many terminals a candidate may open, from 1 to the profile's maximum; 0 when disabled. */
+            terminals: number;
         };
         /** @description A later deadline for an open or paused Sitting. */
         ExtendExamSittingRequest: {
@@ -12205,19 +12538,6 @@ export interface components {
          * @enum {string}
          */
         MailTemplateKey: "academic.academic_unit_assigned" | "academic.academic_unit_assignment_ended" | "academic.class_enrolled" | "academic.class_enrollment_ended" | "academic.class_transferred" | "access.academic_unit_role_invitation" | "access.institution_role_invitation" | "access.invitation_accepted" | "access.invitation_revoked" | "access.student_class_invitation" | "access.teacher_academic_unit_invitation" | "authorization.institution_role_assigned" | "authorization.institution_role_ended" | "authorization.scoped_role_assigned" | "authorization.scoped_role_ended" | "exam.manager_added" | "exam.manager_removed" | "exam.ownership_transferred_from_you" | "exam.ownership_transferred_to_you" | "exam.result_released" | "exam.retention_scheduled" | "exam.sitting_assignment_removed" | "exam.sitting_canceled" | "exam.sitting_rescheduled" | "exam.sitting_scheduled" | "exam.submission_automatically_sealed" | "exam.submission_manager_ended" | "exam.submission_received" | "identity.account_disabled" | "identity.account_enabled" | "identity.email_change_verify_new" | "identity.email_change_warning_old" | "identity.email_verified_by_admin" | "identity.mfa_disabled" | "identity.mfa_enabled" | "identity.mfa_recovery_codes_regenerated" | "identity.mfa_reset" | "identity.password_changed" | "identity.password_reset" | "identity.personal_access_token_created" | "identity.personal_access_token_disabled" | "identity.personal_access_token_enabled" | "identity.personal_access_token_revoked" | "identity.sessions_revoked_by_admin" | "identity.verify_email" | "system.mail_test";
-        MoveCandidateWorkspaceEntryRequest: {
-            /** @description New Workspace Path for the entry. It must differ from expected_path, nothing may exist there, and its parent directory must exist. */
-            destination_path: components["schemas"]["StarterWorkspacePath"];
-            /** @description Path the entry must still have. If it has moved since the client last saw it, the request fails. */
-            expected_path: components["schemas"]["StarterWorkspacePath"];
-            /**
-             * Format: int64
-             * @description Participation Generation of the active Participation. A write from an older generation is rejected.
-             */
-            generation: number;
-            /** @description ID of the active Attempt Participation, returned when the candidate connected to the Attempt. */
-            participation_id: components["schemas"]["ID"];
-        };
         MoveExamStarterWorkspaceEntryRequest: {
             /**
              * Format: int64
@@ -12773,6 +13093,12 @@ export interface components {
              */
             status: "valid" | "invalid" | "duplicate" | "pending" | "succeeded" | "no_op" | "failed" | "skipped" | "canceled";
         };
+        OpenCandidateTerminalRequest: {
+            /** @description Columns; supply it with rows. */
+            cols?: number;
+            /** @description Rows; supply it with cols. */
+            rows?: number;
+        };
         PasswordReauthenticationRequest: {
             /** @description The current User's password. Never log or store it. */
             password: string;
@@ -13237,37 +13563,21 @@ export interface components {
             /** @description Every current Resource ID on the Draft, each once, in the order you want. */
             resource_ids: components["schemas"]["ID"][];
         };
-        ReplaceCandidateWorkspaceFileMetadata: {
-            /** @description Workspace Content Version the client last received for this file. If the file changed since then, the request fails instead of overwriting the newer content. */
-            expected_content_version: components["schemas"]["WorkspaceContentVersion"];
-            /** @description Path the file must still have before its content can be replaced. */
-            expected_path: components["schemas"]["StarterWorkspacePath"];
-            /**
-             * Format: int64
-             * @description Participation Generation of the active Participation. A write from an older generation is rejected.
-             */
-            generation: number;
-            /** @description Media type of the replacement content. */
-            media_type: string;
-            /** @description ID of the active Attempt Participation, returned when the candidate connected to the Attempt. */
-            participation_id: components["schemas"]["ID"];
-            /** @description Lowercase hexadecimal SHA-256 digest of the replacement content. The server rejects the upload if the content does not match. */
-            sha256: components["schemas"]["SHA256"];
-            /**
-             * Format: int64
-             * @description Exact length of the replacement content in bytes. It must fit both the limit of the Exam Revision and the API limit.
-             */
-            size: number;
+        ReplaceExamAttemptEnvironmentRequest: {
+            /** Format: int64 */
+            expected_incarnation: number;
         };
-        /** @description Exactly two parts, in order: the JSON replacement metadata, then the file content. */
-        ReplaceCandidateWorkspaceFileMultipart: {
+        ReplaceExamAttemptEnvironmentResponse: {
+            desired: components["schemas"]["AttemptEnvironmentDesired"];
+            exam_attempt_id: components["schemas"]["ID"];
+            /** Format: int64 */
+            incarnation: number;
             /**
-             * Format: binary
-             * @description The replacement file content. It must be the second part and match the size and digest in metadata.
+             * Format: int64
+             * @description The incarnation the owner moves to; the replacement is done once incarnation reaches it.
              */
-            content: string;
-            /** @description JSON metadata that describes the replacement. It must be the first part. */
-            metadata: components["schemas"]["ReplaceCandidateWorkspaceFileMetadata"];
+            replace_before: number;
+            state: components["schemas"]["AttemptEnvironmentState"];
         };
         ReplaceInvitationRequest: {
             /** @description The Academic Unit of a `teacher_academic_unit` or `academic_unit_role` Invitation. */
@@ -14488,6 +14798,10 @@ export interface components {
          * @enum {string}
          */
         SessionRevocationReasonCode: "access_policy_changed" | "account_disabled" | "administrator_all_sessions" | "administrator_session" | "authentication_audit_failed" | "desktop_authorization_failed" | "desktop_registration_revoked" | "email_change_undone" | "exam_attempt_session_lock" | "expired" | "external_identity_unlinked" | "inactive_user" | "password_changed" | "password_removed" | "mfa_reset" | "password_reset" | "refresh_replay" | "user_all_sessions" | "user_logout" | "user_other_sessions" | "user_session";
+        SignalCandidateTerminalRequest: {
+            /** @enum {string} */
+            signal: "interrupt";
+        };
         /** @description The candidate's Exam Attempt. */
         SittingCandidateAttemptResponse: {
             /**
@@ -14514,6 +14828,18 @@ export interface components {
              * @description When the Attempt last changed.
              */
             updated_at: string;
+        };
+        /** @description The candidate's execution environment, present once the Attempt has one. Incarnation counts the machines it has had; a manager names it to replace the current one. */
+        SittingCandidateEnvironmentResponse: {
+            desired: components["schemas"]["AttemptEnvironmentDesired"];
+            /** Format: int64 */
+            incarnation: number;
+            state: components["schemas"]["AttemptEnvironmentState"];
+            /**
+             * Format: date-time
+             * @description When the current wait for an execution host with room began.
+             */
+            waiting_since?: string;
         };
         /** @description The candidate User. */
         SittingCandidateIdentityResponse: {
@@ -14552,6 +14878,7 @@ export interface components {
             candidate: components["schemas"]["SittingCandidateIdentityResponse"];
             /** @description Whether the candidate is still a member of the Sitting's Class. */
             current_class_membership: boolean;
+            environment?: components["schemas"]["SittingCandidateEnvironmentResponse"];
             /**
              * Format: int64
              * @description Number of integrity issues on the Attempt that still need attention, such as discrepancies not covered by a finalized Submission Review or gaps in the delivered integrity data. Zero when there is no Attempt.
@@ -15264,6 +15591,16 @@ export interface components {
              */
             reason_code: "institution_request" | "integrity_review" | "records_review" | "review_not_required" | "case_closed" | "mistake" | "other";
         };
+        /** @description Who made a Workspace change. Every author writes on behalf of the candidate; the kind says which actor it was. */
+        WorkspaceAuthor: {
+            /**
+             * @description `candidate` is the candidate's own editor. `environment` is the Attempt's execution environment, writing back what its programs changed.
+             * @enum {string}
+             */
+            kind: "candidate" | "environment";
+            /** @description The reference within the kind. For `candidate`, the Attempt Connection the editor wrote through. For `environment`, the environment incarnation in decimal, followed by a slash and the tag of the writing process, such as `terminal:1`, when it is known. */
+            ref: string;
+        };
         /** @description A token for one saved version of a Workspace file's content. Compare it or send it back unchanged. It is not an identifier, and you should not read meaning into its characters. */
         WorkspaceContentVersion: string;
     };
@@ -15873,6 +16210,21 @@ export interface components {
                 "application/json": components["schemas"]["AffiliationListResponse"];
             };
         };
+        /** @description Bounded private Attempt evidence, never a Flag or a guilt finding. */
+        AttemptEvidenceListOK: {
+            headers: {
+                "Cache-Control"?: "no-store";
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "items": []
+                 *     }
+                 */
+                "application/json": components["schemas"]["AttemptEvidenceListResponse"];
+            };
+        };
         /** @description Audit Event collection */
         AuditListOK: {
             headers: {
@@ -16454,6 +16806,16 @@ export interface components {
                 "application/json": components["schemas"]["BuildInfoResponse"];
             };
         };
+        /** @description The Attempt's execution environment */
+        CandidateEnvironment: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["CandidateEnvironmentResponse"];
+            };
+        };
         /** @description Candidate Exam activity collection */
         CandidateExamActivityOK: {
             headers: {
@@ -16727,6 +17089,60 @@ export interface components {
                 "application/json": components["schemas"]["ScreenClipResponse"];
             };
         };
+        /** @description The terminal that opened */
+        CandidateTerminalOpened: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "input_offset": 0,
+                 *       "number": 2,
+                 *       "output_offset": 0,
+                 *       "running": true,
+                 *       "started_at": "2026-08-01T09:12:30Z",
+                 *       "tag": "terminal:2"
+                 *     }
+                 */
+                "application/json": components["schemas"]["CandidateTerminal"];
+            };
+        };
+        /** @description The candidate's terminals on the current machine, and how many may run at once */
+        CandidateTerminals: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "terminal_limit": 2,
+                 *       "terminals": [
+                 *         {
+                 *           "exit_code": 0,
+                 *           "input_offset": 921,
+                 *           "number": 1,
+                 *           "output_offset": 18342,
+                 *           "running": false,
+                 *           "started_at": "2026-08-01T09:02:11Z",
+                 *           "tag": "terminal:1"
+                 *         },
+                 *         {
+                 *           "input_offset": 37,
+                 *           "number": 2,
+                 *           "output_offset": 2048,
+                 *           "running": true,
+                 *           "started_at": "2026-08-01T09:12:30Z",
+                 *           "tag": "terminal:2"
+                 *         }
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["CandidateTerminals"];
+            };
+        };
         /** @description One page of Workspace changes in order, or a signal to reload the full file list. */
         CandidateWorkspaceJournalOK: {
             headers: {
@@ -16739,6 +17155,10 @@ export interface components {
                  *       "current_cursor": 17,
                  *       "items": [
                  *         {
+                 *           "author": {
+                 *             "kind": "candidate",
+                 *             "ref": "c8xmq7t4h1rz6a3kpedn5yw9fo"
+                 *           },
                  *           "changed_at": "2026-08-01T09:12:40Z",
                  *           "content_version": "kVcIsgUpj6Sg9aheovEZXzUjpw",
                  *           "cursor": 15,
@@ -16749,6 +17169,10 @@ export interface components {
                  *           "operation": "replace_file"
                  *         },
                  *         {
+                 *           "author": {
+                 *             "kind": "environment",
+                 *             "ref": "0/terminal:1"
+                 *           },
                  *           "changed_at": "2026-08-01T09:14:05Z",
                  *           "content_version": "VhOGu5NgyvhwvSuqK4dWGlgnoA",
                  *           "cursor": 16,
@@ -16765,58 +17189,6 @@ export interface components {
                  *     }
                  */
                 "application/json": components["schemas"]["CandidateWorkspaceJournalResponse"];
-            };
-        };
-        /** @description The server accepted and recorded the new Workspace entry. */
-        CandidateWorkspaceMutationCreated: {
-            headers: {
-                "Cache-Control": components["headers"]["NoStore"];
-                [name: string]: unknown;
-            };
-            content: {
-                /**
-                 * @example {
-                 *       "entry": {
-                 *         "content_version": "EcTl31uGQ_dFCGAtmNtc0mRau8",
-                 *         "id": "g63dcrphk8idgyjgzbrpajosz6",
-                 *         "kind": "file",
-                 *         "media_type": "text/x-go",
-                 *         "path": "answers/main_test.go",
-                 *         "sha256": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35",
-                 *         "size": 912
-                 *       },
-                 *       "operation": "create_file",
-                 *       "workspace_cursor": 18,
-                 *       "workspace_id": "wj3drgzdpnf54rxf5d8qd3dqne"
-                 *     }
-                 */
-                "application/json": components["schemas"]["CandidateWorkspaceMutationResponse"];
-            };
-        };
-        /** @description The server accepted and recorded the Workspace change. */
-        CandidateWorkspaceMutationOK: {
-            headers: {
-                "Cache-Control": components["headers"]["NoStore"];
-                [name: string]: unknown;
-            };
-            content: {
-                /**
-                 * @example {
-                 *       "entry": {
-                 *         "content_version": "VhOGu5NgyvhwvSuqK4dWGlgnoA",
-                 *         "id": "saqjfmjqqy9mo1yj4zwed73333",
-                 *         "kind": "file",
-                 *         "media_type": "text/plain",
-                 *         "path": "answers/final.txt",
-                 *         "sha256": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
-                 *         "size": 640
-                 *       },
-                 *       "operation": "move_entry",
-                 *       "workspace_cursor": 19,
-                 *       "workspace_id": "wj3drgzdpnf54rxf5d8qd3dqne"
-                 *     }
-                 */
-                "application/json": components["schemas"]["CandidateWorkspaceMutationResponse"];
             };
         };
         /** @description Class archived */
@@ -17462,6 +17834,36 @@ export interface components {
                 "application/json": components["schemas"]["EmailVerificationInspectionResponse"];
             };
         };
+        /** @description The environment profiles. */
+        EnvironmentProfileListOK: {
+            headers: {
+                "Cache-Control": components["headers"]["PrivateNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["EnvironmentProfileListResponse"];
+            };
+        };
+        /** @description The environment profile. */
+        EnvironmentProfileOK: {
+            headers: {
+                "Cache-Control": components["headers"]["PrivateNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["EnvironmentProfileResponse"];
+            };
+        };
+        /** @description The environment after the replacement was asked */
+        ExamAttemptEnvironmentReplaced: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ReplaceExamAttemptEnvironmentResponse"];
+            };
+        };
         /** @description One page of the Sitting's Attempts, as a manager may see them. */
         ExamAttemptManagerListOK: {
             headers: {
@@ -17736,6 +18138,11 @@ export interface components {
                  *         "policy": {
                  *           "connection_loss": {
                  *             "outcome": "flag_and_suspend"
+                 *           },
+                 *           "execution": {
+                 *             "enabled": false,
+                 *             "record_input": false,
+                 *             "terminals": 0
                  *           },
                  *           "focus_loss": {
                  *             "enabled": true,
@@ -18136,6 +18543,13 @@ export interface components {
             content: {
                 /**
                  * @example {
+                 *       "attempt_evidence": {
+                 *         "bytes": 0,
+                 *         "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                 *         "gaps": 0,
+                 *         "overflow": 0,
+                 *         "records": 0
+                 *       },
                  *       "browser_activity": {
                  *         "incomplete_source_count": 0,
                  *         "inventory_revision": 1,
@@ -18326,6 +18740,11 @@ export interface components {
                  *         "policy": {
                  *           "connection_loss": {
                  *             "outcome": "flag_and_suspend"
+                 *           },
+                 *           "execution": {
+                 *             "enabled": false,
+                 *             "record_input": false,
+                 *             "terminals": 0
                  *           },
                  *           "focus_loss": {
                  *             "enabled": true,
@@ -18722,6 +19141,7 @@ export interface components {
             content: {
                 /**
                  * @example {
+                 *       "environments_waiting_capacity": 0,
                  *       "exam_id": "39kqk53i4cswfzbi7hbai1r8qg",
                  *       "exam_sitting_id": "889766ufjgio6kbpzjbufozksq",
                  *       "items": [
@@ -19147,6 +19567,10 @@ export interface components {
                  * @example {
                  *       "items": [
                  *         {
+                 *           "author": {
+                 *             "kind": "environment",
+                 *             "ref": "0/terminal:1"
+                 *           },
                  *           "content_version": "nan7rdocriztinowtuyrbqg67a",
                  *           "entry_id": "dfa1x1n7mkthyoziwxnupsmyia",
                  *           "kind": "file",
@@ -19156,6 +19580,10 @@ export interface components {
                  *           "size": 2214
                  *         },
                  *         {
+                 *           "author": {
+                 *             "kind": "candidate",
+                 *             "ref": "c8xmq7t4h1rz6a3kpedn5yw9fo"
+                 *           },
                  *           "entry_id": "f6tcxyfofj3n3buuqfjaw9j1jn",
                  *           "kind": "directory",
                  *           "path": "src"
@@ -22393,6 +22821,8 @@ export interface components {
         CandidateAttemptConnectionID: components["schemas"]["ID"];
         /** @description The secret continuity credential of the active Participation: 32 bytes as unpadded URL-safe base64. Treat it like a password. Never log, store, cache or put it in a URL. */
         CandidateAttemptCredential: string;
+        /** @description The terminal's number on the Attempt's current machine, from 1; terminal 1 has the tag terminal:1. */
+        CandidateTerminalNumber: number;
         /** @description The Class identifier. */
         ClassID: components["schemas"]["ID"];
         /** @description The ID of the Class enrollment. */
@@ -23010,19 +23440,6 @@ export interface components {
                 "application/json": components["schemas"]["CreateAffiliationRequest"];
             };
         };
-        /** @description The active Participation and its generation, and the Workspace Path of the new empty directory. */
-        CreateCandidateWorkspaceDirectory: {
-            content: {
-                /**
-                 * @example {
-                 *       "generation": 2,
-                 *       "participation_id": "ybndrfg8ejkmcpqxot1uwisza3",
-                 *       "path": "answers/part-a"
-                 *     }
-                 */
-                "application/json": components["schemas"]["CreateCandidateWorkspaceDirectoryRequest"];
-            };
-        };
         /** @description The Academic Period, machine name and display text for a new Class under the Programme Level in the path. */
         CreateClass: {
             content: {
@@ -23190,20 +23607,6 @@ export interface components {
                  *     }
                  */
                 "application/json": components["schemas"]["DeclareDeliveryGaps"];
-            };
-        };
-        /** @description The active Participation and its generation, and the state the entry must still have for the delete to go ahead. */
-        DeleteCandidateWorkspaceEntry: {
-            content: {
-                /**
-                 * @example {
-                 *       "expected_content_version": "ybndrfg8ejkmcpqxot1uwisza4",
-                 *       "expected_path": "answers/draft.txt",
-                 *       "generation": 2,
-                 *       "participation_id": "ybndrfg8ejkmcpqxot1uwisza3"
-                 *     }
-                 */
-                "application/json": components["schemas"]["DeleteCandidateWorkspaceEntryRequest"];
             };
         };
         /** @description The one-time code, the state, the PKCE verifier, and the same public key and Desktop build details that were sent at the start. */
@@ -23490,20 +23893,6 @@ export interface components {
                 "application/json": components["schemas"]["MFACodeRequest"];
             };
         };
-        /** @description The active Participation and its generation, the entry's current path, and the path to move it to. */
-        MoveCandidateWorkspaceEntry: {
-            content: {
-                /**
-                 * @example {
-                 *       "destination_path": "answers/final.txt",
-                 *       "expected_path": "answers/draft.txt",
-                 *       "generation": 2,
-                 *       "participation_id": "ybndrfg8ejkmcpqxot1uwisza3"
-                 *     }
-                 */
-                "application/json": components["schemas"]["MoveCandidateWorkspaceEntryRequest"];
-            };
-        };
         /** @description The Draft revision you last saw, and the new path for the entry. */
         MoveExamStarterWorkspaceEntry: {
             content: {
@@ -23531,6 +23920,18 @@ export interface components {
         NativeSecurityBatch: {
             content: {
                 "application/json": components["schemas"]["NativeSecurityBatch"];
+            };
+        };
+        /** @description The window the terminal starts with. Both members are optional together; without them the terminal is 80 columns by 24 rows. */
+        OpenCandidateTerminal: {
+            content: {
+                /**
+                 * @example {
+                 *       "cols": 120,
+                 *       "rows": 32
+                 *     }
+                 */
+                "application/json": components["schemas"]["OpenCandidateTerminalRequest"];
             };
         };
         /** @description The current User's password. It proves the person is still present on a Session that was signed in with a password, before the pending sensitive task continues. */
@@ -23755,6 +24156,17 @@ export interface components {
                 "application/json": components["schemas"]["DesktopCompatibilityPolicyRequest"];
             };
         };
+        /** @description Names the incarnation of the machine to replace, as the candidate-status board showed it. */
+        ReplaceExamAttemptEnvironment: {
+            content: {
+                /**
+                 * @example {
+                 *       "expected_incarnation": 0
+                 *     }
+                 */
+                "application/json": components["schemas"]["ReplaceExamAttemptEnvironmentRequest"];
+            };
+        };
         /** @description The pending Invitation's current revision and the complete terms of the new Invitation. */
         ReplaceInvitation: {
             content: {
@@ -23956,6 +24368,17 @@ export interface components {
                  *     }
                  */
                 "application/json": components["schemas"]["SecurityPreflightReport"];
+            };
+        };
+        /** @description The signal to send; a candidate may only interrupt. */
+        SignalCandidateTerminal: {
+            content: {
+                /**
+                 * @example {
+                 *       "signal": "interrupt"
+                 *     }
+                 */
+                "application/json": components["schemas"]["SignalCandidateTerminalRequest"];
             };
         };
         /** @description The configured key, other than the primary key, that this rotation retires. */
@@ -26148,6 +26571,95 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    listEnvironmentProfiles: {
+        parameters: {
+            query?: {
+                /** @description Whether retired profiles are listed too. */
+                include_retired?: boolean;
+                /** @description Maximum number of items to return in this page. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description The `next_cursor` from the previous page, sent back exactly as received. Omit it to get the first page. */
+                cursor?: components["parameters"]["PageCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["EnvironmentProfileListOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    createEnvironmentProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A unique key you choose for this request, such as a random UUID. If you retry with the same key and the same input within 24 hours, you get the first result back and the change is not made twice. Reusing a key with different input fails with `idempotency.conflict`. */
+                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The complete profile. Every member is required. */
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "cpu_millis": 1000,
+                 *       "disk_bytes": 2147483648,
+                 *       "idle_window_seconds": 600,
+                 *       "image": "python-3.12",
+                 *       "max_terminals": 4,
+                 *       "memory_bytes": 1073741824,
+                 *       "name": "python-small",
+                 *       "network": "none"
+                 *     }
+                 */
+                "application/json": components["schemas"]["EnvironmentProfileRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["EnvironmentProfileOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    retireEnvironmentProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A unique key you choose for this request, such as a random UUID. If you retry with the same key and the same input within 24 hours, you get the first result back and the change is not made twice. Reusing a key with different input fails with `idempotency.conflict`. */
+                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
+            };
+            path: {
+                /** @description The environment profile to retire. */
+                environment_profile_id: components["schemas"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["EnvironmentProfileOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     browserSourceList: {
         parameters: {
             query: {
@@ -26469,6 +26981,157 @@ export interface operations {
             409: components["responses"]["Conflict"];
             410: components["responses"]["NativeDeliveryExpired"];
             429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getCandidateEnvironment: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The secret continuity credential of the active Participation: 32 bytes as unpadded URL-safe base64. Treat it like a password. Never log, store, cache or put it in a URL. */
+                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
+                /** @description The identifier of the open Attempt Connection that belongs to the current Session. */
+                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
+            };
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["CandidateEnvironment"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    listCandidateTerminals: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The secret continuity credential of the active Participation: 32 bytes as unpadded URL-safe base64. Treat it like a password. Never log, store, cache or put it in a URL. */
+                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
+                /** @description The identifier of the open Attempt Connection that belongs to the current Session. */
+                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
+            };
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["CandidateTerminals"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    openCandidateTerminal: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The secret continuity credential of the active Participation: 32 bytes as unpadded URL-safe base64. Treat it like a password. Never log, store, cache or put it in a URL. */
+                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
+                /** @description The identifier of the open Attempt Connection that belongs to the current Session. */
+                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
+            };
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["OpenCandidateTerminal"];
+        responses: {
+            201: components["responses"]["CandidateTerminalOpened"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    signalCandidateTerminal: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The secret continuity credential of the active Participation: 32 bytes as unpadded URL-safe base64. Treat it like a password. Never log, store, cache or put it in a URL. */
+                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
+                /** @description The identifier of the open Attempt Connection that belongs to the current Session. */
+                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
+            };
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The terminal's number on the Attempt's current machine, from 1; terminal 1 has the tag terminal:1. */
+                terminal: components["parameters"]["CandidateTerminalNumber"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["SignalCandidateTerminal"];
+        responses: {
+            /** @description The terminal was interrupted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    connectCandidateTerminal: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The secret continuity credential of the active Participation: 32 bytes as unpadded URL-safe base64. Treat it like a password. Never log, store, cache or put it in a URL. */
+                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
+                /** @description The identifier of the open Attempt Connection that belongs to the current Session. */
+                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
+            };
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The terminal's number on the Attempt's current machine, from 1; terminal 1 has the tag terminal:1. */
+                terminal: components["parameters"]["CandidateTerminalNumber"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Switching Protocols to the terminal socket */
+            101: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };
@@ -27015,6 +27678,50 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    applyCandidateExamWorkspaceBatch: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The secret continuity credential of the active Participation: 32 bytes as unpadded URL-safe base64. Treat it like a password. Never log, store, cache or put it in a URL. */
+                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
+                /** @description The identifier of the open Attempt Connection that belongs to the current Session. */
+                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
+                /** @description A unique key you choose for this request, such as a random UUID. If you retry with the same key and the same input within 24 hours, you get the first result back and the change is not made twice. Reusing a key with different input fails with `idempotency.conflict`. */
+                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
+            };
+            path: {
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        /** @description A strict JSON manifest part first, then exactly one content part per create_file and replace_file mutation, in manifest order, and no other part. The manifest and every body together are bounded by the hard API limit; each file is also bounded by the admitted Revision. The Attempt credential and Connection remain headers, never form fields. */
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["CandidateWorkspaceBatchMultipart"];
+            };
+        };
+        responses: {
+            /** @description Every mutation of the batch was acknowledged */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateWorkspaceBatchResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     listCandidateExamWorkspaceChanges: {
         parameters: {
             query?: {
@@ -27049,131 +27756,6 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
-    createCandidateExamWorkspaceDirectory: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description The secret continuity credential of the active Participation: 32 bytes as unpadded URL-safe base64. Treat it like a password. Never log, store, cache or put it in a URL. */
-                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
-                /** @description The identifier of the open Attempt Connection that belongs to the current Session. */
-                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
-                /** @description A unique key you choose for this request, such as a random UUID. If you retry with the same key and the same input within 24 hours, you get the first result back and the change is not made twice. Reusing a key with different input fails with `idempotency.conflict`. */
-                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
-            };
-            path: {
-                /** @description The Exam Attempt identifier. */
-                exam_attempt_id: components["parameters"]["ExamAttemptID"];
-            };
-            cookie?: never;
-        };
-        requestBody: components["requestBodies"]["CreateCandidateWorkspaceDirectory"];
-        responses: {
-            201: components["responses"]["CandidateWorkspaceMutationCreated"];
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalError"];
-            503: components["responses"]["ServiceUnavailable"];
-        };
-    };
-    deleteCandidateExamWorkspaceEntry: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description The secret continuity credential of the active Participation: 32 bytes as unpadded URL-safe base64. Treat it like a password. Never log, store, cache or put it in a URL. */
-                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
-                /** @description The identifier of the open Attempt Connection that belongs to the current Session. */
-                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
-                /** @description A unique key you choose for this request, such as a random UUID. If you retry with the same key and the same input within 24 hours, you get the first result back and the change is not made twice. Reusing a key with different input fails with `idempotency.conflict`. */
-                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
-            };
-            path: {
-                /** @description The Exam Attempt identifier. */
-                exam_attempt_id: components["parameters"]["ExamAttemptID"];
-                /** @description The identifier of an entry in the Attempt Workspace. */
-                attempt_workspace_entry_id: components["parameters"]["AttemptWorkspaceEntryID"];
-            };
-            cookie?: never;
-        };
-        requestBody: components["requestBodies"]["DeleteCandidateWorkspaceEntry"];
-        responses: {
-            200: components["responses"]["CandidateWorkspaceMutationOK"];
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalError"];
-            503: components["responses"]["ServiceUnavailable"];
-        };
-    };
-    moveCandidateExamWorkspaceEntry: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description The secret continuity credential of the active Participation: 32 bytes as unpadded URL-safe base64. Treat it like a password. Never log, store, cache or put it in a URL. */
-                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
-                /** @description The identifier of the open Attempt Connection that belongs to the current Session. */
-                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
-                /** @description A unique key you choose for this request, such as a random UUID. If you retry with the same key and the same input within 24 hours, you get the first result back and the change is not made twice. Reusing a key with different input fails with `idempotency.conflict`. */
-                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
-            };
-            path: {
-                /** @description The Exam Attempt identifier. */
-                exam_attempt_id: components["parameters"]["ExamAttemptID"];
-                /** @description The identifier of an entry in the Attempt Workspace. */
-                attempt_workspace_entry_id: components["parameters"]["AttemptWorkspaceEntryID"];
-            };
-            cookie?: never;
-        };
-        requestBody: components["requestBodies"]["MoveCandidateWorkspaceEntry"];
-        responses: {
-            200: components["responses"]["CandidateWorkspaceMutationOK"];
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalError"];
-            503: components["responses"]["ServiceUnavailable"];
-        };
-    };
-    createCandidateExamWorkspaceFile: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description The secret continuity credential of the active Participation: 32 bytes as unpadded URL-safe base64. Treat it like a password. Never log, store, cache or put it in a URL. */
-                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
-                /** @description The identifier of the open Attempt Connection that belongs to the current Session. */
-                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
-                /** @description A unique key you choose for this request, such as a random UUID. If you retry with the same key and the same input within 24 hours, you get the first result back and the change is not made twice. Reusing a key with different input fails with `idempotency.conflict`. */
-                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
-            };
-            path: {
-                /** @description The Exam Attempt identifier. */
-                exam_attempt_id: components["parameters"]["ExamAttemptID"];
-            };
-            cookie?: never;
-        };
-        /** @description Exactly two multipart parts, in order: the JSON metadata, then the file content. The Attempt credential and Connection go in headers, never in form fields. */
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["CandidateWorkspaceFileUploadMultipart"];
-            };
-        };
-        responses: {
-            201: components["responses"]["CandidateWorkspaceMutationCreated"];
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalError"];
-            503: components["responses"]["ServiceUnavailable"];
-        };
-    };
     getCandidateExamWorkspaceContent: {
         parameters: {
             query?: never;
@@ -27197,42 +27779,6 @@ export interface operations {
         responses: {
             200: components["responses"]["CandidateExamProtectedContent"];
             304: components["responses"]["CandidateExamContentNotModified"];
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalError"];
-            503: components["responses"]["ServiceUnavailable"];
-        };
-    };
-    replaceCandidateExamWorkspaceFile: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description The secret continuity credential of the active Participation: 32 bytes as unpadded URL-safe base64. Treat it like a password. Never log, store, cache or put it in a URL. */
-                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
-                /** @description The identifier of the open Attempt Connection that belongs to the current Session. */
-                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
-                /** @description A unique key you choose for this request, such as a random UUID. If you retry with the same key and the same input within 24 hours, you get the first result back and the change is not made twice. Reusing a key with different input fails with `idempotency.conflict`. */
-                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
-            };
-            path: {
-                /** @description The Exam Attempt identifier. */
-                exam_attempt_id: components["parameters"]["ExamAttemptID"];
-                /** @description The identifier of an entry in the Attempt Workspace. */
-                attempt_workspace_entry_id: components["parameters"]["AttemptWorkspaceEntryID"];
-            };
-            cookie?: never;
-        };
-        /** @description The replacement metadata first, then the file content. Both parts must describe the same content, and the server checks them before it accepts the change. */
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["ReplaceCandidateWorkspaceFileMultipart"];
-            };
-        };
-        responses: {
-            200: components["responses"]["CandidateWorkspaceMutationOK"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -27442,6 +27988,47 @@ export interface operations {
             cookie?: never;
         };
         requestBody: components["requestBodies"]["ConfigureExamDraftBrowserPolicy"];
+        responses: {
+            200: components["responses"]["ExamOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    configureExamDraftExecution: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A unique key you choose for this request, such as a random UUID. If you retry with the same key and the same input within 24 hours, you get the first result back and the change is not made twice. Reusing a key with different input fails with `idempotency.conflict`. */
+                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
+            };
+            path: {
+                /** @description The Exam identifier. */
+                exam_id: components["parameters"]["ExamID"];
+            };
+            cookie?: never;
+        };
+        /** @description Supplies the expected Draft revision and the complete replacement execution policy. */
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "execution": {
+                 *         "enabled": true,
+                 *         "profile_id": "ybndrfg8ejkmcpqxot1uwisza3",
+                 *         "record_input": false,
+                 *         "terminals": 2
+                 *       },
+                 *       "expected_revision": 4
+                 *     }
+                 */
+                "application/json": components["schemas"]["ConfigureExamDraftExecutionRequest"];
+            };
+        };
         responses: {
             200: components["responses"]["ExamOK"];
             400: components["responses"]["BadRequest"];
@@ -28371,6 +28958,35 @@ export interface operations {
         requestBody: components["requestBodies"]["EndExamAttemptByManager"];
         responses: {
             200: components["responses"]["ExamSubmissionReceiptOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    replaceExamAttemptEnvironment: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A unique key you choose for this request, such as a random UUID. If you retry with the same key and the same input within 24 hours, you get the first result back and the change is not made twice. Reusing a key with different input fails with `idempotency.conflict`. */
+                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
+            };
+            path: {
+                /** @description The Exam identifier. */
+                exam_id: components["parameters"]["ExamID"];
+                /** @description The Exam Sitting identifier. */
+                exam_sitting_id: components["parameters"]["ExamSittingID"];
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["ReplaceExamAttemptEnvironment"];
+        responses: {
+            200: components["responses"]["ExamAttemptEnvironmentReplaced"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -30906,6 +31522,32 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    listAttemptEvidence: {
+        parameters: {
+            query?: {
+                /** @description Maximum number of Attempt evidence records to return. */
+                limit?: number;
+                /** @description Opaque continuation from the preceding Attempt evidence page. */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The Submission identifier. */
+                submission_id: components["parameters"]["SubmissionID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AttemptEvidenceListOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };

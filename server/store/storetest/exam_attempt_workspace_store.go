@@ -9,6 +9,7 @@ package storetest
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -29,6 +30,7 @@ type ExamAttemptWorkspaceSQLProbe struct {
 	FillWorkspaceEntryQuota      func(*testing.T, context.Context, model.ExamAttemptWorkspaceID)
 	MakeJournalGap               func(*testing.T, context.Context, model.ExamAttemptWorkspaceID)
 	SetParticipationLeaseExpired func(*testing.T, context.Context, model.AttemptParticipationID)
+	PassSittingScheduledEnd      func(*testing.T, context.Context, model.ExamSittingID)
 	ConcurrentPeer               store.ExamAttemptWorkspaceStore
 }
 
@@ -65,7 +67,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 		examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "workspace-connect", "workspace-connect"))
 	require.NoError(t, err)
 
-	access := store.ExamAttemptWorkspaceMutationAccess{AttemptID: connected.Attempt.ID,
+	access := store.ExamAttemptWorkspaceEditorAccess{AttemptID: connected.Attempt.ID,
 		ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation,
 		CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID,
 		DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint,
@@ -92,25 +94,9 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 	require.NoError(t, err)
 	require.Equal(t, admittedCapacity, presentation.Capacity)
 	require.NotEqual(t, lowered, presentation.Capacity)
-	reservation := &store.ExamAttemptWorkspaceObjectReservation{Access: access, ObjectID: model.NewAttemptWorkspaceObjectID()}
-	reserved, err := workspace.ReserveObject(ctx, reservation)
-	require.NoError(t, err)
-	require.NotNil(t, reserved)
-	require.Equal(t, reservation.ObjectID, reserved.ID)
-	require.Equal(t, connected.Workspace.ID, reserved.WorkspaceID)
-	require.Equal(t, model.AttemptWorkspaceObjectStaged, reserved.State)
-	require.Equal(t, model.AttemptWorkspaceStorageAttempt, reserved.StorageOrigin)
-	require.False(t, reserved.CreatedAt.IsZero())
-	require.Equal(t, reserved.CreatedAt, reserved.UpdatedAt)
-	require.Equal(t, model.AttemptWorkspaceStageLifetime, reserved.ExpiresAt.Sub(reserved.CreatedAt))
-	require.False(t, reserved.HasContent())
-	replayed, err := workspace.ReserveObject(ctx, reservation)
-	require.NoError(t, err)
-	require.NotNil(t, replayed, "ReserveObject(repeat) = %#v, first = %#v", replayed, reserved)
-	require.Equal(t, reserved.ID, replayed.ID, "ReserveObject(repeat) = %#v, first = %#v", replayed, reserved)
-	require.True(t, replayed.CreatedAt.Equal(reserved.CreatedAt), "ReserveObject(repeat) = %#v, first = %#v", replayed, reserved)
-	require.True(t, replayed.ExpiresAt.Equal(reserved.ExpiresAt), "ReserveObject(repeat) = %#v, first = %#v", replayed, reserved)
-	target, err := workspace.ResolveMutationTarget(ctx, access)
+	objectID := model.NewAttemptWorkspaceObjectID()
+	reservation := &store.ExamAttemptWorkspaceObjectReservation{Access: access, ObjectIDs: []model.AttemptWorkspaceObjectID{objectID}}
+	target, err := workspace.ReserveObjects(ctx, reservation)
 	require.NoError(t, err)
 	require.NotNil(t, target)
 	require.Equal(t, fixture.examID, target.ExamID)
@@ -118,63 +104,81 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 	require.Equal(t, fixture.class.ID, target.ClassID)
 	require.Equal(t, fixture.candidate.ID, target.CandidateUserID)
 	require.Equal(t, connected.Workspace.ID, target.WorkspaceID)
-	readyInput := &store.ExamAttemptWorkspaceObjectReady{Access: access, ObjectID: reserved.ID,
-		ContentVersion: model.NewWorkspaceContentVersion(),
-		Content:        model.AttemptWorkspaceContent{MediaType: "text/x-go", SizeBytes: 12, SHA256: strings.Repeat("a", 64)}}
-	ready, err := workspace.MarkObjectReady(ctx, readyInput)
-	require.NoError(t, err)
-	require.NotNil(t, ready)
-	require.Equal(t, reserved.ID, ready.ID)
-	require.Equal(t, model.AttemptWorkspaceObjectStaged, ready.State)
-	require.Equal(t, readyInput.ContentVersion, ready.ContentVersion)
-	require.Equal(t, readyInput.Content.MediaType, ready.MediaType)
-	require.Equal(t, readyInput.Content.SizeBytes, ready.SizeBytes)
-	require.Equal(t, readyInput.Content.SHA256, ready.SHA256)
-	readyReplay, err := workspace.MarkObjectReady(ctx, readyInput)
-	require.NoError(t, err)
-	require.NotNil(t, readyReplay, "MarkObjectReady(repeat) = %#v, first = %#v", readyReplay, ready)
-	require.Equal(t, ready.ID, readyReplay.ID, "MarkObjectReady(repeat) = %#v, first = %#v", readyReplay, ready)
-	require.True(t, readyReplay.UpdatedAt.Equal(ready.UpdatedAt), "MarkObjectReady(repeat) = %#v, first = %#v", readyReplay, ready)
-	changedReady := *readyInput
+	// An exact repeat keeps the same unused reservation.
+	repeatedTarget, err := workspace.ReserveObjects(ctx, reservation)
+	require.NoError(t, err, "ReserveObjects(exact repeat)")
+	require.Equal(t, target, repeatedTarget, "ReserveObjects(exact repeat)")
+	// With no objects, a reservation only resolves the target.
+	resolvedTarget, err := workspace.ReserveObjects(ctx, &store.ExamAttemptWorkspaceObjectReservation{Access: access})
+	require.NoError(t, err, "ReserveObjects(no objects)")
+	require.Equal(t, target, resolvedTarget, "ReserveObjects(no objects)")
+	duplicateID := model.NewAttemptWorkspaceObjectID()
+	_, err = workspace.ReserveObjects(ctx, &store.ExamAttemptWorkspaceObjectReservation{Access: access,
+		ObjectIDs: []model.AttemptWorkspaceObjectID{duplicateID, duplicateID}})
+	requireInvalidInput(t, err, "ReserveObjects(duplicate object)")
+	_, err = workspace.ReserveObjects(ctx, &store.ExamAttemptWorkspaceObjectReservation{Access: access,
+		ObjectIDs: newAttemptWorkspaceObjectIDs(model.AttemptWorkspaceBatchMaximumMutations + 1)})
+	requireInvalidInput(t, err, "ReserveObjects(more objects than a batch)")
+	readyInput := &store.ExamAttemptWorkspaceObjectsReady{Access: access, Objects: []store.ExamAttemptWorkspaceReadyObject{{
+		ObjectID: objectID, ContentVersion: model.NewWorkspaceContentVersion(),
+		Content: model.AttemptWorkspaceContent{MediaType: "text/x-go", SizeBytes: 12, SHA256: strings.Repeat("a", 64)}}}}
+	require.NoError(t, workspace.MarkObjectsReady(ctx, readyInput))
+	require.NoError(t, workspace.MarkObjectsReady(ctx, readyInput), "MarkObjectsReady(exact repeat)")
+	ready := readyInput.Objects[0]
+	// Different content for a ready object conflicts, and refuses the whole
+	// call: the object readied beside it keeps no content.
+	sibling := stageAttemptWorkspaceReservations(t, ctx, workspace, access, 1)[0]
+	siblingReady := store.ExamAttemptWorkspaceReadyObject{ObjectID: sibling, ContentVersion: model.NewWorkspaceContentVersion(),
+		Content: model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: 3, SHA256: strings.Repeat("e", 64)}}
+	changedReady := ready
 	changedReady.Content.SHA256 = strings.Repeat("b", 64)
-	_, err = workspace.MarkObjectReady(ctx, &changedReady)
-	require.True(t, store.IsConflict(err), "MarkObjectReady(changed repeat) error")
+	err = workspace.MarkObjectsReady(ctx, &store.ExamAttemptWorkspaceObjectsReady{Access: access,
+		Objects: []store.ExamAttemptWorkspaceReadyObject{siblingReady, changedReady}})
+	requireConflictConstraint(t, err, "attempt_workspace_object_state")
+	siblingReady.Content.SHA256 = strings.Repeat("f", 64)
+	require.NoError(t, workspace.MarkObjectsReady(ctx, &store.ExamAttemptWorkspaceObjectsReady{Access: access,
+		Objects: []store.ExamAttemptWorkspaceReadyObject{siblingReady}}), "MarkObjectsReady(after a refused call)")
+	err = workspace.MarkObjectsReady(ctx, &store.ExamAttemptWorkspaceObjectsReady{Access: access})
+	requireInvalidInput(t, err, "MarkObjectsReady(no objects)")
+	err = workspace.MarkObjectsReady(ctx, &store.ExamAttemptWorkspaceObjectsReady{Access: access,
+		Objects: []store.ExamAttemptWorkspaceReadyObject{ready, ready}})
+	requireInvalidInput(t, err, "MarkObjectsReady(duplicate object)")
+	oversized := stageAttemptWorkspaceReservations(t, ctx, workspace, access, 1)[0]
+	err = workspace.MarkObjectsReady(ctx, &store.ExamAttemptWorkspaceObjectsReady{Access: access,
+		Objects: []store.ExamAttemptWorkspaceReadyObject{{ObjectID: oversized, ContentVersion: model.NewWorkspaceContentVersion(),
+			Content: model.AttemptWorkspaceContent{MediaType: "application/octet-stream",
+				SizeBytes: admittedCapacity.WorkspaceMaximumFileBytes + 1, SHA256: strings.Repeat("a", 64)}}}})
+	requireConflictConstraint(t, err, "attempt_workspace_size_limit")
+
 	entryID := model.NewAttemptWorkspaceEntryID()
-	mutation := &store.ExamAttemptWorkspaceMutation{Access: access, Operation: model.AttemptWorkspaceMutationCreateFile,
-		EntryID: entryID, DestinationPath: "notes.go", ObjectID: ready.ID,
-		AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
-	command := examCommand(fixture.candidate.ID, store.ExamAttemptWorkspaceMutationOperation,
-		"workspace-create-file", "workspace-create-file")
-	created, err := workspace.ApplyMutation(ctx, mutation, command)
+	createFile := store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateFile,
+		EntryID: entryID, DestinationPath: "notes.go", ObjectID: ready.ObjectID}
+	batch := newAttemptWorkspaceBatch(t, ctx, ss, fixture, access, createFile)
+	command := attemptWorkspaceBatchCommand(fixture.candidate.ID, "workspace-create-file")
+	created, err := workspace.ApplyBatch(ctx, batch, command)
 	require.NoError(t, err)
-	require.True(t, created.ConsistentWith(target, mutation.Operation, mutation.EntryID), "ApplyMutation returned a result inconsistent with its request")
-	requireWorkspaceMutationEcho(t, created, mutation, model.StarterWorkspaceEntryFile, ready.ContentVersion)
-	require.NotNil(t, created)
+	requireWorkspaceBatchEcho(t, created, target, batch.Mutations, workspaceEcho{model.StarterWorkspaceEntryFile, ready.ContentVersion})
 	require.False(t, created.Replayed)
 	require.Equal(t, fixture.sitting.ID, created.SittingID)
 	require.Equal(t, fixture.class.ID, created.ClassID)
 	require.Equal(t, fixture.candidate.ID, created.CandidateUserID)
 	require.Equal(t, connected.Workspace.ID, created.WorkspaceID)
-	require.NotNil(t, created.Entry)
-	require.Equal(t, entryID, created.Entry.EntryID)
-	require.Equal(t, mutation.DestinationPath, created.Entry.Path)
-	require.Equal(t, ready.ContentVersion, created.Entry.ContentVersion)
-	require.Equal(t, int64(1), created.Change.Cursor)
-	require.Equal(t, model.AttemptWorkspaceMutationCreateFile, created.Change.Operation)
-	require.Equal(t, mutation.DestinationPath, created.Change.NewPath)
-	replayMutation := *mutation
-	replayMutation.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
-	replayedMutation, err := workspace.ApplyMutation(ctx, &replayMutation, command)
+	require.Equal(t, int64(1), created.Changes[0].Cursor)
+	require.Equal(t, entryID, created.Changes[0].EntryID)
+	createdFile, err := workspace.ResolveFile(ctx, journalAccess(access), entryID)
 	require.NoError(t, err)
-	require.True(t, replayedMutation.ConsistentWith(target, replayMutation.Operation, replayMutation.EntryID), "ApplyMutation replay returned a result inconsistent with its request")
-	requireWorkspaceMutationEcho(t, replayedMutation, &replayMutation, model.StarterWorkspaceEntryFile, ready.ContentVersion)
-	require.NotNil(t, replayedMutation, "ApplyMutation(replay) = %#v, first = %#v", replayedMutation, created)
-	require.True(t, replayedMutation.Replayed, "ApplyMutation(replay) = %#v, first = %#v", replayedMutation, created)
-	require.Equal(t, created.Change.Cursor, replayedMutation.Change.Cursor, "ApplyMutation(replay) = %#v, first = %#v", replayedMutation, created)
-	require.NotNil(t, replayedMutation.Entry, "ApplyMutation(replay) = %#v, first = %#v", replayedMutation, created)
-	require.Equal(t, created.Entry.EntryID, replayedMutation.Entry.EntryID, "ApplyMutation(replay) = %#v, first = %#v", replayedMutation, created)
-	requireSuccessfulAudit(t, ctx, ss, mutation.AuditEventID)
-	requireSuccessfulAudit(t, ctx, ss, replayMutation.AuditEventID)
+	require.Equal(t, createFile.DestinationPath, createdFile.Entry.Path)
+	require.Equal(t, ready.ContentVersion, createdFile.Entry.ContentVersion)
+	require.Equal(t, ready.ObjectID, createdFile.AttemptObjectID)
+	replayBatch := *batch
+	replayBatch.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
+	replayedCreate, err := workspace.ApplyBatch(ctx, &replayBatch, command)
+	require.NoError(t, err)
+	requireWorkspaceBatchEcho(t, replayedCreate, target, replayBatch.Mutations, workspaceEcho{model.StarterWorkspaceEntryFile, ""})
+	require.True(t, replayedCreate.Replayed, "ApplyBatch(replay) = %#v, first = %#v", replayedCreate, created)
+	require.Equal(t, created.Changes, replayedCreate.Changes, "ApplyBatch(replay) = %#v, first = %#v", replayedCreate, created)
+	requireSuccessfulAudit(t, ctx, ss, batch.AuditEventID)
+	requireSuccessfulAudit(t, ctx, ss, replayBatch.AuditEventID)
 	closed, err := ss.ExamAttempt().CloseConnection(ctx, &store.ExamAttemptConnectionClose{
 		ConnectionID: access.ConnectionID, CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID,
 		Reason: model.AttemptConnectionCloseTransport, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC(),
@@ -206,16 +210,14 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 	require.Equal(t, connected.Participation.Generation, reconnected.Participation.Generation)
 	require.Equal(t, reconnect.ConnectionID, reconnected.Connection.ID)
 	access.ConnectionID = reconnected.Connection.ID
-	replayAfterReconnect := *mutation
+	replayAfterReconnect := *batch
 	replayAfterReconnect.Access = access
 	replayAfterReconnect.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
-	replayedAfterReconnect, err := workspace.ApplyMutation(ctx, &replayAfterReconnect, command)
+	replayedAfterReconnect, err := workspace.ApplyBatch(ctx, &replayAfterReconnect, command)
 	require.NoError(t, err)
-	require.True(t, replayedAfterReconnect.ConsistentWith(target, replayAfterReconnect.Operation, replayAfterReconnect.EntryID), "ApplyMutation replay returned a result inconsistent with its request")
-	requireWorkspaceMutationEcho(t, replayedAfterReconnect, &replayAfterReconnect, model.StarterWorkspaceEntryFile, ready.ContentVersion)
-	require.NotNil(t, replayedAfterReconnect)
+	requireWorkspaceBatchEcho(t, replayedAfterReconnect, target, replayAfterReconnect.Mutations, workspaceEcho{model.StarterWorkspaceEntryFile, ""})
 	require.True(t, replayedAfterReconnect.Replayed)
-	require.Equal(t, created.Change.Cursor, replayedAfterReconnect.Change.Cursor)
+	require.Equal(t, created.Changes, replayedAfterReconnect.Changes)
 	requireSuccessfulAudit(t, ctx, ss, replayAfterReconnect.AuditEventID)
 	journal, err := workspace.ListJournal(ctx, store.CandidateWorkspaceJournalOptions{
 		Access: store.CandidateAttemptAccess{AttemptID: access.AttemptID, CandidateUserID: access.CandidateUserID,
@@ -232,7 +234,8 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 	require.Len(t, journal.Entries, 1)
 	require.Equal(t, int64(1), journal.Entries[0].Cursor)
 	require.Equal(t, entryID, journal.Entries[0].EntryID)
-	require.Equal(t, mutation.DestinationPath, journal.Entries[0].NewPath)
+	require.Equal(t, createFile.DestinationPath, journal.Entries[0].NewPath)
+	require.Equal(t, created.Changes[0], journal.Entries[0])
 	manifest, err := workspace.List(ctx, store.CandidateWorkspaceListOptions{Access: store.CandidateAttemptAccess{
 		AttemptID: access.AttemptID, CandidateUserID: access.CandidateUserID, SessionID: access.SessionID,
 		DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint,
@@ -253,20 +256,20 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 	require.Equal(t, int64(1), refresh.Cursor)
 
 	const concurrentCreates = 12
-	mutations := make([]*store.ExamAttemptWorkspaceMutation, concurrentCreates)
-	commands := make([]*store.CommandIdempotency, concurrentCreates)
-	for i := range mutations {
-		mutations[i] = &store.ExamAttemptWorkspaceMutation{Access: access,
-			Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: model.NewAttemptWorkspaceEntryID(),
-			DestinationPath: "race-" + string(rune('a'+i)), AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID,
-			AuditAt: model.NowUTC()}
-		commands[i] = examCommand(fixture.candidate.ID, store.ExamAttemptWorkspaceMutationOperation,
-			"workspace-race-"+string(rune('a'+i)), "workspace-race-"+string(rune('a'+i)))
+	raceEntries := make([]model.AttemptWorkspaceEntryID, concurrentCreates)
+	raceBatches := make([]*store.ExamAttemptWorkspaceBatch, concurrentCreates)
+	raceCommands := make([]*store.CommandIdempotency, concurrentCreates)
+	for i := range raceBatches {
+		raceEntries[i] = model.NewAttemptWorkspaceEntryID()
+		raceBatches[i] = newAttemptWorkspaceBatch(t, ctx, ss, fixture, access, store.ExamAttemptWorkspaceMutation{
+			Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: raceEntries[i],
+			DestinationPath: "race-" + string(rune('a'+i))})
+		raceCommands[i] = attemptWorkspaceBatchCommand(fixture.candidate.ID, "workspace-race-"+string(rune('a'+i)))
 	}
 	writeDone := make(chan error, 1)
 	go func() {
-		for i := range mutations {
-			if _, writeErr := workspace.ApplyMutation(ctx, mutations[i], commands[i]); writeErr != nil {
+		for i := range raceBatches {
+			if _, writeErr := workspace.ApplyBatch(ctx, raceBatches[i], raceCommands[i]); writeErr != nil {
 				writeDone <- writeErr
 				return
 			}
@@ -296,53 +299,46 @@ writesComplete:
 	require.True(t, journal.HasMore)
 	require.Len(t, journal.Entries, 1)
 	require.Equal(t, int64(concurrentCreates+1), journal.CurrentCursor)
-	reserveReady := func(label string) *model.AttemptWorkspaceObject {
-		t.Helper()
-		object, reserveErr := workspace.ReserveObject(ctx, &store.ExamAttemptWorkspaceObjectReservation{
-			Access: access, ObjectID: model.NewAttemptWorkspaceObjectID(),
-		})
-		require.NoError(t, reserveErr)
-		object, reserveErr = workspace.MarkObjectReady(ctx, &store.ExamAttemptWorkspaceObjectReady{Access: access,
-			ObjectID: object.ID, ContentVersion: model.NewWorkspaceContentVersion(),
-			Content: model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: int64(len(label)), SHA256: strings.Repeat("c", 64)}})
-		require.NoError(t, reserveErr)
-		return object
+	textContent := func(label string) model.AttemptWorkspaceContent {
+		return model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: int64(len(label)), SHA256: strings.Repeat("c", 64)}
 	}
-	apply := func(operation model.AttemptWorkspaceMutationKind, label string, configure func(*store.ExamAttemptWorkspaceMutation)) (*store.ExamAttemptWorkspaceMutationResult, error) {
+	stage := func(contents ...model.AttemptWorkspaceContent) []store.ExamAttemptWorkspaceReadyObject {
 		t.Helper()
-		input := &store.ExamAttemptWorkspaceMutation{Access: access, Operation: operation,
-			EntryID: model.NewAttemptWorkspaceEntryID(), AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
-		configure(input)
-		return workspace.ApplyMutation(ctx, input, examCommand(fixture.candidate.ID,
-			store.ExamAttemptWorkspaceMutationOperation, "workspace-"+label, "workspace-"+label))
+		return stageAttemptWorkspaceObjects(t, ctx, workspace, access, contents...)
+	}
+	apply := func(label string, mutations ...store.ExamAttemptWorkspaceMutation) (*store.ExamAttemptWorkspaceBatchResult, error) {
+		t.Helper()
+		return workspace.ApplyBatch(ctx, newAttemptWorkspaceBatch(t, ctx, ss, fixture, access, mutations...),
+			attemptWorkspaceBatchCommand(fixture.candidate.ID, "workspace-"+label))
+	}
+	state := func() attemptWorkspaceState {
+		t.Helper()
+		return readAttemptWorkspaceState(t, ctx, workspace, journalAccess(access))
 	}
 
 	renew()
-	replacement := reserveReady("replacement")
-	replaced, err := apply(model.AttemptWorkspaceMutationReplaceFile, "replace", func(input *store.ExamAttemptWorkspaceMutation) {
-		input.EntryID, input.ExpectedPath, input.ExpectedContentVersion, input.ObjectID = entryID, mutation.DestinationPath, ready.ContentVersion, replacement.ID
-	})
+	replacement := stage(textContent("replacement"))[0]
+	replaceMutation := store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationReplaceFile, EntryID: entryID,
+		ExpectedPath: createFile.DestinationPath, ExpectedContentVersion: ready.ContentVersion, ObjectID: replacement.ObjectID}
+	replaced, err := apply("replace", replaceMutation)
 	require.NoError(t, err)
-	require.True(t, replaced.ConsistentWith(target, model.AttemptWorkspaceMutationReplaceFile, entryID), "ApplyMutation returned a result inconsistent with its request")
-	requireWorkspaceMutationEcho(t, replaced, &store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationReplaceFile, EntryID: entryID},
-		model.StarterWorkspaceEntryFile, replacement.ContentVersion)
-	require.NotNil(t, replaced.Entry)
-	require.Equal(t, entryID, replaced.Entry.EntryID)
-	require.Equal(t, replacement.ContentVersion, replaced.Entry.ContentVersion)
-	require.Equal(t, int64(concurrentCreates+2), replaced.Change.Cursor)
+	requireWorkspaceBatchEcho(t, replaced, target, []store.ExamAttemptWorkspaceMutation{replaceMutation},
+		workspaceEcho{model.StarterWorkspaceEntryFile, replacement.ContentVersion})
+	require.Equal(t, int64(concurrentCreates+2), replaced.Changes[0].Cursor)
 	resolved, err := workspace.ResolveFile(ctx, journalAccess(access), entryID)
 	require.NoError(t, err)
 	require.NotNil(t, resolved)
 	require.Equal(t, replacement.ContentVersion, resolved.Entry.ContentVersion)
-	require.Equal(t, replacement.ID, resolved.AttemptObjectID)
-	movedFile, err := apply(model.AttemptWorkspaceMutationMoveEntry, "move-file", func(input *store.ExamAttemptWorkspaceMutation) {
-		input.EntryID, input.ExpectedPath, input.DestinationPath = entryID, mutation.DestinationPath, "renamed.go"
-	})
+	require.Equal(t, replacement.ObjectID, resolved.AttemptObjectID)
+	moveFile := store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationMoveEntry, EntryID: entryID,
+		ExpectedPath: createFile.DestinationPath, DestinationPath: "renamed.go"}
+	movedFile, err := apply("move-file", moveFile)
 	require.NoError(t, err)
+	requireWorkspaceBatchEcho(t, movedFile, target, []store.ExamAttemptWorkspaceMutation{moveFile},
+		workspaceEcho{model.StarterWorkspaceEntryFile, replacement.ContentVersion})
 	resolvedAfterMove, err := workspace.ResolveFile(ctx, journalAccess(access), entryID)
 	require.NoError(t, err)
-	require.NotNil(t, movedFile.Entry, "file move changed content object: moved=%#v before=%#v after=%#v", movedFile, resolved, resolvedAfterMove)
-	require.Equal(t, "renamed.go", movedFile.Entry.Path, "file move changed content object: moved=%#v before=%#v after=%#v", movedFile, resolved, resolvedAfterMove)
+	require.Equal(t, "renamed.go", resolvedAfterMove.Entry.Path, "file move: moved=%#v before=%#v after=%#v", movedFile, resolved, resolvedAfterMove)
 	require.Equal(t, resolved.AttemptObjectID, resolvedAfterMove.AttemptObjectID, "file move changed content object: moved=%#v before=%#v after=%#v", movedFile, resolved, resolvedAfterMove)
 	require.Equal(t, resolved.ContentVersion, resolvedAfterMove.ContentVersion, "file move changed content object: moved=%#v before=%#v after=%#v", movedFile, resolved, resolvedAfterMove)
 	var starterFile store.CandidateAttemptWorkspaceItem
@@ -353,81 +349,65 @@ writesComplete:
 		}
 	}
 	require.True(t, starterFile.EntryID.IsValid(), "fixture has no Starter-origin file")
-	cowObject := reserveReady("copy-on-write")
-	cow, err := apply(model.AttemptWorkspaceMutationReplaceFile, "replace-starter", func(input *store.ExamAttemptWorkspaceMutation) {
-		input.EntryID, input.ExpectedPath, input.ExpectedContentVersion, input.ObjectID = starterFile.EntryID, starterFile.Path,
-			starterFile.ContentVersion, cowObject.ID
-	})
+	starterResolved, err := workspace.ResolveFile(ctx, journalAccess(access), starterFile.EntryID)
 	require.NoError(t, err)
-	require.NotNil(t, cow.Entry)
-	require.Equal(t, starterFile.EntryID, cow.Entry.EntryID)
-	require.Equal(t, cowObject.ContentVersion, cow.Entry.ContentVersion)
+	require.Equal(t, model.AttemptWorkspaceStorageStarter, starterResolved.StorageOrigin)
+	cowObject := stage(textContent("copy-on-write"))[0]
+	cowMutation := store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationReplaceFile, EntryID: starterFile.EntryID,
+		ExpectedPath: starterFile.Path, ExpectedContentVersion: starterFile.ContentVersion, ObjectID: cowObject.ObjectID}
+	cow, err := apply("replace-starter", cowMutation)
+	require.NoError(t, err)
+	requireWorkspaceBatchEcho(t, cow, target, []store.ExamAttemptWorkspaceMutation{cowMutation},
+		workspaceEcho{model.StarterWorkspaceEntryFile, cowObject.ContentVersion})
 	cowResolved, err := workspace.ResolveFile(ctx, journalAccess(access), starterFile.EntryID)
 	require.NoError(t, err)
 	require.Equal(t, model.AttemptWorkspaceStorageAttempt, cowResolved.StorageOrigin)
-	require.Equal(t, cowObject.ID, cowResolved.AttemptObjectID)
+	require.Equal(t, cowObject.ObjectID, cowResolved.AttemptObjectID)
 	require.Equal(t, starterFile.EntryID, cowResolved.Entry.EntryID)
-	childObject := reserveReady("child")
+	childObject := stage(textContent("child"))[0]
 	childID := model.NewAttemptWorkspaceEntryID()
-	child, err := apply(model.AttemptWorkspaceMutationCreateFile, "create-child", func(input *store.ExamAttemptWorkspaceMutation) {
-		input.EntryID, input.DestinationPath, input.ObjectID = childID, "race-a/child.txt", childObject.ID
-	})
+	child, err := apply("create-child", store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateFile,
+		EntryID: childID, DestinationPath: "race-a/child.txt", ObjectID: childObject.ObjectID})
 	require.NoError(t, err)
-	require.NotNil(t, child.Entry)
-	require.Equal(t, "race-a/child.txt", child.Entry.Path)
-	var raceARoot model.AttemptWorkspaceEntryID
-	for i := range mutations {
-		if mutations[i].DestinationPath == "race-a" {
-			raceARoot = mutations[i].EntryID
-			break
-		}
-	}
-	moved, err := apply(model.AttemptWorkspaceMutationMoveEntry, "move-tree", func(input *store.ExamAttemptWorkspaceMutation) {
-		input.EntryID, input.ExpectedPath, input.DestinationPath = raceARoot, "race-a", "moved"
-	})
+	require.Equal(t, "race-a/child.txt", child.Changes[0].NewPath)
+	raceARoot := raceEntries[0]
+	moved, err := apply("move-tree", store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationMoveEntry,
+		EntryID: raceARoot, ExpectedPath: "race-a", DestinationPath: "moved"})
 	require.NoError(t, err)
-	require.NotNil(t, moved.Entry)
-	require.Equal(t, "moved", moved.Entry.Path)
-	_, err = apply(model.AttemptWorkspaceMutationDeleteEntry, "delete-nonempty", func(input *store.ExamAttemptWorkspaceMutation) {
-		input.EntryID, input.ExpectedPath = raceARoot, "moved"
-	})
-	require.True(t, store.IsConflict(err), "ApplyMutation(delete non-empty directory) error")
-	deletedChild, err := apply(model.AttemptWorkspaceMutationDeleteEntry, "delete-child", func(input *store.ExamAttemptWorkspaceMutation) {
-		input.EntryID, input.ExpectedPath, input.ExpectedContentVersion = childID, "moved/child.txt", childObject.ContentVersion
-	})
+	require.Equal(t, "moved", moved.Changes[0].NewPath)
+	require.Equal(t, model.StarterWorkspaceEntryDirectory, moved.Changes[0].EntryKind)
+	_, err = apply("delete-nonempty", store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationDeleteEntry,
+		EntryID: raceARoot, ExpectedPath: "moved"})
+	requireAttemptWorkspaceBatchItem(t, err, 0, "attempt_workspace_not_empty")
+	deletedChild, err := apply("delete-child", store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationDeleteEntry,
+		EntryID: childID, ExpectedPath: "moved/child.txt", ExpectedContentVersion: childObject.ContentVersion})
 	require.NoError(t, err)
-	require.Nil(t, deletedChild.Entry)
-	require.Equal(t, "moved/child.txt", deletedChild.Change.OldPath)
-	deletedDirectory, err := apply(model.AttemptWorkspaceMutationDeleteEntry, "delete-directory", func(input *store.ExamAttemptWorkspaceMutation) {
-		input.EntryID, input.ExpectedPath = raceARoot, "moved"
-	})
+	require.Equal(t, "moved/child.txt", deletedChild.Changes[0].OldPath)
+	require.Empty(t, deletedChild.Changes[0].NewPath)
+	deletedDirectory, err := apply("delete-directory", store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationDeleteEntry,
+		EntryID: raceARoot, ExpectedPath: "moved"})
 	require.NoError(t, err)
-	require.Nil(t, deletedDirectory.Entry)
-	require.Equal(t, model.StarterWorkspaceEntryDirectory, deletedDirectory.Change.EntryKind)
-	_, err = apply(model.AttemptWorkspaceMutationMoveEntry, "path-collision", func(input *store.ExamAttemptWorkspaceMutation) {
-		input.EntryID, input.ExpectedPath, input.DestinationPath = mutations[1].EntryID, "race-b", "race-c"
-	})
-	require.True(t, store.IsConflict(err), "ApplyMutation(path collision) error")
-	_, err = apply(model.AttemptWorkspaceMutationCreateDirectory, "missing-parent", func(input *store.ExamAttemptWorkspaceMutation) {
-		input.DestinationPath = "missing/child"
-	})
-	requireConflictConstraint(t, err, "attempt_workspace_path")
+	require.Equal(t, model.StarterWorkspaceEntryDirectory, deletedDirectory.Changes[0].EntryKind)
+	_, err = apply("path-collision", store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationMoveEntry,
+		EntryID: raceEntries[1], ExpectedPath: "race-b", DestinationPath: "race-c"})
+	requireAttemptWorkspaceBatchItem(t, err, 0, "attempt_workspace_path")
+	_, err = apply("missing-parent", store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
+		EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "missing/child"})
+	requireAttemptWorkspaceBatchItem(t, err, 0, "attempt_workspace_path")
 
 	type moveRaceResult struct {
-		input   *store.ExamAttemptWorkspaceMutation
+		input   *store.ExamAttemptWorkspaceBatch
 		command *store.CommandIdempotency
-		result  *store.ExamAttemptWorkspaceMutationResult
+		result  *store.ExamAttemptWorkspaceBatchResult
 		err     error
 	}
 	moveRace := make(chan moveRaceResult, 2)
 	for i, destination := range []string{"race-winner-a", "race-winner-b"} {
-		input := &store.ExamAttemptWorkspaceMutation{Access: access, Operation: model.AttemptWorkspaceMutationMoveEntry,
-			EntryID: mutations[3].EntryID, ExpectedPath: "race-d", DestinationPath: destination,
-			AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
-		command := examCommand(fixture.candidate.ID, store.ExamAttemptWorkspaceMutationOperation,
-			"workspace-move-race-"+string(rune('a'+i)), "workspace-move-race-"+string(rune('a'+i)))
+		input := newAttemptWorkspaceBatch(t, ctx, ss, fixture, access, store.ExamAttemptWorkspaceMutation{
+			Operation: model.AttemptWorkspaceMutationMoveEntry, EntryID: raceEntries[3], ExpectedPath: "race-d", DestinationPath: destination})
+		command := attemptWorkspaceBatchCommand(fixture.candidate.ID, "workspace-move-race-"+string(rune('a'+i)))
 		go func() {
-			result, raceErr := workspace.ApplyMutation(ctx, input, command)
+			result, raceErr := workspace.ApplyBatch(ctx, input, command)
 			moveRace <- moveRaceResult{input: input, command: command, result: result, err: raceErr}
 		}()
 	}
@@ -438,84 +418,124 @@ writesComplete:
 	} else if secondRace.err == nil && store.IsConflict(firstRace.err) {
 		winner = secondRace
 	} else {
-		require.FailNow(t, fmt.Sprintf("ApplyMutation(same-entry race) errors = %v, %v", firstRace.err, secondRace.err))
+		require.FailNow(t, fmt.Sprintf("ApplyBatch(same-entry race) errors = %v, %v", firstRace.err, secondRace.err))
 	}
 	replayWinner := *winner.input
 	replayWinner.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
-	winnerReplay, err := workspace.ApplyMutation(ctx, &replayWinner, winner.command)
+	winnerReplay, err := workspace.ApplyBatch(ctx, &replayWinner, winner.command)
 	require.NoError(t, err)
-	require.True(t, winnerReplay.ConsistentWith(target, replayWinner.Operation, replayWinner.EntryID), "ApplyMutation replay returned a result inconsistent with its request")
-	requireWorkspaceMutationEcho(t, winner.result, winner.input, "", "")
-	requireWorkspaceMutationEcho(t, winnerReplay, &replayWinner, "", "")
-	require.NotNil(t, winnerReplay, "ApplyMutation(race winner replay) = %#v, winner = %#v", winnerReplay, winner.result)
-	require.True(t, winnerReplay.Replayed, "ApplyMutation(race winner replay) = %#v, winner = %#v", winnerReplay, winner.result)
-	require.Equal(t, winner.result.Change.Cursor, winnerReplay.Change.Cursor, "ApplyMutation(race winner replay) = %#v, winner = %#v", winnerReplay, winner.result)
-	require.NotNil(t, winnerReplay.Entry, "ApplyMutation(race winner replay) = %#v, winner = %#v", winnerReplay, winner.result)
-	require.Equal(t, winner.result.Entry.Path, winnerReplay.Entry.Path, "ApplyMutation(race winner replay) = %#v, winner = %#v", winnerReplay, winner.result)
-	for index := 0; index < 5; index++ {
-		large, reserveErr := workspace.ReserveObject(ctx, &store.ExamAttemptWorkspaceObjectReservation{
-			Access: access, ObjectID: model.NewAttemptWorkspaceObjectID(),
-		})
-		require.NoError(t, reserveErr)
-		large, reserveErr = workspace.MarkObjectReady(ctx, &store.ExamAttemptWorkspaceObjectReady{Access: access,
-			ObjectID: large.ID, ContentVersion: model.NewWorkspaceContentVersion(), Content: model.AttemptWorkspaceContent{
-				MediaType: "application/octet-stream", SizeBytes: admittedCapacity.WorkspaceMaximumFileBytes, SHA256: strings.Repeat("d", 64)}})
-		require.NoError(t, reserveErr)
-		_, reserveErr = apply(model.AttemptWorkspaceMutationCreateFile, "size-quota-"+string(rune('a'+index)), func(input *store.ExamAttemptWorkspaceMutation) { //nolint:gosec // G115: index ranges over 0..4.
-			input.DestinationPath, input.ObjectID = "large-"+string(rune('a'+index)), large.ID //nolint:gosec // G115: index ranges over 0..4.
-		})
+	requireWorkspaceBatchEcho(t, winner.result, target, winner.input.Mutations, workspaceEcho{model.StarterWorkspaceEntryDirectory, ""})
+	requireWorkspaceBatchEcho(t, winnerReplay, target, replayWinner.Mutations, workspaceEcho{model.StarterWorkspaceEntryDirectory, ""})
+	require.True(t, winnerReplay.Replayed, "ApplyBatch(race winner replay) = %#v, winner = %#v", winnerReplay, winner.result)
+	require.Equal(t, winner.result.Changes, winnerReplay.Changes, "ApplyBatch(race winner replay) = %#v, winner = %#v", winnerReplay, winner.result)
+
+	// Capacity is a property of the batch's final state, and its refusal
+	// names no single mutation.
+	largeContent := model.AttemptWorkspaceContent{MediaType: "application/octet-stream",
+		SizeBytes: admittedCapacity.WorkspaceMaximumFileBytes, SHA256: strings.Repeat("d", 64)}
+	largeObjects := stage(largeContent, largeContent, largeContent, largeContent, largeContent)
+	largeEntries := make([]model.AttemptWorkspaceEntryID, len(largeObjects))
+	for index, large := range largeObjects {
+		largeEntries[index] = model.NewAttemptWorkspaceEntryID()
+		_, err = apply("size-quota-"+string(rune('a'+index)), store.ExamAttemptWorkspaceMutation{
+			Operation: model.AttemptWorkspaceMutationCreateFile, EntryID: largeEntries[index],
+			DestinationPath: "large-" + string(rune('a'+index)), ObjectID: large.ObjectID})
 		if index < 4 {
-			require.NoError(t, reserveErr)
+			require.NoError(t, err)
 		} else {
-			requireConflictConstraint(t, reserveErr, "attempt_workspace_size_limit")
+			requireAttemptWorkspaceBatchCapacity(t, err, "attempt_workspace_size_limit")
 		}
 	}
+	// Freeing space earlier in the same batch makes room: the refused
+	// object is still staged and usable.
+	swappedSize, err := apply("size-quota-swap",
+		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationDeleteEntry, EntryID: largeEntries[0],
+			ExpectedPath: "large-a", ExpectedContentVersion: largeObjects[0].ContentVersion},
+		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateFile, EntryID: largeEntries[4],
+			DestinationPath: "large-e", ObjectID: largeObjects[4].ObjectID})
+	require.NoError(t, err, "ApplyBatch(delete then create at the size limit)")
+	require.Len(t, swappedSize.Changes, 2)
+	require.Equal(t, swappedSize.Changes[0].Cursor+1, swappedSize.Changes[1].Cursor)
+	beforeOverflow := state()
+	overflow := stage(largeContent)[0]
+	_, err = apply("size-quota-exceed",
+		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
+			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "quota"},
+		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateFile,
+			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "quota/large-f", ObjectID: overflow.ObjectID})
+	requireAttemptWorkspaceBatchCapacity(t, err, "attempt_workspace_size_limit")
+	requireAttemptWorkspaceStateUnchanged(t, ctx, workspace, journalAccess(access), beforeOverflow)
 
-	err = workspace.MarkObjectReclaimable(ctx, ready.ID)
-	require.True(t, store.IsConflict(err), "MarkObjectReclaimable(current referenced object) error")
-	abandoned, err := workspace.ReserveObject(ctx, &store.ExamAttemptWorkspaceObjectReservation{
-		Access: access, ObjectID: model.NewAttemptWorkspaceObjectID(),
-	})
+	// Releasing objects is bulk and leaves anything still referenced alone:
+	// the superseded object is protected by its retained outcome, the
+	// replacement is current, and only the unused reservations are released.
+	abandoned := stageAttemptWorkspaceReservations(t, ctx, workspace, access, 1)[0]
+	require.NoError(t, workspace.MarkObjectsReclaimable(ctx, nil), "MarkObjectsReclaimable(no objects)")
+	require.NoError(t, workspace.MarkObjectsReclaimable(ctx, []model.AttemptWorkspaceObjectID{
+		ready.ObjectID, replacement.ObjectID, abandoned, sibling, oversized}))
+	resolvedAfterRelease, err := workspace.ResolveFile(ctx, journalAccess(access), entryID)
 	require.NoError(t, err)
-	require.NoError(t, workspace.MarkObjectReclaimable(ctx, abandoned.ID))
+	require.Equal(t, replacement.ObjectID, resolvedAfterRelease.AttemptObjectID, "MarkObjectsReclaimable released a current object")
 	claimed, err := workspace.ClaimObjectsForCleanup(ctx, &store.AttemptWorkspaceCleanupClaim{Limit: 10, ClaimToken: "attempt-workspace-cleanup"})
 	require.NoError(t, err)
 	require.Empty(t, claimed)
 	renew()
 	if len(probes) > 0 && probes[0].MakeObjectCleanupDue != nil {
-		probes[0].MakeObjectCleanupDue(t, ctx, ready.ID)
-		probes[0].MakeObjectCleanupDue(t, ctx, abandoned.ID)
+		for _, id := range []model.AttemptWorkspaceObjectID{ready.ObjectID, replacement.ObjectID, abandoned, sibling, oversized} {
+			probes[0].MakeObjectCleanupDue(t, ctx, id)
+		}
 		claimed, err = workspace.ClaimObjectsForCleanup(ctx, &store.AttemptWorkspaceCleanupClaim{Limit: 10, ClaimToken: "attempt-workspace-cleanup"})
 		require.NoError(t, err)
-		require.Len(t, claimed, 1)
-		require.Equal(t, abandoned.ID, claimed[0].ID)
-		require.Equal(t, model.AttemptWorkspaceObjectClaimed, claimed[0].State)
-		require.Equal(t, "attempt-workspace-cleanup", claimed[0].ClaimToken)
+		claimedIDs := make([]model.AttemptWorkspaceObjectID, len(claimed))
+		for index, object := range claimed {
+			claimedIDs[index] = object.ID
+			require.Equal(t, model.AttemptWorkspaceObjectClaimed, object.State)
+			require.Equal(t, "attempt-workspace-cleanup", object.ClaimToken)
+		}
+		require.ElementsMatch(t, []model.AttemptWorkspaceObjectID{abandoned, sibling, oversized}, claimedIDs)
 		if probes[0].MakeCleanupClaimStale != nil {
-			probes[0].MakeCleanupClaimStale(t, ctx, abandoned.ID)
+			probes[0].MakeCleanupClaimStale(t, ctx, abandoned)
 			claimed, err = workspace.ClaimObjectsForCleanup(ctx, &store.AttemptWorkspaceCleanupClaim{Limit: 10, ClaimToken: "attempt-workspace-cleanup-stale-retry"})
 			require.NoError(t, err)
 			require.Len(t, claimed, 1)
-			require.Equal(t, abandoned.ID, claimed[0].ID)
+			require.Equal(t, abandoned, claimed[0].ID)
 			require.Equal(t, "attempt-workspace-cleanup-stale-retry", claimed[0].ClaimToken)
+			err = workspace.ReleaseObjectCleanup(ctx, &store.AttemptWorkspaceCleanupRelease{ObjectID: abandoned, ClaimToken: "attempt-workspace-cleanup"})
+			require.True(t, store.IsConflict(err), "ReleaseObjectCleanup(old token) error")
+			require.NoError(t, workspace.ReleaseObjectCleanup(ctx, &store.AttemptWorkspaceCleanupRelease{ObjectID: abandoned, ClaimToken: "attempt-workspace-cleanup-stale-retry"}))
+		} else {
+			require.NoError(t, workspace.ReleaseObjectCleanup(ctx, &store.AttemptWorkspaceCleanupRelease{ObjectID: abandoned, ClaimToken: "attempt-workspace-cleanup"}))
 		}
-		err = workspace.ReleaseObjectCleanup(ctx, &store.AttemptWorkspaceCleanupRelease{ObjectID: abandoned.ID, ClaimToken: "attempt-workspace-cleanup"})
-		require.True(t, store.IsConflict(err), "ReleaseObjectCleanup(old token) error")
-		require.NoError(t, workspace.ReleaseObjectCleanup(ctx, &store.AttemptWorkspaceCleanupRelease{ObjectID: abandoned.ID, ClaimToken: "attempt-workspace-cleanup-stale-retry"}))
 		claimed, err = workspace.ClaimObjectsForCleanup(ctx, &store.AttemptWorkspaceCleanupClaim{Limit: 10, ClaimToken: "attempt-workspace-cleanup-retry"})
 		require.NoError(t, err)
 		require.Len(t, claimed, 1)
-		require.Equal(t, abandoned.ID, claimed[0].ID)
-		require.NoError(t, workspace.CompleteObjectCleanup(ctx, &store.AttemptWorkspaceCleanupCompletion{ObjectID: abandoned.ID, ClaimToken: "attempt-workspace-cleanup-retry"}))
-		require.NoError(t, workspace.CompleteObjectCleanup(ctx, &store.AttemptWorkspaceCleanupCompletion{ObjectID: abandoned.ID, ClaimToken: "attempt-workspace-cleanup-retry"}))
+		require.Equal(t, abandoned, claimed[0].ID)
+		require.NoError(t, workspace.CompleteObjectCleanup(ctx, &store.AttemptWorkspaceCleanupCompletion{ObjectID: abandoned, ClaimToken: "attempt-workspace-cleanup-retry"}))
+		require.NoError(t, workspace.CompleteObjectCleanup(ctx, &store.AttemptWorkspaceCleanupCompletion{ObjectID: abandoned, ClaimToken: "attempt-workspace-cleanup-retry"}))
+		for _, id := range []model.AttemptWorkspaceObjectID{sibling, oversized} {
+			require.NoError(t, workspace.CompleteObjectCleanup(ctx, &store.AttemptWorkspaceCleanupCompletion{ObjectID: id, ClaimToken: "attempt-workspace-cleanup"}))
+		}
 	}
 	renew()
 	if len(probes) > 0 && probes[0].FillWorkspaceEntryQuota != nil {
 		probes[0].FillWorkspaceEntryQuota(t, ctx, connected.Workspace.ID)
-		_, err = apply(model.AttemptWorkspaceMutationCreateDirectory, "entry-quota", func(input *store.ExamAttemptWorkspaceMutation) {
-			input.DestinationPath = "entry-overflow"
-		})
-		requireConflictConstraint(t, err, "attempt_workspace_entry_limit")
+		_, err = apply("entry-quota", store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
+			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "entry-overflow"})
+		requireAttemptWorkspaceBatchCapacity(t, err, "attempt_workspace_entry_limit")
+		swappedEntry, swapErr := apply("entry-quota-swap",
+			store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationDeleteEntry, EntryID: raceEntries[4], ExpectedPath: "race-e"},
+			store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
+				EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "entry-swap"})
+		require.NoError(t, swapErr, "ApplyBatch(delete then create at the entry limit)")
+		require.Len(t, swappedEntry.Changes, 2)
+		beforeEntryOverflow := state()
+		_, err = apply("entry-quota-exceed",
+			store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
+				EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "entry-over-a"},
+			store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
+				EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "entry-over-b"})
+		requireAttemptWorkspaceBatchCapacity(t, err, "attempt_workspace_entry_limit")
+		requireAttemptWorkspaceStateUnchanged(t, ctx, workspace, journalAccess(access), beforeEntryOverflow)
 	}
 	if len(probes) > 0 && probes[0].MakeJournalGap != nil {
 		probes[0].MakeJournalGap(t, ctx, connected.Workspace.ID)
@@ -534,20 +554,25 @@ writesComplete:
 	// current eligibility with a higher-precision clock. Cross the millisecond
 	// boundary before asserting that the just-ended relationship is inactive.
 	time.Sleep(100 * time.Millisecond)
-	_, err = workspace.ResolveMutationTarget(ctx, access)
-	require.True(t, store.IsNotFound(err), "ResolveMutationTarget(after membership revoke) error")
+	_, err = workspace.ReserveObjects(ctx, &store.ExamAttemptWorkspaceObjectReservation{Access: access})
+	require.True(t, store.IsNotFound(err), "ReserveObjects(after membership revoke) error")
+	_, err = apply("after-membership-revoke", store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
+		EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "after-revoke"})
+	require.True(t, store.IsNotFound(err), "ApplyBatch(after membership revoke) error")
 	restored, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: fixture.class.ID,
 		UserID: fixture.candidate.ID, StartsAt: model.TimeUTC(endedAt)})
 	require.NoError(t, err)
-	target, err = workspace.ResolveMutationTarget(ctx, access)
+	target, err = workspace.ReserveObjects(ctx, &store.ExamAttemptWorkspaceObjectReservation{Access: access})
 	require.NoError(t, err)
-	require.NotNil(t, target, "ResolveMutationTarget(with historical and current membership) = %#v; restored=%#v ended=%#v", target, restored, ended)
-	require.Equal(t, connected.Workspace.ID, target.WorkspaceID, "ResolveMutationTarget(with historical and current membership) = %#v; restored=%#v ended=%#v", target, restored, ended)
-	require.NotNil(t, restored.Membership, "ResolveMutationTarget(with historical and current membership) = %#v; restored=%#v ended=%#v", target, restored, ended)
-	require.True(t, ended.EndsAt.Valid, "ResolveMutationTarget(with historical and current membership) = %#v; restored=%#v ended=%#v", target, restored, ended)
+	require.NotNil(t, target, "ReserveObjects(with historical and current membership) = %#v; restored=%#v ended=%#v", target, restored, ended)
+	require.Equal(t, connected.Workspace.ID, target.WorkspaceID, "ReserveObjects(with historical and current membership) = %#v; restored=%#v ended=%#v", target, restored, ended)
+	require.NotNil(t, restored.Membership, "ReserveObjects(with historical and current membership) = %#v; restored=%#v ended=%#v", target, restored, ended)
+	require.True(t, ended.EndsAt.Valid, "ReserveObjects(with historical and current membership) = %#v; restored=%#v ended=%#v", target, restored, ended)
 	if len(probes) > 0 && probes[0].SetParticipationLeaseExpired != nil {
 		testExamAttemptWorkspaceSuspensionAndMultiNodeReplay(t, ctx, ss, workspace, probes[0])
 	}
+	testAttemptEnvironmentWriter(t, ss, workspace, probes...)
+	testAttemptWorkspaceBatches(t, ss, workspace)
 	testAttemptWorkspaceRecursiveDeletion(t, ss, workspace, probes...)
 }
 
@@ -567,7 +592,7 @@ func testExamAttemptWorkspaceSuspensionAndMultiNodeReplay(t *testing.T, ctx cont
 	connected, err := ss.ExamAttempt().Connect(ctx, connect,
 		examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "workspace-fence-connect", "workspace-fence-connect"))
 	require.NoError(t, err)
-	access := store.ExamAttemptWorkspaceMutationAccess{AttemptID: connected.Attempt.ID,
+	access := store.ExamAttemptWorkspaceEditorAccess{AttemptID: connected.Attempt.ID,
 		ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation,
 		CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID,
 		DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint,
@@ -575,16 +600,14 @@ func testExamAttemptWorkspaceSuspensionAndMultiNodeReplay(t *testing.T, ctx cont
 
 	if probe.ConcurrentPeer != nil {
 		entryID := model.NewAttemptWorkspaceEntryID()
-		inputs := [2]*store.ExamAttemptWorkspaceMutation{}
+		inputs := [2]*store.ExamAttemptWorkspaceBatch{}
 		for index := range inputs {
-			inputs[index] = &store.ExamAttemptWorkspaceMutation{Access: access,
-				Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: entryID, DestinationPath: "multi-node",
-				AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
+			inputs[index] = newAttemptWorkspaceBatch(t, ctx, ss, fixture, access, store.ExamAttemptWorkspaceMutation{
+				Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: entryID, DestinationPath: "multi-node"})
 		}
-		command := examCommand(fixture.candidate.ID, store.ExamAttemptWorkspaceMutationOperation,
-			"workspace-multi-node", "workspace-multi-node")
+		command := attemptWorkspaceBatchCommand(fixture.candidate.ID, "workspace-multi-node")
 		type result struct {
-			value *store.ExamAttemptWorkspaceMutationResult
+			value *store.ExamAttemptWorkspaceBatchResult
 			err   error
 		}
 		started := make(chan struct{})
@@ -593,7 +616,7 @@ func testExamAttemptWorkspaceSuspensionAndMultiNodeReplay(t *testing.T, ctx cont
 			input := inputs[index]
 			go func() {
 				<-started
-				value, applyErr := adapter.ApplyMutation(ctx, input, command)
+				value, applyErr := adapter.ApplyBatch(ctx, input, command)
 				results <- result{value: value, err: applyErr}
 			}()
 		}
@@ -601,15 +624,13 @@ func testExamAttemptWorkspaceSuspensionAndMultiNodeReplay(t *testing.T, ctx cont
 		first, second := <-results, <-results
 		require.NoError(t, first.err)
 		require.NoError(t, second.err)
-		require.NotNil(t, first.value, "ApplyMutation(two-adapter exact race)")
-		require.NotNil(t, second.value, "ApplyMutation(two-adapter exact race)")
-		require.NotEqual(t, second.value.Replayed, first.value.Replayed, "ApplyMutation(two-adapter exact race)")
-		require.Equal(t, second.value.Change.Cursor, first.value.Change.Cursor, "ApplyMutation(two-adapter exact race)")
-		require.Equal(t, int64(1), first.value.Change.Cursor, "ApplyMutation(two-adapter exact race)")
-		require.NotNil(t, first.value.Entry, "ApplyMutation(two-adapter exact race)")
-		require.NotNil(t, second.value.Entry, "ApplyMutation(two-adapter exact race)")
-		require.Equal(t, entryID, first.value.Entry.EntryID, "ApplyMutation(two-adapter exact race)")
-		require.Equal(t, entryID, second.value.Entry.EntryID, "ApplyMutation(two-adapter exact race)")
+		require.NotNil(t, first.value, "ApplyBatch(two-adapter exact race)")
+		require.NotNil(t, second.value, "ApplyBatch(two-adapter exact race)")
+		require.NotEqual(t, second.value.Replayed, first.value.Replayed, "ApplyBatch(two-adapter exact race)")
+		require.Equal(t, second.value.Changes, first.value.Changes, "ApplyBatch(two-adapter exact race)")
+		require.Len(t, first.value.Changes, 1, "ApplyBatch(two-adapter exact race)")
+		require.Equal(t, int64(1), first.value.Changes[0].Cursor, "ApplyBatch(two-adapter exact race)")
+		require.Equal(t, entryID, first.value.Changes[0].EntryID, "ApplyBatch(two-adapter exact race)")
 		for _, input := range inputs {
 			requireSuccessfulAudit(t, ctx, ss, input.AuditEventID)
 		}
@@ -635,67 +656,558 @@ func testExamAttemptWorkspaceSuspensionAndMultiNodeReplay(t *testing.T, ctx cont
 	require.NotNil(t, expired)
 	require.NotNil(t, expired.Attempt)
 	require.Equal(t, model.ExamAttemptSuspended, expired.Attempt.State)
-	_, err = workspace.ReserveObject(ctx, &store.ExamAttemptWorkspaceObjectReservation{
-		Access: access, ObjectID: model.NewAttemptWorkspaceObjectID(),
+	_, err = workspace.ReserveObjects(ctx, &store.ExamAttemptWorkspaceObjectReservation{
+		Access: access, ObjectIDs: []model.AttemptWorkspaceObjectID{model.NewAttemptWorkspaceObjectID()},
 	})
-	require.True(t, store.IsConflict(err), "ReserveObject(suspended Attempt) error")
+	require.True(t, store.IsConflict(err), "ReserveObjects(suspended Attempt) error")
+	_, err = workspace.ReserveObjects(ctx, &store.ExamAttemptWorkspaceObjectReservation{Access: access})
+	require.True(t, store.IsConflict(err), "ReserveObjects(suspended Attempt, no objects) error")
+	_, err = workspace.ApplyBatch(ctx, newAttemptWorkspaceBatch(t, ctx, ss, fixture, access, store.ExamAttemptWorkspaceMutation{
+		Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "suspended"}),
+		attemptWorkspaceBatchCommand(fixture.candidate.ID, "workspace-suspended"))
+	require.True(t, store.IsConflict(err), "ApplyBatch(suspended Attempt) error")
 }
 
-func journalAccess(access store.ExamAttemptWorkspaceMutationAccess) store.CandidateAttemptAccess {
+func journalAccess(access store.ExamAttemptWorkspaceEditorAccess) store.CandidateAttemptAccess {
 	return store.CandidateAttemptAccess{AttemptID: access.AttemptID, CandidateUserID: access.CandidateUserID,
 		SessionID: access.SessionID, DesktopRegistrationID: access.DesktopRegistrationID,
 		DPoPKeyThumbprint: access.DPoPKeyThumbprint, ConnectionID: access.ConnectionID,
 		ContinuityCredentialHash: access.ContinuityCredentialHash}
 }
 
-// requireWorkspaceMutationEcho asserts what the application no longer
-// re-checks on an Attempt Workspace mutation outcome, with the kind and
-// content version the application expects for the operation: a surviving
-// entry is present and well formed, agrees with the journal change, is the
-// proposed entry unless replayed, has the expected kind and, for a fresh
-// write, the staged content version, and the change repeats the requested
-// recursion.
-func requireWorkspaceMutationEcho(
+// testAttemptWorkspaceBatches covers what only a batch of several mutations
+// can show: order, atomicity, aggregate audit, replay and bounds.
+func testAttemptWorkspaceBatches(t *testing.T, ss store.Store, workspace store.ExamAttemptWorkspaceStore) {
+	t.Helper()
+	ctx := context.Background()
+	fixture := newExamAttemptFixture(t, ctx, ss)
+	credential := model.HashToken(model.NewCredentialToken())
+	connect := &store.ExamAttemptConnect{SittingID: fixture.sitting.ID, CandidateUserID: fixture.candidate.ID,
+		SessionID: fixture.session.ID, DesktopRegistrationID: fixture.session.DesktopRegistrationID,
+		DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint, AttemptID: model.NewExamAttemptID(),
+		WorkspaceID: model.NewExamAttemptWorkspaceID(), ParticipationID: model.NewAttemptParticipationID(),
+		ConnectionID: model.NewAttemptConnectionID(), ContinuityCredentialHash: credential,
+		AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
+	prepareExamAttemptConnect(t, ctx, ss, connect)
+	connected, err := ss.ExamAttempt().Connect(ctx, connect,
+		examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "batch-connect", "batch-connect"))
+	require.NoError(t, err)
+	access := store.ExamAttemptWorkspaceEditorAccess{AttemptID: connected.Attempt.ID,
+		ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation,
+		CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID,
+		DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint,
+		ConnectionID: connected.Connection.ID, ContinuityCredentialHash: credential}
+	target, err := workspace.ReserveObjects(ctx, &store.ExamAttemptWorkspaceObjectReservation{Access: access})
+	require.NoError(t, err)
+	content := func(size int64, digit string) model.AttemptWorkspaceContent {
+		return model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: size, SHA256: strings.Repeat(digit, 64)}
+	}
+	state := func() attemptWorkspaceState {
+		t.Helper()
+		return readAttemptWorkspaceState(t, ctx, workspace, journalAccess(access))
+	}
+	initial := state()
+	var starterFile store.CandidateAttemptWorkspaceItem
+	for _, item := range initial.items {
+		if item.Kind == model.StarterWorkspaceEntryFile {
+			starterFile = item
+		}
+	}
+	require.True(t, starterFile.EntryID.IsValid(), "fixture has no Starter-origin file")
+
+	// A batch applies its mutations in order, each seeing the ones before it,
+	// at consecutive cursors, with one aggregate audit and no paths in it.
+	objects := stageAttemptWorkspaceObjects(t, ctx, workspace, access, content(4, "1"), content(5, "2"))
+	directoryID, fileID := model.NewAttemptWorkspaceEntryID(), model.NewAttemptWorkspaceEntryID()
+	mutations := []store.ExamAttemptWorkspaceMutation{
+		{Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: directoryID, DestinationPath: "pkg"},
+		{Operation: model.AttemptWorkspaceMutationCreateFile, EntryID: fileID, DestinationPath: "pkg/util.go", ObjectID: objects[0].ObjectID},
+		{Operation: model.AttemptWorkspaceMutationReplaceFile, EntryID: starterFile.EntryID, ExpectedPath: starterFile.Path,
+			ExpectedContentVersion: starterFile.ContentVersion, ObjectID: objects[1].ObjectID},
+		{Operation: model.AttemptWorkspaceMutationMoveEntry, EntryID: fileID, ExpectedPath: "pkg/util.go", DestinationPath: "pkg/helpers.go"},
+		{Operation: model.AttemptWorkspaceMutationDeleteEntry, EntryID: starterFile.EntryID, ExpectedPath: starterFile.Path,
+			ExpectedContentVersion: objects[1].ContentVersion},
+	}
+	batch := newAttemptWorkspaceBatch(t, ctx, ss, fixture, access, mutations...)
+	command := attemptWorkspaceBatchCommand(fixture.candidate.ID, "batch-mixed")
+	applied, err := workspace.ApplyBatch(ctx, batch, command)
+	require.NoError(t, err)
+	requireWorkspaceBatchEcho(t, applied, target, mutations,
+		workspaceEcho{model.StarterWorkspaceEntryDirectory, ""},
+		workspaceEcho{model.StarterWorkspaceEntryFile, objects[0].ContentVersion},
+		workspaceEcho{model.StarterWorkspaceEntryFile, objects[1].ContentVersion},
+		workspaceEcho{model.StarterWorkspaceEntryFile, objects[0].ContentVersion},
+		workspaceEcho{model.StarterWorkspaceEntryFile, ""})
+	require.False(t, applied.Replayed)
+	require.Equal(t, initial.cursor+1, applied.Changes[0].Cursor)
+	require.Equal(t, initial.cursor+int64(len(mutations)), applied.Changes[len(mutations)-1].Cursor)
+	afterMixed := state()
+	require.Equal(t, applied.Changes[len(mutations)-1].Cursor, afterMixed.cursor)
+	paths := make(map[string]store.CandidateAttemptWorkspaceItem, len(afterMixed.items))
+	for _, item := range afterMixed.items {
+		paths[item.Path] = item
+	}
+	require.Len(t, afterMixed.items, len(initial.items)+1, "manifest = %#v", afterMixed.items)
+	require.Equal(t, directoryID, paths["pkg"].EntryID)
+	require.Equal(t, fileID, paths["pkg/helpers.go"].EntryID)
+	require.Equal(t, objects[0].ContentVersion, paths["pkg/helpers.go"].ContentVersion)
+	require.NotContains(t, paths, "pkg/util.go")
+	require.NotContains(t, paths, starterFile.Path)
+	journal, err := workspace.ListJournal(ctx, store.CandidateWorkspaceJournalOptions{Access: journalAccess(access),
+		AfterCursor: initial.cursor, Limit: model.AttemptWorkspaceJournalReadMaximum})
+	require.NoError(t, err)
+	require.Equal(t, applied.Changes, journal.Entries)
+	audit, err := ss.Audit().Get(ctx, batch.AuditEventID)
+	require.NoError(t, err)
+	require.Equal(t, model.AuditStatusSuccess, audit.Status)
+	auditData := requireAttemptWorkspaceBatchAudit(t, audit, len(mutations), applied)
+	require.Equal(t, map[string]int{
+		string(model.AttemptWorkspaceMutationCreateDirectory): 1,
+		string(model.AttemptWorkspaceMutationCreateFile):      1,
+		string(model.AttemptWorkspaceMutationReplaceFile):     1,
+		string(model.AttemptWorkspaceMutationMoveEntry):       1,
+		string(model.AttemptWorkspaceMutationDeleteEntry):     1,
+	}, auditData.OperationCounts)
+	for _, path := range []string{"pkg", "util.go", "helpers.go", starterFile.Path} {
+		require.NotContains(t, string(audit.Result), path, "batch audit carries a Workspace Path")
+	}
+
+	// An exact replay returns the retained changes, with the entries the
+	// first run created, though the replaying caller proposes new ones.
+	replayMutations := append([]store.ExamAttemptWorkspaceMutation(nil), mutations...)
+	replayMutations[0].EntryID, replayMutations[1].EntryID = model.NewAttemptWorkspaceEntryID(), model.NewAttemptWorkspaceEntryID()
+	replayBatch := newAttemptWorkspaceBatch(t, ctx, ss, fixture, access, replayMutations...)
+	replayed, err := workspace.ApplyBatch(ctx, replayBatch, command)
+	require.NoError(t, err)
+	require.True(t, replayed.Replayed)
+	require.True(t, replayed.ConsistentWith(target, access.WorkspaceAuthor(), replayMutations))
+	require.Equal(t, applied.Changes, replayed.Changes)
+	require.Equal(t, afterMixed.cursor, state().cursor, "replay advanced the Workspace Cursor")
+	replayAudit, err := ss.Audit().Get(ctx, replayBatch.AuditEventID)
+	require.NoError(t, err)
+	require.Equal(t, model.AuditStatusSuccess, replayAudit.Status)
+	replayData := requireAttemptWorkspaceBatchAudit(t, replayAudit, len(mutations), applied)
+	require.True(t, replayData.Replayed)
+	require.Equal(t, batch.AuditEventID.String(), replayData.OriginalAuditEventID)
+
+	// A mutation that fails in the middle refuses the whole batch and names
+	// itself; nothing changes and its staged object stays usable.
+	atomic := stageAttemptWorkspaceObjects(t, ctx, workspace, access, content(3, "3"))[0]
+	before := state()
+	failing := newAttemptWorkspaceBatch(t, ctx, ss, fixture, access,
+		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
+			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "atomic"},
+		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateFile,
+			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "atomic/a.txt", ObjectID: atomic.ObjectID},
+		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationMoveEntry, EntryID: fileID,
+			ExpectedPath: "pkg/stale.go", DestinationPath: "pkg/moved.go"},
+		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
+			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "atomic-after"})
+	_, err = workspace.ApplyBatch(ctx, failing, attemptWorkspaceBatchCommand(fixture.candidate.ID, "batch-atomic-failure"))
+	requireAttemptWorkspaceBatchItem(t, err, 2, "attempt_workspace_entry")
+	requireAttemptWorkspaceStateUnchanged(t, ctx, workspace, journalAccess(access), before)
+	failedAudit, err := ss.Audit().Get(ctx, failing.AuditEventID)
+	require.NoError(t, err)
+	require.NotEqual(t, model.AuditStatusSuccess, failedAudit.Status, "a refused batch completed its audit as a success")
+	_, err = workspace.ApplyBatch(ctx, newAttemptWorkspaceBatch(t, ctx, ss, fixture, access,
+		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
+			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "stale-version"},
+		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationReplaceFile, EntryID: fileID,
+			ExpectedPath: "pkg/helpers.go", ExpectedContentVersion: model.NewWorkspaceContentVersion(), ObjectID: atomic.ObjectID}),
+		attemptWorkspaceBatchCommand(fixture.candidate.ID, "batch-stale-version"))
+	requireAttemptWorkspaceBatchItem(t, err, 1, "attempt_workspace_content_version")
+	requireAttemptWorkspaceStateUnchanged(t, ctx, workspace, journalAccess(access), before)
+	retried, err := workspace.ApplyBatch(ctx, newAttemptWorkspaceBatch(t, ctx, ss, fixture, access,
+		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
+			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "atomic"},
+		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateFile,
+			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "atomic/a.txt", ObjectID: atomic.ObjectID}),
+		attemptWorkspaceBatchCommand(fixture.candidate.ID, "batch-atomic-retry"))
+	require.NoError(t, err, "a refused batch consumed its staged object")
+	require.Equal(t, before.cursor+1, retried.Changes[0].Cursor, "a refused batch consumed cursors")
+
+	// Malformed batches are refused before any lock, naming the bad mutation
+	// when there is one.
+	invalidBatches := map[string]*store.ExamAttemptWorkspaceBatch{
+		"empty": newAttemptWorkspaceBatch(t, ctx, ss, fixture, access),
+		"too many mutations": newAttemptWorkspaceBatch(t, ctx, ss, fixture, access,
+			attemptWorkspaceDirectoryMutations("too-many", model.AttemptWorkspaceBatchMaximumMutations+1)...),
+		"shared object": newAttemptWorkspaceBatch(t, ctx, ss, fixture, access,
+			store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateFile,
+				EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "shared-a", ObjectID: atomic.ObjectID},
+			store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateFile,
+				EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "shared-b", ObjectID: atomic.ObjectID}),
+		"cursor without recursive deletion": func() *store.ExamAttemptWorkspaceBatch {
+			value := newAttemptWorkspaceBatch(t, ctx, ss, fixture, access, attemptWorkspaceDirectoryMutations("fenced", 1)...)
+			value.ExpectedWorkspaceCursor = &before.cursor
+			return value
+		}(),
+		"recursive deletion without cursor": newAttemptWorkspaceBatch(t, ctx, ss, fixture, access,
+			store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationDeleteEntry,
+				EntryID: directoryID, ExpectedPath: "pkg", Recursive: true}),
+	}
+	for name, invalid := range invalidBatches {
+		_, err = workspace.ApplyBatch(ctx, invalid, attemptWorkspaceBatchCommand(fixture.candidate.ID, "batch-invalid-"+name))
+		requireInvalidInput(t, err, "ApplyBatch(%s)", name)
+		var item *store.ErrAttemptWorkspaceBatchItem
+		require.NotErrorAs(t, err, &item, "ApplyBatch(%s) named a mutation", name)
+	}
+	_, err = workspace.ApplyBatch(ctx, newAttemptWorkspaceBatch(t, ctx, ss, fixture, access,
+		attemptWorkspaceDirectoryMutations("valid", 1)[0],
+		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
+			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "not//normal"}),
+		attemptWorkspaceBatchCommand(fixture.candidate.ID, "batch-invalid-path"))
+	requireInvalidInput(t, err, "ApplyBatch(unnormalized path)")
+	var invalidItem *store.ErrAttemptWorkspaceBatchItem
+	require.ErrorAs(t, err, &invalidItem)
+	require.Equal(t, 1, invalidItem.Index)
+
+	// A recursive deletion in a batch fences the cursor the batch starts
+	// from, and later mutations of the batch see the subtree gone.
+	treeID := model.NewAttemptWorkspaceEntryID()
+	tree := []store.ExamAttemptWorkspaceMutation{
+		{Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: treeID, DestinationPath: "tree"},
+		{Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "tree/leaf"},
+		{Operation: model.AttemptWorkspaceMutationDeleteEntry, EntryID: treeID, ExpectedPath: "tree", Recursive: true},
+		{Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "tree"},
+	}
+	beforeTree := state()
+	staleTree := newAttemptWorkspaceBatch(t, ctx, ss, fixture, access, tree...)
+	staleCursor := beforeTree.cursor - 1
+	staleTree.ExpectedWorkspaceCursor = &staleCursor
+	_, err = workspace.ApplyBatch(ctx, staleTree, attemptWorkspaceBatchCommand(fixture.candidate.ID, "batch-tree-stale"))
+	requireAttemptWorkspaceBatchCapacity(t, err, "attempt_workspace_cursor")
+	requireAttemptWorkspaceStateUnchanged(t, ctx, workspace, journalAccess(access), beforeTree)
+	treeBatch := newAttemptWorkspaceBatch(t, ctx, ss, fixture, access, tree...)
+	treeBatch.ExpectedWorkspaceCursor = &beforeTree.cursor
+	treeResult, err := workspace.ApplyBatch(ctx, treeBatch, attemptWorkspaceBatchCommand(fixture.candidate.ID, "batch-tree"))
+	require.NoError(t, err)
+	requireWorkspaceBatchEcho(t, treeResult, target, tree)
+	require.True(t, treeResult.Changes[2].Recursive)
+	afterTree := state()
+	require.Len(t, afterTree.items, len(beforeTree.items)+1)
+
+	// Releasing objects is bulk: unused reservations go, current content
+	// stays, and a released object can no longer be consumed.
+	unused := stageAttemptWorkspaceObjects(t, ctx, workspace, access, content(2, "4"))[0]
+	require.NoError(t, workspace.MarkObjectsReclaimable(ctx, []model.AttemptWorkspaceObjectID{objects[0].ObjectID, unused.ObjectID}))
+	current, err := workspace.ResolveFile(ctx, journalAccess(access), fileID)
+	require.NoError(t, err)
+	require.Equal(t, objects[0].ObjectID, current.AttemptObjectID, "MarkObjectsReclaimable released a current object")
+	_, err = workspace.ApplyBatch(ctx, newAttemptWorkspaceBatch(t, ctx, ss, fixture, access,
+		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateFile,
+			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "released.txt", ObjectID: unused.ObjectID}),
+		attemptWorkspaceBatchCommand(fixture.candidate.ID, "batch-released"))
+	requireAttemptWorkspaceBatchItem(t, err, 0, "attempt_workspace_object_state")
+	duplicate := model.NewAttemptWorkspaceObjectID()
+	requireInvalidInput(t, workspace.MarkObjectsReclaimable(ctx, []model.AttemptWorkspaceObjectID{duplicate, duplicate}),
+		"MarkObjectsReclaimable(duplicate object)")
+	requireInvalidInput(t, workspace.MarkObjectsReclaimable(ctx, newAttemptWorkspaceObjectIDs(model.AttemptWorkspaceBatchMaximumMutations+1)),
+		"MarkObjectsReclaimable(more objects than a batch)")
+
+	// A full batch of file writes fits its retained outcome, including one
+	// that supersedes a full batch of objects, and replays from it.
+	bulkContents := make([]model.AttemptWorkspaceContent, model.AttemptWorkspaceBatchMaximumMutations)
+	for index := range bulkContents {
+		bulkContents[index] = content(1, "5")
+	}
+	requireInvalidInput(t, workspace.MarkObjectsReady(ctx, &store.ExamAttemptWorkspaceObjectsReady{Access: access,
+		Objects: make([]store.ExamAttemptWorkspaceReadyObject, model.AttemptWorkspaceBatchMaximumMutations+1)}),
+		"MarkObjectsReady(more objects than a batch)")
+	bulkObjects := stageAttemptWorkspaceObjects(t, ctx, workspace, access, bulkContents...)
+	creates := make([]store.ExamAttemptWorkspaceMutation, len(bulkObjects))
+	for index, object := range bulkObjects {
+		creates[index] = store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateFile,
+			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: fmt.Sprintf("bulk-%03d.txt", index), ObjectID: object.ObjectID}
+	}
+	bulkCreated, err := workspace.ApplyBatch(ctx, newAttemptWorkspaceBatch(t, ctx, ss, fixture, access, creates...),
+		attemptWorkspaceBatchCommand(fixture.candidate.ID, "batch-bulk-create"))
+	require.NoError(t, err, "ApplyBatch(full batch of creates)")
+	requireWorkspaceBatchEcho(t, bulkCreated, target, creates)
+	bulkReplacements := stageAttemptWorkspaceObjects(t, ctx, workspace, access, bulkContents...)
+	replaces := make([]store.ExamAttemptWorkspaceMutation, len(bulkReplacements))
+	for index, object := range bulkReplacements {
+		replaces[index] = store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationReplaceFile,
+			EntryID: creates[index].EntryID, ExpectedPath: creates[index].DestinationPath,
+			ExpectedContentVersion: bulkObjects[index].ContentVersion, ObjectID: object.ObjectID}
+	}
+	replaceBatch := newAttemptWorkspaceBatch(t, ctx, ss, fixture, access, replaces...)
+	replaceCommand := attemptWorkspaceBatchCommand(fixture.candidate.ID, "batch-bulk-replace")
+	bulkReplaced, err := workspace.ApplyBatch(ctx, replaceBatch, replaceCommand)
+	require.NoError(t, err, "ApplyBatch(full batch of replacements)")
+	requireWorkspaceBatchEcho(t, bulkReplaced, target, replaces)
+	replayReplace := *replaceBatch
+	replayReplace.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
+	bulkReplayed, err := workspace.ApplyBatch(ctx, &replayReplace, replaceCommand)
+	require.NoError(t, err, "ApplyBatch(replay of a full batch)")
+	require.True(t, bulkReplayed.Replayed)
+	require.Equal(t, bulkReplaced.Changes, bulkReplayed.Changes)
+}
+
+// workspaceEcho is the kind and, for a fresh file write, the content version
+// one change is expected to carry. Zero fields are not checked.
+type workspaceEcho struct {
+	kind    model.StarterWorkspaceEntryKind
+	version model.WorkspaceContentVersion
+}
+
+// requireWorkspaceBatchEcho asserts what the application no longer re-checks
+// on a batch outcome: one well-formed change per mutation, in order, at
+// consecutive cursors, with one change time, the paths the mutation implies,
+// the proposed entry unless replayed, and, where given, the expected kind and
+// fresh content version.
+func requireWorkspaceBatchEcho(
 	t *testing.T,
-	result *store.ExamAttemptWorkspaceMutationResult,
-	mutation *store.ExamAttemptWorkspaceMutation,
-	expectedKind model.StarterWorkspaceEntryKind,
-	expectedVersion model.WorkspaceContentVersion,
+	result *store.ExamAttemptWorkspaceBatchResult,
+	target *store.ExamAttemptWorkspaceMutationTarget,
+	mutations []store.ExamAttemptWorkspaceMutation,
+	expected ...workspaceEcho,
 ) {
 	t.Helper()
 	require.NotNil(t, result)
-	require.Equal(t, mutation.Recursive, result.Change.Recursive)
-	if mutation.Operation == model.AttemptWorkspaceMutationDeleteEntry {
-		return
+	require.NotEmpty(t, result.Changes)
+	require.True(t, result.ConsistentWith(target, result.Changes[0].Author, mutations), "ApplyBatch returned a result inconsistent with its request")
+	require.Equal(t, model.AttemptWorkspaceAuthorCandidate, result.Changes[0].Author.Kind)
+	require.Len(t, result.Changes, len(mutations))
+	for index, change := range result.Changes {
+		mutation := mutations[index]
+		require.NoError(t, change.Validate())
+		require.Equal(t, mutation.Recursive, change.Recursive)
+		require.True(t, change.ChangedAt.Equal(result.Changes[0].ChangedAt), "a batch's changes have different times")
+		for _, path := range []string{change.OldPath, change.NewPath} {
+			if path != "" {
+				normalized, err := model.NormalizeAttemptWorkspacePath(path)
+				require.NoError(t, err)
+				require.Equal(t, normalized, path)
+			}
+		}
+		switch mutation.Operation {
+		case model.AttemptWorkspaceMutationCreateFile, model.AttemptWorkspaceMutationCreateDirectory:
+			require.Empty(t, change.OldPath)
+			require.Equal(t, mutation.DestinationPath, change.NewPath)
+		case model.AttemptWorkspaceMutationReplaceFile:
+			require.Equal(t, mutation.ExpectedPath, change.OldPath)
+			require.Equal(t, mutation.ExpectedPath, change.NewPath)
+		case model.AttemptWorkspaceMutationMoveEntry:
+			require.Equal(t, mutation.ExpectedPath, change.OldPath)
+			require.Equal(t, mutation.DestinationPath, change.NewPath)
+		case model.AttemptWorkspaceMutationDeleteEntry:
+			require.Equal(t, mutation.ExpectedPath, change.OldPath)
+			require.Empty(t, change.NewPath)
+		}
+		switch change.EntryKind {
+		case model.StarterWorkspaceEntryDirectory:
+			require.True(t, change.ContentVersion.IsZero())
+		case model.StarterWorkspaceEntryFile:
+			require.Equal(t, mutation.Operation != model.AttemptWorkspaceMutationDeleteEntry, change.ContentVersion.IsValid())
+		default:
+			require.Failf(t, "unknown Workspace entry kind", "kind = %q", change.EntryKind)
+		}
+		if !result.Replayed {
+			require.Equal(t, mutation.EntryID, change.EntryID)
+		}
+		if index < len(expected) {
+			if expected[index].kind != "" {
+				require.Equal(t, expected[index].kind, change.EntryKind)
+			}
+			if !result.Replayed && expected[index].version.IsValid() {
+				require.Equal(t, expected[index].version, change.ContentVersion)
+			}
+		}
 	}
-	require.NotNil(t, result.Entry)
-	entry := result.Entry
-	require.True(t, entry.EntryID.IsValid())
-	normalized, err := model.NormalizeAttemptWorkspacePath(entry.Path)
+}
+
+// attemptWorkspaceBatchAudit is the aggregate completion data of one batch.
+type attemptWorkspaceBatchAudit struct {
+	OperationCounts      map[string]int
+	Replayed             bool
+	OriginalAuditEventID string
+	Author               model.AttemptWorkspaceAuthor
+	Fence                int64
+}
+
+// requireAttemptWorkspaceBatchAudit asserts that a batch audit carries only
+// safe scope, counts by operation, the cursor range of result and the
+// writer's author, plus the lease fence of an environment writer.
+func requireAttemptWorkspaceBatchAudit(t *testing.T, audit *model.AuditEvent, mutationCount int,
+	result *store.ExamAttemptWorkspaceBatchResult,
+) attemptWorkspaceBatchAudit {
+	t.Helper()
+	var data map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(audit.Result, &data))
+	keys := []string{"exam_sitting_id", "candidate_user_id", "workspace_id", "mutation_count", "operation_counts",
+		"first_workspace_cursor", "last_workspace_cursor", "author_kind", "author_ref"}
+	var decoded attemptWorkspaceBatchAudit
+	require.NoError(t, json.Unmarshal(data["author_kind"], &decoded.Author.Kind))
+	require.NoError(t, json.Unmarshal(data["author_ref"], &decoded.Author.Ref))
+	require.Equal(t, result.Changes[0].Author, decoded.Author, "batch audit author = %s", audit.Result)
+	if decoded.Author.Kind == model.AttemptWorkspaceAuthorEnvironment {
+		keys = append(keys, "environment_lease_fence")
+		require.NoError(t, json.Unmarshal(data["environment_lease_fence"], &decoded.Fence))
+	}
+	if _, replayed := data["idempotency_replayed"]; replayed {
+		keys = append(keys, "idempotency_replayed", "original_audit_event_id")
+		require.NoError(t, json.Unmarshal(data["idempotency_replayed"], &decoded.Replayed))
+		require.NoError(t, json.Unmarshal(data["original_audit_event_id"], &decoded.OriginalAuditEventID))
+	}
+	present := make([]string, 0, len(data))
+	for key := range data {
+		present = append(present, key)
+	}
+	require.ElementsMatch(t, keys, present, "batch audit data = %s", audit.Result)
+	var sittingID, candidateID, workspaceID string
+	var count int
+	var first, last int64
+	require.NoError(t, json.Unmarshal(data["exam_sitting_id"], &sittingID))
+	require.NoError(t, json.Unmarshal(data["candidate_user_id"], &candidateID))
+	require.NoError(t, json.Unmarshal(data["workspace_id"], &workspaceID))
+	require.NoError(t, json.Unmarshal(data["mutation_count"], &count))
+	require.NoError(t, json.Unmarshal(data["operation_counts"], &decoded.OperationCounts))
+	require.NoError(t, json.Unmarshal(data["first_workspace_cursor"], &first))
+	require.NoError(t, json.Unmarshal(data["last_workspace_cursor"], &last))
+	require.Equal(t, result.SittingID.String(), sittingID)
+	require.Equal(t, result.CandidateUserID.String(), candidateID)
+	require.Equal(t, result.WorkspaceID.String(), workspaceID)
+	require.Equal(t, mutationCount, count)
+	require.Equal(t, result.Changes[0].Cursor, first)
+	require.Equal(t, result.Changes[len(result.Changes)-1].Cursor, last)
+	return decoded
+}
+
+// attemptWorkspaceState is everything a refused batch must leave alone: the
+// cursor and the complete manifest. An unchanged cursor also means no journal
+// record was appended.
+type attemptWorkspaceState struct {
+	cursor int64
+	items  []store.CandidateAttemptWorkspaceItem
+}
+
+func readAttemptWorkspaceState(t *testing.T, ctx context.Context, workspace store.ExamAttemptWorkspaceStore,
+	access store.CandidateAttemptAccess,
+) attemptWorkspaceState {
+	t.Helper()
+	page, err := workspace.List(ctx, store.CandidateWorkspaceListOptions{Access: access, ExpectedCursor: -1, Limit: 200})
 	require.NoError(t, err)
-	require.Equal(t, normalized, entry.Path)
-	switch entry.Kind {
-	case model.StarterWorkspaceEntryDirectory:
-		require.True(t, entry.ContentVersion.IsZero())
-		require.Empty(t, entry.MediaType)
-		require.Zero(t, entry.SizeBytes)
-		require.Empty(t, entry.SHA256)
-	case model.StarterWorkspaceEntryFile:
-		require.True(t, entry.ContentVersion.IsValid())
-		require.NoError(t, model.AttemptWorkspaceContent{MediaType: entry.MediaType, SizeBytes: entry.SizeBytes, SHA256: entry.SHA256}.Validate())
-	default:
-		require.Failf(t, "unknown Workspace entry kind", "kind = %q", entry.Kind)
+	state := attemptWorkspaceState{cursor: page.Cursor, items: page.Items}
+	for page.HasMore {
+		page, err = workspace.List(ctx, store.CandidateWorkspaceListOptions{Access: access, ExpectedCursor: state.cursor,
+			AfterEntryID: state.items[len(state.items)-1].EntryID, Limit: 200})
+		require.NoError(t, err)
+		require.False(t, page.RefreshRequired, "Workspace changed while its state was read")
+		state.items = append(state.items, page.Items...)
 	}
-	require.Equal(t, result.Change.EntryID, entry.EntryID)
-	require.Equal(t, result.Change.NewPath, entry.Path)
-	if !result.Replayed {
-		require.Equal(t, mutation.EntryID, entry.EntryID)
+	return state
+}
+
+func requireAttemptWorkspaceStateUnchanged(t *testing.T, ctx context.Context, workspace store.ExamAttemptWorkspaceStore,
+	access store.CandidateAttemptAccess, before attemptWorkspaceState,
+) {
+	t.Helper()
+	after := readAttemptWorkspaceState(t, ctx, workspace, access)
+	require.Equal(t, before.cursor, after.cursor, "a refused batch advanced the Workspace Cursor")
+	require.Equal(t, before.items, after.items, "a refused batch changed the Workspace")
+	journal, err := workspace.ListJournal(ctx, store.CandidateWorkspaceJournalOptions{Access: access, AfterCursor: before.cursor, Limit: 1})
+	require.NoError(t, err)
+	require.Empty(t, journal.Entries, "a refused batch appended to the journal")
+}
+
+// requireAttemptWorkspaceBatchItem asserts that err refuses a batch because
+// of the mutation at index, with the stable conflict constraint.
+func requireAttemptWorkspaceBatchItem(t *testing.T, err error, index int, constraint string) {
+	t.Helper()
+	var item *store.ErrAttemptWorkspaceBatchItem
+	require.ErrorAs(t, err, &item)
+	require.Equal(t, index, item.Index, "batch refusal = %v", err)
+	requireConflictConstraint(t, item.Err, constraint)
+}
+
+// requireAttemptWorkspaceBatchCapacity asserts a whole-batch conflict, such
+// as capacity or the cursor fence, which names no single mutation.
+func requireAttemptWorkspaceBatchCapacity(t *testing.T, err error, constraint string) {
+	t.Helper()
+	requireConflictConstraint(t, err, constraint)
+	var item *store.ErrAttemptWorkspaceBatchItem
+	require.NotErrorAs(t, err, &item, "a whole-batch conflict named a mutation")
+}
+
+func requireInvalidInput(t *testing.T, err error, format string, args ...any) {
+	t.Helper()
+	var invalid *store.ErrInvalidInput
+	require.ErrorAs(t, err, &invalid, append([]any{format}, args...)...)
+}
+
+func newAttemptWorkspaceObjectIDs(count int) []model.AttemptWorkspaceObjectID {
+	ids := make([]model.AttemptWorkspaceObjectID, count)
+	for index := range ids {
+		ids[index] = model.NewAttemptWorkspaceObjectID()
 	}
-	if expectedKind != "" {
-		require.Equal(t, expectedKind, entry.Kind)
+	return ids
+}
+
+func attemptWorkspaceDirectoryMutations(prefix string, count int) []store.ExamAttemptWorkspaceMutation {
+	mutations := make([]store.ExamAttemptWorkspaceMutation, count)
+	for index := range mutations {
+		mutations[index] = store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateDirectory,
+			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: fmt.Sprintf("%s-%03d", prefix, index)}
 	}
-	if !result.Replayed && expectedVersion.IsValid() {
-		require.Equal(t, expectedVersion, entry.ContentVersion)
-		require.Equal(t, expectedVersion, result.Change.ContentVersion)
+	return mutations
+}
+
+// stageAttemptWorkspaceReservations reserves count objects in one call and
+// leaves them without content.
+func stageAttemptWorkspaceReservations(t *testing.T, ctx context.Context, workspace store.ExamAttemptWorkspaceStore,
+	access store.ExamAttemptWorkspaceWriteAccess, count int,
+) []model.AttemptWorkspaceObjectID {
+	t.Helper()
+	ids := newAttemptWorkspaceObjectIDs(count)
+	_, err := workspace.ReserveObjects(ctx, &store.ExamAttemptWorkspaceObjectReservation{Access: access, ObjectIDs: ids})
+	require.NoError(t, err)
+	return ids
+}
+
+// stageAttemptWorkspaceObjects reserves and readies one object per content,
+// with one ReserveObjects and one MarkObjectsReady call, as one batch's
+// staging does.
+func stageAttemptWorkspaceObjects(t *testing.T, ctx context.Context, workspace store.ExamAttemptWorkspaceStore,
+	access store.ExamAttemptWorkspaceWriteAccess, contents ...model.AttemptWorkspaceContent,
+) []store.ExamAttemptWorkspaceReadyObject {
+	t.Helper()
+	ids := stageAttemptWorkspaceReservations(t, ctx, workspace, access, len(contents))
+	objects := make([]store.ExamAttemptWorkspaceReadyObject, len(contents))
+	for index, content := range contents {
+		objects[index] = store.ExamAttemptWorkspaceReadyObject{ObjectID: ids[index],
+			ContentVersion: model.NewWorkspaceContentVersion(), Content: content}
 	}
+	require.NoError(t, workspace.MarkObjectsReady(ctx, &store.ExamAttemptWorkspaceObjectsReady{Access: access, Objects: objects}))
+	return objects
+}
+
+// newAttemptWorkspaceBatch wraps mutations in a batch with a fresh audit
+// attempt for the fixture's Sitting.
+func newAttemptWorkspaceBatch(t *testing.T, ctx context.Context, ss store.Store, fixture examAttemptFixture,
+	access store.ExamAttemptWorkspaceWriteAccess, mutations ...store.ExamAttemptWorkspaceMutation,
+) *store.ExamAttemptWorkspaceBatch {
+	t.Helper()
+	return &store.ExamAttemptWorkspaceBatch{Access: access, Mutations: mutations,
+		AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
+}
+
+func attemptWorkspaceBatchCommand(userID model.UserID, label string) *store.CommandIdempotency {
+	return examCommand(userID, store.ExamAttemptWorkspaceBatchOperation, label, label)
+}
+
+// createAttemptWorkspaceTestFile stages one object and creates a file from
+// it in a one-mutation batch, for suites that need Workspace content.
+func createAttemptWorkspaceTestFile(t *testing.T, ctx context.Context, ss store.Store, fixture examAttemptFixture,
+	access store.ExamAttemptWorkspaceWriteAccess, path string, content model.AttemptWorkspaceContent, label string,
+) (store.ExamAttemptWorkspaceReadyObject, *store.ExamAttemptWorkspaceBatchResult) {
+	t.Helper()
+	object := stageAttemptWorkspaceObjects(t, ctx, ss.ExamAttemptWorkspace(), access, content)[0]
+	result, err := ss.ExamAttemptWorkspace().ApplyBatch(ctx, newAttemptWorkspaceBatch(t, ctx, ss, fixture, access,
+		store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationCreateFile,
+			EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: path, ObjectID: object.ObjectID}),
+		attemptWorkspaceBatchCommand(fixture.candidate.ID, label))
+	require.NoError(t, err)
+	require.Len(t, result.Changes, 1)
+	return object, result
 }

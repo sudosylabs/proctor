@@ -122,11 +122,11 @@ func TestCandidateExamAttemptSuspendedEventAcceptsFocusPolicyReviewReason(t *tes
 func TestCandidateExamAttemptWorkspaceChangedEventIsOnlyASafeRefetchHint(t *testing.T) {
 	t.Parallel()
 	sittingID, attemptID, candidateID := model.NewExamSittingID(), model.NewExamAttemptID(), model.NewUserID()
-	entryID := model.NewAttemptWorkspaceEntryID()
 	at := time.Date(2026, time.August, 19, 10, 0, 0, 0, time.UTC)
-	event, err := NewCandidateExamAttemptWorkspaceChangedEvent(sittingID, attemptID, candidateID, entryID,
-		model.AttemptWorkspaceMutationReplaceFile, 17, at)
+	event, err := NewCandidateExamAttemptWorkspaceChangedEvent(sittingID, attemptID, candidateID, 15, 17, at)
 	require.NoError(t, err)
+	_, err = NewCandidateExamAttemptWorkspaceChangedEvent(sittingID, attemptID, candidateID, 18, 17, at)
+	require.Error(t, err, "a batch cannot end before it starts")
 	require.Equal(t, "exam_attempt_workspace_changed", event.Name)
 	require.Equal(t, candidateID, event.UserID)
 	require.Equal(t, model.ActionExamSittingParticipate, event.Action)

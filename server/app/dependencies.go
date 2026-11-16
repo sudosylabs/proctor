@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
-	"github.com/sudosylabs/proctor/server/app/events"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
+	"github.com/sudosylabs/proctor/server/app/exam/environment"
 	"github.com/sudosylabs/proctor/server/app/exam/resource"
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
 	"github.com/sudosylabs/proctor/server/app/identity"
@@ -74,10 +74,6 @@ type Dependencies struct {
 	// Plugins describes and validates the compiled-in plugins for plugin
 	// administration; nil makes it unavailable.
 	Plugins administration.PluginCatalog
-	// EventSubscriptions reports the plugins' domain-event handlers at the
-	// moment it is called. The domain-event dispatch Job offers each
-	// committed event to them.
-	EventSubscriptions func() []events.Subscription
 	// DesktopBuildCatalog is the immutable verified build catalog embedded by
 	// the server release. An empty catalog admits no released builds.
 	DesktopBuildCatalog []model.DesktopBuildTuple
@@ -87,6 +83,22 @@ type Dependencies struct {
 
 	NodeID    string
 	PublicURL string
+	// ExecutionEnabled is whether Exams may publish with an execution
+	// environment.
+	ExecutionEnabled bool
+	// EnvironmentWaker wakes the owner of an Attempt's execution environment
+	// after its facts or Workspace change. Nil wakes nobody; the runtime's
+	// backstop still finds the change.
+	EnvironmentWaker environment.Waker
+	// EnvironmentSettles delivers the settles owners complete, which a seal
+	// waits on. Nil settles nothing before a seal.
+	EnvironmentSettles environment.SettleSubscriber
+	// EnvironmentDiagnostics receives execution environment failures nobody
+	// else sees, such as a settle that could not be asked. Nil drops them.
+	EnvironmentDiagnostics func(model.ExamAttemptID, error)
+	// EnvironmentHosts reaches the execution hosts, so any node serves a
+	// candidate's terminals. Nil serves none.
+	EnvironmentHosts environment.Hosts
 	// SupportAddress is the operator-configured help mailbox that public
 	// discovery publishes for hosted pages; empty publishes none.
 	SupportAddress string

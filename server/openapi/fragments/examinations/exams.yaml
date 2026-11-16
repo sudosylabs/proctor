@@ -294,6 +294,7 @@ components:
                   incident_count: 3
                   window_milliseconds: 300000
                   outcome: flag_and_warn
+                execution: {enabled: false, record_input: false, terminals: 0}
               browser_policy:
                 enabled: false
               capacity:

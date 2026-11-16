@@ -51,6 +51,7 @@ components:
                   incident_count: 3
                   window_milliseconds: 300000
                   outcome: flag_and_warn
+                execution: {enabled: false, record_input: false, terminals: 0}
               browser_policy:
                 enabled: true
                 start_rule_id: reference
@@ -388,6 +389,7 @@ components:
         - native
         - connection_loss
         - focus_loss
+        - execution
       properties:
         native:
           $ref: '#/components/schemas/NativeSecurityPolicy'
@@ -398,6 +400,32 @@ components:
         focus_loss:
           $ref: '#/components/schemas/FocusLossPolicy'
           description: When leaving the Exam window counts against the candidate.
+        execution:
+          $ref: '#/components/schemas/ExecutionPolicy'
+          description: Whether the Attempts get an execution environment, from which profile, and how many terminals.
+    ExecutionPolicy:
+      type: object
+      additionalProperties: false
+      description: >-
+        Whether the Exam's Attempts get an execution environment and which. A disabled policy names no profile,
+        records nothing and opens no terminal. Terminal output is never recorded.
+      required:
+        - enabled
+        - record_input
+        - terminals
+      properties:
+        enabled:
+          type: boolean
+        profile_id:
+          $ref: '#/components/schemas/ID'
+        record_input:
+          type: boolean
+          description: Whether terminal input is recorded as evidence.
+        terminals:
+          type: integer
+          minimum: 0
+          maximum: 8
+          description: How many terminals a candidate may open, from 1 to the profile's maximum; 0 when disabled.
     ConnectionLossPolicy:
       type: object
       description: What happens when the server loses its connection to a candidate's Attempt. You can't change it.

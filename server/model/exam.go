@@ -300,6 +300,30 @@ func (d *ExamDraft) ApplyFocusLossPolicy(policy FocusLossPolicy, at time.Time) (
 	return true, nil
 }
 
+// ApplyExecutionPolicy replaces the Draft's execution policy. Whether the
+// profile it names is usable is the Store's and publication's question.
+func (d *ExamDraft) ApplyExecutionPolicy(policy ExecutionPolicy, at time.Time) (bool, error) {
+	if d == nil {
+		return false, invalidModelError("ExamDraft.ApplyExecutionPolicy", "exam_draft", "value", "is required", "")
+	}
+	if policy == d.Policy.Execution {
+		return false, nil
+	}
+	candidate := *d
+	candidate.Policy = d.Policy.Clone()
+	candidate.Policy.Execution = policy
+	candidate.Revision++
+	candidate.UpdatedAt = TimeUTC(at)
+	if candidate.UpdatedAt.Before(d.UpdatedAt) {
+		candidate.UpdatedAt = d.UpdatedAt
+	}
+	if err := candidate.Validate(); err != nil {
+		return false, err
+	}
+	*d = candidate
+	return true, nil
+}
+
 // ExamManager grants authoring responsibility independently of role grants.
 type ExamManager struct {
 	ExamID          ExamID

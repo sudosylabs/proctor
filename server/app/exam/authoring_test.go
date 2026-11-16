@@ -200,7 +200,9 @@ type authoringStoreFake struct {
 	creation           *store.ExamAuthoringCreation
 	textUpdate         *store.ExamDraftTextUpdate
 	focusLossUpdate    *store.ExamDraftFocusLossUpdate
+	executionUpdate    *store.ExamDraftExecutionUpdate
 	nativePolicyUpdate *store.ExamDraftNativePolicyUpdate
+	draftRevision      int64
 	archive            *store.ExamArchive
 	listOptions        store.ExamListOptions
 	summaries          []store.ExamSummary
@@ -338,6 +340,26 @@ func (f *authoringStoreFake) UpdateDraftFocusLoss(_ context.Context, input *stor
 	}
 	return &store.ExamAuthoringCommandResult{Value: snapshot}, nil
 }
+func (f *authoringStoreFake) UpdateDraftExecution(_ context.Context, input *store.ExamDraftExecutionUpdate, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+	*f.order = append(*f.order, "store.update_execution")
+	f.executionUpdate, f.idempotency = input, command
+	if f.err != nil {
+		return nil, f.err
+	}
+	snapshot, err := f.Get(context.Background(), input.ExamID, input.ActorUserID)
+	*f.order = (*f.order)[:len(*f.order)-1]
+	if err != nil {
+		return nil, err
+	}
+	if snapshot.Draft.Revision != input.ExpectedRevision {
+		return nil, store.NewErrConflict("exam_draft", "exam_draft_revision", nil)
+	}
+	if _, err := snapshot.Draft.ApplyExecutionPolicy(input.Execution, model.TimeUTC(input.UpdatedAt)); err != nil {
+		return nil, err
+	}
+	return &store.ExamAuthoringCommandResult{Value: snapshot}, nil
+}
+
 func (f *authoringStoreFake) UpdateDraftBrowserPolicy(_ context.Context, input *store.ExamDraftBrowserPolicyUpdate, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
 	*f.order = append(*f.order, "store.update_browser_policy")
 	f.idempotency = command
@@ -379,6 +401,9 @@ func (f *authoringStoreFake) Get(_ context.Context, examID model.ExamID, _ model
 		exam.ArchivedAt = model.OptionalTimeFrom(at)
 	}
 	draft, _ := model.NewExamDraft(examID, "Test", "", model.DefaultExamPolicySet(), at)
+	if f.draftRevision > 0 {
+		draft.Revision = f.draftRevision
+	}
 	return &store.ExamAuthoringSnapshot{Exam: exam, Draft: draft, OwnerUserID: f.actorID, ManagerCount: 1, ActorIsManager: f.actorIsManager}, nil
 }
 func (f *authoringStoreFake) Resolve(context.Context, model.ExamID) (*model.Exam, error) {

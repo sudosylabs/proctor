@@ -25,7 +25,7 @@ func TestCanonicalExamRevisionPolicyIgnoresAuthoredJSONFieldOrder(t *testing.T) 
 	require.NoError(t, err)
 	var fields map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(ordered, &fields))
-	reordered := []byte(fmt.Sprintf(` { "native": %s, "focus_loss": {"outcome":"flag_and_warn","window_milliseconds":300000,"incident_count":3,"minimum_duration_milliseconds":2000,"enabled":true}, "connection_loss":{"outcome":"flag_and_suspend"} } `, fields["native"]))
+	reordered := []byte(fmt.Sprintf(` { "native": %s, "focus_loss": {"outcome":"flag_and_warn","window_milliseconds":300000,"incident_count":3,"minimum_duration_milliseconds":2000,"enabled":true}, "connection_loss":{"outcome":"flag_and_suspend"}, "execution": {"terminals":0,"record_input":false,"profile_id":"","enabled":false} } `, fields["native"]))
 
 	first, err := CanonicalizeExamRevisionPolicy(ordered)
 	require.NoError(t, err)

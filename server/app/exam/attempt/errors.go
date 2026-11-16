@@ -93,6 +93,11 @@ var storeErrors = apperror.StoreTable{
 		"attempt_workspace_size_limit":             "exam.attempt.workspace.size_limit",
 		"attempt_workspace_object_state":           "exam.attempt.workspace.object_conflict",
 		"attempt_workspace_cursor":                 "exam.attempt.workspace.cursor_conflict",
+		// An environment owner whose lease or incarnation is no longer
+		// current is in the position of a closed Connection.
+		"attempt_environment_owner":       "exam.attempt.connection_closed",
+		"attempt_environment_incarnation": "exam.attempt.environment_changed",
+		"attempt_environment_ended":       "exam.attempt.environment_ended",
 	},
 	NotFound:     "exam.attempt.not_found",
 	Conflict:     "exam.attempt.conflict",

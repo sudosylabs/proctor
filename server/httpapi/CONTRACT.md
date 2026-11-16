@@ -153,11 +153,14 @@ catalog before serving, validates results before applying response effects,
 owns ordinary response and Problem Details writing, and fails closed when an
 operation returns an undeclared error. Redirects, bounded uploads, and binary
 downloads use named protocol-specific results recorded in the manifest rather
-than an unrestricted response-writer escape hatch. The WebSocket handshake is
-the only raw response exception: it is a named, session-authenticated upgrade
+than an unrestricted response-writer escape hatch. Upgrades are the only raw
+response exception: the WebSocket handshake, and binary sockets such as a
+candidate's terminal (a GET whose path ends in `/socket` and whose protocol
+name ends in `-socket`). Each is a named, session-authenticated upgrade
 operation whose parameters, request metadata, and pre-upgrade failures remain
 kernel-owned. After a successful upgrade, the sibling transport owns the
-connection lifecycle. The catalog exposes no mutable router or late-registration
+connection lifecycle; a binary socket's frame protocol is the resource's and
+is documented in its OpenAPI operation. The catalog exposes no mutable router or late-registration
 seam.
 
 `httpapi.New` takes the application and a `Settings` value that names an
@@ -1193,9 +1196,9 @@ limits, and the WebSocket transport. A resource may retain its application
 service, but never `Settings`, `*app.App`, `*route.API`, a router,
 `store.Store`, SQL, `platform.Service`, or concrete adapters.
 
-The unexported `newAPI` validates the settings and passes the kernel's share
-of them, the authenticator, and the resources it is given to `route.New`,
-which compiles them. `New` passes the production inventory, and handler tests
+The unexported `compileAPI` validates the settings and passes the kernel's
+share of them, the authenticator, and the resources it is given to
+`route.New`, which compiles them. `New` passes the production inventory, and handler tests
 pass resources built over their fakes, so there is one compile path.
 
 The production route trace is intentionally linear and searchable:
@@ -1205,7 +1208,7 @@ httpapi.New
     -> productionResources             (resources.go)
     -> <domain>Resource                (for example institutionResource)
     -> route.Endpoint{...} literals    (route/endpoint.go)
-    -> newAPI                          (api.go)
+    -> compileAPI                      (api.go)
     -> route.New                       (route/api.go)
     -> validation + compileRoutes      (route/validate.go, route/compile.go)
     -> application capability method   (for example GetInstitution)
@@ -1254,7 +1257,8 @@ envelope of one.
 
 Package initialization, mutable router access, late registration, arbitrary
 path regular expressions, and direct persistence or platform access are not
-extension mechanisms. `route.API.Routes` is a defensive manifest projection for
+extension mechanisms; the route catalog never changes while the API serves.
+`route.API.Routes` is a defensive manifest projection for
 agreement and diagnostics; callers cannot mutate dispatch through it.
 
 These reviewed v1 shapes are frozen compatibility exceptions, not target
@@ -1536,11 +1540,7 @@ candidates use Attempt-scoped protected delivery routes:
 | `PUT /api/v1/exam-attempts/{exam_attempt_id}/corrections/{exam_revision_id}/acknowledgement` | bound registered-key Desktop Session plus Attempt credential and Connection; required idempotency | retained correction acknowledgement |
 | `GET /api/v1/exam-attempts/{exam_attempt_id}/workspace` | Session plus Attempt credential and Connection | bounded logical Workspace page |
 | `GET /api/v1/exam-attempts/{exam_attempt_id}/workspace/changes` | Session plus Attempt credential and Connection | bounded journal page or explicit full-refresh signal |
-| `POST /api/v1/exam-attempts/{exam_attempt_id}/workspace/directories` | Session plus Attempt credential and Connection; required idempotency | acknowledged directory and Cursor |
-| `POST /api/v1/exam-attempts/{exam_attempt_id}/workspace/files` | Session plus Attempt credential and Connection; required idempotency | staged and acknowledged file and Cursor |
-| `PATCH /api/v1/exam-attempts/{exam_attempt_id}/workspace/entries/{attempt_workspace_entry_id}` | Session plus Attempt credential and Connection; required idempotency | acknowledged rename/move and Cursor |
-| `PUT /api/v1/exam-attempts/{exam_attempt_id}/workspace/files/{attempt_workspace_entry_id}/content` | Session plus Attempt credential and Connection; required idempotency | acknowledged replacement and Cursor |
-| `DELETE /api/v1/exam-attempts/{exam_attempt_id}/workspace/entries/{attempt_workspace_entry_id}` | Session plus Attempt credential and Connection; required idempotency | acknowledged deletion and Cursor |
+| `POST /api/v1/exam-attempts/{exam_attempt_id}/workspace/batches` | Session plus Attempt credential and Connection; required idempotency | 1–128 mutations applied all or nothing; one journal change per mutation at consecutive Cursors |
 | `GET /api/v1/exam-attempts/{exam_attempt_id}/resources/{exam_resource_id}/content` | Session plus Attempt credential and Connection | protected inline bytes or `304` |
 | `GET /api/v1/exam-attempts/{exam_attempt_id}/workspace/files/{attempt_workspace_entry_id}/content` | Session plus Attempt credential and Connection | protected inline bytes or `304` |
 | `POST /api/v1/exam-attempts/{exam_attempt_id}/submissions` | Session plus Attempt credential and Connection; required idempotency | `201` candidate-safe retained receipt |

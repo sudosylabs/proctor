@@ -154,9 +154,9 @@ func integrityPolicySuspends(reason AttemptSuspensionCandidateReason) bool {
 // evidence carries. The SQL schema uses the same bound.
 const IntegrityEvidenceDetailMaxBytes = 64 * 1024
 
-// validCapabilityEvidenceDetail reports whether detail is one bounded JSON
+// validEvidenceDetail reports whether detail is one bounded JSON
 // object.
-func validCapabilityEvidenceDetail(detail json.RawMessage) bool {
+func validEvidenceDetail(detail json.RawMessage) bool {
 	trimmed := bytes.TrimSpace(detail)
 	return len(detail) <= IntegrityEvidenceDetailMaxBytes &&
 		len(trimmed) > 1 && trimmed[0] == '{' && json.Valid(trimmed)

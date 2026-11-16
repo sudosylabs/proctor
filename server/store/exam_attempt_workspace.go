@@ -10,19 +10,17 @@ package store
 import (
 	"context"
 	"encoding/hex"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-const ExamAttemptWorkspaceMutationOperation = "exam.attempt.workspace.mutate"
+// ExamAttemptWorkspaceBatchOperation names the one Workspace write command in
+// idempotency outcomes and audit.
+const ExamAttemptWorkspaceBatchOperation = "exam.attempt.workspace.batch"
 
-// ExamAttemptWorkspaceMutationAccess is the complete hash-only selector for a
-// candidate write. Persistence rechecks the current Class membership, Open
-// Sitting, Active Attempt, exact active unexpired Participation generation,
-// and owning Session-bound open Connection on every reservation, readiness,
-// mutation, and exact replay.
 // IsValidWorkspaceSHA256 reports whether value is a lowercase hexadecimal
 // SHA-256 digest, the form Attempt Workspace content and Submission manifest
 // digests are stored in.
@@ -34,7 +32,43 @@ func IsValidWorkspaceSHA256(value string) bool {
 	return err == nil
 }
 
-type ExamAttemptWorkspaceMutationAccess struct {
+// ExamAttemptWorkspaceWriteAccess names who writes one batch. It is one of
+// two kinds:
+//
+//   - ExamAttemptWorkspaceEditorAccess: the candidate's own Desktop, proved by
+//     Session, registered key, open Connection and continuity credential. It
+//     also requires current Class membership, an Open Sitting before its
+//     deadline, an Active Attempt, the exact active unexpired Participation
+//     generation and no pending Workspace correction acknowledgement.
+//   - ExamAttemptWorkspaceEnvironmentAccess: the Attempt's execution
+//     environment on the candidate's behalf, proved by its owner's current
+//     runtime lease. It requires only that lease, the environment's current
+//     incarnation and an Attempt with no Submission, so the owner can harvest
+//     the guest's last changes while the Attempt is frozen or past its
+//     deadline, until the seal.
+//
+// Persistence rechecks the chosen kind once per reservation, readiness and
+// batch, and on every exact replay.
+type ExamAttemptWorkspaceWriteAccess interface {
+	// WorkspaceAttemptID is the Attempt whose Workspace is written.
+	WorkspaceAttemptID() model.ExamAttemptID
+	// WorkspaceAuthor is the author the writer's changes are journaled under.
+	WorkspaceAuthor() model.AttemptWorkspaceAuthor
+	examAttemptWorkspaceWriteAccess()
+}
+
+// ExamAttemptWorkspaceReadAccess names who reads the live Attempt Workspace:
+// the candidate's Desktop (CandidateAttemptAccess) or the owner of the
+// Attempt's execution environment (ExamAttemptWorkspaceEnvironmentAccess).
+type ExamAttemptWorkspaceReadAccess interface {
+	WorkspaceAttemptID() model.ExamAttemptID
+	examAttemptWorkspaceReadAccess()
+}
+
+// ExamAttemptWorkspaceEditorAccess is the complete hash-only selector for a
+// candidate's own write from Desktop. It additionally requires the owning
+// Session-bound open Connection, registered key and continuity credential.
+type ExamAttemptWorkspaceEditorAccess struct {
 	AttemptID                model.ExamAttemptID
 	ParticipationID          model.AttemptParticipationID
 	Generation               int64
@@ -46,10 +80,59 @@ type ExamAttemptWorkspaceMutationAccess struct {
 	ContinuityCredentialHash string
 }
 
+func (a ExamAttemptWorkspaceEditorAccess) WorkspaceAttemptID() model.ExamAttemptID {
+	return a.AttemptID
+}
+
+func (a ExamAttemptWorkspaceEditorAccess) WorkspaceAuthor() model.AttemptWorkspaceAuthor {
+	return model.NewCandidateWorkspaceAuthor(a.ConnectionID)
+}
+
+func (ExamAttemptWorkspaceEditorAccess) examAttemptWorkspaceWriteAccess() {}
+
+// ExamAttemptWorkspaceEnvironmentAccess is the selector the owner of an
+// Attempt's execution environment writes and reads through, on the
+// candidate's behalf. Fence is the owner's runtime lease fence and
+// Incarnation the environment incarnation it acts for; persistence requires
+// that lease to be the Attempt's current unexpired one, the incarnation to
+// be the environment's current one, and the Attempt to have no Submission.
+// No Session, Connection or Participation is involved. The candidate is
+// resolved from the Attempt. Tag, when set, is the process tag the write's
+// author names beside the incarnation, such as terminal:1 for a change a
+// terminal's program made; it takes no part in the owner check.
+type ExamAttemptWorkspaceEnvironmentAccess struct {
+	AttemptID   model.ExamAttemptID
+	Incarnation int64
+	Fence       int64
+	Tag         model.AttemptEnvironmentProcessTag
+}
+
+func (a ExamAttemptWorkspaceEnvironmentAccess) WorkspaceAttemptID() model.ExamAttemptID {
+	return a.AttemptID
+}
+
+func (a ExamAttemptWorkspaceEnvironmentAccess) WorkspaceAuthor() model.AttemptWorkspaceAuthor {
+	return model.NewEnvironmentWorkspaceAuthor(a.Incarnation, a.Tag)
+}
+
+// Valid reports whether every selector field is well formed, the author it
+// names included.
+func (a ExamAttemptWorkspaceEnvironmentAccess) Valid() bool {
+	return a.AttemptID.IsValid() && a.Incarnation >= 0 && a.Fence > 0 && a.WorkspaceAuthor().IsValid()
+}
+
+func (ExamAttemptWorkspaceEnvironmentAccess) examAttemptWorkspaceWriteAccess() {}
+
+func (ExamAttemptWorkspaceEnvironmentAccess) examAttemptWorkspaceReadAccess() {}
+
+func (a CandidateAttemptAccess) WorkspaceAttemptID() model.ExamAttemptID { return a.AttemptID }
+
+func (CandidateAttemptAccess) examAttemptWorkspaceReadAccess() {}
+
 // ExamAttemptWorkspaceMutationTarget is the bounded preflight projection used
 // to begin one Class-scoped audit attempt and address post-commit candidate
 // effects. It exposes no path, content, credential, Session, or object selector.
-// ApplyMutation rechecks all target ownership and eligibility under its locks.
+// ApplyBatch rechecks all target ownership and eligibility under its locks.
 type ExamAttemptWorkspaceMutationTarget struct {
 	ExamID          model.ExamID
 	SittingID       model.ExamSittingID
@@ -58,31 +141,38 @@ type ExamAttemptWorkspaceMutationTarget struct {
 	WorkspaceID     model.ExamAttemptWorkspaceID
 }
 
-// ExamAttemptWorkspaceObjectReservation creates invisible, expiring metadata
-// before VFS staging. PostgreSQL supplies CreatedAt and ExpiresAt using its
-// clock. Exact repeats of the same unused ObjectID return the same reservation.
+// ExamAttemptWorkspaceObjectReservation checks write access once and creates
+// invisible, expiring metadata for every object a batch will stage, before any
+// VFS write. With no ObjectIDs it only resolves the target. PostgreSQL
+// supplies CreatedAt and ExpiresAt using its clock. Exact repeats of the same
+// unused ObjectID keep the same reservation.
 type ExamAttemptWorkspaceObjectReservation struct {
-	Access   ExamAttemptWorkspaceMutationAccess
-	ObjectID model.AttemptWorkspaceObjectID
+	Access    ExamAttemptWorkspaceWriteAccess
+	ObjectIDs []model.AttemptWorkspaceObjectID
 }
 
-// ExamAttemptWorkspaceObjectReady records verified bounded metadata after VFS
-// staging. It never carries an object key or backend revision. Exact repeats
-// with identical content are idempotent; different content conflicts.
-type ExamAttemptWorkspaceObjectReady struct {
-	Access         ExamAttemptWorkspaceMutationAccess
+// ExamAttemptWorkspaceObjectsReady records verified bounded metadata for
+// every object staged for one batch, after VFS staging. It never carries an
+// object key or backend revision. Exact repeats with identical content are
+// idempotent; different content conflicts.
+type ExamAttemptWorkspaceObjectsReady struct {
+	Access  ExamAttemptWorkspaceWriteAccess
+	Objects []ExamAttemptWorkspaceReadyObject
+}
+
+// ExamAttemptWorkspaceReadyObject is one staged object's verified content.
+type ExamAttemptWorkspaceReadyObject struct {
 	ObjectID       model.AttemptWorkspaceObjectID
 	ContentVersion model.WorkspaceContentVersion
 	Content        model.AttemptWorkspaceContent
 }
 
-// ExamAttemptWorkspaceMutation applies one selective entry-level fence. Create
-// uses EntryID and DestinationPath. Move additionally requires ExpectedPath.
-// Replace requires EntryID, ExpectedPath, ExpectedContentVersion, and a Ready
-// ObjectID. Delete requires EntryID and ExpectedPath, plus
-// ExpectedContentVersion for a file. Recursive directory deletion additionally
-// requires ExpectedWorkspaceCursor, fencing the complete subtree snapshot.
-// Other mutations omit this aggregate fence so unrelated entries may commute.
+// ExamAttemptWorkspaceMutation is one entry-level change inside a batch, with
+// its own fence. Create uses EntryID and DestinationPath. Move additionally
+// requires ExpectedPath. Replace requires EntryID, ExpectedPath,
+// ExpectedContentVersion, and a Ready ObjectID. Delete requires EntryID and
+// ExpectedPath, plus ExpectedContentVersion for a file. Recursive directory
+// deletion requires the batch's ExpectedWorkspaceCursor.
 // Rename and move are the same MoveEntry operation; moving a directory
 // atomically rewrites its descendants after checking every resulting path and
 // collision. Non-recursive deletion of a non-empty directory conflicts.
@@ -90,62 +180,95 @@ type ExamAttemptWorkspaceObjectReady struct {
 // objects with retained-outcome protection, and appends one recursive journal
 // record. Published Starter and submitted content pins remain protected.
 type ExamAttemptWorkspaceMutation struct {
-	Access                  ExamAttemptWorkspaceMutationAccess
-	Operation               model.AttemptWorkspaceMutationKind
-	EntryID                 model.AttemptWorkspaceEntryID
-	ExpectedPath            string
-	DestinationPath         string
-	ExpectedContentVersion  model.WorkspaceContentVersion
-	Recursive               bool
+	Operation              model.AttemptWorkspaceMutationKind
+	EntryID                model.AttemptWorkspaceEntryID
+	ExpectedPath           string
+	DestinationPath        string
+	ExpectedContentVersion model.WorkspaceContentVersion
+	Recursive              bool
+	ObjectID               model.AttemptWorkspaceObjectID
+}
+
+// ExamAttemptWorkspaceBatch applies 1..AttemptWorkspaceBatchMaximumMutations
+// mutations in order, all or nothing. Each mutation sees the effects of the
+// ones before it. ExpectedWorkspaceCursor is required exactly when a mutation
+// deletes recursively, and fences the cursor the batch starts from; other
+// batches omit it so unrelated entries may commute.
+type ExamAttemptWorkspaceBatch struct {
+	Access                  ExamAttemptWorkspaceWriteAccess
+	Mutations               []ExamAttemptWorkspaceMutation
 	ExpectedWorkspaceCursor *int64
-	ObjectID                model.AttemptWorkspaceObjectID
 	AuditEventID            model.AuditEventID
 	AuditAt                 time.Time
 }
 
-// ExamAttemptWorkspaceMutationResult is the safe acknowledged state. Entry is
-// nil only for deletion. Change carries the resulting Workspace Cursor but no
-// mutation-key digest, object selector, credential, Session, or content body.
-type ExamAttemptWorkspaceMutationResult struct {
+// ExamAttemptWorkspaceBatchResult is the safe acknowledged state. Changes has
+// one journal entry per mutation, in order, at consecutive cursors, each with
+// the batch's author. A replay carries the author of the original batch. It carries no mutation-key digest, object selector,
+// credential, Session, binding, or content body.
+type ExamAttemptWorkspaceBatchResult struct {
 	SittingID       model.ExamSittingID
 	ClassID         model.ClassID
 	CandidateUserID model.UserID
 	WorkspaceID     model.ExamAttemptWorkspaceID
-	Entry           *CandidateAttemptWorkspaceItem
-	Change          model.AttemptWorkspaceJournalEntry
+	Changes         []model.AttemptWorkspaceJournalEntry
 	Replayed        bool
 }
 
-// ConsistentWith reports whether the outcome names the resolved target's
-// Sitting, Class, candidate and Attempt Workspace, carries a valid journal
-// change of the requested operation in that workspace at a positive cursor,
-// and that change is for the proposed entry unless it replays an earlier
-// mutation. It reads target, which the caller has already checked.
+// ConsistentWith reports whether the result names the resolved target's
+// Sitting, Class, candidate and Attempt Workspace, and carries one valid
+// change per mutation, of the requested operation, in that workspace, at
+// consecutive positive cursors, by the writer's author kind. Unless it
+// replays an earlier batch, each change is for the proposed entry and by the
+// writer's exact author; a replay keeps the original batch's reference. It reads target, which the caller has already checked.
 //
 // It is part of the Store contract: the conformance suite asserts it on
 // every real result.
-func (r *ExamAttemptWorkspaceMutationResult) ConsistentWith(
+func (r *ExamAttemptWorkspaceBatchResult) ConsistentWith(
 	target *ExamAttemptWorkspaceMutationTarget,
-	operation model.AttemptWorkspaceMutationKind,
-	entryID model.AttemptWorkspaceEntryID,
+	author model.AttemptWorkspaceAuthor,
+	mutations []ExamAttemptWorkspaceMutation,
 ) bool {
-	return !(r == nil ||
+	if r == nil ||
 		r.SittingID != target.SittingID ||
 		r.ClassID != target.ClassID ||
 		r.CandidateUserID != target.CandidateUserID ||
 		r.WorkspaceID != target.WorkspaceID ||
-		r.Change.Validate() != nil ||
-		r.Change.WorkspaceID != r.WorkspaceID ||
-		r.Change.Operation != operation ||
-		r.Change.Cursor < 1 ||
-		(!r.Replayed && r.Change.EntryID != entryID))
+		len(r.Changes) != len(mutations) {
+		return false
+	}
+	for index, change := range r.Changes {
+		if change.Validate() != nil ||
+			change.WorkspaceID != r.WorkspaceID ||
+			change.Operation != mutations[index].Operation ||
+			change.Author.Kind != author.Kind ||
+			change.Cursor < 1 ||
+			(index > 0 && change.Cursor != r.Changes[index-1].Cursor+1) ||
+			(!r.Replayed && (change.EntryID != mutations[index].EntryID || change.Author != author)) {
+			return false
+		}
+	}
+	return true
 }
+
+// ErrAttemptWorkspaceBatchItem reports which mutation of a batch refused the
+// whole batch. Err is the store failure for that mutation.
+type ErrAttemptWorkspaceBatchItem struct {
+	Index int
+	Err   error
+}
+
+func (e *ErrAttemptWorkspaceBatchItem) Error() string {
+	return "Attempt Workspace batch mutation " + strconv.Itoa(e.Index) + ": " + e.Err.Error()
+}
+
+func (e *ErrAttemptWorkspaceBatchItem) Unwrap() error { return e.Err }
 
 // CandidateWorkspaceJournalOptions requests ordered changes strictly after a
 // numeric cursor. Limit is 1..200. Paths remain in the protected response body
 // and never enter a URL, pagination token, audit field, log, or realtime event.
 type CandidateWorkspaceJournalOptions struct {
-	Access      CandidateAttemptAccess
+	Access      ExamAttemptWorkspaceReadAccess
 	AfterCursor int64
 	Limit       int
 }
@@ -185,22 +308,64 @@ func (p *CandidateWorkspaceJournalPage) NotBehind(afterCursor int64) bool {
 // visibility, selective concurrency, ordered journal/cursor advancement,
 // attempt-scoped command outcome, and cleanup eligibility.
 //
-// ApplyMutation atomically changes the logical hierarchy/current content
-// pointer, advances the Workspace Cursor, appends one journal record, marks a
-// consumed Ready object Current, makes a superseded/deleted attempt-owned
-// object reclaimable after the safety window, and commits the idempotent
-// outcome and supplied audit attempt. Audit data is limited to safe scope,
-// operation, Entry identity, and resulting cursor; paths, content metadata,
-// bodies, and object identities are excluded. Conflicts or failed commits
-// change none of those facts. Required corrections selecting workspace are
-// checked under the same Sitting lock as publication. Exact replays recheck current write eligibility
-// and return the retained result. The durable journal records the command's
-// bounded KeyDigest for correlation, but candidate journal projections omit it.
-// At most the newest 4,096 entries remain; pruning and append are atomic.
-// Stable conflicts are attempt_workspace_path, attempt_workspace_entry,
-// attempt_workspace_content_version, attempt_workspace_not_empty, attempt_workspace_cursor,
-// attempt_workspace_entry_limit, attempt_workspace_size_limit, and
-// attempt_workspace_object_state.
+// Every write is one batch: ReserveObjects, then VFS staging, then
+// MarkObjectsReady, then ApplyBatch. Each checks access once for the whole
+// batch. The editor and the execution environment both write this way; the
+// access kind decides how the writer is proved, what else it requires and
+// the journal author. The command outcome is keyed under the candidate
+// either way, and audit adds the author, and for the environment its lease
+// fence, to the aggregate data.
+// Every changed entry records the author of its last change, which a
+// Submission seals.
+//
+// The reads take either the candidate's Desktop access or an environment
+// access and return the same manifest, file and journal projections.
+//
+// AppendAttemptEvidence stores one Attempt evidence record through an
+// environment access, under the same check as the environment's reads and
+// writes: the owner's current lease and incarnation and no Submission. A
+// stale lease or incarnation conflicts with attempt_environment_owner; an
+// Attempt with a Submission conflicts with exam_attempt_state. The record belongs to the Attempt,
+// names the access's author and is stamped with PostgreSQL time; an
+// observation time after it is clamped to it. Its kind is one of the core's.
+// The kind, author and sequence identify it: the same claim again returns the
+// stored record with Repeated, and a different claim for them conflicts with
+// attempt_evidence_sequence. A record that would pass the Attempt's record
+// or byte bound is not stored: the refusal is counted in the inventory and
+// returned as Refused. A stored record extends the inventory's chained digest
+// in the same transaction. Nothing raises a Flag, writes audit or changes the
+// Attempt. Once the Submission exists the inventory is fixed and nothing more
+// is accepted.
+//
+// AppendTerminalInput stores one execution.input record from the node that
+// serves a terminal, which holds no lease: it requires the environment's
+// current incarnation to be the one named, with the environment not ended,
+// and the Attempt to have no Submission. Another incarnation conflicts with
+// attempt_environment_incarnation, an Attempt without an environment is not
+// found, and a sealed one conflicts with exam_attempt_state. The record is
+// then stored exactly as AppendAttemptEvidence stores one, by the
+// incarnation and terminal's author.
+//
+// ApplyBatch atomically applies every mutation in order: it changes the
+// logical hierarchy and current content pointers, advances the Workspace
+// Cursor once per mutation, appends one journal record per mutation, marks
+// each consumed Ready object Current, makes each superseded or deleted
+// attempt-owned object reclaimable after the safety window, checks capacity
+// once against the final state, and commits one idempotent outcome and the
+// supplied audit attempt. Audit data is limited to safe scope, counts by
+// operation, and the resulting cursor range; paths, content metadata, bodies,
+// and object identities are excluded. If any mutation fails, nothing changes
+// and the error is an ErrAttemptWorkspaceBatchItem naming it, except for
+// capacity, which is a property of the whole batch. Required corrections
+// selecting workspace are checked under the same Sitting lock as publication.
+// Exact replays recheck current write eligibility and return the retained
+// result. The durable journal records the command's bounded KeyDigest for
+// correlation, but candidate journal projections omit it. At most the newest
+// 4,096 entries remain; pruning and append are atomic. Stable conflicts are
+// attempt_workspace_path, attempt_workspace_entry,
+// attempt_workspace_content_version, attempt_workspace_not_empty,
+// attempt_workspace_cursor, attempt_workspace_entry_limit,
+// attempt_workspace_size_limit, and attempt_workspace_object_state.
 //
 // Cleanup claims use PostgreSQL time, limit 1..200, and a trimmed token of at
 // most 128 bytes. ClaimObjectsForCleanup selects only attempt-origin objects
@@ -210,14 +375,15 @@ func (p *CandidateWorkspaceJournalPage) NotBehind(afterCursor int64) bool {
 // stale-claim retry repeats removal before CompleteObjectCleanup deletes the
 // metadata. ReleaseObjectCleanup handles known physical-removal failure.
 type ExamAttemptWorkspaceStore interface {
+	AppendAttemptEvidence(context.Context, *ExamAttemptEvidenceAppend) (*ExamAttemptEvidenceAppendResult, error)
+	AppendTerminalInput(context.Context, *ExamAttemptTerminalInputAppend) (*ExamAttemptEvidenceAppendResult, error)
 	List(context.Context, CandidateWorkspaceListOptions) (*CandidateAttemptWorkspacePage, error)
-	ResolveFile(context.Context, CandidateAttemptAccess, model.AttemptWorkspaceEntryID) (*CandidateWorkspaceContent, error)
+	ResolveFile(context.Context, ExamAttemptWorkspaceReadAccess, model.AttemptWorkspaceEntryID) (*CandidateWorkspaceContent, error)
 	ListJournal(context.Context, CandidateWorkspaceJournalOptions) (*CandidateWorkspaceJournalPage, error)
-	ResolveMutationTarget(context.Context, ExamAttemptWorkspaceMutationAccess) (*ExamAttemptWorkspaceMutationTarget, error)
-	ReserveObject(context.Context, *ExamAttemptWorkspaceObjectReservation) (*model.AttemptWorkspaceObject, error)
-	MarkObjectReady(context.Context, *ExamAttemptWorkspaceObjectReady) (*model.AttemptWorkspaceObject, error)
-	ApplyMutation(context.Context, *ExamAttemptWorkspaceMutation, *CommandIdempotency) (*ExamAttemptWorkspaceMutationResult, error)
-	MarkObjectReclaimable(context.Context, model.AttemptWorkspaceObjectID) error
+	ReserveObjects(context.Context, *ExamAttemptWorkspaceObjectReservation) (*ExamAttemptWorkspaceMutationTarget, error)
+	MarkObjectsReady(context.Context, *ExamAttemptWorkspaceObjectsReady) error
+	ApplyBatch(context.Context, *ExamAttemptWorkspaceBatch, *CommandIdempotency) (*ExamAttemptWorkspaceBatchResult, error)
+	MarkObjectsReclaimable(context.Context, []model.AttemptWorkspaceObjectID) error
 	ClaimObjectsForCleanup(context.Context, *AttemptWorkspaceCleanupClaim) ([]model.AttemptWorkspaceObject, error)
 	CompleteObjectCleanup(context.Context, *AttemptWorkspaceCleanupCompletion) error
 	ReleaseObjectCleanup(context.Context, *AttemptWorkspaceCleanupRelease) error

@@ -129,6 +129,9 @@ func (s *Service) EndExamAttemptByManager(
 	if err = checkManagerEndPreparation(preparation, command, managerSnapshot.Attempt.CandidateUserID, sitting.Sitting.ClassID); err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)
 	}
+	if !preparation.Replayed && s.settler != nil {
+		s.settler.Settle(ctx, command.AttemptID)
+	}
 
 	proposed, receiptCode := s.newSubmissionID(), s.newReceiptCode()
 	if !proposed.IsValid() {

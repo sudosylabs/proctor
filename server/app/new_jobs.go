@@ -16,6 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/events"
+	"github.com/sudosylabs/proctor/server/app/exam/environment"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobs"
@@ -69,9 +70,10 @@ func newJobRuntime(
 		mailHealth = mail.NewHealth(deps.MailDeliverySender != nil && deps.MailDeliverySender.Enabled())
 	}
 
-	// With no subscriptions an event is offered to nobody and its outbox row
-	// is retired.
-	domainEvents := events.NewDispatcher(deps.EventSubscriptions)
+	domainEvents, err := events.NewDispatcher(domainEventSubscriptions(deps))
+	if err != nil {
+		return jobRuntime{}, err
+	}
 	definitions := buildApplicationJobDefinitions(deps, shared, exams, users, defaultPictureJobs, onboardingPorts, mailHealth, domainEvents)
 	engine, err := job.New(job.Dependencies{
 		Store:         deps.Store.Job(),
@@ -300,4 +302,22 @@ func administrationCountsDependencies(onboardingPorts onboarding.Ports, runtime 
 		deps.FailedMailDeliveries = runtime.mail.CountFailedMailDeliveries
 	}
 	return deps
+}
+
+// domainEventSubscriptions are the core's domain-event handlers: the Attempt
+// Environment facts, when the Store keeps environments.
+func domainEventSubscriptions(deps Dependencies) []events.Subscription {
+	if deps.Store.AttemptEnvironment() == nil {
+		return nil
+	}
+	facts, err := environment.NewFacts(deps.Store.AttemptEnvironment(), deps.EnvironmentWaker)
+	if err != nil {
+		return nil
+	}
+	topics := environment.Topics()
+	subscriptions := make([]events.Subscription, len(topics))
+	for index, topic := range topics {
+		subscriptions[index] = events.Subscription{Key: "attempt_environment:" + string(topic), Topic: topic, Handler: facts}
+	}
+	return subscriptions
 }

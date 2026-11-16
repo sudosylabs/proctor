@@ -112,6 +112,9 @@ type Service struct {
 	retentionPolicies store.RetentionPolicyStore
 	retention         store.RetentionStore
 	pluginSettings    store.PluginSettingsStore
+	// environmentProfiles is nil without persistence, which makes profile
+	// administration unavailable.
+	environmentProfiles store.EnvironmentProfileStore
 
 	authorizer   Authorizer
 	auditor      access.MutationAuditor
@@ -176,6 +179,7 @@ func New(deps Dependencies) (*Service, error) {
 		accessPolicies:          catalog.AccessPolicy(),
 		retentionPolicies:       catalog.RetentionPolicy(),
 		pluginSettings:          catalog.PluginSettings(),
+		environmentProfiles:     catalog.EnvironmentProfile(),
 		retention:               catalog.Retention(),
 		authorizer:              deps.Authorizer,
 		auditor:                 deps.Auditor,

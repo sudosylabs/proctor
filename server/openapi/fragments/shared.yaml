@@ -1197,6 +1197,11 @@ components:
         - desktop_registration.invalid
         - desktop_registration.revoked
         - desktop_registration.unavailable
+        - environment_profile.invalid
+        - environment_profile.limit_reached
+        - environment_profile.name_in_use
+        - environment_profile.not_found
+        - environment_profile.unavailable
         - exam.archived
         - exam.attempt.already_connected
         - exam.attempt.browser_activity_conflict
@@ -1210,6 +1215,11 @@ components:
         - exam.attempt.continuity_invalid
         - exam.attempt.correction_conflict
         - exam.attempt.desktop_incompatible
+        - exam.attempt.environment_changed
+        - exam.attempt.environment_ended
+        - exam.attempt.environment_not_found
+        - exam.attempt.environment_not_running
+        - exam.attempt.environment_unavailable
         - exam.attempt.focus_loss_conflict
         - exam.attempt.invalid
         - exam.attempt.management_authority_conflict
@@ -1224,6 +1234,9 @@ components:
         - exam.attempt.sitting_not_open
         - exam.attempt.state_conflict
         - exam.attempt.suspension_conflict
+        - exam.attempt.terminal_exited
+        - exam.attempt.terminal_limit_reached
+        - exam.attempt.terminal_not_found
         - exam.attempt.unavailable
         - exam.attempt.workspace.content_conflict
         - exam.attempt.workspace.cursor_conflict
@@ -1232,6 +1245,7 @@ components:
         - exam.attempt.workspace.entry_limit
         - exam.attempt.workspace.object_conflict
         - exam.attempt.workspace.path_conflict
+        - exam.attempt.workspace.rate_limited
         - exam.attempt.workspace.size_limit
         - exam.browser.source_budget_exhausted
         - exam.conflict
@@ -1248,6 +1262,8 @@ components:
         - exam.delivery.upload_expired
         - exam.draft.no_changes
         - exam.draft.revision_conflict
+        - exam.execution.disabled
+        - exam.execution.profile_unusable
         - exam.export.claim_lost
         - exam.export.conflict
         - exam.export.expired
@@ -1475,6 +1491,7 @@ components:
         - desktop_compatibility_policy.manage
         - desktop_registration.rename
         - desktop_registration.revoke
+        - environment_profile.manage
         - exam.attempt.browser_activity.view
         - exam.create
         - exam.create.override

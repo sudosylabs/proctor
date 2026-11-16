@@ -298,7 +298,10 @@ type runtimeComponents struct {
 	settings              runtimeSettings
 	logger                *logging.Logger
 	jobs                  runtimeComponent
-	servingLease          monitoredRuntimeComponent
+	// environments owns this node's execution environments; nil when the
+	// installation runs none.
+	environments runtimeComponent
+	servingLease monitoredRuntimeComponent
 	// plugins deactivates the plugins once nothing can call into them.
 	plugins interface{ Close(context.Context) error }
 	// pluginReconciler keeps the plugins in step with saved settings; nil
@@ -532,6 +535,14 @@ func (s *Server) startupStages() []startupStage {
 				s.recordStarted(func(m *lifecycleMilestones) { m.jobsStarted = true })
 				s.components.logger.InfoContext(ctx, "durable jobs started")
 			},
+		})
+	}
+
+	if s.components.environments != nil {
+		stages = append(stages, startupStage{
+			name:   "start attempt environments",
+			start:  s.components.environments.Start,
+			verify: s.verifyServingNodeLease,
 		})
 	}
 

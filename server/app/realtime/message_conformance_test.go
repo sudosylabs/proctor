@@ -154,8 +154,7 @@ func conformanceConstructors() map[string]func() (Event, error) {
 			return NewCandidateExamAttemptReallowedEvent(sittingID, attemptID, candidateID, at)
 		},
 		"exam_attempt_workspace_changed": func() (Event, error) {
-			return NewCandidateExamAttemptWorkspaceChangedEvent(sittingID, attemptID, candidateID,
-				model.NewAttemptWorkspaceEntryID(), model.AttemptWorkspaceMutationMoveEntry, 9, at)
+			return NewCandidateExamAttemptWorkspaceChangedEvent(sittingID, attemptID, candidateID, 7, 9, at)
 		},
 		"exam_attempt_screen_clips_requested": func() (Event, error) {
 			return NewCandidateScreenClipsRequestedEvent(sittingID, attemptID, candidateID, at)

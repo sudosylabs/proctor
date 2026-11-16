@@ -119,16 +119,6 @@ func (a InstitutionAuthorization) GrantedUserVisibility(ctx context.Context, pri
 	return a.Authorizer.GrantedUserVisibility(ctx, principal)
 }
 
-// institutionAuthorizer authorizes an Action on the installation's singleton
-// Institution and returns that Resource for the caller's audit, and reports
-// the Users the caller can see so a delivery names its recipient only inside
-// that visibility. Production passes InstitutionAuthorization; the tests
-// substitute a fake.
-type institutionAuthorizer interface {
-	AuthorizeInstitution(context.Context, invocation.Invocation, model.Action) (model.Resource, error)
-	GrantedUserVisibility(context.Context, model.Principal) (store.UserVisibilityScope, error)
-}
-
 // testLimiter counts one operator test mail for a User and reports whether
 // that User has now sent more than maximum within window. Production passes
 // the identity area's attempt accounting, which this package cannot import.
@@ -136,22 +126,16 @@ type testLimiter interface {
 	AccountMailTest(ctx context.Context, userID model.UserID, window time.Duration, maximum int) (bool, error)
 }
 
-type auditPreparer interface {
-	PrepareTest(context.Context, invocation.Invocation, model.Resource, model.MailDeliveryID) (*model.AuditEvent, error)
-	PrepareControl(context.Context, invocation.Invocation, model.Resource, *model.MailDelivery, string) (model.AuditEventID, error)
-	Fail(context.Context, model.AuditEventID, string) error
-}
-
 // OperationsDependencies are the collaborators of Operations;
 // NewOperations validates them once and Operations keeps them in deps.
-// RekeyJobs, RekeyAudit and Wake serve payload-key rotation and the Job
-// wake-up after a queued delivery; without them those use cases answer that
-// mail is unavailable.
+// RekeyJobs and Wake serve payload-key rotation and the Job wake-up after a
+// queued delivery; without them those use cases answer that mail is
+// unavailable.
 type OperationsDependencies struct {
 	Mail                    store.MailStore
 	Users                   store.UserStore
-	Authorization           institutionAuthorizer
-	Audit                   auditPreparer
+	Authorization           InstitutionAuthorization
+	Audit                   *access.Auditor
 	Attempts                testLimiter
 	Renderer                Renderer
 	Sender                  Sender
@@ -162,7 +146,6 @@ type OperationsDependencies struct {
 	// InstitutionName supplies the institution display name to mail copy.
 	InstitutionName func() string
 	RekeyJobs       store.JobStore
-	RekeyAudit      access.MutationAuditor
 	Wake            func()
 }
 
@@ -172,8 +155,12 @@ type OperationsDependencies struct {
 type Operations struct {
 	deps OperationsDependencies
 
+	// audit prepares the audit of test mail and delivery control.
+	audit access.MailAuditAdapter
+	// rekeyAudit opens and fails the attempt of a payload-key rotation; the
+	// Store completes a committed attempt.
+	rekeyAudit access.MutationAuditAdapter
 	rekeyJobs  store.JobStore
-	rekeyAudit access.MutationAuditor
 
 	composer *Composer
 
@@ -186,7 +173,8 @@ type Operations struct {
 func NewOperations(deps OperationsDependencies) (*Operations, error) {
 	if deps.Mail == nil ||
 		deps.Users == nil ||
-		deps.Authorization == nil ||
+		deps.Authorization.Authorizer == nil ||
+		deps.Authorization.Institutions == nil ||
 		deps.Audit == nil ||
 		deps.Attempts == nil ||
 		deps.Renderer == nil ||
@@ -213,8 +201,9 @@ func NewOperations(deps OperationsDependencies) (*Operations, error) {
 
 	return &Operations{
 		deps:       deps,
+		audit:      deps.Audit.MailAudit(),
+		rekeyAudit: deps.Audit.MutationAudit(),
 		rekeyJobs:  deps.RekeyJobs,
-		rekeyAudit: deps.RekeyAudit,
 		composer:   composer,
 		wake:       deps.Wake,
 	}, nil
@@ -277,7 +266,7 @@ func (s *Operations) SendTestMail(ctx context.Context, inv invocation.Invocation
 		return DeliveryView{}, apperror.New("mail.unavailable").Wrap(err)
 	}
 
-	audit, err := s.deps.Audit.PrepareTest(ctx, inv, institutionResource, prepared.Delivery.ID)
+	audit, err := s.audit.PrepareTest(ctx, inv, institutionResource, prepared.Delivery.ID)
 	if err != nil {
 		return DeliveryView{}, err
 	}
@@ -534,7 +523,7 @@ func (s *Operations) mutate(
 		}
 	}
 
-	auditID, err := s.deps.Audit.PrepareControl(ctx, inv, institutionResource, delivery, operation)
+	auditID, err := s.audit.PrepareControl(ctx, inv, institutionResource, delivery, operation)
 	if err != nil {
 		return DeliveryView{}, err
 	}
@@ -546,7 +535,7 @@ func (s *Operations) mutate(
 		AuditAt:          now,
 	})
 	if err != nil {
-		_ = s.deps.Audit.Fail(ctx, auditID, "mail.conflict")
+		_ = s.audit.Fail(ctx, auditID, "mail.conflict")
 		return DeliveryView{}, storeErrors.Translate(err)
 	}
 

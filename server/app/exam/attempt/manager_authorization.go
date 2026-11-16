@@ -12,28 +12,18 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-// SittingAuthorizer is the current Exam Manager decision the Sitting area
-// makes for a Sitting or one of its Submissions. *sitting.Service satisfies
-// it; the import policy keeps the Sitting area out of this package.
-type SittingAuthorizer interface {
-	AuthorizeSittingView(context.Context, invocation.Invocation, model.ExamSittingID) error
-	AuthorizeSittingManage(context.Context, invocation.Invocation, model.ExamSittingID) (access.ManagerAuthorization, error)
-	AuthorizeBrowserActivityView(context.Context, invocation.Invocation, model.ExamSittingID) (access.BrowserActivityAuthorization, error)
-	AuthorizeSubmissionView(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) error
-	AuthorizeSubmissionReview(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) (access.ManagerAuthorization, error)
-}
 
 // SittingManagerAuthorizer is the manager authorization the Attempt use
 // cases ask. A Sitting decision is the Sitting area's own. A Submission
 // decision first resolves the canonical Submission, because a caller names a
 // Submission without the Exam the Sitting area decides against.
 type SittingManagerAuthorizer struct {
-	Sittings    SittingAuthorizer
+	Sittings    *sitting.Service
 	Submissions store.ExamSubmissionStore
 	Audit       *access.Auditor
 }

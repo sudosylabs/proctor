@@ -155,7 +155,7 @@ func TestAccessControlAcademicPeriodPreflightDeniesBeforeInspection(t *testing.T
 	units := &accessAcademicUnitStoreFake{err: errors.New("academic period owner must not be read")}
 	resolver, err := NewScopeResolver(ScopeResolverDependencies{Institutions: &accessInstitutionStoreFake{institution: &model.Institution{ID: institutionID}}, AcademicUnits: units, Classes: &accessClassStoreFake{}, Users: &accessUserStoreFake{}, ClassMembers: &accessClassMemberStoreFake{}, Exams: &accessExamAuthoringStoreFake{}, Sittings: &accessExamSittingStoreFake{}, Submissions: &accessExamSubmissionStoreFake{}, AcademicPeriods: periods})
 	require.NoError(t, err)
-	access, err := NewAuthorizer(AuthorizerDependencies{Roles: &accessRoleStoreFake{}, Bindings: &accessRoleBindingStoreFake{}, Resolver: resolver, Audit: accessDecisionAuditFake{}})
+	access, err := NewAuthorizer(AuthorizerDependencies{Roles: &accessRoleStoreFake{}, Bindings: &accessRoleBindingStoreFake{}, Resolver: resolver, Audit: decisionAuditor()})
 	require.NoError(t, err)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
@@ -184,7 +184,7 @@ func TestAccessControlMembershipPreflightDeniesBeforeOpaqueTargetInspection(t *t
 	classes := &accessClassStoreFake{}
 	resolver, err := NewScopeResolver(ScopeResolverDependencies{Institutions: &accessInstitutionStoreFake{institution: &model.Institution{ID: institutionID}}, AcademicUnits: &accessAcademicUnitStoreFake{}, Classes: classes, Users: &accessUserStoreFake{}, ClassMembers: &accessClassMemberStoreFake{}, Exams: &accessExamAuthoringStoreFake{}, Sittings: &accessExamSittingStoreFake{}, Submissions: &accessExamSubmissionStoreFake{}, AcademicPeriods: &accessAcademicPeriodStoreFake{}})
 	require.NoError(t, err)
-	access, err := NewAuthorizer(AuthorizerDependencies{Roles: &accessRoleStoreFake{}, Bindings: &accessRoleBindingStoreFake{}, Resolver: resolver, Audit: accessDecisionAuditFake{}})
+	access, err := NewAuthorizer(AuthorizerDependencies{Roles: &accessRoleStoreFake{}, Bindings: &accessRoleBindingStoreFake{}, Resolver: resolver, Audit: decisionAuditor()})
 	require.NoError(t, err)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
@@ -226,7 +226,7 @@ func TestAccessControlAcademicPeriodScopeInheritanceAndInstitutionView(t *testin
 	}}, Classes: &accessClassStoreFake{}, Users: &accessUserStoreFake{}, ClassMembers: &accessClassMemberStoreFake{}, Exams: &accessExamAuthoringStoreFake{}, Sittings: &accessExamSittingStoreFake{}, Submissions: &accessExamSubmissionStoreFake{}, AcademicPeriods: &accessAcademicPeriodStoreFake{periods: periods}})
 	require.NoError(t, err)
 	userID, roleID := model.NewUserID(), model.NewRoleID()
-	access, err := NewAuthorizer(AuthorizerDependencies{Roles: &accessRoleStoreFake{roles: []*model.Role{{ID: roleID, Permissions: []string{string(model.ActionAcademicPeriodView), string(model.ActionAcademicPeriodManage)}}}}, Bindings: &accessRoleBindingStoreFake{bindings: []*model.RoleBinding{{RoleID: roleID, UserID: userID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: rootID.String()}}}, Resolver: resolver, Audit: accessDecisionAuditFake{}})
+	access, err := NewAuthorizer(AuthorizerDependencies{Roles: &accessRoleStoreFake{roles: []*model.Role{{ID: roleID, Permissions: []string{string(model.ActionAcademicPeriodView), string(model.ActionAcademicPeriodManage)}}}}, Bindings: &accessRoleBindingStoreFake{bindings: []*model.RoleBinding{{RoleID: roleID, UserID: userID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: rootID.String()}}}, Resolver: resolver, Audit: decisionAuditor()})
 	require.NoError(t, err)
 	principal := model.Principal{
 		UserID: userID, SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
@@ -310,7 +310,7 @@ func TestAccessControlGrantsExamViewThroughAcademicUnitScope(t *testing.T) {
 		unitID.String(): {{ID: unitID, InstitutionID: institutionID}},
 	}}, Classes: &accessClassStoreFake{}, Users: &accessUserStoreFake{}, ClassMembers: &accessClassMemberStoreFake{}, Exams: &accessExamAuthoringStoreFake{exam: exam}, Sittings: &accessExamSittingStoreFake{}, Submissions: &accessExamSubmissionStoreFake{}, AcademicPeriods: &accessAcademicPeriodStoreFake{}})
 	require.NoError(t, err)
-	access, err := NewAuthorizer(AuthorizerDependencies{Roles: &accessRoleStoreFake{roles: []*model.Role{{ID: roleID, Permissions: []string{string(model.ActionExamView)}}}}, Bindings: &accessRoleBindingStoreFake{bindings: []*model.RoleBinding{{RoleID: roleID, UserID: userID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String()}}}, Resolver: resolver, Audit: accessDecisionAuditFake{}})
+	access, err := NewAuthorizer(AuthorizerDependencies{Roles: &accessRoleStoreFake{roles: []*model.Role{{ID: roleID, Permissions: []string{string(model.ActionExamView)}}}}, Bindings: &accessRoleBindingStoreFake{bindings: []*model.RoleBinding{{RoleID: roleID, UserID: userID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String()}}}, Resolver: resolver, Audit: decisionAuditor()})
 	require.NoError(t, err)
 	principal := model.Principal{
 		UserID: userID, CredentialID: model.PrincipalCredentialID(model.NewID()),
@@ -331,7 +331,7 @@ func TestAccessControlGrantsExamCreateOverrideThroughInstitutionScope(t *testing
 		unitID.String(): {{ID: unitID, InstitutionID: institutionID}},
 	}}, Classes: &accessClassStoreFake{}, Users: &accessUserStoreFake{}, ClassMembers: &accessClassMemberStoreFake{}, Exams: &accessExamAuthoringStoreFake{}, Sittings: &accessExamSittingStoreFake{}, Submissions: &accessExamSubmissionStoreFake{}, AcademicPeriods: &accessAcademicPeriodStoreFake{}})
 	require.NoError(t, err)
-	access, err := NewAuthorizer(AuthorizerDependencies{Roles: &accessRoleStoreFake{roles: []*model.Role{{ID: roleID, Permissions: []string{string(model.ActionExamCreateOverride)}}}}, Bindings: &accessRoleBindingStoreFake{bindings: []*model.RoleBinding{{RoleID: roleID, UserID: userID, ScopeType: model.RoleScopeInstitution, ScopeID: institutionID.String()}}}, Resolver: resolver, Audit: accessDecisionAuditFake{}})
+	access, err := NewAuthorizer(AuthorizerDependencies{Roles: &accessRoleStoreFake{roles: []*model.Role{{ID: roleID, Permissions: []string{string(model.ActionExamCreateOverride)}}}}, Bindings: &accessRoleBindingStoreFake{bindings: []*model.RoleBinding{{RoleID: roleID, UserID: userID, ScopeType: model.RoleScopeInstitution, ScopeID: institutionID.String()}}}, Resolver: resolver, Audit: decisionAuditor()})
 	require.NoError(t, err)
 	principal := model.Principal{
 		UserID: userID, CredentialID: model.PrincipalCredentialID(model.NewID()),
@@ -384,7 +384,7 @@ func TestAccessControlUsesNativeRoleBindingDecisionTime(t *testing.T) {
 				}
 				return nil, nil
 			}}
-			authorization, err := NewAuthorizer(AuthorizerDependencies{Roles: &accessRoleStoreFake{roles: []*model.Role{{ID: roleID, Permissions: []string{string(model.ActionAcademicUnitView)}}}}, Bindings: bindings, Resolver: resolver, Audit: accessDecisionAuditFake{}})
+			authorization, err := NewAuthorizer(AuthorizerDependencies{Roles: &accessRoleStoreFake{roles: []*model.Role{{ID: roleID, Permissions: []string{string(model.ActionAcademicUnitView)}}}}, Bindings: bindings, Resolver: resolver, Audit: decisionAuditor()})
 			require.NoError(t, err)
 			authorization.now = func() time.Time { return test.at }
 			allowed, err := authorization.Can(context.Background(), principal, model.ActionAcademicUnitView,
@@ -414,7 +414,7 @@ func TestAccessScopeConstraintsAreBoundedAndRespectPATCeiling(t *testing.T) {
 		childID.String(): {{ID: rootID, InstitutionID: institutionID}, {ID: childID, InstitutionID: institutionID}},
 	}}, Classes: &accessClassStoreFake{}, Users: &accessUserStoreFake{}, ClassMembers: &accessClassMemberStoreFake{}, Exams: &accessExamAuthoringStoreFake{}, Sittings: &accessExamSittingStoreFake{}, Submissions: &accessExamSubmissionStoreFake{}, AcademicPeriods: &accessAcademicPeriodStoreFake{}})
 	require.NoError(t, err)
-	authorization, err := NewAuthorizer(AuthorizerDependencies{Roles: &accessRoleStoreFake{roles: []*model.Role{{ID: roleID, Permissions: []string{string(model.ActionAcademicUnitView)}}}}, Bindings: &accessRoleBindingStoreFake{bindings: []*model.RoleBinding{{RoleID: roleID, UserID: userID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: childID.String()}}}, Resolver: resolver, Audit: accessDecisionAuditFake{}})
+	authorization, err := NewAuthorizer(AuthorizerDependencies{Roles: &accessRoleStoreFake{roles: []*model.Role{{ID: roleID, Permissions: []string{string(model.ActionAcademicUnitView)}}}}, Bindings: &accessRoleBindingStoreFake{bindings: []*model.RoleBinding{{RoleID: roleID, UserID: userID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: childID.String()}}}, Resolver: resolver, Audit: decisionAuditor()})
 	require.NoError(t, err)
 	authorization.now = func() time.Time { return now }
 	principal := model.Principal{
@@ -459,7 +459,7 @@ func TestUserVisibilityScopeKeepsRelationshipAndClassMemberAuthoritySeparate(t *
 	authorization, err := NewAuthorizer(AuthorizerDependencies{Roles: &accessRoleStoreFake{roles: []*model.Role{
 		{ID: userViewRoleID, Permissions: []string{string(model.ActionUserView)}},
 		{ID: classMembersRoleID, Permissions: []string{string(model.ActionClassMembersView)}},
-	}}, Bindings: bindings, Resolver: resolver, Audit: accessDecisionAuditFake{}})
+	}}, Bindings: bindings, Resolver: resolver, Audit: decisionAuditor()})
 	require.NoError(t, err)
 	clockCalls := 0
 	authorization.now = func() time.Time {
@@ -503,7 +503,7 @@ func TestUserReadMatchesInstitutionWideClassMemberVisibility(t *testing.T) {
 		ID: roleID, Permissions: []string{string(model.ActionClassMembersView)},
 	}}}, Bindings: &accessRoleBindingStoreFake{bindings: []*model.RoleBinding{{
 		RoleID: roleID, UserID: viewerID, ScopeType: model.RoleScopeInstitution, ScopeID: institutionID.String(),
-	}}}, Resolver: resolver, Audit: accessDecisionAuditFake{}})
+	}}}, Resolver: resolver, Audit: decisionAuditor()})
 	require.NoError(t, err)
 	authorization.now = func() time.Time { return now }
 	principal := model.Principal{
@@ -539,7 +539,7 @@ func TestDelegationCeilingRequiresOwnedActionAndContainingScope(t *testing.T) {
 		string(model.ActionProgrammeManage), string(model.ActionRoleBindingManage),
 	}}}}, Bindings: &accessRoleBindingStoreFake{bindings: []*model.RoleBinding{{
 		UserID: userID, RoleID: roleID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: rootID.String(),
-	}}}, Resolver: resolver, Audit: accessDecisionAuditFake{}})
+	}}}, Resolver: resolver, Audit: decisionAuditor()})
 	require.NoError(t, err)
 	principal := model.Principal{
 		UserID: userID, CredentialID: model.PrincipalCredentialID(model.NewID()),
@@ -611,7 +611,7 @@ func TestAccessControlPreservesIntrinsicSelfRead(t *testing.T) {
 	}
 	resolver, err := NewScopeResolver(ScopeResolverDependencies{Institutions: &accessInstitutionStoreFake{institution: institution}, AcademicUnits: &accessAcademicUnitStoreFake{}, Classes: &accessClassStoreFake{}, Users: &accessUserStoreFake{user: user}, ClassMembers: &accessClassMemberStoreFake{}, Exams: &accessExamAuthoringStoreFake{}, Sittings: &accessExamSittingStoreFake{}, Submissions: &accessExamSubmissionStoreFake{}, AcademicPeriods: &accessAcademicPeriodStoreFake{}})
 	require.NoError(t, err)
-	access, err := NewAuthorizer(AuthorizerDependencies{Roles: &accessRoleStoreFake{}, Bindings: &accessRoleBindingStoreFake{}, Resolver: resolver, Audit: accessDecisionAuditFake{}})
+	access, err := NewAuthorizer(AuthorizerDependencies{Roles: &accessRoleStoreFake{}, Bindings: &accessRoleBindingStoreFake{}, Resolver: resolver, Audit: decisionAuditor()})
 	require.NoError(t, err)
 	principal := model.Principal{
 		UserID: user.ID, CredentialID: model.PrincipalCredentialID(model.NewID()),
@@ -767,12 +767,8 @@ func (s *accessRoleBindingStoreFake) ListActiveByUser(_ context.Context, _ model
 	return s.bindings, nil
 }
 
-type accessDecisionAuditFake struct{}
-
-func (accessDecisionAuditFake) RecordAuthorizationDecision(context.Context, model.Principal, model.Action, model.Resource, model.RoleScopeType, string, model.RequestMetadata, bool) error {
-	return nil
-}
-
-func (accessDecisionAuditFake) RecordUserSearchDecision(context.Context, model.Principal, model.Resource, model.RoleScopeType, string, model.RequestMetadata, bool) error {
-	return nil
+// decisionAuditor is a real Auditor over a store that keeps the last
+// decision, so the authorizer records decisions as production does.
+func decisionAuditor() *Auditor {
+	return &Auditor{deps: AuditorDependencies{Audits: &savingAuditStore{}, NodeID: "test-node"}, now: time.Now}
 }

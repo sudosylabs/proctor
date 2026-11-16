@@ -8,7 +8,6 @@
 package sitting
 
 import (
-	"context"
 	"errors"
 	"time"
 
@@ -24,13 +23,6 @@ type LifecycleJobFactory interface {
 	BoundaryJobs(model.ExamSittingID, int64, time.Time, time.Time) (*model.Job, *model.Job, error)
 	DeadlineJob(model.ExamSittingID, int64, time.Time) (*model.Job, error)
 	FinalizeJob(model.ExamSittingID, int64, time.Time) (*model.Job, error)
-}
-
-// ScheduleMailPreparer owns the bounded, presentation-ready fan-out intent.
-// The Sitting service supplies only safe schedule facts; it cannot select
-// recipients, delivery work, ciphertext, or fan-out deadlines.
-type ScheduleMailPreparer interface {
-	Prepare(context.Context, ScheduleMailRequest) (*store.ExamSittingMailFanout, error)
 }
 
 // ScheduleMailRequest is the committed schedule fact a schedule notice
@@ -66,7 +58,7 @@ type Service struct {
 	systemAuditor access.SystemAuditAdapter
 	publisher     realtime.Publisher
 	jobs          LifecycleJobFactory
-	mail          ScheduleMailPreparer
+	mail          ScheduleMail
 	now           func() time.Time
 	newID         func() model.ExamSittingID
 	operational   OperationalRecorder
@@ -88,7 +80,7 @@ type Dependencies struct {
 	Auditor     *access.Auditor
 	Publisher   realtime.Publisher
 	Jobs        LifecycleJobFactory
-	Mail        ScheduleMailPreparer
+	Mail        ScheduleMail
 	Now         func() time.Time
 	NewID       func() model.ExamSittingID
 	Operational OperationalRecorder
@@ -104,7 +96,9 @@ func New(deps Dependencies) (*Service, error) {
 		deps.Auditor == nil ||
 		deps.Publisher == nil ||
 		deps.Jobs == nil ||
-		deps.Mail == nil ||
+		deps.Mail.Composer == nil ||
+		deps.Mail.Revisions == nil ||
+		deps.Mail.Classes == nil ||
 		deps.Now == nil ||
 		deps.NewID == nil {
 		return nil, errors.New("Exam Sitting dependencies are required")

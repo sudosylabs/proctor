@@ -12,19 +12,11 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-// SittingAuthorizer is the current Exam Manager decision the Sitting area
-// makes for one Submission of an Exam. *sitting.Service satisfies it; this
-// package cannot import the Sitting area.
-type SittingAuthorizer interface {
-	AuthorizeSubmissionView(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) error
-	AuthorizeSubmissionReview(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) (access.ManagerAuthorization, error)
-	AuthorizeSubmissionRelease(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) (access.ManagerAuthorization, error)
-}
 
 // SittingManagerAuthorizer is the Submission authorization the Integrity
 // review use cases ask. Every decision first resolves the canonical
@@ -35,7 +27,7 @@ type SittingAuthorizer interface {
 // current Exam Manager decision is asked.
 type SittingManagerAuthorizer struct {
 	Reviews  store.ExamIntegrityReviewStore
-	Sittings SittingAuthorizer
+	Sittings *sitting.Service
 	Audit    *access.Auditor
 }
 

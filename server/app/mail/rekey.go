@@ -94,7 +94,7 @@ func (s *Operations) StartMailRekey(ctx context.Context, inv invocation.Invocati
 	if err != nil {
 		return RekeyView{}, err
 	}
-	if s.deps.Mail == nil || s.rekeyAudit == nil || s.deps.Sealer == nil || s.wake == nil {
+	if s.deps.Mail == nil || s.deps.Sealer == nil || s.wake == nil {
 		return RekeyView{}, apperror.New("mail.unavailable")
 	}
 

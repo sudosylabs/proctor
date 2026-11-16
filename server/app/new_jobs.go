@@ -102,7 +102,7 @@ func newJobRuntime(
 			Mail:                    deps.Store.Mail(),
 			Users:                   deps.Store.User(),
 			Authorization:           mail.InstitutionAuthorization{Authorizer: authorizer, Institutions: deps.Store.Institution()},
-			Audit:                   shared.audit.MailAudit(),
+			Audit:                   shared.audit,
 			Attempts:                shared.attempts,
 			Renderer:                deps.MailTemplateRenderer,
 			Sender:                  deps.MailDeliverySender,
@@ -112,7 +112,6 @@ func newJobRuntime(
 			Now:                     time.Now,
 			InstitutionName:         newInstitutionName(deps),
 			RekeyJobs:               deps.Store.Job(),
-			RekeyAudit:              shared.audit.MutationAudit(),
 			Wake:                    engine.Wake,
 		})
 		if err != nil {
@@ -123,7 +122,7 @@ func newJobRuntime(
 	operations, err := job.NewOperations(job.OperationsDependencies{
 		Jobs:          engine,
 		Authorization: job.InstitutionAuthorization{Authorizer: authorizer, Institutions: deps.Store.Institution()},
-		Audit:         shared.audit.MutationAudit(),
+		Audit:         shared.audit,
 		Users:         deps.Store.User(),
 		ExamExports:   deps.Store.ExamExport(),
 		Now:           time.Now,
@@ -317,7 +316,7 @@ func domainEventSubscriptions(deps Dependencies) []events.Subscription {
 	topics := environment.Topics()
 	subscriptions := make([]events.Subscription, len(topics))
 	for index, topic := range topics {
-		subscriptions[index] = events.Subscription{Key: "attempt_environment:" + string(topic), Topic: topic, Handler: facts}
+		subscriptions[index] = events.Subscription{Key: "attempt_environment:" + string(topic), Topic: topic, Handle: facts.HandleEvent}
 	}
 	return subscriptions
 }

@@ -15,10 +15,10 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// SubmissionReceiptMail is the SubmissionMailPreparer the application runs.
-// It reads the candidate, the Sitting and the published Exam title the
-// receipt shows, and has the mail composer freeze the receipt for that
-// candidate alone.
+// SubmissionReceiptMail prepares the candidate's Submission receipt. It
+// reads the candidate, the Sitting and the published Exam title the receipt
+// shows, and has the mail composer freeze the receipt for that candidate
+// alone.
 type SubmissionReceiptMail struct {
 	Composer  *mail.Composer
 	Users     store.UserStore

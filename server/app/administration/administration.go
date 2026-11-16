@@ -48,8 +48,8 @@ import (
 type Dependencies struct {
 	Store        store.Catalog
 	Authorizer   *access.Authorizer
-	Auditor      access.MutationAuditor
-	Capabilities identity.AccessPolicyCapabilitySource
+	Auditor      *access.Auditor
+	Capabilities *identity.DeploymentCapabilities
 	Mail         *mail.Composer
 	Publisher    realtime.Publisher
 	// CanonicalOrigin, SupportAddress and PasswordMinimumLength are the
@@ -83,11 +83,13 @@ type Service struct {
 	// administration unavailable.
 	environmentProfiles store.EnvironmentProfileStore
 
-	authorizer   *access.Authorizer
-	auditor      access.MutationAuditor
+	authorizer *access.Authorizer
+	// auditor opens the attempt of each mutation and fails it when the
+	// mutation does not commit; the Store completes a committed attempt.
+	auditor      access.MutationAuditAdapter
 	publisher    realtime.Publisher
 	mail         *mail.Composer
-	capabilities identity.AccessPolicyCapabilitySource
+	capabilities *identity.DeploymentCapabilities
 	plugins      PluginCatalog
 
 	// canonicalOrigin, supportAddress and passwordMinimumLength are the
@@ -149,7 +151,7 @@ func New(deps Dependencies) (*Service, error) {
 		environmentProfiles:     catalog.EnvironmentProfile(),
 		retention:               catalog.Retention(),
 		authorizer:              deps.Authorizer,
-		auditor:                 deps.Auditor,
+		auditor:                 deps.Auditor.MutationAudit(),
 		publisher:               deps.Publisher,
 		mail:                    deps.Mail,
 		capabilities:            deps.Capabilities,

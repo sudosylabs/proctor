@@ -18,7 +18,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -30,35 +29,42 @@ import (
 
 func TestManagerAttemptOperationsAuthorizeBeforeReadingAttempts(t *testing.T) {
 	t.Parallel()
-	denied := apperror.New("authorization.denied")
 	// Each operation records only its authorization decision before refusing.
+	viewDenied := []string{"grants", "decision:" + string(model.ActionExamSittingViewOverride) + ":fail"}
+	manageDenied := []string{"grants", "decision:" + string(model.ActionExamSittingManageOverride) + ":fail"}
+	browserDenied := []string{"decision:" + string(model.ActionExamAttemptBrowserActivityView) + ":fail"}
+	// A caller outside the Exam is refused with the same code whether or
+	// not the Attempt exists. The Sitting area conceals the browser-activity
+	// refusal itself, as exam.sitting.not_found, before any decision is
+	// asked, so it records only the denial.
 	operations := map[string]struct {
-		authorization string
+		authorization []string
+		code          string
 		run           func(*fixture, model.ExamAttemptID) error
 	}{
-		"get": {authorization: "manager.authorize", run: func(f *fixture, attemptID model.ExamAttemptID) error {
+		"get": {authorization: viewDenied, code: "resource.not_found", run: func(f *fixture, attemptID model.ExamAttemptID) error {
 			_, err := f.service.GetExamAttempt(context.Background(), f.inv, f.sitting.ExamID, f.sitting.ID, attemptID)
 			return err
 		}},
-		"reallow": {authorization: "manager.manage", run: func(f *fixture, attemptID model.ExamAttemptID) error {
+		"reallow": {authorization: manageDenied, code: "resource.not_found", run: func(f *fixture, attemptID model.ExamAttemptID) error {
 			_, err := f.service.ReallowExamAttempt(context.Background(), f.inv, ReallowCommand{
 				ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: attemptID, SuspensionID: model.NewAttemptSuspensionID(),
 				ExpectedAttemptRevision: 2, PrivateReason: "probe", IdempotencyKey: "probe-key"})
 			return err
 		}},
-		"end": {authorization: "manager.manage", run: func(f *fixture, attemptID model.ExamAttemptID) error {
+		"end": {authorization: manageDenied, code: "resource.not_found", run: func(f *fixture, attemptID model.ExamAttemptID) error {
 			_, err := f.service.EndExamAttemptByManager(context.Background(), f.inv, ManagerEndCommand{
 				ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: attemptID,
 				ExpectedAttemptRevision: 2, PrivateReason: "probe", IdempotencyKey: "probe-key"})
 			return err
 		}},
-		"suspend": {authorization: "manager.manage", run: func(f *fixture, attemptID model.ExamAttemptID) error {
+		"suspend": {authorization: manageDenied, code: "resource.not_found", run: func(f *fixture, attemptID model.ExamAttemptID) error {
 			_, err := f.service.SuspendExamAttempt(context.Background(), f.inv, ManualSuspensionCommand{
 				ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: attemptID,
 				ExpectedAttemptRevision: 2, PrivateReason: "probe", IdempotencyKey: "probe-key"})
 			return err
 		}},
-		"browser_activity": {authorization: "browser.authorize", run: func(f *fixture, attemptID model.ExamAttemptID) error {
+		"browser_activity": {authorization: browserDenied, code: "exam.sitting.not_found", run: func(f *fixture, attemptID model.ExamAttemptID) error {
 			_, err := f.service.ListExamAttemptBrowserActivity(context.Background(), f.inv, BrowserActivityPageQuery{
 				ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: attemptID, Limit: 10})
 			return err
@@ -70,8 +76,7 @@ func TestManagerAttemptOperationsAuthorizeBeforeReadingAttempts(t *testing.T) {
 			var codes []string
 			for _, existing := range []bool{true, false} {
 				f := newFixture(t)
-				useManagerCall(f)
-				f.managerErr = denied
+				useOutsiderCall(f)
 				f.persistence.attempt, f.persistence.managerSuspension = managerAttemptFixture(t, f, model.ExamAttemptSuspended, 2,
 					model.NewAttemptSuspensionID())
 				attemptID := f.attemptID
@@ -82,11 +87,11 @@ func TestManagerAttemptOperationsAuthorizeBeforeReadingAttempts(t *testing.T) {
 				var fault *apperror.Error
 				require.ErrorAs(t, err, &fault, "existing=%t error", existing)
 				codes = append(codes, fault.Code())
-				require.Equal(t, []string{operation.authorization}, f.order, "existing=%t denied caller reached Attempt state", existing)
+				require.Equal(t, operation.authorization, f.order, "existing=%t denied caller reached Attempt state", existing)
 				require.Nil(t, f.audit().values, "existing=%t denied caller reached Attempt state: order=%v audit", existing, f.order)
 			}
 			require.Equal(t, codes[1], codes[0])
-			require.Equal(t, "resource.not_found", codes[0])
+			require.Equal(t, operation.code, codes[0])
 		})
 	}
 }
@@ -127,24 +132,29 @@ type fixture struct {
 	persistence  *attemptStoreFake
 	workspace    *attemptWorkspaceStoreFake
 	submissions  *submissionStoreFake
-	mail         *submissionMailFake
+	mail         *receiptMail
 	// control is the real auditor. What it records joins order as
 	// "audit-begin:<action>", "audit-<status>" and
 	// "decision:<action>:<status>".
-	control                   *accesstest.Fixture
-	publisher                 *realtimetest.Publisher
-	content                   *contentFake
-	managerOverride           bool
-	clipReviewer              bool
-	managerErr                error
-	focusSignalID             model.FocusLossSignalID
-	focusFlagID               model.IntegrityFlagID
-	discrepancyID             model.IntegrityDiscrepancyID
-	submissionID              model.SubmissionID
-	receiptCode               model.SubmissionReceiptCode
-	submissionAuthorizationID model.SubmissionID
-	configuration             model.AttemptConfiguration
-	desktopBuild              model.DesktopBuildTuple
+	control   *accesstest.Fixture
+	publisher *realtimetest.Publisher
+	content   *contentFake
+	// managers is the Sitting area's real Exam Manager decision for the
+	// fixture's Exam. managerID manages it from its Academic Unit, unitID;
+	// reviewerID may only review its Submissions. otherUnitID is a second
+	// unit a Submission may be recorded at.
+	managers      *sittingManagers
+	managerID     model.UserID
+	reviewerID    model.UserID
+	unitID        model.AcademicUnitID
+	otherUnitID   model.AcademicUnitID
+	focusSignalID model.FocusLossSignalID
+	focusFlagID   model.IntegrityFlagID
+	discrepancyID model.IntegrityDiscrepancyID
+	submissionID  model.SubmissionID
+	receiptCode   model.SubmissionReceiptCode
+	configuration model.AttemptConfiguration
+	desktopBuild  model.DesktopBuildTuple
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -162,9 +172,24 @@ func newFixture(t *testing.T) *fixture {
 	f.persistence = &attemptStoreFake{f: f, firstAdmission: true, connectionOpened: true}
 	f.workspace = &attemptWorkspaceStoreFake{f: f}
 	f.submissions = &submissionStoreFake{f: f}
-	f.mail = &submissionMailFake{f: f}
+	f.mail = newReceiptMail(t, f)
+	f.managerID, f.reviewerID = model.NewUserID(), model.NewUserID()
+	f.unitID, f.otherUnitID = model.NewAcademicUnitID(), model.NewAcademicUnitID()
+	f.managers = &sittingManagers{
+		exam:     func() *model.Exam { return &model.Exam{ID: f.sitting.ExamID, AcademicUnitID: f.unitID} },
+		sitting:  func() *model.ExamSitting { return f.sitting },
+		managers: map[model.UserID]bool{f.managerID: true, f.reviewerID: true},
+		members:  map[model.UserID]bool{f.managerID: true, f.reviewerID: true},
+	}
 	f.control = accesstest.New(t, accesstest.Options{Now: func() time.Time { return f.at },
-		Observe: func(event string) { f.order = append(f.order, event) }})
+		Observe: func(event string) { f.order = append(f.order, event) },
+		Units:   []*model.AcademicUnit{{ID: f.otherUnitID, Name: "Other unit"}},
+		Grants: []accesstest.Grant{
+			managerGrant(f.managerID, f.unitID),
+			{UserID: f.reviewerID, Actions: []model.Action{model.ActionSubmissionReview}},
+		},
+		Exams: f.managers.exams(), Sittings: f.managers.sittings(), Submissions: quietSubmissions{submissions: f.submissions},
+	})
 	f.publisher = publisherIn(&f.order)
 	f.content = &contentFake{f: f}
 	f.desktopBuild = model.DesktopBuildTuple{DesktopRelease: "1.0.0", DesktopBuildID: "attempt-test",
@@ -179,8 +204,9 @@ func newFixture(t *testing.T) *fixture {
 	service, err := New(Dependencies{
 		Persistence: f.persistence, FocusLoss: f.persistence, SecurityPreflight: f.persistence, NativeDelivery: f.persistence,
 		BrowserDelivery: f.persistence, DeliveryBudget: f.persistence, Workspace: f.workspace, Submissions: f.submissions, Sittings: &sittingFake{f: f},
-		Managers: SittingManagerAuthorizer{Sittings: &managerFake{f: f}, Submissions: f.submissions, Audit: f.control.Auditor},
-		Auditor:  f.control.Auditor, Publisher: f.publisher, Content: f.content, Mail: f.mail,
+		Managers: SittingManagerAuthorizer{Sittings: f.managers.service(t, f.control, func() time.Time { return f.at }),
+			Submissions: f.submissions, Audit: f.control.Auditor},
+		Auditor: f.control.Auditor, Publisher: f.publisher, Content: f.content, Mail: f.mail.preparer,
 		DesktopBuilds: &desktopBuildResolverFake{f: f},
 		Now:           func() time.Time { return f.at }, NewAttemptID: model.NewExamAttemptID, NewWorkspaceID: model.NewExamAttemptWorkspaceID,
 		NewParticipation: model.NewAttemptParticipationID, NewConnection: model.NewAttemptConnectionID,
@@ -240,12 +266,28 @@ func validConnectCommand(f *fixture, credential, key string) ConnectCommand {
 		InitialConfiguration:             &configuration.AttemptConfigurationCandidate, IdempotencyKey: key}
 }
 
-func useManagerCall(f *fixture) model.UserID {
+// useManagerCall makes the fixture's calls as the Exam Manager, who holds the
+// Sitting and Submission permissions and their overrides in the Exam's unit.
+func useManagerCall(f *fixture) model.UserID { return useCall(f, f.managerID) }
+
+// useReviewerCall makes the fixture's calls as a User who may review the
+// Exam's Submissions but not manage its Sitting.
+func useReviewerCall(f *fixture) model.UserID { return useCall(f, f.reviewerID) }
+
+// useOutsiderCall makes the fixture's calls as a User with no relationship
+// to the Exam and no grant.
+func useOutsiderCall(f *fixture) model.UserID { return useCall(f, model.NewUserID()) }
+
+func useCall(f *fixture, userID model.UserID) model.UserID {
 	principal := f.inv.Principal()
-	principal.UserID = model.NewUserID()
+	principal.UserID = userID
 	f.inv = invocation.New(principal, f.inv.RequestMetadata())
-	return principal.UserID
+	return userID
 }
+
+// useManagerOverride leaves the Exam Manager without current membership of
+// the Exam's unit, so the Sitting area decides on the override Actions.
+func useManagerOverride(f *fixture) { delete(f.managers.members, f.managerID) }
 
 func managerAttemptFixture(t *testing.T, f *fixture, state model.ExamAttemptState, revision int64,
 	suspensionID model.AttemptSuspensionID,
@@ -295,38 +337,6 @@ type sittingFake struct {
 func (f *sittingFake) Resolve(context.Context, model.ExamSittingID) (*store.ExamSittingSnapshot, error) {
 	f.f.order = append(f.f.order, "sitting")
 	return &store.ExamSittingSnapshot{Sitting: f.f.sitting}, nil
-}
-
-// managerFake is the Sitting area's Exam Manager decision, which this
-// package reaches only through SittingAuthorizer. managerErr refuses the
-// Sitting and review decisions; clipReviewer refuses only the Sitting
-// management decision, so the caller sees an Attempt's clips as a reviewer
-// of its Submission.
-type managerFake struct{ f *fixture }
-
-func (f *managerFake) AuthorizeSittingView(context.Context, invocation.Invocation, model.ExamSittingID) error {
-	f.f.order = append(f.f.order, "manager.authorize")
-	return f.f.managerErr
-}
-func (f *managerFake) AuthorizeSittingManage(context.Context, invocation.Invocation, model.ExamSittingID) (access.ManagerAuthorization, error) {
-	f.f.order = append(f.f.order, "manager.manage")
-	if f.f.clipReviewer && f.f.managerErr == nil {
-		return access.ManagerAuthorization{}, apperror.New("authorization.denied")
-	}
-	return access.ManagerAuthorization{Override: f.f.managerOverride}, f.f.managerErr
-}
-func (f *managerFake) AuthorizeSubmissionView(_ context.Context, _ invocation.Invocation, _ model.ExamID, submissionID model.SubmissionID) error {
-	f.f.order = append(f.f.order, "submission.authorize")
-	f.f.submissionAuthorizationID = submissionID
-	return nil
-}
-func (f *managerFake) AuthorizeSubmissionReview(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) (access.ManagerAuthorization, error) {
-	f.f.order = append(f.f.order, "submission.review")
-	return access.ManagerAuthorization{}, f.f.managerErr
-}
-func (f *managerFake) AuthorizeBrowserActivityView(context.Context, invocation.Invocation, model.ExamSittingID) (access.BrowserActivityAuthorization, error) {
-	f.f.order = append(f.f.order, "browser.authorize")
-	return access.BrowserActivityAuthorization{AcademicUnitID: model.NewAcademicUnitID()}, f.f.managerErr
 }
 
 // auditRecord is a mutation attempt as the real auditor stored it.

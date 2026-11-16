@@ -80,11 +80,12 @@ func TestCreateEnvironmentProfileIsAuditedAndIdempotent(t *testing.T) {
 	require.Equal(t, "python-small", profile.Name)
 	require.Equal(t, fixture.inv.Principal().UserID, profile.CreatedByUserID)
 	require.Equal(t, []string{"environment_profile.manage institution:" + fixture.institution.ID.String() + " success"}, decisions(fixture.access))
-	require.Equal(t, model.ActionEnvironmentProfileManage, fixture.audit.attempt.Action)
-	require.Equal(t, "create", fixture.audit.attempt.Operation)
-	require.Equal(t, map[string]any{"name": "python-small", "image": "python-3.12"}, fixture.audit.attempt.Value)
+	attempt := onlyAttempt(t, fixture.access)
+	require.Equal(t, string(model.ActionEnvironmentProfileManage), attempt.Action)
+	require.Equal(t, "create", attempt.Operation)
+	require.Equal(t, map[string]any{"name": "python-small", "image": "python-3.12"}, attempt.Value)
 	require.Equal(t, store.EnvironmentProfileCreateOperation, profiles.command.Operation)
-	require.Equal(t, fixture.audit.beginID, profiles.created.AuditEventID.String())
+	require.Equal(t, attempt.ID, profiles.created.AuditEventID)
 }
 
 func TestCreateEnvironmentProfileRefusesAnInvalidProfileBeforeAuditing(t *testing.T) {
@@ -97,7 +98,7 @@ func TestCreateEnvironmentProfileRefusesAnInvalidProfileBeforeAuditing(t *testin
 	})
 	require.True(t, apperror.Is(err, "environment_profile.invalid"), "error = %v", err)
 	require.Nil(t, profiles.created)
-	require.Empty(t, fixture.audit.attempt.Action)
+	require.Empty(t, fixture.access.Audits.Attempts(), "nothing is audited")
 }
 
 func TestEnvironmentProfileStoreRefusalsBecomeTheirCodes(t *testing.T) {
@@ -134,7 +135,7 @@ func TestRetireAndListEnvironmentProfiles(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, retired.Retired())
 	require.Equal(t, existing.ID, profiles.retired.ProfileID)
-	require.Equal(t, "retire", fixture.audit.attempt.Operation)
+	require.Equal(t, "retire", onlyAttempt(t, fixture.access).Operation)
 	require.Equal(t, store.EnvironmentProfileRetireOperation, profiles.command.Operation)
 
 	_, err = fixture.service.ListEnvironmentProfiles(t.Context(), fixture.stranger, false)

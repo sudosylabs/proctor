@@ -54,7 +54,7 @@ type MutationReference struct {
 // audit.internal before the auditor is asked to begin.
 func RunAudited[T any](
 	ctx context.Context,
-	auditor MutationAuditor,
+	auditor MutationAuditAdapter,
 	attempt Mutation,
 	mutate func(context.Context, MutationReference) (T, error),
 	mapError func(error) error,

@@ -91,7 +91,7 @@ func (f *domainEventDispatchFixture) run(t *testing.T, handlerErrors ...error) j
 	for index, handlerErr := range handlerErrors {
 		name := fmt.Sprint(index)
 		subscriptions = append(subscriptions, events.Subscription{Key: name, Topic: model.DomainEventTopicExamAttemptSubmitted,
-			Handler: eventHandlerFake{name: name, err: handlerErr, calls: &f.calls, received: &f.received}})
+			Handle: eventHandlerFake{name: name, err: handlerErr, calls: &f.calls, received: &f.received}.HandleEvent})
 	}
 	dispatcher, err := events.NewDispatcher(subscriptions)
 	require.NoError(t, err)

@@ -48,8 +48,7 @@ func TestScheduleCreatesAuthorizedSittingAndPublishesSafeEffect(t *testing.T) {
 	require.Equal(t, int64(1), fixture.jobs.boundaryRevision, "store schedule")
 	require.True(t, fixture.jobs.boundaryStart.Equal(start), "store schedule")
 	require.True(t, fixture.jobs.boundaryEnd.Equal(end), "store schedule")
-	require.Same(t, fixture.mail.result, fixture.persistence.schedule.Mail, "store schedule")
-	require.Equal(t, store.ExamSittingMailScheduled, fixture.mail.request.ChangeKind, "store schedule")
+	fixture.mail.requirePrepared(t, fixture.persistence.schedule.Mail, store.ExamSittingMailScheduled, fixture.userID)
 	wantIdempotency, err := prepareScheduleIdempotency(fixture.inv, command)
 	require.NoError(t, err)
 	require.Equal(t, wantIdempotency, fixture.persistence.command)
@@ -172,10 +171,14 @@ func TestUpdateScheduleUsesSittingManagementAndOptimisticFence(t *testing.T) {
 	require.Equal(t, int64(2), fixture.jobs.boundaryRevision, "boundary Jobs = %#v %#v, factory revision/times = %d %v %v", input.OpenJob, input.DeadlineJob, fixture.jobs.boundaryRevision, fixture.jobs.boundaryStart, fixture.jobs.boundaryEnd)
 	require.True(t, fixture.jobs.boundaryStart.Equal(changedStart), "boundary Jobs = %#v %#v, factory revision/times = %d %v %v", input.OpenJob, input.DeadlineJob, fixture.jobs.boundaryRevision, fixture.jobs.boundaryStart, fixture.jobs.boundaryEnd)
 	require.True(t, fixture.jobs.boundaryEnd.Equal(changedEnd), "boundary Jobs = %#v %#v, factory revision/times = %d %v %v", input.OpenJob, input.DeadlineJob, fixture.jobs.boundaryRevision, fixture.jobs.boundaryStart, fixture.jobs.boundaryEnd)
-	require.Same(t, fixture.mail.result, input.Mail, "mail preparation = %#v, store", fixture.mail.request)
-	require.Equal(t, store.ExamSittingMailRescheduled, fixture.mail.request.ChangeKind, "mail preparation = %#v, store", fixture.mail.request)
-	require.Equal(t, fixture.classID, fixture.mail.request.PriorClassID, "mail preparation = %#v, store", fixture.mail.request)
-	require.Equal(t, int64(2), fixture.mail.request.SittingRevision, "mail preparation = %#v, store", fixture.mail.request)
+	fixture.mail.requirePrepared(t, input.Mail, store.ExamSittingMailRescheduled, fixture.userID)
+	// The prior Class is the Sitting's own, so the notice reads that Class
+	// alone and names it as both the current and the prior one.
+	require.Equal(t, []model.ClassID{fixture.classID}, fixture.mail.classes.reads, "Classes the notice read")
+	for _, details := range fixture.mail.renderer.details {
+		require.Equal(t, fixture.mail.className, details.PriorClassDisplayName, "rendered prior Class")
+		require.True(t, details.StartsAt.Equal(changedStart) && details.EndsAt.Equal(changedEnd), "rendered schedule = %v %v", details.StartsAt, details.EndsAt)
+	}
 	require.Equal(t, fixture.revisionID, input.ExamRevisionID)
 	require.Equal(t, fixture.classID, input.ClassID)
 	require.True(t, input.ScheduledStartAt.Equal(changedStart))

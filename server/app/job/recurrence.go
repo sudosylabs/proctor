@@ -61,16 +61,16 @@ func runRecurrenceProposal(
 	ctx context.Context,
 	recurrence Recurrence,
 	diagnostics *logging.Logger,
-	clock Clock,
+	now func() time.Time,
 	retryDelay time.Duration,
 	wake func(),
 	recorder Recorder,
 ) {
-	if recurrence.Name == "" || recurrence.Proposer == nil || diagnostics == nil || clock == nil || retryDelay <= 0 {
+	if recurrence.Name == "" || recurrence.Proposer == nil || diagnostics == nil || now == nil || retryDelay <= 0 {
 		return
 	}
 
-	occurrence := clock.Now().UTC()
+	occurrence := now().UTC()
 	for {
 		started := time.Now()
 		err := recurrence.Proposer.Propose(ctx, occurrence)
@@ -94,28 +94,28 @@ func runRecurrenceProposal(
 				wake()
 			}
 
-			delay = nextRecurrenceOccurrence(occurrence, recurrence.Interval).Sub(clock.Now().UTC())
+			delay = nextRecurrenceOccurrence(occurrence, recurrence.Interval).Sub(now().UTC())
 		}
 
 		if delay <= 0 {
-			occurrence = clock.Now().UTC()
+			occurrence = now().UTC()
 			continue
 		}
 
-		timer := clock.NewTimer(delay)
+		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
 			if !timer.Stop() {
 				select {
-				case <-timer.C():
+				case <-timer.C:
 				default:
 				}
 			}
 
 			return
-		case <-timer.C():
+		case <-timer.C:
 			if err == nil {
-				occurrence = clock.Now().UTC()
+				occurrence = now().UTC()
 			}
 		}
 	}

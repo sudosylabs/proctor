@@ -41,8 +41,8 @@ func newSubmittedEvent(t *testing.T) *model.DomainEvent {
 	return event
 }
 
-func subscription(key string, handler Handler) Subscription {
-	return Subscription{Key: key, Topic: model.DomainEventTopicExamAttemptSubmitted, Handler: handler}
+func subscription(key string, handle func(context.Context, model.DomainEvent) error) Subscription {
+	return Subscription{Key: key, Topic: model.DomainEventTopicExamAttemptSubmitted, Handle: handle}
 }
 
 func mustDispatcher(t *testing.T, subscriptions ...Subscription) *Dispatcher {
@@ -55,10 +55,10 @@ func mustDispatcher(t *testing.T, subscriptions ...Subscription) *Dispatcher {
 func TestNewDispatcherRefusesAnIncompleteOrRepeatedSubscription(t *testing.T) {
 	handler := recordingHandler{calls: new([]string), events: new([]model.DomainEvent)}
 	for name, subscriptions := range map[string][]Subscription{
-		"no key":        {{Topic: model.DomainEventTopicExamAttemptSubmitted, Handler: handler}},
+		"no key":        {{Topic: model.DomainEventTopicExamAttemptSubmitted, Handle: handler.HandleEvent}},
 		"no handler":    {{Key: "a", Topic: model.DomainEventTopicExamAttemptSubmitted}},
-		"unknown topic": {{Key: "a", Topic: "exam.attempt.suspended", Handler: handler}},
-		"repeated key":  {subscription("a", handler), subscription("a", handler)},
+		"unknown topic": {{Key: "a", Topic: "exam.attempt.suspended", Handle: handler.HandleEvent}},
+		"repeated key":  {subscription("a", handler.HandleEvent), subscription("a", handler.HandleEvent)},
 	} {
 		_, err := NewDispatcher(subscriptions)
 		require.Error(t, err, name)
@@ -70,8 +70,8 @@ func TestDispatchOffersTheEventToEachSubscriptionInOrder(t *testing.T) {
 	var calls []string
 	var received []model.DomainEvent
 	dispatcher := mustDispatcher(t,
-		subscription("first", recordingHandler{name: "first", calls: &calls, events: &received}),
-		subscription("second", recordingHandler{name: "second", calls: &calls, events: &received}),
+		subscription("first", recordingHandler{name: "first", calls: &calls, events: &received}.HandleEvent),
+		subscription("second", recordingHandler{name: "second", calls: &calls, events: &received}.HandleEvent),
 	)
 	delivered, err := dispatcher.Dispatch(context.Background(), event, nil)
 	require.NoError(t, err)
@@ -86,8 +86,8 @@ func TestDispatchOffersTheEventToTheRestWhenOneFails(t *testing.T) {
 	var received []model.DomainEvent
 	failure := errors.New("handler unavailable")
 	dispatcher := mustDispatcher(t,
-		subscription("first", recordingHandler{name: "first", calls: &calls, events: &received, err: failure}),
-		subscription("second", recordingHandler{name: "second", calls: &calls, events: &received}),
+		subscription("first", recordingHandler{name: "first", calls: &calls, events: &received, err: failure}.HandleEvent),
+		subscription("second", recordingHandler{name: "second", calls: &calls, events: &received}.HandleEvent),
 	)
 	delivered, err := dispatcher.Dispatch(context.Background(), event, nil)
 	require.ErrorIs(t, err, failure)
@@ -100,12 +100,12 @@ func TestDispatchSkipsDeliveredSubscriptionsAndOtherTopics(t *testing.T) {
 	event := newSubmittedEvent(t)
 	var calls []string
 	var received []model.DomainEvent
-	otherTopic := subscription("elsewhere", recordingHandler{name: "elsewhere", calls: &calls, events: &received})
+	otherTopic := subscription("elsewhere", recordingHandler{name: "elsewhere", calls: &calls, events: &received}.HandleEvent)
 	otherTopic.Topic = model.DomainEventTopicExamSittingPaused
 	dispatcher := mustDispatcher(t,
-		subscription("first", recordingHandler{name: "first", calls: &calls, events: &received}),
+		subscription("first", recordingHandler{name: "first", calls: &calls, events: &received}.HandleEvent),
 		otherTopic,
-		subscription("second", recordingHandler{name: "second", calls: &calls, events: &received}),
+		subscription("second", recordingHandler{name: "second", calls: &calls, events: &received}.HandleEvent),
 	)
 	previously := []string{"first"}
 	delivered, err := dispatcher.Dispatch(context.Background(), event, previously)
@@ -129,8 +129,8 @@ func TestDispatchIsolatesEachHandlersData(t *testing.T) {
 	original := append(json.RawMessage(nil), event.Data...)
 	var calls []string
 	var received []model.DomainEvent
-	dispatcher := mustDispatcher(t, subscription("mutating", mutatingHandler{}),
-		subscription("after", recordingHandler{name: "after", calls: &calls, events: &received}))
+	dispatcher := mustDispatcher(t, subscription("mutating", mutatingHandler{}.HandleEvent),
+		subscription("after", recordingHandler{name: "after", calls: &calls, events: &received}.HandleEvent))
 	_, err := dispatcher.Dispatch(context.Background(), event, nil)
 	require.NoError(t, err)
 	require.Equal(t, original, event.Data, "a handler cannot change the stored event")
@@ -147,7 +147,7 @@ func TestDispatchWithoutSubscriptionsSucceeds(t *testing.T) {
 func TestDispatchRejectsAnInvalidEvent(t *testing.T) {
 	var calls []string
 	var received []model.DomainEvent
-	dispatcher := mustDispatcher(t, subscription("first", recordingHandler{name: "first", calls: &calls, events: &received}))
+	dispatcher := mustDispatcher(t, subscription("first", recordingHandler{name: "first", calls: &calls, events: &received}.HandleEvent))
 	_, err := dispatcher.Dispatch(context.Background(), &model.DomainEvent{}, nil)
 	require.Error(t, err)
 	require.Empty(t, calls)

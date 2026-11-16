@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
+	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -27,13 +28,52 @@ func TestSittingMailReconciliationPeriodicRunnerPreparesOneBoundedFanout(t *test
 	persistence := &sittingMailStoreFake{candidates: []store.ExamSittingMailReconciliationCandidate{{
 		Sitting: record, ActorUserID: model.NewUserID(),
 	}}}
-	mail := &sittingMailReconciliationPreparerFake{prepared: &store.ExamSittingMailFanout{}}
-	err = (sittingMailReconciliationRunner{sittings: persistence, mail: mail}).Run(context.Background())
+	actor := persistence.candidates[0].ActorUserID
+	composer, err := mail.NewSittingComposer(mail.SittingComposerDependencies{Renderer: sittingMailRendererFake{}, Sender: &mailSenderFake{enabled: true,
+		from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}}, Sealer: mailTestSealer(t), Now: func() time.Time { return at }})
 	require.NoError(t, err)
-	require.NotNil(t, persistence.reconciled, "reconciliation=%#v request=%#v", persistence.reconciled, mail.request)
-	require.Equal(t, record.ID, persistence.reconciled.SittingID, "reconciliation=%#v request=%#v", persistence.reconciled, mail.request)
-	require.Equal(t, store.ExamSittingMailReconciled, mail.request.ChangeKind, "reconciliation=%#v request=%#v", persistence.reconciled, mail.request)
-	require.Equal(t, record.Revision, mail.request.SittingRevision, "reconciliation=%#v request=%#v", persistence.reconciled, mail.request)
+	classes := &sittingMailClassStoreFake{class: &model.Class{ID: record.ClassID, DisplayName: "Class A"}}
+	preparer := sitting.ScheduleMail{Composer: composer, Classes: classes,
+		Revisions: sittingMailRevisionStoreFake{summary: &store.ExamRevisionSummary{ID: record.ExamRevisionID, ExamID: record.ExamID, Title: "Algorithms"}}}
+	err = (sittingMailReconciliationRunner{sittings: persistence, mail: preparer}).Run(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, persistence.reconciled, "reconciliation=%#v", persistence.reconciled)
+	require.Equal(t, record.ID, persistence.reconciled.SittingID, "reconciliation=%#v", persistence.reconciled)
+	require.Equal(t, record.Revision, persistence.reconciled.ExpectedRevision, "the reconciliation is fenced at the listed revision")
+	prepared := persistence.reconciled.Mail
+	require.NotNil(t, prepared, "the reconciliation carries the prepared fan-out")
+	require.Equal(t, store.ExamSittingMailReconciled, prepared.ChangeKind)
+	require.Equal(t, actor, prepared.Occurrence.ActorUserID)
+	require.NotNil(t, prepared.Bundle, "an enabled sender freezes the notice bundle")
+	// A reconciliation names the Sitting's own Class as the prior one, so
+	// only that Class is read.
+	require.Equal(t, []model.ClassID{record.ClassID}, classes.reads)
+}
+
+// sittingMailClassStoreFake answers the Class a schedule notice names.
+type sittingMailClassStoreFake struct {
+	store.ClassStore
+	class *model.Class
+	reads []model.ClassID
+}
+
+func (f *sittingMailClassStoreFake) Get(_ context.Context, id model.ClassID) (*model.Class, error) {
+	f.reads = append(f.reads, id)
+	if f.class == nil || f.class.ID != id {
+		return nil, store.NewErrNotFound("class", id.String())
+	}
+	return f.class, nil
+}
+
+// sittingMailRevisionStoreFake answers the published revision a schedule
+// notice titles.
+type sittingMailRevisionStoreFake struct {
+	store.ExamRevisionStore
+	summary *store.ExamRevisionSummary
+}
+
+func (f sittingMailRevisionStoreFake) GetSummary(context.Context, model.ExamID, model.ExamRevisionID) (*store.ExamRevisionSummary, error) {
+	return f.summary, nil
 }
 
 type sittingMailStoreFake struct {
@@ -55,16 +95,4 @@ func (f *sittingMailStoreFake) ReconcileMail(_ context.Context,
 ) (*store.ExamSittingMailFanoutSnapshot, error) {
 	f.reconciled = input
 	return &store.ExamSittingMailFanoutSnapshot{}, nil
-}
-
-type sittingMailReconciliationPreparerFake struct {
-	request  sitting.ScheduleMailRequest
-	prepared *store.ExamSittingMailFanout
-}
-
-func (f *sittingMailReconciliationPreparerFake) Prepare(_ context.Context,
-	request sitting.ScheduleMailRequest,
-) (*store.ExamSittingMailFanout, error) {
-	f.request = request
-	return f.prepared, nil
 }

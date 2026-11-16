@@ -12,6 +12,8 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/exam"
+	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -23,22 +25,10 @@ import (
 // Exams and Sittings the caller may not see.
 type RealtimeAdmission struct {
 	principals    *identity.Service
-	exams         realtimeExamViewAuthorizer
-	sittings      realtimeSittingViewAuthorizer
+	exams         *exam.Authoring
+	sittings      *sitting.Service
 	authorization *access.Authorizer
 	operational   OperationalRecorder
-}
-
-// realtimeExamViewAuthorizer is the Exam relationship gate a subscription
-// uses; its tests substitute a fake.
-type realtimeExamViewAuthorizer interface {
-	AuthorizeExamView(context.Context, invocation.Invocation, model.ExamID) error
-}
-
-// realtimeSittingViewAuthorizer is the Sitting relationship gate a
-// subscription uses; its tests substitute a fake.
-type realtimeSittingViewAuthorizer interface {
-	AuthorizeSittingView(context.Context, invocation.Invocation, model.ExamSittingID) error
 }
 
 var (

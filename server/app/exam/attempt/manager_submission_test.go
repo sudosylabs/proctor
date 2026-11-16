@@ -45,17 +45,17 @@ func TestManagerEndSealsWithPrivateReasonOutsideCandidateReceipt(t *testing.T) {
 		SittingID: target.SittingID, AttemptID: target.AttemptID, ExpectedAttemptRevision: 4,
 		PrivateReason: privateReason, IdempotencyKey: "manager-end-once"})
 	require.NoError(t, err)
-	require.Equal(t, submissionID, result.SubmissionID, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
-	require.Equal(t, receiptCode, result.ReceiptCode, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
-	require.Equal(t, receiptCode, f.submissions.managerInput.ReceiptCode, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
-	require.Equal(t, receiptCode, f.mail.request.ReceiptCode, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
-	require.Equal(t, submittedCalls(t, sealedSubmission(f.submissions.managerResult.ExamSubmissionSealResult, model.ExamSubmissionManagerEndedAttempt), false), f.publisher.Calls(), "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
-	require.NotNil(t, f.submissions.managerInput, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
-	require.Equal(t, privateReason, f.submissions.managerInput.Request.PrivateReason, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
-	require.Equal(t, managerID, f.submissions.managerInput.Request.ActorUserID, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
+	require.Equal(t, submissionID, result.SubmissionID, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.receipt())
+	require.Equal(t, receiptCode, result.ReceiptCode, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.receipt())
+	require.Equal(t, receiptCode, f.submissions.managerInput.ReceiptCode, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.receipt())
+	require.Equal(t, receiptCode, f.mail.receipt().ReceiptCode, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.receipt())
+	require.Equal(t, submittedCalls(t, sealedSubmission(f.submissions.managerResult.ExamSubmissionSealResult, model.ExamSubmissionManagerEndedAttempt), false), f.publisher.Calls(), "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.receipt())
+	require.NotNil(t, f.submissions.managerInput, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.receipt())
+	require.Equal(t, privateReason, f.submissions.managerInput.Request.PrivateReason, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.receipt())
+	require.Equal(t, managerID, f.submissions.managerInput.Request.ActorUserID, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.receipt())
 	require.True(t, f.submissions.managerInput.DomainEventID.IsValid(), "the proposed domain event reaches the manager seal")
 	require.True(t, f.submissions.managerInput.DomainEventJobID.IsValid(), "the proposed dispatch Job reaches the manager seal")
-	require.Equal(t, model.ExamSubmissionManagerEndedAttempt, f.mail.request.Provenance, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
+	require.Equal(t, model.ExamSubmissionManagerEndedAttempt, f.mail.receipt().Provenance, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.receipt())
 	require.NotContains(t, fmt.Sprintf("%#v", f.audit().values), privateReason, "private reason entered ordinary audit fields: %#v", f.audit().values)
 	wantIdempotency, prepareErr := prepareManagerEndIdempotency(f.inv, ManagerEndCommand{ExamID: target.ExamID,
 		SittingID: target.SittingID, AttemptID: target.AttemptID, ExpectedAttemptRevision: 4,
@@ -76,6 +76,8 @@ func TestManagerEndConcealsSelfAccessAndFailsClosedOnAuditFailure(t *testing.T) 
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			f := newFixture(t)
+			// The Exam's Manager is also the Attempt's candidate.
+			f.userID = useManagerCall(f)
 			f.persistence.attempt, _ = managerAttemptFixture(t, f, model.ExamAttemptActive, 4, "")
 			if test.auditErr != nil {
 				f.control.Audits.FailCompletions(test.auditErr)
@@ -109,11 +111,11 @@ func TestManagerEndConcealsSelfAccessAndFailsClosedOnAuditFailure(t *testing.T) 
 			require.Equal(t, f.sitting.ID.String(), f.audit().values["exam_sitting_id"])
 			require.Equal(t, f.attemptID.String(), f.audit().values["exam_attempt_id"])
 			require.EqualValues(t, 4, f.audit().values["expected_attempt_revision"])
-			require.NotContains(t, fmt.Sprintf("%#v", f.audit().values), privateReason, "self-denial leaked or mutated: audit=%#v submissions=%#v mail=%#v effects", f.audit().values, f.submissions, f.mail.request)
-			require.Nil(t, f.submissions.managerPreparation, "self-denial leaked or mutated: audit=%#v submissions=%#v mail=%#v effects", f.audit().values, f.submissions, f.mail.request)
-			require.Nil(t, f.submissions.managerInput, "self-denial leaked or mutated: audit=%#v submissions=%#v mail=%#v effects", f.audit().values, f.submissions, f.mail.request)
-			require.False(t, f.mail.request.SubmissionID.IsValid(), "self-denial leaked or mutated: audit=%#v submissions=%#v mail=%#v effects", f.audit().values, f.submissions, f.mail.request)
-			require.Empty(t, f.publisher.Calls(), "self-denial leaked or mutated: audit=%#v submissions=%#v mail=%#v effects", f.audit().values, f.submissions, f.mail.request)
+			require.NotContains(t, fmt.Sprintf("%#v", f.audit().values), privateReason, "self-denial leaked or mutated: audit=%#v submissions=%#v mail=%#v effects", f.audit().values, f.submissions, f.mail.receipt())
+			require.Nil(t, f.submissions.managerPreparation, "self-denial leaked or mutated: audit=%#v submissions=%#v mail=%#v effects", f.audit().values, f.submissions, f.mail.receipt())
+			require.Nil(t, f.submissions.managerInput, "self-denial leaked or mutated: audit=%#v submissions=%#v mail=%#v effects", f.audit().values, f.submissions, f.mail.receipt())
+			require.False(t, f.mail.receipt().SubmissionID.IsValid(), "self-denial leaked or mutated: audit=%#v submissions=%#v mail=%#v effects", f.audit().values, f.submissions, f.mail.receipt())
+			require.Empty(t, f.publisher.Calls(), "self-denial leaked or mutated: audit=%#v submissions=%#v mail=%#v effects", f.audit().values, f.submissions, f.mail.receipt())
 		})
 	}
 }

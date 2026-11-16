@@ -77,7 +77,7 @@ func roleService(t *testing.T, events *[]string, roles *roleStoreFake, actions .
 	principal, inv := newCaller()
 	fixture := grantedAccess(t, events, institutionGrant(principal.UserID, actions...))
 	service := &Service{roles: roles, institutions: &institutionStoreFake{institution: fixture.Institution}, authorizer: fixture.Authorizer,
-		auditor: &institutionAuditorFake{events: events, beginID: model.NewID()}, publisher: publisherIn(events), now: func() time.Time { return time.UnixMilli(500) }}
+		auditor: fixture.Auditor.MutationAudit(), publisher: publisherIn(events), now: func() time.Time { return time.UnixMilli(500) }}
 	return service, fixture, inv
 }
 
@@ -96,7 +96,7 @@ func TestRoleCreateCommitsWithoutSideEffects(t *testing.T) {
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
 	// begins before the durable write. The second grants read is the
 	// delegation check of class.view.
-	require.Equal(t, []string{"grants", "decision:role.manage:success", "grants", "audit-begin", "store-create"}, events)
+	require.Equal(t, []string{"grants", "decision:role.manage:success", "grants", "audit-begin:role.manage", "store-create"}, events)
 	institutionID := service.institutions.(*institutionStoreFake).institution.ID.String()
 	require.Equal(t, []recordedDecision{{
 		action: model.ActionRoleManage, resource: model.Resource{Type: model.ResourceInstitution, ID: institutionID},
@@ -164,7 +164,7 @@ func TestRoleUpdateCommitsBeforeInvalidation(t *testing.T) {
 	require.Equal(t, "Lead Teacher", got.DisplayName)
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
-	require.Equal(t, []string{"grants", "decision:role.manage:success", "get-role", "audit-begin", "store-update", "invalidate-authorization"}, events)
+	require.Equal(t, []string{"grants", "decision:role.manage:success", "get-role", "audit-begin:role.manage", "store-update", "invalidate-authorization"}, events)
 	// Contract: the one realtime effect drops every User's cached authorization.
 	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization}}, publisher.Calls())
 }
@@ -179,7 +179,7 @@ func TestRoleUpdateFailurePublishesNoInvalidation(t *testing.T) {
 	require.True(t, apperror.Is(err, "role.conflict"), "error = %v", err)
 	// Contract (guardrail 8): authorization precedes the audit, the audit begins
 	// before the durable write, and the audit outcome follows the write.
-	require.Equal(t, []string{"grants", "decision:role.manage:success", "get-role", "audit-begin", "store-update", "audit-fail"}, events)
+	require.Equal(t, []string{"grants", "decision:role.manage:success", "get-role", "audit-begin:role.manage", "store-update", "audit-fail"}, events)
 }
 
 func TestRoleUpdateRejectsBuiltIn(t *testing.T) {
@@ -202,7 +202,7 @@ func TestRoleArchiveCommitsBeforeInvalidation(t *testing.T) {
 	require.NoError(t, service.ArchiveRole(context.Background(), inv, role.ID))
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
-	require.Equal(t, []string{"grants", "decision:role.manage:success", "get-role", "audit-begin", "store-archive", "invalidate-authorization"}, events)
+	require.Equal(t, []string{"grants", "decision:role.manage:success", "get-role", "audit-begin:role.manage", "store-archive", "invalidate-authorization"}, events)
 	// Contract: the one realtime effect drops every User's cached authorization.
 	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization}}, publisher.Calls())
 }

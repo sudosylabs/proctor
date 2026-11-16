@@ -30,7 +30,8 @@ type AuthorizerDependencies struct {
 	Roles    store.RoleStore
 	Bindings store.RoleBindingStore
 	Resolver *ScopeResolver
-	Audit    DecisionAudit
+	// Audit records every allowed and denied decision.
+	Audit *Auditor
 	// Now is the decision clock; nil means time.Now.
 	Now func() time.Time
 }
@@ -42,22 +43,6 @@ type Authorizer struct {
 	deps AuthorizerDependencies
 
 	now func() time.Time
-}
-
-// DecisionAudit durably records authorization decisions. Auditor implements
-// it; tests substitute a recorder.
-type DecisionAudit interface {
-	RecordAuthorizationDecision(
-		context.Context,
-		model.Principal,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		model.RequestMetadata,
-		bool,
-	) error
-	RecordUserSearchDecision(context.Context, model.Principal, model.Resource, model.RoleScopeType, string, model.RequestMetadata, bool) error
 }
 
 type resolvedAuthorizationResource struct {

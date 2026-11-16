@@ -24,7 +24,7 @@ import (
 func TestProgressCoalescerAdmitsOncePerWindow(t *testing.T) {
 	t.Parallel()
 
-	clock := newManualClock(time.Date(2026, time.August, 1, 9, 0, 0, 0, time.UTC))
+	clock := newSettableClock(time.Date(2026, time.August, 1, 9, 0, 0, 0, time.UTC))
 	coalescer := newProgressCoalescer(2*time.Second, clock.Now)
 	id := model.NewJobID()
 
@@ -40,7 +40,7 @@ func TestProgressCoalescerAdmitsOncePerWindow(t *testing.T) {
 func TestProgressCoalescerForgetClearsTheWindow(t *testing.T) {
 	t.Parallel()
 
-	clock := newManualClock(time.Date(2026, time.August, 1, 9, 0, 0, 0, time.UTC))
+	clock := newSettableClock(time.Date(2026, time.August, 1, 9, 0, 0, 0, time.UTC))
 	coalescer := newProgressCoalescer(2*time.Second, clock.Now)
 	id := model.NewJobID()
 
@@ -54,7 +54,7 @@ func TestProgressCoalescerForgetClearsTheWindow(t *testing.T) {
 func TestProgressCoalescerKeepsJobsIndependent(t *testing.T) {
 	t.Parallel()
 
-	clock := newManualClock(time.Date(2026, time.August, 1, 9, 0, 0, 0, time.UTC))
+	clock := newSettableClock(time.Date(2026, time.August, 1, 9, 0, 0, 0, time.UTC))
 	coalescer := newProgressCoalescer(2*time.Second, clock.Now)
 	first, second := model.NewJobID(), model.NewJobID()
 
@@ -72,7 +72,7 @@ func TestEngineAnnouncesStatusAlwaysAndProgressCoalesced(t *testing.T) {
 	t.Parallel()
 
 	claim := jobRunnerClaim(t)
-	clock := newManualClock(time.Date(2026, time.August, 1, 9, 0, 0, 0, time.UTC))
+	clock := newSettableClock(time.Date(2026, time.August, 1, 9, 0, 0, 0, time.UTC))
 	descriptor := testDescriptor(handlerFunc(func(ctx context.Context, execution Execution) Outcome {
 		for current := int64(1); current <= 3; current++ {
 			if current == 3 {
@@ -92,7 +92,7 @@ func TestEngineAnnouncesStatusAlwaysAndProgressCoalesced(t *testing.T) {
 	descriptor.ProgressStages = []string{"rendering"}
 	persistence := &changingStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: claim.Job}
 	listener := &changeRecorder{}
-	engine := newChangeTestEngine(t, persistence, descriptor, clock, listener)
+	engine := newChangeTestEngine(t, persistence, descriptor, clock.Now, listener)
 
 	engine.executeClaim(context.Background(), descriptor, claim)
 
@@ -111,7 +111,7 @@ func TestEngineAnnouncesNothingWhenTheStoreRefuses(t *testing.T) {
 	t.Parallel()
 
 	claim := jobRunnerClaim(t)
-	clock := newManualClock(time.Date(2026, time.August, 1, 9, 0, 0, 0, time.UTC))
+	clock := newSettableClock(time.Date(2026, time.August, 1, 9, 0, 0, 0, time.UTC))
 	var checkpointErr error
 	descriptor := testDescriptor(handlerFunc(func(ctx context.Context, execution Execution) Outcome {
 		checkpointErr = execution.Checkpoint(ctx, CheckpointValue{
@@ -124,7 +124,7 @@ func TestEngineAnnouncesNothingWhenTheStoreRefuses(t *testing.T) {
 	descriptor.ProgressStages = []string{"rendering"}
 	persistence := &changingStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: claim.Job, err: errors.New("fence lost")}
 	listener := &changeRecorder{}
-	engine := newChangeTestEngine(t, persistence, descriptor, clock, listener)
+	engine := newChangeTestEngine(t, persistence, descriptor, clock.Now, listener)
 
 	engine.executeClaim(context.Background(), descriptor, claim)
 
@@ -135,14 +135,14 @@ func TestEngineAnnouncesNothingWhenTheStoreRefuses(t *testing.T) {
 func TestEngineAnnouncesOnlyOperatorVisibleJobsAndProgressOnlyWhereDeclared(t *testing.T) {
 	t.Parallel()
 
-	clock := newManualClock(time.Date(2026, time.August, 1, 9, 0, 0, 0, time.UTC))
+	clock := newSettableClock(time.Date(2026, time.August, 1, 9, 0, 0, 0, time.UTC))
 	succeed := handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() })
 
 	domain := testDescriptor(succeed)
 	domain.Visibility = VisibilityDomain
 	claim := jobRunnerClaim(t)
 	listener := &changeRecorder{}
-	engine := newChangeTestEngine(t, &changingStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: claim.Job}, domain, clock, listener)
+	engine := newChangeTestEngine(t, &changingStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: claim.Job}, domain, clock.Now, listener)
 	engine.executeClaim(context.Background(), domain, claim)
 	require.Empty(t, listener.recorded(), "a domain Job is not announced")
 
@@ -152,7 +152,7 @@ func TestEngineAnnouncesOnlyOperatorVisibleJobsAndProgressOnlyWhereDeclared(t *t
 	claim.Job.Progress = &model.JobProgress{Current: 1, Total: 2, Stage: "hidden"}
 	listener = &changeRecorder{}
 	operator := testDescriptor(succeed)
-	engine = newChangeTestEngine(t, &changingStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: claim.Job}, operator, clock, listener)
+	engine = newChangeTestEngine(t, &changingStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: claim.Job}, operator, clock.Now, listener)
 	engine.executeClaim(context.Background(), operator, claim)
 	require.Equal(t, []Change{{ID: claim.Job.ID, Type: claim.Job.Type, Status: model.JobStatusSucceeded}}, listener.recorded())
 }
@@ -166,7 +166,7 @@ func TestEngineAnnouncesTheClaimAndOperatorControls(t *testing.T) {
 	descriptor.ExplicitRetryStatuses = []model.JobStatus{model.JobStatusFailed}
 	persistence := &changingStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{claim: claim}, job: claim.Job}
 	listener := &changeRecorder{}
-	engine := newChangeTestEngine(t, persistence, descriptor, newManualClock(time.Now()), listener)
+	engine := newChangeTestEngine(t, persistence, descriptor, time.Now, listener)
 	require.NoError(t, engine.Start(context.Background()))
 	engine.Wake()
 	require.Eventually(t, func() bool { return len(listener.recorded()) == 2 }, time.Second, time.Millisecond)
@@ -181,7 +181,7 @@ func TestEngineAnnouncesTheClaimAndOperatorControls(t *testing.T) {
 	require.NoError(t, err)
 	operator := &operatorStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: queued}
 	listener = &changeRecorder{}
-	engine = newChangeTestEngine(t, operator, descriptor, newManualClock(at), listener)
+	engine = newChangeTestEngine(t, operator, descriptor, func() time.Time { return at }, listener)
 	audit := AuditReference{EventID: model.NewAuditEventID(), At: at}
 	target, err := engine.PrepareCancellation(context.Background(), queued.ID)
 	require.NoError(t, err)
@@ -226,11 +226,11 @@ func TestAttachChangeListenerOnlyOnceBeforeStart(t *testing.T) {
 	require.Error(t, started.AttachChangeListener(&changeRecorder{}), "a listener after Start")
 }
 
-func newChangeTestEngine(t *testing.T, persistence store.JobStore, descriptor Descriptor, clock Clock, listener ChangeListener) *Engine {
+func newChangeTestEngine(t *testing.T, persistence store.JobStore, descriptor Descriptor, now func() time.Time, listener ChangeListener) *Engine {
 	t.Helper()
 	engine, err := New(Dependencies{
 		Store: persistence, Descriptors: []Descriptor{descriptor}, NodeID: "node-a",
-		Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Hour}, Clock: clock,
+		Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Hour}, Now: now,
 	})
 	require.NoError(t, err)
 	require.NoError(t, engine.AttachChangeListener(listener))
@@ -292,10 +292,4 @@ func (r *changeRecorder) recorded() []Change {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]Change(nil), r.changes...)
-}
-
-func (c *manualClock) set(at time.Time) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.now = at
 }

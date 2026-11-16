@@ -22,6 +22,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/identity"
@@ -263,6 +264,9 @@ func TestJobRecipeConnectsRuntimeOperationsAndProfileWake(t *testing.T) {
 
 	defaultJobs := jobs.NewDefaultProfilePictureJobs(jobs.DefaultProfilePictureJobsDependencies{Jobs: constructionEnqueueJobStoreStub{}})
 	wake := &jobWake{}
+	// The operator Job service is built over the composition's authorizer
+	// and auditor, which production always has.
+	control := accesstest.New(t, accesstest.Options{})
 	runtime, err := newJobRuntime(
 		Dependencies{
 			Store: constructionCatalogWithJobs{
@@ -275,8 +279,8 @@ func TestJobRecipeConnectsRuntimeOperationsAndProfileWake(t *testing.T) {
 			},
 			NodeID: "node-a", RecoveryDiagnostics: newDiscardLogger(t),
 		},
-		sharedMechanics{},
-		nil,
+		sharedMechanics{audit: control.Auditor},
+		control.Authorizer,
 		examServices{sittings: &sitting.Service{}, attempts: &attempt.Service{}},
 		nil,
 		defaultJobs,

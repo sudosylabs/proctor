@@ -8,7 +8,6 @@
 package review
 
 import (
-	"context"
 	"errors"
 	"time"
 
@@ -37,13 +36,6 @@ type PreparedResultReleaseMail struct {
 	ExpectedRecipientRevision int64
 }
 
-// ResultReleaseMailPreparer prepares the notice that tells a candidate a
-// result is available. ResultReleaseMail satisfies it and tests substitute a
-// fake.
-type ResultReleaseMailPreparer interface {
-	PrepareResultRelease(context.Context, ResultReleaseMailPreparation) (*PreparedResultReleaseMail, error)
-}
-
 // Dependencies are the collaborators New validates once and distributes to
 // the Service.
 type Dependencies struct {
@@ -51,7 +43,7 @@ type Dependencies struct {
 	Authorizer    SittingManagerAuthorizer
 	Auditor       *access.Auditor
 	Publisher     realtime.Publisher
-	Mail          ResultReleaseMailPreparer
+	Mail          ResultReleaseMail
 	Now           func() time.Time
 	NewReviewID   func() model.SubmissionReviewID
 	NewDecisionID func() model.IntegrityReviewDecisionID
@@ -68,7 +60,7 @@ type Service struct {
 	// mutation; the Store completes the attempt with the change it commits.
 	auditor       access.MutationAuditAdapter
 	publisher     realtime.Publisher
-	mail          ResultReleaseMailPreparer
+	mail          ResultReleaseMail
 	now           func() time.Time
 	newReviewID   func() model.SubmissionReviewID
 	newDecisionID func() model.IntegrityReviewDecisionID
@@ -80,7 +72,10 @@ func New(deps Dependencies) (*Service, error) {
 		deps.Authorizer.Sittings == nil ||
 		deps.Auditor == nil ||
 		deps.Publisher == nil ||
-		deps.Mail == nil ||
+		deps.Mail.Composer == nil ||
+		deps.Mail.Users == nil ||
+		deps.Mail.Sittings == nil ||
+		deps.Mail.Revisions == nil ||
 		deps.Now == nil ||
 		deps.NewReviewID == nil ||
 		deps.NewDecisionID == nil {

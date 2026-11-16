@@ -8,18 +8,23 @@
 package attempt
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
@@ -71,7 +76,7 @@ func TestSubmitSealsExactAcknowledgedStateBeforePublishingEffects(t *testing.T) 
 	require.Equal(t, submissionID, result.SubmissionID, "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
 	require.Equal(t, receiptCode, f.submissions.seal.ReceiptCode, "the proposed receipt code reaches the seal")
 	require.Equal(t, receiptCode, result.ReceiptCode, "the sealed receipt code reaches the candidate")
-	require.Equal(t, receiptCode, f.mail.request.ReceiptCode, "the receipt mail carries the proposed code")
+	require.Equal(t, receiptCode, f.mail.receipt().ReceiptCode, "the receipt mail carries the proposed code")
 	require.Equal(t, submittedCalls(t, sealedSubmission(*f.submissions.sealResult, model.ExamSubmissionCandidateSubmitted), false), f.publisher.Calls(), "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
 	audit := fmt.Sprintf("%#v", f.audit().values)
 	for _, private := range []string{credential, model.HashToken(credential), participationID.String()} {
@@ -82,15 +87,15 @@ func TestSubmitSealsExactAcknowledgedStateBeforePublishingEffects(t *testing.T) 
 	wantIdempotency, prepareErr := prepareSubmissionIdempotency(f.inv, "test-key", f.attemptID, revisionID, 11, 7)
 	require.NoError(t, prepareErr)
 	require.Equal(t, wantIdempotency, f.submissions.idempotency)
-	require.Equal(t, f.userID, f.mail.request.CandidateUserID, "mail request=%#v seal=%#v", f.mail.request, f.submissions.seal)
-	require.Equal(t, f.sitting.ExamID, f.mail.request.ExamID, "mail request=%#v seal=%#v", f.mail.request, f.submissions.seal)
-	require.Equal(t, f.sitting.ID, f.mail.request.SittingID, "mail request=%#v seal=%#v", f.mail.request, f.submissions.seal)
-	require.Equal(t, submissionID, f.mail.request.SubmissionID, "mail request=%#v seal=%#v", f.mail.request, f.submissions.seal)
-	require.True(t, f.mail.request.SealedAt.Equal(f.at), "mail request=%#v seal=%#v", f.mail.request, f.submissions.seal)
-	require.Equal(t, model.ExamSubmissionCandidateSubmitted, f.mail.request.Provenance, "mail request=%#v seal=%#v", f.mail.request, f.submissions.seal)
-	require.NotNil(t, f.submissions.seal.Notice, "mail request=%#v seal=%#v", f.mail.request, f.submissions.seal)
-	require.Equal(t, int64(2), f.submissions.seal.ExpectedRecipientRevision, "mail request=%#v seal=%#v", f.mail.request, f.submissions.seal)
-	require.True(t, model.TimeUTC(f.at).Equal(f.submissions.seal.AuditAt), "mail request=%#v seal=%#v", f.mail.request, f.submissions.seal)
+	require.Equal(t, f.userID, f.mail.receipt().CandidateUserID, "mail request=%#v seal=%#v", f.mail.receipt(), f.submissions.seal)
+	require.Equal(t, f.sitting.ExamID, f.mail.receipt().ExamID, "mail request=%#v seal=%#v", f.mail.receipt(), f.submissions.seal)
+	require.Equal(t, f.sitting.ID, f.mail.receipt().SittingID, "mail request=%#v seal=%#v", f.mail.receipt(), f.submissions.seal)
+	require.Equal(t, submissionID, f.mail.receipt().SubmissionID, "mail request=%#v seal=%#v", f.mail.receipt(), f.submissions.seal)
+	require.True(t, f.mail.receipt().SealedAt.Equal(f.at), "mail request=%#v seal=%#v", f.mail.receipt(), f.submissions.seal)
+	require.Equal(t, model.ExamSubmissionCandidateSubmitted, f.mail.receipt().Provenance, "mail request=%#v seal=%#v", f.mail.receipt(), f.submissions.seal)
+	require.NotNil(t, f.submissions.seal.Notice, "mail request=%#v seal=%#v", f.mail.receipt(), f.submissions.seal)
+	require.Equal(t, int64(2), f.submissions.seal.ExpectedRecipientRevision, "mail request=%#v seal=%#v", f.mail.receipt(), f.submissions.seal)
+	require.True(t, model.TimeUTC(f.at).Equal(f.submissions.seal.AuditAt), "mail request=%#v seal=%#v", f.mail.receipt(), f.submissions.seal)
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
 	// and the write commits before its effect.
 	require.Equal(t, []string{"submission.resolve", "audit-begin:exam.sitting.participate", "submission.mail", "submission.seal", "effects"}, f.order)
@@ -125,7 +130,7 @@ func TestSubmitReplayReturnsRetainedReceiptAndSuppressesEffects(t *testing.T) {
 	require.Empty(t, f.publisher.Calls(), "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.publisher.Calls())
 	require.Nil(t, f.submissions.seal.Notice, "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.publisher.Calls())
 	require.Equal(t, int64(0), f.submissions.seal.ExpectedRecipientRevision, "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.publisher.Calls())
-	require.False(t, f.mail.request.SubmissionID.IsValid(), "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.publisher.Calls())
+	require.False(t, f.mail.receipt().SubmissionID.IsValid(), "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.publisher.Calls())
 	require.Empty(t, f.settler.settled, "a replay settles nothing")
 }
 
@@ -133,25 +138,29 @@ func TestManagedSubmissionNestedOwnershipMismatchIsConcealed(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
+	// Submissions are read by the Exam's Manager.
+	useManagerCall(f)
 	submissionID := model.NewSubmissionID()
 	f.submissions.authorization = &store.ExamSubmissionAuthorization{SubmissionID: submissionID,
-		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, CandidateUserID: model.NewUserID(), AcademicUnitID: model.NewAcademicUnitID()}
+		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, CandidateUserID: model.NewUserID(), AcademicUnitID: f.unitID}
 	_, err := f.service.GetExamSubmission(context.Background(), f.inv, GetSubmissionQuery{ExamID: model.NewExamID(),
 		SittingID: f.sitting.ID, AttemptID: f.attemptID, SubmissionID: submissionID})
 	require.True(t, apperror.Is(err, "resource.not_found"), "error=%v order=%v", err, f.order)
 	require.True(t, chainHasCode(err, "exam.attempt.not_found"), "error=%v order=%v", err, f.order)
 	// A concealed ownership mismatch never reads the Submission.
-	require.Equal(t, []string{"submission.resolve_owner", "submission.authorize", "submission.resolve_owner"}, f.order)
+	require.Equal(t, []string{"submission.resolve_owner", "grants", "decision:" + string(model.ActionSubmissionView) + ":success", "submission.resolve_owner"}, f.order)
 }
 
 func TestOpenSubmissionFileAuthorizesThenStreamsRetainedStarterBytes(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
+	// Submissions are read by the Exam's Manager.
+	useManagerCall(f)
 	submission := submissionFixture(t, f, 5)
 	entryID, version, starterID := model.NewAttemptWorkspaceEntryID(), model.NewWorkspaceContentVersion(), model.NewStarterWorkspaceObjectID()
 	f.submissions.authorization = &store.ExamSubmissionAuthorization{SubmissionID: submission.ID,
-		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, CandidateUserID: model.NewUserID(), AcademicUnitID: model.NewAcademicUnitID()}
+		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, CandidateUserID: model.NewUserID(), AcademicUnitID: f.unitID}
 	f.submissions.file = &store.ExamSubmissionFileSelector{Entry: store.ExamSubmissionManifestItem{EntryID: entryID,
 		Kind: model.StarterWorkspaceEntryFile, Path: "main.go", ContentVersion: version, MediaType: "text/x-go",
 		SizeBytes: 4, SHA256: strings.Repeat("a", 64)}, StorageOrigin: model.AttemptWorkspaceStorageStarter,
@@ -174,10 +183,12 @@ func TestOpenSubmissionFileStreamsRetainedAttemptOriginBytes(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
+	// Submissions are read by the Exam's Manager.
+	useManagerCall(f)
 	submission := submissionFixture(t, f, 5)
 	entryID, version, objectID := model.NewAttemptWorkspaceEntryID(), model.NewWorkspaceContentVersion(), model.NewAttemptWorkspaceObjectID()
 	f.submissions.authorization = &store.ExamSubmissionAuthorization{SubmissionID: submission.ID,
-		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, CandidateUserID: model.NewUserID(), AcademicUnitID: model.NewAcademicUnitID()}
+		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, CandidateUserID: model.NewUserID(), AcademicUnitID: f.unitID}
 	f.submissions.file = &store.ExamSubmissionFileSelector{Entry: store.ExamSubmissionManifestItem{EntryID: entryID,
 		Kind: model.StarterWorkspaceEntryFile, Path: "answer.txt", ContentVersion: version, MediaType: "text/plain",
 		SizeBytes: 4, SHA256: strings.Repeat("b", 64)}, StorageOrigin: model.AttemptWorkspaceStorageAttempt,
@@ -201,10 +212,12 @@ func TestOpenSubmissionFileFailsClosedOnRetainedSelectorMismatch(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
+	// Submissions are read by the Exam's Manager.
+	useManagerCall(f)
 	submission := submissionFixture(t, f, 5)
 	entryID := model.NewAttemptWorkspaceEntryID()
 	f.submissions.authorization = &store.ExamSubmissionAuthorization{SubmissionID: submission.ID,
-		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, CandidateUserID: model.NewUserID(), AcademicUnitID: model.NewAcademicUnitID()}
+		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, CandidateUserID: model.NewUserID(), AcademicUnitID: f.unitID}
 	f.submissions.file = &store.ExamSubmissionFileSelector{Entry: store.ExamSubmissionManifestItem{
 		EntryID: model.NewAttemptWorkspaceEntryID(), Kind: model.StarterWorkspaceEntryFile, Path: "answer.txt",
 		ContentVersion: model.NewWorkspaceContentVersion(), MediaType: "text/plain", SizeBytes: 4,
@@ -225,9 +238,11 @@ func TestListSubmissionManifestReturnsBoundedEntryIDKeysetAfterAuthorization(t *
 	t.Parallel()
 
 	f := newFixture(t)
+	// Submissions are read by the Exam's Manager.
+	useManagerCall(f)
 	submission := submissionFixture(t, f, 5)
 	f.submissions.authorization = &store.ExamSubmissionAuthorization{SubmissionID: submission.ID,
-		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, CandidateUserID: model.NewUserID(), AcademicUnitID: model.NewAcademicUnitID()}
+		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, CandidateUserID: model.NewUserID(), AcademicUnitID: f.unitID}
 	ids := []model.AttemptWorkspaceEntryID{model.NewAttemptWorkspaceEntryID(), model.NewAttemptWorkspaceEntryID(), model.NewAttemptWorkspaceEntryID()}
 	slices.SortFunc(ids, func(left, right model.AttemptWorkspaceEntryID) int {
 		return strings.Compare(left.String(), right.String())
@@ -255,9 +270,11 @@ func TestGetSubmissionAuthorizesCanonicalResourceBeforeProtectedRead(t *testing.
 	t.Parallel()
 
 	f := newFixture(t)
+	// Submissions are read by the Exam's Manager.
+	useManagerCall(f)
 	submission := submissionFixture(t, f, 5)
 	f.submissions.authorization = &store.ExamSubmissionAuthorization{SubmissionID: submission.ID,
-		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, CandidateUserID: model.NewUserID(), AcademicUnitID: model.NewAcademicUnitID()}
+		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, CandidateUserID: model.NewUserID(), AcademicUnitID: f.unitID}
 	f.submissions.submission = submission
 
 	got, err := f.service.GetExamSubmission(context.Background(), f.inv, GetSubmissionQuery{ExamID: f.sitting.ExamID,
@@ -265,9 +282,10 @@ func TestGetSubmissionAuthorizesCanonicalResourceBeforeProtectedRead(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, *f.submissions.authorization, got.Authorization, "got=%#v authorized", got)
 	require.Equal(t, submission.ID, got.Submission.ID, "got=%#v authorized", got)
-	require.Equal(t, submission.ID, f.submissionAuthorizationID, "got=%#v authorized", got)
+	decisions := f.control.Audits.Decisions()
+	require.Equal(t, submission.ID.String(), decisions[len(decisions)-1].Resource.ID, "got=%#v authorized", got)
 	// Contract: authorization precedes reading the Submission.
-	require.Equal(t, []string{"submission.resolve_owner", "submission.authorize", "submission.resolve_owner", "submission.get"}, f.order)
+	require.Equal(t, []string{"submission.resolve_owner", "grants", "decision:" + string(model.ActionSubmissionView) + ":success", "submission.resolve_owner", "submission.get"}, f.order)
 }
 
 func submissionFixture(t *testing.T, f *fixture, cursor int64) *model.ExamSubmission {
@@ -305,20 +323,125 @@ type submissionStoreFake struct {
 	idempotency        *store.CommandIdempotency
 }
 
-type submissionMailFake struct {
-	f       *fixture
-	request SubmissionMailPreparation
-	err     error
+// receiptMail is the production receipt preparation, SubmissionReceiptMail
+// over the real mail Composer, with a renderer that records what the
+// Composer froze. Reading the candidate enters the call order as
+// "submission.mail".
+type receiptMail struct {
+	f        *fixture
+	preparer SubmissionReceiptMail
+	renderer *receiptRenderer
+	// candidate and examID are what the preparation read: the candidate it
+	// addressed and the Exam whose Sitting it read.
+	candidate model.UserID
+	examID    model.ExamID
 }
 
-func (f *submissionMailFake) PrepareSubmissionReceipt(_ context.Context, request SubmissionMailPreparation) (*PreparedSubmissionMail, error) {
-	f.f.order = append(f.f.order, "submission.mail")
-	f.request = request
-	if f.err != nil {
-		return nil, f.err
+// preparedReceipt is what a frozen receipt says, in the terms of the request
+// that produced it. It is zero when no receipt was prepared.
+type preparedReceipt struct {
+	CandidateUserID model.UserID
+	ExamID          model.ExamID
+	SittingID       model.ExamSittingID
+	SubmissionID    model.SubmissionID
+	ReceiptCode     model.SubmissionReceiptCode
+	SealedAt        time.Time
+	Provenance      model.ExamSubmissionProvenance
+}
+
+func newReceiptMail(t *testing.T, f *fixture) *receiptMail {
+	t.Helper()
+	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
+	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
+	require.NoError(t, err)
+	renderer := &receiptRenderer{}
+	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: renderer,
+		Sender: receiptSender{}, Sealer: sealer})
+	require.NoError(t, err)
+	m := &receiptMail{f: f, renderer: renderer}
+	m.preparer = SubmissionReceiptMail{Composer: composer, Users: receiptUsers{m: m},
+		Sittings: receiptSittings{m: m}, Revisions: receiptRevisions{}}
+	return m
+}
+
+// receipt is the last receipt the Composer froze.
+func (m *receiptMail) receipt() preparedReceipt {
+	requests := m.renderer.rendered()
+	if len(requests) == 0 {
+		return preparedReceipt{}
 	}
-	return &PreparedSubmissionMail{Notice: &store.PreparedMail{Occurrence: &model.MailOccurrence{},
-		Delivery: &model.MailDelivery{}, Job: &model.Job{}}, ExpectedRecipientRevision: 2}, nil
+	request := requests[len(requests)-1]
+	details, ok := request.Presentation.(mail.SubmissionReceiptDetails)
+	require.True(m.f.t, ok, "a receipt presents its Submission")
+	provenance := map[model.MailTemplateKey]model.ExamSubmissionProvenance{
+		model.MailTemplateExamSubmissionReceived:            model.ExamSubmissionCandidateSubmitted,
+		model.MailTemplateExamSubmissionManagerEnded:        model.ExamSubmissionManagerEndedAttempt,
+		model.MailTemplateExamSubmissionAutomaticallySealed: model.ExamSubmissionSittingClosed,
+	}[request.Key]
+	return preparedReceipt{CandidateUserID: m.candidate, ExamID: m.examID, SittingID: details.SittingID,
+		SubmissionID: details.SubmissionID, ReceiptCode: details.ReceiptCode, SealedAt: details.SealedAt, Provenance: provenance}
+}
+
+type receiptRenderer struct {
+	mu       sync.Mutex
+	requests []mail.RenderRequest
+}
+
+func (r *receiptRenderer) Render(request mail.RenderRequest) (mail.FrozenContent, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.requests = append(r.requests, request)
+	return mail.FrozenContent{Subject: "Receipt", Text: "Receipt", HTML: "<p>Receipt</p>"}, nil
+}
+
+func (r *receiptRenderer) rendered() []mail.RenderRequest {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]mail.RenderRequest(nil), r.requests...)
+}
+
+type receiptSender struct{}
+
+func (receiptSender) Enabled() bool { return true }
+
+func (receiptSender) From() mail.Address {
+	return mail.Address{Name: "Proctor", Address: "no-reply@example.test"}
+}
+
+func (receiptSender) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
+	return mail.TransportUnknown, nil
+}
+
+// receiptUsers reads the candidate at revision 2.
+type receiptUsers struct {
+	store.UserStore
+	m *receiptMail
+}
+
+func (u receiptUsers) Get(_ context.Context, id model.UserID) (*model.User, error) {
+	u.m.f.order = append(u.m.f.order, "submission.mail")
+	u.m.candidate = id
+	user := &model.User{Username: "candidate", Email: "candidate@example.edu", DisplayName: "Candidate",
+		EmailVerified: true, Locale: "en", Timezone: "UTC"}
+	user.PrepareCreate(id, time.UnixMilli(1))
+	user.Revision = 2
+	return user, nil
+}
+
+type receiptSittings struct {
+	store.ExamSittingStore
+	m *receiptMail
+}
+
+func (s receiptSittings) Get(_ context.Context, examID model.ExamID, _ model.ExamSittingID) (*store.ExamSittingSnapshot, error) {
+	s.m.examID = examID
+	return &store.ExamSittingSnapshot{Sitting: s.m.f.sitting}, nil
+}
+
+type receiptRevisions struct{ store.ExamRevisionStore }
+
+func (receiptRevisions) GetSummary(context.Context, model.ExamID, model.ExamRevisionID) (*store.ExamRevisionSummary, error) {
+	return &store.ExamRevisionSummary{Title: "Algorithms final"}, nil
 }
 
 func (f *submissionStoreFake) ListAutomaticSealTargets(_ context.Context, options store.ExamSubmissionAutomaticSealListOptions) ([]store.ExamSubmissionAutomaticSealTarget, error) {

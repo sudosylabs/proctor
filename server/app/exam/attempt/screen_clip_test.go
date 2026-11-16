@@ -43,7 +43,7 @@ func TestScreenClipRequestAuthorizesFirstAndKeepsItsReasonPrivate(t *testing.T) 
 	require.NotContains(t, fmt.Sprintf("%#v", f.audit().values), reason, "the audit carries no reason")
 	require.Equal(t, model.ActionExamSittingManage, f.audit().action)
 	require.Equal(t, store.ExamAttemptScreenClipRequestOperation, f.audit().operation)
-	require.Equal(t, []string{"manager.manage", "sitting", "audit-begin:exam.sitting.manage", "screen_clip", "effects"}, f.order,
+	require.Equal(t, []string{"grants", "decision:exam.sitting.manage:success", "sitting", "audit-begin:exam.sitting.manage", "screen_clip", "effects"}, f.order,
 		"authorization precedes the audit, which precedes the request; the candidate is told after it")
 	require.Equal(t, []realtimetest.Call{published(t)(realtime.NewCandidateScreenClipsRequestedEvent(
 		f.sitting.ID, f.attemptID, f.userID, input.Clip.RequestedAt))}, f.publisher.Calls(),
@@ -54,7 +54,7 @@ func TestScreenClipRequestRefusesAManagementOverride(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	useManagerCall(f)
-	f.managerOverride = true
+	useManagerOverride(f)
 	_, err := f.service.RequestScreenClip(context.Background(), f.inv, RequestScreenClipCommand{
 		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID,
 		Range: model.ScreenClipRange{FromSessionStart: true, End: f.at}, PrivateReason: "r", IdempotencyKey: "clip-override",
@@ -149,14 +149,14 @@ func TestScreenClipPlaybackIsAuditedFromItsFirstByteOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "video/webm", clip.MediaType)
 	require.Equal(t, int64(100), clip.SizeBytes)
-	require.Equal(t, []string{"manager.manage", "sitting"}, f.order, "one authorization decides the playback")
+	require.Equal(t, []string{"grants", "decision:exam.sitting.manage:success", "sitting"}, f.order, "one authorization decides the playback")
 	require.Empty(t, f.audit().operation, "nothing is played yet")
 
 	body, err := clip.Open(0, 100)
 	require.NoError(t, err)
 	require.NoError(t, body.Close())
 	require.Equal(t, ScreenClipPlaybackOperation, f.audit().operation, "starting a playback is audited")
-	require.Equal(t, []string{"manager.manage", "sitting", "audit-begin:exam.sitting.manage", "audit-success"}, f.order,
+	require.Equal(t, []string{"grants", "decision:exam.sitting.manage:success", "sitting", "audit-begin:exam.sitting.manage", "audit-success"}, f.order,
 		"opening the clip asks for no second authorization")
 	require.Equal(t, model.ActionExamSittingManage, f.audit().action)
 	require.Equal(t, model.RoleScopeClass, f.audit().scopeType)
@@ -175,8 +175,8 @@ func TestScreenClipPlaybackIsAuditedFromItsFirstByteOnly(t *testing.T) {
 	}
 
 	// A reviewer of the Submission plays it too, audited as a review.
-	submissionID, unitID := model.NewSubmissionID(), model.NewAcademicUnitID()
-	f.clipReviewer = true
+	submissionID, unitID := model.NewSubmissionID(), f.otherUnitID
+	useReviewerCall(f)
 	f.submissions.authorization = &store.ExamSubmissionAuthorization{SubmissionID: submissionID, ExamID: f.sitting.ExamID,
 		SittingID: f.sitting.ID, AttemptID: f.attemptID, CandidateUserID: f.userID, AcademicUnitID: unitID}
 	reviewed, err := f.service.PlayScreenClip(context.Background(), f.inv, query)
@@ -187,7 +187,7 @@ func TestScreenClipPlaybackIsAuditedFromItsFirstByteOnly(t *testing.T) {
 	require.Equal(t, model.ActionSubmissionReview, f.audit().action)
 	require.Equal(t, model.Resource{Type: model.ResourceSubmission, ID: submissionID.String()}, f.audit().resource)
 	require.Equal(t, unitID.String(), f.audit().scopeID, "a reviewer's playback is audited at the Submission's unit")
-	f.clipReviewer = false
+	useManagerCall(f)
 
 	f.persistence.attemptScreenClip.State = model.ScreenClipUploading
 	_, err = f.service.PlayScreenClip(context.Background(), f.inv, query)

@@ -28,19 +28,15 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// Handler handles one committed domain event. It runs after the fact has
-// committed, never inside it.
-type Handler interface {
-	HandleEvent(ctx context.Context, event model.DomainEvent) error
-}
-
 // Subscription is one handler for one topic.
 type Subscription struct {
 	// Key identifies the subscription across deliveries, so a retry can skip
 	// the subscriptions that already accepted an event.
-	Key     string
-	Topic   model.DomainEventTopic
-	Handler Handler
+	Key   string
+	Topic model.DomainEventTopic
+	// Handle handles one committed domain event. It runs after the fact has
+	// committed, never inside it.
+	Handle func(ctx context.Context, event model.DomainEvent) error
 }
 
 // Dispatcher offers domain events to a fixed list of subscriptions.
@@ -54,7 +50,7 @@ type Dispatcher struct {
 func NewDispatcher(subscriptions []Subscription) (*Dispatcher, error) {
 	keys := make(map[string]struct{}, len(subscriptions))
 	for _, subscription := range subscriptions {
-		if subscription.Key == "" || subscription.Handler == nil || !subscription.Topic.IsValid() {
+		if subscription.Key == "" || subscription.Handle == nil || !subscription.Topic.IsValid() {
 			return nil, fmt.Errorf("domain event subscription %q is incomplete", subscription.Key)
 		}
 		if _, repeated := keys[subscription.Key]; repeated {
@@ -82,7 +78,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event *model.DomainEvent, del
 		}
 		copied := *event
 		copied.Data = slices.Clone(event.Data)
-		if handleErr := subscription.Handler.HandleEvent(ctx, copied); handleErr != nil {
+		if handleErr := subscription.Handle(ctx, copied); handleErr != nil {
 			failures = errors.Join(failures, fmt.Errorf("domain event subscription %q: %w", subscription.Key, handleErr))
 			continue
 		}

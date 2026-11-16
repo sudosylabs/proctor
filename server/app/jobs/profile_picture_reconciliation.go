@@ -107,15 +107,11 @@ func decodeStrictJobDocument(document json.RawMessage, target any) error {
 	return nil
 }
 
-// ProfilePictureDefaultJobs proposes default profile picture generation for
-// one User; the reconciliation Job calls it for each User that lacks one.
-type ProfilePictureDefaultJobs interface {
-	ProposeDefaultProfilePicture(context.Context, model.UserID, time.Time) error
-}
-
 type defaultProfilePictureReconciliationHandler struct {
-	users    store.UserStore
-	defaults ProfilePictureDefaultJobs
+	users store.UserStore
+	// defaults proposes default profile picture generation for each User
+	// that lacks one.
+	defaults *DefaultProfilePictureJobs
 	now      func() time.Time
 }
 
@@ -244,7 +240,7 @@ func defaultProfilePictureReconciliationDescriptor(handler job.Handler) job.Desc
 // default profile pictures for Users that lack one, proposed daily.
 func NewDefaultProfilePictureReconciliation(
 	users store.UserStore,
-	defaults ProfilePictureDefaultJobs,
+	defaults *DefaultProfilePictureJobs,
 	jobs store.JobStore,
 	now func() time.Time,
 ) job.Registration {

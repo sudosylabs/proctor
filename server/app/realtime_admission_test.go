@@ -9,64 +9,78 @@ package app
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/exam"
+	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/jobs"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestAuthorizeWebSocketExamSubscriptionUsesExamRelationshipGate(t *testing.T) {
 	t.Parallel()
-	exams := &realtimeExamViewFake{}
-	admission := &RealtimeAdmission{exams: exams}
-	principal := testExamPrincipal(model.NewUserID())
-	examID := model.NewExamID()
-	err := admission.AuthorizeWebSocketSubscription(context.Background(), invocation.New(principal, model.RequestMetadata{RequestID: "subscribe"}),
-		model.ActionExamView, model.Resource{Type: model.ResourceExam, ID: examID.String()})
+	gate := newRealtimeGateFixture(t)
+	err := gate.admission.AuthorizeWebSocketSubscription(context.Background(),
+		invocation.New(gate.manager, model.RequestMetadata{RequestID: "subscribe"}),
+		model.ActionExamView, model.Resource{Type: model.ResourceExam, ID: gate.exam.ID.String()})
 	require.NoError(t, err)
-	require.Equal(t, examID, exams.examID, "authorization = %s %#v", exams.examID, exams.inv)
-	require.Equal(t, principal.UserID, exams.inv.Principal().UserID, "authorization = %s %#v", exams.examID, exams.inv)
+	// The Exam Manager's current relationship selects the ordinary action,
+	// which the real authorizer decides and records for this caller and Exam.
+	gate.requireOnlyDecision(t, model.ActionExamView, model.ResourceExam, gate.exam.ID.String(), model.AuditStatusSuccess)
+	require.Equal(t, "subscribe", gate.access.Audits.Decisions()[0].RequestID)
 }
 
 func TestAuthorizeWebSocketExamSubscriptionConcealsMissingAndDeniedExams(t *testing.T) {
 	t.Parallel()
-	principal := testExamPrincipal(model.NewUserID())
-	resource := model.Resource{Type: model.ResourceExam, ID: model.NewExamID().String()}
-	for _, failure := range []error{apperror.New("exam.not_found"), apperror.New("authorization.denied")} {
-		admission := &RealtimeAdmission{exams: &realtimeExamViewFake{err: failure}}
-		err := admission.AuthorizeWebSocketSubscription(context.Background(), invocation.New(principal, model.RequestMetadata{}), model.ActionExamView, resource)
-		require.True(t, apperror.Is(err, "resource.not_found"), "error = %v, want concealed resource.not_found", err)
-	}
+	gate := newRealtimeGateFixture(t)
+	missing := model.Resource{Type: model.ResourceExam, ID: model.NewExamID().String()}
+	err := gate.admission.AuthorizeWebSocketSubscription(context.Background(), invocation.New(gate.manager, model.RequestMetadata{}), model.ActionExamView, missing)
+	require.True(t, apperror.Is(err, "resource.not_found"), "missing Exam error = %v, want concealed resource.not_found", err)
+	require.Empty(t, gate.access.Audits.Decisions(), "a missing Exam is refused before any decision")
+
+	// Another User is no manager, so the gate asks for the override action
+	// it does not hold.
+	outsider := testExamPrincipal(model.NewUserID())
+	err = gate.admission.AuthorizeWebSocketSubscription(context.Background(), invocation.New(outsider, model.RequestMetadata{}),
+		model.ActionExamView, model.Resource{Type: model.ResourceExam, ID: gate.exam.ID.String()})
+	require.True(t, apperror.Is(err, "resource.not_found"), "denied Exam error = %v, want concealed resource.not_found", err)
+	gate.requireOnlyDecision(t, model.ActionExamViewOverride, model.ResourceExam, gate.exam.ID.String(), model.AuditStatusFail)
 }
 
 func TestAuthorizeWebSocketSittingSubscriptionUsesRelationshipGate(t *testing.T) {
 	t.Parallel()
-	sittings := &realtimeSittingViewFake{}
-	admission := &RealtimeAdmission{sittings: sittings}
-	principal := testExamPrincipal(model.NewUserID())
-	sittingID := model.NewExamSittingID()
-	err := admission.AuthorizeWebSocketSubscription(context.Background(),
-		invocation.New(principal, model.RequestMetadata{RequestID: "sitting-subscribe"}), model.ActionExamSittingView,
-		model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()})
+	gate := newRealtimeGateFixture(t)
+	err := gate.admission.AuthorizeWebSocketSubscription(context.Background(),
+		invocation.New(gate.manager, model.RequestMetadata{RequestID: "sitting-subscribe"}), model.ActionExamSittingView,
+		model.Resource{Type: model.ResourceExamSitting, ID: gate.sitting.ID.String()})
 	require.NoError(t, err)
-	require.Equal(t, sittingID, sittings.sittingID, "authorization = %s %#v", sittings.sittingID, sittings.inv)
-	require.Equal(t, principal.UserID, sittings.inv.Principal().UserID, "authorization = %s %#v", sittings.sittingID, sittings.inv)
+	gate.requireOnlyDecision(t, model.ActionExamSittingView, model.ResourceExamSitting, gate.sitting.ID.String(), model.AuditStatusSuccess)
+	require.Equal(t, "sitting-subscribe", gate.access.Audits.Decisions()[0].RequestID)
 }
 
 func TestAuthorizeWebSocketSittingSubscriptionConcealsMissingAndDeniedTargets(t *testing.T) {
 	t.Parallel()
-	principal := testExamPrincipal(model.NewUserID())
-	resource := model.Resource{Type: model.ResourceExamSitting, ID: model.NewExamSittingID().String()}
-	for _, failure := range []error{apperror.New("exam.sitting.not_found"), apperror.New("authorization.denied")} {
-		admission := &RealtimeAdmission{sittings: &realtimeSittingViewFake{err: failure}}
-		err := admission.AuthorizeWebSocketSubscription(context.Background(), invocation.New(principal, model.RequestMetadata{}),
-			model.ActionExamSittingView, resource)
-		require.True(t, apperror.Is(err, "resource.not_found"), "error = %v, want concealed resource.not_found", err)
-	}
+	gate := newRealtimeGateFixture(t)
+	missing := model.Resource{Type: model.ResourceExamSitting, ID: model.NewExamSittingID().String()}
+	err := gate.admission.AuthorizeWebSocketSubscription(context.Background(), invocation.New(gate.manager, model.RequestMetadata{}),
+		model.ActionExamSittingView, missing)
+	require.True(t, apperror.Is(err, "resource.not_found"), "missing Sitting error = %v, want concealed resource.not_found", err)
+	require.Empty(t, gate.access.Audits.Decisions(), "a missing Sitting is refused before any decision")
+
+	outsider := testExamPrincipal(model.NewUserID())
+	err = gate.admission.AuthorizeWebSocketSubscription(context.Background(), invocation.New(outsider, model.RequestMetadata{}),
+		model.ActionExamSittingView, model.Resource{Type: model.ResourceExamSitting, ID: gate.sitting.ID.String()})
+	require.True(t, apperror.Is(err, "resource.not_found"), "denied Sitting error = %v, want concealed resource.not_found", err)
+	gate.requireOnlyDecision(t, model.ActionExamSittingViewOverride, model.ResourceExamSitting, gate.sitting.ID.String(), model.AuditStatusFail)
 }
 
 // A subscription may name an owning scope its action accepts, but no other
@@ -87,26 +101,132 @@ func TestAuthorizeWebSocketSubscriptionRefusesAResourceTheActionDoesNotAccept(t 
 	}
 }
 
-type realtimeExamViewFake struct {
-	inv    invocation.Invocation
-	examID model.ExamID
-	err    error
+// realtimeGateFixture is a RealtimeAdmission over the real Exam Authoring
+// and Sitting services and the real authorizer. One Exam in one Academic
+// Unit has one Sitting; manager is its Exam Manager, a current member of
+// that unit, granted exam.view and exam_sitting.view there.
+type realtimeGateFixture struct {
+	access    *accesstest.Fixture
+	admission *RealtimeAdmission
+	manager   model.Principal
+	exam      *model.Exam
+	sitting   *model.ExamSitting
 }
 
-func (f *realtimeExamViewFake) AuthorizeExamView(_ context.Context, inv invocation.Invocation, examID model.ExamID) error {
-	f.inv, f.examID = inv, examID
-	return f.err
+func newRealtimeGateFixture(t *testing.T) realtimeGateFixture {
+	t.Helper()
+	unitID := model.NewAcademicUnitID()
+	manager := testExamPrincipal(model.NewUserID())
+	examRecord := &model.Exam{ID: model.NewExamID(), AcademicUnitID: unitID}
+	sittingRecord := &model.ExamSitting{ID: model.NewExamSittingID(), ExamID: examRecord.ID}
+	exams := &realtimeExamStoreFake{exam: examRecord, manager: manager.UserID}
+	sittings := &realtimeSittingStoreFake{snapshot: &store.ExamSittingSnapshot{Sitting: sittingRecord, AcademicUnitID: unitID}}
+	memberships := realtimeMembershipStoreFake{unitID: unitID, userID: manager.UserID}
+	fixture := accesstest.New(t, accesstest.Options{
+		Grants: []accesstest.Grant{{
+			UserID: manager.UserID, Actions: []model.Action{model.ActionExamView, model.ActionExamSittingView},
+			ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(),
+		}},
+		Exams: exams, Sittings: sittings,
+	})
+	publisher := &realtimetest.Publisher{}
+	authoring, err := exam.NewAuthoring(exam.AuthoringDependencies{
+		Persistence: exams, Memberships: memberships, Users: realtimeNoUsers{}, Sittings: sittings,
+		Mail: realtimeUnusedManagerMail{}, Authorizer: fixture.Authorizer, Auditor: fixture.Auditor,
+		Publisher: publisher, Now: time.Now, NewID: model.NewExamID,
+	})
+	require.NoError(t, err)
+	// A subscription never schedules, so the schedule notices have nothing
+	// to read; the composer is the production one over a disabled sender.
+	sittingMail, err := newSittingMailPreparer(sittingMailRendererFake{}, &mailSenderFake{}, nil, time.Now, nil)
+	require.NoError(t, err)
+	sittingService, err := sitting.New(sitting.Dependencies{
+		Persistence: sittings, Access: exams, Memberships: memberships,
+		Authorizer: fixture.Authorizer, Auditor: fixture.Auditor, Publisher: publisher,
+		Jobs: jobs.NewExamSittingLifecycleJobFactory(time.Now, model.NewJobID),
+		Mail: sitting.ScheduleMail{Composer: sittingMail, Revisions: realtimeNoRevisions{}, Classes: realtimeNoClasses{}}, Now: time.Now, NewID: model.NewExamSittingID,
+	})
+	require.NoError(t, err)
+	return realtimeGateFixture{
+		access:    fixture,
+		admission: &RealtimeAdmission{exams: authoring, sittings: sittingService, authorization: fixture.Authorizer},
+		manager:   manager,
+		exam:      examRecord,
+		sitting:   sittingRecord,
+	}
 }
 
-type realtimeSittingViewFake struct {
-	inv       invocation.Invocation
-	sittingID model.ExamSittingID
-	err       error
+// requireOnlyDecision requires that the one recorded decision is the given
+// action on the resource.
+func (f realtimeGateFixture) requireOnlyDecision(t *testing.T, action model.Action, resourceType model.ResourceType, id string, status model.AuditStatus) {
+	t.Helper()
+	decisions := f.access.Audits.Decisions()
+	require.Len(t, decisions, 1, "recorded decisions")
+	require.Equal(t, string(action), decisions[0].Action)
+	require.Equal(t, model.Resource{Type: resourceType, ID: id}, decisions[0].Resource)
+	require.Equal(t, status, decisions[0].Status)
 }
 
-func (f *realtimeSittingViewFake) AuthorizeSittingView(_ context.Context, inv invocation.Invocation, sittingID model.ExamSittingID) error {
-	f.inv, f.sittingID = inv, sittingID
-	return f.err
+// realtimeExamStoreFake holds one Exam; manager is its only Exam Manager.
+type realtimeExamStoreFake struct {
+	store.ExamAuthoringStore
+	exam    *model.Exam
+	manager model.UserID
+}
+
+func (s *realtimeExamStoreFake) Resolve(_ context.Context, id model.ExamID) (*model.Exam, error) {
+	if id != s.exam.ID {
+		return nil, store.NewErrNotFound("exam", id.String())
+	}
+	return s.exam, nil
+}
+
+func (s *realtimeExamStoreFake) Access(_ context.Context, id model.ExamID, userID model.UserID) (*store.ExamAccessSnapshot, error) {
+	if id != s.exam.ID {
+		return nil, store.NewErrNotFound("exam", id.String())
+	}
+	return &store.ExamAccessSnapshot{Exam: s.exam, ActorIsManager: userID == s.manager}, nil
+}
+
+type realtimeSittingStoreFake struct {
+	store.ExamSittingStore
+	snapshot *store.ExamSittingSnapshot
+}
+
+func (s *realtimeSittingStoreFake) Resolve(_ context.Context, id model.ExamSittingID) (*store.ExamSittingSnapshot, error) {
+	if id != s.snapshot.Sitting.ID {
+		return nil, store.NewErrNotFound("exam_sitting", id.String())
+	}
+	copied := *s.snapshot
+	return &copied, nil
+}
+
+// realtimeMembershipStoreFake makes userID a current member of unitID.
+type realtimeMembershipStoreFake struct {
+	store.AcademicUnitMemberStore
+	unitID model.AcademicUnitID
+	userID model.UserID
+}
+
+func (s realtimeMembershipStoreFake) ListActiveByUser(_ context.Context, userID model.UserID, _ time.Time) ([]*model.AcademicUnitMember, error) {
+	if userID != s.userID {
+		return nil, nil
+	}
+	return []*model.AcademicUnitMember{{AcademicUnitID: s.unitID, UserID: userID}}, nil
+}
+
+type (
+	realtimeNoUsers     struct{ store.UserStore }
+	realtimeNoRevisions struct{ store.ExamRevisionStore }
+	realtimeNoClasses   struct{ store.ClassStore }
+)
+
+// realtimeUnusedManagerMail is the manager mail port a subscription never
+// reaches; it refuses so a test would notice if one did.
+type realtimeUnusedManagerMail struct{}
+
+func (realtimeUnusedManagerMail) PrepareManagerMail(exam.ManagerMailPreparation) (*store.ExamManagerMail, error) {
+	return nil, errors.New("a realtime subscription prepares no manager mail")
 }
 
 func testExamPrincipal(userID model.UserID) model.Principal {

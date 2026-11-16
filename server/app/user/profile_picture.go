@@ -49,8 +49,6 @@ type PictureFiles interface {
 	GenerateAndStoreDefaultProfilePicture(context.Context, model.FileRevisionID, string, time.Time) ([]model.FileRendition, error)
 }
 
-type profilePictureWorkCapacity interface{ WorkCapacityExceeded() }
-
 // RenderedProfilePicture is a generated default picture. The caller owns Body
 // and must close it.
 type RenderedProfilePicture struct {
@@ -247,7 +245,7 @@ func (s *Service) stageProfilePictureUpload(
 
 // profilePictureNormalizationError maps a normalization failure to its application error.
 func profilePictureNormalizationError(err error) error {
-	var capacity profilePictureWorkCapacity
+	var capacity apperror.WorkCapacityExceeded
 	if errors.As(err, &capacity) {
 		return apperror.New("service.busy").Wrap(err)
 	}
@@ -464,7 +462,7 @@ func (s *Service) GetProfilePicture(
 		if store.IsNotFound(err) && user.CustomProfilePictureFileID.IsZero() && user.DefaultProfilePictureFileID.IsZero() {
 			rendered, renderErr := s.pictures.RenderDefaultProfilePicture(ctx, user.DefaultProfilePictureSeed, query.Size)
 			if renderErr != nil {
-				var capacity profilePictureWorkCapacity
+				var capacity apperror.WorkCapacityExceeded
 				if errors.As(renderErr, &capacity) {
 					return nil, apperror.New("service.busy").Wrap(renderErr)
 				}

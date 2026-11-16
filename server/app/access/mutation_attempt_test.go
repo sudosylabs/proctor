@@ -20,66 +20,82 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
-type mutationAttemptAuditorFake struct {
-	events   *[]string
-	beginID  string
-	beginIDs []string
-	beginErr error
-	failErr  error
-	failID   string
-	failCode string
-	attempt  Mutation
-	attempts []Mutation
+// mutationAttemptAudits is the audit store behind a real
+// MutationAuditAdapter. It logs each save as "begin" and each completion as
+// "fail" or "success" into the test's shared event log.
+type mutationAttemptAudits struct {
+	store.AuditStore
+	events      *[]string
+	saveErr     error
+	completeErr error
+	saved       []*model.AuditEvent
+	completions []*store.AuditCompletion
 }
 
-// Begin records the whole Mutation; the event names whether it carried an
-// explicit scope, as the two positional entry points once did.
-func (a *mutationAttemptAuditorFake) Begin(_ context.Context, attempt Mutation) (model.AuditEventID, error) {
-	if attempt.ScopeType != "" {
-		*a.events = append(*a.events, "begin-at-scope")
-	} else {
-		*a.events = append(*a.events, "begin")
+func (a *mutationAttemptAudits) Save(_ context.Context, event *model.AuditEvent) (*model.AuditEvent, error) {
+	*a.events = append(*a.events, "begin")
+	if a.saveErr != nil {
+		return nil, a.saveErr
 	}
-
-	a.attempt = attempt
-	a.attempts = append(a.attempts, attempt)
-	return model.AuditEventID(a.nextBeginID()), a.beginErr
+	saved := *event
+	saved.ID = model.NewAuditEventID()
+	a.saved = append(a.saved, &saved)
+	return &saved, nil
 }
 
-func (a *mutationAttemptAuditorFake) nextBeginID() string {
-	if len(a.beginIDs) == 0 {
-		return a.beginID
+func (a *mutationAttemptAudits) Complete(_ context.Context, completion *store.AuditCompletion) (*model.AuditEvent, error) {
+	*a.events = append(*a.events, string(completion.Status))
+	a.completions = append(a.completions, completion)
+	if a.completeErr != nil {
+		return nil, a.completeErr
 	}
-	id := a.beginIDs[0]
-	a.beginIDs = a.beginIDs[1:]
-	return id
+	return &model.AuditEvent{ID: completion.ID, Status: completion.Status, ErrorCode: completion.ErrorCode}, nil
 }
 
-func (a *mutationAttemptAuditorFake) Fail(_ context.Context, id model.AuditEventID, code string) error {
-	*a.events = append(*a.events, "fail")
-	a.failID = id.String()
-	a.failCode = code
-	return a.failErr
+// attempt is the one recorded attempt.
+func (a *mutationAttemptAudits) attempt(t *testing.T) *model.AuditEvent {
+	t.Helper()
+	require.Len(t, a.saved, 1, "recorded attempts")
+	return a.saved[0]
+}
+
+// completion is the one recorded completion.
+func (a *mutationAttemptAudits) completion(t *testing.T) *store.AuditCompletion {
+	t.Helper()
+	require.Len(t, a.completions, 1, "recorded completions")
+	return a.completions[0]
+}
+
+func mutationAttemptAuditor(audits *mutationAttemptAudits) MutationAuditAdapter {
+	return MutationAuditAdapter{audit: &Auditor{deps: AuditorDependencies{Audits: audits, NodeID: "test-node"}, now: time.Now}}
+}
+
+func mutationAttemptInvocation() invocation.Invocation {
+	return invocation.New(model.Principal{
+		UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
+		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password",
+		AuthenticationStrength: model.AuthenticationSingleFactor, AuthenticatedAt: model.NowUTC(), ClientType: model.SessionClientWeb,
+	}, model.RequestMetadata{RequestID: "mutation-attempt"})
 }
 
 func TestMutationAttemptBeginFailurePreventsMutation(t *testing.T) {
 	t.Parallel()
 
 	events := []string{}
-	beginErr := apperror.New("audit.unavailable")
-	auditor := &mutationAttemptAuditorFake{
-		events: &events, beginID: model.NewID(), beginErr: beginErr,
-	}
+	saveErr := errors.New("audit store unavailable")
+	audits := &mutationAttemptAudits{events: &events, saveErr: saveErr}
 	mutated := false
 	_, err := RunAudited(
-		context.Background(), auditor,
+		context.Background(), mutationAttemptAuditor(audits),
 		Mutation{
-			Action:    model.ActionAcademicUnitManage,
-			Resource:  model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()},
-			Operation: "create",
-			At:        time.Now(),
+			Invocation: mutationAttemptInvocation(),
+			Action:     model.ActionAcademicUnitManage,
+			Resource:   model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()},
+			Operation:  "create",
+			At:         time.Now(),
 		},
 		func(context.Context, MutationReference) (string, error) {
 			mutated = true
@@ -87,7 +103,8 @@ func TestMutationAttemptBeginFailurePreventsMutation(t *testing.T) {
 		},
 		func(err error) error { return apperror.New("programme.conflict").Wrap(err) },
 	)
-	require.Equal(t, err, beginErr, "RunAudited() error = %v, want begin error", err)
+	require.True(t, apperror.Is(err, "audit.unavailable"), "RunAudited() error = %v, want audit.unavailable", err)
+	require.ErrorIs(t, err, saveErr, "RunAudited() error")
 	require.False(t, mutated, "named mutation ran after begin failure")
 	require.Equal(t, []string{"begin"}, events)
 }
@@ -96,14 +113,15 @@ func TestMutationAttemptRejectsMutationWithoutTime(t *testing.T) {
 	t.Parallel()
 
 	events := []string{}
-	auditor := &mutationAttemptAuditorFake{events: &events, beginID: model.NewID()}
+	audits := &mutationAttemptAudits{events: &events}
 	mutated := false
 	_, err := RunAudited(
-		context.Background(), auditor,
+		context.Background(), mutationAttemptAuditor(audits),
 		Mutation{
-			Action:    model.ActionAcademicUnitManage,
-			Resource:  model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()},
-			Operation: "create",
+			Invocation: mutationAttemptInvocation(),
+			Action:     model.ActionAcademicUnitManage,
+			Resource:   model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()},
+			Operation:  "create",
 		},
 		func(context.Context, MutationReference) (string, error) {
 			mutated = true
@@ -122,53 +140,54 @@ func TestMutationAttemptUsesIndependentAuditScope(t *testing.T) {
 	t.Parallel()
 
 	events := []string{}
-	auditID := model.NewID()
 	scopeID := model.NewID()
 	resource := model.Resource{Type: model.ResourceAcademicPeriod, ID: model.NewID()}
-	auditor := &mutationAttemptAuditorFake{events: &events, beginID: auditID}
+	audits := &mutationAttemptAudits{events: &events}
 	got, err := RunAudited(
-		context.Background(), auditor,
+		context.Background(), mutationAttemptAuditor(audits),
 		Mutation{
-			Action: model.ActionAcademicPeriodManage, Resource: resource,
+			Invocation: mutationAttemptInvocation(),
+			Action:     model.ActionAcademicPeriodManage, Resource: resource,
 			ScopeType: model.RoleScopeAcademicUnit, ScopeID: scopeID,
 			Operation: "create",
 			At:        time.Now(),
 		},
-		func(_ context.Context, reference MutationReference) (string, error) {
+		func(_ context.Context, reference MutationReference) (model.AuditEventID, error) {
 			events = append(events, "mutate")
-			return reference.ID.String(), nil
+			return reference.ID, nil
 		},
 		func(error) error { return nil },
 	)
 	require.NoError(t, err, "RunAudited()")
-	require.Equal(t, auditID, got, "RunAudited()")
-	require.Equal(t, resource, auditor.attempt.Resource)
-	require.Equal(t, model.RoleScopeAcademicUnit, auditor.attempt.ScopeType)
-	require.Equal(t, scopeID, auditor.attempt.ScopeID)
+	attempt := audits.attempt(t)
+	require.Equal(t, attempt.ID, got, "RunAudited()")
+	require.Equal(t, resource, attempt.Resource)
+	require.Equal(t, model.RoleScopeAcademicUnit, attempt.ScopeType)
+	require.Equal(t, scopeID, attempt.ScopeID)
 	// Contract (guardrail 8): the audit begins before the durable write.
-	require.Equal(t, []string{"begin-at-scope", "mutate"}, events)
+	require.Equal(t, []string{"begin", "mutate"}, events)
 }
 
 func TestMutationAttemptMapsStoreFailureBeforeCompletingAttempt(t *testing.T) {
 	t.Parallel()
 
 	events := []string{}
-	auditID := model.NewID()
 	storeErr := errors.New("store failed")
 	mapped := apperror.New("programme.conflict").Wrap(storeErr)
-	auditor := &mutationAttemptAuditorFake{events: &events, beginID: auditID}
+	audits := &mutationAttemptAudits{events: &events}
 	at := time.UnixMilli(500)
 	_, err := RunAudited(
-		context.Background(), auditor,
+		context.Background(), mutationAttemptAuditor(audits),
 		Mutation{
-			Action:    model.ActionAcademicUnitManage,
-			Resource:  model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()},
-			Operation: "patch",
-			At:        at,
+			Invocation: mutationAttemptInvocation(),
+			Action:     model.ActionAcademicUnitManage,
+			Resource:   model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()},
+			Operation:  "patch",
+			At:         at,
 		},
 		func(_ context.Context, reference MutationReference) (string, error) {
 			events = append(events, "mutate")
-			require.Equal(t, model.AuditEventID(auditID), reference.ID)
+			require.Equal(t, audits.attempt(t).ID, reference.ID)
 			require.True(t, model.TimeUTC(at).Equal(reference.MutationAt))
 			return "", storeErr
 		},
@@ -179,8 +198,10 @@ func TestMutationAttemptMapsStoreFailureBeforeCompletingAttempt(t *testing.T) {
 		},
 	)
 	require.Equal(t, err, mapped, "RunAudited() error = %v, want mapped error", err)
-	require.Equal(t, auditID, auditor.failID, "failure completion = id")
-	require.Equal(t, mapped.Code(), auditor.failCode, "failure completion = id")
+	completion := audits.completion(t)
+	require.Equal(t, audits.attempt(t).ID, completion.ID, "failure completion = id")
+	require.Equal(t, model.AuditStatusFail, completion.Status, "failure completion status")
+	require.Equal(t, mapped.Code(), completion.ErrorCode, "failure completion code")
 	// Contract (guardrail 8): the audit begins before the durable write, and the
 	// audit outcome follows the write.
 	require.Equal(t, []string{"begin", "mutate", "map", "fail"}, events)
@@ -191,17 +212,16 @@ func TestMutationAttemptFailureCompletionErrorJoinsOriginalFailure(t *testing.T)
 
 	events := []string{}
 	storeErr := errors.New("store failed")
-	auditErr := apperror.New("audit.unavailable")
-	auditor := &mutationAttemptAuditorFake{
-		events: &events, beginID: model.NewID(), failErr: auditErr,
-	}
+	completeErr := errors.New("audit store unavailable")
+	audits := &mutationAttemptAudits{events: &events, completeErr: completeErr}
 	_, err := RunAudited(
-		context.Background(), auditor,
+		context.Background(), mutationAttemptAuditor(audits),
 		Mutation{
-			Action:    model.ActionAcademicUnitManage,
-			Resource:  model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()},
-			Operation: "archive",
-			At:        time.Now(),
+			Invocation: mutationAttemptInvocation(),
+			Action:     model.ActionAcademicUnitManage,
+			Resource:   model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()},
+			Operation:  "archive",
+			At:         time.Now(),
 		},
 		func(context.Context, MutationReference) (struct{}, error) {
 			return struct{}{}, storeErr
@@ -214,7 +234,7 @@ func TestMutationAttemptFailureCompletionErrorJoinsOriginalFailure(t *testing.T)
 	require.True(t, ok, "RunAudited() error")
 	require.Equal(t, "programme.conflict", appErr.Code(), "RunAudited() error")
 	require.ErrorIs(t, err, storeErr, "RunAudited() error")
-	require.ErrorIs(t, err, auditErr, "RunAudited() error")
+	require.ErrorIs(t, err, completeErr, "RunAudited() error")
 }
 
 func TestMutationAttemptRejectsInvalidMappedError(t *testing.T) {
@@ -226,14 +246,15 @@ func TestMutationAttemptRejectsInvalidMappedError(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			events := []string{}
-			auditor := &mutationAttemptAuditorFake{events: &events, beginID: model.NewID()}
+			audits := &mutationAttemptAudits{events: &events}
 			_, err := RunAudited(
-				context.Background(), auditor,
+				context.Background(), mutationAttemptAuditor(audits),
 				Mutation{
-					Action:    model.ActionAcademicUnitManage,
-					Resource:  model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()},
-					Operation: "create",
-					At:        time.Now(),
+					Invocation: mutationAttemptInvocation(),
+					Action:     model.ActionAcademicUnitManage,
+					Resource:   model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()},
+					Operation:  "create",
+					At:         time.Now(),
 				},
 				func(context.Context, MutationReference) (struct{}, error) {
 					return struct{}{}, errors.New("store failed")
@@ -243,7 +264,7 @@ func TestMutationAttemptRejectsInvalidMappedError(t *testing.T) {
 			appErr, ok := apperror.As(err)
 			require.True(t, ok)
 			require.Equal(t, "audit.internal", appErr.Code())
-			require.Equal(t, "audit.internal", auditor.failCode)
+			require.Equal(t, "audit.internal", audits.completion(t).ErrorCode)
 		})
 	}
 }
@@ -252,16 +273,17 @@ func TestMutationAttemptPreservesMappedErrorWrapper(t *testing.T) {
 	t.Parallel()
 
 	events := []string{}
-	auditor := &mutationAttemptAuditorFake{events: &events, beginID: model.NewID()}
+	audits := &mutationAttemptAudits{events: &events}
 	appFailure := apperror.New("role.conflict")
 	mapped := fmt.Errorf("persistence context: %w", appFailure)
 	_, err := RunAudited(
-		context.Background(), auditor,
+		context.Background(), mutationAttemptAuditor(audits),
 		Mutation{
-			Action:    model.ActionRoleManage,
-			Resource:  model.Resource{Type: model.ResourceInstitution, ID: model.NewID()},
-			Operation: "patch",
-			At:        time.Now(),
+			Invocation: mutationAttemptInvocation(),
+			Action:     model.ActionRoleManage,
+			Resource:   model.Resource{Type: model.ResourceInstitution, ID: model.NewID()},
+			Operation:  "patch",
+			At:         time.Now(),
 		},
 		func(context.Context, MutationReference) (struct{}, error) {
 			return struct{}{}, errors.New("store failed")
@@ -269,24 +291,23 @@ func TestMutationAttemptPreservesMappedErrorWrapper(t *testing.T) {
 		func(error) error { return mapped },
 	)
 	require.Equal(t, mapped, err, "RunAudited() error")
-	require.Equal(t, appFailure.Code(), auditor.failCode)
+	require.Equal(t, appFailure.Code(), audits.completion(t).ErrorCode)
 }
 
 func TestMutationAttemptReturnsSuccessWithoutCompletingIt(t *testing.T) {
 	t.Parallel()
 
 	events := []string{}
-	auditID := model.NewID()
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()}
 	value := map[string]any{"name": "computer-science"}
 	prior := map[string]any{"name": "computing"}
-	inv := invocation.Invocation{}
-	auditor := &mutationAttemptAuditorFake{events: &events, beginID: auditID}
+	inv := mutationAttemptInvocation()
+	audits := &mutationAttemptAudits{events: &events}
 	// A local, sub-microsecond instant far from the wall clock: only the given
 	// At, normalised, can reach the mutation reference.
 	at := time.UnixMilli(500).Add(789 * time.Nanosecond).In(time.FixedZone("WAT", 3600))
 	got, err := RunAudited(
-		context.Background(), auditor,
+		context.Background(), mutationAttemptAuditor(audits),
 		Mutation{
 			Invocation: inv,
 			Action:     model.ActionAcademicUnitManage,
@@ -298,7 +319,7 @@ func TestMutationAttemptReturnsSuccessWithoutCompletingIt(t *testing.T) {
 		},
 		func(_ context.Context, reference MutationReference) (string, error) {
 			events = append(events, "mutate")
-			require.Equal(t, model.AuditEventID(auditID), reference.ID)
+			require.Equal(t, audits.attempt(t).ID, reference.ID)
 			require.Equal(t, time.UnixMilli(500).UTC(), reference.MutationAt)
 			return "saved", nil
 		},
@@ -309,13 +330,15 @@ func TestMutationAttemptReturnsSuccessWithoutCompletingIt(t *testing.T) {
 	)
 	require.NoError(t, err, "RunAudited()")
 	require.Equal(t, "saved", got, "RunAudited()")
-	require.Equal(t, inv, auditor.attempt.Invocation)
-	require.Equal(t, model.ActionAcademicUnitManage, auditor.attempt.Action)
-	require.Equal(t, resource, auditor.attempt.Resource)
-	require.Equal(t, "patch", auditor.attempt.Operation)
-	require.Equal(t, value, auditor.attempt.Value)
-	require.Equal(t, prior, auditor.attempt.Prior)
-	require.Equal(t, at, auditor.attempt.At)
+	attempt := audits.attempt(t)
+	require.Equal(t, inv.Principal().UserID, attempt.ActorID)
+	require.Equal(t, inv.RequestMetadata().RequestID, attempt.RequestID)
+	require.Equal(t, string(model.ActionAcademicUnitManage), attempt.Action)
+	require.Equal(t, resource, attempt.Resource)
+	require.Equal(t, model.AuditStatusAttempt, attempt.Status)
+	require.JSONEq(t, `{"operation":"patch","value":{"name":"computer-science"}}`, string(attempt.Parameters))
+	require.JSONEq(t, `{"name":"computing"}`, string(attempt.PriorState))
+	require.Empty(t, audits.completions, "a successful attempt is completed by the Store mutation")
 	// RunAudited reads no clock: no parameter can supply one.
 	runner := reflect.TypeOf(RunAudited[string])
 	for i := range runner.NumIn() {

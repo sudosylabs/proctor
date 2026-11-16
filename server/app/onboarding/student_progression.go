@@ -367,7 +367,7 @@ func (s *Service) DryRunStudentProgression(
 
 func runProgressionAudited[T any](
 	ctx context.Context,
-	audit access.MutationAuditor,
+	audit access.MutationAuditAdapter,
 	inv invocation.Invocation,
 	operation, progressionID string,
 	sourceClassID, destinationClassID model.ClassID,

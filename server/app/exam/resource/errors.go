@@ -39,18 +39,12 @@ var storeErrors = apperror.StoreTable{
 	Unavailable:  "exam.resource.unavailable",
 }
 
-type invalidContentError interface {
-	InvalidExamResourceContent()
-}
-
-type workCapacityError interface{ WorkCapacityExceeded() }
-
 func mapContentError(err error) error {
-	var capacity workCapacityError
+	var capacity apperror.WorkCapacityExceeded
 	if errors.As(err, &capacity) {
 		return apperror.New("service.busy").Wrap(err)
 	}
-	var invalidContent invalidContentError
+	var invalidContent apperror.InvalidExamResourceContent
 	if errors.As(err, &invalidContent) {
 		return apperror.New("exam.resource.content_invalid").Wrap(err)
 	}

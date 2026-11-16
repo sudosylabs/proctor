@@ -28,11 +28,11 @@ const (
 // reconcile it. A pass reads a bounded number of pages.
 type sittingMailReconciliationRunner struct {
 	sittings store.ExamSittingStore
-	mail     sitting.ScheduleMailPreparer
+	mail     sitting.ScheduleMail
 }
 
 func (r sittingMailReconciliationRunner) Run(ctx context.Context) error {
-	if r.sittings == nil || r.mail == nil {
+	if r.sittings == nil || r.mail.Composer == nil {
 		return errors.New("Sitting mail reconciliation dependencies are unavailable")
 	}
 
@@ -90,7 +90,7 @@ func (r sittingMailReconciliationRunner) Run(ctx context.Context) error {
 // reconciles Sitting schedule mail on every node. A Sitting that changed or
 // disappeared since it was listed is skipped; a later pass lists it again if
 // it is still due.
-func NewSittingMailReconciliationTask(sittings store.ExamSittingStore, mail sitting.ScheduleMailPreparer) job.PeriodicTask {
+func NewSittingMailReconciliationTask(sittings store.ExamSittingStore, mail sitting.ScheduleMail) job.PeriodicTask {
 	return job.PeriodicTask{
 		Name:     sittingMailReconciliationTaskName,
 		Interval: sittingMailReconciliationInterval,

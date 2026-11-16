@@ -20,15 +20,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// sittingLifecycle is the part of *sitting.Service the lifecycle, recovery and
-// sealing Jobs drive. It is a seam because the handler tests fake it: the real
-// service needs a Store, an audit trail and a clock to produce each result.
-type sittingLifecycle interface {
-	AdvanceDue(context.Context, invocation.System, model.ExamSittingID) (store.ExamSittingLifecycleResult, error)
-	ListLifecycleDue(context.Context, invocation.System, store.ExamSittingLifecycleDueOptions) ([]store.ExamSittingLifecycleDue, error)
-	FinishSealing(context.Context, invocation.System, model.ExamSittingID) (store.ExamSittingLifecycleResult, error)
-}
-
 // ExamSittingLifecycleJobResult is deliberately limited to safe lifecycle
 // state. The immutable command, audit documents, and private manager reasons
 // never enter the generic Job result.
@@ -40,7 +31,7 @@ type ExamSittingLifecycleJobResult struct {
 }
 
 type examSittingLifecycleHandler struct {
-	sittings sittingLifecycle
+	sittings *sitting.Service
 }
 
 func (h examSittingLifecycleHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {

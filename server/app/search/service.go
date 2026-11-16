@@ -59,21 +59,13 @@ type Result struct {
 	Users   []*model.User
 }
 
-type examCatalog interface {
-	ListExams(context.Context, invocation.Invocation, exam.ListQuery) (exam.CatalogPage, error)
-}
-
-type classAuthorizer interface {
-	AuthorizeClassSearch(context.Context, invocation.Invocation) (store.ClassVisibilityScope, error)
-}
-
 // Dependencies are the collaborators of Service. Exams and Users are the
 // Exam catalog and User directory use cases themselves, so each type is
 // authorized, audited and scoped exactly as its own list is.
 type Dependencies struct {
-	Exams              examCatalog
+	Exams              *exam.Authoring
 	Users              *user.Service
-	ClassAuthorization classAuthorizer
+	ClassAuthorization *access.Authorizer
 	Classes            store.ClassStore
 }
 

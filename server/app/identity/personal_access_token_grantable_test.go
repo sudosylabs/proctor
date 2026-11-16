@@ -107,9 +107,11 @@ func newGrantableScopeFixture(t *testing.T) grantableScopeFixture {
 // with the roles and bindings given.
 func (f grantableScopeFixture) authorizer(t *testing.T, roles []*model.Role, bindings []*model.RoleBinding) *access.Authorizer {
 	t.Helper()
+	auditor, err := access.NewAuditor(access.AuditorDependencies{Audits: &decisionAudits{}, Institutions: f.institutions, NodeID: "test-node"})
+	require.NoError(t, err)
 	authorizer, err := access.NewAuthorizer(access.AuthorizerDependencies{
 		Roles: &accessRoleStoreFake{roles: roles}, Bindings: &accessRoleBindingStoreFake{bindings: bindings},
-		Resolver: f.resolver, Audit: accessDecisionAuditFake{}, Now: func() time.Time { return f.now },
+		Resolver: f.resolver, Audit: auditor, Now: func() time.Time { return f.now },
 	})
 	require.NoError(t, err)
 	return authorizer

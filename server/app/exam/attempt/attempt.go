@@ -61,12 +61,6 @@ type PreparedSubmissionMail struct {
 	ExpectedRecipientRevision int64
 }
 
-// SubmissionMailPreparer prepares the candidate's Submission receipt.
-// SubmissionReceiptMail satisfies it and tests substitute a fake.
-type SubmissionMailPreparer interface {
-	PrepareSubmissionReceipt(context.Context, SubmissionMailPreparation) (*PreparedSubmissionMail, error)
-}
-
 // DesktopBuildResolution is the Desktop build resolved for a Principal and
 // the Desktop compatibility policy revision it was resolved under.
 type DesktopBuildResolution struct {
@@ -106,7 +100,7 @@ type Dependencies struct {
 	Auditor             *access.Auditor
 	Publisher           realtime.Publisher
 	Content             Content
-	Mail                SubmissionMailPreparer
+	Mail                SubmissionReceiptMail
 	DesktopBuilds       DesktopBuildResolver
 	Now                 func() time.Time
 	NewAttemptID        func() model.ExamAttemptID
@@ -192,7 +186,7 @@ type Service struct {
 	systemAuditor access.SystemAuditAdapter
 	publisher     realtime.Publisher
 	content       Content
-	mail          SubmissionMailPreparer
+	mail          SubmissionReceiptMail
 	desktopBuilds DesktopBuildResolver
 	now           func() time.Time
 	operational   OperationalRecorder
@@ -239,7 +233,10 @@ func New(deps Dependencies) (*Service, error) {
 		deps.Auditor == nil ||
 		deps.Publisher == nil ||
 		deps.Content == nil ||
-		deps.Mail == nil ||
+		deps.Mail.Composer == nil ||
+		deps.Mail.Users == nil ||
+		deps.Mail.Sittings == nil ||
+		deps.Mail.Revisions == nil ||
 		deps.DesktopBuilds == nil ||
 		deps.Now == nil ||
 		deps.NewAttemptID == nil ||

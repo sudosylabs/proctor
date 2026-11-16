@@ -55,7 +55,7 @@ func New(deps Dependencies) (*App, error) {
 		Health:     shared.mailHealth,
 		MFAEnabled: deps.MFA.Enabled,
 	}
-	administrations, err := newAdministration(deps, shared, authorizer, capabilities)
+	administrations, err := newAdministration(deps, shared, authorizer, &capabilities)
 	if err != nil {
 		return nil, err
 	}
@@ -312,12 +312,12 @@ func newAdministration(
 	deps Dependencies,
 	shared sharedMechanics,
 	authorizer *access.Authorizer,
-	capabilities identity.DeploymentCapabilities,
+	capabilities *identity.DeploymentCapabilities,
 ) (*administration.Service, error) {
 	return administration.New(administration.Dependencies{
 		Store:                   deps.Store,
 		Authorizer:              authorizer,
-		Auditor:                 shared.audit.MutationAudit(),
+		Auditor:                 shared.audit,
 		Capabilities:            capabilities,
 		Mail:                    shared.mail,
 		Publisher:               shared.realtime,

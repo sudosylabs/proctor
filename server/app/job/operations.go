@@ -27,35 +27,20 @@ import (
 // answers that Jobs are unavailable.
 type Operations struct {
 	deps OperationsDependencies
+	// audit opens the attempt of each cancel or retry and fails it when the
+	// transition does not commit; the Store completes a committed attempt.
+	audit access.MutationAuditAdapter
 }
 
 // OperationsDependencies are the collaborators of Operations;
 // NewOperations validates them once and Operations keeps them in deps.
 type OperationsDependencies struct {
-	Jobs          operatorEngine
-	Authorization institutionAuthorizer
-	Audit         access.MutationAuditor
+	Jobs          *Engine
+	Authorization InstitutionAuthorization
+	Audit         *access.Auditor
 	Users         store.UserStore
 	ExamExports   store.ExamExportStore
 	Now           func() time.Time
-}
-
-type operatorEngine interface {
-	List(context.Context, ListQuery) (Page, error)
-	CountRecentFailures(context.Context, time.Duration, int) (int, error)
-	Get(context.Context, model.JobID) (View, error)
-	Attempts(context.Context, AttemptListQuery) (AttemptPage, error)
-	PrepareCancellation(context.Context, model.JobID) (ControlTarget, error)
-	PrepareRetry(context.Context, model.JobID) (ControlTarget, error)
-	Cancel(context.Context, ControlTarget, AuditReference) (View, error)
-	Retry(context.Context, ControlTarget, AuditReference) (View, error)
-}
-
-// institutionAuthorizer authorizes an Action on the installation's singleton
-// Institution and returns that Resource for the caller's audit. Production
-// passes InstitutionAuthorization; the tests substitute a fake.
-type institutionAuthorizer interface {
-	AuthorizeInstitution(context.Context, invocation.Invocation, model.Action) (model.Resource, error)
 }
 
 // InstitutionAuthorization authorizes a Job operator Action on the singleton
@@ -92,7 +77,7 @@ func NewOperations(deps OperationsDependencies) (*Operations, error) {
 	if deps.Jobs == nil {
 		return nil, errors.New("job operations engine is required")
 	}
-	if deps.Authorization == nil {
+	if deps.Authorization.Authorizer == nil || deps.Authorization.Institutions == nil {
 		return nil, errors.New("job operations authorization is required")
 	}
 	if deps.Audit == nil {
@@ -107,7 +92,7 @@ func NewOperations(deps OperationsDependencies) (*Operations, error) {
 	if deps.Now == nil {
 		return nil, errors.New("job operations clock is required")
 	}
-	return &Operations{deps: deps}, nil
+	return &Operations{deps: deps, audit: deps.Audit.MutationAudit()}, nil
 }
 
 // ListJobs lists one page of operator-visible Jobs, with who started each and
@@ -231,7 +216,7 @@ func (s *Operations) controlJob(
 	}
 
 	view := target.View()
-	auditID, err := s.deps.Audit.Begin(ctx, access.Mutation{
+	auditID, err := s.audit.Begin(ctx, access.Mutation{
 		Invocation: inv,
 		Action:     model.ActionJobManage,
 		Resource:   resource,
@@ -244,7 +229,7 @@ func (s *Operations) controlJob(
 
 	updated, err := apply(ctx, target, AuditReference{EventID: auditID, At: s.deps.Now()})
 	if err != nil {
-		_ = s.deps.Audit.Fail(ctx, auditID, "job.conflict")
+		_ = s.audit.Fail(ctx, auditID, "job.conflict")
 		return View{}, operationsStoreErrors.Translate(err)
 	}
 

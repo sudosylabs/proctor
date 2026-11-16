@@ -42,23 +42,9 @@ type ExamSittingSealingResult struct {
 	Revision  int64                  `json:"revision"`
 }
 
-// attemptSealing is the part of *attempt.Service the sealing Job drives. It
-// is a seam because the handler tests fake it: sealing a real Attempt needs
-// its Submission, audit and workspace machinery.
-type attemptSealing interface {
-	ListAutomaticSealTargets(
-		context.Context,
-		invocation.System,
-		model.ExamSittingID,
-		model.ExamAttemptID,
-		int,
-	) ([]store.ExamSubmissionAutomaticSealTarget, error)
-	SealForSittingClose(context.Context, invocation.System, store.ExamSubmissionAutomaticSealTarget) (attempt.AutomaticSubmissionResult, error)
-}
-
 type examSittingSealingHandler struct {
-	sittings sittingLifecycle
-	attempts attemptSealing
+	sittings *sitting.Service
+	attempts *attempt.Service
 	jobs     store.JobStore
 	now      func() time.Time
 	newID    func() model.JobID

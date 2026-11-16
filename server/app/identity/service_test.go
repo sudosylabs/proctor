@@ -158,14 +158,20 @@ func (s *accessRoleBindingStoreFake) ListActiveByUser(_ context.Context, _ model
 	return s.bindings, nil
 }
 
-type accessDecisionAuditFake struct{}
-
-func (accessDecisionAuditFake) RecordAuthorizationDecision(context.Context, model.Principal, model.Action, model.Resource, model.RoleScopeType, string, model.RequestMetadata, bool) error {
-	return nil
+// decisionAudits keeps the authorization decisions a real Auditor records.
+type decisionAudits struct {
+	store.AuditStore
+	mu     sync.Mutex
+	events []*model.AuditEvent
 }
 
-func (accessDecisionAuditFake) RecordUserSearchDecision(context.Context, model.Principal, model.Resource, model.RoleScopeType, string, model.RequestMetadata, bool) error {
-	return nil
+func (a *decisionAudits) Save(_ context.Context, event *model.AuditEvent) (*model.AuditEvent, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	saved := *event
+	saved.ID = model.NewAuditEventID()
+	a.events = append(a.events, &saved)
+	return &saved, nil
 }
 
 type accessPolicyStoreFake struct {

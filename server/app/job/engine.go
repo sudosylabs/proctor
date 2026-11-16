@@ -48,9 +48,11 @@ type Dependencies struct {
 	Diagnostics *logging.Logger
 	Recorder    Recorder
 	// Tracer, when set, encloses each claimed execution in a span.
-	Tracer        Tracer
-	Policy        Policy
-	Clock         Clock
+	Tracer Tracer
+	Policy Policy
+	// Now reads the instant a recurrence proposes and progress is coalesced
+	// at; nil means time.Now. Waiting always uses real timers.
+	Now           func() time.Time
 	Recurrences   []Recurrence
 	PeriodicTasks []PeriodicTask
 }
@@ -85,15 +87,15 @@ func New(deps Dependencies) (*Engine, error) {
 	if deps.Policy.ProposalRetryDelay <= 0 {
 		deps.Policy.ProposalRetryDelay = time.Minute
 	}
-	if deps.Clock == nil {
-		deps.Clock = systemClock{}
+	if deps.Now == nil {
+		deps.Now = time.Now
 	}
 	deps.Recurrences, deps.PeriodicTasks = recurrences, periodicTasks
 	return &Engine{
 		deps:     deps,
 		registry: registry,
 		wake:     make(chan struct{}, 1),
-		progress: newProgressCoalescer(progressWindow, deps.Clock.Now),
+		progress: newProgressCoalescer(progressWindow, deps.Now),
 	}, nil
 }
 
@@ -148,7 +150,7 @@ func (r *Engine) Start(ctx context.Context) error {
 		r.wg.Add(1)
 		go func(value Recurrence) {
 			defer r.wg.Done()
-			runRecurrenceProposal(runCtx, value, r.deps.Diagnostics, r.deps.Clock, r.deps.Policy.ProposalRetryDelay, r.Wake, r.deps.Recorder)
+			runRecurrenceProposal(runCtx, value, r.deps.Diagnostics, r.deps.Now, r.deps.Policy.ProposalRetryDelay, r.Wake, r.deps.Recorder)
 		}(recurrence)
 	}
 
@@ -156,7 +158,7 @@ func (r *Engine) Start(ctx context.Context) error {
 		r.wg.Add(1)
 		go func(value PeriodicTask) {
 			defer r.wg.Done()
-			runPeriodicTask(runCtx, value, r.deps.Diagnostics, r.deps.Clock, r.deps.Recorder)
+			runPeriodicTask(runCtx, value, r.deps.Diagnostics, r.deps.Recorder)
 		}(task)
 	}
 

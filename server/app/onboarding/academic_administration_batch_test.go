@@ -98,7 +98,7 @@ func newBatchWorld(t *testing.T, now time.Time, options batchWorldOptions) *batc
 
 	capabilities := &identity.DeploymentCapabilities{}
 	administrationService, err := administration.New(administration.Dependencies{Store: catalog, Authorizer: fixture.Authorizer,
-		Auditor: fixture.Auditor.MutationAudit(), Capabilities: capabilities, Mail: composer, Publisher: publisher,
+		Auditor: fixture.Auditor, Capabilities: capabilities, Mail: composer, Publisher: publisher,
 		CanonicalOrigin: "https://proctor.example.edu", PasswordMinimumLength: 12, RecentAuthenticationTTL: 15 * time.Minute,
 		Now: func() time.Time { return now }})
 	require.NoError(t, err)

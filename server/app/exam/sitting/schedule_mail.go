@@ -16,10 +16,11 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ScheduleMail is the ScheduleMailPreparer the application runs: it reads the
-// published Exam title and the Class names a schedule notice shows, then has
-// the Sitting mail composer freeze the notice as one fan-out. It selects no
-// recipient.
+// ScheduleMail owns the bounded, presentation-ready fan-out intent of a
+// schedule change: it reads the published Exam title and the Class names a
+// schedule notice shows, then has the Sitting mail composer freeze the notice
+// as one fan-out. The Sitting service supplies only safe schedule facts; it
+// selects no recipient, delivery work, ciphertext or fan-out deadline.
 type ScheduleMail struct {
 	Composer  *mail.SittingComposer
 	Revisions store.ExamRevisionStore

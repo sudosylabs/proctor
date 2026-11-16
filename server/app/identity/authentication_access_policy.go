@@ -217,13 +217,6 @@ type AccessPolicyCapabilitySnapshot struct {
 	MFA bool
 }
 
-// AccessPolicyCapabilitySource reports the deployment's current capabilities.
-// Administration reads them through it; identity holds DeploymentCapabilities
-// itself.
-type AccessPolicyCapabilitySource interface {
-	Snapshot() AccessPolicyCapabilitySnapshot
-}
-
 // AccessDeploymentCapabilities projects a capability snapshot into the form
 // the Store rechecks inside the transaction that relies on it.
 func AccessDeploymentCapabilities(snapshot AccessPolicyCapabilitySnapshot) store.AccessDeploymentCapabilities {

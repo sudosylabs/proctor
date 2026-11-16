@@ -20,20 +20,13 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// examExportBuilder is the part of *exam.Exports the build Job drives. It is
-// a seam because the handler test fakes it: the real service builds and
-// publishes an archive.
-type examExportBuilder interface {
-	BuildFromJob(context.Context, invocation.System, store.ExamExportBuild) error
-}
-
 // ExamExportPurger removes the stored content of an expired Exam export,
 // fenced by the Job Attempt that claimed the purge.
 type ExamExportPurger interface {
 	PurgeExamExport(context.Context, model.ExamExportID, model.JobAttemptID) error
 }
 
-type examExportBuildHandler struct{ service examExportBuilder }
+type examExportBuildHandler struct{ service *exam.Exports }
 type examExportBuildCommand struct {
 	ExportID model.ExamExportID `json:"export_id"`
 }

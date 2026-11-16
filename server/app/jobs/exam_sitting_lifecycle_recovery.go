@@ -95,7 +95,7 @@ func validateExamSittingLifecycleRecoveryCheckpoint(value ExamSittingLifecycleRe
 }
 
 type examSittingLifecycleRecoveryHandler struct {
-	sittings sittingLifecycle
+	sittings *sitting.Service
 }
 
 func (h examSittingLifecycleRecoveryHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {

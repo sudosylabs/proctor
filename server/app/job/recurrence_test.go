@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -63,84 +64,62 @@ func TestEngineValidatesRecurrencesAtConstruction(t *testing.T) {
 
 func TestEngineRetriesSameOccurrenceWakesLocallyAndStopsRecurrence(t *testing.T) {
 	t.Parallel()
-	at := time.Date(2026, time.August, 10, 9, 30, 0, 0, time.UTC)
-	clock := newManualClock(at)
-	proposer := &occurrenceProposerFake{calls: make(chan time.Time, 3), fail: 1}
-	descriptor := testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))
-	persistence := &jobRunnerStoreFake{claimRequests: make(chan struct{}, 8)}
-	engine, err := New(Dependencies{
-		Store: persistence, Descriptors: []Descriptor{descriptor}, NodeID: "node-a", Diagnostics: newDiscardLogger(t),
-		Policy: Policy{PollInterval: time.Hour, ProposalRetryDelay: 10 * time.Second}, Clock: clock,
-		Recurrences: []Recurrence{{Name: "daily", Proposer: proposer}},
+	synctest.Test(t, func(t *testing.T) {
+		at := time.Date(2026, time.August, 10, 9, 30, 0, 0, time.UTC)
+		proposer := &occurrenceProposerFake{calls: make(chan time.Time, 3), fail: 1}
+		descriptor := testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))
+		persistence := &jobRunnerStoreFake{claimRequests: make(chan struct{}, 8)}
+		engine, err := New(Dependencies{
+			Store: persistence, Descriptors: []Descriptor{descriptor}, NodeID: "node-a", Diagnostics: newDiscardLogger(t),
+			Policy: Policy{PollInterval: time.Hour, ProposalRetryDelay: 10 * time.Second}, Now: bubbleClock(at),
+			Recurrences: []Recurrence{{Name: "daily", Proposer: proposer}},
+		})
+		require.NoError(t, err)
+		err = engine.Start(context.Background())
+		require.NoError(t, err)
+		first := nextProposal(t, proposer.calls)
+		require.True(t, first.Equal(at), "first occurrence=%v", first)
+		// The worker polls once on startup. A failed proposal must not add a wake.
+		require.Len(t, persistence.claimRequests, 1, "worker initial claims")
+		<-persistence.claimRequests
+		noProposalAfter(t, proposer.calls, 10*time.Second-time.Nanosecond, "the failed proposal was retried before its delay")
+		require.Empty(t, persistence.claimRequests, "failed proposal woke the local worker")
+		time.Sleep(time.Nanosecond)
+		second := nextProposal(t, proposer.calls)
+		require.True(t, second.Equal(at), "retry occurrence=%v", second)
+		require.Len(t, persistence.claimRequests, 1, "successful proposal did not wake the local worker")
+		<-persistence.claimRequests
+		noProposalAfter(t, proposer.calls, 14*time.Hour+29*time.Minute+50*time.Second-time.Nanosecond, "the next daily occurrence was proposed early")
+		time.Sleep(time.Nanosecond)
+		daily := nextProposal(t, proposer.calls)
+		require.True(t, daily.Equal(nextDailyOccurrence(at)), "daily occurrence=%v", daily)
+		err = engine.Close(context.Background())
+		require.NoError(t, err)
+		noProposalAfter(t, proposer.calls, 48*time.Hour, "proposal ran after engine shutdown")
 	})
-	require.NoError(t, err)
-	err = engine.Start(context.Background())
-	require.NoError(t, err)
-	first := <-proposer.calls
-	retryTimer := <-clock.timers
-	require.True(t, first.Equal(at), "first occurrence=%v retry delay", first)
-	require.Equal(t, 10*time.Second, retryTimer.delay, "first occurrence=%v retry delay", first)
-	// The worker polls once on startup. A failed proposal must not add a wake.
-	select {
-	case <-persistence.claimRequests:
-	case <-time.After(time.Second):
-		require.FailNow(t, "worker did not perform its initial claim")
-	}
-	select {
-	case <-persistence.claimRequests:
-		require.FailNow(t, "failed proposal woke the local worker")
-	default:
-	}
-	clock.advance(retryTimer, at.Add(10*time.Second))
-	second := <-proposer.calls
-	require.True(t, second.Equal(at), "retry occurrence=%v", second)
-	select {
-	case <-persistence.claimRequests:
-	case <-time.After(time.Second):
-		require.FailNow(t, "successful proposal did not wake the local worker")
-	}
-	dailyTimer := <-clock.timers
-	require.Equal(t, 14*time.Hour+29*time.Minute+50*time.Second, dailyTimer.delay)
-	err = engine.Close(context.Background())
-	require.NoError(t, err)
-	clock.advance(dailyTimer, nextDailyOccurrence(at))
-	select {
-	case occurrence := <-proposer.calls:
-		require.FailNow(t, fmt.Sprintf("proposal ran after engine shutdown: %v", occurrence))
-	default:
-	}
 }
-
 func TestEngineCopiesRecurrenceDefinitionsAtConstruction(t *testing.T) {
 	t.Parallel()
-	at := time.Date(2026, time.August, 10, 9, 30, 0, 0, time.UTC)
-	clock := newManualClock(at)
-	original := &occurrenceProposerFake{calls: make(chan time.Time, 1)}
-	replacement := &occurrenceProposerFake{calls: make(chan time.Time, 1)}
-	recurrences := []Recurrence{{Name: "daily", Proposer: original}}
-	descriptor := testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))
-	engine, err := New(Dependencies{
-		Store: &jobRunnerStoreFake{}, Descriptors: []Descriptor{descriptor}, NodeID: "node-a", Diagnostics: newDiscardLogger(t),
-		Policy: Policy{PollInterval: time.Hour}, Clock: clock, Recurrences: recurrences,
+	synctest.Test(t, func(t *testing.T) {
+		at := time.Date(2026, time.August, 10, 9, 30, 0, 0, time.UTC)
+		original := &occurrenceProposerFake{calls: make(chan time.Time, 1)}
+		replacement := &occurrenceProposerFake{calls: make(chan time.Time, 1)}
+		recurrences := []Recurrence{{Name: "daily", Proposer: original}}
+		descriptor := testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))
+		engine, err := New(Dependencies{
+			Store: &jobRunnerStoreFake{}, Descriptors: []Descriptor{descriptor}, NodeID: "node-a", Diagnostics: newDiscardLogger(t),
+			Policy: Policy{PollInterval: time.Hour}, Now: bubbleClock(at), Recurrences: recurrences,
+		})
+		require.NoError(t, err)
+		recurrences[0] = Recurrence{Name: "replacement", Proposer: replacement}
+		err = engine.Start(context.Background())
+		require.NoError(t, err)
+		nextProposal(t, original.calls)
+		require.Empty(t, replacement.calls, "engine retained caller-owned recurrence slice")
+		err = engine.Close(context.Background())
+		require.NoError(t, err)
 	})
-	require.NoError(t, err)
-	recurrences[0] = Recurrence{Name: "replacement", Proposer: replacement}
-	err = engine.Start(context.Background())
-	require.NoError(t, err)
-	select {
-	case <-original.calls:
-	case <-time.After(time.Second):
-		require.FailNow(t, "constructed recurrence did not run")
-	}
-	select {
-	case <-replacement.calls:
-		require.FailNow(t, "engine retained caller-owned recurrence slice")
-	default:
-	}
-	err = engine.Close(context.Background())
-	require.NoError(t, err)
 }
-
 func TestConcurrentEnginesAndRestartProposeTheSameOccurrence(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, time.August, 10, 9, 30, 0, 0, time.UTC)
@@ -150,7 +129,7 @@ func TestConcurrentEnginesAndRestartProposeTheSameOccurrence(t *testing.T) {
 		t.Helper()
 		engine, err := New(Dependencies{
 			Store: &jobRunnerStoreFake{}, Descriptors: []Descriptor{descriptor}, NodeID: nodeID, Diagnostics: newDiscardLogger(t),
-			Policy: Policy{PollInterval: time.Hour}, Clock: newManualClock(at),
+			Policy: Policy{PollInterval: time.Hour}, Now: func() time.Time { return at },
 			Recurrences: []Recurrence{{Name: "daily", Proposer: proposer}},
 		})
 		require.NoError(t, err)
@@ -184,32 +163,57 @@ func TestNextDailyOccurrenceUsesUTCDayBoundary(t *testing.T) {
 
 func TestRecurrenceIntervalRetriesSameBucketThenAdvancesAtUTCBoundary(t *testing.T) {
 	t.Parallel()
-	at := time.Date(2026, time.September, 7, 13, 57, 0, 0, time.FixedZone("offset", 2*60*60))
-	clock := newManualClock(at)
-	proposer := &occurrenceProposerFake{calls: make(chan time.Time, 4), fail: 1}
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	logger := newDiscardLogger(t)
-	go func() {
-		defer close(done)
-		runRecurrenceProposal(ctx, Recurrence{Name: "hourly", Interval: time.Hour, Proposer: proposer}, logger, clock, 5*time.Minute, nil, nil)
-	}()
-	defer func() { cancel(); <-done }()
-	require.True(t, (<-proposer.calls).Equal(at))
-	retry := <-clock.timers
-	require.Equal(t, 5*time.Minute, retry.delay)
-	// A transient failure crossing noon must first finish the old occurrence.
-	clock.advance(retry, at.Add(5*time.Minute))
-	require.True(t, (<-proposer.calls).Equal(at))
-	require.True(t, (<-proposer.calls).Equal(at.Add(5*time.Minute)))
-	next := <-clock.timers
-	require.Equal(t, 58*time.Minute, next.delay)
-	clock.advance(next, time.Date(2026, time.September, 7, 13, 0, 0, 0, time.UTC))
-	got := <-proposer.calls
-	require.Equal(t, 13, got.Hour())
-	require.Same(t, time.UTC, got.Location())
+	synctest.Test(t, func(t *testing.T) {
+		at := time.Date(2026, time.September, 7, 13, 57, 0, 0, time.FixedZone("offset", 2*60*60))
+		proposer := &occurrenceProposerFake{calls: make(chan time.Time, 4), fail: 1}
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		logger := newDiscardLogger(t)
+		go func() {
+			defer close(done)
+			runRecurrenceProposal(ctx, Recurrence{Name: "hourly", Interval: time.Hour, Proposer: proposer}, logger, bubbleClock(at), 5*time.Minute, nil, nil)
+		}()
+		defer func() { cancel(); <-done }()
+		require.True(t, nextProposal(t, proposer.calls).Equal(at))
+		noProposalAfter(t, proposer.calls, 5*time.Minute-time.Nanosecond, "the retry ran before its delay")
+		// A transient failure crossing noon must first finish the old occurrence.
+		time.Sleep(time.Nanosecond)
+		require.True(t, nextProposal(t, proposer.calls).Equal(at))
+		require.True(t, nextProposal(t, proposer.calls).Equal(at.Add(5*time.Minute)))
+		noProposalAfter(t, proposer.calls, 58*time.Minute-time.Nanosecond, "the next bucket was proposed early")
+		time.Sleep(time.Nanosecond)
+		got := nextProposal(t, proposer.calls)
+		require.Equal(t, 13, got.Hour())
+		require.Same(t, time.UTC, got.Location())
+	})
 }
 
+// nextProposal returns the proposal made by the time every goroutine in the
+// bubble is waiting again.
+func nextProposal(t *testing.T, calls <-chan time.Time) time.Time {
+	t.Helper()
+	synctest.Wait()
+	select {
+	case occurrence := <-calls:
+		return occurrence
+	default:
+		require.FailNow(t, "no occurrence was proposed")
+		return time.Time{}
+	}
+}
+
+// noProposalAfter lets wait pass in the bubble and requires that nothing
+// was proposed meanwhile.
+func noProposalAfter(t *testing.T, calls <-chan time.Time, wait time.Duration, message string) {
+	t.Helper()
+	time.Sleep(wait)
+	synctest.Wait()
+	select {
+	case occurrence := <-calls:
+		require.FailNow(t, fmt.Sprintf("%s: %v", message, occurrence))
+	default:
+	}
+}
 func TestRecurrenceIntervalsAreBoundedAndAlignAcrossNodes(t *testing.T) {
 	t.Parallel()
 	for _, interval := range []time.Duration{-time.Hour, time.Second, 7 * time.Minute, 25 * time.Hour} {

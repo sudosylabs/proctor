@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
@@ -27,9 +28,11 @@ func TestFinalizeAndReleaseUseDistinctAuthorizationAndEffects(t *testing.T) {
 	f.persistence.mode = "finalize"
 	finalized, err := f.service.FinalizeExamIntegrityReview(context.Background(), f.inv, TerminalCommand{SubmissionID: f.submissionID,
 		ReviewID: f.reviewID, ExpectedReviewRevision: 2, IdempotencyKey: "test-key"})
-	require.NoError(t, err, "finalized=%#v error=%v auth=%#v", finalized, err, f.authorizer)
-	require.Equal(t, model.SubmissionReviewFinalized, finalized.Review.State, "finalized=%#v error=%v auth=%#v", finalized, err, f.authorizer)
-	require.Equal(t, 1, f.authorizer.reviewCalls, "finalized=%#v error=%v auth=%#v", finalized, err, f.authorizer)
+	require.NoError(t, err, "finalized=%#v error=%v", finalized, err)
+	require.Equal(t, model.SubmissionReviewFinalized, finalized.Review.State, "finalized=%#v error=%v", finalized, err)
+	// Finalizing is a review decision, never a release one.
+	require.Equal(t, []string{"success"}, f.decisions(model.ActionSubmissionReview), "finalization decisions")
+	require.Empty(t, f.decisions(model.ActionSubmissionRelease), "finalization decisions")
 	// Contract: finalizing tells managers the Review was finalized, then
 	// invalidates the Sitting board.
 	finalizedCalls := reviewCalls(t, realtime.NewExamIntegrityReviewFinalizedEvent, finalized)
@@ -41,9 +44,10 @@ func TestFinalizeAndReleaseUseDistinctAuthorizationAndEffects(t *testing.T) {
 	f.persistence.mode = "release"
 	released, err := f.service.ReleaseStudentExamResult(context.Background(), f.inv, TerminalCommand{SubmissionID: f.submissionID,
 		ReviewID: f.reviewID, ExpectedReviewRevision: 3, IdempotencyKey: "test-key"})
-	require.NoError(t, err, "released=%#v error=%v auth=%#v", released, err, f.authorizer)
-	require.Equal(t, model.SubmissionReviewReleased, released.Review.ReleaseState, "released=%#v error=%v auth=%#v", released, err, f.authorizer)
-	require.Equal(t, 1, f.authorizer.releaseCalls, "released=%#v error=%v auth=%#v", released, err, f.authorizer)
+	require.NoError(t, err, "released=%#v error=%v", released, err)
+	require.Equal(t, model.SubmissionReviewReleased, released.Review.ReleaseState, "released=%#v error=%v", released, err)
+	require.Equal(t, []string{"success"}, f.decisions(model.ActionSubmissionRelease), "release decisions")
+	require.Equal(t, []string{"success"}, f.decisions(model.ActionSubmissionReview), "a release asks no further review decision")
 	managerRelease, eventErr := realtime.NewExamStudentResultReleasedEvent(reviewFact(released))
 	require.NoError(t, eventErr)
 	candidateRelease, eventErr := realtime.NewCandidateStudentResultReleasedEvent(reviewFact(released))
@@ -65,13 +69,21 @@ func TestFinalizeAndReleaseUseDistinctAuthorizationAndEffects(t *testing.T) {
 		"test-key", f.submissionID, f.reviewID, 3)
 	require.NoError(t, prepareErr)
 	require.Equal(t, wantRelease, f.persistence.idempotency)
-	require.Equal(t, f.candidateID, f.mail.request.CandidateUserID, "mail=%#v release", f.mail.request)
-	require.Equal(t, f.reviewID, f.mail.request.ReviewID, "mail=%#v release", f.mail.request)
-	require.Equal(t, int64(3), f.mail.request.ExpectedReviewRevision, "mail=%#v release", f.mail.request)
-	require.True(t, f.mail.request.ReleasedAt.Equal(f.at.Add(time.Minute)), "mail=%#v release", f.mail.request)
-	require.NotNil(t, f.persistence.release, "mail=%#v release", f.mail.request)
-	require.NotNil(t, f.persistence.release.Notice, "mail=%#v release", f.mail.request)
-	require.Equal(t, int64(2), f.persistence.release.ExpectedRecipientRevision, "mail=%#v release", f.mail.request)
+	// The notice the Store commits is the real one prepared for the
+	// candidate, for this Review at the expected revision, at release time.
+	require.NotNil(t, f.persistence.release, "release")
+	notice := f.persistence.release.Notice
+	require.NotNil(t, notice, "release")
+	wantOccurrence, occurrenceErr := model.ResultReleaseOccurrenceID(f.reviewID, 3)
+	require.NoError(t, occurrenceErr)
+	require.Equal(t, wantOccurrence, notice.Occurrence.ID, "notice=%#v", notice)
+	require.Equal(t, model.MailTemplateExamResultReleased, notice.Delivery.TemplateKey, "notice=%#v", notice)
+	require.Equal(t, f.candidateID, notice.Delivery.TargetUserID, "notice=%#v", notice)
+	require.True(t, notice.Occurrence.CreatedAt.Equal(f.at.Add(time.Minute)), "notice=%#v", notice)
+	rendered := f.renderer.rendered()
+	require.Len(t, rendered, 1, "rendered notices")
+	require.Equal(t, mail.ResultReleaseDetails{ExamTitle: reviewExamTitle, ReleasedAt: f.at.Add(time.Minute)}, rendered[0].Presentation)
+	require.Equal(t, int64(reviewCandidateRevision), f.persistence.release.ExpectedRecipientRevision, "release")
 }
 
 func TestReleasePreparationFailureIsAuditedAsAttempt(t *testing.T) {
@@ -87,11 +99,11 @@ func TestReleasePreparationFailureIsAuditedAsAttempt(t *testing.T) {
 	// The release-time reservation is a durable write, so its attempt must be
 	// audited before it runs and completed as failed when it is refused.
 	attempts := f.control.Audits.Attempts()
-	require.Len(t, attempts, 1, "audit=%#v mail=%d release", attempts, f.mail.calls)
-	require.Equal(t, model.AuditStatusFail, attempts[0].Status, "audit=%#v mail=%d release", attempts[0], f.mail.calls)
-	require.Equal(t, fault.Code(), attempts[0].ErrorCode, "audit=%#v mail=%d release", attempts[0], f.mail.calls)
-	require.Equal(t, 0, f.mail.calls, "audit=%#v mail=%d release", attempts, f.mail.calls)
-	require.Nil(t, f.persistence.release, "audit=%#v mail=%d release", attempts, f.mail.calls)
+	require.Len(t, attempts, 1, "audit=%#v release", attempts)
+	require.Equal(t, model.AuditStatusFail, attempts[0].Status, "audit=%#v release", attempts[0])
+	require.Equal(t, fault.Code(), attempts[0].ErrorCode, "audit=%#v release", attempts[0])
+	require.Empty(t, f.renderer.rendered(), "a refused release prepared a notice")
+	require.Nil(t, f.persistence.release, "audit=%#v release", attempts)
 }
 
 func TestReleaseReplayReturnsRetainedResultWithoutPreparingMail(t *testing.T) {
@@ -100,10 +112,10 @@ func TestReleaseReplayReturnsRetainedResultWithoutPreparingMail(t *testing.T) {
 	f.persistence.mode, f.persistence.replayed = "release", true
 	released, err := f.service.ReleaseStudentExamResult(context.Background(), f.inv, TerminalCommand{SubmissionID: f.submissionID,
 		ReviewID: f.reviewID, ExpectedReviewRevision: 3, IdempotencyKey: "test-key"})
-	require.NoError(t, err, "released=%#v error=%v mail=%#v release", released, err, f.mail)
-	require.True(t, released.Replayed, "released=%#v error=%v mail=%#v release", released, err, f.mail)
+	require.NoError(t, err, "released=%#v error=%v", released, err)
+	require.True(t, released.Replayed, "released=%#v error=%v", released, err)
 	require.Empty(t, f.publisher.Calls(), "a replayed release republished")
-	require.Equal(t, 0, f.mail.calls, "released=%#v error=%v mail=%#v release", released, err, f.mail)
-	require.NotNil(t, f.persistence.release, "released=%#v error=%v mail=%#v release", released, err, f.mail)
-	require.Nil(t, f.persistence.release.Notice, "released=%#v error=%v mail=%#v release", released, err, f.mail)
+	require.Empty(t, f.renderer.rendered(), "a replayed release prepared a notice")
+	require.NotNil(t, f.persistence.release, "released=%#v error=%v", released, err)
+	require.Nil(t, f.persistence.release.Notice, "released=%#v error=%v", released, err)
 }

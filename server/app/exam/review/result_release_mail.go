@@ -15,9 +15,10 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ResultReleaseMail is the ResultReleaseMailPreparer the application runs. It
-// reads the candidate, the Sitting and the published Exam title, and has the
-// mail composer freeze a notice that says only that a result is available.
+// ResultReleaseMail prepares the notice that tells a candidate a result is
+// available. It reads the candidate, the Sitting and the published Exam
+// title, and has the mail composer freeze a notice that says only that a
+// result is available.
 type ResultReleaseMail struct {
 	Composer  *mail.Composer
 	Users     store.UserStore

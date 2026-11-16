@@ -64,7 +64,6 @@ type pluginFixture struct {
 	catalog     *pluginCatalogFake
 	saved       *pluginSettingsStoreFake
 	access      *accesstest.Fixture
-	audit       *accessPolicyAuditFake
 	publisher   *realtimetest.Publisher
 	institution *model.Institution
 	inv         invocation.Invocation
@@ -86,15 +85,14 @@ func newPluginFixture(t *testing.T) pluginFixture {
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		AuthenticatedAt: at, MFACompletedAt: model.OptionalTimeFrom(at), ClientType: model.SessionClientWeb}
 	access := grantedAccess(t, nil, institutionGrant(principal.UserID, model.ActionPluginManage, model.ActionEnvironmentProfileManage))
-	audit := &accessPolicyAuditFake{beginID: model.NewAuditEventID().String()}
 	publisher := &realtimetest.Publisher{}
 	service := &Service{
 		institutions: &institutionStoreFake{institution: institution}, pluginSettings: saved, plugins: catalog,
-		authorizer: access.Authorizer, auditor: audit, publisher: publisher,
+		authorizer: access.Authorizer, auditor: access.Auditor.MutationAudit(), publisher: publisher,
 		recentAuthenticationTTL: time.Minute, now: func() time.Time { return at },
 	}
 	inv := invocation.New(principal, model.RequestMetadata{RequestID: "plugins"})
-	return pluginFixture{service: service, catalog: catalog, saved: saved, access: access, audit: audit, publisher: publisher,
+	return pluginFixture{service: service, catalog: catalog, saved: saved, access: access, publisher: publisher,
 		institution: institution, inv: inv, stranger: strangerTo(inv), at: at}
 }
 
@@ -141,9 +139,11 @@ func TestReplacePluginSettingsSavesAuditedAndAppliesTheChange(t *testing.T) {
 	require.Equal(t, model.PluginID("display-topology"), fixture.saved.replaceInput.PluginID)
 	require.Equal(t, fixture.inv.Principal().UserID, fixture.saved.replaceInput.ActorID)
 	require.Equal(t, store.PluginSettingsReplaceOperation, fixture.saved.command.Operation)
-	require.Equal(t, model.ActionPluginManage, fixture.audit.attempt.Action)
-	require.Equal(t, map[string]any{"plugin_id": "display-topology", "expected_revision": int64(0), "enabled": true}, fixture.audit.attempt.Value,
+	attempt := onlyAttempt(t, fixture.access)
+	require.Equal(t, string(model.ActionPluginManage), attempt.Action)
+	require.JSONEq(t, `{"operation":"replace","value":{"plugin_id":"display-topology","expected_revision":0,"enabled":true}}`, string(attempt.Parameters),
 		"the audit names the plugin, never setting values")
+	require.Equal(t, attempt.ID, fixture.saved.replaceInput.AuditEventID, "the replacement completes the attempt it was given")
 	require.Equal(t, 1, fixture.catalog.changes, "this node applies the change at once")
 	changed, err := realtime.NewPluginSettingsChangedEvent(fixture.institution.ID, "display-topology", 1)
 	require.NoError(t, err)
@@ -186,7 +186,7 @@ func TestReplacePluginSettingsRejectsWhatItCannotSave(t *testing.T) {
 			_, err := fixture.service.ReplacePluginSettings(t.Context(), fixture.inv, command)
 			require.True(t, apperror.Is(err, test.code), "err = %v", err)
 			require.Nil(t, fixture.saved.replaceInput, "nothing is saved")
-			require.Empty(t, fixture.audit.attempt.Operation, "nothing is audited")
+			require.Empty(t, fixture.access.Audits.Attempts(), "nothing is audited")
 			require.Equal(t, 0, fixture.catalog.changes)
 		})
 	}

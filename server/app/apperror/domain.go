@@ -25,3 +25,13 @@ func DomainInvalid(code Code, err error) error {
 	}
 	return out.Wrap(err)
 }
+
+// WorkCapacityExceeded marks a content error meaning the bounded content
+// work is full. The content adapter cannot import the application's error
+// types, so callers detect it with errors.As and present it as service.busy.
+type WorkCapacityExceeded interface{ WorkCapacityExceeded() }
+
+// InvalidExamResourceContent marks a content error meaning Exam resource
+// bytes failed validation. Callers detect it with errors.As, for the same
+// reason as WorkCapacityExceeded.
+type InvalidExamResourceContent interface{ InvalidExamResourceContent() }

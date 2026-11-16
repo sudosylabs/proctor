@@ -47,8 +47,8 @@ func clonePeriodicTasks(values []PeriodicTask) ([]PeriodicTask, error) {
 	return cloned, nil
 }
 
-func runPeriodicTask(ctx context.Context, task PeriodicTask, diagnostics *logging.Logger, clock Clock, recorder Recorder) {
-	if task.Name == "" || task.Interval <= 0 || task.Runner == nil || diagnostics == nil || clock == nil {
+func runPeriodicTask(ctx context.Context, task PeriodicTask, diagnostics *logging.Logger, recorder Recorder) {
+	if task.Name == "" || task.Interval <= 0 || task.Runner == nil || diagnostics == nil {
 		return
 	}
 
@@ -72,18 +72,18 @@ func runPeriodicTask(ctx context.Context, task PeriodicTask, diagnostics *loggin
 			return
 		}
 
-		timer := clock.NewTimer(task.Interval)
+		timer := time.NewTimer(task.Interval)
 		select {
 		case <-ctx.Done():
 			if !timer.Stop() {
 				select {
-				case <-timer.C():
+				case <-timer.C:
 				default:
 				}
 			}
 
 			return
-		case <-timer.C():
+		case <-timer.C:
 		}
 	}
 }

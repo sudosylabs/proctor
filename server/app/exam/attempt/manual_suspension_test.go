@@ -70,7 +70,7 @@ func TestSuspendByManagerAuthorizesFirstAndKeepsPrivateReasonOutOfAuditAndEffect
 	// Contract: the Manager authorization precedes the audit, the audit begins
 	// before the durable suspension (guardrail 8), and the suspension commits
 	// before the kick (guardrail 14).
-	require.Equal(t, []string{"manager.manage", "sitting", "audit-begin:exam.sitting.manage", "manager.get", "suspend", "effects"}, f.order)
+	require.Equal(t, []string{"grants", "decision:exam.sitting.manage:success", "sitting", "audit-begin:exam.sitting.manage", "manager.get", "suspend", "effects"}, f.order)
 	require.Equal(t, model.ActionExamSittingManage, f.audit().action, "audit=%#v result=%#v", f.audit(), result)
 	require.Equal(t, store.ExamAttemptSuspendOperation, f.audit().operation, "audit=%#v result=%#v", f.audit(), result)
 	require.NotContains(t, fmt.Sprintf("%#v", f.audit().values), reason, "audit=%#v result=%#v", f.audit(), result)
@@ -84,7 +84,7 @@ func TestSuspendByManagerReplaySuppressesEffectAndPropagatesOverride(t *testing.
 	t.Parallel()
 	f := newFixture(t)
 	managerID := useManagerCall(f)
-	f.managerOverride = true
+	useManagerOverride(f)
 	f.persistence.attempt, _ = managerAttemptFixture(t, f, model.ExamAttemptActive, 3, "")
 	f.persistence.manualSuspensionResult = manualSuspensionResultFixture(t, f, managerID, 3, true)
 	result, err := f.service.SuspendExamAttempt(context.Background(), f.inv, ManualSuspensionCommand{ExamID: f.sitting.ExamID,
@@ -100,6 +100,8 @@ func TestSuspendByManagerReplaySuppressesEffectAndPropagatesOverride(t *testing.
 func TestSuspendByManagerConcealsSelfAndValidatesBeforeAuthorization(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
+	// The Exam's Manager is also the Attempt's candidate.
+	f.userID = useManagerCall(f)
 	f.persistence.attempt, _ = managerAttemptFixture(t, f, model.ExamAttemptActive, 3, "")
 	_, err := f.service.SuspendExamAttempt(context.Background(), f.inv, ManualSuspensionCommand{ExamID: f.sitting.ExamID,
 		SittingID: f.sitting.ID, AttemptID: f.attemptID, ExpectedAttemptRevision: 3, PrivateReason: "self", IdempotencyKey: "kick-key"})
@@ -187,7 +189,7 @@ func TestSuspendByManagerRecordsLapsedLeaseAsConnectionLossInsteadOfKick(t *test
 	require.Equal(t, expiryCalls(t, expiryOf(f.persistence.expireResult), true), f.publisher.Calls(), "error=%v order=%v", err, f.order)
 	// Contract (guardrails 8 and 14): the refused kick stays audited as
 	// failed, and the expiry audit begins before its commit and effect.
-	require.Equal(t, []string{"manager.manage", "sitting", "audit-begin:exam.sitting.manage", "manager.get", "suspend", "expiry.resolve", "audit-begin:exam.sitting.manage", "expiry.commit", "effects", "audit-fail"}, f.order)
+	require.Equal(t, []string{"grants", "decision:exam.sitting.manage:success", "sitting", "audit-begin:exam.sitting.manage", "manager.get", "suspend", "expiry.resolve", "audit-begin:exam.sitting.manage", "expiry.commit", "effects", "audit-fail"}, f.order)
 	// The expiry is the system's own decision, so its attempt names no actor.
 	attempts := f.control.Audits.Attempts()
 	require.Len(t, attempts, 2)

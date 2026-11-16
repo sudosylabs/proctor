@@ -21,6 +21,7 @@ import (
 func TestManagerListAuthorizesBeforeBoundedStoreRead(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
+	useManagerCall(f)
 	rows := make([]store.ExamAttemptManagerSnapshot, 3)
 	for index := range rows {
 		attempt, err := model.NewExamAttempt(model.NewExamAttemptID(), f.sitting.ExamID, f.sitting.ID, model.NewUserID(), f.revision.ID, f.at.Add(time.Duration(index)*time.Second))
@@ -36,12 +37,13 @@ func TestManagerListAuthorizesBeforeBoundedStoreRead(t *testing.T) {
 	require.True(t, page.HasMore, "page=%#v options=%#v order=%v", page, f.persistence.managerOptions, f.order)
 	require.Equal(t, 3, f.persistence.managerOptions.Limit, "page=%#v options=%#v order=%v", page, f.persistence.managerOptions, f.order)
 	// Contract: authorization precedes reading the managed Attempts.
-	require.Equal(t, []string{"manager.authorize", "manager.list"}, f.order)
+	require.Equal(t, []string{"grants", "decision:exam.sitting.view:success", "manager.list"}, f.order)
 }
 
 func TestManagerListValidatesAndDeepClonesActiveSuspension(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
+	useManagerCall(f)
 	attempt, err := model.NewExamAttempt(f.attemptID, f.sitting.ExamID, f.sitting.ID, f.userID, f.revision.ID, f.at.Add(-time.Hour))
 	require.NoError(t, err)
 	attempt.State, attempt.UpdatedAt, attempt.Revision = model.ExamAttemptSuspended, f.at, 2

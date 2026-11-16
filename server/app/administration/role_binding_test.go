@@ -132,9 +132,8 @@ func TestRoleBindingCreateCommitsBeforeInvalidation(t *testing.T) {
 	caller, inv := newCaller()
 	fixture := grantedAccess(t, &events, institutionGrant(caller.UserID, model.ActionRoleBindingManage, model.ActionClassView))
 	mail, rendered := newMail(t)
-	auditor := &institutionAuditorFake{events: &events, beginID: model.NewID()}
 	publisher := publisherIn(&events)
-	service := &Service{roleBindings: &roleBindingStoreFake{events: &events, createResult: created}, roles: &roleBindingRoleStoreFake{events: &events, role: role}, users: relationshipUserStoreTestFake{}, institutions: anyInstitution(), authorizer: fixture.Authorizer, capabilities: &accessPolicyCapabilitiesFake{}, auditor: auditor, mail: mail, publisher: publisher, now: func() time.Time { return time.UnixMilli(500) }}
+	service := &Service{roleBindings: &roleBindingStoreFake{events: &events, createResult: created}, roles: &roleBindingRoleStoreFake{events: &events, role: role}, users: relationshipUserStoreTestFake{}, institutions: anyInstitution(), authorizer: fixture.Authorizer, capabilities: noCapabilities(), auditor: fixture.Auditor.MutationAudit(), mail: mail, publisher: publisher, now: func() time.Time { return time.UnixMilli(500) }}
 	got, err := service.CreateRoleBinding(context.Background(), inv, CreateRoleBindingCommand{
 		UserID: model.UserID(userID), RoleID: created.RoleID, ScopeType: model.RoleScopeInstitution,
 		ScopeID: model.NewID(), StartAt: 100,
@@ -146,10 +145,10 @@ func TestRoleBindingCreateCommitsBeforeInvalidation(t *testing.T) {
 	require.NotNil(t, service.roleBindings.(*roleBindingStoreFake).createInput.Notice)
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
-	require.Equal(t, []string{"grants", "decision:role_binding.manage:success", "get-role", "grants", "audit-begin", "store-create", "invalidate-authorization"}, events)
+	require.Equal(t, []string{"grants", "decision:role_binding.manage:success", "get-role", "grants", "audit-begin:role_binding.manage", "store-create", "invalidate-authorization"}, events)
 	// Contract: the one realtime effect drops the bound User's cached authorization.
 	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization, UserID: model.UserID(userID)}}, publisher.Calls())
-	require.Equal(t, []model.UserID{model.UserID(userID)}, auditor.subjects, "the grant names the bound User as its subject")
+	require.Equal(t, model.UserID(userID), onlyAttempt(t, fixture).SubjectUserID, "the grant names the bound User as its subject")
 }
 
 func TestRoleBindingCreateRejectsSystemAdminOutsideInstitution(t *testing.T) {
@@ -159,7 +158,7 @@ func TestRoleBindingCreateRejectsSystemAdminOutsideInstitution(t *testing.T) {
 	world := newClassWorld()
 	caller, inv := newCaller()
 	fixture := accessWith(t, &events, world.options(institutionGrant(caller.UserID, model.ActionRoleBindingManage)))
-	service := &Service{roleBindings: &roleBindingStoreFake{events: &events}, roles: &roleBindingRoleStoreFake{events: &events, role: &model.Role{ID: model.RoleID(roleID), Name: model.SystemAdministratorRoleName}}, users: relationshipUserStoreTestFake{}, institutions: anyInstitution(), authorizer: fixture.Authorizer, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events}, publisher: publisherIn(&events), now: time.Now}
+	service := &Service{roleBindings: &roleBindingStoreFake{events: &events}, roles: &roleBindingRoleStoreFake{events: &events, role: &model.Role{ID: model.RoleID(roleID), Name: model.SystemAdministratorRoleName}}, users: relationshipUserStoreTestFake{}, institutions: anyInstitution(), authorizer: fixture.Authorizer, capabilities: noCapabilities(), auditor: fixture.Auditor.MutationAudit(), publisher: publisherIn(&events), now: time.Now}
 	_, err := service.CreateRoleBinding(context.Background(), inv, CreateRoleBindingCommand{
 		UserID: model.UserID(model.NewID()), RoleID: model.RoleID(roleID), ScopeType: model.RoleScopeClass,
 		ScopeID: world.class.ID.String(), StartAt: 100,
@@ -179,7 +178,7 @@ func TestRoleBindingRetainedCreateUsesArchivedRoleForCurrentDelegation(t *testin
 	caller, inv := newCaller()
 	fixture := grantedAccess(t, &events, institutionGrant(caller.UserID, model.ActionRoleBindingManage, model.ActionClassMembersManage))
 	publisher := publisherIn(&events)
-	service := &Service{roleBindings: persistence, roles: &roleBindingRoleStoreFake{events: &events, role: archivedRole}, users: relationshipUserStoreTestFake{}, institutions: anyInstitution(), authorizer: fixture.Authorizer, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, publisher: publisher, now: func() time.Time { return time.UnixMilli(500) }}
+	service := &Service{roleBindings: persistence, roles: &roleBindingRoleStoreFake{events: &events, role: archivedRole}, users: relationshipUserStoreTestFake{}, institutions: anyInstitution(), authorizer: fixture.Authorizer, capabilities: noCapabilities(), auditor: fixture.Auditor.MutationAudit(), publisher: publisher, now: func() time.Time { return time.UnixMilli(500) }}
 	result, err := service.CreateRoleBinding(context.Background(), inv,
 		CreateRoleBindingCommand{UserID: userID, RoleID: roleID, ScopeType: model.RoleScopeInstitution,
 			ScopeID: scopeID, StartAt: 100, IdempotencyKey: "row", Batch: batchitem.New(batchitem.Fields{RetainedOutcome: true})})
@@ -190,7 +189,7 @@ func TestRoleBindingRetainedCreateUsesArchivedRoleForCurrentDelegation(t *testin
 	// begins before the durable write, and the write commits before its effect.
 	// The grants read after the archived Role is the delegation check of its
 	// class.members.manage.
-	require.Equal(t, []string{"grants", "decision:role_binding.manage:success", "get-role-including-archived", "grants", "audit-begin", "store-create", "invalidate-authorization"}, events)
+	require.Equal(t, []string{"grants", "decision:role_binding.manage:success", "get-role-including-archived", "grants", "audit-begin:role_binding.manage", "store-create", "invalidate-authorization"}, events)
 	// Contract: the one realtime effect drops the bound User's cached authorization.
 	require.Equal(t, []realtimetest.Call{{Method: realtimetest.InvalidateAuthorization, UserID: userID}}, publisher.Calls())
 }
@@ -203,14 +202,13 @@ func TestRoleBindingEndFailurePublishesNoInvalidation(t *testing.T) {
 	caller, inv := newCaller()
 	fixture := accessWith(t, &events, world.options(institutionGrant(caller.UserID, model.ActionRoleBindingManage)))
 	mail, rendered := newMail(t)
-	endAuditor := &institutionAuditorFake{events: &events, beginID: model.NewID()}
+	providers := &capabilityProviders{}
+	providers.set(identity.AccessPolicyProviderCapability{Descriptor: model.ExternalAuthenticationProvider{ID: "campus", Type: "oidc"}})
 	persistence := &roleBindingStoreFake{
 		events: &events, binding: binding,
 		endErr: store.NewErrConflict("role_binding", "role_bindings_last_system_admin", errors.New("last")),
 	}
-	service := &Service{roleBindings: persistence, roles: &roleBindingRoleStoreFake{events: &events}, users: relationshipUserStoreTestFake{}, institutions: anyInstitution(), authorizer: fixture.Authorizer, capabilities: &accessPolicyCapabilitiesFake{snapshot: identity.AccessPolicyCapabilitySnapshot{Providers: []identity.AccessPolicyProviderCapability{{
-		Descriptor: model.ExternalAuthenticationProvider{ID: "campus", Type: "oidc"},
-	}}}}, auditor: endAuditor, mail: mail, publisher: publisherIn(&events), now: time.Now}
+	service := &Service{roleBindings: persistence, roles: &roleBindingRoleStoreFake{events: &events}, users: relationshipUserStoreTestFake{}, institutions: anyInstitution(), authorizer: fixture.Authorizer, capabilities: deploymentCapabilities(providers, false), auditor: fixture.Auditor.MutationAudit(), mail: mail, publisher: publisherIn(&events), now: time.Now}
 	_, err := service.EndRoleBinding(context.Background(), inv, EndRoleBindingCommand{ID: binding.ID})
 	require.True(t, apperror.Is(err, "role_binding.last_system_admin"), "error = %v", err)
 	_, available := persistence.endInput.Capabilities.Providers["campus"]
@@ -222,8 +220,11 @@ func TestRoleBindingEndFailurePublishesNoInvalidation(t *testing.T) {
 	// before the durable write, and the audit outcome follows the write. The
 	// first grants read is the preflight, which records no decision when the
 	// caller holds the action somewhere.
-	require.Equal(t, []string{"grants", "get-binding", "grants", "decision:role_binding.manage:success", "audit-begin", "store-end", "audit-fail"}, events)
-	require.Equal(t, []model.UserID{binding.UserID}, endAuditor.subjects, "the end names the bound User as its subject")
+	require.Equal(t, []string{"grants", "get-binding", "grants", "decision:role_binding.manage:success", "audit-begin:role_binding.manage", "store-end", "audit-fail"}, events)
+	attempt := onlyAttempt(t, fixture)
+	require.Equal(t, binding.UserID, attempt.SubjectUserID, "the end names the bound User as its subject")
+	require.Equal(t, model.AuditStatusFail, attempt.Status, "the refused end fails its attempt")
+	require.Equal(t, "role_binding.last_system_admin", attempt.ErrorCode, "the refused end fails its attempt")
 }
 
 func TestRoleBindingListByUserAuthorizesThenReads(t *testing.T) {
@@ -233,7 +234,7 @@ func TestRoleBindingListByUserAuthorizesThenReads(t *testing.T) {
 	institutions := anyInstitution()
 	caller, inv := newCaller()
 	fixture := grantedAccess(t, &events, institutionGrant(caller.UserID, model.ActionRoleBindingView))
-	service := &Service{roleBindings: &roleBindingStoreFake{events: &events, list: []*model.RoleBinding{{ID: model.NewRoleBindingID(), UserID: model.UserID(userID)}}}, roles: &roleBindingRoleStoreFake{events: &events}, users: relationshipUserStoreTestFake{}, institutions: institutions, authorizer: fixture.Authorizer, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events}, publisher: publisherIn(&events), now: time.Now}
+	service := &Service{roleBindings: &roleBindingStoreFake{events: &events, list: []*model.RoleBinding{{ID: model.NewRoleBindingID(), UserID: model.UserID(userID)}}}, roles: &roleBindingRoleStoreFake{events: &events}, users: relationshipUserStoreTestFake{}, institutions: institutions, authorizer: fixture.Authorizer, capabilities: noCapabilities(), auditor: fixture.Auditor.MutationAudit(), publisher: publisherIn(&events), now: time.Now}
 	got, err := service.ListRoleBindings(context.Background(), inv, ListRoleBindingsQuery{UserID: model.UserID(userID)})
 	require.NoError(t, err, "list")
 	require.Len(t, got.Items, 1, "list")
@@ -253,7 +254,7 @@ func TestRoleBindingListByUserPassesAcademicScopeToPersistence(t *testing.T) {
 	persistence := &roleBindingStoreFake{events: &events}
 	caller, inv := newCaller()
 	fixture := grantedAccess(t, &events, unitGrant(caller.UserID, model.AcademicUnitID(rootID), model.ActionRoleBindingView))
-	service := &Service{roleBindings: persistence, roles: &roleBindingRoleStoreFake{events: &events}, users: relationshipUserStoreTestFake{}, institutions: anyInstitution(), authorizer: fixture.Authorizer, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events}, publisher: publisherIn(&events), now: time.Now}
+	service := &Service{roleBindings: persistence, roles: &roleBindingRoleStoreFake{events: &events}, users: relationshipUserStoreTestFake{}, institutions: anyInstitution(), authorizer: fixture.Authorizer, capabilities: noCapabilities(), auditor: fixture.Auditor.MutationAudit(), publisher: publisherIn(&events), now: time.Now}
 	_, err := service.ListRoleBindings(context.Background(), inv, ListRoleBindingsQuery{UserID: model.NewUserID()})
 	require.NoError(t, err)
 	require.Equal(t, []model.AcademicUnitID{model.AcademicUnitID(rootID)}, persistence.visibility.AcademicUnitRootIDs)

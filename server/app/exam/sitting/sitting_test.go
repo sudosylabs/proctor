@@ -9,6 +9,7 @@ package sitting
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"testing"
 	"time"
@@ -18,9 +19,11 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
@@ -47,7 +50,7 @@ type sittingFixture struct {
 	control   *accesstest.Fixture
 	publisher *realtimetest.Publisher
 	jobs      *lifecycleJobFactoryFake
-	mail      *scheduleMailPreparerFake
+	mail      *scheduleMailWorld
 }
 
 func (f sittingFixture) sitting(t *testing.T) *model.ExamSitting {
@@ -91,7 +94,7 @@ func newFixture(t *testing.T) sittingFixture {
 	})
 	publisher := &realtimetest.Publisher{}
 	jobs := &lifecycleJobFactoryFake{open: &model.Job{}, deadline: &model.Job{}, finalize: &model.Job{}}
-	mailPreparer := &scheduleMailPreparerFake{result: &store.ExamSittingMailFanout{}}
+	mailWorld := newScheduleMailWorld(t, examID, revisionID, classID)
 	service, err := New(Dependencies{
 		Persistence: persistence,
 		Access:      accessStore,
@@ -100,7 +103,7 @@ func newFixture(t *testing.T) sittingFixture {
 		Auditor:     control.Auditor,
 		Publisher:   publisher,
 		Jobs:        jobs,
-		Mail:        mailPreparer,
+		Mail:        mailWorld.preparer,
 		Now:         func() time.Time { return testNow },
 		NewID:       func() model.ExamSittingID { return sittingID },
 	})
@@ -109,7 +112,7 @@ func newFixture(t *testing.T) sittingFixture {
 		stranger: invocation.New(testPrincipal(model.NewUserID()), model.RequestMetadata{}), userID: userID,
 		unitID: unitID, examID: examID, revisionID: revisionID, classID: classID, sittingID: sittingID,
 		persistence: persistence, access: accessStore, memberships: memberships, control: control,
-		publisher: publisher, jobs: jobs, mail: mailPreparer}
+		publisher: publisher, jobs: jobs, mail: mailWorld}
 }
 
 // requireDecision asserts the last authorization decision the real
@@ -193,15 +196,97 @@ type sittingStoreFake struct {
 	getErr        error
 }
 
-type scheduleMailPreparerFake struct {
-	request ScheduleMailRequest
-	result  *store.ExamSittingMailFanout
-	err     error
+// scheduleMailWorld is the real ScheduleMail over a real Sitting mail
+// composer: an enabled sender, a renderer that keeps what it was asked to
+// render, and the Class and published revision a notice names.
+type scheduleMailWorld struct {
+	preparer  ScheduleMail
+	classes   *scheduleMailClassStoreFake
+	renderer  *scheduleMailRendererFake
+	className string
 }
 
-func (f *scheduleMailPreparerFake) Prepare(_ context.Context, request ScheduleMailRequest) (*store.ExamSittingMailFanout, error) {
-	f.request = request
-	return f.result, f.err
+func newScheduleMailWorld(t *testing.T, examID model.ExamID, revisionID model.ExamRevisionID, classID model.ClassID) *scheduleMailWorld {
+	t.Helper()
+	key := base64.StdEncoding.EncodeToString(make([]byte, 32))
+	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
+	require.NoError(t, err)
+	renderer := &scheduleMailRendererFake{}
+	composer, err := mail.NewSittingComposer(mail.SittingComposerDependencies{
+		Renderer: renderer, Sender: scheduleMailSenderFake{}, Sealer: sealer, Now: func() time.Time { return testNow },
+	})
+	require.NoError(t, err)
+	world := &scheduleMailWorld{renderer: renderer, className: "Algorithms A"}
+	world.classes = &scheduleMailClassStoreFake{classes: map[model.ClassID]*model.Class{classID: {ID: classID, DisplayName: world.className}}}
+	world.preparer = ScheduleMail{
+		Composer:  composer,
+		Classes:   world.classes,
+		Revisions: scheduleMailRevisionStoreFake{summary: &store.ExamRevisionSummary{ID: revisionID, ExamID: examID, Title: "Algorithms final"}},
+	}
+	return world
+}
+
+// requirePrepared asserts the fan-out the Store received is the notice of
+// change, prepared for the actor, over the Exam title and Class names the
+// notice shows.
+func (w *scheduleMailWorld) requirePrepared(t *testing.T, fanout *store.ExamSittingMailFanout, change store.ExamSittingMailChangeKind, actor model.UserID) {
+	t.Helper()
+	require.NotNil(t, fanout, "the Store receives the prepared fan-out")
+	require.Equal(t, change, fanout.ChangeKind, "fan-out change")
+	require.Equal(t, actor, fanout.Occurrence.ActorUserID, "fan-out actor")
+	require.NotNil(t, fanout.Bundle, "an enabled sender freezes the notice bundle")
+	require.NotEmpty(t, w.renderer.details, "the notice was rendered")
+	for _, details := range w.renderer.details {
+		require.Equal(t, "Algorithms final", details.ExamTitle, "rendered Exam title")
+	}
+}
+
+type scheduleMailRendererFake struct {
+	details []mail.SittingScheduleDetails
+}
+
+func (*scheduleMailRendererFake) SittingLocales() (string, []string) { return "en", []string{"en"} }
+
+func (r *scheduleMailRendererFake) Render(request mail.RenderRequest) (mail.FrozenContent, error) {
+	details, _ := request.Presentation.(mail.SittingScheduleDetails)
+	r.details = append(r.details, details)
+	return mail.FrozenContent{Subject: string(request.Key), Text: details.ExamTitle, HTML: "<p>" + details.ExamTitle + "</p>"}, nil
+}
+
+type scheduleMailSenderFake struct{}
+
+func (scheduleMailSenderFake) Enabled() bool { return true }
+func (scheduleMailSenderFake) From() mail.Address {
+	return mail.Address{Name: "Proctor", Address: "no-reply@example.test"}
+}
+func (scheduleMailSenderFake) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
+	return mail.TransportUnknown, nil
+}
+
+// scheduleMailClassStoreFake answers the Classes a notice names and keeps
+// which it was asked for.
+type scheduleMailClassStoreFake struct {
+	store.ClassStore
+	classes map[model.ClassID]*model.Class
+	reads   []model.ClassID
+}
+
+func (f *scheduleMailClassStoreFake) Get(_ context.Context, id model.ClassID) (*model.Class, error) {
+	f.reads = append(f.reads, id)
+	class, ok := f.classes[id]
+	if !ok {
+		return nil, store.NewErrNotFound("class", id.String())
+	}
+	return class, nil
+}
+
+type scheduleMailRevisionStoreFake struct {
+	store.ExamRevisionStore
+	summary *store.ExamRevisionSummary
+}
+
+func (f scheduleMailRevisionStoreFake) GetSummary(context.Context, model.ExamID, model.ExamRevisionID) (*store.ExamRevisionSummary, error) {
+	return f.summary, nil
 }
 
 func (f *sittingStoreFake) Resolve(_ context.Context, sittingID model.ExamSittingID) (*store.ExamSittingSnapshot, error) {

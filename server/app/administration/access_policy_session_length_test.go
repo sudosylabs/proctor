@@ -35,7 +35,8 @@ func TestSessionLengthLimitsFollowTheDeploymentLifetimes(t *testing.T) {
 
 func TestAccessPolicyPreflightNamesTheRefusedSessionLength(t *testing.T) {
 	t.Parallel()
-	service, persistence, _, _, _, inv := accessPolicyFixture(t)
+	world := accessPolicyFixture(t)
+	service, persistence, inv := world.service, world.policies, world.inv
 	service.sessionLimits = model.SessionLengthLimits{IdleMinimumMinutes: 16, IdleDefaultMinutes: 120, IdleMaximumMinutes: 120,
 		AbsoluteMinimumMinutes: 16, AbsoluteDefaultMinutes: 1440, AbsoluteMaximumMinutes: 1440}
 	for _, test := range []struct {

@@ -15,14 +15,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// MutationAuditor begins and fails the audit attempt of one named Store
-// mutation. Begin receives the whole Mutation, so every auditor is handed the
-// scope and the subject User the attempt must record.
-type MutationAuditor interface {
-	Begin(context.Context, Mutation) (model.AuditEventID, error)
-	Fail(context.Context, model.AuditEventID, string) error
-}
-
 // MutationAuditAdapter is the one Invocation-shaped view of the audit service.
 // Every parent use case and Exam child receives it directly for
 // principal-attributed mutation audit; it never wraps another adapter.

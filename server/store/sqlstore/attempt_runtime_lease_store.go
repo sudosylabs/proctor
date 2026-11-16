@@ -67,11 +67,9 @@ func validLeaseClaim(nodeID string, lifetime time.Duration) bool {
 // Claim takes one Attempt's lease when it is free or expired.
 func (s SQLAttemptRuntimeLeaseStore) Claim(
 	ctx context.Context,
-	attemptID model.ExamAttemptID,
-	nodeID string,
-	lifetime time.Duration,
+	claim *store.AttemptRuntimeLeaseClaim,
 ) (*store.AttemptRuntimeLease, error) {
-	if !attemptID.IsValid() || !validLeaseClaim(nodeID, lifetime) {
+	if claim == nil || !claim.AttemptID.IsValid() || !validLeaseClaim(claim.NodeID, claim.Lifetime) {
 		return nil, store.NewErrInvalidInput("attempt_runtime_lease", "claim", nil)
 	}
 	var rows []attemptRuntimeLeaseRow
@@ -84,8 +82,9 @@ func (s SQLAttemptRuntimeLeaseStore) Claim(
 				WHERE held.exam_attempt_id = ? AND held.expires_at > now.at
 			)
 		)`+claimAttemptRuntimeLeasesQuery,
-		attemptID.String(), attemptID.String(), nodeID, lifetime.Milliseconds()); err != nil {
-		return nil, fmt.Errorf("claim attempt runtime lease: %w", translateError("attempt_runtime_lease", attemptID.String(), err))
+		claim.AttemptID.String(), claim.AttemptID.String(), claim.NodeID, claim.Lifetime.Milliseconds()); err != nil {
+		return nil, fmt.Errorf("claim attempt runtime lease: %w",
+			translateError("attempt_runtime_lease", claim.AttemptID.String(), err))
 	}
 	if len(rows) == 0 {
 		return nil, nil
@@ -97,15 +96,13 @@ func (s SQLAttemptRuntimeLeaseStore) Claim(
 	return &lease, nil
 }
 
-// ClaimAvailable takes up to limit Attempts whose environment is not done
+// ClaimAvailable takes up to the limit of Attempts whose environment is not done
 // and whose lease is free, oldest environment first.
 func (s SQLAttemptRuntimeLeaseStore) ClaimAvailable(
 	ctx context.Context,
-	nodeID string,
-	lifetime time.Duration,
-	limit int,
+	claim *store.AttemptRuntimeLeaseAvailableClaim,
 ) ([]store.AttemptRuntimeLease, error) {
-	if !validLeaseClaim(nodeID, lifetime) || limit < 1 || limit > 1000 {
+	if claim == nil || !validLeaseClaim(claim.NodeID, claim.Lifetime) || claim.Limit < 1 || claim.Limit > 1000 {
 		return nil, store.NewErrInvalidInput("attempt_runtime_lease", "claim", nil)
 	}
 	var rows []attemptRuntimeLeaseRow
@@ -121,7 +118,7 @@ func (s SQLAttemptRuntimeLeaseStore) ClaimAvailable(
 			ORDER BY environment.created_at, environment.exam_attempt_id
 			LIMIT ?
 		)`+claimAttemptRuntimeLeasesQuery,
-		limit, nodeID, lifetime.Milliseconds()); err != nil {
+		claim.Limit, claim.NodeID, claim.Lifetime.Milliseconds()); err != nil {
 		return nil, fmt.Errorf("claim available attempt runtime leases: %w", err)
 	}
 	leases := make([]store.AttemptRuntimeLease, 0, len(rows))
@@ -138,9 +135,12 @@ func (s SQLAttemptRuntimeLeaseStore) ClaimAvailable(
 // Renew extends the holder's unexpired lease from the database's now.
 func (s SQLAttemptRuntimeLeaseStore) Renew(
 	ctx context.Context,
-	lease store.AttemptRuntimeLease,
-	lifetime time.Duration,
+	renewal *store.AttemptRuntimeLeaseRenewal,
 ) (*store.AttemptRuntimeLease, error) {
+	if renewal == nil {
+		return nil, store.NewErrInvalidInput("attempt_runtime_lease", "renew", nil)
+	}
+	lease, lifetime := renewal.Lease, renewal.Lifetime
 	if !lease.AttemptID.IsValid() || lease.Fence < 1 || !validLeaseClaim(lease.NodeID, lifetime) {
 		return nil, store.NewErrInvalidInput("attempt_runtime_lease", "renew", nil)
 	}
@@ -168,7 +168,11 @@ func (s SQLAttemptRuntimeLeaseStore) Renew(
 }
 
 // Release deletes the holder's lease, expired or not.
-func (s SQLAttemptRuntimeLeaseStore) Release(ctx context.Context, lease store.AttemptRuntimeLease) error {
+func (s SQLAttemptRuntimeLeaseStore) Release(ctx context.Context, release *store.AttemptRuntimeLeaseRelease) error {
+	if release == nil {
+		return store.NewErrInvalidInput("attempt_runtime_lease", "release", nil)
+	}
+	lease := release.Lease
 	if !lease.AttemptID.IsValid() || lease.Fence < 1 || lease.NodeID == "" {
 		return store.NewErrInvalidInput("attempt_runtime_lease", "release", nil)
 	}

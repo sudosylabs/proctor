@@ -29,20 +29,49 @@ type AttemptRuntimeLease struct {
 // another node; its holder must stop acting on the Attempt.
 var ErrAttemptRuntimeLeaseLost = errors.New("attempt runtime lease lost")
 
+// AttemptRuntimeLeaseClaim asks for one Attempt's lease for NodeID, held
+// for Lifetime from the database's now.
+type AttemptRuntimeLeaseClaim struct {
+	AttemptID model.ExamAttemptID
+	NodeID    string
+	Lifetime  time.Duration
+}
+
+// AttemptRuntimeLeaseAvailableClaim asks for up to Limit leases of Attempts
+// whose environment is not done and whose lease is free.
+type AttemptRuntimeLeaseAvailableClaim struct {
+	NodeID   string
+	Lifetime time.Duration
+	Limit    int
+}
+
+// AttemptRuntimeLeaseRenewal extends Lease, held by its exact node and
+// fence, to Lifetime from the database's now.
+type AttemptRuntimeLeaseRenewal struct {
+	Lease    AttemptRuntimeLease
+	Lifetime time.Duration
+}
+
+// AttemptRuntimeLeaseRelease gives back Lease, held by its exact node and
+// fence.
+type AttemptRuntimeLeaseRelease struct {
+	Lease AttemptRuntimeLease
+}
+
 // AttemptRuntimeLeaseStore holds the runtime leases. Every decision uses
 // PostgreSQL's clock.
 //
 // Claim takes the Attempt's lease when nobody holds it unexpired, with the
-// next fence, and otherwise returns nil. ClaimAvailable claims up to limit
-// Attempts whose environment is not done and whose lease is free. Renew
-// extends the exact node and fence before expiry, or fails with
+// next fence, and otherwise returns nil. ClaimAvailable claims up to the
+// limit of Attempts whose environment is not done and whose lease is free.
+// Renew extends the exact node and fence before expiry, or fails with
 // ErrAttemptRuntimeLeaseLost. Release deletes the exact node and fence; a
 // lease already lost releases nothing.
 type AttemptRuntimeLeaseStore interface {
-	Claim(ctx context.Context, attemptID model.ExamAttemptID, nodeID string, lifetime time.Duration) (*AttemptRuntimeLease, error)
-	ClaimAvailable(ctx context.Context, nodeID string, lifetime time.Duration, limit int) ([]AttemptRuntimeLease, error)
-	Renew(ctx context.Context, lease AttemptRuntimeLease, lifetime time.Duration) (*AttemptRuntimeLease, error)
-	Release(ctx context.Context, lease AttemptRuntimeLease) error
+	Claim(context.Context, *AttemptRuntimeLeaseClaim) (*AttemptRuntimeLease, error)
+	ClaimAvailable(context.Context, *AttemptRuntimeLeaseAvailableClaim) ([]AttemptRuntimeLease, error)
+	Renew(context.Context, *AttemptRuntimeLeaseRenewal) (*AttemptRuntimeLease, error)
+	Release(context.Context, *AttemptRuntimeLeaseRelease) error
 }
 
 // AttemptEnvironmentFactResult is the environment a fact left, and whether

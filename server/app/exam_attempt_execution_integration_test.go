@@ -322,12 +322,14 @@ func TestAttemptEnvironmentEndToEnd(t *testing.T) {
 
 	// The candidate opens a terminal and types a command into it, from
 	// whichever node serves the request.
-	opened, err := helper.App.Terminals.OpenTerminal(ctx, desktop.inv, access, environment.Window{})
+	terminalAccess := environment.CandidateAccess{AttemptID: access.AttemptID, ConnectionID: access.ConnectionID,
+		ContinuityCredential: access.ContinuityCredential}
+	opened, err := helper.App.Terminals.OpenTerminal(ctx, desktop.inv, terminalAccess, environment.Window{})
 	require.NoError(t, err)
-	require.Equal(t, "terminal:1", opened.Tag)
-	_, err = helper.App.Terminals.OpenTerminal(ctx, desktop.inv, access, environment.Window{})
+	require.Equal(t, model.AttemptEnvironmentProcessTag("terminal:1"), opened.Tag)
+	_, err = helper.App.Terminals.OpenTerminal(ctx, desktop.inv, terminalAccess, environment.Window{})
 	require.True(t, apperror.Is(err, "exam.attempt.terminal_limit_reached"), "the policy allows one terminal: %v", err)
-	session, err := helper.App.Terminals.AttachTerminal(ctx, desktop.inv, access, opened.Tag)
+	session, err := helper.App.Terminals.AttachTerminal(ctx, desktop.inv, terminalAccess, opened.Tag)
 	require.NoError(t, err)
 	output, err := session.Output(ctx, 0)
 	require.NoError(t, err)

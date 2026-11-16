@@ -64,7 +64,7 @@ func productionResources(
 		examResourceResource(application.Resources),
 		examStarterWorkspaceResource(application.StarterWorkspaces),
 		examAttemptResource(application.Attempts),
-		examAttemptTerminalResource(appTerminals{terminals: application.Terminals}, binarySockets, logger),
+		examAttemptTerminalResource(application.Terminals, binarySockets, logger),
 		securityPreflightResource(application.Attempts),
 		nativeDeliveryResource(application.Attempts),
 		browserDeliveryResource(application.Attempts),

@@ -11,11 +11,10 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/environment"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
@@ -33,46 +32,20 @@ const (
 )
 
 // terminalApplication is what the terminal routes call: the candidate's
-// access is proved by each call.
+// access is proved by each call. *environment.Terminals implements it, and
+// a nil one, for an installation that runs no execution environments,
+// answers every call with exam.attempt.environment_unavailable.
 type terminalApplication interface {
-	GetEnvironment(context.Context, invocation.Invocation, attempt.CandidateAccess) (model.AttemptEnvironment, error)
-	OpenTerminal(context.Context, invocation.Invocation, attempt.CandidateAccess, environment.Window) (environment.Terminal, error)
-	ListTerminals(context.Context, invocation.Invocation, attempt.CandidateAccess) (environment.TerminalList, error)
-	InterruptTerminal(context.Context, invocation.Invocation, attempt.CandidateAccess, string) error
-	AttachTerminal(context.Context, invocation.Invocation, attempt.CandidateAccess, string) (terminalSession, error)
-}
-
-// appTerminals adapts the application's terminals, which are absent when
-// the installation runs no execution environments.
-type appTerminals struct{ terminals *app.Terminals }
-
-func (a appTerminals) OpenTerminal(
-	ctx context.Context,
-	inv invocation.Invocation,
-	access attempt.CandidateAccess,
-	window environment.Window,
-) (environment.Terminal, error) {
-	return a.terminals.OpenTerminal(ctx, inv, access, window)
-}
-
-func (a appTerminals) ListTerminals(ctx context.Context, inv invocation.Invocation, access attempt.CandidateAccess) (environment.TerminalList, error) {
-	return a.terminals.ListTerminals(ctx, inv, access)
-}
-
-func (a appTerminals) GetEnvironment(ctx context.Context, inv invocation.Invocation, access attempt.CandidateAccess) (model.AttemptEnvironment, error) {
-	return a.terminals.GetEnvironment(ctx, inv, access)
-}
-
-func (a appTerminals) InterruptTerminal(ctx context.Context, inv invocation.Invocation, access attempt.CandidateAccess, tag string) error {
-	return a.terminals.InterruptTerminal(ctx, inv, access, tag)
-}
-
-func (a appTerminals) AttachTerminal(ctx context.Context, inv invocation.Invocation, access attempt.CandidateAccess, tag string) (terminalSession, error) {
-	session, err := a.terminals.AttachTerminal(ctx, inv, access, tag)
-	if err != nil {
-		return nil, err
-	}
-	return session, nil
+	GetEnvironment(context.Context, invocation.Invocation, environment.CandidateAccess) (model.AttemptEnvironment, error)
+	OpenTerminal(context.Context, invocation.Invocation, environment.CandidateAccess, environment.Window) (environment.Terminal, error)
+	ListTerminals(context.Context, invocation.Invocation, environment.CandidateAccess) (environment.TerminalList, error)
+	InterruptTerminal(context.Context, invocation.Invocation, environment.CandidateAccess, model.AttemptEnvironmentProcessTag) error
+	AttachTerminal(
+		context.Context,
+		invocation.Invocation,
+		environment.CandidateAccess,
+		model.AttemptEnvironmentProcessTag,
+	) (environment.TerminalAttachment, error)
 }
 
 type examAttemptTerminalHandlers struct {
@@ -81,37 +54,38 @@ type examAttemptTerminalHandlers struct {
 	logger  *logging.Logger
 }
 
-// candidateTerminalErrors are the codes every terminal route can answer
-// with: the candidate access check's and the environment's.
-var candidateTerminalErrors = []string{
+// candidateAccessErrors are the codes the candidate access check answers
+// with, which every route here can return.
+var candidateAccessErrors = []string{
 	"request.invalid",
 	"resource.not_found",
 	"exam.attempt.invalid",
 	"exam.attempt.unavailable",
 	"exam.attempt.registered_desktop_required",
 	"exam.delivery.metadata_capacity",
-	"exam.attempt.environment_not_found",
-	"exam.attempt.environment_not_running",
-	"exam.attempt.environment_unavailable",
-	"exam.attempt.terminal_limit_reached",
-	"exam.attempt.terminal_not_found",
-	"exam.attempt.terminal_exited",
 }
 
 // environmentErrors are the codes reading the environment answers with.
-var environmentErrors = []string{
-	"request.invalid",
-	"resource.not_found",
-	"exam.attempt.invalid",
-	"exam.attempt.unavailable",
-	"exam.attempt.registered_desktop_required",
-	"exam.delivery.metadata_capacity",
+var environmentErrors = withCandidateAccessErrors(
 	"exam.attempt.environment_not_found",
 	"exam.attempt.environment_unavailable",
+)
+
+// terminalErrors are the codes a terminal route answers with: the access
+// check's, the environment's and the terminal's, then extra.
+func terminalErrors(extra ...string) []string {
+	return append(withCandidateAccessErrors(
+		"exam.attempt.environment_not_found",
+		"exam.attempt.environment_not_running",
+		"exam.attempt.environment_unavailable",
+		"exam.attempt.terminal_limit_reached",
+		"exam.attempt.terminal_not_found",
+		"exam.attempt.terminal_exited",
+	), extra...)
 }
 
-func terminalErrors(extra ...string) []string {
-	return append(append([]string(nil), candidateTerminalErrors...), extra...)
+func withCandidateAccessErrors(codes ...string) []string {
+	return append(slices.Clone(candidateAccessErrors), codes...)
 }
 
 func examAttemptTerminalResource(application terminalApplication, sockets BinarySocketTransport, logger *logging.Logger) route.Resource {
@@ -168,14 +142,14 @@ type openTerminalRequest struct {
 
 // terminalResponse describes one terminal on the Attempt's current machine.
 type terminalResponse struct {
-	Number       int    `json:"number"`
-	Tag          string `json:"tag"`
-	Running      bool   `json:"running"`
-	StartedAt    string `json:"started_at,omitempty"`
-	ExitCode     *int   `json:"exit_code,omitempty"`
-	ExitSignal   *int   `json:"exit_signal,omitempty"`
-	OutputOffset uint64 `json:"output_offset"`
-	InputOffset  uint64 `json:"input_offset"`
+	Number       int                                `json:"number"`
+	Tag          model.AttemptEnvironmentProcessTag `json:"tag"`
+	Running      bool                               `json:"running"`
+	StartedAt    string                             `json:"started_at,omitempty"`
+	ExitCode     *int                               `json:"exit_code,omitempty"`
+	ExitSignal   *int                               `json:"exit_signal,omitempty"`
+	OutputOffset uint64                             `json:"output_offset"`
+	InputOffset  uint64                             `json:"input_offset"`
 }
 
 // terminalsResponse is the candidate's terminals on the current machine and
@@ -191,7 +165,7 @@ type signalTerminalRequest struct {
 }
 
 func terminalResponseFrom(terminal environment.Terminal) terminalResponse {
-	number, _ := strconv.Atoi(terminal.Tag[len(environment.TerminalTagPrefix):])
+	number, _ := strconv.Atoi(string(terminal.Tag[len(environment.TerminalTagPrefix):]))
 	response := terminalResponse{Number: number, Tag: terminal.Tag, Running: terminal.Running,
 		OutputOffset: terminal.Output, InputOffset: terminal.Input}
 	if !terminal.Started.IsZero() {
@@ -210,12 +184,22 @@ func terminalResponseFrom(terminal environment.Terminal) terminalResponse {
 }
 
 // terminalTag reads the terminal number of the path as its tag.
-func terminalTag(request route.Request) (string, error) {
+func terminalTag(request route.Request) (model.AttemptEnvironmentProcessTag, error) {
 	number, err := strconv.Atoi(request.Params["terminal"])
 	if err != nil || number < 1 || number > environment.MaxTerminalOpens {
 		return "", route.InvalidRequest(errors.New("terminal number out of bounds"))
 	}
 	return environment.TerminalTag(number), nil
+}
+
+// terminalAccess is the candidate access a terminal route presents.
+func terminalAccess(request route.Request) (environment.CandidateAccess, error) {
+	access, err := candidateAccess(request)
+	if err != nil {
+		return environment.CandidateAccess{}, err
+	}
+	return environment.CandidateAccess{AttemptID: access.AttemptID, ConnectionID: access.ConnectionID,
+		ContinuityCredential: access.ContinuityCredential}, nil
 }
 
 // windowFrom reads a requested window; neither member asks for the default.
@@ -230,7 +214,7 @@ func windowFrom(cols, rows int) (environment.Window, error) {
 }
 
 func (h examAttemptTerminalHandlers) open(request route.Request) (route.Result, error) {
-	access, err := candidateAccess(request)
+	access, err := terminalAccess(request)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -272,7 +256,7 @@ type candidateEnvironmentPath struct {
 }
 
 func (h examAttemptTerminalHandlers) environment(request route.Request) (route.Result, error) {
-	access, err := candidateAccess(request)
+	access, err := terminalAccess(request)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -294,7 +278,7 @@ func (h examAttemptTerminalHandlers) environment(request route.Request) (route.R
 }
 
 func (h examAttemptTerminalHandlers) list(request route.Request) (route.Result, error) {
-	access, err := candidateAccess(request)
+	access, err := terminalAccess(request)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -310,7 +294,7 @@ func (h examAttemptTerminalHandlers) list(request route.Request) (route.Result, 
 }
 
 func (h examAttemptTerminalHandlers) signal(request route.Request) (route.Result, error) {
-	access, err := candidateAccess(request)
+	access, err := terminalAccess(request)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -334,7 +318,7 @@ func (h examAttemptTerminalHandlers) signal(request route.Request) (route.Result
 // socket attaches to the terminal before the upgrade, so a refused attach
 // answers as a problem, then serves the terminal protocol on the socket.
 func (h examAttemptTerminalHandlers) socket(writer http.ResponseWriter, request route.Request) error {
-	access, err := candidateAccess(request)
+	access, err := terminalAccess(request)
 	if err != nil {
 		return err
 	}

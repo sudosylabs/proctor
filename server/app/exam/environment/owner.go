@@ -438,17 +438,16 @@ func (o *owner) completeSettle(ctx context.Context) error {
 	return nil
 }
 
-// spec is the machine the row names. It is derived from the row alone, so
-// every owner ensures exactly the same one.
-func (o *owner) spec(grantID string) MachineSpec {
-	return machineSpec(o.row, grantID)
+// machineSpec is the machine an environment row names. It is derived from
+// the row alone, so every owner, and every node that serves a terminal,
+// ensures exactly the same one.
+func machineSpec(row *model.AttemptEnvironment) MachineSpec {
+	return MachineSpec{Image: row.Image, Network: row.Network, Resources: row.Resources, IdleSuspend: row.IdleWindow}
 }
 
-// machineSpec is the machine an environment row names under grantID. The
-// owner and every node that serves a terminal derive it the same way.
-func machineSpec(row *model.AttemptEnvironment, grantID string) MachineSpec {
-	return MachineSpec{GrantID: grantID, Image: row.Image, Network: row.Network, Resources: row.Resources,
-		IdleSuspend: row.IdleWindow}
+// grantOf is the machine an environment row names.
+func grantOf(row *model.AttemptEnvironment) GrantRef {
+	return GrantRef{Host: row.Host, GrantID: row.GrantID}
 }
 
 // establish reaches the machine the row names, or places a new one.
@@ -456,10 +455,10 @@ func (o *owner) establish(ctx context.Context) error {
 	if o.row.GrantID == "" {
 		return o.place(ctx)
 	}
-	machine, err := o.deps.Hosts.Ensure(ctx, o.row.Host, o.spec(o.row.GrantID))
+	machine, err := o.deps.Hosts.Ensure(ctx, grantOf(o.row), machineSpec(o.row))
 	switch {
 	case errors.Is(err, ErrMachineLost):
-		_ = o.deps.Hosts.Revoke(ctx, o.row.Host, o.row.GrantID)
+		_ = o.deps.Hosts.Revoke(ctx, grantOf(o.row))
 		return restartError{reason: "lost"}
 	case errors.Is(err, ErrHostUnavailable):
 		return o.unreachable(err)
@@ -500,7 +499,7 @@ func (o *owner) useMachine(ctx context.Context, machine Machine) {
 	o.dropMachine()
 	o.machine, o.control, o.ready = machine, "", false
 	o.resetSync()
-	if watch, err := o.deps.Hosts.WatchGrant(ctx, o.row.Host, machine.GrantID()); err == nil {
+	if watch, err := o.deps.Hosts.WatchGrant(ctx, GrantRef{Host: o.row.Host, GrantID: machine.GrantID()}); err == nil {
 		o.watch = followGrant(ctx, watch)
 	} else {
 		o.report(fmt.Errorf("follow the execution machine: %w", err))
@@ -551,11 +550,13 @@ func (o *owner) place(ctx context.Context) error {
 			cmp.Compare(b.Free.DiskBytes, a.Free.DiskBytes), cmp.Compare(a.Name, b.Name))
 	})
 	grantID := fmt.Sprintf("%s.%d", o.attemptID, o.row.Incarnation)
+	spec := machineSpec(o.row)
 	for _, candidate := range candidates {
-		machine, err := o.deps.Hosts.Ensure(ctx, candidate.Name, o.spec(grantID))
+		grant := GrantRef{Host: candidate.Name, GrantID: grantID}
+		machine, err := o.deps.Hosts.Ensure(ctx, grant, spec)
 		if errors.Is(err, ErrMachineLost) {
-			_ = o.deps.Hosts.Revoke(ctx, candidate.Name, grantID)
-			machine, err = o.deps.Hosts.Ensure(ctx, candidate.Name, o.spec(grantID))
+			_ = o.deps.Hosts.Revoke(ctx, grant)
+			machine, err = o.deps.Hosts.Ensure(ctx, grant, spec)
 		}
 		if err != nil {
 			// Capacity, a draining host or one that stopped answering:
@@ -569,7 +570,7 @@ func (o *owner) place(ctx context.Context) error {
 				return err
 			}
 		}
-		o.row.Host, o.row.GrantID, o.row.Epoch = candidate.Name, grantID, machine.Epoch()
+		o.row.Host, o.row.GrantID, o.row.Epoch = grant.Host, grant.GrantID, machine.Epoch()
 		o.row.State, o.row.WaitingSince = model.AttemptEnvironmentCreating, time.Time{}
 		o.row.ControlFence, o.row.ProjectionCursor, o.row.ObservationCursor, o.row.ProcessCursor = 0, 0, 0, 0
 		o.row.ProjectedVersions, o.row.SyncPaths = nil, nil
@@ -643,7 +644,7 @@ func (o *owner) restart(ctx context.Context, reason string) error {
 	if o.machine != nil {
 		_ = o.machine.Revoke(ctx)
 	} else if o.row.GrantID != "" {
-		_ = o.deps.Hosts.Revoke(ctx, o.row.Host, o.row.GrantID)
+		_ = o.deps.Hosts.Revoke(ctx, grantOf(o.row))
 	}
 	o.dropMachine()
 	o.resetSync()
@@ -670,7 +671,7 @@ func (o *owner) teardown(ctx context.Context) error {
 		if o.machine != nil {
 			err = o.machine.Revoke(ctx)
 		} else {
-			err = o.deps.Hosts.Revoke(ctx, o.row.Host, o.row.GrantID)
+			err = o.deps.Hosts.Revoke(ctx, grantOf(o.row))
 		}
 		if err != nil && !errors.Is(err, ErrMachineRevoked) && !errors.Is(err, ErrMachineLost) {
 			// A host gone too long leaves nothing to revoke from here.

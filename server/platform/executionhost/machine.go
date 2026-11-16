@@ -173,7 +173,7 @@ func (m *machine) Observe(ctx context.Context, request environment.ObserveReques
 			NodeIdentity: observation.NodeIdentity, Kind: fromKind(observation.Kind), Path: observation.Path,
 			DestinationPath: observation.DestinationPath, ExpectedVersion: string(observation.ExpectedContentVersion),
 			Recursive: observation.Recursive, Content: fromContent(observation.Content),
-			ProcessTag:  observation.ProcessTag,
+			ProcessTag:  model.AttemptEnvironmentProcessTag(observation.ProcessTag),
 			DiscardedBy: int64(observation.DiscardedBy), //nolint:gosec // G115: cursors stay below 2^53.
 		}
 	}
@@ -229,7 +229,7 @@ func (m *machine) ObserveProcesses(ctx context.Context, fence environment.Fence,
 	for index, event := range page.Events {
 		result.Events[index] = environment.ProcessEvent{
 			Sequence: event.Sequence, Kind: string(event.Kind), PID: event.PID, ParentPID: event.ParentPID,
-			Argv: event.Argv, Truncated: event.Truncated, Unread: event.Unread, Dir: event.Dir, Tag: event.Tag,
+			Argv: event.Argv, Truncated: event.Truncated, Unread: event.Unread, Dir: event.Dir, Tag: model.AttemptEnvironmentProcessTag(event.Tag),
 			At: event.At, ExitCode: event.ExitCode, Signal: event.Signal, Dropped: event.Dropped,
 		}
 	}

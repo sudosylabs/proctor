@@ -143,19 +143,19 @@ func TestAttemptEnvironmentStore(t *testing.T, ss store.Store) {
 	require.Equal(t, model.AttemptEnvironmentDesiredRunning, environment.Desired)
 
 	// One node holds the lease at a time, and each claim takes a new fence.
-	lease, err := leases.Claim(ctx, attemptID, "node-a", time.Minute)
+	lease, err := leases.Claim(ctx, &store.AttemptRuntimeLeaseClaim{AttemptID: attemptID, NodeID: "node-a", Lifetime: time.Minute})
 	require.NoError(t, err)
 	require.NotNil(t, lease)
-	other, err := leases.Claim(ctx, attemptID, "node-b", time.Minute)
+	other, err := leases.Claim(ctx, &store.AttemptRuntimeLeaseClaim{AttemptID: attemptID, NodeID: "node-b", Lifetime: time.Minute})
 	require.NoError(t, err)
 	require.Nil(t, other, "a live lease is not taken over")
-	available, err := leases.ClaimAvailable(ctx, "node-b", time.Minute, 1000)
+	available, err := leases.ClaimAvailable(ctx, &store.AttemptRuntimeLeaseAvailableClaim{NodeID: "node-b", Lifetime: time.Minute, Limit: 1000})
 	require.NoError(t, err)
 	for _, claimed := range available {
 		require.NotEqual(t, attemptID, claimed.AttemptID, "a held environment is not available")
-		require.NoError(t, leases.Release(ctx, claimed))
+		require.NoError(t, leases.Release(ctx, &store.AttemptRuntimeLeaseRelease{Lease: claimed}))
 	}
-	renewed, err := leases.Renew(ctx, *lease, 2*time.Minute)
+	renewed, err := leases.Renew(ctx, &store.AttemptRuntimeLeaseRenewal{Lease: *lease, Lifetime: 2 * time.Minute})
 	require.NoError(t, err)
 	require.Equal(t, lease.Fence, renewed.Fence)
 	require.True(t, renewed.ExpiresAt.After(lease.ExpiresAt))
@@ -193,13 +193,13 @@ func TestAttemptEnvironmentStore(t *testing.T, ss store.Store) {
 	requireConflictConstraint(t, err, "attempt_environment_revision")
 
 	// A released lease fences its old owner out, and the next claim moves on.
-	require.NoError(t, leases.Release(ctx, *renewed))
+	require.NoError(t, leases.Release(ctx, &store.AttemptRuntimeLeaseRelease{Lease: *renewed}))
 	_, err = environments.SaveOwner(ctx, &store.AttemptEnvironmentOwnerSave{Lease: *renewed,
 		ExpectedRevision: saved.Revision, Environment: owned})
 	require.ErrorIs(t, err, store.ErrAttemptRuntimeLeaseLost, "a released lease still writes")
-	_, err = leases.Renew(ctx, *renewed, time.Minute)
+	_, err = leases.Renew(ctx, &store.AttemptRuntimeLeaseRenewal{Lease: *renewed, Lifetime: time.Minute})
 	require.ErrorIs(t, err, store.ErrAttemptRuntimeLeaseLost, "a released lease renews")
-	next, err := leases.Claim(ctx, attemptID, "node-b", time.Minute)
+	next, err := leases.Claim(ctx, &store.AttemptRuntimeLeaseClaim{AttemptID: attemptID, NodeID: "node-b", Lifetime: time.Minute})
 	require.NoError(t, err)
 	require.NotNil(t, next)
 	require.Greater(t, next.Fence, lease.Fence)
@@ -259,12 +259,12 @@ func TestAttemptEnvironmentStore(t *testing.T, ss store.Store) {
 	_, err = environments.SaveOwner(ctx, &store.AttemptEnvironmentOwnerSave{Lease: *next,
 		ExpectedRevision: environment.Revision, Environment: finished})
 	require.NoError(t, err)
-	require.NoError(t, leases.Release(ctx, *next))
-	available, err = leases.ClaimAvailable(ctx, "node-c", time.Minute, 1000)
+	require.NoError(t, leases.Release(ctx, &store.AttemptRuntimeLeaseRelease{Lease: *next}))
+	available, err = leases.ClaimAvailable(ctx, &store.AttemptRuntimeLeaseAvailableClaim{NodeID: "node-c", Lifetime: time.Minute, Limit: 1000})
 	require.NoError(t, err)
 	for _, claimed := range available {
 		require.NotEqual(t, attemptID, claimed.AttemptID, "a done environment is never claimed again")
-		require.NoError(t, leases.Release(ctx, claimed))
+		require.NoError(t, leases.Release(ctx, &store.AttemptRuntimeLeaseRelease{Lease: claimed}))
 	}
 
 	// An Attempt whose Revision does not enable execution has none.

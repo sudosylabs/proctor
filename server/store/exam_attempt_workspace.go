@@ -104,7 +104,7 @@ type ExamAttemptWorkspaceEnvironmentAccess struct {
 	AttemptID   model.ExamAttemptID
 	Incarnation int64
 	Fence       int64
-	Tag         string
+	Tag         model.AttemptEnvironmentProcessTag
 }
 
 func (a ExamAttemptWorkspaceEnvironmentAccess) WorkspaceAttemptID() model.ExamAttemptID {

@@ -16,8 +16,13 @@
 // writes back through the Store, carrying the lease. Workspace commits and
 // facts wake the owner; a slow backstop claims what nobody holds.
 //
-// The package holds no execution-host client. The owner reaches a host
-// through a port that the composition root implements.
+// Terminals serves the candidate's terminals from any node, without a
+// lease, proving the candidate's access through a port on every call.
+//
+// The package holds no execution-host client. The owner and the terminals
+// reach a host through a port that the composition root implements; the
+// parent application implements the candidate port over the Attempt
+// service.
 package environment
 
 import (

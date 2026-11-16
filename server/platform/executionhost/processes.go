@@ -15,6 +15,7 @@ import (
 	"github.com/sudosylabs/execenv"
 
 	"github.com/sudosylabs/proctor/server/app/exam/environment"
+	"github.com/sudosylabs/proctor/server/model"
 )
 
 // The core's processes are terminals: one PTY stream each.
@@ -25,13 +26,13 @@ func toWindow(window environment.Window) execenv.Window {
 
 func fromInfo(info execenv.ProcessInfo) environment.ProcessInfo {
 	return environment.ProcessInfo{
-		Tag: info.Tag, PTY: info.PTY, Started: info.Started, Running: info.Running,
+		Tag: model.AttemptEnvironmentProcessTag(info.Tag), PTY: info.PTY, Started: info.Started, Running: info.Running,
 		ExitCode: info.Exit.Code, ExitSignal: info.Exit.Signal, Output: info.Output[execenv.StreamPTY], Input: info.Input,
 	}
 }
 
 func (m *machine) StartProcess(ctx context.Context, fence environment.Fence, spec environment.ProcessSpec) (environment.ProcessInfo, error) {
-	executionSpec := execenv.ProcessSpec{Tag: spec.Tag, Argv: spec.Argv}
+	executionSpec := execenv.ProcessSpec{Tag: string(spec.Tag), Argv: spec.Argv}
 	if spec.PTY != nil {
 		window := toWindow(*spec.PTY)
 		executionSpec.PTY = &window
@@ -55,8 +56,12 @@ func (m *machine) ListProcesses(ctx context.Context) ([]environment.ProcessInfo,
 	return result, nil
 }
 
-func (m *machine) AttachProcess(ctx context.Context, tag string, from uint64) (environment.ProcessAttachment, error) {
-	attachment, err := m.env.AttachProcess(ctx, tag, map[execenv.Stream]uint64{execenv.StreamPTY: from})
+func (m *machine) AttachProcess(
+	ctx context.Context,
+	tag model.AttemptEnvironmentProcessTag,
+	from uint64,
+) (environment.ProcessAttachment, error) {
+	attachment, err := m.env.AttachProcess(ctx, string(tag), map[execenv.Stream]uint64{execenv.StreamPTY: from})
 	if err != nil {
 		return nil, m.fail("attach process", err)
 	}
@@ -98,22 +103,38 @@ func (a *processAttachment) Next(ctx context.Context) (environment.ProcessOutput
 
 func (a *processAttachment) Close() error { return a.attachment.Close() }
 
-func (m *machine) WriteInput(ctx context.Context, fence environment.Fence, tag string, offset uint64, data []byte) (uint64, error) {
-	next, err := m.env.WriteInput(ctx, toFence(fence), tag, offset, data)
+func (m *machine) WriteInput(
+	ctx context.Context,
+	fence environment.Fence,
+	tag model.AttemptEnvironmentProcessTag,
+	offset uint64,
+	data []byte,
+) (uint64, error) {
+	next, err := m.env.WriteInput(ctx, toFence(fence), string(tag), offset, data)
 	if err != nil {
 		return next, m.fail("write input", err)
 	}
 	return next, nil
 }
 
-func (m *machine) Resize(ctx context.Context, fence environment.Fence, tag string, window environment.Window) error {
-	if err := m.env.Resize(ctx, toFence(fence), tag, toWindow(window)); err != nil {
+func (m *machine) Resize(
+	ctx context.Context,
+	fence environment.Fence,
+	tag model.AttemptEnvironmentProcessTag,
+	window environment.Window,
+) error {
+	if err := m.env.Resize(ctx, toFence(fence), string(tag), toWindow(window)); err != nil {
 		return m.fail("resize", err)
 	}
 	return nil
 }
 
-func (m *machine) SignalProcess(ctx context.Context, fence environment.Fence, tag string, signal environment.ProcessSignal) error {
+func (m *machine) SignalProcess(
+	ctx context.Context,
+	fence environment.Fence,
+	tag model.AttemptEnvironmentProcessTag,
+	signal environment.ProcessSignal,
+) error {
 	var executionSignal execenv.Signal
 	switch signal {
 	case environment.SignalInterrupt:
@@ -121,14 +142,14 @@ func (m *machine) SignalProcess(ctx context.Context, fence environment.Fence, ta
 	default:
 		return hostError("signal", errors.New("unknown signal"))
 	}
-	if err := m.env.SignalProcess(ctx, toFence(fence), tag, executionSignal); err != nil {
+	if err := m.env.SignalProcess(ctx, toFence(fence), string(tag), executionSignal); err != nil {
 		return m.fail("signal", err)
 	}
 	return nil
 }
 
-func (m *machine) Screen(ctx context.Context, tag string) (environment.Screen, error) {
-	screen, err := m.env.Screen(ctx, tag)
+func (m *machine) Screen(ctx context.Context, tag model.AttemptEnvironmentProcessTag) (environment.Screen, error) {
+	screen, err := m.env.Screen(ctx, string(tag))
 	if err != nil {
 		return environment.Screen{}, m.fail("screen", err)
 	}

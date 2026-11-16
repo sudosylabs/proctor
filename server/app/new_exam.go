@@ -384,7 +384,7 @@ func environmentSettler(deps Dependencies) attempt.EnvironmentSettler {
 	if !deps.ExecutionEnabled || deps.Store.AttemptEnvironment() == nil || deps.EnvironmentSettles == nil {
 		return nil
 	}
-	settler, err := environment.NewSettler(environment.SettlerConfig{
+	settler, err := environment.NewSettler(environment.SettlerDependencies{
 		Environments:  deps.Store.AttemptEnvironment(),
 		Waker:         deps.EnvironmentWaker,
 		Signals:       deps.EnvironmentSettles,

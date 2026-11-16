@@ -17,7 +17,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/exam/environment"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/logging"
@@ -134,7 +133,7 @@ func (s *fakeTerminalSession) Check(context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.ended {
-		return app.ErrTerminalAccessEnded
+		return environment.ErrTerminalAccessEnded
 	}
 	return s.checkErr
 }

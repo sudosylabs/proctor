@@ -31,9 +31,9 @@ func TestProcessOriginsFollowDescent(t *testing.T) {
 		{Sequence: 5, Kind: processExited, PID: 12},
 	}
 	origins.attribute("epoch-a", events)
-	require.Equal(t, []string{"terminal:1", "terminal:1", "terminal:1", "", "terminal:1"},
-		[]string{events[0].Origin, events[1].Origin, events[2].Origin, events[3].Origin, events[4].Origin})
-	require.Equal(t, "terminal:1", events[0].Tag, "the host's tag stays")
+	require.Equal(t, []model.AttemptEnvironmentProcessTag{"terminal:1", "terminal:1", "terminal:1", "", "terminal:1"},
+		[]model.AttemptEnvironmentProcessTag{events[0].Origin, events[1].Origin, events[2].Origin, events[3].Origin, events[4].Origin})
+	require.Equal(t, model.AttemptEnvironmentProcessTag("terminal:1"), events[0].Tag, "the host's tag stays")
 	require.Empty(t, events[1].Tag)
 
 	// A reused PID is the new process; a later page continues the map.
@@ -43,7 +43,7 @@ func TestProcessOriginsFollowDescent(t *testing.T) {
 	}
 	origins.attribute("epoch-a", later)
 	require.Empty(t, later[0].Origin)
-	require.Equal(t, "terminal:1", later[1].Origin)
+	require.Equal(t, model.AttemptEnvironmentProcessTag("terminal:1"), later[1].Origin)
 
 	// Another machine starts again.
 	other := []ProcessEvent{{Sequence: 1, Kind: processStarted, PID: 13, ParentPID: 11}}
@@ -93,7 +93,7 @@ func recordedInput(t *testing.T, record store.ExamAttemptTerminalInputAppend) (u
 func TestInputRecorderCoalescesAndDeduplicates(t *testing.T) {
 	t.Parallel()
 	evidence := &inputStore{}
-	terminals := &Terminals{config: TerminalsConfig{Evidence: evidence, Now: time.Now, InputFlush: time.Hour, InputChunkBytes: 8}}
+	terminals := &Terminals{deps: TerminalsDependencies{Evidence: evidence, Now: time.Now, InputFlush: time.Hour, InputChunkBytes: 8}}
 	attemptID := model.NewExamAttemptID()
 	// Four bytes were taken before the session attached: another session's.
 	recorder := newInputRecorder(terminals, attemptID, 2, "terminal:1", 4)
@@ -132,7 +132,7 @@ func TestInputRecorderCoalescesAndDeduplicates(t *testing.T) {
 func TestInputRecorderFlushesAfterItsWindow(t *testing.T) {
 	t.Parallel()
 	evidence := &inputStore{}
-	terminals := &Terminals{config: TerminalsConfig{Evidence: evidence, Now: time.Now, InputFlush: 10 * time.Millisecond,
+	terminals := &Terminals{deps: TerminalsDependencies{Evidence: evidence, Now: time.Now, InputFlush: 10 * time.Millisecond,
 		InputChunkBytes: DefaultInputChunkBytes}}
 	recorder := newInputRecorder(terminals, model.NewExamAttemptID(), 0, "terminal:2", 0)
 	recorder.resize(Window{Cols: 100, Rows: 30})

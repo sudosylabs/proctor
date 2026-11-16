@@ -176,7 +176,7 @@ func TestAttemptEvidence(t *testing.T, ss store.Store, export AttemptEvidenceExp
 		terminalOwner, _ := ownTestEnvironment(t, ctx, ss, terminalConnected.Attempt.ID, terminal.sitting.ID,
 			terminalConnected.Participation.Generation)
 		typedAt := model.NowUTC().Add(-time.Second).Truncate(time.Millisecond)
-		inputAt := func(incarnation, sequence int64, tag, detail string) *store.ExamAttemptTerminalInputAppend {
+		inputAt := func(incarnation, sequence int64, tag model.AttemptEnvironmentProcessTag, detail string) *store.ExamAttemptTerminalInputAppend {
 			return &store.ExamAttemptTerminalInputAppend{AttemptID: terminalConnected.Attempt.ID, Incarnation: incarnation,
 				Tag: tag, EvidenceID: model.NewIntegrityEvidenceID(), Sequence: sequence, Detail: json.RawMessage(detail),
 				ObservedAt: typedAt}

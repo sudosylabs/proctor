@@ -490,10 +490,10 @@ func NewCandidateWorkspaceAuthor(connectionID AttemptConnectionID) AttemptWorksp
 
 // NewEnvironmentWorkspaceAuthor names one environment incarnation and, when
 // processTag is not empty, the process that wrote the change.
-func NewEnvironmentWorkspaceAuthor(incarnation int64, processTag string) AttemptWorkspaceAuthor {
+func NewEnvironmentWorkspaceAuthor(incarnation int64, processTag AttemptEnvironmentProcessTag) AttemptWorkspaceAuthor {
 	ref := strconv.FormatInt(incarnation, 10)
 	if processTag != "" {
-		ref += "/" + processTag
+		ref += "/" + string(processTag)
 	}
 	return AttemptWorkspaceAuthor{Kind: AttemptWorkspaceAuthorEnvironment, Ref: ref}
 }
@@ -513,21 +513,24 @@ func (a AttemptWorkspaceAuthor) IsValid() bool {
 		if err != nil || value < 0 || strconv.FormatInt(value, 10) != incarnation {
 			return false
 		}
-		return !tagged || IsValidAttemptEnvironmentProcessTag(tag)
+		return !tagged || AttemptEnvironmentProcessTag(tag).IsValid()
 	default:
 		return false
 	}
 }
 
-// IsValidAttemptEnvironmentProcessTag reports whether tag names one process
-// the core started in an environment, such as terminal:1: a lowercase letter,
-// then up to 63 lowercase letters, digits, colons, hyphens or underscores.
-func IsValidAttemptEnvironmentProcessTag(tag string) bool {
-	if tag == "" || len(tag) > 64 || tag[0] < 'a' || tag[0] > 'z' {
+// AttemptEnvironmentProcessTag names one process the core started in an
+// environment, such as terminal:1. The empty tag names no process.
+type AttemptEnvironmentProcessTag string
+
+// IsValid reports whether the tag is a lowercase letter, then up to 63
+// lowercase letters, digits, colons, hyphens or underscores.
+func (t AttemptEnvironmentProcessTag) IsValid() bool {
+	if t == "" || len(t) > 64 || t[0] < 'a' || t[0] > 'z' {
 		return false
 	}
-	for index := 1; index < len(tag); index++ {
-		character := tag[index]
+	for index := 1; index < len(t); index++ {
+		character := t[index]
 		if (character < 'a' || character > 'z') && (character < '0' || character > '9') &&
 			character != ':' && character != '-' && character != '_' {
 			return false

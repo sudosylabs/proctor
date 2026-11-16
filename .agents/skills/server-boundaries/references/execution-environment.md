@@ -85,8 +85,10 @@ This file holds only the rules that must not drift.
   environment row names while the row says running: the spec derived from
   the row as the owner derives it, the row's epoch, the row's current control
   fence. It never writes the row.
-- The Attempt service owns the candidate access check; terminal use cases
-  take an already verified Attempt and recheck it while a socket is open.
+- The Attempt service owns the candidate access check. The terminal use
+  cases live on `environment.Terminals` and reach the check through the
+  area's own candidate port, which the parent implements over the Attempt
+  service; they run it on every call and again while a socket is open.
 - A machine never reuses a process tag, so input offsets, and the evidence
   sequences derived from them, name one process. A tag's prefix names its
   kind and author (`terminal:` is the candidate's).

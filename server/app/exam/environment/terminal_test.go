@@ -19,7 +19,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/environment"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -33,7 +35,7 @@ type output struct {
 	done   chan struct{}
 }
 
-func follow(t *testing.T, ctx context.Context, session *environment.TerminalSession, from uint64) *output {
+func follow(t *testing.T, ctx context.Context, session environment.TerminalAttachment, from uint64) *output {
 	t.Helper()
 	attachment, err := session.Output(ctx, from)
 	require.NoError(t, err)
@@ -74,10 +76,38 @@ func (o *output) start() (uint64, bool) {
 	return o.first, o.seen
 }
 
-func newTerminals(t *testing.T, r *rig) *environment.Terminals {
+// candidatesFake verifies every candidate as the Attempt's, until refuse
+// names the code it answers with instead.
+type candidatesFake struct {
+	mu     sync.Mutex
+	userID model.UserID
+	refuse string
+}
+
+func (c *candidatesFake) VerifyCandidate(
+	_ context.Context,
+	_ invocation.Invocation,
+	access environment.CandidateAccess,
+) (environment.CandidateAttempt, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.refuse != "" {
+		return environment.CandidateAttempt{}, apperror.New(apperror.Code(c.refuse))
+	}
+	return environment.CandidateAttempt{AttemptID: access.AttemptID, CandidateUserID: c.userID}, nil
+}
+
+func (c *candidatesFake) refuseWith(code string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.refuse = code
+}
+
+func newTerminals(t *testing.T, r *rig, candidates environment.CandidateVerifier) *environment.Terminals {
 	t.Helper()
-	terminals, err := environment.NewTerminals(environment.TerminalsConfig{
-		Environments: r.environments, Evidence: r.evidence, Hosts: r.hosts, InputFlush: 20 * time.Millisecond,
+	terminals, err := environment.NewTerminals(environment.TerminalsDependencies{
+		Environments: r.environments, Evidence: r.evidence, Hosts: r.hosts, Candidates: candidates,
+		InputFlush: 20 * time.Millisecond,
 	})
 	require.NoError(t, err)
 	return terminals
@@ -91,15 +121,17 @@ func TestTerminalsOverAnExecutionHost(t *testing.T) {
 	r.environments.mu.Unlock()
 	r.running()
 	ctx := t.Context()
-	terminals := newTerminals(t, r)
-	candidate := environment.CandidateAttempt{AttemptID: r.attemptID, CandidateUserID: model.NewUserID()}
+	candidates := &candidatesFake{userID: model.NewUserID()}
+	terminals := newTerminals(t, r, candidates)
+	var inv invocation.Invocation
+	access := environment.CandidateAccess{AttemptID: r.attemptID, ConnectionID: model.NewAttemptConnectionID()}
 
-	opened, err := terminals.Open(ctx, candidate, environment.Window{})
+	opened, err := terminals.OpenTerminal(ctx, inv, access, environment.Window{})
 	require.NoError(t, err)
-	require.Equal(t, "terminal:1", opened.Tag)
+	require.Equal(t, model.AttemptEnvironmentProcessTag("terminal:1"), opened.Tag)
 	require.True(t, opened.Running)
 
-	session, err := terminals.Attach(ctx, candidate, opened.Tag)
+	session, err := terminals.AttachTerminal(ctx, inv, access, opened.Tag)
 	require.NoError(t, err)
 	gathered := follow(t, ctx, session, 0)
 
@@ -156,7 +188,7 @@ func TestTerminalsOverAnExecutionHost(t *testing.T) {
 	session.Close(ctx)
 	inputs := r.evidence.terminalInputs()
 	require.Len(t, inputs, 1)
-	require.Equal(t, "terminal:1", inputs[0].Tag)
+	require.Equal(t, model.AttemptEnvironmentProcessTag("terminal:1"), inputs[0].Tag)
 	require.EqualValues(t, 1, inputs[0].Sequence)
 	var detail struct {
 		Offset uint64 `json:"offset"`
@@ -174,48 +206,66 @@ func TestTerminalsOverAnExecutionHost(t *testing.T) {
 	require.Equal(t, string(line), string(recorded), "input is recorded, output never")
 
 	// The policy's limit bounds running terminals; tags are never reused.
-	second, err := terminals.Open(ctx, candidate, environment.Window{Cols: 120, Rows: 40})
+	second, err := terminals.OpenTerminal(ctx, inv, access, environment.Window{Cols: 120, Rows: 40})
 	require.NoError(t, err)
-	require.Equal(t, "terminal:2", second.Tag)
-	_, err = terminals.Open(ctx, candidate, environment.Window{})
+	require.Equal(t, model.AttemptEnvironmentProcessTag("terminal:2"), second.Tag)
+	_, err = terminals.OpenTerminal(ctx, inv, access, environment.Window{})
 	require.ErrorIs(t, err, environment.ErrTerminalLimit)
-	require.NoError(t, terminals.Signal(ctx, candidate, second.Tag, environment.SignalInterrupt))
+	require.True(t, apperror.Is(err, "exam.attempt.terminal_limit_reached"))
+	require.NoError(t, terminals.InterruptTerminal(ctx, inv, access, second.Tag))
 	require.Eventually(t, func() bool {
-		listed, listErr := terminals.List(ctx, candidate)
+		listed, listErr := terminals.ListTerminals(ctx, inv, access)
 		return listErr == nil && listed.Limit == 2 && len(listed.Terminals) == 2 && !listed.Terminals[1].Running
 	}, eventually, tick)
-	third, err := terminals.Open(ctx, candidate, environment.Window{})
+	third, err := terminals.OpenTerminal(ctx, inv, access, environment.Window{})
 	require.NoError(t, err)
-	require.Equal(t, "terminal:3", third.Tag)
-	_, err = terminals.Attach(ctx, candidate, "terminal:9")
+	require.Equal(t, model.AttemptEnvironmentProcessTag("terminal:3"), third.Tag)
+	_, err = terminals.AttachTerminal(ctx, inv, access, "terminal:9")
 	require.ErrorIs(t, err, environment.ErrTerminalNotFound)
-	require.ErrorIs(t, terminals.Signal(ctx, candidate, "shell", environment.SignalInterrupt), environment.ErrTerminalNotFound)
+	require.ErrorIs(t, terminals.InterruptTerminal(ctx, inv, access, "shell"), environment.ErrTerminalNotFound)
 
-	// A frozen environment opens nothing, and a session on it ends.
-	reattached, err := terminals.Attach(ctx, candidate, opened.Tag)
+	// A session whose candidate access lapses for a moment goes on; one
+	// whose access is refused ends.
+	reattached, err := terminals.AttachTerminal(ctx, inv, access, opened.Tag)
 	require.NoError(t, err)
 	defer reattached.Close(ctx)
+	candidates.refuseWith("exam.attempt.unavailable")
+	require.True(t, apperror.Is(reattached.Check(ctx), "exam.attempt.unavailable"))
+	candidates.refuseWith("exam.attempt.invalid")
+	require.ErrorIs(t, reattached.Check(ctx), environment.ErrTerminalAccessEnded)
+	candidates.refuseWith("")
+	require.NoError(t, reattached.Check(ctx))
+
+	// A frozen environment opens nothing, and a session on it ends.
 	r.environments.desire(model.AttemptEnvironmentDesiredFrozen)
 	r.poke()
 	require.Eventually(t, func() bool { return r.environments.snapshot().State == model.AttemptEnvironmentFrozen }, eventually, tick)
-	_, err = terminals.Open(ctx, candidate, environment.Window{})
+	_, err = terminals.OpenTerminal(ctx, inv, access, environment.Window{})
 	require.ErrorIs(t, err, environment.ErrEnvironmentNotRunning)
 	_, err = reattached.Write(ctx, uint64(len(line)), []byte("x"))
 	require.ErrorIs(t, err, environment.ErrEnvironmentNotRunning)
 	r.environments.desire(model.AttemptEnvironmentDesiredEnded)
 	r.poke()
 	require.Eventually(t, func() bool {
-		return errors.Is(reattached.Check(ctx), environment.ErrTerminalEnded)
+		return errors.Is(reattached.Check(ctx), environment.ErrTerminalAccessEnded)
 	}, eventually, tick)
 }
 
 func TestTerminalsRefuseAnAttemptWithoutAnEnvironment(t *testing.T) {
 	t.Parallel()
 	r := newRig(t, environment.OwnerTiming{})
-	terminals := newTerminals(t, r)
-	other := environment.CandidateAttempt{AttemptID: model.NewExamAttemptID(), CandidateUserID: model.NewUserID()}
-	_, err := terminals.Open(context.Background(), other, environment.Window{})
+	terminals := newTerminals(t, r, &candidatesFake{userID: model.NewUserID()})
+	other := environment.CandidateAccess{AttemptID: model.NewExamAttemptID(), ConnectionID: model.NewAttemptConnectionID()}
+	_, err := terminals.OpenTerminal(context.Background(), invocation.Invocation{}, other, environment.Window{})
 	require.ErrorIs(t, err, environment.ErrNoEnvironment)
-	_, err = environment.NewTerminals(environment.TerminalsConfig{})
+	require.True(t, apperror.Is(err, "exam.attempt.environment_not_found"))
+	_, err = environment.NewTerminals(environment.TerminalsDependencies{})
 	require.Error(t, err)
+}
+
+func TestNilTerminalsAnswerUnavailable(t *testing.T) {
+	t.Parallel()
+	var terminals *environment.Terminals
+	_, err := terminals.ListTerminals(context.Background(), invocation.Invocation{}, environment.CandidateAccess{})
+	require.True(t, apperror.Is(err, "exam.attempt.environment_unavailable"), "an installation without execution: %v", err)
 }

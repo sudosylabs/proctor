@@ -154,7 +154,7 @@ func TestSettlerWaitsForTheOwnersSignalWithoutPolling(t *testing.T) {
 	attemptID := model.NewExamAttemptID()
 	environments, signals := newSettleStoreFake(), &signalsFake{}
 	environments.add(attemptID, settleRow{})
-	settler, err := NewSettler(SettlerConfig{Environments: environments, Signals: signals,
+	settler, err := NewSettler(SettlerDependencies{Environments: environments, Signals: signals,
 		Waker: signalingWaker{environments, signals}, Budget: time.Hour, NewEvidenceID: model.NewIntegrityEvidenceID})
 	require.NoError(t, err)
 
@@ -170,7 +170,7 @@ func TestSettlerRecordsTheGapOfAnOwnerThatNeverAnswers(t *testing.T) {
 	attemptID := model.NewExamAttemptID()
 	environments := newSettleStoreFake()
 	environments.add(attemptID, settleRow{})
-	silent, err := NewSettler(SettlerConfig{Environments: environments, Signals: &signalsFake{},
+	silent, err := NewSettler(SettlerDependencies{Environments: environments, Signals: &signalsFake{},
 		Budget: 50 * time.Millisecond, NewEvidenceID: model.NewIntegrityEvidenceID})
 	require.NoError(t, err)
 
@@ -188,16 +188,16 @@ func TestSettlerRecordsTheGapOfAnOwnerThatNeverAnswers(t *testing.T) {
 	_, _, gaps = environments.counts()
 	require.Len(t, gaps, 1)
 
-	_, err = NewSettler(SettlerConfig{Environments: environments, Signals: &signalsFake{}})
+	_, err = NewSettler(SettlerDependencies{Environments: environments, Signals: &signalsFake{}})
 	require.Error(t, err, "an evidence ID source is required")
-	_, err = NewSettler(SettlerConfig{Environments: environments, NewEvidenceID: model.NewIntegrityEvidenceID})
+	_, err = NewSettler(SettlerDependencies{Environments: environments, NewEvidenceID: model.NewIntegrityEvidenceID})
 	require.Error(t, err, "the settle signals are required")
 }
 
 func TestSettlerAwaitsAPendingSettleWithoutAskingAnother(t *testing.T) {
 	t.Parallel()
 	environments, signals := newSettleStoreFake(), &signalsFake{}
-	settler, err := NewSettler(SettlerConfig{Environments: environments, Signals: signals, Budget: time.Hour,
+	settler, err := NewSettler(SettlerDependencies{Environments: environments, Signals: signals, Budget: time.Hour,
 		NewEvidenceID: model.NewIntegrityEvidenceID})
 	require.NoError(t, err)
 
@@ -240,7 +240,7 @@ func TestSettlerBoundsASittingCloseOfUnreachableHosts(t *testing.T) {
 		targets[index] = model.NewExamAttemptID()
 		environments.add(targets[index], settleRow{requested: 1, requestedAt: asked})
 	}
-	settler, err := NewSettler(SettlerConfig{Environments: environments, Signals: &signalsFake{},
+	settler, err := NewSettler(SettlerDependencies{Environments: environments, Signals: &signalsFake{},
 		NewEvidenceID: model.NewIntegrityEvidenceID})
 	require.NoError(t, err)
 

@@ -54,7 +54,7 @@ func ownTestEnvironment(t *testing.T, ctx context.Context, ss store.Store, attem
 // claim takes the Attempt's lease, which must be free.
 func (o *testEnvironmentOwner) claim(t *testing.T, ctx context.Context) {
 	t.Helper()
-	lease, err := o.ss.AttemptRuntimeLease().Claim(ctx, o.attemptID, "test-node", time.Minute)
+	lease, err := o.ss.AttemptRuntimeLease().Claim(ctx, &store.AttemptRuntimeLeaseClaim{AttemptID: o.attemptID, NodeID: "test-node", Lifetime: time.Minute})
 	require.NoError(t, err)
 	require.NotNil(t, lease, "the lease is free")
 	o.lease = *lease
@@ -63,7 +63,7 @@ func (o *testEnvironmentOwner) claim(t *testing.T, ctx context.Context) {
 // release gives the lease up.
 func (o *testEnvironmentOwner) release(t *testing.T, ctx context.Context) {
 	t.Helper()
-	require.NoError(t, o.ss.AttemptRuntimeLease().Release(ctx, o.lease))
+	require.NoError(t, o.ss.AttemptRuntimeLease().Release(ctx, &store.AttemptRuntimeLeaseRelease{Lease: o.lease}))
 }
 
 func (o *testEnvironmentOwner) access(incarnation int64) store.ExamAttemptWorkspaceEnvironmentAccess {

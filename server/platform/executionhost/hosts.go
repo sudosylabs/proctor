@@ -260,14 +260,14 @@ func toReport(name string, report execenv.Report) environment.HostReport {
 	return result
 }
 
-// Ensure places the machine on the named host.
-func (h *Hosts) Ensure(ctx context.Context, name string, spec environment.MachineSpec) (environment.Machine, error) {
-	client, err := h.client(ctx, name)
+// Ensure places the machine under the grant on its host.
+func (h *Hosts) Ensure(ctx context.Context, grant environment.GrantRef, spec environment.MachineSpec) (environment.Machine, error) {
+	client, err := h.client(ctx, grant.Host)
 	if err != nil {
 		return nil, err
 	}
 	executionSpec := execenv.Spec{
-		ID: execenv.ID(spec.GrantID), Image: execenv.Image(spec.Image), Network: toNetwork(spec.Network),
+		ID: execenv.ID(grant.GrantID), Image: execenv.Image(spec.Image), Network: toNetwork(spec.Network),
 		Resources: execenv.Resources{CPUMillis: spec.Resources.CPUMillis, MemoryBytes: spec.Resources.MemoryBytes,
 			DiskBytes: spec.Resources.DiskBytes},
 	}
@@ -277,11 +277,11 @@ func (h *Hosts) Ensure(ctx context.Context, name string, spec environment.Machin
 	env, err := client.Ensure(ctx, executionSpec)
 	if err != nil {
 		if errors.Is(err, execenv.ErrConnection) {
-			h.broken(name, client)
+			h.broken(grant.Host, client)
 		}
 		return nil, translate("ensure", err)
 	}
-	return &machine{env: env, hosts: h, host: name, client: client}, nil
+	return &machine{env: env, hosts: h, host: grant.Host, client: client}, nil
 }
 
 func toNetwork(network model.EnvironmentNetwork) execenv.Network {
@@ -292,14 +292,14 @@ func toNetwork(network model.EnvironmentNetwork) execenv.Network {
 }
 
 // Revoke ends a machine, or acknowledges a lost one.
-func (h *Hosts) Revoke(ctx context.Context, name, grantID string) error {
-	client, err := h.client(ctx, name)
+func (h *Hosts) Revoke(ctx context.Context, grant environment.GrantRef) error {
+	client, err := h.client(ctx, grant.Host)
 	if err != nil {
 		return err
 	}
-	if err := client.Revoke(ctx, execenv.ID(grantID)); err != nil {
+	if err := client.Revoke(ctx, execenv.ID(grant.GrantID)); err != nil {
 		if errors.Is(err, execenv.ErrConnection) {
-			h.broken(name, client)
+			h.broken(grant.Host, client)
 		}
 		return translate("revoke", err)
 	}
@@ -307,12 +307,12 @@ func (h *Hosts) Revoke(ctx context.Context, name, grantID string) error {
 }
 
 // WatchGrant follows one machine.
-func (h *Hosts) WatchGrant(ctx context.Context, name, grantID string) (environment.GrantWatch, error) {
-	client, err := h.client(ctx, name)
+func (h *Hosts) WatchGrant(ctx context.Context, grant environment.GrantRef) (environment.GrantWatch, error) {
+	client, err := h.client(ctx, grant.Host)
 	if err != nil {
 		return nil, err
 	}
-	watch, err := client.WatchGrant(ctx, execenv.ID(grantID))
+	watch, err := client.WatchGrant(ctx, execenv.ID(grant.GrantID))
 	if err != nil {
 		return nil, translate("watch", err)
 	}

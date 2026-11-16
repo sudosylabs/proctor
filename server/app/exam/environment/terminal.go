@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -63,21 +64,14 @@ func (e *InputAheadError) Error() string {
 	return "terminal input offset is past the terminal's input at " + strconv.FormatUint(e.Input, 10)
 }
 
-// CandidateAttempt is an Attempt whose candidate access the caller has
-// already verified. Every terminal a candidate opens is the candidate's.
-type CandidateAttempt struct {
-	AttemptID       model.ExamAttemptID
-	CandidateUserID model.UserID
-}
-
 // IsTerminalTag reports whether tag names a terminal a candidate opened.
-func IsTerminalTag(tag string) bool {
+func IsTerminalTag(tag model.AttemptEnvironmentProcessTag) bool {
 	_, ok := terminalNumber(tag)
 	return ok
 }
 
-func terminalNumber(tag string) (int, bool) {
-	digits, ok := strings.CutPrefix(tag, TerminalTagPrefix)
+func terminalNumber(tag model.AttemptEnvironmentProcessTag) (int, bool) {
+	digits, ok := strings.CutPrefix(string(tag), TerminalTagPrefix)
 	if !ok || digits == "" || digits[0] == '0' {
 		return 0, false
 	}
@@ -89,12 +83,14 @@ func terminalNumber(tag string) (int, bool) {
 }
 
 // TerminalTag is the tag of the terminal numbered n.
-func TerminalTag(n int) string { return TerminalTagPrefix + strconv.Itoa(n) }
+func TerminalTag(n int) model.AttemptEnvironmentProcessTag {
+	return model.AttemptEnvironmentProcessTag(TerminalTagPrefix + strconv.Itoa(n))
+}
 
 // Terminal describes one terminal on the environment's current machine.
 // Output is how many bytes it has written and Input how many it has taken.
 type Terminal struct {
-	Tag        string
+	Tag        model.AttemptEnvironmentProcessTag
 	Running    bool
 	Started    time.Time
 	ExitCode   int
@@ -108,12 +104,15 @@ func terminalOf(info ProcessInfo) Terminal {
 		ExitSignal: info.ExitSignal, Output: info.Output, Input: info.Input}
 }
 
-// TerminalsConfig is what NewTerminals needs.
-type TerminalsConfig struct {
+// TerminalsDependencies is what NewTerminals needs.
+type TerminalsDependencies struct {
 	Environments store.AttemptEnvironmentStore
 	// Evidence stores recorded terminal input.
 	Evidence store.ExamAttemptWorkspaceStore
 	Hosts    Hosts
+	// Candidates proves a candidate's access before every call, and again
+	// while a session stays attached.
+	Candidates CandidateVerifier
 	// Now is the clock; nil uses time.Now.
 	Now func() time.Time
 	// Report receives failures a terminal survives, such as input that
@@ -134,26 +133,27 @@ const (
 // Terminals serves candidates' terminals from any node. It holds no lease:
 // it reads the environment row, reaches the machine the row names itself,
 // and writes under the row's current control fence. Terminal bytes never
-// travel over cluster peer delivery.
+// travel over cluster peer delivery. A nil Terminals is an installation
+// that runs no execution environments, and answers every use case so.
 type Terminals struct {
-	config TerminalsConfig
+	deps TerminalsDependencies
 }
 
-// NewTerminals validates the configuration.
-func NewTerminals(config TerminalsConfig) (*Terminals, error) {
-	if config.Environments == nil || config.Evidence == nil || config.Hosts == nil {
-		return nil, errors.New("terminals need the environments, evidence and hosts")
+// NewTerminals validates its dependencies.
+func NewTerminals(deps TerminalsDependencies) (*Terminals, error) {
+	if deps.Environments == nil || deps.Evidence == nil || deps.Hosts == nil || deps.Candidates == nil {
+		return nil, errors.New("terminals need the environments, evidence, hosts and candidate verification")
 	}
-	if config.Now == nil {
-		config.Now = time.Now
+	if deps.Now == nil {
+		deps.Now = time.Now
 	}
-	if config.InputFlush <= 0 {
-		config.InputFlush = DefaultInputFlush
+	if deps.InputFlush <= 0 {
+		deps.InputFlush = DefaultInputFlush
 	}
-	if config.InputChunkBytes <= 0 {
-		config.InputChunkBytes = DefaultInputChunkBytes
+	if deps.InputChunkBytes <= 0 {
+		deps.InputChunkBytes = DefaultInputChunkBytes
 	}
-	return &Terminals{config: config}, nil
+	return &Terminals{deps: deps}, nil
 }
 
 // reached is the machine an environment row names, as this node reached it.
@@ -171,7 +171,7 @@ func (r reached) fence() Fence {
 // another epoch is not the row's: the one the row names is gone, and the
 // one Ensure just placed belongs to nobody, so it is given back.
 func (t *Terminals) reach(ctx context.Context, attemptID model.ExamAttemptID) (reached, error) {
-	row, err := t.config.Environments.Get(ctx, attemptID)
+	row, err := t.deps.Environments.Get(ctx, attemptID)
 	if store.IsNotFound(err) {
 		return reached{}, ErrNoEnvironment
 	}
@@ -182,7 +182,7 @@ func (t *Terminals) reach(ctx context.Context, attemptID model.ExamAttemptID) (r
 		row.GrantID == "" {
 		return reached{}, ErrEnvironmentNotRunning
 	}
-	machine, err := t.config.Hosts.Ensure(ctx, row.Host, machineSpec(row, row.GrantID))
+	machine, err := t.deps.Hosts.Ensure(ctx, grantOf(row), machineSpec(row))
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return reached{}, err
@@ -205,7 +205,7 @@ func (t *Terminals) fenced(ctx context.Context, at *reached, call func(Fence) er
 	if !errors.Is(err, ErrMachineConflict) {
 		return err
 	}
-	row, readErr := t.config.Environments.Get(ctx, at.row.AttemptID)
+	row, readErr := t.deps.Environments.Get(ctx, at.row.AttemptID)
 	if readErr != nil {
 		return err
 	}
@@ -259,11 +259,11 @@ func terminals(ctx context.Context, machine Machine) ([]ProcessInfo, error) {
 	return result, nil
 }
 
-// Open starts a terminal running the image's login shell and answers with
+// open starts a terminal running the image's login shell and answers with
 // its tag: the number after the highest the machine has opened. It refuses
 // once the candidate has the policy's number of terminals running, and when
 // the environment is not running.
-func (t *Terminals) Open(ctx context.Context, candidate CandidateAttempt, window Window) (Terminal, error) {
+func (t *Terminals) open(ctx context.Context, candidate CandidateAttempt, window Window) (Terminal, error) {
 	if window == (Window{}) {
 		window = DefaultTerminalWindow
 	}
@@ -318,8 +318,8 @@ type TerminalList struct {
 	Limit     int
 }
 
-// List returns the candidate's terminals on the current machine.
-func (t *Terminals) List(ctx context.Context, candidate CandidateAttempt) (TerminalList, error) {
+// list returns the candidate's terminals on the current machine.
+func (t *Terminals) list(ctx context.Context, candidate CandidateAttempt) (TerminalList, error) {
 	at, err := t.reach(ctx, candidate.AttemptID)
 	if err != nil {
 		return TerminalList{}, err
@@ -335,8 +335,13 @@ func (t *Terminals) List(ctx context.Context, candidate CandidateAttempt) (Termi
 	return result, nil
 }
 
-// Signal sends a terminal a signal. A candidate may only interrupt.
-func (t *Terminals) Signal(ctx context.Context, candidate CandidateAttempt, tag string, signal ProcessSignal) error {
+// signal sends a terminal a signal. A candidate may only interrupt.
+func (t *Terminals) signal(
+	ctx context.Context,
+	candidate CandidateAttempt,
+	tag model.AttemptEnvironmentProcessTag,
+	signal ProcessSignal,
+) error {
 	if !IsTerminalTag(tag) {
 		return ErrTerminalNotFound
 	}
@@ -352,10 +357,14 @@ func (t *Terminals) Signal(ctx context.Context, candidate CandidateAttempt, tag 
 	}))
 }
 
-// Attach opens a session on one terminal. Any number of sessions may read
+// attach opens a session on one terminal. Any number of sessions may read
 // a terminal; the candidate's sessions also write to it. The caller closes
 // the session.
-func (t *Terminals) Attach(ctx context.Context, candidate CandidateAttempt, tag string) (*TerminalSession, error) {
+func (t *Terminals) attach(
+	ctx context.Context,
+	candidate CandidateAttempt,
+	tag model.AttemptEnvironmentProcessTag,
+) (*terminalSession, error) {
 	if !IsTerminalTag(tag) {
 		return nil, ErrTerminalNotFound
 	}
@@ -371,41 +380,43 @@ func (t *Terminals) Attach(ctx context.Context, candidate CandidateAttempt, tag 
 	if index < 0 {
 		return nil, ErrTerminalNotFound
 	}
-	session := &TerminalSession{terminals: t, at: at, tag: tag, author: true}
+	session := &terminalSession{terminals: t, at: at, tag: tag, author: true}
 	if at.row.RecordInput {
 		session.recorder = newInputRecorder(t, at.row.AttemptID, at.row.Incarnation, tag, open[index].Input)
 	}
 	return session, nil
 }
 
-// TerminalSession is one attachment to one terminal on the machine the
-// environment row named when it was opened.
-type TerminalSession struct {
+// terminalSession is one attachment to one terminal on the machine the
+// environment row named when it was opened, by the candidate whose access
+// opened it.
+type terminalSession struct {
 	terminals *Terminals
 	at        reached
-	tag       string
+	tag       model.AttemptEnvironmentProcessTag
 	// author is set when the session writes as the terminal's author.
 	author   bool
 	recorder *inputRecorder
+	// inv and access are the candidate's, rechecked by Check.
+	inv    invocation.Invocation
+	access CandidateAccess
 }
-
-// Tag is the terminal the session is attached to.
-func (s *TerminalSession) Tag() string { return s.tag }
 
 // Output reads the terminal's output from offset, replaying what its
 // history still holds.
-func (s *TerminalSession) Output(ctx context.Context, from uint64) (ProcessAttachment, error) {
+func (s *terminalSession) Output(ctx context.Context, from uint64) (ProcessAttachment, error) {
 	attachment, err := s.at.machine.AttachProcess(ctx, s.tag, from)
 	if err != nil {
 		return nil, terminalError(err)
 	}
-	return terminalAttachment{attachment: attachment}, nil
+	return terminalOutput{attachment: attachment}, nil
 }
 
-// terminalAttachment reports a machine that ended as ErrTerminalEnded.
-type terminalAttachment struct{ attachment ProcessAttachment }
+// terminalOutput is a terminal's output, reporting a machine that ended as
+// ErrTerminalEnded.
+type terminalOutput struct{ attachment ProcessAttachment }
 
-func (a terminalAttachment) Next(ctx context.Context) (ProcessOutput, error) {
+func (a terminalOutput) Next(ctx context.Context) (ProcessOutput, error) {
 	output, err := a.attachment.Next(ctx)
 	if err != nil && (errors.Is(err, ErrMachineRevoked) || errors.Is(err, ErrMachineLost)) {
 		return output, ErrTerminalEnded
@@ -413,11 +424,11 @@ func (a terminalAttachment) Next(ctx context.Context) (ProcessOutput, error) {
 	return output, err
 }
 
-func (a terminalAttachment) Close() error { return a.attachment.Close() }
+func (a terminalOutput) Close() error { return a.attachment.Close() }
 
 // Screen is the terminal's screen now, for a client with no screen of its
 // own: it draws Data, then reads output from Offset.
-func (s *TerminalSession) Screen(ctx context.Context) (Screen, error) {
+func (s *terminalSession) Screen(ctx context.Context) (Screen, error) {
 	screen, err := s.at.machine.Screen(ctx, s.tag)
 	return screen, terminalError(err)
 }
@@ -427,7 +438,7 @@ func (s *TerminalSession) Screen(ctx context.Context) (Screen, error) {
 // a lost connection types nothing twice; an offset past its input is an
 // InputAheadError. When the policy records input, what the terminal took
 // is recorded.
-func (s *TerminalSession) Write(ctx context.Context, offset uint64, data []byte) (uint64, error) {
+func (s *terminalSession) Write(ctx context.Context, offset uint64, data []byte) (uint64, error) {
 	if !s.author {
 		return 0, ErrTerminalNotAuthor
 	}
@@ -458,7 +469,7 @@ func (s *TerminalSession) Write(ctx context.Context, offset uint64, data []byte)
 }
 
 // input is where the terminal's input stands.
-func (s *TerminalSession) input(ctx context.Context) (uint64, error) {
+func (s *terminalSession) input(ctx context.Context) (uint64, error) {
 	open, err := terminals(ctx, s.at.machine)
 	if err != nil {
 		return 0, err
@@ -472,7 +483,7 @@ func (s *TerminalSession) input(ctx context.Context) (uint64, error) {
 }
 
 // Resize changes the terminal's window. It is recorded with the input.
-func (s *TerminalSession) Resize(ctx context.Context, window Window) error {
+func (s *terminalSession) Resize(ctx context.Context, window Window) error {
 	if !s.author {
 		return ErrTerminalNotAuthor
 	}
@@ -491,10 +502,10 @@ func (s *TerminalSession) Resize(ctx context.Context, window Window) error {
 	return nil
 }
 
-// Check rereads the environment row and reports ErrTerminalEnded once the
+// ended rereads the environment row and reports ErrTerminalEnded once the
 // machine the session is attached to is no longer the running one.
-func (s *TerminalSession) Check(ctx context.Context) error {
-	row, err := s.terminals.config.Environments.Get(ctx, s.at.row.AttemptID)
+func (s *terminalSession) ended(ctx context.Context) error {
+	row, err := s.terminals.deps.Environments.Get(ctx, s.at.row.AttemptID)
 	if err != nil {
 		return err
 	}
@@ -506,7 +517,7 @@ func (s *TerminalSession) Check(ctx context.Context) error {
 }
 
 // Close stores the input the session recorded and not yet stored.
-func (s *TerminalSession) Close(ctx context.Context) {
+func (s *terminalSession) Close(ctx context.Context) {
 	if s.recorder != nil {
 		s.recorder.close(ctx)
 	}

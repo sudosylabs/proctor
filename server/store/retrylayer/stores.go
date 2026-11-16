@@ -1266,17 +1266,16 @@ func (s *attemptEnvironmentStore) Get(ctx context.Context, attemptID model.ExamA
 // commit extends the same lease again or reports it lost.
 func (s *attemptRuntimeLeaseStore) Renew(
 	ctx context.Context,
-	lease store.AttemptRuntimeLease,
-	lifetime time.Duration,
+	renewal *store.AttemptRuntimeLeaseRenewal,
 ) (*store.AttemptRuntimeLease, error) {
 	return retryCall1(ctx, s.layer, func() (*store.AttemptRuntimeLease, error) {
-		return s.AttemptRuntimeLeaseStore.Renew(ctx, lease, lifetime)
+		return s.AttemptRuntimeLeaseStore.Renew(ctx, renewal)
 	})
 }
 
 // Release deletes only the caller's exact fence, so a replay is idempotent.
-func (s *attemptRuntimeLeaseStore) Release(ctx context.Context, lease store.AttemptRuntimeLease) error {
-	return retryCall0(ctx, s.layer, func() error { return s.AttemptRuntimeLeaseStore.Release(ctx, lease) })
+func (s *attemptRuntimeLeaseStore) Release(ctx context.Context, release *store.AttemptRuntimeLeaseRelease) error {
+	return retryCall0(ctx, s.layer, func() error { return s.AttemptRuntimeLeaseStore.Release(ctx, release) })
 }
 
 func (s *servingNodeLeaseStore) Delete(ctx context.Context, input *store.ServingNodeLeaseDeletion) error {

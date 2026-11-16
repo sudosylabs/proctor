@@ -110,8 +110,8 @@ type plannedChange struct {
 
 // writerTag is the process tag a guest change is journaled under, or empty
 // when the machine named none or one the journal cannot carry.
-func writerTag(observation Observation) string {
-	if model.IsValidAttemptEnvironmentProcessTag(observation.ProcessTag) {
+func writerTag(observation Observation) model.AttemptEnvironmentProcessTag {
+	if observation.ProcessTag.IsValid() {
 		return observation.ProcessTag
 	}
 	return ""
@@ -498,13 +498,18 @@ func (h *harvester) commit(ctx context.Context, batch []plannedChange) (batchOut
 
 // harvestKey is the batch's idempotency key: the same batch on the same
 // machine is the same command.
-func harvestKey(grantID, epoch, tag string, mutations []WorkspaceMutation, expected *int64) string {
+func harvestKey(
+	grantID, epoch string,
+	tag model.AttemptEnvironmentProcessTag,
+	mutations []WorkspaceMutation,
+	expected *int64,
+) string {
 	encoded, _ := json.Marshal(struct {
-		Grant     string              `json:"grant"`
-		Epoch     string              `json:"epoch"`
-		Tag       string              `json:"tag,omitempty"`
-		Mutations []WorkspaceMutation `json:"mutations"`
-		Expected  *int64              `json:"expected,omitempty"`
+		Grant     string                             `json:"grant"`
+		Epoch     string                             `json:"epoch"`
+		Tag       model.AttemptEnvironmentProcessTag `json:"tag,omitempty"`
+		Mutations []WorkspaceMutation                `json:"mutations"`
+		Expected  *int64                             `json:"expected,omitempty"`
 	}{grantID, epoch, tag, mutations, expected})
 	sum := sha256.Sum256(encoded)
 	return "execution.harvest:" + hex.EncodeToString(sum[:])

@@ -44,43 +44,44 @@ func (f *leaseStoreFake) claim(attemptID model.ExamAttemptID, nodeID string, lif
 	return &lease
 }
 
-func (f *leaseStoreFake) Claim(_ context.Context, attemptID model.ExamAttemptID, nodeID string, lifetime time.Duration) (*store.AttemptRuntimeLease, error) {
+func (f *leaseStoreFake) Claim(_ context.Context, claim *store.AttemptRuntimeLeaseClaim) (*store.AttemptRuntimeLease, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.claim(attemptID, nodeID, lifetime), nil
+	return f.claim(claim.AttemptID, claim.NodeID, claim.Lifetime), nil
 }
 
-func (f *leaseStoreFake) ClaimAvailable(_ context.Context, nodeID string, lifetime time.Duration, limit int) ([]store.AttemptRuntimeLease, error) {
+func (f *leaseStoreFake) ClaimAvailable(_ context.Context, claim *store.AttemptRuntimeLeaseAvailableClaim) ([]store.AttemptRuntimeLease, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var leases []store.AttemptRuntimeLease
 	for _, attemptID := range f.available {
-		if len(leases) == limit {
+		if len(leases) == claim.Limit {
 			break
 		}
-		if lease := f.claim(attemptID, nodeID, lifetime); lease != nil {
+		if lease := f.claim(attemptID, claim.NodeID, claim.Lifetime); lease != nil {
 			leases = append(leases, *lease)
 		}
 	}
 	return leases, nil
 }
 
-func (f *leaseStoreFake) Renew(_ context.Context, lease store.AttemptRuntimeLease, lifetime time.Duration) (*store.AttemptRuntimeLease, error) {
+func (f *leaseStoreFake) Renew(_ context.Context, renewal *store.AttemptRuntimeLeaseRenewal) (*store.AttemptRuntimeLease, error) {
+	lease := renewal.Lease
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.renewals++
 	if f.lose[lease.AttemptID] {
 		return nil, store.ErrAttemptRuntimeLeaseLost
 	}
-	lease.ExpiresAt = time.Now().Add(lifetime)
+	lease.ExpiresAt = time.Now().Add(renewal.Lifetime)
 	return &lease, nil
 }
 
-func (f *leaseStoreFake) Release(_ context.Context, lease store.AttemptRuntimeLease) error {
+func (f *leaseStoreFake) Release(_ context.Context, release *store.AttemptRuntimeLeaseRelease) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	delete(f.held, lease.AttemptID)
-	f.released = append(f.released, lease)
+	delete(f.held, release.Lease.AttemptID)
+	f.released = append(f.released, release.Lease)
 	return nil
 }
 
@@ -141,7 +142,7 @@ func TestRuntimeClaimsWakesRenewsAndReleases(t *testing.T) {
 	first, second, third := model.NewExamAttemptID(), model.NewExamAttemptID(), model.NewExamAttemptID()
 	leases := newLeaseStoreFake(first, second, third)
 	owners := newOwnerFake()
-	runtime, err := NewRuntime(RuntimeConfig{Leases: leases, NodeID: "node-a", NewOwner: owners.factory, Owners: 2,
+	runtime, err := NewRuntime(RuntimeDependencies{Leases: leases, NodeID: "node-a", NewOwner: owners.factory, Owners: 2,
 		LeaseLifetime: 30 * time.Millisecond * 3, Backstop: time.Hour})
 	require.NoError(t, err)
 	require.NoError(t, runtime.Start(t.Context()))
@@ -182,9 +183,9 @@ func TestRuntimeClaimsWakesRenewsAndReleases(t *testing.T) {
 
 func TestNewRuntimeRefusesAnIncompleteConfiguration(t *testing.T) {
 	t.Parallel()
-	_, err := NewRuntime(RuntimeConfig{Leases: newLeaseStoreFake(), NodeID: "node", Owners: 1})
+	_, err := NewRuntime(RuntimeDependencies{Leases: newLeaseStoreFake(), NodeID: "node", Owners: 1})
 	require.Error(t, err, "an owner factory is required")
-	_, err = NewRuntime(RuntimeConfig{Leases: newLeaseStoreFake(), NewOwner: newOwnerFake().factory, Owners: 1})
+	_, err = NewRuntime(RuntimeDependencies{Leases: newLeaseStoreFake(), NewOwner: newOwnerFake().factory, Owners: 1})
 	require.Error(t, err, "a node ID is required")
 }
 

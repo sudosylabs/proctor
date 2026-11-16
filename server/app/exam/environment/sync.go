@@ -677,13 +677,13 @@ const maxProcessOrigins = 1 << 14
 // Origin empty rather than guess.
 type processOrigins struct {
 	epoch string
-	byPID map[int]string
+	byPID map[int]model.AttemptEnvironmentProcessTag
 }
 
 // attribute sets Origin on each event of epoch's command log, in order.
 func (p *processOrigins) attribute(epoch string, events []ProcessEvent) {
 	if p.epoch != epoch || p.byPID == nil {
-		p.epoch, p.byPID = epoch, map[int]string{}
+		p.epoch, p.byPID = epoch, map[int]model.AttemptEnvironmentProcessTag{}
 	}
 	for index := range events {
 		event := &events[index]

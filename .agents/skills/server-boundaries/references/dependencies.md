@@ -82,7 +82,7 @@ exists.
 | exam Sitting application | `app/exam/sitting` | `app/access`, `app/apperror`, `app/idempotency`, `app/invocation`, `app/exam/manageraccess`, `app/mail`, `app/realtime`, `model`, `store` | none | infrastructure |
 | exam manager access consumers | `app/exam`, `app/exam/correction`, `app/exam/resource`, `app/exam/workspace` | `app/access`, `app/apperror`, `app/idempotency`, `app/invocation`, `app/exam/manageraccess`, `app/realtime`, `model`, `store` | none | infrastructure |
 | exam mail and safe Markdown consumers | `app/exam/attempt`, `app/exam/review` | `app/access`, `app/apperror`, `app/idempotency`, `app/invocation`, `app/mail`, `app/realtime`, `model`, `store`, `app/exam/safemarkdown` | none | infrastructure |
-| exam execution environment | `app/exam/environment` | `model`, `store` | none | infrastructure |
+| exam execution environment | `app/exam/environment` | `app/apperror`, `app/invocation`, `model`, `store` | none | infrastructure |
 | safe Markdown | `app/exam/safemarkdown` | none | none | infrastructure |
 | file-content adapter | `filecontent` and below | `app/exam`, `app/user`, `model`, `plugin`, `packages/vfs` | `github.com/HugoSmits86/nativewebp`, `github.com/disintegration/imaging`, below `github.com/pdfcpu/pdfcpu`, `golang.org/x/image/webp` | infrastructure except `os` |
 | Desktop release verification | `desktoprelease` | `model`, `internal/canonicaljson`, `internal/factschema` | none | infrastructure |

@@ -85,10 +85,16 @@ func (r HostReport) Offers(image string, network model.EnvironmentNetwork, resou
 		fits(resources.DiskBytes, r.Free.DiskBytes, r.GrantMax.DiskBytes)
 }
 
+// GrantRef names one machine: the host that holds it and the grant it was
+// placed under.
+type GrantRef struct {
+	Host    string
+	GrantID string
+}
+
 // MachineSpec is what a host is asked to place. The owner derives it from
 // the environment row alone, so a later owner ensures exactly the same one.
 type MachineSpec struct {
-	GrantID   string
 	Image     string
 	Network   model.EnvironmentNetwork
 	Resources model.EnvironmentResources
@@ -121,14 +127,14 @@ type GrantWatch interface {
 type Hosts interface {
 	// Reports returns the readiness of every host that answers now.
 	Reports(ctx context.Context) []HostReport
-	// Ensure places the machine on the named host, or returns the one it
-	// already holds under spec.GrantID.
-	Ensure(ctx context.Context, host string, spec MachineSpec) (Machine, error)
+	// Ensure places the machine under the grant on its host, or returns the
+	// one the host already holds under that grant.
+	Ensure(ctx context.Context, grant GrantRef, spec MachineSpec) (Machine, error)
 	// Revoke ends a machine, and acknowledges a lost one. Revoking an
 	// unknown grant succeeds.
-	Revoke(ctx context.Context, host, grantID string) error
+	Revoke(ctx context.Context, grant GrantRef) error
 	// WatchGrant follows one machine.
-	WatchGrant(ctx context.Context, host, grantID string) (GrantWatch, error)
+	WatchGrant(ctx context.Context, grant GrantRef) (GrantWatch, error)
 	// IgnoreRules compiles the ignore rules every projection starts with:
 	// the Workspace file that holds them and the patterns that apply while
 	// it is missing or does not parse.
@@ -281,7 +287,7 @@ type Observation struct {
 	Content         *ContentRef
 	// ProcessTag is the tag of the started process the writer descends
 	// from, such as terminal:1, or empty when the host cannot say.
-	ProcessTag string
+	ProcessTag model.AttemptEnvironmentProcessTag
 	// DiscardedBy is the journal cursor of the Overwrite that replaced this
 	// change before it was confirmed, or 0. A discarded change is gone from
 	// the machine: it cannot be confirmed and its content is stale.
@@ -312,23 +318,23 @@ type ObservationPage struct {
 // ProcessEvent is one entry of the machine's command log, recorded outside
 // the candidate's workload. Its JSON form is the evidence detail.
 type ProcessEvent struct {
-	Sequence  uint64    `json:"sequence"`
-	Kind      string    `json:"kind"`
-	PID       int       `json:"pid,omitempty"`
-	ParentPID int       `json:"parent_pid,omitempty"`
-	Argv      []string  `json:"argv,omitempty"`
-	Truncated bool      `json:"truncated,omitempty"`
-	Unread    bool      `json:"unread,omitempty"`
-	Dir       string    `json:"dir,omitempty"`
-	Tag       string    `json:"tag,omitempty"`
-	At        time.Time `json:"at"`
-	ExitCode  *int      `json:"exit_code,omitempty"`
-	Signal    int       `json:"signal,omitempty"`
-	Dropped   uint64    `json:"dropped,omitempty"`
+	Sequence  uint64                             `json:"sequence"`
+	Kind      string                             `json:"kind"`
+	PID       int                                `json:"pid,omitempty"`
+	ParentPID int                                `json:"parent_pid,omitempty"`
+	Argv      []string                           `json:"argv,omitempty"`
+	Truncated bool                               `json:"truncated,omitempty"`
+	Unread    bool                               `json:"unread,omitempty"`
+	Dir       string                             `json:"dir,omitempty"`
+	Tag       model.AttemptEnvironmentProcessTag `json:"tag,omitempty"`
+	At        time.Time                          `json:"at"`
+	ExitCode  *int                               `json:"exit_code,omitempty"`
+	Signal    int                                `json:"signal,omitempty"`
+	Dropped   uint64                             `json:"dropped,omitempty"`
 	// Origin is the tag of the started process this one descends from,
 	// such as the terminal that ran it. The owner sets it; the host never
 	// does, and Tag stays the host's.
-	Origin string `json:"origin,omitempty"`
+	Origin model.AttemptEnvironmentProcessTag `json:"origin,omitempty"`
 }
 
 // ProcessDropped is the kind of the event that stands in for lost ones.
@@ -391,7 +397,7 @@ func (w Window) Valid() bool {
 // ProcessSpec starts one process. A terminal has a PTY of its window and,
 // with no Argv, runs the image's login shell.
 type ProcessSpec struct {
-	Tag  string
+	Tag  model.AttemptEnvironmentProcessTag
 	Argv []string
 	PTY  *Window
 }
@@ -400,7 +406,7 @@ type ProcessSpec struct {
 // Output is the end offset of its terminal output and Input how many bytes
 // of input it took.
 type ProcessInfo struct {
-	Tag        string
+	Tag        model.AttemptEnvironmentProcessTag
 	PTY        bool
 	Started    time.Time
 	Running    bool
@@ -471,12 +477,12 @@ type Processes interface {
 	ListProcesses(ctx context.Context) ([]ProcessInfo, error)
 	// AttachProcess reads a terminal's output from offset; output older
 	// than its history is reported as truncated.
-	AttachProcess(ctx context.Context, tag string, from uint64) (ProcessAttachment, error)
+	AttachProcess(ctx context.Context, tag model.AttemptEnvironmentProcessTag, from uint64) (ProcessAttachment, error)
 	// WriteInput appends data at offset and returns the process's input
 	// offset after it. Bytes it already took are dropped, so a resend never
 	// types twice; an offset past what it took is ErrMachineConflict.
-	WriteInput(ctx context.Context, fence Fence, tag string, offset uint64, data []byte) (uint64, error)
-	Resize(ctx context.Context, fence Fence, tag string, window Window) error
-	SignalProcess(ctx context.Context, fence Fence, tag string, signal ProcessSignal) error
-	Screen(ctx context.Context, tag string) (Screen, error)
+	WriteInput(ctx context.Context, fence Fence, tag model.AttemptEnvironmentProcessTag, offset uint64, data []byte) (uint64, error)
+	Resize(ctx context.Context, fence Fence, tag model.AttemptEnvironmentProcessTag, window Window) error
+	SignalProcess(ctx context.Context, fence Fence, tag model.AttemptEnvironmentProcessTag, signal ProcessSignal) error
+	Screen(ctx context.Context, tag model.AttemptEnvironmentProcessTag) (Screen, error)
 }

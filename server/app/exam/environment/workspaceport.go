@@ -25,7 +25,7 @@ type WorkspaceAccess struct {
 	AttemptID   model.ExamAttemptID
 	Incarnation int64
 	Fence       int64
-	Tag         string
+	Tag         model.AttemptEnvironmentProcessTag
 }
 
 // The failures a Workspace port reports beside a WorkspaceRefusal.

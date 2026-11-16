@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/exam/environment"
 	"github.com/sudosylabs/proctor/server/logging"
 )
@@ -75,23 +74,12 @@ const (
 	terminalRecheck = 15 * time.Second
 )
 
-// terminalSession is one attachment to a terminal, as the socket uses it.
-type terminalSession interface {
-	Output(ctx context.Context, from uint64) (environment.ProcessAttachment, error)
-	Screen(ctx context.Context) (environment.Screen, error)
-	Write(ctx context.Context, offset uint64, data []byte) (uint64, error)
-	Resize(ctx context.Context, window environment.Window) error
-	// Check reports app.ErrTerminalAccessEnded once the socket must end.
-	Check(ctx context.Context) error
-	Close(ctx context.Context)
-}
-
 // serveTerminal runs the terminal protocol on socket until the client
 // leaves, the terminal exits, or access ends.
 func serveTerminal(
 	ctx context.Context,
 	socket BinarySocket,
-	session terminalSession,
+	session environment.TerminalAttachment,
 	logger *logging.Logger,
 	recheck time.Duration,
 ) BinarySocketOutcome {
@@ -138,7 +126,7 @@ func serveTerminal(
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if errors.Is(session.Check(ctx), app.ErrTerminalAccessEnded) {
+				if errors.Is(session.Check(ctx), environment.ErrTerminalAccessEnded) {
 					ended <- BinarySocketAccessEnded
 					return
 				}
@@ -186,7 +174,7 @@ func pumpTerminalOutput(ctx context.Context, sender *terminalSender, attachment 
 }
 
 // readTerminalInput applies the client's frames until it leaves.
-func readTerminalInput(ctx context.Context, socket BinarySocket, sender *terminalSender, session terminalSession) BinarySocketOutcome {
+func readTerminalInput(ctx context.Context, socket BinarySocket, sender *terminalSender, session environment.TerminalAttachment) BinarySocketOutcome {
 	for {
 		message, err := socket.Read(ctx)
 		if err != nil {
@@ -200,7 +188,7 @@ func readTerminalInput(ctx context.Context, socket BinarySocket, sender *termina
 
 // applyTerminalFrame applies one client frame after the first. It reports
 // done when the socket must end.
-func applyTerminalFrame(ctx context.Context, sender *terminalSender, session terminalSession, message []byte) (BinarySocketOutcome, bool) {
+func applyTerminalFrame(ctx context.Context, sender *terminalSender, session environment.TerminalAttachment, message []byte) (BinarySocketOutcome, bool) {
 	var err error
 	switch {
 	case len(message) > 9 && len(message) <= maxTerminalClientMessage && message[0] == terminalFrameInput:
@@ -214,7 +202,7 @@ func applyTerminalFrame(ctx context.Context, sender *terminalSender, session ter
 			if outcome, done := terminalRefusal(writeErr); done {
 				return outcome, true
 			}
-			if sender.error(ctx, app.TerminalCode(writeErr)) != nil {
+			if sender.error(ctx, environment.TerminalCode(writeErr)) != nil {
 				return BinarySocketDone, true
 			}
 		}
@@ -229,7 +217,7 @@ func applyTerminalFrame(ctx context.Context, sender *terminalSender, session ter
 			if outcome, done := terminalRefusal(resizeErr); done {
 				return outcome, true
 			}
-			err = sender.error(ctx, app.TerminalCode(resizeErr))
+			err = sender.error(ctx, environment.TerminalCode(resizeErr))
 		}
 	case len(message) == 1 && message[0] == terminalFrameScreen:
 		screen, screenErr := session.Screen(ctx)
@@ -237,7 +225,7 @@ func applyTerminalFrame(ctx context.Context, sender *terminalSender, session ter
 			if outcome, done := terminalRefusal(screenErr); done {
 				return outcome, true
 			}
-			err = sender.error(ctx, app.TerminalCode(screenErr))
+			err = sender.error(ctx, environment.TerminalCode(screenErr))
 			break
 		}
 		err = sender.screen(ctx, screen)
@@ -271,7 +259,7 @@ func (s *terminalSender) fail(ctx context.Context, err error) BinarySocketOutcom
 	if outcome, done := terminalRefusal(err); done {
 		return outcome
 	}
-	_ = s.error(ctx, app.TerminalCode(err))
+	_ = s.error(ctx, environment.TerminalCode(err))
 	return BinarySocketDone
 }
 

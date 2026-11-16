@@ -112,7 +112,7 @@ func (e *attemptEnvironments) complete(
 	if err != nil {
 		return fmt.Errorf("construct attempt environment owners: %w", err)
 	}
-	runtime, err := environment.NewRuntime(environment.RuntimeConfig{
+	runtime, err := environment.NewRuntime(environment.RuntimeDependencies{
 		Leases:   inputs.persistence.AttemptRuntimeLease(),
 		NodeID:   inputs.nodeID,
 		NewOwner: owners,

@@ -47,7 +47,7 @@ type inputRecorder struct {
 	terminals   *Terminals
 	attemptID   model.ExamAttemptID
 	incarnation int64
-	tag         string
+	tag         model.AttemptEnvironmentProcessTag
 
 	mu      sync.Mutex
 	through uint64
@@ -75,13 +75,19 @@ type inputEvent struct {
 
 // inputDetail is the detail of one execution.input record.
 type inputDetail struct {
-	Terminal  string       `json:"terminal"`
-	Offset    uint64       `json:"offset"`
-	StartedAt time.Time    `json:"started_at"`
-	Events    []inputEvent `json:"events"`
+	Terminal  model.AttemptEnvironmentProcessTag `json:"terminal"`
+	Offset    uint64                             `json:"offset"`
+	StartedAt time.Time                          `json:"started_at"`
+	Events    []inputEvent                       `json:"events"`
 }
 
-func newInputRecorder(terminals *Terminals, attemptID model.ExamAttemptID, incarnation int64, tag string, taken uint64) *inputRecorder {
+func newInputRecorder(
+	terminals *Terminals,
+	attemptID model.ExamAttemptID,
+	incarnation int64,
+	tag model.AttemptEnvironmentProcessTag,
+	taken uint64,
+) *inputRecorder {
 	return &inputRecorder{terminals: terminals, attemptID: attemptID, incarnation: incarnation, tag: tag, through: taken}
 }
 
@@ -103,7 +109,7 @@ func (r *inputRecorder) input(offset uint64, data []byte) {
 		// Another session wrote the bytes between: they are its record.
 		full = append(full, r.takeLocked())
 	}
-	limit := r.terminals.config.InputChunkBytes
+	limit := r.terminals.deps.InputChunkBytes
 	for len(data) > 0 {
 		chunk := r.chunkLocked()
 		if chunk.bytes == 0 {
@@ -136,7 +142,7 @@ func (r *inputRecorder) resize(window Window) {
 	chunk.size += inputEventOverhead
 }
 
-func (r *inputRecorder) now() time.Time { return r.terminals.config.Now() }
+func (r *inputRecorder) now() time.Time { return r.terminals.deps.Now() }
 
 // chunkLocked returns the record being gathered, starting one.
 func (r *inputRecorder) chunkLocked() *inputChunk {
@@ -151,7 +157,7 @@ func (r *inputRecorder) armLocked() {
 	if r.timer != nil {
 		r.timer.Stop()
 	}
-	r.timer = time.AfterFunc(r.terminals.config.InputFlush, func() {
+	r.timer = time.AfterFunc(r.terminals.deps.InputFlush, func() {
 		r.mu.Lock()
 		var chunk *inputChunk
 		if r.pending != nil && r.pending.bytes > 0 {
@@ -211,7 +217,7 @@ func (r *inputRecorder) store(ctx context.Context, chunk *inputChunk) {
 		r.report(fmt.Errorf("encode terminal input: %w", err))
 		return
 	}
-	_, err = r.terminals.config.Evidence.AppendTerminalInput(ctx, &store.ExamAttemptTerminalInputAppend{
+	_, err = r.terminals.deps.Evidence.AppendTerminalInput(ctx, &store.ExamAttemptTerminalInputAppend{
 		AttemptID: r.attemptID, Incarnation: r.incarnation, Tag: r.tag, EvidenceID: model.NewIntegrityEvidenceID(),
 		Sequence: int64(chunk.offset) + 1, //nolint:gosec // G115: input offsets stay below 2^53.
 		Detail:   detail, ObservedAt: model.TimeUTC(chunk.started),
@@ -227,7 +233,7 @@ func (r *inputRecorder) store(ctx context.Context, chunk *inputChunk) {
 }
 
 func (r *inputRecorder) report(err error) {
-	if report := r.terminals.config.Report; report != nil {
+	if report := r.terminals.deps.Report; report != nil {
 		report(r.attemptID, err)
 	}
 }

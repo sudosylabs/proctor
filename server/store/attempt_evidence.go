@@ -64,7 +64,7 @@ func (r *ExamAttemptEvidenceAppendResult) Consistent(input *ExamAttemptEvidenceA
 type ExamAttemptTerminalInputAppend struct {
 	AttemptID   model.ExamAttemptID
 	Incarnation int64
-	Tag         string
+	Tag         model.AttemptEnvironmentProcessTag
 	EvidenceID  model.IntegrityEvidenceID
 	Sequence    int64
 	Detail      json.RawMessage
@@ -78,7 +78,7 @@ func (a *ExamAttemptTerminalInputAppend) Author() model.AttemptWorkspaceAuthor {
 
 // Valid reports whether every field is well formed.
 func (a *ExamAttemptTerminalInputAppend) Valid() bool {
-	return a != nil && a.AttemptID.IsValid() && a.Incarnation >= 0 && model.IsValidAttemptEnvironmentProcessTag(a.Tag) &&
+	return a != nil && a.AttemptID.IsValid() && a.Incarnation >= 0 && a.Tag.IsValid() &&
 		a.EvidenceID.IsValid() && model.ValidAttemptEvidenceClaim(model.AttemptEvidenceInput, a.Author(), a.Sequence, a.Detail) &&
 		!a.ObservedAt.IsZero()
 }

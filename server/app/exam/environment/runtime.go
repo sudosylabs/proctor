@@ -37,8 +37,8 @@ const (
 	releaseTimeout = 5 * time.Second
 )
 
-// RuntimeConfig is what NewRuntime needs.
-type RuntimeConfig struct {
+// RuntimeDependencies is what NewRuntime needs: the leases and the owners it runs, and the bounds and timing of its claims.
+type RuntimeDependencies struct {
 	Leases   store.AttemptRuntimeLeaseStore
 	NodeID   string
 	NewOwner OwnerFactory
@@ -59,7 +59,7 @@ type RuntimeConfig struct {
 // them renewed, and runs one owner per held environment. It is inert until
 // Start, and Close stops every owner and releases its lease.
 type Runtime struct {
-	config RuntimeConfig
+	deps RuntimeDependencies
 
 	mu      sync.Mutex
 	held    map[model.ExamAttemptID]*heldOwner
@@ -76,19 +76,19 @@ type heldOwner struct {
 	cancel context.CancelFunc
 }
 
-// NewRuntime validates config and returns an inert runtime.
-func NewRuntime(config RuntimeConfig) (*Runtime, error) {
-	if config.Leases == nil || config.NodeID == "" || config.NewOwner == nil || config.Owners < 1 {
+// NewRuntime validates its dependencies and returns an inert runtime.
+func NewRuntime(deps RuntimeDependencies) (*Runtime, error) {
+	if deps.Leases == nil || deps.NodeID == "" || deps.NewOwner == nil || deps.Owners < 1 {
 		return nil, errors.New("attempt environment runtime needs leases, a node ID, an owner factory and an owner bound")
 	}
-	if config.LeaseLifetime <= 0 {
-		config.LeaseLifetime = DefaultLeaseLifetime
+	if deps.LeaseLifetime <= 0 {
+		deps.LeaseLifetime = DefaultLeaseLifetime
 	}
-	if config.Backstop <= 0 {
-		config.Backstop = DefaultBackstop
+	if deps.Backstop <= 0 {
+		deps.Backstop = DefaultBackstop
 	}
 	return &Runtime{
-		config:  config,
+		deps:    deps,
 		held:    make(map[model.ExamAttemptID]*heldOwner),
 		pending: make(map[model.ExamAttemptID]struct{}),
 		signal:  make(chan struct{}, 1),
@@ -168,7 +168,7 @@ func (r *Runtime) Holds(attemptID model.ExamAttemptID) bool {
 
 func (r *Runtime) claimLoop(ctx context.Context) {
 	defer r.wg.Done()
-	ticker := time.NewTicker(r.config.Backstop)
+	ticker := time.NewTicker(r.deps.Backstop)
 	defer ticker.Stop()
 	r.claimAvailable(ctx)
 	for {
@@ -187,7 +187,7 @@ func (r *Runtime) claimLoop(ctx context.Context) {
 func (r *Runtime) room() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.config.Owners - len(r.held)
+	return r.deps.Owners - len(r.held)
 }
 
 func (r *Runtime) claimAvailable(ctx context.Context) {
@@ -195,7 +195,9 @@ func (r *Runtime) claimAvailable(ctx context.Context) {
 	if room <= 0 {
 		return
 	}
-	leases, err := r.config.Leases.ClaimAvailable(ctx, r.config.NodeID, r.config.LeaseLifetime, min(room, 1000))
+	leases, err := r.deps.Leases.ClaimAvailable(ctx, &store.AttemptRuntimeLeaseAvailableClaim{
+		NodeID: r.deps.NodeID, Lifetime: r.deps.LeaseLifetime, Limit: min(room, 1000),
+	})
 	if err != nil {
 		r.report("", err)
 		return
@@ -214,7 +216,9 @@ func (r *Runtime) claimPending(ctx context.Context) {
 		if r.room() <= 0 || r.Holds(attemptID) {
 			continue
 		}
-		lease, err := r.config.Leases.Claim(ctx, attemptID, r.config.NodeID, r.config.LeaseLifetime)
+		lease, err := r.deps.Leases.Claim(ctx, &store.AttemptRuntimeLeaseClaim{
+			AttemptID: attemptID, NodeID: r.deps.NodeID, Lifetime: r.deps.LeaseLifetime,
+		})
 		if err != nil {
 			r.report(attemptID, err)
 			continue
@@ -253,7 +257,7 @@ func (r *Runtime) run(parent context.Context, lease store.AttemptRuntimeLease) {
 			r.mu.Unlock()
 			cancel()
 		}()
-		if err := r.config.NewOwner(lease.AttemptID).Run(ctx, lease, held.wake); err != nil && ctx.Err() == nil {
+		if err := r.deps.NewOwner(lease.AttemptID).Run(ctx, lease, held.wake); err != nil && ctx.Err() == nil {
 			r.report(lease.AttemptID, err)
 		}
 	}()
@@ -262,7 +266,7 @@ func (r *Runtime) run(parent context.Context, lease store.AttemptRuntimeLease) {
 // keep renews the lease every third of its lifetime and ends the owner's
 // context once the lease is lost or about to run out.
 func (r *Runtime) keep(ctx context.Context, cancel context.CancelFunc, lease store.AttemptRuntimeLease) {
-	interval := r.config.LeaseLifetime / 3
+	interval := r.deps.LeaseLifetime / 3
 	timer := time.NewTimer(interval)
 	defer timer.Stop()
 	for {
@@ -271,7 +275,7 @@ func (r *Runtime) keep(ctx context.Context, cancel context.CancelFunc, lease sto
 			return
 		case <-timer.C:
 		}
-		renewed, err := r.config.Leases.Renew(ctx, lease, r.config.LeaseLifetime)
+		renewed, err := r.deps.Leases.Renew(ctx, &store.AttemptRuntimeLeaseRenewal{Lease: lease, Lifetime: r.deps.LeaseLifetime})
 		switch {
 		case errors.Is(err, store.ErrAttemptRuntimeLeaseLost):
 			cancel()
@@ -293,13 +297,13 @@ func (r *Runtime) keep(ctx context.Context, cancel context.CancelFunc, lease sto
 func (r *Runtime) release(lease store.AttemptRuntimeLease) {
 	ctx, cancel := context.WithTimeout(context.Background(), releaseTimeout)
 	defer cancel()
-	if err := r.config.Leases.Release(ctx, lease); err != nil {
+	if err := r.deps.Leases.Release(ctx, &store.AttemptRuntimeLeaseRelease{Lease: lease}); err != nil {
 		r.report(lease.AttemptID, err)
 	}
 }
 
 func (r *Runtime) report(attemptID model.ExamAttemptID, err error) {
-	if r.config.Report != nil && err != nil && !errors.Is(err, context.Canceled) {
-		r.config.Report(attemptID, err)
+	if r.deps.Report != nil && err != nil && !errors.Is(err, context.Canceled) {
+		r.deps.Report(attemptID, err)
 	}
 }

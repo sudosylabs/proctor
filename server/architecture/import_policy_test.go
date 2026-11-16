@@ -484,12 +484,15 @@ var dependencyRules = []dependencyRule{
 	},
 	{
 		// The Attempt Environment area owns execution environments: their
-		// facts, the runtime that holds their leases, and their owners. It
-		// reaches an execution host only through its own port.
+		// facts, the runtime that holds their leases, their owners, and the
+		// candidates' terminals. It reaches an execution host, and the
+		// Attempt's candidate access check, only through its own ports.
 		name:           "exam execution environment",
 		sources:        []pathPattern{exact(serverModule + "/app/exam/environment")},
 		deniedStandard: standardInfrastructure,
 		project: only(
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/invocation"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
 		),

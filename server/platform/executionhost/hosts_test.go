@@ -41,8 +41,14 @@ func memoryHosts(t *testing.T, allowUnisolated bool) (*Hosts, *memory.Host, *int
 	return hosts, host, &dials
 }
 
+// testGrantA and testGrantB name the test machine on each host.
+var (
+	testGrantA = environment.GrantRef{Host: "exec-a", GrantID: "attempt.0"}
+	testGrantB = environment.GrantRef{Host: "exec-b", GrantID: "attempt.0"}
+)
+
 var testSpec = environment.MachineSpec{
-	GrantID: "attempt.0", Image: "python", Network: model.EnvironmentNetworkNone,
+	Image: "python", Network: model.EnvironmentNetworkNone,
 	Resources: model.EnvironmentResources{CPUMillis: 1000, MemoryBytes: 512 << 20, DiskBytes: 1 << 30},
 }
 
@@ -60,17 +66,17 @@ func TestHostsReportPlaceAndTranslate(t *testing.T) {
 	hosts.Reports(ctx)
 	require.Equal(t, 1, *dials, "one client per host")
 
-	machine, err := hosts.Ensure(ctx, "exec-a", testSpec)
+	machine, err := hosts.Ensure(ctx, testGrantA, testSpec)
 	require.NoError(t, err)
 	require.Equal(t, "attempt.0", machine.GrantID())
-	again, err := hosts.Ensure(ctx, "exec-a", testSpec)
+	again, err := hosts.Ensure(ctx, testGrantA, testSpec)
 	require.NoError(t, err)
 	require.Equal(t, machine.Epoch(), again.Epoch(), "ensure is idempotent")
 	other := testSpec
 	other.Image = "node"
-	_, err = hosts.Ensure(ctx, "exec-a", other)
+	_, err = hosts.Ensure(ctx, testGrantA, other)
 	require.ErrorIs(t, err, environment.ErrMachineConflict, "another spec under the same grant")
-	_, err = hosts.Ensure(ctx, "exec-b", testSpec)
+	_, err = hosts.Ensure(ctx, testGrantB, testSpec)
 	require.ErrorIs(t, err, environment.ErrHostUnavailable, "an unknown host")
 
 	fence := environment.Fence{GrantID: machine.GrantID(), Epoch: machine.Epoch(), Revision: 1}
@@ -146,7 +152,7 @@ func TestHostsReportPlaceAndTranslate(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, processes.Events)
 
-	watch, err := hosts.WatchGrant(ctx, "exec-a", machine.GrantID())
+	watch, err := hosts.WatchGrant(ctx, environment.GrantRef{Host: "exec-a", GrantID: machine.GrantID()})
 	require.NoError(t, err)
 	state, err := watch.Next(ctx)
 	require.NoError(t, err)
@@ -163,10 +169,10 @@ func TestHostsReportPlaceAndTranslate(t *testing.T) {
 		}
 	}
 	require.NoError(t, watch.Close())
-	_, err = hosts.Ensure(ctx, "exec-a", testSpec)
+	_, err = hosts.Ensure(ctx, testGrantA, testSpec)
 	require.ErrorIs(t, err, environment.ErrMachineLost, "a lost grant stays lost until revoked")
-	require.NoError(t, hosts.Revoke(ctx, "exec-a", "attempt.0"))
-	fresh, err := hosts.Ensure(ctx, "exec-a", testSpec)
+	require.NoError(t, hosts.Revoke(ctx, testGrantA))
+	fresh, err := hosts.Ensure(ctx, testGrantA, testSpec)
 	require.NoError(t, err)
 	require.NotEqual(t, machine.Epoch(), fresh.Epoch())
 }
@@ -175,7 +181,7 @@ func TestHostsRefuseAnUnisolatedHostInProduction(t *testing.T) {
 	t.Parallel()
 	hosts, _, _ := memoryHosts(t, false)
 	require.Empty(t, hosts.Reports(t.Context()), "a host that shares the kernel is never offered")
-	_, err := hosts.Ensure(t.Context(), "exec-a", testSpec)
+	_, err := hosts.Ensure(t.Context(), testGrantA, testSpec)
 	require.ErrorIs(t, err, environment.ErrHostUnavailable)
 }
 

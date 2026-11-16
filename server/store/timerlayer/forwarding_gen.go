@@ -4144,27 +4144,27 @@ func (s *timedAttemptEnvironmentStore) Replace(arg0 context.Context, arg1 *store
 	})
 }
 
-func (s *timedAttemptRuntimeLeaseStore) Claim(ctx context.Context, attemptID model.ExamAttemptID, nodeID string, lifetime time.Duration) (*store.AttemptRuntimeLease, error) {
-	return timeStoreCall1(ctx, s.layer, storeOperation(aggregateAttemptRuntimeLease, methodClaim), func(callCtx context.Context) (*store.AttemptRuntimeLease, error) {
-		return s.next.Claim(callCtx, attemptID, nodeID, lifetime)
+func (s *timedAttemptRuntimeLeaseStore) Claim(arg0 context.Context, arg1 *store.AttemptRuntimeLeaseClaim) (*store.AttemptRuntimeLease, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAttemptRuntimeLease, methodClaim), func(callCtx context.Context) (*store.AttemptRuntimeLease, error) {
+		return s.next.Claim(callCtx, arg1)
 	})
 }
 
-func (s *timedAttemptRuntimeLeaseStore) ClaimAvailable(ctx context.Context, nodeID string, lifetime time.Duration, limit int) ([]store.AttemptRuntimeLease, error) {
-	return timeStoreCall1(ctx, s.layer, storeOperation(aggregateAttemptRuntimeLease, methodClaimAvailable), func(callCtx context.Context) ([]store.AttemptRuntimeLease, error) {
-		return s.next.ClaimAvailable(callCtx, nodeID, lifetime, limit)
+func (s *timedAttemptRuntimeLeaseStore) ClaimAvailable(arg0 context.Context, arg1 *store.AttemptRuntimeLeaseAvailableClaim) ([]store.AttemptRuntimeLease, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAttemptRuntimeLease, methodClaimAvailable), func(callCtx context.Context) ([]store.AttemptRuntimeLease, error) {
+		return s.next.ClaimAvailable(callCtx, arg1)
 	})
 }
 
-func (s *timedAttemptRuntimeLeaseStore) Renew(ctx context.Context, lease store.AttemptRuntimeLease, lifetime time.Duration) (*store.AttemptRuntimeLease, error) {
-	return timeStoreCall1(ctx, s.layer, storeOperation(aggregateAttemptRuntimeLease, methodRenew), func(callCtx context.Context) (*store.AttemptRuntimeLease, error) {
-		return s.next.Renew(callCtx, lease, lifetime)
+func (s *timedAttemptRuntimeLeaseStore) Renew(arg0 context.Context, arg1 *store.AttemptRuntimeLeaseRenewal) (*store.AttemptRuntimeLease, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAttemptRuntimeLease, methodRenew), func(callCtx context.Context) (*store.AttemptRuntimeLease, error) {
+		return s.next.Renew(callCtx, arg1)
 	})
 }
 
-func (s *timedAttemptRuntimeLeaseStore) Release(ctx context.Context, lease store.AttemptRuntimeLease) error {
-	return timeStoreCall0(ctx, s.layer, storeOperation(aggregateAttemptRuntimeLease, methodRelease), func(callCtx context.Context) error {
-		return s.next.Release(callCtx, lease)
+func (s *timedAttemptRuntimeLeaseStore) Release(arg0 context.Context, arg1 *store.AttemptRuntimeLeaseRelease) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateAttemptRuntimeLease, methodRelease), func(callCtx context.Context) error {
+		return s.next.Release(callCtx, arg1)
 	})
 }
 

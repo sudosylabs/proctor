@@ -435,7 +435,7 @@ type toldHosts struct {
 	states chan environment.GrantState
 }
 
-func (h toldHosts) WatchGrant(context.Context, string, string) (environment.GrantWatch, error) {
+func (h toldHosts) WatchGrant(context.Context, environment.GrantRef) (environment.GrantWatch, error) {
 	return toldWatch(h.states), nil
 }
 

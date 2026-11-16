@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -69,6 +70,18 @@ func (s *signinRecoveryReads) GetRecoveryState(ctx context.Context, userID model
 	return s.signinMFAStore.GetRecoveryState(ctx, userID)
 }
 
+// passwordPermits signals each permit the hasher grants.
+type passwordPermits struct{ started chan struct{} }
+
+func (p passwordPermits) Started() {
+	select {
+	case p.started <- struct{}{}:
+	default:
+	}
+}
+func (p passwordPermits) Finished(time.Duration) {}
+func (p passwordPermits) Rejected()              {}
+
 func TestLoginCapacityRefusalIsRetryableAndDoesNotIssueCredentials(t *testing.T) {
 	logger, logs := routetest.NewLogger(t)
 	// The slow User's stored hash asks for twenty Argon2id passes, so each
@@ -78,7 +91,8 @@ func TestLoginCapacityRefusalIsRetryableAndDoesNotIssueCredentials(t *testing.T)
 	require.Contains(t, slowHash, ",t=20,")
 	users := &signinLoginLookups{slow: slow, failing: "broken", byLogin: map[string]int{}}
 	recovery := &signinRecoveryReads{reads: make(chan model.UserID, 2)}
-	fixture := newIdentityFixture(t, identityOptions{Stores: identityStores{
+	permits := passwordPermits{started: make(chan struct{}, 64)}
+	fixture := newIdentityFixture(t, identityOptions{PasswordWork: permits, Stores: identityStores{
 		Users: users, MFA: recovery,
 		Passwords: &identityPasswords{byUser: map[model.UserID]*model.PasswordCredential{
 			slow.ID: {ID: model.NewPasswordCredentialID(), UserID: slow.ID, Revision: 1, PasswordHash: slowHash},
@@ -105,6 +119,10 @@ func TestLoginCapacityRefusalIsRetryableAndDoesNotIssueCredentials(t *testing.T)
 	go func() { slowLogins.Wait(); close(slowDone) }()
 	<-recovery.reads
 	<-recovery.reads
+	// Wait until both slow verifications hold their permits, so no unknown
+	// login below can take one first and leave a slow login refused.
+	<-permits.started
+	<-permits.started
 
 	// Both slow logins are verifying or about to. An unknown login still
 	// spends one dummy verification, so once both permits are held it is

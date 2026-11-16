@@ -89,6 +89,9 @@ type identityOptions struct {
 	// RecentAuthenticationTTL is how long a sign-in counts as recent; zero
 	// means 15 minutes.
 	RecentAuthenticationTTL time.Duration
+	// PasswordWork observes the hasher's permits, so a test can wait until
+	// password work actually holds them.
+	PasswordWork identity.PasswordWorkRecorder
 }
 
 // identityPublicURL is the origin the fixture's Desktop authorization and
@@ -114,7 +117,7 @@ func newIdentityFixture(t *testing.T, options identityOptions) *identityFixture 
 	renderer, fixture.renders = recordingHTTPMailRenderer(t)
 	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: renderer, Sender: fixture.mail, Sealer: sealer})
 	require.NoError(t, err)
-	hasher, err := identity.NewPasswordHasher(identity.PasswordHasherDependencies{Settings: identityPasswordPolicy()})
+	hasher, err := identity.NewPasswordHasher(identity.PasswordHasherDependencies{Settings: identityPasswordPolicy(), Recorder: options.PasswordWork})
 	require.NoError(t, err)
 	attempts, err := identity.NewAttemptAccounting(identity.AttemptAccountingDependencies{Cache: fixture.cache})
 	require.NoError(t, err)

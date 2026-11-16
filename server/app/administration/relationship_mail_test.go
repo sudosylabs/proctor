@@ -8,13 +8,22 @@
 package administration
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// relationshipUserStoreTestFake holds an active User, at revision 1, for
+// every identifier, so a Role Binding notice can be prepared for anyone.
 type relationshipUserStoreTestFake struct{ store.UserStore }
 
 func (relationshipUserStoreTestFake) Get(_ context.Context, id model.UserID) (*model.User, error) {
@@ -22,7 +31,9 @@ func (relationshipUserStoreTestFake) Get(_ context.Context, id model.UserID) (*m
 	if err != nil {
 		return nil, err
 	}
-	return &model.User{ID: parsed, Revision: 1}, nil
+	user := &model.User{Email: "member@example.test", DisplayName: "Member", EmailVerified: true, Locale: "en", Timezone: "UTC"}
+	user.PrepareCreate(parsed, time.UnixMilli(1))
+	return user, nil
 }
 
 func (relationshipUserStoreTestFake) ListIdentities(_ context.Context, ids []model.UserID) ([]store.UserIdentity, error) {
@@ -33,11 +44,41 @@ func (relationshipUserStoreTestFake) ListIdentities(_ context.Context, ids []mod
 	return identities, nil
 }
 
-type relationshipMailPreparerTestFake struct {
-	requests []mail.RelationshipTransitionPreparation
+// mailRendererFake renders every message the real Composer freezes and
+// records what it was asked to render.
+type mailRendererFake struct {
+	requests []mail.RenderRequest
 }
 
-func (f *relationshipMailPreparerTestFake) PrepareRelationshipTransition(request mail.RelationshipTransitionPreparation) (*store.PreparedMail, error) {
-	f.requests = append(f.requests, request)
-	return &store.PreparedMail{}, nil
+func (r *mailRendererFake) Render(request mail.RenderRequest) (mail.FrozenContent, error) {
+	r.requests = append(r.requests, request)
+	return mail.FrozenContent{Subject: "Notice", Text: "Notice", HTML: "<p>Notice</p>"}, nil
+}
+
+// newMail builds the production mail Composer over an enabled sender, so
+// every eligible recipient's message is rendered.
+func newMail(t *testing.T) (*mail.Composer, *mailRendererFake) {
+	t.Helper()
+	renderer := &mailRendererFake{}
+	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
+	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
+	require.NoError(t, err)
+	composer, err := mail.NewComposer(mail.ComposerDependencies{
+		Renderer: renderer,
+		Sender:   mailSenderFake{},
+		Sealer:   sealer,
+	})
+	require.NoError(t, err)
+	return composer, renderer
+}
+
+type mailSenderFake struct{}
+
+func (mailSenderFake) Enabled() bool { return true }
+func (mailSenderFake) From() mail.Address {
+	return mail.Address{Name: "Proctor", Address: "no-reply@example.test"}
+}
+
+func (mailSenderFake) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
+	return mail.TransportUnknown, nil
 }

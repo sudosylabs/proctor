@@ -79,8 +79,7 @@ func TestCreateEnvironmentProfileIsAuditedAndIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "python-small", profile.Name)
 	require.Equal(t, fixture.inv.Principal().UserID, profile.CreatedByUserID)
-	require.Equal(t, model.ActionEnvironmentProfileManage, fixture.authorization.action)
-	require.Equal(t, model.Resource{Type: model.ResourceInstitution, ID: fixture.institution.ID.String()}, fixture.authorization.resource)
+	require.Equal(t, []string{"environment_profile.manage institution:" + fixture.institution.ID.String() + " success"}, decisions(fixture.access))
 	require.Equal(t, model.ActionEnvironmentProfileManage, fixture.audit.attempt.Action)
 	require.Equal(t, "create", fixture.audit.attempt.Operation)
 	require.Equal(t, map[string]any{"name": "python-small", "image": "python-3.12"}, fixture.audit.attempt.Value)
@@ -138,8 +137,7 @@ func TestRetireAndListEnvironmentProfiles(t *testing.T) {
 	require.Equal(t, "retire", fixture.audit.attempt.Operation)
 	require.Equal(t, store.EnvironmentProfileRetireOperation, profiles.command.Operation)
 
-	fixture.authorization.err = apperror.New("authorization.denied")
-	_, err = fixture.service.ListEnvironmentProfiles(t.Context(), fixture.inv, false)
+	_, err = fixture.service.ListEnvironmentProfiles(t.Context(), fixture.stranger, false)
 	require.True(t, apperror.Is(err, "authorization.denied"))
 
 	fixture.service.environmentProfiles = nil

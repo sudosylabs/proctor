@@ -105,17 +105,18 @@ func accessPolicyFixture(t *testing.T) (*Service, *accessPolicyStoreFake, *acces
 	}}
 	publisher := &realtimetest.Publisher{}
 	audit := &accessPolicyAuditFake{beginID: model.NewID()}
+	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
+		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
+		AuthenticatedAt: at, MFACompletedAt: model.OptionalTimeFrom(at.Add(30 * time.Second)), ClientType: model.SessionClientWeb}
+	access := grantedAccess(t, nil, institutionGrant(principal.UserID, model.ActionAccessPolicyView, model.ActionAccessPolicyManage))
 	service, err := New(Dependencies{
 		Store: &catalogFake{accessPolicies: persistence, institutions: &institutionStoreFake{institution: institution},
 			retentionPolicies: &retentionPolicyStoreFake{}, retention: &retentionLifecycleFake{}},
-		Authorizer: &resourceAuthorizerFake{}, Capabilities: capabilities, Auditor: audit, Publisher: publisher,
+		Authorizer: access.Authorizer, Capabilities: capabilities, Auditor: audit, Publisher: publisher,
 		CanonicalOrigin: "https://proctor.example.edu", SupportAddress: " Help@Example.edu ", PasswordMinimumLength: 12,
 		RecentAuthenticationTTL: time.Minute, Now: func() time.Time { return at.Add(time.Minute) },
 	})
 	require.NoError(t, err)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
-		AuthenticatedAt: at, MFACompletedAt: model.OptionalTimeFrom(at.Add(30 * time.Second)), ClientType: model.SessionClientWeb}
 	return service, persistence, capabilities, publisher, audit, invocation.New(principal, model.RequestMetadata{RequestID: "request-1"})
 }
 

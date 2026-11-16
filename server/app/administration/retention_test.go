@@ -43,7 +43,7 @@ func TestRetentionApprovalRequiresAuthorityAndCriticalAudit(t *testing.T) {
 			call := fixture.inv
 			switch gate {
 			case "authority":
-				fixture.authorization.err = apperror.New("authorization.denied")
+				call = fixture.stranger
 			case "audit":
 				fixture.audit.beginErr = errors.New("audit unavailable")
 			case "assurance":
@@ -84,7 +84,8 @@ func TestRetentionApprovalPassesExactReviewedPolicyAndCredential(t *testing.T) {
 	require.Equal(t, model.AuditEventID(fixture.audit.beginID), lifecycle.change.AuditEventID, "lost review, authority or atomic audit fence: %+v, %+v", lifecycle.change, lifecycle.command)
 	require.Positive(t, int64(lifecycle.change.RecentAuthenticationTTL), "lost review, authority or atomic audit fence: %+v, %+v", lifecycle.change, lifecycle.command)
 	require.Equal(t, store.RetentionControlOperation, lifecycle.command.Operation, "lost review, authority or atomic audit fence: %+v, %+v", lifecycle.change, lifecycle.command)
-	require.Equal(t, model.ActionRetentionCleanupManage, fixture.authorization.action, "cleanup approval reused configuration permission")
+	require.Equal(t, []string{"retention_cleanup.manage institution:" + fixture.institution.ID.String() + " success"}, decisions(fixture.access),
+		"cleanup approval reused configuration permission")
 }
 
 func TestRetentionStoreConflictsStayBounded(t *testing.T) {

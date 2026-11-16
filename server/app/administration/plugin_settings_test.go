@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
@@ -59,15 +60,17 @@ func (s *pluginSettingsStoreFake) Replace(_ context.Context, input *store.Plugin
 }
 
 type pluginFixture struct {
-	service       *Service
-	catalog       *pluginCatalogFake
-	saved         *pluginSettingsStoreFake
-	authorization *resourceAuthorizerFake
-	audit         *accessPolicyAuditFake
-	publisher     *realtimetest.Publisher
-	institution   *model.Institution
-	inv           invocation.Invocation
-	at            time.Time
+	service     *Service
+	catalog     *pluginCatalogFake
+	saved       *pluginSettingsStoreFake
+	access      *accesstest.Fixture
+	audit       *accessPolicyAuditFake
+	publisher   *realtimetest.Publisher
+	institution *model.Institution
+	inv         invocation.Invocation
+	// stranger is a caller with the same assurance who holds no grant.
+	stranger invocation.Invocation
+	at       time.Time
 }
 
 func newPluginFixture(t *testing.T) pluginFixture {
@@ -79,19 +82,20 @@ func newPluginFixture(t *testing.T) pluginFixture {
 		{ID: "export.zip", Name: "Zip export", State: "active", Required: true, EnabledByDefault: true},
 	}}
 	saved := &pluginSettingsStoreFake{}
-	authorization := &resourceAuthorizerFake{}
+	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
+		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
+		AuthenticatedAt: at, MFACompletedAt: model.OptionalTimeFrom(at), ClientType: model.SessionClientWeb}
+	access := grantedAccess(t, nil, institutionGrant(principal.UserID, model.ActionPluginManage, model.ActionEnvironmentProfileManage))
 	audit := &accessPolicyAuditFake{beginID: model.NewAuditEventID().String()}
 	publisher := &realtimetest.Publisher{}
 	service := &Service{
 		institutions: &institutionStoreFake{institution: institution}, pluginSettings: saved, plugins: catalog,
-		authorizer: authorization, auditor: audit, publisher: publisher,
+		authorizer: access.Authorizer, auditor: audit, publisher: publisher,
 		recentAuthenticationTTL: time.Minute, now: func() time.Time { return at },
 	}
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
-		AuthenticatedAt: at, MFACompletedAt: model.OptionalTimeFrom(at), ClientType: model.SessionClientWeb}
-	return pluginFixture{service: service, catalog: catalog, saved: saved, authorization: authorization, audit: audit, publisher: publisher,
-		institution: institution, inv: invocation.New(principal, model.RequestMetadata{RequestID: "plugins"}), at: at}
+	inv := invocation.New(principal, model.RequestMetadata{RequestID: "plugins"})
+	return pluginFixture{service: service, catalog: catalog, saved: saved, access: access, audit: audit, publisher: publisher,
+		institution: institution, inv: inv, stranger: strangerTo(inv), at: at}
 }
 
 func pluginCommand() ReplacePluginSettingsCommand {
@@ -109,15 +113,13 @@ func TestListPluginsJoinsDescriptorsWithSavedSettings(t *testing.T) {
 
 	views, err := fixture.service.ListPlugins(t.Context(), fixture.inv)
 	require.NoError(t, err)
-	require.Equal(t, model.ActionPluginManage, fixture.authorization.action)
-	require.Equal(t, model.Resource{Type: model.ResourceInstitution, ID: fixture.institution.ID.String()}, fixture.authorization.resource)
+	require.Equal(t, []string{"plugin.manage institution:" + fixture.institution.ID.String() + " success"}, decisions(fixture.access))
 	require.Equal(t, []PluginView{
 		{PluginDescriptor: fixture.catalog.descriptors[0], Enabled: true, Settings: json.RawMessage(`{"mode":"enforce"}`), Revision: 1},
 		{PluginDescriptor: fixture.catalog.descriptors[1], Enabled: true, Settings: json.RawMessage(`{}`)},
 	}, views, "saved settings win; a plugin nobody configured shows its default")
 
-	fixture.authorization.err = apperror.New("authorization.denied")
-	_, err = fixture.service.ListPlugins(t.Context(), fixture.inv)
+	_, err = fixture.service.ListPlugins(t.Context(), fixture.stranger)
 	require.True(t, apperror.Is(err, "authorization.denied"))
 }
 
@@ -173,9 +175,7 @@ func TestReplacePluginSettingsRejectsWhatItCannotSave(t *testing.T) {
 		{"refused by the plugin", func(f *pluginFixture, _ *ReplacePluginSettingsCommand) {
 			f.catalog.validateErr = errors.New("mode must be observe or enforce")
 		}, "plugin.invalid"},
-		{"authorization denied", func(f *pluginFixture, _ *ReplacePluginSettingsCommand) {
-			f.authorization.err = apperror.New("authorization.denied")
-		}, "authorization.denied"},
+		{"authorization denied", func(f *pluginFixture, _ *ReplacePluginSettingsCommand) { f.inv = f.stranger }, "authorization.denied"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()

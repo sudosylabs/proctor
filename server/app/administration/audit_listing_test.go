@@ -13,10 +13,11 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
@@ -70,51 +71,44 @@ func (s *auditListingStoreFake) List(_ context.Context, options store.AuditListO
 	return s.list, s.err
 }
 
-// auditListingAuthorizerFake grants the audit visibility in scope: audit.view
-// Institution-wide, otherwise academic_audit.view at its Academic Units. It
-// records the one authorization as authorize-view.
-type auditListingAuthorizerFake struct {
-	Authorizer
-	events    *[]string
-	err       error
-	scope     store.AuditVisibilityScope
-	decisions []recordedDecision
-	// grants answers GrantedScopes for the actions an audit page's names
-	// need, and users answers GrantedUserVisibility.
-	grants map[model.Action]access.AuthorizedScopeConstraint
-	users  store.UserVisibilityScope
+// auditGrant gives a caller one grant; the audit listing tests describe a
+// caller's audit visibility by the grants that produce it.
+type auditGrant func(caller model.UserID) accesstest.Grant
+
+// auditReader holds audit.view Institution-wide.
+func auditReader(caller model.UserID) accesstest.Grant {
+	return institutionGrant(caller, model.ActionAuditView)
 }
 
-func (a *auditListingAuthorizerFake) GrantedUserVisibility(context.Context, model.Principal) (store.UserVisibilityScope, error) {
-	*a.events = append(*a.events, "user-visibility")
-	return a.users, nil
+// academicAuditorEverywhere holds academic_audit.view Institution-wide.
+func academicAuditorEverywhere(caller model.UserID) accesstest.Grant {
+	return institutionGrant(caller, model.ActionAcademicAuditView)
 }
 
-// recordedDecision is one RecordAuthorizationDecision call, as the authorizer
-// fakes capture it.
-type recordedDecision struct {
-	action    model.Action
-	resource  model.Resource
-	scopeType model.RoleScopeType
-	scopeID   string
-	allowed   bool
-}
-
-func (a *auditListingAuthorizerFake) GrantedScopes(_ context.Context, _ model.Principal, action model.Action, _ model.ResourceType) (access.AuthorizedScopeConstraint, error) {
-	if action == model.ActionAuditView {
-		*a.events = append(*a.events, "authorize-view")
-		return access.AuthorizedScopeConstraint{InstitutionWide: a.scope.InstitutionWide}, a.err
+// academicAuditorAt holds academic_audit.view in one Academic Unit.
+func academicAuditorAt(root model.AcademicUnitID) auditGrant {
+	return func(caller model.UserID) accesstest.Grant {
+		return unitGrant(caller, root, model.ActionAcademicAuditView)
 	}
-	if grant, named := a.grants[action]; named {
-		*a.events = append(*a.events, "scopes-"+string(action))
-		return grant, nil
-	}
-	return access.AuthorizedScopeConstraint{InstitutionWide: a.scope.AcademicInstitutionWide, AcademicUnitRootIDs: a.scope.AcademicUnitRootIDs}, nil
 }
 
-func (a *auditListingAuthorizerFake) RecordAuthorizationDecision(_ context.Context, _ model.Principal, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID string, _ model.RequestMetadata, allowed bool) error {
-	a.decisions = append(a.decisions, recordedDecision{action, resource, scopeType, scopeID, allowed})
-	return nil
+// auditListingService builds a Service over the audit Store fake and the real
+// authorizer, whose caller holds the grants, and returns the caller's
+// invocation. The options describe the rest of the authorizer's world.
+func auditListingService(
+	t testing.TB,
+	events *[]string,
+	persistence *auditListingStoreFake,
+	options accesstest.Options,
+	grants ...auditGrant,
+) (*Service, *accesstest.Fixture, invocation.Invocation) {
+	t.Helper()
+	caller, inv := newCaller()
+	for _, grant := range grants {
+		options.Grants = append(options.Grants, grant(caller.UserID))
+	}
+	fixture := accessWith(t, events, options)
+	return &Service{institutions: anyInstitution(), audits: persistence, authorizer: fixture.Authorizer}, fixture, inv
 }
 
 func TestAcademicAuditListingPassesScopeToPersistenceAndRedactsSecurityMetadata(t *testing.T) {
@@ -129,12 +123,8 @@ func TestAcademicAuditListingPassesScopeToPersistenceAndRedactsSecurityMetadata(
 		RequestID: "request", NodeID: "node", ClientType: "web", AuthMethod: "password", IPAddress: "127.0.0.1", UserAgent: "browser",
 	}
 	persistence := &auditListingStoreFake{events: &events, list: []*model.AuditEvent{event}}
-	service := &Service{institutions: anyInstitution(), audits: persistence, authorizer: &auditListingAuthorizerFake{
-		events: &events, scope: store.AuditVisibilityScope{
-			AcademicUnitRootIDs: []model.AcademicUnitID{model.AcademicUnitID(rootID)},
-		},
-	}}
-	got, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10})
+	service, _, inv := auditListingService(t, &events, persistence, accesstest.Options{}, academicAuditorAt(model.AcademicUnitID(rootID)))
+	got, err := service.ListAuditEvents(context.Background(), inv, ListAuditEventsQuery{Limit: 10})
 	require.NoError(t, err)
 	require.Equal(t, []model.AcademicUnitID{model.AcademicUnitID(rootID)}, persistence.input.Visibility.AcademicUnitRootIDs)
 	require.Len(t, got.Items, 1)
@@ -162,13 +152,8 @@ func TestInstitutionAcademicAuditListingRetainsAcademicOnlyConstraint(t *testing
 		Status: model.AuditStatusSuccess, IPAddress: "127.0.0.1",
 	}
 	persistence := &auditListingStoreFake{events: &events, list: []*model.AuditEvent{event}}
-	service := &Service{institutions: anyInstitution(), audits: persistence, authorizer: &auditListingAuthorizerFake{
-		events: &events,
-		scope: store.AuditVisibilityScope{
-			AcademicInstitutionWide: true,
-		},
-	}}
-	got, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10})
+	service, _, inv := auditListingService(t, &events, persistence, accesstest.Options{}, academicAuditorEverywhere)
+	got, err := service.ListAuditEvents(context.Background(), inv, ListAuditEventsQuery{Limit: 10})
 	require.NoError(t, err)
 	require.True(t, persistence.input.Visibility.AcademicInstitutionWide)
 	require.False(t, persistence.input.Visibility.InstitutionWide)
@@ -183,21 +168,20 @@ func TestAuditListingAuthorizesOnceThenReads(t *testing.T) {
 	events := []string{}
 	event := &model.AuditEvent{ID: model.NewAuditEventID(), CreatedAt: model.TimeFromMillis(100)}
 	persistence := &auditListingStoreFake{events: &events, list: []*model.AuditEvent{event}}
-	institutions := anyInstitution()
-	authorizer := &auditListingAuthorizerFake{events: &events, scope: store.AuditVisibilityScope{InstitutionWide: true}}
-	service := &Service{institutions: institutions, audits: persistence, authorizer: authorizer}
-	got, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10, ActorID: model.NewUserID()})
+	service, fixture, inv := auditListingService(t, &events, persistence, accesstest.Options{}, auditReader)
+	institutions := service.institutions.(*institutionStoreFake)
+	got, err := service.ListAuditEvents(context.Background(), inv, ListAuditEventsQuery{Limit: 10, ActorID: model.NewUserID()})
 	require.NoError(t, err)
 	require.Len(t, got.Items, 1, "result/input = %#v / %#v", got, persistence.input)
 	require.Equal(t, 11, persistence.input.Limit, "the read probes one past the page; result/input = %#v / %#v", got, persistence.input)
 	// Contract: authorization precedes the read, and the first page then counts.
-	require.Equal(t, []string{"authorize-view", "list-audits", "count-audits"}, events)
+	require.Equal(t, []string{"grants", "decision:audit.view:success", "list-audits", "count-audits"}, events)
 	require.Equal(t, paging.Total{Counted: true, Total: 1}, got.Total)
 	id := institutions.institution.ID.String()
 	require.Equal(t, []recordedDecision{{
 		action: model.ActionAuditView, resource: model.Resource{Type: model.ResourceInstitution, ID: id},
 		scopeType: model.RoleScopeInstitution, scopeID: id, allowed: true,
-	}}, authorizer.decisions)
+	}}, recordedDecisions(fixture))
 }
 
 func TestAuditListingFailsClosedWhenAuthorizationReturnsZeroVisibility(t *testing.T) {
@@ -207,23 +191,22 @@ func TestAuditListingFailsClosedWhenAuthorizationReturnsZeroVisibility(t *testin
 		events: &events,
 		list:   []*model.AuditEvent{{ID: model.NewAuditEventID(), CreatedAt: model.TimeFromMillis(100)}},
 	}
-	institutions := anyInstitution()
-	authorizer := &auditListingAuthorizerFake{events: &events}
-	service := &Service{institutions: institutions, audits: persistence, authorizer: authorizer}
-	_, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10})
+	service, fixture, inv := auditListingService(t, &events, persistence, accesstest.Options{})
+	institutions := service.institutions.(*institutionStoreFake)
+	_, err := service.ListAuditEvents(context.Background(), inv, ListAuditEventsQuery{Limit: 10})
 	require.True(t, apperror.Is(err, "authorization.denied"), "error = %v, want authorization.denied", err)
-	require.Equal(t, []string{"authorize-view"}, events, "events")
+	require.Equal(t, []string{"grants", "grants", "decision:academic_audit.view:fail"}, events, "events")
 	id := institutions.institution.ID.String()
 	require.Equal(t, []recordedDecision{{
 		action: model.ActionAcademicAuditView, resource: model.Resource{Type: model.ResourceInstitution, ID: id},
 		scopeType: model.RoleScopeInstitution, scopeID: id, allowed: false,
-	}}, authorizer.decisions)
+	}}, recordedDecisions(fixture))
 }
 
 // TestAuditListingFailsClosedOnInconsistentAcademicVisibility reaches the
-// guard behind authorizeAuditList: an academic grant that is both
-// Institution-wide and rooted at Academic Units is allowed by authorization
-// yet is not a visibility the store may be given.
+// guard behind authorizeAuditList: academic_audit.view held both
+// Institution-wide and at an Academic Unit is allowed by authorization yet is
+// not a visibility the store may be given.
 func TestAuditListingFailsClosedOnInconsistentAcademicVisibility(t *testing.T) {
 	t.Parallel()
 	events := []string{}
@@ -231,29 +214,26 @@ func TestAuditListingFailsClosedOnInconsistentAcademicVisibility(t *testing.T) {
 		events: &events,
 		list:   []*model.AuditEvent{{ID: model.NewAuditEventID(), CreatedAt: model.TimeFromMillis(100)}},
 	}
-	institutions := anyInstitution()
-	authorizer := &auditListingAuthorizerFake{events: &events, scope: store.AuditVisibilityScope{
-		AcademicInstitutionWide: true,
-		AcademicUnitRootIDs:     []model.AcademicUnitID{model.NewAcademicUnitID()},
-	}}
-	service := &Service{institutions: institutions, audits: persistence, authorizer: authorizer}
-	_, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10})
+	service, fixture, inv := auditListingService(t, &events, persistence, accesstest.Options{},
+		academicAuditorEverywhere, academicAuditorAt(model.NewAcademicUnitID()))
+	institutions := service.institutions.(*institutionStoreFake)
+	_, err := service.ListAuditEvents(context.Background(), inv, ListAuditEventsQuery{Limit: 10})
 	require.True(t, apperror.Is(err, "authorization.denied"), "error = %v, want authorization.denied", err)
-	require.Equal(t, []string{"authorize-view"}, events, "the store must not be read")
+	require.Equal(t, []string{"grants", "grants", "decision:academic_audit.view:success"}, events, "the store must not be read")
 	id := institutions.institution.ID.String()
 	require.Equal(t, []recordedDecision{{
 		action: model.ActionAcademicAuditView, resource: model.Resource{Type: model.ResourceInstitution, ID: id},
 		scopeType: model.RoleScopeInstitution, scopeID: id, allowed: true,
-	}}, authorizer.decisions, "authorization allowed before the guard denied")
+	}}, recordedDecisions(fixture), "authorization allowed before the guard denied")
 }
 
 func TestAuditListingRejectsInvalidQuery(t *testing.T) {
 	t.Parallel()
 	events := []string{}
-	service := &Service{institutions: anyInstitution(), audits: &auditListingStoreFake{events: &events}, authorizer: &auditListingAuthorizerFake{events: &events, scope: store.AuditVisibilityScope{InstitutionWide: true}}}
-	_, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 500})
+	service, _, inv := auditListingService(t, &events, &auditListingStoreFake{events: &events}, accesstest.Options{}, auditReader)
+	_, err := service.ListAuditEvents(context.Background(), inv, ListAuditEventsQuery{Limit: 500})
 	require.True(t, apperror.Is(err, "audit.query.invalid"), "error = %v", err)
-	want := []string{"authorize-view"}
+	want := []string{"grants", "decision:audit.view:success"}
 	require.Equal(t, want, events, "events")
 }
 
@@ -266,18 +246,16 @@ func TestAuditListingReportsMoreOnlyWhenTheProbeRowExists(t *testing.T) {
 		{ID: model.NewAuditEventID(), CreatedAt: model.TimeFromMillis(100)},
 	}
 	persistence := &auditListingStoreFake{events: &events}
-	service := &Service{institutions: anyInstitution(), audits: persistence, authorizer: &auditListingAuthorizerFake{
-		events: &events, scope: store.AuditVisibilityScope{InstitutionWide: true},
-	}}
+	service, _, inv := auditListingService(t, &events, persistence, accesstest.Options{}, auditReader)
 
 	persistence.list = rows[:2]
-	full, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 2})
+	full, err := service.ListAuditEvents(context.Background(), inv, ListAuditEventsQuery{Limit: 2})
 	require.NoError(t, err)
 	require.Equal(t, rows[:2], full.Items)
 	require.False(t, full.HasMore, "an exactly full final page has no successor")
 
 	persistence.list = rows
-	more, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 2})
+	more, err := service.ListAuditEvents(context.Background(), inv, ListAuditEventsQuery{Limit: 2})
 	require.NoError(t, err)
 	require.Equal(t, rows[:2], more.Items)
 	require.True(t, more.HasMore)
@@ -288,10 +266,8 @@ func TestAuditListingPassesCreatedRangeAndRejectsAnEmptyOne(t *testing.T) {
 	since, until := model.TimeFromMillis(100), model.TimeFromMillis(200)
 	events := []string{}
 	persistence := &auditListingStoreFake{events: &events}
-	service := &Service{institutions: anyInstitution(), audits: persistence, authorizer: &auditListingAuthorizerFake{
-		events: &events, scope: store.AuditVisibilityScope{InstitutionWide: true},
-	}}
-	_, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10, Since: since, Until: until})
+	service, _, inv := auditListingService(t, &events, persistence, accesstest.Options{}, auditReader)
+	_, err := service.ListAuditEvents(context.Background(), inv, ListAuditEventsQuery{Limit: 10, Since: since, Until: until})
 	require.NoError(t, err)
 	require.True(t, since.Equal(persistence.input.Since), "Since = %v", persistence.input.Since)
 	require.True(t, until.Equal(persistence.input.Until), "Until = %v", persistence.input.Until)
@@ -302,9 +278,9 @@ func TestAuditListingPassesCreatedRangeAndRejectsAnEmptyOne(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			events = events[:0]
-			_, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, query)
+			_, err := service.ListAuditEvents(context.Background(), inv, query)
 			require.True(t, apperror.Is(err, "audit.query.invalid"), "error = %v", err)
-			require.Equal(t, []string{"authorize-view"}, events, "an empty range must not read")
+			require.Equal(t, []string{"grants", "decision:audit.view:success"}, events, "an empty range must not read")
 		})
 	}
 }
@@ -324,22 +300,18 @@ func TestAccountDisableReasonReachesOnlyInstitutionAuditReaders(t *testing.T) {
 		Parameters: parameters,
 	}
 	for name, test := range map[string]struct {
-		scope      store.AuditVisibilityScope
+		grant      auditGrant
 		wantReason bool
 	}{
-		"institution": {scope: store.AuditVisibilityScope{InstitutionWide: true}, wantReason: true},
-		"academic unit": {scope: store.AuditVisibilityScope{
-			AcademicUnitRootIDs: []model.AcademicUnitID{rootID},
-		}},
+		"institution":   {grant: auditReader, wantReason: true},
+		"academic unit": {grant: academicAuditorAt(rootID)},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			events := []string{}
-			service := &Service{institutions: anyInstitution(),
-				audits:     &auditListingStoreFake{events: &events, list: []*model.AuditEvent{event}},
-				authorizer: &auditListingAuthorizerFake{events: &events, scope: test.scope},
-			}
-			got, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10})
+			service, _, inv := auditListingService(t, &events,
+				&auditListingStoreFake{events: &events, list: []*model.AuditEvent{event}}, accesstest.Options{}, test.grant)
+			got, err := service.ListAuditEvents(context.Background(), inv, ListAuditEventsQuery{Limit: 10})
 			require.NoError(t, err)
 			require.Len(t, got.Items, 1)
 			require.Equal(t, test.wantReason, bytes.Contains(got.Items[0].Parameters, []byte(`"reason"`)), "parameters = %s", got.Items[0].Parameters)
@@ -357,22 +329,21 @@ func TestAuditListingCountsTheFirstPageWithinItsVisibility(t *testing.T) {
 	t.Parallel()
 	events := []string{}
 	event := &model.AuditEvent{ID: model.NewAuditEventID(), CreatedAt: model.TimeFromMillis(100)}
-	scope := store.AuditVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, AllowedActions: model.AcademicAuditActions()}
 	persistence := &auditListingStoreFake{events: &events, list: []*model.AuditEvent{event}, listCount: 42}
-	service := &Service{institutions: anyInstitution(), audits: persistence, authorizer: &auditListingAuthorizerFake{events: &events, scope: scope}}
+	service, _, inv := auditListingService(t, &events, persistence, accesstest.Options{}, academicAuditorAt(model.NewAcademicUnitID()))
 
-	first, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10, Since: model.TimeFromMillis(50)})
+	first, err := service.ListAuditEvents(context.Background(), inv, ListAuditEventsQuery{Limit: 10, Since: model.TimeFromMillis(50)})
 	require.NoError(t, err)
 	require.Equal(t, paging.Total{Counted: true, Total: 42}, first.Total)
 	require.Equal(t, persistence.input, persistence.listCountInput, "the count reads the list's visibility and filters")
 
 	events = events[:0]
-	later, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10,
+	later, err := service.ListAuditEvents(context.Background(), inv, ListAuditEventsQuery{Limit: 10,
 		BeforeCreatedAt: event.CreatedAt, BeforeID: event.ID})
 	require.NoError(t, err)
 	require.Equal(t, paging.Total{}, later.Total)
 	// Contract: a continued page authorizes and lists without counting.
-	require.Equal(t, []string{"authorize-view", "list-audits"}, events)
+	require.Equal(t, []string{"grants", "grants", "decision:academic_audit.view:success", "list-audits"}, events)
 }
 
 // TestAuditListingFiltersReachPersistenceInsideTheVisibility pins the
@@ -387,10 +358,8 @@ func TestAuditListingFiltersReachPersistenceInsideTheVisibility(t *testing.T) {
 	inCatalog, outside := string(model.ActionClassMembersManage), string(model.ActionExternalIdentityManage)
 	events := []string{}
 	persistence := &auditListingStoreFake{events: &events}
-	service := &Service{institutions: anyInstitution(), audits: persistence, authorizer: &auditListingAuthorizerFake{
-		events: &events, scope: store.AuditVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{rootID}},
-	}}
-	_, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{
+	service, _, inv := auditListingService(t, &events, persistence, accesstest.Options{}, academicAuditorAt(rootID))
+	_, err := service.ListAuditEvents(context.Background(), inv, ListAuditEventsQuery{
 		Limit: 10, SubjectUserID: subject, Status: model.AuditStatusFail, Actions: []string{inCatalog, " " + outside, inCatalog},
 	})
 	require.NoError(t, err)
@@ -417,13 +386,11 @@ func TestAuditListingFiltersReachPersistenceInsideTheVisibility(t *testing.T) {
 			t.Parallel()
 			events := []string{}
 			persistence := &auditListingStoreFake{events: &events}
-			service := &Service{institutions: anyInstitution(), audits: persistence, authorizer: &auditListingAuthorizerFake{
-				events: &events, scope: store.AuditVisibilityScope{InstitutionWide: true},
-			}}
+			service, _, inv := auditListingService(t, &events, persistence, accesstest.Options{}, auditReader)
 			query.Limit = 10
-			_, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, query)
+			_, err := service.ListAuditEvents(context.Background(), inv, query)
 			require.True(t, apperror.Is(err, "audit.query.invalid"), "error = %v", err)
-			require.Equal(t, []string{"authorize-view"}, events, "a refused filter reads nothing")
+			require.Equal(t, []string{"grants", "decision:audit.view:success"}, events, "a refused filter reads nothing")
 		})
 	}
 }
@@ -441,10 +408,8 @@ func TestAuditListingKindNarrowsAnAcademicAuditor(t *testing.T) {
 			t.Parallel()
 			events := []string{}
 			persistence := &auditListingStoreFake{events: &events}
-			service := &Service{institutions: anyInstitution(), audits: persistence, authorizer: &auditListingAuthorizerFake{
-				events: &events, scope: store.AuditVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{rootID}},
-			}}
-			_, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{
+			service, _, inv := auditListingService(t, &events, persistence, accesstest.Options{}, academicAuditorAt(rootID))
+			_, err := service.ListAuditEvents(context.Background(), inv, ListAuditEventsQuery{
 				Limit: 10, Kind: kind, Actions: []string{outside},
 			})
 			require.NoError(t, err)
@@ -466,7 +431,8 @@ func TestAuditListingNamesOnlyWhatTheCallerCanSeeInOneRead(t *testing.T) {
 	t.Parallel()
 	events := []string{}
 	actor, subject := model.NewUserID(), model.NewUserID()
-	classID, unitID, rootID := model.NewClassID(), model.NewAcademicUnitID(), model.NewAcademicUnitID()
+	world := newClassWorld()
+	classID, unitID, rootID := world.class.ID, model.NewAcademicUnitID(), model.NewAcademicUnitID()
 	enrolment := &model.AuditEvent{
 		ID: model.NewAuditEventID(), CreatedAt: model.TimeFromMillis(300), ActorID: actor, SubjectUserID: subject,
 		Action: string(model.ActionClassMembersManage), Resource: model.Resource{Type: model.ResourceClass, ID: classID.String()},
@@ -485,20 +451,22 @@ func TestAuditListingNamesOnlyWhatTheCallerCanSeeInOneRead(t *testing.T) {
 	names := store.AuditNames{Users: map[model.UserID]string{actor: "Ada Admin"}}
 	persistence := &auditListingStoreFake{events: &events, list: []*model.AuditEvent{enrolment, unitChange, signIn}, names: names}
 	users := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{rootID}, ActiveAt: model.TimeFromMillis(400)}
-	authorizer := &auditListingAuthorizerFake{
-		events: &events, scope: store.AuditVisibilityScope{InstitutionWide: true}, users: users,
-		grants: map[model.Action]access.AuthorizedScopeConstraint{
-			model.ActionAcademicUnitView: {AcademicUnitRootIDs: []model.AcademicUnitID{rootID}},
-			model.ActionClassView:        {ClassIDs: []model.ClassID{classID}},
+	options := world.options()
+	options.Now = func() time.Time { return time.UnixMilli(400) }
+	service, _, inv := auditListingService(t, &events, persistence, options, auditReader,
+		func(caller model.UserID) accesstest.Grant {
+			return unitGrant(caller, rootID, model.ActionUserView, model.ActionAcademicUnitView)
 		},
-	}
-	service := &Service{institutions: anyInstitution(), audits: persistence, authorizer: authorizer}
+		func(caller model.UserID) accesstest.Grant { return classGrant(caller, classID, model.ActionClassView) })
 
-	page, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10})
+	page, err := service.ListAuditEvents(context.Background(), inv, ListAuditEventsQuery{Limit: 10})
 	require.NoError(t, err)
+	// The User visibility reads the caller's grants twice, for user.view and
+	// class.members.view; academic_unit.view and class.view read them once
+	// each.
 	require.Equal(t, []string{
-		"authorize-view", "list-audits", "count-audits",
-		"user-visibility", "scopes-academic_unit.view", "scopes-class.view", "list-audit-names",
+		"grants", "decision:audit.view:success", "list-audits", "count-audits",
+		"grants", "grants", "grants", "grants", "list-audit-names",
 	}, events, "one name read per page, after the scopes that gate it")
 	require.Equal(t, []store.AuditNameOptions{{
 		UserIDs:             []model.UserID{actor, subject},
@@ -528,14 +496,12 @@ func TestAcademicAuditListingNamesNoSubject(t *testing.T) {
 		Status: model.AuditStatusSuccess, Parameters: []byte(`{"operation":"enroll","value":{}}`), IPAddress: "192.0.2.10",
 	}
 	persistence := &auditListingStoreFake{events: &events, list: []*model.AuditEvent{enrolment}}
-	service := &Service{institutions: anyInstitution(), audits: persistence, authorizer: &auditListingAuthorizerFake{
-		events: &events, scope: store.AuditVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{rootID}},
-		grants: map[model.Action]access.AuthorizedScopeConstraint{
-			model.ActionClassView: {AcademicUnitRootIDs: []model.AcademicUnitID{rootID}},
-		},
-	}}
+	service, _, inv := auditListingService(t, &events, persistence, accesstest.Options{},
+		func(caller model.UserID) accesstest.Grant {
+			return unitGrant(caller, rootID, model.ActionAcademicAuditView, model.ActionClassView)
+		})
 
-	page, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10})
+	page, err := service.ListAuditEvents(context.Background(), inv, ListAuditEventsQuery{Limit: 10})
 	require.NoError(t, err)
 	require.True(t, page.Redacted)
 	require.Len(t, persistence.namesInputs, 1)

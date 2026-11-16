@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
@@ -30,13 +31,11 @@ func TestRetentionPolicyReadAuthorizesExactInstitutionAndReturnsCopy(t *testing.
 	require.NoError(t, err, "GetRetentionPolicy")
 	require.NotNil(t, result, "GetRetentionPolicy")
 	require.Equal(t, fixture.policies.policy, result, "GetRetentionPolicy")
-	require.Equal(t, model.ActionRetentionPolicyView, fixture.authorization.action, "authorized")
-	require.Equal(t, model.Resource{Type: model.ResourceInstitution, ID: fixture.institution.ID.String()}, fixture.authorization.resource, "authorized")
+	require.Equal(t, []string{"retention_policy.view institution:" + fixture.institution.ID.String() + " success"}, decisions(fixture.access), "authorized")
 	result.SubmissionRetentionDays = 7
 	require.Equal(t, 0, fixture.policies.policy.SubmissionRetentionDays, "read result shares mutable Store policy")
-	fixture.authorization.err = apperror.New("authorization.denied")
 	fixture.policies.getCalls = 0
-	result, err = application.GetRetentionPolicy(t.Context(), fixture.inv)
+	result, err = application.GetRetentionPolicy(t.Context(), fixture.stranger)
 	require.Nil(t, result, "denied read = %#v, %v; Store calls", result, err)
 	require.True(t, apperror.Is(err, "authorization.denied"), "denied read = %#v, %v; Store calls", result, err)
 	require.Equal(t, 0, fixture.policies.getCalls, "denied read = %#v, %v; Store calls", result, err)
@@ -86,7 +85,7 @@ func TestRetentionPolicyReplacementRequiresStrongRecentSessionBeforeWork(t *test
 			result, err := fixture.service.ReplaceRetentionPolicy(t.Context(), invocation.New(principal, model.RequestMetadata{}), retentionPolicyCommand())
 			require.Nil(t, result, "unassured replacement = %#v, %v; authorization calls", result, err)
 			require.True(t, apperror.Is(err, test.code), "unassured replacement = %#v, %v; authorization calls", result, err)
-			require.Equal(t, 0, fixture.authorization.calls, "unassured replacement = %#v, %v; authorization calls", result, err)
+			require.Empty(t, fixture.access.Audits.Decisions(), "unassured replacement = %#v, %v; authorization calls", result, err)
 			require.Nil(t, fixture.policies.replaceInput, "unassured replacement = %#v, %v; authorization calls", result, err)
 			require.Empty(t, fixture.audit.attempt.Operation, "unassured replacement = %#v, %v; authorization calls", result, err)
 		})
@@ -100,9 +99,7 @@ func TestRetentionPolicyReplacementRejectsInvalidIntentBeforeAuditAndStore(t *te
 		alter func(*retentionPolicyFixture, *ReplaceRetentionPolicyCommand)
 		code  string
 	}{
-		{"authorization denied", func(f *retentionPolicyFixture, _ *ReplaceRetentionPolicyCommand) {
-			f.authorization.err = apperror.New("authorization.denied")
-		}, "authorization.denied"},
+		{"authorization denied", func(f *retentionPolicyFixture, _ *ReplaceRetentionPolicyCommand) { f.inv = f.stranger }, "authorization.denied"},
 		{"missing revision", func(_ *retentionPolicyFixture, c *ReplaceRetentionPolicyCommand) { c.ExpectedRevision = 0 }, "retention_policy.invalid"},
 		{"negative period", func(_ *retentionPolicyFixture, c *ReplaceRetentionPolicyCommand) {
 			c.Settings.SubmissionRetentionDays = -1
@@ -139,8 +136,7 @@ func TestRetentionPolicyReplacementPassesAtomicAuditAndIdempotency(t *testing.T)
 	require.NotNil(t, result, "replace")
 	require.Equal(t, next, result, "replace")
 	resource := model.Resource{Type: model.ResourceInstitution, ID: fixture.institution.ID.String()}
-	require.Equal(t, model.ActionRetentionPolicyManage, fixture.authorization.action)
-	require.Equal(t, resource, fixture.authorization.resource)
+	require.Equal(t, []string{"retention_policy.manage institution:" + resource.ID + " success"}, decisions(fixture.access))
 	require.Equal(t, model.ActionRetentionPolicyManage, fixture.audit.attempt.Action)
 	require.Equal(t, resource, fixture.audit.attempt.Resource)
 	require.Equal(t, model.RoleScopeInstitution, fixture.audit.attempt.ScopeType)
@@ -179,7 +175,7 @@ func TestRetentionPolicyReplacementReplayAndNoOpUseStoreOutcome(t *testing.T) {
 		require.Equal(t, retained, result, "replayed=%t: result", replay)
 		require.Equal(t, 0, fixture.policies.getCalls, "replayed=%t: result", replay)
 		require.Equal(t, model.AuditEventID(fixture.audit.beginID), fixture.policies.replaceInput.AuditEventID, "replayed=%t: result", replay)
-		require.Equal(t, 1, fixture.authorization.calls, "replayed=%t: result", replay)
+		require.Len(t, fixture.access.Audits.Decisions(), 1, "replayed=%t: result", replay)
 	}
 }
 
@@ -303,13 +299,17 @@ func TestRetentionPolicyConstructionRejectsIncompleteDependencies(t *testing.T) 
 }
 
 type retentionPolicyFixture struct {
-	service       *Service
-	policies      *retentionPolicyStoreFake
-	authorization *resourceAuthorizerFake
-	audit         *accessPolicyAuditFake
-	institution   *model.Institution
-	inv           invocation.Invocation
-	at            time.Time
+	service  *Service
+	policies *retentionPolicyStoreFake
+	access   *accesstest.Fixture
+	audit    *accessPolicyAuditFake
+	// institution is the Service's own Institution. The authorizer resolves
+	// any Institution identifier to its fixture's, so a test may replace it.
+	institution *model.Institution
+	inv         invocation.Invocation
+	// stranger is a caller with the same assurance who holds no grant.
+	stranger invocation.Invocation
+	at       time.Time
 }
 
 func newRetentionPolicyFixture(t *testing.T) retentionPolicyFixture {
@@ -318,15 +318,17 @@ func newRetentionPolicyFixture(t *testing.T) retentionPolicyFixture {
 	institution := &model.Institution{ID: model.NewInstitutionID()}
 	policy := model.NewInitialRetentionPolicy(institution.ID, at.Add(-time.Hour))
 	policies := &retentionPolicyStoreFake{policy: policy, result: &store.RetentionPolicyReplacementResult{Policy: policy}}
-	authorization := &resourceAuthorizerFake{}
-	audit := &accessPolicyAuditFake{beginID: model.NewAuditEventID().String()}
-	service := &Service{retentionPolicies: policies, retention: &retentionLifecycleFake{}, institutions: &institutionStoreFake{institution: institution},
-		authorizer: authorization, auditor: audit, recentAuthenticationTTL: time.Minute, now: func() time.Time { return at }}
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		AuthenticatedAt: at, MFACompletedAt: model.OptionalTimeFrom(at), ClientType: model.SessionClientWeb}
-	return retentionPolicyFixture{service: service, policies: policies, authorization: authorization, audit: audit, institution: institution,
-		inv: invocation.New(principal, model.RequestMetadata{RequestID: "retention-policy"}), at: at}
+	access := grantedAccess(t, nil, institutionGrant(principal.UserID,
+		model.ActionRetentionPolicyView, model.ActionRetentionPolicyManage, model.ActionRetentionCleanupManage))
+	audit := &accessPolicyAuditFake{beginID: model.NewAuditEventID().String()}
+	service := &Service{retentionPolicies: policies, retention: &retentionLifecycleFake{}, institutions: &institutionStoreFake{institution: institution},
+		authorizer: access.Authorizer, auditor: audit, recentAuthenticationTTL: time.Minute, now: func() time.Time { return at }}
+	inv := invocation.New(principal, model.RequestMetadata{RequestID: "retention-policy"})
+	return retentionPolicyFixture{service: service, policies: policies, access: access, audit: audit, institution: institution,
+		inv: inv, stranger: strangerTo(inv), at: at}
 }
 
 func retentionPolicyCommand() ReplaceRetentionPolicyCommand {
@@ -353,20 +355,4 @@ func (s *retentionPolicyStoreFake) Get(context.Context) (*model.RetentionPolicy,
 func (s *retentionPolicyStoreFake) Replace(_ context.Context, input *store.RetentionPolicyReplacement, command *store.CommandIdempotency) (*store.RetentionPolicyReplacementResult, error) {
 	s.replaceInput, s.command = input, command
 	return s.result, s.replaceErr
-}
-
-// resourceAuthorizerFake stands for *access.Authorizer where a use case
-// authorizes one Action on the Institution, recording the last decision.
-type resourceAuthorizerFake struct {
-	Authorizer
-	action   model.Action
-	resource model.Resource
-	calls    int
-	err      error
-}
-
-func (a *resourceAuthorizerFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource) error {
-	a.action, a.resource = action, resource
-	a.calls++
-	return a.err
 }

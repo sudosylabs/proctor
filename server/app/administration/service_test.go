@@ -9,9 +9,11 @@ package administration
 
 import (
 	"context"
+	"testing"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
@@ -93,6 +95,148 @@ func selfAuditSessionInvocation() invocation.Invocation {
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password",
 		AuthenticationStrength: model.AuthenticationSingleFactor, AuthenticatedAt: at, ClientType: model.SessionClientWeb,
 	}, model.RequestMetadata{RequestID: "self-audit"})
+}
+
+// newCaller returns a signed-in caller and the invocation it makes. The real
+// authorizer refuses a zero Principal.
+func newCaller() (model.Principal, invocation.Invocation) {
+	inv := selfAuditSessionInvocation()
+	return inv.Principal(), inv
+}
+
+// accessWith builds the real authorizer and auditor the options describe and
+// places what they do in events: "grants" for each read of the caller's Role
+// Bindings and "decision:<action>:<status>" for a recorded decision. A nil
+// events drops them.
+func accessWith(t testing.TB, events *[]string, options accesstest.Options) *accesstest.Fixture {
+	t.Helper()
+	options.Observe = func(event string) {
+		if events != nil {
+			*events = append(*events, event)
+		}
+	}
+	return accesstest.New(t, options)
+}
+
+// grantedAccess builds the real authorizer over the grants alone.
+func grantedAccess(t testing.TB, events *[]string, grants ...accesstest.Grant) *accesstest.Fixture {
+	t.Helper()
+	return accessWith(t, events, accesstest.Options{Grants: grants})
+}
+
+// institutionGrant grants the actions Institution-wide.
+func institutionGrant(userID model.UserID, actions ...model.Action) accesstest.Grant {
+	return accesstest.Grant{UserID: userID, Actions: actions}
+}
+
+// unitGrant grants the actions in one Academic Unit and its descendants.
+func unitGrant(userID model.UserID, unitID model.AcademicUnitID, actions ...model.Action) accesstest.Grant {
+	return accesstest.Grant{UserID: userID, Actions: actions, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String()}
+}
+
+// classGrant grants the actions in one Class.
+func classGrant(userID model.UserID, classID model.ClassID, actions ...model.Action) accesstest.Grant {
+	return accesstest.Grant{UserID: userID, Actions: actions, ScopeType: model.RoleScopeClass, ScopeID: classID.String()}
+}
+
+// strangerTo is the invocation of another User with the same credential
+// and assurance as inv, who holds no grant.
+func strangerTo(inv invocation.Invocation) invocation.Invocation {
+	principal := inv.Principal()
+	principal.UserID = model.NewUserID()
+	return invocation.New(principal, inv.RequestMetadata())
+}
+
+// recordedDecision is one authorization decision the real auditor recorded.
+type recordedDecision struct {
+	action    model.Action
+	resource  model.Resource
+	scopeType model.RoleScopeType
+	scopeID   string
+	allowed   bool
+}
+
+// recordedDecisions returns the decisions the fixture recorded, in order.
+func recordedDecisions(fixture *accesstest.Fixture) []recordedDecision {
+	var decisions []recordedDecision
+	for _, event := range fixture.Audits.Decisions() {
+		decisions = append(decisions, recordedDecision{
+			action: model.Action(event.Action), resource: event.Resource,
+			scopeType: event.ScopeType, scopeID: event.ScopeID, allowed: event.Status == model.AuditStatusSuccess,
+		})
+	}
+	return decisions
+}
+
+// decisions describes each recorded authorization decision as
+// "<action> <resource type>:<resource id> <status>".
+func decisions(fixture *accesstest.Fixture) []string {
+	var described []string
+	for _, event := range fixture.Audits.Decisions() {
+		described = append(described, event.Action+" "+string(event.Resource.Type)+":"+event.Resource.ID+" "+string(event.Status))
+	}
+	return described
+}
+
+// classWorld is one live Class the real authorizer resolves: it sits in an
+// Academic Unit and an Institution-owned Academic Period.
+type classWorld struct {
+	unitID model.AcademicUnitID
+	class  *model.Class
+	period *model.AcademicPeriod
+}
+
+func newClassWorld() classWorld {
+	period := &model.AcademicPeriod{
+		ID: model.NewAcademicPeriodID(), Owner: model.NewInstitutionAcademicPeriodOwner(model.NewInstitutionID()),
+		StartsAt: model.TimeFromMillis(0), EndsAt: model.TimeFromMillis(1_000_000),
+	}
+	return classWorld{
+		unitID: model.NewAcademicUnitID(),
+		class:  &model.Class{ID: model.NewClassID(), AcademicPeriodID: period.ID, DisplayName: "Class"},
+		period: period,
+	}
+}
+
+// options describe the world to accesstest with the grants.
+func (w classWorld) options(grants ...accesstest.Grant) accesstest.Options {
+	return accesstest.Options{
+		Grants:          grants,
+		Units:           []*model.AcademicUnit{{ID: w.unitID, Name: "unit"}},
+		Classes:         worldClasses{world: w},
+		AcademicPeriods: worldPeriods{world: w},
+	}
+}
+
+type worldClasses struct {
+	store.ClassStore
+	world classWorld
+}
+
+func (c worldClasses) Get(_ context.Context, id model.ClassID) (*model.Class, error) {
+	if id != c.world.class.ID {
+		return nil, store.NewErrNotFound("class", id.String())
+	}
+	return c.world.class, nil
+}
+
+func (c worldClasses) GetAcademicUnitID(_ context.Context, id model.ClassID) (model.AcademicUnitID, error) {
+	if id != c.world.class.ID {
+		return "", store.NewErrNotFound("class", id.String())
+	}
+	return c.world.unitID, nil
+}
+
+type worldPeriods struct {
+	store.AcademicPeriodStore
+	world classWorld
+}
+
+func (p worldPeriods) Get(_ context.Context, id model.AcademicPeriodID) (*model.AcademicPeriod, error) {
+	if id != p.world.period.ID {
+		return nil, store.NewErrNotFound("academic_period", id.String())
+	}
+	return p.world.period, nil
 }
 
 type institutionAuditorFake struct {

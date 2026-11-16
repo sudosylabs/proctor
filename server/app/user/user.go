@@ -23,40 +23,10 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-// Authorizer is the part of *access.Authorizer the User use cases call.
-type Authorizer interface {
-	AuthorizeUserSearch(context.Context, invocation.Invocation) (store.UserVisibilityScope, error)
-	// RoleBindingViewScope reports, without recording a decision, the scopes
-	// in which the caller holds role_binding.view at the instant. It narrows
-	// what a directory summary shows; it never admits a request.
-	RoleBindingViewScope(context.Context, invocation.Invocation, time.Time) (store.UserVisibilityScope, error)
-	// CanViewRoles reports, without recording a decision, whether the caller
-	// holds Institution-wide role.view, which is how a caller sees Roles.
-	CanViewRoles(context.Context, invocation.Invocation) (bool, error)
-	// AuthorizeProfileRead reports fullProfile when the caller reads its own
-	// profile or holds institution-wide User visibility; a scoped grant reads
-	// the limited profile.
-	AuthorizeProfileRead(context.Context, invocation.Invocation, model.UserID) (access.ProfileReadAuthorization, error)
-	AuthorizeProfilePictureWrite(context.Context, invocation.Invocation, model.UserID) error
-	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
-}
-
-// Auditor records the attempt and failure of each audited mutation.
-type Auditor interface {
-	access.MutationAuditor
-}
-
-// SettingsAuditor prepares the audit event that commits with a settings
-// replacement.
-type SettingsAuditor interface {
-	PrepareReplacement(context.Context, access.UserSettingsAuditInput) (*model.AuditEvent, error)
-}
 
 // DefaultPictureJobs proposes the durable generation of a User's default
 // profile picture.
@@ -69,17 +39,13 @@ type DefaultPictureJobs interface {
 // after a change commits. DefaultJobs may be nil, which leaves default
 // pictures to be rendered on every read.
 type Dependencies struct {
-	Store           store.Catalog
-	Authorizer      Authorizer
-	Auditor         Auditor
-	SettingsAuditor SettingsAuditor
-	Publisher       realtime.Publisher
-	DefaultJobs     DefaultPictureJobs
-	Uploads         ProfilePictureUploadFiles
-	Reads           ProfilePictureReadFiles
-	Fallback        DefaultProfilePictureRenderFiles
-	Defaults        DefaultProfilePictureGenerationFiles
-	Now             func() time.Time
+	Store       store.Catalog
+	Authorizer  *access.Authorizer
+	Auditor     *access.Auditor
+	Publisher   realtime.Publisher
+	DefaultJobs DefaultPictureJobs
+	Pictures    PictureFiles
+	Now         func() time.Time
 }
 
 // Service holds every User profile, directory, settings and profile-picture
@@ -91,15 +57,12 @@ type Service struct {
 	files        store.FileStore
 	settings     store.UserSettingsStore
 
-	authorizer      Authorizer
-	auditor         Auditor
-	settingsAuditor SettingsAuditor
+	authorizer      *access.Authorizer
+	auditor         access.MutationAuditAdapter
+	settingsAuditor access.UserSettingsAuditAdapter
 	publisher       realtime.Publisher
 	defaultJobs     DefaultPictureJobs
-	uploads         ProfilePictureUploadFiles
-	reads           ProfilePictureReadFiles
-	fallback        DefaultProfilePictureRenderFiles
-	defaults        DefaultProfilePictureGenerationFiles
+	pictures        PictureFiles
 	now             func() time.Time
 }
 
@@ -111,8 +74,11 @@ func New(deps Dependencies) (*Service, error) {
 	if deps.Store.UserSettings() == nil {
 		return nil, errors.New("user settings store is required")
 	}
-	if deps.SettingsAuditor == nil {
-		return nil, errors.New("user settings audit preparer is required")
+	if deps.Authorizer == nil {
+		return nil, errors.New("user authorizer is required")
+	}
+	if deps.Auditor == nil {
+		return nil, errors.New("user auditor is required")
 	}
 	if deps.Publisher == nil {
 		return nil, errors.New("user realtime publisher is required")
@@ -128,14 +94,11 @@ func New(deps Dependencies) (*Service, error) {
 		files:           deps.Store.File(),
 		settings:        deps.Store.UserSettings(),
 		authorizer:      deps.Authorizer,
-		auditor:         deps.Auditor,
-		settingsAuditor: deps.SettingsAuditor,
+		auditor:         deps.Auditor.MutationAudit(),
+		settingsAuditor: deps.Auditor.UserSettingsAudit(),
 		publisher:       deps.Publisher,
 		defaultJobs:     deps.DefaultJobs,
-		uploads:         deps.Uploads,
-		reads:           deps.Reads,
-		fallback:        deps.Fallback,
-		defaults:        deps.Defaults,
+		pictures:        deps.Pictures,
 		now:             deps.Now,
 	}, nil
 }

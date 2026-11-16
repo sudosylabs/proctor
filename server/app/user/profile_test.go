@@ -17,6 +17,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
@@ -96,7 +97,7 @@ func TestCurrentUserContextReturnsBoundedNavigationProjection(t *testing.T) {
 		UnresolvedAttempt: attempt,
 	}
 	persistence := &userStoreFake{events: &[]string{}, currentContext: persisted}
-	application := newProfileService(persistence, nil, nil, nil, time.Now)
+	application := newProfileService(t, persistence, nil, accessWith(t, nil, persistence), time.Now)
 	principal := userSettingsSessionPrincipal(time.Now())
 	principal.UserID = userID
 	principal.ClientType = model.SessionClientDesktop
@@ -132,7 +133,7 @@ func TestCurrentUserContextReturnsBoundedNavigationProjection(t *testing.T) {
 func TestCurrentUserContextRejectsPersonalAccessTokensWithoutReading(t *testing.T) {
 	t.Parallel()
 	persistence := &userStoreFake{events: &[]string{}}
-	application := newProfileService(persistence, nil, nil, nil, time.Now)
+	application := newProfileService(t, persistence, nil, accessWith(t, nil, persistence), time.Now)
 	principal := model.Principal{
 		UserID: model.NewUserID(), CredentialID: model.PrincipalCredentialID(model.NewPersonalAccessTokenID()),
 		CredentialType: model.CredentialPersonalAccessToken, AuthenticationMethod: "personal_access_token",
@@ -148,10 +149,11 @@ func TestUserProfileUpdateIsAuthorizedAndAuditAtomic(t *testing.T) {
 	events := []string{}
 	current := &model.User{ID: model.NewUserID(), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), Revision: 3, Username: "student", Email: "old@example.edu", EmailVerified: true, DisplayName: "Student", Locale: "en", Timezone: "UTC"}
 	persistence := &userStoreFake{events: &events, current: current}
-	auditor := &profilePictureAuditorFake{events: &events, beginID: model.NewID()}
-	service := newProfileService(persistence, nil, &authorizerFake{events: &events}, auditor, func() time.Time { return time.UnixMilli(500) })
+	caller, inv := newCaller()
+	authorization := accessWith(t, &events, persistence, institutionGrant(caller.UserID, model.ActionUserManage))
+	service := newProfileService(t, persistence, nil, authorization, func() time.Time { return time.UnixMilli(500) })
 	displayName := "Updated Student"
-	updated, err := service.UpdateUserProfile(context.Background(), invocation.Invocation{}, UpdateUserProfileCommand{ID: current.ID, DisplayName: &displayName})
+	updated, err := service.UpdateUserProfile(context.Background(), inv, UpdateUserProfileCommand{ID: current.ID, DisplayName: &displayName})
 	require.NoError(t, err)
 	require.Equal(t, current.Email, updated.Email, "updated/input = %#v / %#v", updated, persistence.updateInput)
 	require.True(t, updated.EmailVerified, "updated/input = %#v / %#v", updated, persistence.updateInput)
@@ -163,40 +165,39 @@ func TestUserProfileUpdateIsAuthorizedAndAuditAtomic(t *testing.T) {
 	require.Equal(t, int64(4), updated.Revision, "updated/input = %#v / %#v", updated, persistence.updateInput)
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
 	// begins before the durable write.
-	require.Equal(t, []string{"authorize-manage", "get-user", "audit-begin", "store-update"}, events)
+	require.Equal(t, []string{"get-user", "grants", "decision:user.manage:success", "get-user", "audit-begin:user.manage", "store-update"}, events)
 }
 
 func TestUserProfileSearchReturnsEmptyCollection(t *testing.T) {
 	t.Parallel()
 	events := []string{}
 	persistence := &userStoreFake{events: &events}
-	service := newProfileService(persistence, nil, &authorizerFake{events: &events}, &profilePictureAuditorFake{events: &events}, time.Now)
-	users, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{})
+	caller, inv := newCaller()
+	unitID := model.NewAcademicUnitID()
+	service := newProfileService(t, persistence, nil, accessWith(t, &events, persistence, unitGrant(caller.UserID, unitID, model.ActionUserView)), time.Now)
+	users, err := service.SearchUsers(context.Background(), inv, SearchUsersQuery{})
 	require.NoError(t, err)
 	require.NotNil(t, users.Items, "users")
 	require.Empty(t, users.Items, "users")
-	require.Equal(t, []model.ClassID{"class-a"}, persistence.listOptions.Visibility.ClassIDs)
+	require.Equal(t, []model.AcademicUnitID{unitID}, persistence.listOptions.Visibility.AcademicUnitRootIDs)
 }
 
 func TestScopedUserSearchCannotRequestDisabledUsers(t *testing.T) {
 	t.Parallel()
+	caller, inv := newCaller()
 	for _, test := range []struct {
 		name  string
-		scope store.UserVisibilityScope
+		grant accesstest.Grant
 	}{
-		{name: "academic unit", scope: store.UserVisibilityScope{
-			AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.TimeFromMillis(100),
-		}},
-		{name: "institution class members", scope: store.UserVisibilityScope{
-			ClassMemberInstitutionWide: true, ActiveAt: model.TimeFromMillis(100),
-		}},
+		{name: "academic unit", grant: unitGrant(caller.UserID, model.NewAcademicUnitID(), model.ActionUserView)},
+		{name: "institution class members", grant: institutionGrant(caller.UserID, model.ActionClassMembersView)},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			for _, includeDisabled := range []bool{false, true} {
 				events := []string{}
 				persistence := &userStoreFake{events: &events}
-				service := newProfileService(persistence, nil, &authorizerFake{events: &events, searchScope: test.scope}, &profilePictureAuditorFake{events: &events}, time.Now)
-				_, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{
+				service := newProfileService(t, persistence, nil, accessWith(t, &events, persistence, test.grant), time.Now)
+				_, err := service.SearchUsers(context.Background(), inv, SearchUsersQuery{
 					Limit: 10, IncludeDisabled: includeDisabled,
 				})
 				require.NoError(t, err)
@@ -207,8 +208,8 @@ func TestScopedUserSearchCannotRequestDisabledUsers(t *testing.T) {
 
 	events := []string{}
 	persistence := &userStoreFake{events: &events}
-	service := newProfileService(persistence, nil, &authorizerFake{events: &events, searchScope: store.UserVisibilityScope{InstitutionWide: true}}, &profilePictureAuditorFake{events: &events}, time.Now)
-	_, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{
+	service := newProfileService(t, persistence, nil, accessWith(t, &events, persistence, institutionGrant(caller.UserID, model.ActionUserView)), time.Now)
+	_, err := service.SearchUsers(context.Background(), inv, SearchUsersQuery{
 		Limit: 10, IncludeDisabled: true,
 	})
 	require.NoError(t, err)
@@ -225,8 +226,10 @@ func TestScopedUserSearchReturnsOnlySafeDirectoryFields(t *testing.T) {
 		DisabledAt: model.OptionalTimeFromMillis(300),
 	}
 	persistence := &userStoreFake{events: &events, current: user, countTotal: 1}
-	service := newProfileService(&userProfileSearchStoreFake{userStoreFake: persistence, values: []*model.User{user}}, nil, &authorizerFake{events: &events, searchScope: store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.TimeFromMillis(100)}}, &profilePictureAuditorFake{events: &events}, time.Now)
-	users, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Limit: 10})
+	caller, inv := newCaller()
+	authorization := accessWith(t, &events, persistence, unitGrant(caller.UserID, model.NewAcademicUnitID(), model.ActionUserView))
+	service := newProfileService(t, &userProfileSearchStoreFake{userStoreFake: persistence, values: []*model.User{user}}, nil, authorization, time.Now)
+	users, err := service.SearchUsers(context.Background(), inv, SearchUsersQuery{Limit: 10})
 	require.NoError(t, err)
 	require.Len(t, users.Items, 1)
 	projected := users.Items[0].User
@@ -259,12 +262,14 @@ func (s *userProfileSearchStoreFake) List(_ context.Context, options store.UserL
 
 func TestUserSearchNarrowsTheCallerVisibilityByAffiliationAndUnit(t *testing.T) {
 	t.Parallel()
-	scope := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.TimeFromMillis(100)}
+	scope := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: directoryInstant}
 	unitID := model.NewAcademicUnitID()
 	events := []string{}
 	persistence := &userStoreFake{events: &events}
-	service := newProfileService(persistence, nil, &authorizerFake{events: &events, searchScope: scope}, &profilePictureAuditorFake{events: &events}, time.Now)
-	_, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{
+	caller, inv := newCaller()
+	authorization := accessWith(t, &events, persistence, unitGrant(caller.UserID, scope.AcademicUnitRootIDs[0], model.ActionUserView))
+	service := newProfileService(t, persistence, nil, authorization, time.Now)
+	_, err := service.SearchUsers(context.Background(), inv, SearchUsersQuery{
 		Limit: 10, AcademicUnitID: unitID,
 		Affiliations: []model.AffiliationKind{model.AffiliationTeacher, model.AffiliationStaff, model.AffiliationTeacher},
 	})
@@ -287,8 +292,10 @@ func TestUserSearchRejectsInvalidDirectoryFiltersBeforeAuthorization(t *testing.
 			t.Parallel()
 			events := []string{}
 			persistence := &userStoreFake{events: &events}
-			service := newProfileService(persistence, nil, &authorizerFake{events: &events}, &profilePictureAuditorFake{events: &events}, time.Now)
-			_, err := service.SearchUsers(context.Background(), invocation.Invocation{}, test.query)
+			caller, inv := newCaller()
+			authorization := accessWith(t, &events, persistence, institutionGrant(caller.UserID, model.ActionUserView))
+			service := newProfileService(t, persistence, nil, authorization, time.Now)
+			_, err := service.SearchUsers(context.Background(), inv, test.query)
 			var appErr *apperror.Error
 			require.ErrorAs(t, err, &appErr)
 			require.Equal(t, "request.invalid", appErr.Code())
@@ -303,14 +310,15 @@ func TestUserProfileUpdateRejectsControlCharacterNamesBeforeAudit(t *testing.T) 
 	events := []string{}
 	current := &model.User{ID: model.NewUserID(), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), Revision: 3, Username: "student", Email: "old@example.edu", EmailVerified: true, DisplayName: "Student", Locale: "en", Timezone: "UTC"}
 	persistence := &userStoreFake{events: &events, current: current}
-	auditor := &profilePictureAuditorFake{events: &events, beginID: model.NewID()}
-	service := newProfileService(persistence, nil, &authorizerFake{events: &events}, auditor, func() time.Time { return time.UnixMilli(500) })
+	caller, inv := newCaller()
+	authorization := accessWith(t, &events, persistence, institutionGrant(caller.UserID, model.ActionUserManage))
+	service := newProfileService(t, persistence, nil, authorization, func() time.Time { return time.UnixMilli(500) })
 	displayName := "Student\r\nBcc: other@example.test"
-	_, err := service.UpdateUserProfile(context.Background(), invocation.Invocation{}, UpdateUserProfileCommand{ID: current.ID, DisplayName: &displayName})
+	_, err := service.UpdateUserProfile(context.Background(), inv, UpdateUserProfileCommand{ID: current.ID, DisplayName: &displayName})
 	failure, ok := apperror.As(err)
 	require.True(t, ok)
 	require.Equal(t, "user.invalid", failure.Code())
-	require.Equal(t, []string{"authorize-manage", "get-user"}, events)
+	require.Equal(t, []string{"get-user", "grants", "decision:user.manage:success", "get-user"}, events, "the invalid name is refused before the audit begins")
 }
 
 type userDirectoryRoleBindingStoreFake struct {
@@ -328,7 +336,7 @@ func (s *userDirectoryRoleBindingStoreFake) ListVisibleSummariesByUsers(_ contex
 
 func TestUserSearchSummarizesThePageAtTheVisibilityInstant(t *testing.T) {
 	t.Parallel()
-	activeAt := model.TimeFromMillis(100)
+	activeAt := directoryInstant
 	unitRoot := model.NewAcademicUnitID()
 	first := &model.User{ID: model.NewUserID(), Username: "first"}
 	second := &model.User{ID: model.NewUserID(), Username: "second"}
@@ -340,26 +348,27 @@ func TestUserSearchSummarizesThePageAtTheVisibilityInstant(t *testing.T) {
 		RoleID: model.NewRoleID(), DisplayName: "Reviewer", ScopeType: model.RoleScopeAcademicUnit,
 		ScopeID: unitRoot.String(), ScopeName: "Engineering",
 	}}}
-	roleScope := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{unitRoot}}
 	events := []string{}
 	persistence := &userStoreFake{events: &events, countTotal: 2, summaries: []store.UserDirectorySummary{memberships}}
 	bindings := &userDirectoryRoleBindingStoreFake{events: &events, summaries: []store.UserRoleBindingSummary{roles}}
-	authorization := &authorizerFake{events: &events, roleScope: roleScope, searchScope: store.UserVisibilityScope{
-		AcademicUnitRootIDs: []model.AcademicUnitID{unitRoot}, ActiveAt: activeAt,
-	}}
-	service := newProfileService(&userProfileSearchStoreFake{userStoreFake: persistence, values: []*model.User{first, second}},
-		bindings, authorization, &profilePictureAuditorFake{events: &events}, time.Now)
+	caller, inv := newCaller()
+	authorization := accessWith(t, &events, persistence, unitGrant(caller.UserID, unitRoot, model.ActionUserView, model.ActionRoleBindingView))
+	service := newProfileService(t, &userProfileSearchStoreFake{userStoreFake: persistence, values: []*model.User{first, second}},
+		bindings, authorization, time.Now)
 
-	page, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Limit: 10})
+	page, err := service.SearchUsers(context.Background(), inv, SearchUsersQuery{Limit: 10})
 	require.NoError(t, err)
-	// Contract: the summary reads follow the counted page, with the Role
-	// Binding scope resolved once between them.
-	require.Equal(t, []string{"authorize-search", "list-users", "count-users", "summarize-users", "role-binding-view-scope", "summarize-role-bindings"}, events)
+	// Contract: the search is authorized and recorded before anything is
+	// read; the summary reads follow the counted page, with the caller's
+	// role_binding.view grants read once between them.
+	require.Equal(t, []string{
+		"grants", "grants", "decision:user.search:success", "list-users", "count-users", "summarize-users",
+		"grants", "summarize-role-bindings",
+	}, events)
 	require.Equal(t, []model.UserID{first.ID, second.ID}, persistence.summaryOptions.UserIDs)
 	require.Equal(t, persistence.listOptions.Visibility, persistence.summaryOptions.Visibility, "the summary reads the page's visibility")
 	require.Equal(t, userDirectorySummaryAffiliations, persistence.summaryOptions.AffiliationLimit)
 	require.Equal(t, userDirectorySummaryAcademicUnits, persistence.summaryOptions.AcademicUnitLimit)
-	require.Equal(t, activeAt, authorization.roleScopeAt, "role_binding.view is resolved at the page's instant")
 	require.Equal(t, store.RoleBindingSummaryOptions{
 		UserIDs: []model.UserID{first.ID, second.ID}, Limit: userDirectorySummaryRoles,
 		Visibility: store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{unitRoot}, ActiveAt: activeAt},
@@ -375,29 +384,28 @@ func TestUserSearchOmitsRolesWithoutRoleBindingView(t *testing.T) {
 	user := &model.User{ID: model.NewUserID(), Username: "first"}
 	events := []string{}
 	persistence := &userStoreFake{events: &events, countTotal: 1}
-	service := newProfileService(&userProfileSearchStoreFake{userStoreFake: persistence, values: []*model.User{user}},
+	caller, inv := newCaller()
+	service := newProfileService(t, &userProfileSearchStoreFake{userStoreFake: persistence, values: []*model.User{user}},
 		&userDirectoryRoleBindingStoreFake{events: &events},
-		&authorizerFake{events: &events, searchScope: store.UserVisibilityScope{InstitutionWide: true, ActiveAt: model.TimeFromMillis(100)}},
-		&profilePictureAuditorFake{events: &events}, time.Now)
+		accessWith(t, &events, persistence, institutionGrant(caller.UserID, model.ActionUserView)), time.Now)
 
-	page, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Limit: 10})
+	page, err := service.SearchUsers(context.Background(), inv, SearchUsersQuery{Limit: 10})
 	require.NoError(t, err)
 	require.Len(t, page.Items, 1)
 	require.Nil(t, page.Items[0].Roles, "a caller without role_binding.view reads no Role summary")
 	// Contract: without role_binding.view the Role Bindings are never read.
-	require.Equal(t, []string{"authorize-search", "list-users", "count-users", "summarize-users", "role-binding-view-scope"}, events)
+	require.Equal(t, []string{"grants", "grants", "decision:user.search:success", "list-users", "count-users", "summarize-users", "grants"}, events)
 }
 
 // newProfileService builds the Service over the User and Role Binding fakes of
-// a directory or profile test.
-func newProfileService(users store.UserStore, roleBindings store.RoleBindingStore, authorizer Authorizer, auditor Auditor, now func() time.Time) *Service {
+// a directory or profile test and the real authorizer of authorization.
+func newProfileService(t *testing.T, users store.UserStore, roleBindings store.RoleBindingStore, authorization *accesstest.Fixture, now func() time.Time) *Service {
+	t.Helper()
 	service, err := New(Dependencies{
 		Store:      &catalogFake{user: users, roleBinding: roleBindings, userSettings: &userSettingsStoreFake{}},
-		Authorizer: authorizer, Auditor: auditor, SettingsAuditor: &settingsAuditFake{}, Publisher: &realtimetest.Publisher{}, Now: now,
+		Authorizer: authorization.Authorizer, Auditor: authorization.Auditor, Publisher: &realtimetest.Publisher{}, Now: now,
 	})
-	if err != nil {
-		panic(err)
-	}
+	require.NoError(t, err)
 	return service
 }
 
@@ -406,11 +414,12 @@ func TestUserSearchCountsThroughTheListedOptions(t *testing.T) {
 	events := []string{}
 	user := &model.User{ID: model.NewUserID(), Username: "counted"}
 	persistence := &userStoreFake{events: &events, countTotal: store.MaximumListCount + 5}
-	scope := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.TimeFromMillis(100)}
-	service := newProfileService(&userProfileSearchStoreFake{userStoreFake: persistence, values: []*model.User{user}}, nil,
-		&authorizerFake{events: &events, searchScope: scope}, &profilePictureAuditorFake{events: &events}, time.Now)
+	caller, inv := newCaller()
+	authorization := accessWith(t, &events, persistence, unitGrant(caller.UserID, model.NewAcademicUnitID(), model.ActionUserView))
+	service := newProfileService(t, &userProfileSearchStoreFake{userStoreFake: persistence, values: []*model.User{user}}, nil,
+		authorization, time.Now)
 
-	first, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Query: "count", Limit: 10,
+	first, err := service.SearchUsers(context.Background(), inv, SearchUsersQuery{Query: "count", Limit: 10,
 		Affiliations: []model.AffiliationKind{model.AffiliationStudent}})
 	require.NoError(t, err)
 	require.Equal(t, paging.Total{Counted: true, Total: store.MaximumListCount, TotalIsLowerBound: true}, first.Total)
@@ -419,22 +428,23 @@ func TestUserSearchCountsThroughTheListedOptions(t *testing.T) {
 	require.Equal(t, store.MaximumListCount, persistence.countMaximum)
 	// Contract: authorization precedes the read, only the first page counts,
 	// and the summary reads follow the count.
-	require.Equal(t, []string{"authorize-search", "list-users", "count-users", "summarize-users", "role-binding-view-scope"}, events)
+	authorized := []string{"grants", "grants", "decision:user.search:success"}
+	require.Equal(t, append(slices.Clone(authorized), "list-users", "count-users", "summarize-users", "grants"), events)
 
 	events = events[:0]
-	later, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Query: "count", Limit: 10,
+	later, err := service.SearchUsers(context.Background(), inv, SearchUsersQuery{Query: "count", Limit: 10,
 		AfterUsername: user.Username, AfterID: user.ID})
 	require.NoError(t, err)
 	require.Equal(t, paging.Total{}, later.Total)
 	// Contract: a continued page authorizes and lists without counting.
-	require.Equal(t, []string{"authorize-search", "list-users", "summarize-users", "role-binding-view-scope"}, events)
+	require.Equal(t, append(slices.Clone(authorized), "list-users", "summarize-users", "grants"), events)
 
 	events = events[:0]
-	page, err := service.SearchUserPage(context.Background(), invocation.Invocation{}, SearchUsersQuery{Query: "count", Limit: 5})
+	page, err := service.SearchUserPage(context.Background(), inv, SearchUsersQuery{Query: "count", Limit: 5})
 	require.NoError(t, err)
 	require.Len(t, page.Items, 1)
 	// Contract: global search composes the uncounted directory read.
-	require.Equal(t, []string{"authorize-search", "list-users"}, events)
+	require.Equal(t, append(slices.Clone(authorized), "list-users"), events)
 }
 
 // TestUserSearchSortsByLastActivityOnlyForInstitutionWideViewers pins the
@@ -443,29 +453,31 @@ func TestUserSearchCountsThroughTheListedOptions(t *testing.T) {
 // nor infer it, while the other orders reach persistence unchanged.
 func TestUserSearchSortsByLastActivityOnlyForInstitutionWideViewers(t *testing.T) {
 	t.Parallel()
-	scoped := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.TimeFromMillis(100)}
+	caller, inv := newCaller()
+	scoped := unitGrant(caller.UserID, model.NewAcademicUnitID(), model.ActionUserView)
+	institution := institutionGrant(caller.UserID, model.ActionUserView)
 	for _, test := range []struct {
 		name    string
-		scope   store.UserVisibilityScope
+		grant   accesstest.Grant
 		order   store.UserOrder
 		allowed bool
 	}{
-		{name: "scoped last active", scope: scoped, order: store.UserOrderLastActive},
-		{name: "scoped class members last active", scope: store.UserVisibilityScope{ClassMemberInstitutionWide: true, ActiveAt: model.TimeFromMillis(100)}, order: store.UserOrderLastActive},
-		{name: "scoped name", scope: scoped, order: store.UserOrderName, allowed: true},
-		{name: "scoped created", scope: scoped, order: store.UserOrderCreated, allowed: true},
-		{name: "institution last active", scope: store.UserVisibilityScope{InstitutionWide: true}, order: store.UserOrderLastActive, allowed: true},
-		{name: "unknown order", scope: store.UserVisibilityScope{InstitutionWide: true}, order: "email"},
+		{name: "scoped last active", grant: scoped, order: store.UserOrderLastActive},
+		{name: "scoped class members last active", grant: institutionGrant(caller.UserID, model.ActionClassMembersView), order: store.UserOrderLastActive},
+		{name: "scoped name", grant: scoped, order: store.UserOrderName, allowed: true},
+		{name: "scoped created", grant: scoped, order: store.UserOrderCreated, allowed: true},
+		{name: "institution last active", grant: institution, order: store.UserOrderLastActive, allowed: true},
+		{name: "unknown order", grant: institution, order: "email"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			events := []string{}
 			persistence := &userStoreFake{events: &events}
-			service := newProfileService(persistence, nil, &authorizerFake{events: &events, searchScope: test.scope}, &profilePictureAuditorFake{events: &events}, time.Now)
-			_, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Limit: 10, Order: test.order, Descending: true})
+			service := newProfileService(t, persistence, nil, accessWith(t, &events, persistence, test.grant), time.Now)
+			_, err := service.SearchUsers(context.Background(), inv, SearchUsersQuery{Limit: 10, Order: test.order, Descending: true})
 			if !test.allowed {
 				require.True(t, apperror.Is(err, "request.invalid"), "%s: %v", test.name, err)
-				require.Equal(t, []string{"authorize-search"}, events, "a refused order reads nothing")
+				require.Equal(t, []string{"grants", "grants", "decision:user.search:success"}, events, "a refused order reads nothing")
 				return
 			}
 			require.NoError(t, err)
@@ -493,15 +505,15 @@ func (s *roleStoreFake) GetByIDs(_ context.Context, ids []model.RoleID) ([]*mode
 	return roles, nil
 }
 
-func newDirectoryFilterService(persistence *userStoreFake, roles *roleStoreFake, authorizer *authorizerFake) *Service {
+func newDirectoryFilterService(t *testing.T, persistence *userStoreFake, roles *roleStoreFake, grants ...accesstest.Grant) *Service {
+	t.Helper()
+	authorization := accessWith(t, persistence.events, persistence, grants...)
 	service, err := New(Dependencies{
 		Store:      &catalogFake{user: persistence, role: roles, userSettings: &userSettingsStoreFake{}},
-		Authorizer: authorizer, Auditor: &profilePictureAuditorFake{events: persistence.events}, SettingsAuditor: &settingsAuditFake{},
+		Authorizer: authorization.Authorizer, Auditor: authorization.Auditor,
 		Publisher: &realtimetest.Publisher{}, Now: func() time.Time { return model.TimeFromMillis(500) },
 	})
-	if err != nil {
-		panic(err)
-	}
+	require.NoError(t, err)
 	return service
 }
 
@@ -513,12 +525,15 @@ func newDirectoryFilterService(persistence *userStoreFake, roles *roleStoreFake,
 // empty; and incoherent combinations are refused before anything is read.
 func TestUserSearchAccountFiltersFollowTheDisabledAndActivityRules(t *testing.T) {
 	t.Parallel()
-	scoped := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.TimeFromMillis(100)}
-	institution := store.UserVisibilityScope{InstitutionWide: true}
+	caller, inv := newCaller()
+	scopedUnit := model.NewAcademicUnitID()
+	scoped := unitGrant(caller.UserID, scopedUnit, model.ActionUserView)
+	scopedVisibility := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{scopedUnit}, ActiveAt: directoryInstant}
+	institution := institutionGrant(caller.UserID, model.ActionUserView)
 	after, before := model.TimeFromMillis(1_000), model.TimeFromMillis(2_000)
 	for _, test := range []struct {
 		name      string
-		scope     store.UserVisibilityScope
+		scope     accesstest.Grant
 		query     SearchUsersQuery
 		field     string
 		authorize bool
@@ -546,7 +561,7 @@ func TestUserSearchAccountFiltersFollowTheDisabledAndActivityRules(t *testing.T)
 		{name: "scoped disabled", scope: scoped, query: SearchUsersQuery{State: AccountStateDisabled},
 			check: func(t *testing.T, options store.UserListOptions) {
 				require.True(t, options.OnlyDisabled, "the Store answers a scoped OnlyDisabled with no rows")
-				require.Equal(t, scoped, options.Visibility)
+				require.Equal(t, scopedVisibility, options.Visibility)
 			}},
 		{name: "active is the default", scope: institution, query: SearchUsersQuery{State: AccountStateActive},
 			check: func(t *testing.T, options store.UserListOptions) {
@@ -558,9 +573,9 @@ func TestUserSearchAccountFiltersFollowTheDisabledAndActivityRules(t *testing.T)
 			t.Parallel()
 			events := []string{}
 			persistence := &userStoreFake{events: &events}
-			service := newDirectoryFilterService(persistence, &roleStoreFake{events: &events}, &authorizerFake{events: &events, searchScope: test.scope})
+			service := newDirectoryFilterService(t, persistence, &roleStoreFake{events: &events}, test.scope)
 			test.query.Limit = 10
-			_, err := service.SearchUsers(context.Background(), invocation.Invocation{}, test.query)
+			_, err := service.SearchUsers(context.Background(), inv, test.query)
 			if test.field != "" {
 				var appErr *apperror.Error
 				require.ErrorAs(t, err, &appErr)
@@ -568,7 +583,7 @@ func TestUserSearchAccountFiltersFollowTheDisabledAndActivityRules(t *testing.T)
 				require.Equal(t, test.field, appErr.Fields()["field"])
 				want := []string{}
 				if test.authorize {
-					want = []string{"authorize-search"}
+					want = []string{"grants", "grants", "decision:user.search:success"}
 				}
 				require.Equal(t, want, events, "a refused filter reads nothing")
 				return
@@ -588,8 +603,20 @@ func TestUserSearchAccountFiltersFollowTheDisabledAndActivityRules(t *testing.T)
 func TestUserSearchRoleFilterRequiresVisibleRoles(t *testing.T) {
 	t.Parallel()
 	known, unknown := model.NewRoleID(), model.NewRoleID()
-	scoped := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.TimeFromMillis(100)}
-	roleScope := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.TimeFromMillis(100)}
+	caller, inv := newCaller()
+	scoped := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: directoryInstant}
+	roleScope := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: directoryInstant}
+	grants := func(rolesView bool) []accesstest.Grant {
+		grants := []accesstest.Grant{
+			unitGrant(caller.UserID, scoped.AcademicUnitRootIDs[0], model.ActionUserView),
+			unitGrant(caller.UserID, roleScope.AcademicUnitRootIDs[0], model.ActionRoleBindingView),
+		}
+		if rolesView {
+			grants = append(grants, institutionGrant(caller.UserID, model.ActionRoleView))
+		}
+		return grants
+	}
+	authorized := []string{"grants", "grants", "decision:user.search:success"}
 	tooMany := make([]model.RoleID, store.MaximumUserListRoles+1)
 	for index := range tooMany {
 		tooMany[index] = model.NewRoleID()
@@ -600,17 +627,17 @@ func TestUserSearchRoleFilterRequiresVisibleRoles(t *testing.T) {
 		rolesView bool
 		events    []string
 	}{
-		{name: "without role.view", roleIDs: []model.RoleID{known}, events: []string{"authorize-search", "can-view-roles"}},
-		{name: "unknown Role", roleIDs: []model.RoleID{known, unknown}, rolesView: true, events: []string{"authorize-search", "can-view-roles", "get-roles"}},
+		{name: "without role.view", roleIDs: []model.RoleID{known}, events: append(slices.Clone(authorized), "grants")},
+		{name: "unknown Role", roleIDs: []model.RoleID{known, unknown}, rolesView: true, events: append(slices.Clone(authorized), "grants", "get-roles")},
 		{name: "invalid Role", roleIDs: []model.RoleID{"not-an-id"}, rolesView: true, events: []string{}},
 		{name: "too many Roles", roleIDs: tooMany, rolesView: true, events: []string{}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			events := []string{}
-			service := newDirectoryFilterService(&userStoreFake{events: &events}, &roleStoreFake{events: &events, known: []model.RoleID{known}},
-				&authorizerFake{events: &events, searchScope: scoped, rolesView: test.rolesView, roleScope: roleScope})
-			_, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Limit: 10, RoleIDs: test.roleIDs})
+			service := newDirectoryFilterService(t, &userStoreFake{events: &events}, &roleStoreFake{events: &events, known: []model.RoleID{known}},
+				grants(test.rolesView)...)
+			_, err := service.SearchUsers(context.Background(), inv, SearchUsersQuery{Limit: 10, RoleIDs: test.roleIDs})
 			var appErr *apperror.Error
 			require.ErrorAs(t, err, &appErr)
 			require.Equal(t, "request.invalid", appErr.Code())
@@ -623,14 +650,12 @@ func TestUserSearchRoleFilterRequiresVisibleRoles(t *testing.T) {
 		t.Parallel()
 		events := []string{}
 		persistence := &userStoreFake{events: &events}
-		authorizer := &authorizerFake{events: &events, searchScope: scoped, rolesView: true, roleScope: roleScope}
-		service := newDirectoryFilterService(persistence, &roleStoreFake{events: &events, known: []model.RoleID{known}}, authorizer)
-		_, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Limit: 10, RoleIDs: []model.RoleID{known, known}})
+		service := newDirectoryFilterService(t, persistence, &roleStoreFake{events: &events, known: []model.RoleID{known}}, grants(true)...)
+		_, err := service.SearchUsers(context.Background(), inv, SearchUsersQuery{Limit: 10, RoleIDs: []model.RoleID{known, known}})
 		require.NoError(t, err)
 		require.Equal(t, []model.RoleID{known}, persistence.listOptions.RoleIDs, "repeats are dropped")
 		require.Equal(t, roleScope, persistence.listOptions.RoleBindingVisibility)
 		require.Equal(t, scoped, persistence.listOptions.Visibility, "the filter narrows the caller's own visibility")
-		require.Equal(t, scoped.ActiveAt, authorizer.roleScopeAt, "bindings are read at the visibility instant")
-		require.Equal(t, []string{"authorize-search", "can-view-roles", "get-roles", "role-binding-view-scope", "list-users", "count-users"}, events)
+		require.Equal(t, append(slices.Clone(authorized), "grants", "get-roles", "grants", "list-users", "count-users"), events)
 	})
 }

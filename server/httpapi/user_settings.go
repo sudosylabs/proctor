@@ -8,10 +8,8 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
@@ -41,11 +39,11 @@ type userSettingsReplacementResponse struct {
 }
 
 type userSettingsHandlers struct {
-	app UserSettingsApplication
+	users *user.Service
 }
 
-func userSettingsResource(app UserSettingsApplication) route.Resource {
-	h := userSettingsHandlers{app: app}
+func userSettingsResource(users *user.Service) route.Resource {
+	h := userSettingsHandlers{users: users}
 	path := "/users/me/settings"
 	replace := route.Endpoint{
 		Method:       http.MethodPut,
@@ -89,7 +87,7 @@ func userSettingsSessionMutationCodes(extra ...string) []string {
 }
 
 func (h userSettingsHandlers) read(request route.Request) (route.Result, error) {
-	view, err := h.app.ReadOwnUserSettings(request.Context, request.Invocation())
+	view, err := h.users.ReadOwnUserSettings(request.Context, request.Invocation())
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -113,7 +111,7 @@ func (h userSettingsHandlers) replace(request route.Request) (route.Result, erro
 		return route.Result{}, route.InvalidRequest(err)
 	}
 
-	result, err := h.app.ReplaceOwnUserSettings(
+	result, err := h.users.ReplaceOwnUserSettings(
 		request.Context,
 		request.Invocation(),
 		user.ReplaceOwnUserSettingsCommand{
@@ -133,14 +131,4 @@ func (h userSettingsHandlers) replace(request route.Request) (route.Result, erro
 		UpdatedAt:     model.FormatRFC3339(result.UpdatedAt),
 		Changed:       result.Changed,
 	}).WithHeaders(http.Header{"Cache-Control": []string{"private, no-store"}}), nil
-}
-
-// UserSettingsApplication is the application port its handlers call; it reads and replaces the caller's own settings document.
-type UserSettingsApplication interface {
-	ReadOwnUserSettings(context.Context, invocation.Invocation) (user.UserSettingsView, error)
-	ReplaceOwnUserSettings(
-		context.Context,
-		invocation.Invocation,
-		user.ReplaceOwnUserSettingsCommand,
-	) (user.UserSettingsReplacementResult, error)
 }

@@ -63,10 +63,6 @@ type examCatalog interface {
 	ListExams(context.Context, invocation.Invocation, exam.ListQuery) (exam.CatalogPage, error)
 }
 
-type userDirectory interface {
-	SearchUserPage(context.Context, invocation.Invocation, user.SearchUsersQuery) (paging.Page[*model.User], error)
-}
-
 type classAuthorizer interface {
 	AuthorizeClassSearch(context.Context, invocation.Invocation) (store.ClassVisibilityScope, error)
 }
@@ -76,7 +72,7 @@ type classAuthorizer interface {
 // authorized, audited and scoped exactly as its own list is.
 type Dependencies struct {
 	Exams              examCatalog
-	Users              userDirectory
+	Users              *user.Service
 	ClassAuthorization classAuthorizer
 	Classes            store.ClassStore
 }

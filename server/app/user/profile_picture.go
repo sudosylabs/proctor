@@ -36,27 +36,16 @@ var ErrDefaultProfilePictureUserNotFound = errors.New("default profile-picture u
 // record failed its model invariants.
 var ErrDefaultProfilePictureInvariant = errors.New("default profile-picture invariant failed")
 
-// ProfilePictureUploadFiles is the content capability used by interactive
-// profile-picture uploads.
-type ProfilePictureUploadFiles interface {
+// PictureFiles stores, opens and renders profile-picture bytes. It is the
+// port to file content, which lives outside the application.
+type PictureFiles interface {
 	NormalizeAndStoreProfilePicture(context.Context, model.FileRevisionID, io.Reader, int64, time.Time) ([]model.FileRendition, error)
 	RemoveProfilePictureRenditions(context.Context, model.FileRevisionID, []model.FileRendition) error
-}
-
-// ProfilePictureReadFiles opens the one rendition selected by authoritative
-// profile-picture metadata.
-type ProfilePictureReadFiles interface {
 	OpenProfilePictureRendition(context.Context, model.FileRevisionID, model.FileRenditionID) (io.ReadCloser, error)
-}
-
-// DefaultProfilePictureRenderFiles renders an unpersisted fallback read.
-type DefaultProfilePictureRenderFiles interface {
+	// RenderDefaultProfilePicture renders a default picture without storing it.
 	RenderDefaultProfilePicture(context.Context, string, int) (*RenderedProfilePicture, error)
-}
-
-// DefaultProfilePictureGenerationFiles creates the complete persisted default
-// rendition set for the durable generation workflow.
-type DefaultProfilePictureGenerationFiles interface {
+	// GenerateAndStoreDefaultProfilePicture stores the complete default
+	// rendition set for the durable generation job.
 	GenerateAndStoreDefaultProfilePicture(context.Context, model.FileRevisionID, string, time.Time) ([]model.FileRendition, error)
 }
 
@@ -137,13 +126,13 @@ func (s *Service) UploadProfilePicture(
 		return nil, err
 	}
 
-	renditions, err := s.uploads.NormalizeAndStoreProfilePicture(ctx, staged.revision.ID, command.Body, command.Size, at)
+	renditions, err := s.pictures.NormalizeAndStoreProfilePicture(ctx, staged.revision.ID, command.Body, command.Size, at)
 	if err != nil {
 		return nil, profilePictureNormalizationError(err)
 	}
 
 	if currentState != nil && sameNormalizedProfilePicture(currentState, renditions) {
-		if err = s.uploads.RemoveProfilePictureRenditions(ctx, staged.revision.ID, renditions); err != nil {
+		if err = s.pictures.RemoveProfilePictureRenditions(ctx, staged.revision.ID, renditions); err != nil {
 			return nil, apperror.New("profile_picture.unavailable").Wrap(err)
 		}
 
@@ -473,7 +462,7 @@ func (s *Service) GetProfilePicture(
 	rendition, err := s.files.GetProfilePictureRendition(ctx, id, fmt.Sprintf("profile_%d", query.Size))
 	if err != nil {
 		if store.IsNotFound(err) && user.CustomProfilePictureFileID.IsZero() && user.DefaultProfilePictureFileID.IsZero() {
-			rendered, renderErr := s.fallback.RenderDefaultProfilePicture(ctx, user.DefaultProfilePictureSeed, query.Size)
+			rendered, renderErr := s.pictures.RenderDefaultProfilePicture(ctx, user.DefaultProfilePictureSeed, query.Size)
 			if renderErr != nil {
 				var capacity profilePictureWorkCapacity
 				if errors.As(renderErr, &capacity) {
@@ -500,7 +489,7 @@ func (s *Service) GetProfilePicture(
 		return nil, profilePictureStoreErrors.Translate(err)
 	}
 
-	body, err := s.reads.OpenProfilePictureRendition(ctx, rendition.RevisionID, rendition.ID)
+	body, err := s.pictures.OpenProfilePictureRendition(ctx, rendition.RevisionID, rendition.ID)
 	if err != nil {
 		return nil, apperror.New("profile_picture.unavailable").Wrap(err)
 	}
@@ -561,7 +550,7 @@ func (s *Service) ensureDefaultProfilePicture(ctx context.Context, userID model.
 		return "", err
 	}
 
-	renditions, err := s.defaults.GenerateAndStoreDefaultProfilePicture(ctx, revision.ID, user.DefaultProfilePictureSeed, at)
+	renditions, err := s.pictures.GenerateAndStoreDefaultProfilePicture(ctx, revision.ID, user.DefaultProfilePictureSeed, at)
 	if err != nil {
 		return "", err
 	}

@@ -77,8 +77,10 @@ func TestUserDirectoryReportsItsTotalOnTheFirstPageOnly(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
 	first := &model.User{ID: model.NewUserID(), Username: "alpha", CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100)}
-	profiles := &userProfileHTTPApplication{values: []*model.User{first}, searchHasMore: true, searchTotal: store.MaximumListCount}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: operatorTestPrincipal()}, userProfileResource(profiles, profiles, profiles))
+	principal := operatorTestPrincipal()
+	fixture := newUserFixture(t, institutionWide(principal.UserID, model.ActionUserView))
+	fixture.users.listed, fixture.users.more, fixture.users.total = []*model.User{first}, true, store.MaximumListCount+10
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userResource(fixture))
 
 	response := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/users?limit=1", "", true)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
@@ -87,9 +89,9 @@ func TestUserDirectoryReportsItsTotalOnTheFirstPageOnly(t *testing.T) {
 	require.InDelta(t, store.MaximumListCount, page["total"], 0)
 	require.Equal(t, true, page["total_is_lower_bound"])
 
-	profiles.searchHasMore = false
+	fixture.users.more = false
 	next := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/users?limit=1&cursor="+url.QueryEscape(page["next_cursor"].(string)), "", true)
 	require.Equal(t, http.StatusOK, next.Code, next.Body.String())
-	require.Equal(t, first.ID, profiles.searchQuery.AfterID)
+	require.Equal(t, first.ID, fixture.users.lastList(t).AfterID)
 	require.NotContains(t, next.Body.String(), "total", "a later page repeats no count")
 }

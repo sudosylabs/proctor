@@ -364,17 +364,13 @@ func newUsers(
 	}
 
 	return user.New(user.Dependencies{
-		Store:           deps.Store,
-		Authorizer:      authorizer,
-		Auditor:         shared.audit.MutationAudit(),
-		SettingsAuditor: shared.audit.UserSettingsAudit(),
-		Publisher:       shared.realtime,
-		DefaultJobs:     proposals,
-		Uploads:         deps.FileContent,
-		Reads:           deps.FileContent,
-		Fallback:        deps.FileContent,
-		Defaults:        deps.FileContent,
-		Now:             time.Now,
+		Store:       deps.Store,
+		Authorizer:  authorizer,
+		Auditor:     shared.audit,
+		Publisher:   shared.realtime,
+		DefaultJobs: proposals,
+		Pictures:    deps.FileContent,
+		Now:         time.Now,
 	})
 }
 

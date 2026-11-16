@@ -33,10 +33,7 @@ import (
 // narrower consumer-owned capability; only the application constructor needs
 // the complete concrete content adapter surface.
 type FileContent interface {
-	user.ProfilePictureUploadFiles
-	user.ProfilePictureReadFiles
-	user.DefaultProfilePictureRenderFiles
-	user.DefaultProfilePictureGenerationFiles
+	user.PictureFiles
 	jobs.FileRevisionContentPurger
 	jobs.StarterWorkspaceObjectPurger
 	jobs.AttemptWorkspaceObjectPurger

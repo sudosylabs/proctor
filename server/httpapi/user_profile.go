@@ -23,7 +23,6 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
@@ -198,13 +197,13 @@ type candidateExamActivityResultResponse struct {
 }
 
 type userProfileHandlers struct {
-	profiles UserProfileApplication
-	accounts UserAccountApplication
+	users    *user.Service
+	attempts UserAccountApplication
 	emails   UserEmailApplication
 }
 
-func userProfileResource(profiles UserProfileApplication, accounts UserAccountApplication, emails UserEmailApplication) route.Resource {
-	h := userProfileHandlers{profiles: profiles, accounts: accounts, emails: emails}
+func userProfileResource(users *user.Service, attempts UserAccountApplication, emails UserEmailApplication) route.Resource {
+	h := userProfileHandlers{users: users, attempts: attempts, emails: emails}
 	userPath := "/users/{user_id}"
 	picture := "/users/{user_id}/profile-picture"
 	email := "/users/{user_id}/email"
@@ -370,7 +369,7 @@ func (h userProfileHandlers) examActivity(request route.Request) (route.Result, 
 		query.BeforeSittingID = model.ExamSittingID(cursor.ExamSittingID)
 	}
 
-	page, err := h.accounts.ListCandidateExamActivity(request.Context, request.Invocation(), query)
+	page, err := h.attempts.ListCandidateExamActivity(request.Context, request.Invocation(), query)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -460,7 +459,7 @@ func currentUserContextSessionCodes(extra ...string) []string {
 }
 
 func (h userProfileHandlers) context(request route.Request) (route.Result, error) {
-	view, err := h.profiles.GetCurrentUserContext(request.Context, request.Invocation())
+	view, err := h.users.GetCurrentUserContext(request.Context, request.Invocation())
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -590,7 +589,7 @@ func (h userProfileHandlers) uploadPicture(request route.Request) (route.Protoco
 		return route.ProtocolResult{}, route.InvalidRequest(err)
 	}
 
-	account, err := h.profiles.UploadProfilePicture(request.Context, request.Invocation(), user.UploadProfilePictureCommand{
+	account, err := h.users.UploadProfilePicture(request.Context, request.Invocation(), user.UploadProfilePictureCommand{
 		UserID:         userID,
 		ExpectedSHA256: expectedSHA256,
 		Body:           request.HTTP.Body,
@@ -614,7 +613,7 @@ func (h userProfileHandlers) removePicture(request route.Request) (route.Result,
 		return route.Result{}, route.InvalidRequest(err)
 	}
 
-	account, appErr := h.profiles.RemoveProfilePicture(
+	account, appErr := h.users.RemoveProfilePicture(
 		request.Context,
 		request.Invocation(),
 		user.RemoveProfilePictureCommand{UserID: userID, ExpectedSHA256: expectedSHA256},
@@ -655,7 +654,7 @@ func (h userProfileHandlers) downloadPicture(request route.Request) (route.Proto
 		return route.ProtocolResult{}, route.InvalidRequest(err)
 	}
 
-	content, appErr := h.profiles.GetProfilePicture(
+	content, appErr := h.users.GetProfilePicture(
 		request.Context,
 		request.Invocation(),
 		user.GetProfilePictureQuery{UserID: userID, Size: size},
@@ -729,7 +728,7 @@ func (h userProfileHandlers) search(request route.Request) (route.Result, error)
 		cursor.continueQuery(&query)
 	}
 
-	page, err := h.profiles.SearchUsers(request.Context, request.Invocation(), query)
+	page, err := h.users.SearchUsers(request.Context, request.Invocation(), query)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -962,7 +961,7 @@ func validUserDirectoryKey(sort, key string) bool {
 }
 
 func (h userProfileHandlers) current(request route.Request) (route.Result, error) {
-	account, err := h.profiles.GetUserProfile(request.Context, request.Invocation(), request.Principal.UserID)
+	account, err := h.users.GetUserProfile(request.Context, request.Invocation(), request.Principal.UserID)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -974,7 +973,7 @@ func (h userProfileHandlers) get(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	account, err := h.profiles.GetUserProfile(request.Context, request.Invocation(), userID)
+	account, err := h.users.GetUserProfile(request.Context, request.Invocation(), userID)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -992,7 +991,7 @@ func (h userProfileHandlers) update(request route.Request) (route.Result, error)
 		return route.Result{}, err
 	}
 
-	account, err := h.profiles.UpdateUserProfile(request.Context, request.Invocation(), user.UpdateUserProfileCommand{
+	account, err := h.users.UpdateUserProfile(request.Context, request.Invocation(), user.UpdateUserProfileCommand{
 		ID:          userID,
 		Username:    body.Username,
 		DisplayName: body.DisplayName,
@@ -1042,18 +1041,6 @@ func userProfileResponseFromModel(account *model.User) userProfileResponse {
 	}
 
 	return response
-}
-
-// UserProfileApplication is the User directory, profile and profile-picture
-// use cases of the user area.
-type UserProfileApplication interface {
-	GetCurrentUserContext(context.Context, invocation.Invocation) (*user.CurrentUserContextView, error)
-	SearchUsers(context.Context, invocation.Invocation, user.SearchUsersQuery) (paging.Counted[user.UserDirectoryEntry], error)
-	GetUserProfile(context.Context, invocation.Invocation, model.UserID) (*model.User, error)
-	UpdateUserProfile(context.Context, invocation.Invocation, user.UpdateUserProfileCommand) (*model.User, error)
-	UploadProfilePicture(context.Context, invocation.Invocation, user.UploadProfilePictureCommand) (*model.User, error)
-	RemoveProfilePicture(context.Context, invocation.Invocation, user.RemoveProfilePictureCommand) (*model.User, error)
-	GetProfilePicture(context.Context, invocation.Invocation, user.GetProfilePictureQuery) (*user.ProfilePictureContent, error)
 }
 
 // UserAccountApplication is the User use case that stays on the application

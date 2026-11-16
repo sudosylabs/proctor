@@ -41,7 +41,6 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
@@ -90,15 +89,6 @@ type auditDrafter interface {
 }
 
 var _ auditDrafter = access.MutationAuditAdapter{}
-
-// userDirectory is the User directory read an academic administration
-// filter preview resolves its filter through, held as the user Service, so
-// the preview applies exactly the directory's validation and visibility.
-type userDirectory interface {
-	SearchUserPage(context.Context, invocation.Invocation, user.SearchUsersQuery) (paging.Page[*model.User], error)
-}
-
-var _ userDirectory = (*user.Service)(nil)
 
 // mailComposer is the part of *mail.Composer onboarding prepares frozen mail
 // with: the Invitation lifecycle messages and the public registration
@@ -234,7 +224,7 @@ type Service struct {
 	identity       identityCommands
 	// directory and drafts are nil when composition supplies no User
 	// directory or no drafting auditor; filter previews then refuse.
-	directory userDirectory
+	directory *user.Service
 	drafts    auditDrafter
 	wake      func()
 

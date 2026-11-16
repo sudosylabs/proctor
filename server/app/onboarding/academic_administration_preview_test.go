@@ -9,43 +9,80 @@ package onboarding
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// userDirectoryFake serves pages of matching Users, total in all, in pages of
-// the query's limit, and records each query; a set err refuses every query.
-type userDirectoryFake struct {
-	total   int
-	queries []user.SearchUsersQuery
-	err     error
+// directoryUsers is a User store holding total Users named in username
+// order. It serves List by the keyset the directory sends and records every
+// options value it receives.
+type directoryUsers struct {
+	store.UserStore
+	users   []*model.User
+	options []store.UserListOptions
 }
 
-func (f *userDirectoryFake) SearchUserPage(_ context.Context, _ invocation.Invocation, query user.SearchUsersQuery) (paging.Page[*model.User], error) {
-	f.queries = append(f.queries, query)
-	if f.err != nil {
-		return paging.Page[*model.User]{}, f.err
+func newDirectoryUsers(total int) *directoryUsers {
+	users := make([]*model.User, 0, total)
+	for index := range total {
+		users = append(users, &model.User{ID: model.NewUserID(), Username: fmt.Sprintf("user-%05d", index)})
 	}
-	served := 0
-	for _, previous := range f.queries[:len(f.queries)-1] {
-		served += previous.Limit
+	return &directoryUsers{users: users}
+}
+
+func (s *directoryUsers) List(_ context.Context, options store.UserListOptions) ([]*model.User, error) {
+	s.options = append(s.options, options)
+	var page []*model.User
+	for _, user := range s.users {
+		if options.AfterUsername != "" && user.Username <= options.AfterUsername {
+			continue
+		}
+		if len(page) == options.Limit {
+			break
+		}
+		page = append(page, user)
 	}
-	page := paging.Page[*model.User]{}
-	for index := served; index < f.total && len(page.Items) < query.Limit; index++ {
-		page.Items = append(page.Items, &model.User{ID: model.NewUserID(), Username: "user"})
-	}
-	page.HasMore = served+len(page.Items) < f.total
 	return page, nil
+}
+
+type directoryCatalog struct {
+	store.Catalog
+	users *directoryUsers
+}
+
+func (c directoryCatalog) User() store.UserStore               { return c.users }
+func (c directoryCatalog) Role() store.RoleStore               { return nil }
+func (c directoryCatalog) RoleBinding() store.RoleBindingStore { return nil }
+func (c directoryCatalog) File() store.FileStore               { return nil }
+func (c directoryCatalog) UserSettings() store.UserSettingsStore {
+	return struct{ store.UserSettingsStore }{}
+}
+
+// directoryFor builds the real User directory over users, with the caller
+// holding Institution-wide user.view.
+func directoryFor(t *testing.T, caller model.UserID, users *directoryUsers) *user.Service {
+	t.Helper()
+	authorization := accesstest.New(t, accesstest.Options{
+		Grants: []accesstest.Grant{{UserID: caller, Actions: []model.Action{model.ActionUserView}}},
+	})
+	directory, err := user.New(user.Dependencies{
+		Store: directoryCatalog{users: users}, Authorizer: authorization.Authorizer, Auditor: authorization.Auditor,
+		Publisher: &realtimetest.Publisher{}, Now: time.Now,
+	})
+	require.NoError(t, err)
+	return directory
 }
 
 type auditDrafterFake struct{}
@@ -163,16 +200,18 @@ func TestAcademicAdministrationPreviewRefusesMoreUsersThanOnePreviewHolds(t *tes
 	inv := invocation.New(previewPrincipal(model.AuthenticationMultiFactor, time.Now()), model.RequestMetadata{})
 	filter := store.AcademicAdministrationFilter{Operation: string(AcademicAdministrationUserDisable)}
 
-	exact := &userDirectoryFake{total: store.AcademicAdministrationPreviewMaximumRows}
-	users, err := (&Service{directory: exact}).matchAcademicAdministrationPreviewUsers(context.Background(), inv, filter)
+	caller := inv.Principal().UserID
+	exact := newDirectoryUsers(store.AcademicAdministrationPreviewMaximumRows)
+	users, err := (&Service{directory: directoryFor(t, caller, exact)}).matchAcademicAdministrationPreviewUsers(context.Background(), inv, filter)
 	require.NoError(t, err)
 	require.Len(t, users, store.AcademicAdministrationPreviewMaximumRows)
 
-	over := &userDirectoryFake{total: store.AcademicAdministrationPreviewMaximumRows + 1}
-	_, err = (&Service{directory: over}).matchAcademicAdministrationPreviewUsers(context.Background(), inv, filter)
+	over := newDirectoryUsers(store.AcademicAdministrationPreviewMaximumRows + 1)
+	_, err = (&Service{directory: directoryFor(t, caller, over)}).matchAcademicAdministrationPreviewUsers(context.Background(), inv, filter)
 	require.True(t, apperror.Is(err, "academic_administration_preview.too_many_users"), "error = %v", err)
-	for _, query := range over.queries {
-		require.Equal(t, store.UserOrderUsername, query.Order, "the frozen order is the directory's username order")
+	require.NotEmpty(t, over.options)
+	for _, options := range over.options {
+		require.Equal(t, store.UserOrderUsername, options.Order, "the frozen order is the directory's username order")
 	}
 }
 
@@ -180,7 +219,8 @@ func TestAcademicAdministrationPreviewRequiresAStrongRecentSessionBeforeAuthoriz
 	t.Parallel()
 	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
 	authorizer := &authorizerFake{}
-	service := &Service{imports: previewImportStoreFake{}, directory: &userDirectoryFake{}, drafts: auditDrafterFake{}, authorizer: authorizer,
+	service := &Service{imports: previewImportStoreFake{}, directory: directoryFor(t, model.NewUserID(), newDirectoryUsers(0)),
+		drafts: auditDrafterFake{}, authorizer: authorizer,
 		recentAuthenticationTTL: 15 * time.Minute, now: func() time.Time { return now }}
 	command := CreateAcademicAdministrationPreviewCommand{Operation: AcademicAdministrationUserDisable, ScopeType: model.RoleScopeInstitution,
 		ScopeID: model.NewInstitutionID().String()}
@@ -216,8 +256,8 @@ func TestAcademicAdministrationPreviewIsReadOnlyByItsCreatorThroughItsOwnSurface
 	value := &store.OnboardingImport{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportAcademicAdministrationFilter,
 		State: model.OnboardingImportPreviewReady, ScopeType: model.RoleScopeInstitution, ScopeID: model.NewInstitutionID().String(),
 		ActorUserID: creator.UserID, Principal: creator, Filter: &store.AcademicAdministrationFilter{Operation: "user.disable"}}
-	service := &Service{imports: previewImportStoreFake{value: value}, directory: &userDirectoryFake{}, drafts: auditDrafterFake{},
-		authorizer: &authorizerFake{}, identity: &academicAdministrationBatchCommandsFake{}, recentAuthenticationTTL: 15 * time.Minute,
+	service := &Service{imports: previewImportStoreFake{value: value}, directory: directoryFor(t, model.NewUserID(), newDirectoryUsers(0)),
+		drafts: auditDrafterFake{}, authorizer: &authorizerFake{}, identity: &academicAdministrationBatchCommandsFake{}, recentAuthenticationTTL: 15 * time.Minute,
 		now: func() time.Time { return now }}
 
 	other := invocation.New(previewPrincipal(model.AuthenticationMultiFactor, now), model.RequestMetadata{})
@@ -236,8 +276,9 @@ func TestAcademicAdministrationPreviewIsReadOnlyByItsCreatorThroughItsOwnSurface
 // TestAcademicAdministrationPreviewRefusesAFilterTheCreatorMayNoLongerApply
 // re-admits the stored filter through the User directory whenever the
 // creator acts on the preview: once the directory refuses it (here an
-// activity filter after Institution-wide user.view was lost), every read and
-// the commit are refused, and execution leaves no row to run.
+// activity filter, which needs Institution-wide user.view, from a creator now
+// holding user.view in one Academic Unit only), every read and the commit are
+// refused, and execution leaves no row to run.
 func TestAcademicAdministrationPreviewRefusesAFilterTheCreatorMayNoLongerApply(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
@@ -246,14 +287,25 @@ func TestAcademicAdministrationPreviewRefusesAFilterTheCreatorMayNoLongerApply(t
 		State: model.OnboardingImportPreviewReady, ScopeType: model.RoleScopeInstitution, ScopeID: model.NewInstitutionID().String(),
 		ActorUserID: creator.UserID, Principal: creator, PreviewDigest: strings.Repeat("a", 64), Revision: 2,
 		Filter: &store.AcademicAdministrationFilter{Operation: string(AcademicAdministrationUserDisable), NeverSignedIn: true}}
-	directory := &userDirectoryFake{err: apperror.Invalid("request.invalid", "never_signed_in")}
+	unit := &model.AcademicUnit{ID: model.NewAcademicUnitID(), Name: "Computing"}
+	authorization := accesstest.New(t, accesstest.Options{
+		Units: []*model.AcademicUnit{unit},
+		Grants: []accesstest.Grant{{UserID: creator.UserID, Actions: []model.Action{model.ActionUserView},
+			ScopeType: model.RoleScopeAcademicUnit, ScopeID: unit.ID.String()}},
+	})
+	users := newDirectoryUsers(1)
+	directory, err := user.New(user.Dependencies{
+		Store: directoryCatalog{users: users}, Authorizer: authorization.Authorizer, Auditor: authorization.Auditor,
+		Publisher: &realtimetest.Publisher{}, Now: time.Now,
+	})
+	require.NoError(t, err)
 	service := &Service{imports: previewImportStoreFake{value: value}, directory: directory, drafts: auditDrafterFake{},
 		authorizer: &authorizerFake{}, identity: &academicAdministrationBatchCommandsFake{}, recentAuthenticationTTL: 15 * time.Minute,
 		now: func() time.Time { return now }}
 	inv := invocation.New(creator, model.RequestMetadata{})
 	lost := apperror.Code("academic_administration_preview.authorization_lost")
 
-	_, err := service.GetAcademicAdministrationPreview(context.Background(), inv, value.ID)
+	_, err = service.GetAcademicAdministrationPreview(context.Background(), inv, value.ID)
 	require.True(t, apperror.Is(err, lost), "summary read: %v", err)
 	_, err = service.ListAcademicAdministrationPreviewRows(context.Background(), inv, ListAcademicAdministrationPreviewRowsQuery{
 		ID: value.ID, Class: store.AcademicAdministrationPreviewWillChange, Limit: 10})
@@ -268,10 +320,7 @@ func TestAcademicAdministrationPreviewRefusesAFilterTheCreatorMayNoLongerApply(t
 		store.OnboardingImportRow{UserID: model.NewUserID(), Operation: value.Filter.Operation})
 	require.NoError(t, err)
 	require.Equal(t, "authorization.denied", code, "a remaining row fails once the filter is no longer admitted")
-	for _, query := range directory.queries {
-		require.True(t, query.NeverSignedIn, "the stored filter itself is admitted")
-		require.Equal(t, 1, query.Limit)
-	}
+	require.Empty(t, users.options, "the directory refuses the stored activity filter before reading any User")
 }
 
 func TestAcademicAdministrationFilterRowCheckRefusesWhatThePreviewWouldNotAdmitNow(t *testing.T) {

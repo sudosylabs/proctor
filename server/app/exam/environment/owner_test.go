@@ -116,8 +116,17 @@ func newSeededRig(t *testing.T, timing environment.OwnerTiming, seed func(*works
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 	r.cancel = cancel
+	// The owner may still be creating the grant's directory when the test
+	// ends, so cleanup waits for it to stop before the work directory is
+	// removed.
+	stopped := make(chan struct{})
 	t.Cleanup(func() {
 		cancel()
+		select {
+		case <-stopped:
+		case <-time.After(10 * time.Second):
+			t.Error("the owner did not stop after cancellation")
+		}
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		for _, report := range r.reports {
@@ -130,6 +139,7 @@ func newSeededRig(t *testing.T, timing environment.OwnerTiming, seed func(*works
 		seed(r.workspace)
 	}
 	go func() {
+		defer close(stopped)
 		r.done <- factory(r.attemptID).Run(ctx, store.AttemptRuntimeLease{AttemptID: r.attemptID, NodeID: "node-a", Fence: 7,
 			ExpiresAt: time.Now().Add(time.Minute)}, r.wake)
 	}()

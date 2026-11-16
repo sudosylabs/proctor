@@ -167,6 +167,8 @@ func decodeDuplicateFreeExamSittingObject(encoded []byte, target any) error {
 	return strict.Decode(target)
 }
 
+// examSittingResponse exposes only the candidate-safe reason code. Private
+// manager reasons, authorization decisions and audit provenance stay out.
 type examSittingResponse struct {
 	ID               string `json:"id"`
 	ExamID           string `json:"exam_id"`

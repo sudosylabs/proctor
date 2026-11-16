@@ -57,6 +57,8 @@ export async function requestInstallationStatus(): Promise<SetupStatus> {
   }
 }
 
+// Ordinary text is trimmed, but the setup key and password are sent exactly
+// as typed. Success creates no Session; the administrator still signs in.
 export async function submitInstallation(
   submission: SetupSubmission,
 ): Promise<SetupSubmissionResult> {

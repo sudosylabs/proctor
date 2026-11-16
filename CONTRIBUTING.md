@@ -24,7 +24,7 @@ similarly self-explanatory maintenance change.
 2. Create a short branch such as `feat/exam-export`, `fix/session-expiry`, or
    `docs/security-reporting`.
 3. Follow the relevant [developer guide](docs/public/developers/index.mdx) and
-   the nearest component contract or module README.
+   the module README and the comments on the code you change.
 4. Implement the smallest complete change, including tests, documentation,
    generated outputs, and provenance required by that change.
 5. Review and verify the complete diff using the

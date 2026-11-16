@@ -2,8 +2,8 @@
 
 This private Docusaurus package renders the task-oriented content in
 [`../public/`](../public/) and the API reference rooted at
-[`../api/`](../api/). Repository skills, component contracts, code, and tests
-remain authoritative for internal behavior.
+[`../api/`](../api/). Repository skills, code, and tests remain authoritative
+for internal behavior.
 
 The current local build provides task-oriented navigation, public content
 validation, contextual guide navigation, and a deterministic

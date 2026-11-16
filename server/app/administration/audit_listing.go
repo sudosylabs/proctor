@@ -317,6 +317,8 @@ func (s *Service) authorizeAuditList(ctx context.Context, inv invocation.Invocat
 		return store.AuditVisibilityScope{}, access.DeniedError()
 	}
 
+	// An Institution-wide academic grant keeps the academic action catalog and
+	// scope fence; it must never widen into audit.view's full history.
 	return store.AuditVisibilityScope{
 		AcademicInstitutionWide: academic.InstitutionWide,
 		AcademicUnitRootIDs:     append([]model.AcademicUnitID(nil), academic.AcademicUnitRootIDs...),

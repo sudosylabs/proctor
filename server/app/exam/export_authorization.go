@@ -79,6 +79,9 @@ func (s *Exports) authorizeSources(
 		}
 	}
 
+	// Browsing history needs exact Exam Manager membership on top of the
+	// action: a scoped Role that may export work must not see where candidates
+	// browsed. This runs on every read and retry, not only at creation.
 	if slices.Contains(categories, model.RetentionCategoryBrowserActivity) {
 		examAccess, err := s.exams.Access(ctx, scope.ExamID, inv.Principal().UserID)
 		if err != nil {

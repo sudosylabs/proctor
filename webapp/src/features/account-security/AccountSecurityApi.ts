@@ -40,6 +40,8 @@ export type SecurityFailure = {
 export type SecurityContextResult =
   | { kind: "ready"; context: SecurityContext }
   | SecurityFailure;
+// The secret, provisioning URI and any recovery codes live only in component
+// memory; they must never reach navigation, browser storage or logs.
 export interface AuthenticatorSetup { secret: string; provisioningURI: string; expiresAt: string }
 export type SetupResult = { kind: "success"; setup: AuthenticatorSetup } | SecurityFailure;
 export type RecoveryCodesResult = { kind: "success"; codes: string[] } | SecurityFailure;
@@ -75,6 +77,8 @@ export async function beginAuthenticatorSetup(): Promise<SetupResult> {
   } catch { return { kind: "unavailable" }; }
 }
 
+// The QR code is drawn locally from this URI, so anything that is not a plain
+// six-digit TOTP URI for exactly this secret is refused rather than encoded.
 function validProvisioningURI(value: unknown, secret: string): value is string {
   if (!boundedText(value, 2048) || new TextEncoder().encode(value).length > 2048 || !/^[A-Z2-7]+$/.test(secret)) return false;
   try {

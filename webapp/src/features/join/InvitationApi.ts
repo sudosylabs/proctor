@@ -34,6 +34,9 @@ export type InvitationSessionAcceptanceResult =
   | { kind: "session_required" }
   | { kind: "unavailable" };
 
+// Exchanges the fragment claim once for a purpose-bound browser handle. The
+// claim never reaches rendered output, a query string, provider state,
+// storage or logs.
 export async function startInvitation(
   claim: string,
 ): Promise<InvitationStartResult> {

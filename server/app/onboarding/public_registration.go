@@ -23,6 +23,8 @@ import (
 
 // RegisterLocalUserCommand contains the public, request-only account fields.
 // Password and mailbox values never enter audit data or successful responses.
+// The names are self-asserted presentation and must never be treated as proof
+// of identity, affiliation or membership.
 type RegisterLocalUserCommand struct {
 	Username  string
 	Email     string

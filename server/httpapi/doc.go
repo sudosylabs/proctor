@@ -17,6 +17,11 @@
 // Details, pagination and the middleware chain. Read its package comment
 // before adding a route. A resource never reaches behind that package.
 //
+// Handlers mint only request.* codes; every domain code comes from the
+// application. A result the transport cannot present returns
+// route.ErrUnpresentable, which is a server fault, never a domain
+// *.unavailable code.
+//
 // New takes the application and a Settings value. It builds each resource
 // from the application service that owns its use cases and hands them to
 // route.New, which compiles every route into one fixed catalog and fails on
@@ -31,7 +36,6 @@
 //   - resources.go: every resource in the production API, in order
 //   - route/doc.go: the guide to declaring endpoints and writing handlers
 //   - route/error_catalog.yaml: every public error code and its status
-//   - CONTRACT.md: the rules every route follows
 //
 // To add a route, add it to its resource file, list any new resource in
 // resources.go, and update the OpenAPI sources under server/openapi.

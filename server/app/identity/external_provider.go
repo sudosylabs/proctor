@@ -128,7 +128,9 @@ func (s *Service) requireExternalAuthentication() error {
 }
 
 // ExternalAuthenticationProviders lists the configured providers the current
-// Access Policy offers for sign-in.
+// Access Policy offers for sign-in. When the policy cannot be read it fails
+// rather than falling back to the deployment catalog, which would offer
+// providers the policy has disabled.
 func (s *Service) ExternalAuthenticationProviders(
 	ctx context.Context,
 	_ invocation.Invocation,

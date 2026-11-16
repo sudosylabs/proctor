@@ -14,10 +14,14 @@ export interface ReauthenticationActions {
   challenge(code: string): Promise<SecurityMutationResult>;
 }
 
+// The only continuations are these fixed local paths; the query can never
+// choose a return URL, and returning never replays the task's mutation.
 export function reauthenticationDestination(task: ReauthenticationTask): string {
   return task === "connect-provider" ? "/account/connect-provider" : "/account/security";
 }
 
+// Refreshes primary proof for the current Session without a new login. An MFA
+// challenge adds strong proof but never stands in for this step.
 export async function proveCurrentPassword(password: string): Promise<PasswordProofResult> {
   try {
     const { data, error, response } = await apiClient.POST("/api/v1/auth/reauthenticate/password", { body: { password } });

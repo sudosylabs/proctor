@@ -27,6 +27,9 @@ type candidateWorkspaceCursor struct {
 	ID             model.AttemptWorkspaceEntryID
 }
 
+// candidateWorkspaceCursorWire keeps after_entry_id optional so a cursor that
+// carries only the snapshot restarts that pinned snapshot from its start.
+// Continuations the server emits always name the last entry served.
 type candidateWorkspaceCursorWire struct {
 	ExpectedCursor int64  `json:"workspace_cursor"`
 	ID             string `json:"after_entry_id,omitempty"`

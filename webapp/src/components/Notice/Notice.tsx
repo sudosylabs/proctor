@@ -6,6 +6,10 @@ import {
 
 import styles from "./Notice.module.css";
 
+/**
+ * `accent` is kept for compatibility but renders like `information`: purple
+ * belongs to a view's one primary action.
+ */
 export type NoticeTone =
   | "accent"
   | "information"
@@ -25,6 +29,10 @@ const markedTones: ReadonlySet<NoticeTone> = new Set([
   "danger",
 ]);
 
+/**
+ * Adds no role or live region; the owning feature decides whether a notice is
+ * a note or announced. Content is localized copy, never arbitrary server prose.
+ */
 export const Notice = forwardRef<HTMLDivElement, NoticeProps>(function Notice(
   { children, className, lead, tone = "information", ...props },
   ref,

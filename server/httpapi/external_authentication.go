@@ -154,6 +154,9 @@ func externalAuthenticationResource(
 	)
 }
 
+// beginFromBody is the only start that takes an Invitation claim. The claim is
+// a bearer secret, so it is read from the body alone, never from the query,
+// and must not reach provider state, logs, audit or a response.
 func (h externalAuthenticationHandlers) beginFromBody(request route.Request) (route.ProtocolResult, error) {
 	providerID, appErr := route.PathProviderID(request, "provider_id")
 	if appErr != nil {

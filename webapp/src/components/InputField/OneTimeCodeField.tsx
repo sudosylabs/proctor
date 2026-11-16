@@ -2,6 +2,10 @@
 import { OTPInput, REGEXP_ONLY_DIGITS } from "input-otp";
 import { forwardRef } from "react";
 
+// The primitive would inject these styles inline, which the server's CSP
+// refuses. They are bundled here instead, and the `input-otp-style` marker in
+// index.html stops the injection. On upgrade, re-check both against upstream
+// and run the production-CSP browser test.
 import "./InputOTPCompatibility.css";
 
 import type { InputFieldProps } from "./InputField";

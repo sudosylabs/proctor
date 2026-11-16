@@ -89,9 +89,11 @@ type mailDeliveryResponse struct {
 	Deadline           string                  `json:"deadline"`
 	MessageID          string                  `json:"message_id"`
 	AttemptCount       int                     `json:"attempt_count"`
-	AcceptedAt         string                  `json:"accepted_at,omitempty"`
-	FailedAt           string                  `json:"failed_at,omitempty"`
-	PublicFailureCode  string                  `json:"public_failure_code,omitempty"`
+	// AcceptedAt is when SMTP accepted DATA; it does not mean the message
+	// reached an inbox.
+	AcceptedAt        string `json:"accepted_at,omitempty"`
+	FailedAt          string `json:"failed_at,omitempty"`
+	PublicFailureCode string `json:"public_failure_code,omitempty"`
 	// RecipientDisplayName names the User target_user_id identifies, only on
 	// reads and only while the viewer can see that User.
 	RecipientDisplayName string `json:"recipient_display_name,omitempty"`

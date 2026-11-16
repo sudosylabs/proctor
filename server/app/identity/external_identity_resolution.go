@@ -131,6 +131,9 @@ func (s *Service) resolveExternalIdentity(
 }
 
 // identityResolutionFailure audits a failed identity resolution and maps it to the public error.
+// An unlinked subject gets the same answer whether policy is linked-only or
+// invitation-required, and a conflict never names the existing User, so the
+// response reveals nothing about admission rules or other accounts.
 func (s *Service) identityResolutionFailure(ctx context.Context, attempt externalCompletionAttempt, err error) error {
 	var conflict *store.ErrConflict
 	errorCode := "authentication.external.internal"

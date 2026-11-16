@@ -38,6 +38,8 @@ export const AuthenticationCodeField = forwardRef<HTMLInputElement, Authenticati
     const recovery = allowRecovery && value.kind === "recovery";
     const shared = { ...props, ref: attachInput, required: true, value: value.code };
 
+    // The old code is dropped on a switch so a half-typed authenticator code
+    // can never be submitted as a recovery code, or the other way round.
     function switchMethod() {
       onChange({ kind: recovery ? "authenticator" : "recovery", code: "" });
       requestAnimationFrame(() => input.current?.focus());
@@ -46,6 +48,7 @@ export const AuthenticationCodeField = forwardRef<HTMLInputElement, Authenticati
     return <div className={styles.field}>
       {recovery ? <InputField {...shared} label={message("webapp.form.recovery_code.label")}
         description={message("webapp.form.recovery_code.help")}
+        // 256 matches the API's input limit; the code is sent exactly as typed.
         autoComplete="off" autoCapitalize="none" spellCheck={false} maxLength={256}
         onChange={(event) => onChange({ kind: "recovery", code: event.currentTarget.value })} />
         : <OneTimeCodeField {...shared} label={message("webapp.security.code.authenticator")}

@@ -480,7 +480,9 @@ func (s *Operations) CancelMailDelivery(
 	return s.mutate(ctx, inv, "cancel", id, false, s.deps.Mail.CancelDelivery)
 }
 
-// RetryMailDelivery retries one mail delivery, with audit.
+// RetryMailDelivery retries one mail delivery, with audit. The retry reuses
+// the same Delivery, recipient and Message-ID; no operator route can create
+// mail of its own.
 func (s *Operations) RetryMailDelivery(
 	ctx context.Context,
 	inv invocation.Invocation,

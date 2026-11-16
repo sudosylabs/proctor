@@ -14,6 +14,12 @@ export interface AsyncResourceController<T> {
   subscribe(listener: (snapshot: AsyncResourceSnapshot<T>) => void): () => void;
 }
 
+/**
+ * Reuses the in-flight attempt so a Strict Mode effect remount does not issue
+ * a second request, and drops completions from superseded attempts. `load`
+ * must turn remote failure into a feature result; nothing here interprets
+ * HTTP or Problem Details.
+ */
 export function createAsyncResourceController<T>(
   load: () => Promise<T>,
   initialValue: T,

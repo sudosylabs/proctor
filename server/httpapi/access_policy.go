@@ -112,6 +112,11 @@ type desktopAuthorizationCompatibilityResponse struct {
 	MinimumVersion int    `json:"minimum_version"`
 	MaximumVersion int    `json:"maximum_version"`
 }
+
+// publicAccessDiscoveryResponse is served to anyone, so it must never grow
+// provider admission rules, invitation credential policy, mail capability,
+// secrets, redirect URIs or recipient data. The support address is an
+// operator contact, not a signal that mail works.
 type publicAccessDiscoveryResponse struct {
 	DiscoveryVersion     int                                       `json:"discovery_version"`
 	CanonicalOrigin      string                                    `json:"canonical_origin"`
@@ -123,7 +128,7 @@ type publicAccessDiscoveryResponse struct {
 	Providers            []externalAuthenticationProviderResponse  `json:"providers"`
 	DesktopAuthorization desktopAuthorizationCompatibilityResponse `json:"desktop_authorization"`
 	// SupportAddress and PasswordMinimumLength are operator-configured
-	// presentation facts for hosted pages.
+	// presentation facts for hosted pages, present even before bootstrap.
 	SupportAddress        string `json:"support_address,omitempty"`
 	PasswordMinimumLength int    `json:"password_minimum_length"`
 }

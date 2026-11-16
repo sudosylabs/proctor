@@ -89,9 +89,9 @@ account" clears the chosen account without rebuilding the original proof.
 When a person's action leads to a terminal state, the page moves focus to the
 replacement task and announces it. Background checks don't steal focus.
 
-Read the page contract,
-`webapp/src/features/desktop-authorization/CONTRACT.md`, before you change a
-state. These tests cover it:
+Before you change a state, read the comments in
+`webapp/src/features/desktop-authorization/DesktopAuthorizationApi.ts`. These
+tests cover the page:
 
 - `webapp/src/app/HostedRoutes.test.tsx` covers credential purpose, URL
   cleanup, state limits and rendering of every route.

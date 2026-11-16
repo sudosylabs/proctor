@@ -11,6 +11,10 @@
 // to its Store operation; the Store saves the outcome with the change and
 // returns it again when the same command is repeated.
 //
+// A replay still runs authentication, authorization and audit; only the
+// mutation and its post-commit effects are skipped. Keys, fingerprints and
+// stored outcomes never reach public fields or ordinary telemetry.
+//
 // Require is for commands that must carry a key, Prepare for commands where
 // the key is optional. Each use case chooses which one applies and what counts
 // as the command's meaning.

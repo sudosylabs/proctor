@@ -316,6 +316,8 @@ func (s *Service) listUsers(
 		return paging.Page[*model.User]{}, store.UserListOptions{}, apperror.Invalid("request.invalid", activityField)
 	}
 
+	// Disablement is account state a scoped viewer cannot see, so it neither
+	// reaches disabled Users nor learns of them from an error.
 	includeDisabled := query.IncludeDisabled && visibility.InstitutionWide
 	if visibility.ActiveAt.IsZero() && (len(affiliations) > 0 || query.AcademicUnitID != "" || len(roleIDs) > 0) {
 		visibility.ActiveAt = model.TimeUTC(s.now())

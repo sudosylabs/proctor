@@ -111,6 +111,8 @@ const RailSlotContext = createContext<HTMLElement | null>(null);
  * Places rail items owned by nested task content into the verification rail,
  * after the page's own `rail` items and before the shell's help item. A page
  * that already knows its items passes them through the shell's `rail` prop.
+ * Nothing renders until the shell has mounted the slot, and the items leave
+ * the rail when the task content unmounts.
  */
 export function TaskRail({ children }: { children: ReactNode }) {
   const slot = useContext(RailSlotContext);
@@ -123,7 +125,8 @@ export interface RailItemProps {
   /**
    * Marks information a person needs before acting. Below `48rem` the rail
    * follows the task, so the page repeats this as a note in its intro and the
-   * rail item is hidden there.
+   * rail item is hidden there. Keep the two in step, or narrow screens show
+   * the information after the action it was meant to precede.
    */
   beforeTask?: boolean;
 }

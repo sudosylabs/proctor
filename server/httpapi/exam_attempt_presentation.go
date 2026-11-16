@@ -74,6 +74,9 @@ type candidateRuntimeCapabilitiesResponse struct {
 	Departure                     candidateDepartureResponse            `json:"departure"`
 }
 
+// candidateAttemptConfigurationResponse deliberately omits the build, registry
+// and settings provenance that the frozen digest also covers, so a candidate
+// cannot recompute the digest from it. Do not add provenance here.
 type candidateAttemptConfigurationResponse struct {
 	Revision            string                                 `json:"attempt_configuration_revision"`
 	Presentation        model.AttemptConfigurationPresentation `json:"presentation"`

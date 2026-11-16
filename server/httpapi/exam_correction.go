@@ -50,6 +50,8 @@ type examSittingCorrectionStageMetadata struct {
 	SHA256             string `json:"sha256"`
 }
 
+// examSittingCorrectionStageResponse names only the stage and resource. File
+// entry, revision, rendition, upload-lease and storage identities stay inside.
 type examSittingCorrectionStageResponse struct {
 	StageID    string `json:"stage_id"`
 	ResourceID string `json:"resource_id"`
@@ -60,15 +62,17 @@ type examSittingCorrectionStageResponse struct {
 }
 
 type applyExamSittingCorrectionRequest struct {
-	ExpectedSittingRevision   int64                                  `json:"expected_revision"`
-	ExpectedCurrentRevisionID string                                 `json:"expected_current_revision_id"`
-	InstructionsMarkdown      route.Optional[string]                 `json:"instructions_markdown"`
-	BrowserPolicy             route.Optional[browserPolicyDocument]  `json:"browser_policy"`
-	AffectedCapabilities      []model.CandidateCapability            `json:"affected_capabilities"`
-	CandidateSummary          string                                 `json:"candidate_summary"`
-	AcknowledgementRequired   bool                                   `json:"acknowledgement_required"`
-	Reason                    string                                 `json:"reason"`
-	Resources                 []examSittingCorrectionResourceRequest `json:"resources"`
+	ExpectedSittingRevision   int64                                 `json:"expected_revision"`
+	ExpectedCurrentRevisionID string                                `json:"expected_current_revision_id"`
+	InstructionsMarkdown      route.Optional[string]                `json:"instructions_markdown"`
+	BrowserPolicy             route.Optional[browserPolicyDocument] `json:"browser_policy"`
+	AffectedCapabilities      []model.CandidateCapability           `json:"affected_capabilities"`
+	CandidateSummary          string                                `json:"candidate_summary"`
+	AcknowledgementRequired   bool                                  `json:"acknowledgement_required"`
+	Reason                    string                                `json:"reason"`
+	// Resources is the complete manifest: an omitted resource is removed, order
+	// is position, and an item without stage_id keeps its exact base content.
+	Resources []examSittingCorrectionResourceRequest `json:"resources"`
 }
 
 type examSittingCorrectionResourceRequest struct {

@@ -74,6 +74,8 @@ func loopbackOrigin(raw string) (string, error) {
 	return "http://" + net.JoinHostPort(host, strconv.Itoa(port)), nil
 }
 
+// localHTTPClient ignores environment proxies, follows no redirects and dials
+// only loopback addresses, so fixture bearer tokens never leave the machine.
 func localHTTPClient() *http.Client {
 	dialer := &net.Dialer{Timeout: 5 * time.Second}
 	return &http.Client{

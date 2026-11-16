@@ -32,6 +32,9 @@ type publishExamRevisionRequest struct {
 	ExpectedDraftRevision int64 `json:"expected_revision"`
 }
 
+// examRevisionResponse carries publication metadata only. Instructions,
+// canonical policy bytes, resource metadata, Starter Workspace paths and
+// content or object identities must never be added here.
 type examRevisionResponse struct {
 	ID                         string                     `json:"id"`
 	ExamID                     string                     `json:"exam_id"`

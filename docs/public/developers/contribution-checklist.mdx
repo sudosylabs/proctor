@@ -18,8 +18,8 @@ repository's
 
 - Write down what changes for the user, operator, developer or system.
 - Identify the domain terms involved and the rules that must hold.
-- Find the current implementation, its tests, the nearest component contract,
-  and the public maturity statement that applies.
+- Find the current implementation, its tests, the comments that state its
+  rules, and the public maturity statement that applies.
 - Run `git status` and tell existing work apart from your change.
 - Before you edit anything, list the public contracts, generated artifacts and
   documentation sources your change touches.
@@ -52,8 +52,9 @@ Follow the workflow that applies:
 - [documentation](./documentation.mdx)
 
 Change source and tests together. When a behavior, or the place that defines
-it, changes, update its component contract, its public guide and maturity, the
-API source, or the tracked reference that owns it, in the same slice.
+it, changes, update the comments that state its rules, its public guide and
+maturity, the API source, or the tracked reference that owns it, in the same
+slice.
 
 If users, operators or module consumers will notice the change, add a line
 under `Unreleased` in the repository

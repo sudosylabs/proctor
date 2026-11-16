@@ -19,6 +19,10 @@ const (
 	RetentionControlOperation = "retention.control"
 )
 
+// RetentionMutation carries the caller's authority into the store, which
+// rechecks it at the locked database time on every write, exact replays and
+// no-ops included, so a retained idempotency key cannot outlive the
+// administrator status or recent proof that first used it.
 type RetentionMutation struct {
 	Principal               model.Principal
 	AuditEventID            model.AuditEventID

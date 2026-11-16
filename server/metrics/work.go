@@ -25,6 +25,8 @@ func (m *Module) WorkFinished(pool string, duration time.Duration) {
 }
 
 // WorkRejected records immediate refusal, without user, file, or error labels.
+// A full pool is load, not a fault: refusals are counted here rather than
+// logged per request, and they never change readiness.
 func (m *Module) WorkRejected(pool string) {
 	if validWorkPool(pool) {
 		m.workRejected.WithLabelValues(pool).Inc()

@@ -467,6 +467,8 @@ function SessionInvitation({
         >
           {message("webapp.join.session.submit")}
         </Button>
+        {/* Sign-in opens in an isolated tab so this page keeps its
+            purpose-bound handle; the feedback text warns about the new tab. */}
         {needsSession ? (
           <a
             aria-describedby="join-session-feedback"

@@ -279,6 +279,8 @@ func (h examExportsHandlers) open(request route.Request) (route.ProtocolResult, 
 
 	headers := privateNoStoreHeaders()
 	headers.Set("Content-Type", "application/zip")
+	// The name carries only the export ID, so no Exam or candidate name ends
+	// up in a browser's download history.
 	headers.Set("Content-Disposition", `attachment; filename="exam-export-`+query.ExportID.String()+`.zip"`)
 	headers.Set("ETag", `"`+opened.Export.ArchiveSHA256+`"`)
 	return route.BinaryDownload(opened.Body, opened.Export.ArchiveSizeBytes).WithHeaders(headers), nil

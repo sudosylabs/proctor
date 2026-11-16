@@ -1356,6 +1356,9 @@ func (row browserAuthenticationRow) model() (*model.BrowserAuthenticationTransac
 	return value, nil
 }
 
+// Maintain runs on every node; SKIP LOCKED row claims make concurrent passes
+// safe without a Job or ledger. Protocol writes deliberately leave expiry and
+// purge to this pass instead of scanning opportunistically.
 func (s SQLBrowserAuthenticationStore) Maintain(ctx context.Context, limit int) (*store.BrowserAuthenticationMaintenanceResult, error) {
 	if limit < 1 || limit > 1000 {
 		return nil, store.NewErrInvalidInput("browser_authentication_transaction", "maintenance_limit", nil)

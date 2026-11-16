@@ -54,6 +54,8 @@ export function resolveRegistrationDiscovery(
   return { kind: "ready", discovery };
 }
 
+// Requests discovery directly rather than through the shared page-lifetime
+// result, because a rejection must be answered from the current policy.
 export async function requestRegistrationDiscovery(
   servingOrigin: string,
 ): Promise<RegistrationDiscoveryState> {
@@ -72,6 +74,7 @@ export async function submitRegistration(
         first_name: submission.firstName.trim(),
         last_name: submission.lastName.trim(),
         username: submission.username.trim(),
+        // The password is sent exactly as typed; only the other fields are trimmed.
         password: submission.password,
       },
     });

@@ -1194,6 +1194,10 @@ func requireLiveUserSession(ctx context.Context, executor sqlxExecutor, userID m
 	return nil
 }
 
+// lockUserSessions takes the per-User lock that every Session issuer and
+// Attempt activation share. Any path that can create a Session must take it
+// and recheck for an active Attempt inside the same transaction, or a Session
+// could be issued after the Attempt started.
 func lockUserSessions(
 	ctx context.Context,
 	executor sqlxExecutor,

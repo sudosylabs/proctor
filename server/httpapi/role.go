@@ -33,6 +33,9 @@ type createRoleRequest struct {
 	Permissions []string `json:"permissions"`
 }
 
+// updateRoleRequest is a frozen v1 shape: omitted and null both leave a field
+// unchanged, while an empty string or array is present and validated. New
+// PATCH requests use route.Optional where omission and null differ.
 type updateRoleRequest struct {
 	DisplayName *string   `json:"display_name,omitempty"`
 	Description *string   `json:"description,omitempty"`

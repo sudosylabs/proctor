@@ -105,7 +105,8 @@ func (s *Service) countPendingInvitations(ctx context.Context, inv invocation.In
 }
 
 // GetInvitation reads one Invitation visible through the caller's invitation.view
-// scopes.
+// scopes. An Invitation outside them reads as missing, so the answer never
+// confirms that it exists.
 func (s *Service) GetInvitation(
 	ctx context.Context,
 	inv invocation.Invocation,

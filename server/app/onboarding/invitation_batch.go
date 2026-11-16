@@ -24,6 +24,8 @@ import (
 
 // RunInvitationBatch runs one Invitation operation over up to
 // MaximumInvitationBatchItems rows after one batch authorization at the scope.
+// Each row goes through the single-Invitation use case with its own checks and
+// commits independently, so a later failure never rolls back earlier rows.
 func (s *Service) RunInvitationBatch(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -70,6 +72,8 @@ func (s *Service) RunInvitationBatch(
 			continue
 		}
 
+		// A repeated item key makes the row identity ambiguous on retry, so
+		// every row sharing it fails rather than one of them running.
 		if itemKeyCounts[item.IdempotencyKey] != 1 {
 			outcome.Status, outcome.ErrorCode = InvitationBatchItemFailed, "request.invalid"
 			result.append(outcome)
@@ -122,6 +126,8 @@ func (s *Service) RunInvitationBatch(
 	return result, nil
 }
 
+// invitationBatchDuplicateWinners picks the smallest item key for each repeated
+// target, so the same row wins however the client orders a retried request.
 func invitationBatchDuplicateWinners(
 	operation InvitationBatchOperation,
 	items []InvitationBatchItemCommand,

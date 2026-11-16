@@ -158,6 +158,8 @@ func (a *API) protocolOperationHandler(
 			return
 		}
 
+		// Only after prepareOperation has authenticated the request, so an
+		// anonymous client cannot hold a connection open for a large upload.
 		if definition.ProtocolKind == ProtocolStreamingUpload {
 			if err := a.transferDeadlines.extendForUpload(writer, request.ContentLength, definition.MaxBodyBytes); err != nil {
 				a.logger.ErrorContext(request.Context(), "extend upload transfer deadline", logging.Err(err))

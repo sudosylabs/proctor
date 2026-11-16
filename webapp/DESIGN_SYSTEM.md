@@ -31,29 +31,29 @@ This foundation owns:
 - CSS ownership and the path for adding themes, components, and pages; and
 - automated token generation, contrast checks, and authored-style guards.
 
-Page composition and component APIs remain feature-owned or governed beside a
+Page composition and component APIs remain feature-owned or live beside a
 component proven by real consumers. The first such component is
-[`AccessPageShell`](./src/components/AccessPageShell/CONTRACT.md), the one
-frame shared by every hosted route; it does not establish a general
+[`AccessPageShell`](./src/components/AccessPageShell/AccessPageShell.tsx), the
+one frame shared by every hosted route; it does not establish a general
 authenticated application shell or navigation. Focused task introductions use
-the [`AccessTaskIntro`](./src/components/AccessTaskIntro/CONTRACT.md)
-contract, labelled facts a person checks before or after an action use
-[`FactList`](./src/components/FactList/CONTRACT.md), and a long task is divided
-into numbered [`FormGroup`](./src/components/FormGroup/CONTRACT.md) parts.
-Their loading, unavailable, terminal, and context-replacement states use the
-narrow [`TaskState`](./src/components/TaskState/CONTRACT.md) contract for a
-consistent hierarchy, responsive action rhythm, live announcement, and
+[`AccessTaskIntro`](./src/components/AccessTaskIntro/AccessTaskIntro.tsx),
+labelled facts a person checks before or after an action use
+[`FactList`](./src/components/FactList/FactList.tsx), and a long task is
+divided into numbered [`FormGroup`](./src/components/FormGroup/FormGroup.tsx)
+parts. Their loading, unavailable, terminal, and context-replacement states use
+the narrow [`TaskState`](./src/components/TaskState/TaskState.tsx) component
+for a consistent hierarchy, responsive action rhythm, live announcement, and
 bounded heading-focus behavior.
-The initial product icon vocabulary is governed by the narrow
-[`Icon`](./src/components/Icon/CONTRACT.md) adapter proven across those pages.
-Stable pre-action evidence and compact inline state use the narrow
-[`Notice`](./src/components/Notice/CONTRACT.md) contract. Repeated form
-behavior is governed by
-[`InputField`](./src/components/InputField/CONTRACT.md) and
-[`Button`](./src/components/Button/CONTRACT.md). Persistent form-level
+The initial product icon vocabulary lives in the narrow
+[`Icon`](./src/components/Icon/Icon.tsx) adapter proven across those pages.
+Stable pre-action evidence and compact inline state use
+[`Notice`](./src/components/Notice/Notice.tsx). Repeated form behavior lives in
+[`InputField`](./src/components/InputField/InputField.tsx) and
+[`Button`](./src/components/Button/Button.tsx). Persistent form-level
 submission failures use the action-adjacent
-[`FormFeedback`](./src/components/FormFeedback/CONTRACT.md) region; features
-retain their values, copy, validation decisions, submission, and recovery.
+[`FormFeedback`](./src/components/FormFeedback/FormFeedback.tsx) region;
+features retain their values, copy, validation decisions, submission, and
+recovery.
 The system still owns no illustration set, general navigation behavior, or
 persisted theme chooser. Those decisions require a real flow and its states
 rather than speculative abstractions.
@@ -149,7 +149,7 @@ Every registered theme exposes exactly the same semantic color and elevation
 keys. The generator rejects incomplete themes, so a component never asks which
 theme is active. Each theme also sets native `color-scheme`, allowing browser
 controls and scrollbars to match. The narrow
-[`ProductTheme`](./src/theme/CONTRACT.md) runtime resolves the effective
+[`ProductTheme`](./src/theme/ProductTheme.tsx) runtime resolves the effective
 registered theme once for document metadata, root state, and the hosted-page
 lockup. A future theme controller supplies only a typed preference to that
 owner and must not reproduce effective-theme logic.
@@ -315,7 +315,7 @@ receive a shadow merely to look complete.
 
 Selected [Lucide React](https://lucide.dev/guide/packages/lucide-react) glyphs
 are the sole product-icon source and are exposed only through the owned
-[`Icon`](./src/components/Icon/CONTRACT.md) adapter. Feature code imports
+[`Icon`](./src/components/Icon/Icon.tsx) adapter. Feature code imports
 semantic Proctor names from that adapter, never `lucide-react`, so changing a
 glyph or source does not leak library APIs through the product. Add a name only
 when a concrete recurring use proves its meaning.
@@ -475,7 +475,7 @@ prefer `transform` and `opacity`. Generated tokens collapse those durations
 under `prefers-reduced-motion`, but a component must also keep its complete
 meaning without animation and stop non-essential repeated motion.
 
-Pending work uses the shared [`Loading`](./src/components/Loading/CONTRACT.md)
+Pending work uses the shared [`Loading`](./src/components/Loading/Loading.tsx)
 indicator: the Lucide Loader glyph through the Icon adapter, with an optional
 message below it. Its color and footprint follow its owning container. Page
 layouts reserve a bounded area for the pending content and keep available
@@ -574,7 +574,7 @@ It encodes the server's validated provisioning URI locally; an adjacent manual
 setup key supplies the nonvisual and same-device alternative.
 
 A component enters the shared system only when at least two real consumers
-need the same semantics and behavior. Its contract then documents:
+need the same semantics and behavior. Before promoting it, settle:
 
 - purpose and non-purpose;
 - semantic element and keyboard behavior;
@@ -822,7 +822,8 @@ rather than a silent semantic repurpose.
 ### Add a component
 
 Start inside the first real feature. Promote it only after a second consumer
-proves shared behavior. Add the narrow component contract, interaction tests,
+proves shared behavior. Add a narrow interface, comments for the rules the
+code can't show, interaction tests,
 accessibility checks, representative content extremes, and both-theme visual
 evidence. Do not add an index of empty component categories.
 

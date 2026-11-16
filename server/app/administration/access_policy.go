@@ -197,6 +197,8 @@ func (s *Service) ReplaceAccessPolicy(
 		return AccessPolicyView{}, apperror.New("access_policy.unavailable")
 	}
 
+	// The event is best effort and only follows the commit; the Store repeats
+	// the blocker and revision checks, so the preflight result is advisory.
 	if stored.Changed && !stored.Replayed {
 		if effectErr := s.publishAccessPolicyChanged(ctx, institution.ID, stored); effectErr != nil {
 			s.publisher.Report(ctx, "access_policy_changed", effectErr)

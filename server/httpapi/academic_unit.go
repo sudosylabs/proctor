@@ -37,6 +37,9 @@ type createAcademicUnitRequest struct {
 	Description string `json:"description"`
 }
 
+// updateAcademicUnitRequest is a frozen v1 shape: its pointers make an omitted
+// member and an explicit null mean the same thing. New PATCH requests whose
+// omission and null differ use route.Optional instead of copying this.
 type updateAcademicUnitRequest struct {
 	ExpectedRevision route.Optional[int64] `json:"expected_revision"`
 	ParentID         *string               `json:"parent_id"`

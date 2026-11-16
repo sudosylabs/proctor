@@ -20,6 +20,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// ManagerEndCommand ends an Attempt on a manager's decision. PrivateReason is
+// kept only in durable provenance; it must not reach the response, mail,
+// realtime events or ordinary audit values.
 type ManagerEndCommand struct {
 	ExamID                  model.ExamID
 	SittingID               model.ExamSittingID

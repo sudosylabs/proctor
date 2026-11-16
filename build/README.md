@@ -252,8 +252,9 @@ Existing Sittings and completed history stay intact. If this operation is
 interrupted, resume without `DEV_SEED_REFRESH=true`; a fresh request always means
 another generation. Academic Period bounds still apply.
 
-The [seed component contract](../server/cmd/ptool/devseed/CONTRACT.md) describes
-recovery and privacy boundaries. `make -C server integration-all` includes its
+The seed journal under the state directory holds passwords, tokens, and
+Invitation claims; keep it out of source control and diagnostic archives.
+`make -C server integration-all` includes its
 small integration profile. To exercise the desktop or large dataset in that
 gate, set `PROCTOR_TEST_SEED_PROFILE=desktop` or `large`. For the large profile,
 allow for real password hashing, mail delivery, and synchronized recovery writes

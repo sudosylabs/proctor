@@ -24,6 +24,8 @@ export function resolveEmailVerificationResult(
   return { kind: "unavailable" };
 }
 
+// Spends the one-time token, so it runs only from the explicit button and
+// never on load. Only an exact 204 proves the address was verified.
 export async function completeEmailVerification(
   token: string,
 ): Promise<EmailVerificationResult> {

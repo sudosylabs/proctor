@@ -44,6 +44,8 @@ type operation struct {
 	Result     json.RawMessage `json:"result,omitempty"`
 }
 
+// journal holds passwords, tokens, one-use Invitation claims and saved
+// requests. It must never be committed or attached to a diagnostic archive.
 type journal struct {
 	Server        string                `json:"server_url"`
 	Mailpit       string                `json:"mailpit_url"`
@@ -158,6 +160,9 @@ func (r *runner) save() error {
 // natural key. A missing result allows an exact saved request to be retried.
 type reconcile func() (json.RawMessage, bool, error)
 
+// step journals a request before sending it and its result before moving on,
+// so a rerun either replays the exact saved request or reconciles it; a
+// completed step is never sent again.
 func (r *runner) step(key, token, method, path string, body object, content []byte, resolve reconcile) (object, error) {
 	op, exists := r.state.Operations[key]
 	if exists && op.Done {

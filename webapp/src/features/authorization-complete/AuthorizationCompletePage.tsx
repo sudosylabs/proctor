@@ -26,6 +26,9 @@ export function isCurrentUser(value: unknown): boolean {
   );
 }
 
+// Only a 200 from /users/me proves sign-in; reaching this path proves nothing.
+// A recovery or enrollment restriction is considered only after the bounded
+// invalid-token 401, never inferred from the URL or a bare rejection.
 async function confirmSession(): Promise<ConfirmationState> {
   try {
     const { data, error, response } = await apiClient.GET("/api/v1/users/me");
@@ -46,6 +49,8 @@ async function confirmSession(): Promise<ConfirmationState> {
   }
 }
 
+// Login and provider connection both end here and pass no input, so the page
+// must never claim which flow finished or that a provider was connected.
 export function AuthorizationCompletePage() {
   const confirmation = useAsyncResource<ConfirmationState>(
     confirmSession,

@@ -713,7 +713,9 @@ func filterUserListVisibility(query sq.SelectBuilder, visibility store.UserVisib
 	return query, nil
 }
 
-// filterUserListSearch restricts a User listing to the trimmed search term, matching email only institution-wide.
+// filterUserListSearch restricts a User listing to the trimmed search term,
+// matching email only institution-wide. A scoped search may match only fields
+// its projection shows, or a hidden email address becomes a lookup oracle.
 func filterUserListSearch(query sq.SelectBuilder, options store.UserListOptions) sq.SelectBuilder {
 	term := strings.TrimSpace(options.Query)
 	if term != "" {

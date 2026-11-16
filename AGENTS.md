@@ -47,12 +47,13 @@ Load only the material relevant to the task:
   uses [`$docs-site`](.agents/skills/docs-site/SKILL.md); its governed figures
   and screenshots use
   [`$docs-site-visual-assets`](.agents/skills/docs-site-visual-assets/SKILL.md).
-- Read the affected module README and the nearest component contract before
-  changing a public or behavioral contract.
+- Read the affected module README and the comments on the code you change
+  before changing a public or behavioral contract.
 
 The code and tests are the source of truth for discoverable implementation
-detail. Skills and component contracts record domain language, durable rules,
-rationale, and non-obvious workflow—not inventories recoverable from the tree.
+detail. Skills record domain language, durable rules, rationale, and
+non-obvious workflow; code comments record an invariant at the place that
+enforces it. Neither repeats inventories recoverable from the tree.
 
 ## Architectural guardrails
 
@@ -130,7 +131,7 @@ While working:
 - Keep dependency direction intact and complete one vertical slice at a time.
 - Add tests proportional to risk and use existing conformance suites.
 - Record copied or substantially adapted upstream source immediately.
-- Update the owning skill, component contract, or public documentation in the
+- Update the owning skill, code comment, or public documentation in the
   same change when its authority has changed.
 
 Before handing off:

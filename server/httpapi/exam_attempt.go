@@ -31,6 +31,10 @@ type candidateAttemptHeaderAccess struct {
 	ContinuityCredential string
 }
 
+// candidateAttemptAccessHeaders reads the continuity credential only from its
+// header, never from the URL, and the value must never be echoed, logged or
+// put in a Problem. Every bad value fails the same way so a client cannot tell
+// which selector was wrong.
 func candidateAttemptAccessHeaders(request *http.Request) (candidateAttemptHeaderAccess, error) {
 	if request == nil {
 		return candidateAttemptHeaderAccess{}, errors.New("candidate Attempt headers are required")

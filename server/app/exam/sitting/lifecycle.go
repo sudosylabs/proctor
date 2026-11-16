@@ -336,6 +336,9 @@ type managerTransitionStoreCall func(
 	*store.CommandIdempotency,
 ) (*store.ExamSittingLifecycleResult, error)
 
+// runManagerTransition runs one manager lifecycle change. allowArchived lets an
+// archived Exam still pause or close early, which only reduce what candidates
+// can do; resume and extension would restore capability and stay refused.
 func (s *Service) runManagerTransition(
 	ctx context.Context,
 	inv invocation.Invocation,

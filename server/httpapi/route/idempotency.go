@@ -56,7 +56,9 @@ func (a *API) withIdempotency(next http.Handler, requirement IdempotencyRequirem
 
 // IdempotencyRequirement says whether a route takes an Idempotency-Key header.
 // The kernel validates the header and passes the key in Request.IdempotencyKey;
-// replaying an outcome belongs to the use case.
+// replaying an outcome belongs to the use case. An existing route may become
+// optional, but making it required breaks clients that send no key, so that
+// needs a new compatible contract.
 type IdempotencyRequirement string
 
 // IdempotencyNone refuses a key with idempotency.not_supported.

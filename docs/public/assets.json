@@ -129,7 +129,7 @@
       "review_triggers": [
         ".agents/skills/identity-and-access/references/access-and-onboarding.md",
         ".agents/skills/identity-and-access/references/identity.md",
-        "webapp/src/features/desktop-authorization/CONTRACT.md",
+        "webapp/src/features/desktop-authorization/DesktopAuthorizationApi.ts",
         "server/openapi/fragments/authentication/auth-desktop.yaml"
       ],
       "visual_review": {
@@ -658,7 +658,7 @@
         ".agents/skills/http-api/references/transport.md",
         ".agents/skills/server-boundaries/references/application.md",
         ".agents/skills/runtime-operations/references/runtime.md",
-        "server/httpapi/CONTRACT.md",
+        "server/httpapi/route/dispatch.go",
         "server/httpapi/route/problem.go",
         "server/metrics/module.go"
       ],
@@ -767,8 +767,7 @@
         "server/openapi/base.yaml",
         "server/i18n/en.json",
         "webapp/DESIGN_SYSTEM.md",
-        "webapp/src/app/HostedRoutes.tsx",
-        "webapp/src/app/CONTRACT.md"
+        "webapp/src/app/HostedRoutes.tsx"
       ],
       "visual_review": {
         "status": "approved",
@@ -819,7 +818,6 @@
       "review_triggers": [
         "webapp/src/app/HostedRoutes.tsx",
         "webapp/src/auth/fragments.ts",
-        "webapp/src/features/reset-password/CONTRACT.md",
         "webapp/src/features/reset-password/ResetPasswordApi.ts",
         "webapp/src/components/PasswordRecovery/ResetPasswordContent.tsx",
         "server/openapi/fragments/authentication/auth-password-reset.yaml"
@@ -871,8 +869,8 @@
       "visual_system": "proctor-diagrams-v2",
       "last_reviewed": "2026-11-15",
       "review_triggers": [
-        "webapp/src/components/InputField/CONTRACT.md",
-        "webapp/src/components/FormFeedback/CONTRACT.md",
+        "webapp/src/components/InputField/InputField.tsx",
+        "webapp/src/components/FormFeedback/FormFeedback.tsx",
         "webapp/src/components/PasswordRecovery/ResetPasswordContent.tsx",
         "webapp/src/components/PasswordRecovery/PasswordRecovery.module.css"
       ],
@@ -952,11 +950,10 @@
       },
       "review_triggers": [
         "webapp/tests/fixtures/documentation-password-reset.json",
-        "webapp/src/features/reset-password/CONTRACT.md",
         "webapp/src/features/reset-password/ResetPasswordPage.tsx",
         "webapp/src/components/PasswordRecovery/ResetPasswordContent.tsx",
         "webapp/src/components/PasswordRecovery/PasswordRecovery.module.css",
-        "webapp/src/components/AccessPageShell/CONTRACT.md"
+        "webapp/src/components/AccessPageShell/AccessPageShell.tsx"
       ]
     },
     {
@@ -1010,9 +1007,9 @@
       "review_triggers": [
         "webapp/tests/fixtures/documentation-desktop-authorization.json",
         "webapp/tests/browser/hosted-access.spec.ts",
-        "webapp/src/features/desktop-authorization/CONTRACT.md",
+        "webapp/src/features/desktop-authorization/DesktopAuthorizationApi.ts",
         "webapp/src/features/desktop-authorization/DesktopAuthorizationPage.tsx",
-        "webapp/src/components/AccessPageShell/CONTRACT.md"
+        "webapp/src/components/AccessPageShell/AccessPageShell.tsx"
       ]
     },
     {

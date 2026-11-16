@@ -106,6 +106,8 @@ func (s *Service) authenticateAccess(
 	if err != nil {
 		return nil, err
 	}
+	// A Desktop credential is bound to its key, so presenting it without a
+	// DPoP proof must fail like an unknown token.
 	if resolved.Session.ClientType == model.SessionClientDesktop {
 		return nil, access.InvalidTokenAppError()
 	}

@@ -353,6 +353,10 @@ func (s *Service) AcceptInstitutionRoleInvitation(
 	return s.acceptScopedRole(ctx, inv, command.Claim, command.Source, model.InvitationPurposeInstitutionRole)
 }
 
+// acceptScopedRole binds the Role to the Session's own User. The claim proves
+// mailbox control only; an account email that matches the recipient must
+// never select or change a User, and acceptance touches no profile, email,
+// membership or credential.
 func (s *Service) acceptScopedRole(
 	ctx context.Context,
 	inv invocation.Invocation,

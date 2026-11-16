@@ -343,17 +343,19 @@ type examIdentityResponse struct {
 }
 
 type examDraftResponse struct {
-	ExamID               string                     `json:"exam_id"`
-	Title                string                     `json:"title"`
-	InstructionsMarkdown string                     `json:"instructions_markdown"`
-	Policy               examPolicyResponse         `json:"policy"`
-	BrowserPolicy        browserPolicyDocument      `json:"browser_policy"`
-	Capacity             examCapacityPolicyResponse `json:"capacity"`
-	BaseRevisionID       string                     `json:"base_revision_id,omitempty"`
-	UpdatedAt            string                     `json:"updated_at"`
-	Revision             int64                      `json:"revision"`
-	ResourceCount        int                        `json:"resource_count"`
-	HasStarterWorkspace  bool                       `json:"has_starter_workspace"`
+	ExamID               string                `json:"exam_id"`
+	Title                string                `json:"title"`
+	InstructionsMarkdown string                `json:"instructions_markdown"`
+	Policy               examPolicyResponse    `json:"policy"`
+	BrowserPolicy        browserPolicyDocument `json:"browser_policy"`
+	// Capacity is guidance for the editor. Each mutation rechecks the current
+	// policy in PostgreSQL rather than trusting this projection.
+	Capacity            examCapacityPolicyResponse `json:"capacity"`
+	BaseRevisionID      string                     `json:"base_revision_id,omitempty"`
+	UpdatedAt           string                     `json:"updated_at"`
+	Revision            int64                      `json:"revision"`
+	ResourceCount       int                        `json:"resource_count"`
+	HasStarterWorkspace bool                       `json:"has_starter_workspace"`
 }
 
 type examPolicyResponse struct {

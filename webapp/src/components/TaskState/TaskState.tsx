@@ -84,6 +84,10 @@ export interface TaskHeadingProps {
   id: string;
 }
 
+/**
+ * Focus only after a user-triggered replacement removed the control that
+ * started it; initial loading and background updates must not move focus.
+ */
 export function TaskHeading({
   children,
   className,
@@ -116,6 +120,11 @@ export function TaskStateActions({
   );
 }
 
+/**
+ * Keep this mounted while the task changes so state changes are announced.
+ * Announce only bounded localized copy, never credentials, identifiers or
+ * server prose.
+ */
 export function TaskStateAnnouncement({ message }: { message: string }) {
   return (
     <div

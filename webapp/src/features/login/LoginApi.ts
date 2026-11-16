@@ -50,6 +50,8 @@ export const authenticateLocal: AuthenticateLocal = async (submission) => {
       return { kind: data.session.mfa_enrollment_required === true ? "enrollment_required" : "authenticated" };
     }
 
+    // Credential failures stay one undifferentiated outcome so the page cannot
+    // reveal whether the identifier, password, User state or policy was the cause.
     switch (readProblemValue(error)?.code) {
       case "authentication.mfa.required":
         return { kind: "mfa_required" };

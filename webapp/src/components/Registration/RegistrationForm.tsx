@@ -49,6 +49,7 @@ export function RegistrationForm({
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  // Client-only: never sent or stored, and it carries no authorization meaning.
   const [acknowledged, setAcknowledged] = useState(false);
   const [pending, setPending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});

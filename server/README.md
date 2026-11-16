@@ -181,8 +181,8 @@ which layer owns which decision and links a complete worked example.
 [`AGENTS.md`](AGENTS.md) has the conventions table: one answer per recurring
 question, and what enforces it: a test, a linter rule, or review. The tests in
 `architecture/` protect package boundaries, security properties and published
-contracts; style is left to the linter. [`httpapi/CONTRACT.md`](httpapi/CONTRACT.md) is the HTTP
-contract, [`openapi/README.md`](openapi/README.md) the OpenAPI authoring
+contracts; style is left to the linter. [`httpapi/route/doc.go`](httpapi/route/doc.go)
+is the guide to declaring routes, [`openapi/README.md`](openapi/README.md) the OpenAPI authoring
 workflow, [`cluster/GUARANTEES.md`](cluster/GUARANTEES.md) what cluster
 delivery promises, and [`templates/README.md`](templates/README.md) the mail
 template workflow. Installing, configuring and operating a server is covered

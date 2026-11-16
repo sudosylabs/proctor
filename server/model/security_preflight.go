@@ -20,7 +20,10 @@ import (
 // digest, and results are persisted as replay outcomes and returned verbatim.
 
 const (
-	SecurityPreflightLifetime           = 120 * time.Second
+	SecurityPreflightLifetime = 120 * time.Second
+	// SecurityPreflightAdmissionFreshness bounds how old a report may be at
+	// admission. A report replay keeps its original receipt time, so retrying
+	// a report can never extend it.
 	SecurityPreflightAdmissionFreshness = 30 * time.Second
 	SecurityPreflightReportMaxBytes     = 128 * 1024
 )

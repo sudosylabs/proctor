@@ -8,50 +8,32 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
-
-type programmePageHTTPApplication struct {
-	programmeHTTPApplication
-	query academic.ListProgrammesQuery
-	page  paging.Counted[*model.Programme]
-}
-
-func (a *programmePageHTTPApplication) ListProgrammes(_ context.Context, _ invocation.Invocation, query academic.ListProgrammesQuery) (paging.Counted[*model.Programme], error) {
-	a.query = query
-	return a.page, nil
-}
 
 func TestAcademicNameListContinuesAfterTheLastName(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{
-		UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password",
-		AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now(),
-	}
+	principal := academicCaller()
 	unitID := model.NewAcademicUnitID()
+	fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, unitID, model.ActionProgrammeView)}})
 	programme := &model.Programme{ID: model.NewProgrammeID(), AcademicUnitID: unitID, Name: "computer-science", DisplayName: "Computer Science"}
-	application := &programmePageHTTPApplication{page: paging.Counted[*model.Programme]{
-		Page:  paging.Page[*model.Programme]{Items: []*model.Programme{programme}, HasMore: true},
-		Total: paging.Total{Counted: true, Total: 7},
-	}}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, programmeResource(application))
+	listing := &fixture.programmes.page
+	listing.listed, listing.more, listing.total = []*model.Programme{programme}, true, 7
+	listing.filler = &model.Programme{ID: model.NewProgrammeID(), AcademicUnitID: unitID, Name: "zz-filler"}
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, programmeResource(fixture.service))
 	call := func(query string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+unitID.String()+"/programmes"+query, nil)
 		request.Header.Set("Authorization", "Bearer credential")
@@ -62,7 +44,8 @@ func TestAcademicNameListContinuesAfterTheLastName(t *testing.T) {
 
 	response := call("?q=comp&limit=1")
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	require.Equal(t, paging.NameQuery{Limit: 1}, application.query.NameQuery)
+	// The Store reads one past the limit to learn whether another page follows.
+	require.Equal(t, store.AcademicNameListOptions{Term: "comp", Limit: 2}, listing.lastList(t))
 	var page route.CountedList[programmeResponse]
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
 	require.Len(t, page.Items, 1)
@@ -72,10 +55,12 @@ func TestAcademicNameListContinuesAfterTheLastName(t *testing.T) {
 	require.NotNil(t, page.TotalIsLowerBound)
 	require.False(t, *page.TotalIsLowerBound)
 
-	application.page = paging.Counted[*model.Programme]{Page: paging.Page[*model.Programme]{Items: []*model.Programme{}}}
+	listing.listed, listing.more = []*model.Programme{}, false
+	counted := len(listing.countOptions)
 	response = call("?q=comp&cursor=" + url.QueryEscape(page.NextCursor))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	require.Equal(t, paging.NameQuery{AfterName: programme.Name, AfterID: programme.ID.String(), Limit: route.DefaultPageLimit}, application.query.NameQuery)
+	require.Equal(t, store.AcademicNameListOptions{Term: "comp", AfterName: programme.Name, AfterID: programme.ID.String(), Limit: route.DefaultPageLimit + 1}, listing.lastList(t))
+	require.Len(t, listing.countOptions, counted, "a later page is not counted")
 	require.JSONEq(t, `{"items":[]}`, response.Body.String(), "the last page omits next_cursor")
 	require.Equal(t, http.StatusBadRequest, call("?cursor=bm90LWEtY3Vyc29y").Code)
 }

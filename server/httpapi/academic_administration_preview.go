@@ -8,53 +8,19 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// AcademicAdministrationPreviewApplication is the application port its
-// handlers call; it previews, reads, commits and cancels one academic
-// administration operation over the Users a directory filter matches.
-type AcademicAdministrationPreviewApplication interface {
-	CreateAcademicAdministrationPreview(
-		context.Context,
-		invocation.Invocation,
-		onboarding.CreateAcademicAdministrationPreviewCommand,
-	) (onboarding.AcademicAdministrationPreviewView, error)
-	GetAcademicAdministrationPreview(
-		context.Context,
-		invocation.Invocation,
-		model.OnboardingImportID,
-	) (onboarding.AcademicAdministrationPreviewView, error)
-	ListAcademicAdministrationPreviewRows(
-		context.Context,
-		invocation.Invocation,
-		onboarding.ListAcademicAdministrationPreviewRowsQuery,
-	) (paging.Page[store.AcademicAdministrationPreviewRow], error)
-	CommitAcademicAdministrationPreview(
-		context.Context,
-		invocation.Invocation,
-		onboarding.CommitAcademicAdministrationPreviewCommand,
-	) (onboarding.AcademicAdministrationPreviewView, error)
-	CancelAcademicAdministrationPreview(
-		context.Context,
-		invocation.Invocation,
-		model.OnboardingImportID,
-	) (onboarding.AcademicAdministrationPreviewView, error)
-}
-
 type academicAdministrationPreviewHandlers struct {
-	app AcademicAdministrationPreviewApplication
+	app *onboarding.Service
 }
 
 // academicAdministrationPreviewFilterBody is the User directory filter of a
@@ -177,7 +143,7 @@ var academicAdministrationPreviewReadErrors = []string{
 	"invitation.unavailable",
 }
 
-func academicAdministrationPreviewResource(app AcademicAdministrationPreviewApplication) route.Resource {
+func academicAdministrationPreviewResource(app *onboarding.Service) route.Resource {
 	h := academicAdministrationPreviewHandlers{app: app}
 	return route.NewResource("academic-administration-previews",
 		route.Endpoint{

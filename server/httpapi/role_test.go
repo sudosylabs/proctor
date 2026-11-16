@@ -30,14 +30,13 @@ func TestRoleHTTPCreateUsesApplicationCommandWithoutPreflight(t *testing.T) {
 		AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType:             model.SessionClientCLI, AuthenticatedAt: time.Now(),
 	}
-	roleID := model.NewID()
-	roles := &roleHTTPApplication{result: &model.Role{ID: model.RoleID(roleID), Name: "teacher", DisplayName: "Teacher",
-		Permissions: []string{string(model.ActionClassView)},
-	}}
-	transport := &academicUnitHTTPApplication{principal: principal}
+	// Delegating class.view through a new Role needs the caller to hold it.
+	fixture := newAdministrationFixture(t, institutionWide(principal.UserID, model.ActionRoleManage, model.ActionClassView))
+	academics := newAdministrationAcademic(t, fixture)
 	settings := validHTTPSettings(t)
 	settings.Logger = logger
-	httpAPI, err := newAPI(settings, transport, academicUnitResource(transport), institutionResource(transport), roleResource(roles))
+	httpAPI, err := newAPI(settings, routetest.Authenticator{Principal: principal},
+		academicUnitResource(academics), institutionResource(academics), roleResource(fixture.service))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
 	body, _ := json.Marshal(map[string]any{
@@ -50,10 +49,15 @@ func TestRoleHTTPCreateUsesApplicationCommandWithoutPreflight(t *testing.T) {
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusCreated, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	require.Equal(t, "teacher", roles.createCommand.Name)
+	created := fixture.roles.lastCreated(t)
+	require.Equal(t, "teacher", created.Role.Name)
+	require.Equal(t, []string{string(model.ActionClassView)}, created.Role.Permissions)
+	roles, err := fixture.roles.List(t.Context())
+	require.NoError(t, err)
+	require.Len(t, roles, 1)
 	var payload map[string]any
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &payload))
-	require.Equal(t, roleID, payload["id"])
+	require.Equal(t, roles[0].ID.String(), payload["id"])
 	require.Equal(t, "teacher", payload["name"])
 }
 

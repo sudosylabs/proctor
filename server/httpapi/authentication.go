@@ -14,7 +14,6 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
@@ -251,20 +250,14 @@ func authenticationResponseFromRefresh(
 	}
 }
 
-// RegistrationApplication is public self-registration, which the onboarding
-// area owns beside Invitations.
-type RegistrationApplication interface {
-	RegisterLocalUser(context.Context, invocation.Invocation, onboarding.RegisterLocalUserCommand) error
-}
-
 type authenticationHandlers struct {
-	registration   RegistrationApplication
+	registration   *onboarding.Service
 	authentication *identity.Service
 	cookies        route.Cookies
 }
 
 func authenticationResource(
-	registration RegistrationApplication,
+	registration *onboarding.Service,
 	authentication *identity.Service,
 	cookies route.Cookies,
 ) route.Resource {

@@ -9,49 +9,18 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"io"
 	"net/http"
 	"slices"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// StudentProgressionApplication is the application port its handlers call; it
-// dry-runs, commits, cancels and reports bulk student progression between
-// Classes.
-type StudentProgressionApplication interface {
-	DryRunStudentProgression(
-		context.Context,
-		invocation.Invocation,
-		onboarding.DryRunStudentProgressionCommand,
-	) (onboarding.OnboardingImportView, error)
-	GetStudentProgression(
-		context.Context,
-		invocation.Invocation,
-		model.OnboardingImportID,
-	) (onboarding.OnboardingImportView, []onboarding.OnboardingImportRowView, error)
-	ListStudentProgressions(
-		context.Context,
-		invocation.Invocation,
-		onboarding.ListStudentProgressionsQuery,
-	) (paging.Counted[onboarding.OnboardingImportView], error)
-	CommitStudentProgression(
-		context.Context,
-		invocation.Invocation,
-		onboarding.CommitStudentProgressionCommand,
-	) (onboarding.OnboardingImportView, error)
-	CancelStudentProgression(context.Context, invocation.Invocation, model.OnboardingImportID) (onboarding.OnboardingImportView, error)
-	StudentProgressionReport(context.Context, invocation.Invocation, model.OnboardingImportID, io.Writer) error
-}
-
-type studentProgressionHandlers struct{ app StudentProgressionApplication }
+type studentProgressionHandlers struct{ app *onboarding.Service }
 
 type studentProgressionDryRunRequest struct {
 	SourcePeriodID      string `json:"source_period_id"`
@@ -66,7 +35,7 @@ type studentProgressionCommitRequest struct {
 	PreviewDigest    string `json:"preview_digest"`
 }
 
-func studentProgressionResource(app StudentProgressionApplication) route.Resource {
+func studentProgressionResource(app *onboarding.Service) route.Resource {
 	h := studentProgressionHandlers{app: app}
 	return route.NewResource("student-progressions",
 		route.Endpoint{

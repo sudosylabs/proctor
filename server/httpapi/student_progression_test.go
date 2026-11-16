@@ -8,9 +8,7 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,77 +17,61 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
-type studentProgressionApplicationFake struct {
-	view    onboarding.OnboardingImportView
-	rows    []onboarding.OnboardingImportRowView
-	command onboarding.DryRunStudentProgressionCommand
-	getID   string
-
-	listQuery *onboarding.ListStudentProgressionsQuery
-	listPage  paging.Counted[onboarding.OnboardingImportView]
-}
-
-func (f *studentProgressionApplicationFake) ListStudentProgressions(_ context.Context, _ invocation.Invocation, query onboarding.ListStudentProgressionsQuery) (paging.Counted[onboarding.OnboardingImportView], error) {
-	f.listQuery = &query
-	return f.listPage, nil
-}
-
-func (f *studentProgressionApplicationFake) DryRunStudentProgression(_ context.Context, _ invocation.Invocation, command onboarding.DryRunStudentProgressionCommand) (onboarding.OnboardingImportView, error) {
-	f.command = command
-	return f.view, nil
-}
-func (f *studentProgressionApplicationFake) GetStudentProgression(_ context.Context, _ invocation.Invocation, id model.OnboardingImportID) (onboarding.OnboardingImportView, []onboarding.OnboardingImportRowView, error) {
-	f.getID = id.String()
-	return f.view, f.rows, nil
-}
-func (f *studentProgressionApplicationFake) CommitStudentProgression(context.Context, invocation.Invocation, onboarding.CommitStudentProgressionCommand) (onboarding.OnboardingImportView, error) {
-	return f.view, nil
-}
-func (f *studentProgressionApplicationFake) CancelStudentProgression(context.Context, invocation.Invocation, model.OnboardingImportID) (onboarding.OnboardingImportView, error) {
-	return f.view, nil
-}
-func (f *studentProgressionApplicationFake) StudentProgressionReport(context.Context, invocation.Invocation, model.OnboardingImportID, io.Writer) error {
-	return nil
+// progressionClasses stores a source Class in one Academic Period and a
+// destination Class in the next, at Programme Levels of one Programme, so a
+// progression between them is coherent.
+func progressionClasses(f *onboardingFixture, effectiveAt time.Time) (*model.Class, *model.Class) {
+	sourcePeriod := f.addPeriod(effectiveAt.AddDate(-1, 0, 0), effectiveAt.AddDate(0, 0, -14))
+	destinationPeriod := f.addPeriod(effectiveAt.AddDate(0, 0, -14), effectiveAt.AddDate(1, 0, 0))
+	programmeID := model.NewProgrammeID()
+	source := &model.Class{ID: model.NewClassID(), AcademicPeriodID: sourcePeriod.ID, ProgrammeLevelID: model.NewProgrammeLevelID(),
+		Name: "year-1-blue", DisplayName: "Year 1 Blue", Revision: 3}
+	destination := &model.Class{ID: model.NewClassID(), AcademicPeriodID: destinationPeriod.ID, ProgrammeLevelID: model.NewProgrammeLevelID(),
+		Name: "year-2-blue", DisplayName: "Year 2 Blue", Revision: 4}
+	for _, class := range []*model.Class{source, destination} {
+		f.classes.add(class)
+		f.levels.byID[class.ProgrammeLevelID] = &model.ProgrammeLevel{ID: class.ProgrammeLevelID, ProgrammeID: programmeID, Name: "level"}
+	}
+	return source, destination
 }
 
 func TestStudentProgressionHTTPRequiresRFC3339AndForwardsExactTargets(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
+	fixture := newOnboardingFixture(t)
 	at := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
-	sourcePeriodID, sourceClassID := model.NewAcademicPeriodID(), model.NewClassID()
-	destinationPeriodID, destinationClassID := model.NewAcademicPeriodID(), model.NewClassID()
-	fake := &studentProgressionApplicationFake{view: onboarding.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportStudentProgression,
-		State: model.OnboardingImportParsing, ScopeType: model.RoleScopeClass, ScopeID: destinationClassID.String(), SourcePeriodID: sourcePeriodID,
-		SourceClassID: sourceClassID, DestinationPeriodID: destinationPeriodID, DestinationClassID: destinationClassID, EffectiveAt: at,
-		ParseJobID: model.NewJobID(), CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 1}}
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
-		ClientType: model.SessionClientWeb, AuthenticatedAt: at}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, studentProgressionResource(fake))
-	body := `{"source_period_id":"` + sourcePeriodID.String() + `","source_class_id":"` + sourceClassID.String() + `","destination_period_id":"` + destinationPeriodID.String() + `","destination_class_id":"` + destinationClassID.String() + `","effective_at":"` + at.Format(time.RFC3339Nano) + `"}`
+	source, destination := progressionClasses(fixture, at)
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: fixture.principal(model.AuthenticationSingleFactor)},
+		studentProgressionResource(fixture.service))
+	body := `{"source_period_id":"` + source.AcademicPeriodID.String() + `","source_class_id":"` + source.ID.String() + `","destination_period_id":"` +
+		destination.AcademicPeriodID.String() + `","destination_class_id":"` + destination.ID.String() + `","effective_at":"` + at.Format(time.RFC3339Nano) + `"}`
 	request := newJSONRequest(http.MethodPost, "/api/v1/student-progressions", strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer session")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
-	require.Equal(t, http.StatusAccepted, response.Code, "student progression = %d %s command=%#v", response.Code, response.Body.String(), fake.command)
-	require.Equal(t, "no-store", response.Header().Get("Cache-Control"), "student progression = %d %s command=%#v", response.Code, response.Body.String(), fake.command)
-	require.Equal(t, sourcePeriodID, fake.command.SourcePeriodID, "student progression = %d %s command=%#v", response.Code, response.Body.String(), fake.command)
-	require.Equal(t, sourceClassID, fake.command.SourceClassID, "student progression = %d %s command=%#v", response.Code, response.Body.String(), fake.command)
-	require.Equal(t, destinationPeriodID, fake.command.DestinationPeriodID, "student progression = %d %s command=%#v", response.Code, response.Body.String(), fake.command)
-	require.Equal(t, destinationClassID, fake.command.DestinationClassID, "student progression = %d %s command=%#v", response.Code, response.Body.String(), fake.command)
-	require.Equal(t, at.UnixMilli(), fake.command.EffectiveAt, "student progression = %d %s command=%#v", response.Code, response.Body.String(), fake.command)
+	require.Equal(t, http.StatusAccepted, response.Code, "student progression = %d %s", response.Code, response.Body.String())
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	created := fixture.imports.lastCreation(t).Import
+	require.Equal(t, model.OnboardingImportStudentProgression, created.Mode)
+	require.Equal(t, source.AcademicPeriodID, created.SourcePeriodID)
+	require.Equal(t, source.ID, created.SourceClassID)
+	require.Equal(t, destination.AcademicPeriodID, created.DestinationPeriodID)
+	require.Equal(t, destination.ID, created.DestinationClassID)
+	require.Equal(t, at.UnixMilli(), created.EffectiveAt.UnixMilli())
+	require.Equal(t, source.Revision, created.SourceClassRevision, "the progression is fenced on the Classes it read")
+	require.Equal(t, destination.Revision, created.DestinationClassRevision, "the progression is fenced on the Classes it read")
 	invalid := newJSONRequest(http.MethodPost, "/api/v1/student-progressions", strings.NewReader(strings.Replace(body, at.Format(time.RFC3339Nano), "1800000000000", 1)))
 	invalid.Header.Set("Authorization", "Bearer session")
 	invalidResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(invalidResponse, invalid)
 	require.Equal(t, http.StatusBadRequest, invalidResponse.Code, "non-RFC3339 effective_at = %d %s", invalidResponse.Code, invalidResponse.Body.String())
+	require.Len(t, fixture.imports.creations, 1, "a refused progression reached the Store")
 }
 
 func TestStudentProgressionResponseExposesOnlySafeExactTargetsAndRows(t *testing.T) {
@@ -112,30 +94,37 @@ func TestStudentProgressionResponseExposesOnlySafeExactTargetsAndRows(t *testing
 
 func TestStudentProgressionListParsesFiltersAndPagesTheCountedEnvelope(t *testing.T) {
 	t.Parallel()
+	fixture := newOnboardingFixture(t)
 	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
-	sourcePeriodID, sourceClassID := model.NewAcademicPeriodID(), model.NewClassID()
-	destinationPeriodID, destinationClassID := model.NewAcademicPeriodID(), model.NewClassID()
-	newest := onboarding.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportStudentProgression,
-		State: model.OnboardingImportPreviewReady, ScopeType: model.RoleScopeClass, ScopeID: destinationClassID.String(),
-		SourcePeriodID: sourcePeriodID, SourceClassID: sourceClassID, DestinationPeriodID: destinationPeriodID, DestinationClassID: destinationClassID,
-		SourceClassName: "Year 1 Blue", DestinationClassName: "Year 2 Blue", EffectiveAt: at.Add(24 * time.Hour),
-		ParseJobID: model.NewJobID(), CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 2}
-	older := newest
-	older.ID, older.CreatedAt = model.NewOnboardingImportID(), at.Add(-time.Minute)
-	fake := &studentProgressionApplicationFake{listPage: paging.Counted[onboarding.OnboardingImportView]{
-		Page:  paging.Page[onboarding.OnboardingImportView]{Items: []onboarding.OnboardingImportView{newest, older}, HasMore: true},
-		Total: paging.Total{Counted: true, Total: 3}}}
-	httpAPI := studentProgressionListAPI(t, fake)
+	source, destination := progressionClasses(fixture, at)
+	newest := fixture.storedProgression(source, destination)
+	older, oldest := *newest, *newest
+	older.ID, older.CreatedAt = model.NewOnboardingImportID(), newest.CreatedAt.Add(-time.Minute)
+	oldest.ID, oldest.CreatedAt = model.NewOnboardingImportID(), newest.CreatedAt.Add(-2*time.Minute)
+	// The Store reads one past the page, which tells the page another follows.
+	for _, value := range []*store.OnboardingImport{newest, &older, &oldest} {
+		fixture.imports.progressions = append(fixture.imports.progressions,
+			&store.StudentProgressionSummary{Progression: value, SourceClassName: "Year 1 Blue", DestinationClassName: "Year 2 Blue"})
+	}
+	fixture.imports.progressionTotal = 3
+	httpAPI := studentProgressionAPI(t, fixture)
 
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/student-progressions?state=preview_ready&state=failed&limit=2"+
-		"&source_period_id="+sourcePeriodID.String()+"&source_class_id="+sourceClassID.String()+
-		"&destination_period_id="+destinationPeriodID.String()+"&destination_class_id="+destinationClassID.String()))
+		"&source_period_id="+source.AcademicPeriodID.String()+"&source_class_id="+source.ID.String()+
+		"&destination_period_id="+destination.AcademicPeriodID.String()+"&destination_class_id="+destination.ID.String()))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
-	require.Equal(t, onboarding.ListStudentProgressionsQuery{States: []model.OnboardingImportState{model.OnboardingImportPreviewReady, model.OnboardingImportFailed},
-		SourcePeriodID: sourcePeriodID, SourceClassID: sourceClassID, DestinationPeriodID: destinationPeriodID, DestinationClassID: destinationClassID,
-		Limit: 2}, *fake.listQuery)
+	require.Len(t, fixture.imports.progressionOptions, 1, "the list reached the Store")
+	options := fixture.imports.progressionOptions[0]
+	require.Equal(t, []model.OnboardingImportState{model.OnboardingImportPreviewReady, model.OnboardingImportFailed}, options.States)
+	require.Equal(t, source.AcademicPeriodID, options.SourcePeriodID)
+	require.Equal(t, source.ID, options.SourceClassID)
+	require.Equal(t, destination.AcademicPeriodID, options.DestinationPeriodID)
+	require.Equal(t, destination.ID, options.DestinationClassID)
+	require.Equal(t, 3, options.Limit, "a page of two reads one more to learn whether another follows")
+	require.True(t, options.BeforeID.IsZero())
+	require.True(t, options.Visibility.InstitutionWide, "the caller's Institution-wide progression authority reached the Store")
 	var page struct {
 		Items             []map[string]any `json:"items"`
 		NextCursor        string           `json:"next_cursor"`
@@ -152,11 +141,17 @@ func TestStudentProgressionListParsesFiltersAndPagesTheCountedEnvelope(t *testin
 	require.Equal(t, 3, *page.Total)
 	require.False(t, *page.TotalIsLowerBound)
 
-	fake.listPage = paging.Counted[onboarding.OnboardingImportView]{Page: paging.Page[onboarding.OnboardingImportView]{Items: []onboarding.OnboardingImportView{}}}
+	fixture.imports.progressions = nil
 	response = httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/student-progressions?cursor="+page.NextCursor))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	require.Equal(t, onboarding.ListStudentProgressionsQuery{BeforeCreatedAt: older.CreatedAt, BeforeID: older.ID, Limit: 50}, *fake.listQuery)
+	require.Len(t, fixture.imports.progressionOptions, 2, "the second page reached the Store")
+	options = fixture.imports.progressionOptions[1]
+	require.Equal(t, older.CreatedAt, options.BeforeCreatedAt)
+	require.Equal(t, older.ID, options.BeforeID)
+	require.Equal(t, 51, options.Limit, "the default page of fifty reads one more")
+	require.Empty(t, options.States)
+	require.True(t, options.SourceClassID.IsZero(), "a later page keeps only the cursor")
 	require.JSONEq(t, `{"items":[]}`, response.Body.String(), "a later page carries no total")
 }
 
@@ -176,35 +171,30 @@ func TestStudentProgressionListRejectsMalformedParameters(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			fake := &studentProgressionApplicationFake{}
+			fixture := newOnboardingFixture(t)
 			response := httptest.NewRecorder()
-			studentProgressionListAPI(t, fake).ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/student-progressions?"+query))
+			studentProgressionAPI(t, fixture).ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/student-progressions?"+query))
 			require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
-			require.Nil(t, fake.listQuery)
+			require.Empty(t, fixture.imports.progressionOptions, "a malformed list reached the Store")
 		})
 	}
 }
 
 func TestStudentProgressionReadNamesBothClasses(t *testing.T) {
 	t.Parallel()
-	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
-	fake := &studentProgressionApplicationFake{view: onboarding.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportStudentProgression,
-		State: model.OnboardingImportPreviewReady, ScopeType: model.RoleScopeClass, ScopeID: model.NewClassID().String(),
-		SourceClassName: "Year 1 Blue", DestinationClassName: "Year 2 Blue", ParseJobID: model.NewJobID(),
-		CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 2}}
+	fixture := newOnboardingFixture(t)
+	value := fixture.storedProgression(fixture.addClass("Year 1 Blue"), fixture.addClass("Year 2 Blue"))
 	response := httptest.NewRecorder()
-	studentProgressionListAPI(t, fake).ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/student-progressions/"+fake.view.ID.String()))
+	studentProgressionAPI(t, fixture).ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/student-progressions/"+value.ID.String()))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Equal(t, []model.OnboardingImportID{value.ID}, fixture.imports.reads, "the read reached the Store")
 	require.Contains(t, response.Body.String(), `"source_class_name":"Year 1 Blue"`)
 	require.Contains(t, response.Body.String(), `"destination_class_name":"Year 2 Blue"`)
 }
 
-func studentProgressionListAPI(t *testing.T, fake *studentProgressionApplicationFake) *route.API {
+// studentProgressionAPI serves the Student Progression resource over the
+// fixture's real service as the caller's multi-factor web Session.
+func studentProgressionAPI(t *testing.T, fixture *onboardingFixture) *route.API {
 	t.Helper()
-	principal := model.Principal{
-		UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
-		AuthenticatedAt: time.Now().UTC(), MFACompletedAt: model.OptionalTimeFrom(time.Now().UTC()), ClientType: model.SessionClientWeb,
-	}
-	return newResourceAPI(t, principal, studentProgressionResource(fake))
+	return newResourceAPI(t, fixture.principal(model.AuthenticationMultiFactor), studentProgressionResource(fixture.service))
 }

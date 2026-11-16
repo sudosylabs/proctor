@@ -8,12 +8,9 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -53,10 +50,10 @@ type updateAcademicPeriodRequest struct {
 }
 
 type academicPeriodHandlers struct {
-	app AcademicPeriodApplication
+	app *academic.Service
 }
 
-func academicPeriodResource(app AcademicPeriodApplication) route.Resource {
+func academicPeriodResource(app *academic.Service) route.Resource {
 	h := academicPeriodHandlers{app: app}
 	collection := "/academic-periods"
 	member := "/academic-periods/{academic_period_id}"
@@ -285,13 +282,4 @@ func academicPeriodResponseFromModel(period *model.AcademicPeriod) academicPerio
 		StartAt:     model.FormatRFC3339(period.StartsAt),
 		EndAt:       model.FormatRFC3339(period.EndsAt),
 	}
-}
-
-// AcademicPeriodApplication is the application port its handlers call; it reads and changes Academic Periods.
-type AcademicPeriodApplication interface {
-	GetAcademicPeriod(context.Context, invocation.Invocation, model.AcademicPeriodID) (*model.AcademicPeriod, error)
-	ListAcademicPeriods(context.Context, invocation.Invocation, academic.ListAcademicPeriodsQuery) (paging.Page[*model.AcademicPeriod], error)
-	CreateAcademicPeriod(context.Context, invocation.Invocation, academic.CreateAcademicPeriodCommand) (*model.AcademicPeriod, error)
-	UpdateAcademicPeriod(context.Context, invocation.Invocation, academic.UpdateAcademicPeriodCommand) (*model.AcademicPeriod, error)
-	ArchiveAcademicPeriod(context.Context, invocation.Invocation, academic.ArchiveAcademicPeriodCommand) error
 }

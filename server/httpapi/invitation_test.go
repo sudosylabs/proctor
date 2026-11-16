@@ -9,7 +9,7 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -20,143 +20,53 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/onboarding"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type invitationHTTPApplication struct {
-	InvitationApplication
-	issue                 onboarding.IssueStudentClassInvitationCommand
-	accept                onboarding.AcceptStudentClassInvitationCommand
-	teacherIssue          onboarding.IssueTeacherAcademicUnitInvitationCommand
-	teacherAccept         onboarding.AcceptTeacherAcademicUnitInvitationCommand
-	unitRoleIssue         onboarding.IssueAcademicUnitRoleInvitationCommand
-	unitRoleAccept        onboarding.AcceptAcademicUnitRoleInvitationCommand
-	institutionRoleIssue  onboarding.IssueInstitutionRoleInvitationCommand
-	institutionRoleAccept onboarding.AcceptInstitutionRoleInvitationCommand
-	resend                onboarding.ResendInvitationCommand
-	revoke                onboarding.RevokeInvitationCommand
-	replace               onboarding.ReplaceInvitationCommand
-	list                  onboarding.ListInvitationsQuery
-	listMore              bool
-	listTotal             int
-	listEmpty             bool
-	getID                 string
-	acceptance            *onboarding.InvitationAcceptanceView
-	batch                 onboarding.RunInvitationBatchCommand
-}
-
-func (a *invitationHTTPApplication) RunInvitationBatch(_ context.Context, _ invocation.Invocation, command onboarding.RunInvitationBatchCommand) (onboarding.InvitationBatchResult, error) {
-	a.batch = command
-	return onboarding.InvitationBatchResult{Operation: command.Operation, Succeeded: 1, NoOp: 1, Failed: 1,
-		Items: []onboarding.InvitationBatchItemResult{
-			{Index: 0, Status: onboarding.InvitationBatchItemSucceeded, InvitationID: model.NewInvitationID()},
-			{Index: 1, Status: onboarding.InvitationBatchItemNoOp, InvitationID: model.NewInvitationID()},
-			{Index: 2, Status: onboarding.InvitationBatchItemFailed, ErrorCode: "invitation.conflict"},
-		}}, nil
-}
-
-func (a *invitationHTTPApplication) IssueAcademicUnitRoleInvitation(_ context.Context, _ invocation.Invocation, command onboarding.IssueAcademicUnitRoleInvitationCommand) (onboarding.InvitationView, error) {
-	a.unitRoleIssue = command
-	return onboarding.InvitationView{ID: model.NewInvitationID(), Purpose: model.InvitationPurposeAcademicUnitRole,
-		State: model.InvitationPending, AcademicUnitID: command.AcademicUnitID, RoleID: command.RoleID}, nil
-}
-func (a *invitationHTTPApplication) AcceptAcademicUnitRoleInvitation(_ context.Context, _ invocation.Invocation, command onboarding.AcceptAcademicUnitRoleInvitationCommand) (*onboarding.InvitationAcceptanceView, error) {
-	a.unitRoleAccept = command
-	return &onboarding.InvitationAcceptanceView{Invitation: onboarding.InvitationView{ID: model.NewInvitationID()},
-		User: &model.User{ID: model.NewUserID()}, RoleBinding: &model.RoleBinding{ID: model.NewRoleBindingID()}}, nil
-}
-func (a *invitationHTTPApplication) IssueInstitutionRoleInvitation(_ context.Context, _ invocation.Invocation, command onboarding.IssueInstitutionRoleInvitationCommand) (onboarding.InvitationView, error) {
-	a.institutionRoleIssue = command
-	return onboarding.InvitationView{ID: model.NewInvitationID(), Purpose: model.InvitationPurposeInstitutionRole,
-		State: model.InvitationPending, RoleID: command.RoleID}, nil
-}
-func (a *invitationHTTPApplication) AcceptInstitutionRoleInvitation(_ context.Context, _ invocation.Invocation, command onboarding.AcceptInstitutionRoleInvitationCommand) (*onboarding.InvitationAcceptanceView, error) {
-	a.institutionRoleAccept = command
-	return &onboarding.InvitationAcceptanceView{Invitation: onboarding.InvitationView{ID: model.NewInvitationID()},
-		User: &model.User{ID: model.NewUserID()}, RoleBinding: &model.RoleBinding{ID: model.NewRoleBindingID()}}, nil
-}
-
-func (a *invitationHTTPApplication) IssueTeacherAcademicUnitInvitation(_ context.Context, _ invocation.Invocation, command onboarding.IssueTeacherAcademicUnitInvitationCommand) (onboarding.InvitationView, error) {
-	a.teacherIssue = command
-	return onboarding.InvitationView{ID: model.NewInvitationID(), Purpose: model.InvitationPurposeTeacherAcademicUnit,
-		State: model.InvitationPending, AcademicUnitID: command.AcademicUnitID, RoleID: command.RoleID,
-		RoleActions: []string{string(model.ActionAcademicUnitView)}}, nil
-}
-func (a *invitationHTTPApplication) AcceptTeacherAcademicUnitInvitation(_ context.Context, _ invocation.Invocation, command onboarding.AcceptTeacherAcademicUnitInvitationCommand) (*onboarding.InvitationAcceptanceView, error) {
-	a.teacherAccept = command
-	if a.acceptance != nil {
-		return a.acceptance, nil
-	}
-	return &onboarding.InvitationAcceptanceView{Invitation: onboarding.InvitationView{ID: model.NewInvitationID()}, User: &model.User{ID: model.NewUserID()},
-		Affiliation: &model.Affiliation{ID: model.NewAffiliationID()}, AcademicUnitMember: &model.AcademicUnitMember{ID: model.NewAcademicUnitMemberID()},
-		RoleBinding: &model.RoleBinding{ID: model.NewRoleBindingID()}}, nil
-}
-
-func (a *invitationHTTPApplication) IssueStudentClassInvitation(_ context.Context, _ invocation.Invocation, command onboarding.IssueStudentClassInvitationCommand) (onboarding.InvitationView, error) {
-	a.issue = command
-	return onboarding.InvitationView{ID: model.NewInvitationID(), Purpose: model.InvitationPurposeStudentClass,
-		State: model.InvitationPending, ClassID: command.ClassID, AcademicPeriodID: model.NewAcademicPeriodID()}, nil
-}
-func (a *invitationHTTPApplication) AcceptStudentClassInvitation(_ context.Context, _ invocation.Invocation, command onboarding.AcceptStudentClassInvitationCommand) (*onboarding.InvitationAcceptanceView, error) {
-	a.accept = command
-	if a.acceptance != nil {
-		return a.acceptance, nil
-	}
-	return &onboarding.InvitationAcceptanceView{User: &model.User{ID: model.NewUserID(), Username: command.Username}}, nil
-}
-func (a *invitationHTTPApplication) ListInvitations(_ context.Context, _ invocation.Invocation, query onboarding.ListInvitationsQuery) (onboarding.InvitationAdministrationPage, error) {
-	a.list = query
-	var total paging.Total
-	if !query.BeforeID.IsValid() {
-		total = paging.Total{Counted: true, Total: a.listTotal}
-	}
-	if a.listEmpty {
-		return onboarding.InvitationAdministrationPage{More: a.listMore, Total: total}, nil
-	}
-	return onboarding.InvitationAdministrationPage{Items: []onboarding.InvitationAdministrationView{a.administrationView()}, More: a.listMore, Total: total}, nil
+// invitationAPI serves the Invitation resource over the fixture's real
+// service, authenticating every request as principal.
+func invitationAPI(t *testing.T, fixture *onboardingFixture, principal model.Principal) http.Handler {
+	t.Helper()
+	logger, _ := routetest.NewLogger(t)
+	return newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(fixture.service))
 }
 
 func TestInvitationAdministrationRejectsNoProgressPage(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	applicationFake := &invitationHTTPApplication{listMore: true, listEmpty: true}
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
-		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
-		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
-		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now(), MFACompletedAt: model.OptionalTimeFrom(time.Now())}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(applicationFake))
+	fixture := newOnboardingFixture(t)
+	// The Store reports a further page but returned no Invitation.
+	fixture.invitations.more = true
+	httpAPI := invitationAPI(t, fixture, fixture.principal(model.AuthenticationMultiFactor))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/invitations", nil)
 	request.Header.Set("Authorization", "Bearer session")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusInternalServerError, response.Code, "no-progress status=%d body=%s", response.Code, response.Body.String())
+	require.Len(t, fixture.invitations.listOptions, 1, "the empty page was read once")
 }
 
 func TestInvitationAdministrationHTTPIsBoundedSafeAndRevisionFenced(t *testing.T) {
-	logger, _ := routetest.NewLogger(t)
-	applicationFake := &invitationHTTPApplication{listMore: true}
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
-		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
-		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
-		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now(), MFACompletedAt: model.OptionalTimeFrom(time.Now())}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(applicationFake))
+	fixture := newOnboardingFixture(t)
+	class := fixture.addClass("Biology 101")
+	invitation, _ := fixture.pendingStudentInvitation(t, class, "student@example.edu")
+	fixture.invitations.listed, fixture.invitations.more = []*model.Invitation{invitation}, true
+	httpAPI := invitationAPI(t, fixture, fixture.principal(model.AuthenticationMultiFactor))
 
 	list := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/invitations?purpose=student_class&state=pending&email=student%40example.edu&limit=25&created_after=2023-11-14T22:13:20Z&created_before=2030-03-17T17:46:40Z", nil)
 	list.Header.Set("Authorization", "Bearer session")
 	listResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(listResponse, list)
-	require.Equal(t, http.StatusOK, listResponse.Code, "list Invitations = %d %s query=%#v", listResponse.Code, listResponse.Body.String(), applicationFake.list)
-	require.Equal(t, "no-store", listResponse.Header().Get("Cache-Control"), "list Invitations = %d %s query=%#v", listResponse.Code, listResponse.Body.String(), applicationFake.list)
-	require.Equal(t, model.InvitationPurposeStudentClass, applicationFake.list.Purpose, "list Invitations = %d %s query=%#v", listResponse.Code, listResponse.Body.String(), applicationFake.list)
-	require.Equal(t, model.InvitationPending, applicationFake.list.State, "list Invitations = %d %s query=%#v", listResponse.Code, listResponse.Body.String(), applicationFake.list)
-	require.Equal(t, "student@example.edu", applicationFake.list.TargetEmail, "list Invitations = %d %s query=%#v", listResponse.Code, listResponse.Body.String(), applicationFake.list)
-	require.Equal(t, 25, applicationFake.list.Limit, "list Invitations = %d %s query=%#v", listResponse.Code, listResponse.Body.String(), applicationFake.list)
-	require.False(t, applicationFake.list.CreatedAfter.IsZero(), "list Invitations = %d %s query=%#v", listResponse.Code, listResponse.Body.String(), applicationFake.list)
-	require.False(t, applicationFake.list.CreatedBefore.IsZero(), "list Invitations = %d %s query=%#v", listResponse.Code, listResponse.Body.String(), applicationFake.list)
+	options := fixture.invitations.lastList(t)
+	require.Equal(t, http.StatusOK, listResponse.Code, "list Invitations = %d %s options=%#v", listResponse.Code, listResponse.Body.String(), options)
+	require.Equal(t, "no-store", listResponse.Header().Get("Cache-Control"))
+	require.Equal(t, model.InvitationPurposeStudentClass, options.Purpose, "list options=%#v", options)
+	require.Equal(t, model.InvitationPending, options.State, "list options=%#v", options)
+	require.Equal(t, "student@example.edu", options.TargetEmail, "list options=%#v", options)
+	require.Equal(t, 25, options.Limit, "list options=%#v", options)
+	require.False(t, options.CreatedAfter.IsZero(), "list options=%#v", options)
+	require.False(t, options.CreatedBefore.IsZero(), "list options=%#v", options)
+	require.True(t, options.Visibility.InstitutionWide, "the caller's Institution-wide invitation.view reached the Store")
 	var listed map[string]any
 	require.NoError(t, json.Unmarshal(listResponse.Body.Bytes(), &listed))
 	require.NotEmpty(t, listed["next_cursor"])
@@ -172,18 +82,22 @@ func TestInvitationAdministrationHTTPIsBoundedSafeAndRevisionFenced(t *testing.T
 	secondPage.Header.Set("Authorization", "Bearer session")
 	secondPageResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(secondPageResponse, secondPage)
-	require.Equal(t, http.StatusOK, secondPageResponse.Code, "second Invitation page = %d %s query=%#v", secondPageResponse.Code, secondPageResponse.Body.String(), applicationFake.list)
-	require.Equal(t, decodedCursor.CreatedAt, applicationFake.list.BeforeCreatedAt.Format(time.RFC3339Nano), "second Invitation page = %d %s query=%#v", secondPageResponse.Code, secondPageResponse.Body.String(), applicationFake.list)
-	require.Equal(t, decodedCursor.ID, applicationFake.list.BeforeID.String(), "second Invitation page = %d %s query=%#v", secondPageResponse.Code, secondPageResponse.Body.String(), applicationFake.list)
+	options = fixture.invitations.lastList(t)
+	require.Equal(t, http.StatusOK, secondPageResponse.Code, "second Invitation page = %d %s options=%#v", secondPageResponse.Code, secondPageResponse.Body.String(), options)
+	require.Equal(t, decodedCursor.CreatedAt, options.BeforeCreatedAt.Format(time.RFC3339Nano), "second page options=%#v", options)
+	require.Equal(t, decodedCursor.ID, options.BeforeID.String(), "second page options=%#v", options)
+	require.Equal(t, invitation.ID, options.BeforeID, "the cursor continues after the listed Invitation")
 
-	id := model.NewInvitationID().String()
+	id := invitation.ID.String()
 	detail := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/invitations/"+id, nil)
 	detail.Header.Set("Authorization", "Bearer session")
 	detailResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(detailResponse, detail)
-	require.Equal(t, http.StatusOK, detailResponse.Code, "Invitation detail = %d %s id", detailResponse.Code, detailResponse.Body.String())
-	require.Equal(t, "no-store", detailResponse.Header().Get("Cache-Control"), "Invitation detail = %d %s id", detailResponse.Code, detailResponse.Body.String())
-	require.Equal(t, id, applicationFake.getID, "Invitation detail = %d %s id", detailResponse.Code, detailResponse.Body.String())
+	require.Equal(t, http.StatusOK, detailResponse.Code, "Invitation detail = %d %s", detailResponse.Code, detailResponse.Body.String())
+	require.Equal(t, "no-store", detailResponse.Header().Get("Cache-Control"))
+	require.Equal(t, []model.InvitationID{invitation.ID}, fixture.invitations.administrationReads, "Invitation detail read")
+
+	replacementClass := fixture.addClass("Biology 102")
 	for _, mutation := range []struct {
 		path string
 		body map[string]any
@@ -191,7 +105,7 @@ func TestInvitationAdministrationHTTPIsBoundedSafeAndRevisionFenced(t *testing.T
 	}{
 		{path: "/api/v1/invitations/" + id + "/resend", body: map[string]any{"expected_revision": 7}, code: http.StatusOK},
 		{path: "/api/v1/invitations/" + id + "/revoke", body: map[string]any{"expected_revision": 8}, code: http.StatusOK},
-		{path: "/api/v1/invitations/" + id + "/replacement", body: map[string]any{"expected_revision": 9, "purpose": "student_class", "email": "replacement@example.edu", "class_id": model.NewClassID().String()}, code: http.StatusCreated},
+		{path: "/api/v1/invitations/" + id + "/replacement", body: map[string]any{"expected_revision": 9, "purpose": "student_class", "email": "replacement@example.edu", "class_id": replacementClass.ID.String()}, code: http.StatusCreated},
 	} {
 		t.Run(mutation.path, func(t *testing.T) {
 			body, _ := json.Marshal(mutation.body)
@@ -203,24 +117,30 @@ func TestInvitationAdministrationHTTPIsBoundedSafeAndRevisionFenced(t *testing.T
 			require.Equal(t, "no-store", response.Header().Get("Cache-Control"), "%s = %d %s", mutation.path, response.Code, response.Body.String())
 		})
 	}
-	require.Equal(t, model.InvitationID(id), applicationFake.resend.ID, "Invitation mutation commands = resend %#v revoke %#v replacement %#v", applicationFake.resend, applicationFake.revoke, applicationFake.replace)
-	require.Equal(t, int64(7), applicationFake.resend.ExpectedRevision, "Invitation mutation commands = resend %#v revoke %#v replacement %#v", applicationFake.resend, applicationFake.revoke, applicationFake.replace)
-	require.Equal(t, model.InvitationID(id), applicationFake.revoke.ID, "Invitation mutation commands = resend %#v revoke %#v replacement %#v", applicationFake.resend, applicationFake.revoke, applicationFake.replace)
-	require.Equal(t, int64(8), applicationFake.revoke.ExpectedRevision, "Invitation mutation commands = resend %#v revoke %#v replacement %#v", applicationFake.resend, applicationFake.revoke, applicationFake.replace)
-	require.Equal(t, model.InvitationID(id), applicationFake.replace.ID, "Invitation mutation commands = resend %#v revoke %#v replacement %#v", applicationFake.resend, applicationFake.revoke, applicationFake.replace)
-	require.Equal(t, int64(9), applicationFake.replace.ExpectedRevision, "Invitation mutation commands = resend %#v revoke %#v replacement %#v", applicationFake.resend, applicationFake.revoke, applicationFake.replace)
-	require.Equal(t, "replacement@example.edu", applicationFake.replace.TargetEmail, "Invitation mutation commands = resend %#v revoke %#v replacement %#v", applicationFake.resend, applicationFake.revoke, applicationFake.replace)
+	invitations := fixture.invitations
+	require.Len(t, invitations.resends, 1, "resend reached the Store")
+	require.Equal(t, invitation.ID, invitations.resends[0].ID)
+	require.Equal(t, int64(7), invitations.resends[0].ExpectedRevision)
+	require.NotEqual(t, invitation.ClaimHash, invitations.resends[0].ClaimHash, "a resend rotates the claim")
+	require.Len(t, invitations.revocations, 1, "revoke reached the Store")
+	require.Equal(t, invitation.ID, invitations.revocations[0].ID)
+	require.Equal(t, int64(8), invitations.revocations[0].ExpectedRevision)
+	require.Len(t, invitations.replacements, 1, "replacement reached the Store")
+	require.Equal(t, invitation.ID, invitations.replacements[0].CurrentID)
+	require.Equal(t, int64(9), invitations.replacements[0].ExpectedRevision)
+	require.Equal(t, "replacement@example.edu", invitations.replacements[0].Replacement.TargetEmail)
+	require.Equal(t, replacementClass.ID, invitations.replacements[0].Replacement.ClassID)
 }
 
 func TestInvitationBatchHTTPIsStrictBoundedAndIdempotent(t *testing.T) {
-	logger, _ := routetest.NewLogger(t)
-	applicationFake := &invitationHTTPApplication{}
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
-		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
-		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
-		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now(), MFACompletedAt: model.OptionalTimeFrom(time.Now())}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(applicationFake))
-	classID := model.NewClassID().String()
+	fixture := newOnboardingFixture(t)
+	class := fixture.addClass("Biology 101")
+	// The second row was already committed under its key and the third
+	// collides with a pending Invitation, so the batch reports one of each.
+	fixture.invitations.replayEmails["second@example.edu"] = true
+	fixture.invitations.conflictEmails["third@example.edu"] = true
+	httpAPI := invitationAPI(t, fixture, fixture.principal(model.AuthenticationMultiFactor))
+	classID := class.ID.String()
 	body, _ := json.Marshal(map[string]any{"operation": "student_class.create", "scope_type": "class", "scope_id": classID,
 		"items": []map[string]any{{"key": "row-1", "email": "first@example.edu"}, {"key": "row-2", "email": "second@example.edu"}, {"key": "row-3", "email": "third@example.edu"}}})
 	request := newJSONRequest(http.MethodPost, "/api/v1/invitation-batches", bytes.NewReader(body))
@@ -228,16 +148,21 @@ func TestInvitationBatchHTTPIsStrictBoundedAndIdempotent(t *testing.T) {
 	request.Header.Set("Idempotency-Key", "batch-once")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
-	require.Equal(t, http.StatusOK, response.Code, "Invitation batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.batch)
-	require.Equal(t, "no-store", response.Header().Get("Cache-Control"), "Invitation batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.batch)
-	require.Equal(t, "batch-once", applicationFake.batch.IdempotencyKey, "Invitation batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.batch)
-	require.Equal(t, classID, applicationFake.batch.ScopeID, "Invitation batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.batch)
-	require.Equal(t, onboarding.InvitationBatchStudentClassCreate, applicationFake.batch.Operation, "Invitation batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.batch)
-	require.Len(t, applicationFake.batch.Items, 3, "Invitation batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.batch)
-	require.Contains(t, response.Body.String(), `"succeeded":1`, "Invitation batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.batch)
-	require.Contains(t, response.Body.String(), `"no_op":1`, "Invitation batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.batch)
-	require.Contains(t, response.Body.String(), `"error_code":"invitation.conflict"`, "Invitation batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.batch)
-	require.NotContains(t, response.Body.String(), "@example.edu", "Invitation batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.batch)
+	issues := fixture.invitations.studentIssues
+	require.Equal(t, http.StatusOK, response.Code, "Invitation batch = %d %s", response.Code, response.Body.String())
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	require.Len(t, issues, 3, "every row reached the Store")
+	for index, row := range []struct{ key, email string }{{"row-1", "first@example.edu"}, {"row-2", "second@example.edu"}, {"row-3", "third@example.edu"}} {
+		require.Equal(t, class.ID, issues[index].Invitation.ClassID, "row %d is issued in the batch's Class", index)
+		require.Equal(t, model.InvitationPurposeStudentClass, issues[index].Invitation.Purpose, "row %d is a student_class.create", index)
+		require.Equal(t, row.email, issues[index].Invitation.TargetEmail, "row %d", index)
+		command := fixture.invitations.studentIssueCommands[index]
+		require.Equal(t, sha256.Sum256([]byte("10:batch-once:"+row.key)), command.KeyDigest, "row %d is keyed under the batch's Idempotency-Key", index)
+	}
+	require.Contains(t, response.Body.String(), `"succeeded":1`)
+	require.Contains(t, response.Body.String(), `"no_op":1`)
+	require.Contains(t, response.Body.String(), `"error_code":"invitation.conflict"`)
+	require.NotContains(t, response.Body.String(), "@example.edu")
 
 	missingKey := newJSONRequest(http.MethodPost, "/api/v1/invitation-batches", bytes.NewReader(body))
 	missingKey.Header.Set("Authorization", "Bearer session")
@@ -253,79 +178,51 @@ func TestInvitationBatchHTTPIsStrictBoundedAndIdempotent(t *testing.T) {
 	unknownResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(unknownResponse, unknown)
 	require.Equal(t, http.StatusBadRequest, unknownResponse.Code, "Invitation batch unknown JSON = %d %s", unknownResponse.Code, unknownResponse.Body.String())
+	require.Len(t, fixture.invitations.studentIssues, 3, "a refused batch reached the Store")
 }
 
 func TestInvitationAdministrationHTTPRejectsMalformedCursor(t *testing.T) {
+	fixture := newOnboardingFixture(t)
+	principal := fixture.principal(model.AuthenticationSingleFactor)
+	principal.ClientType = model.SessionClientCLI
 	logger, logs := routetest.NewLogger(t)
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
-		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
-		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
-		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}}, invitationResource(&invitationHTTPApplication{}))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(fixture.service))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/invitations?cursor=not-a-cursor", nil)
 	request.Header.Set("Authorization", "Bearer pat")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusBadRequest, response.Code, "malformed Invitation cursor = %d %s logs=%s", response.Code, response.Body.String(), logs.String())
 	require.Contains(t, response.Body.String(), "request.invalid", "malformed Invitation cursor = %d %s logs=%s", response.Code, response.Body.String(), logs.String())
-}
-func (a *invitationHTTPApplication) GetInvitation(_ context.Context, _ invocation.Invocation, id model.InvitationID) (onboarding.InvitationAdministrationView, error) {
-	a.getID = id.String()
-	return a.administrationView(), nil
-}
-func (a *invitationHTTPApplication) ResendInvitation(_ context.Context, _ invocation.Invocation, command onboarding.ResendInvitationCommand) (onboarding.InvitationAdministrationView, error) {
-	a.resend = command
-	return a.administrationView(), nil
-}
-func (a *invitationHTTPApplication) RevokeInvitation(_ context.Context, _ invocation.Invocation, command onboarding.RevokeInvitationCommand) (onboarding.InvitationAdministrationView, error) {
-	a.revoke = command
-	view := a.administrationView()
-	view.State = model.InvitationRevoked
-	return view, nil
-}
-func (a *invitationHTTPApplication) ReplaceInvitation(_ context.Context, _ invocation.Invocation, command onboarding.ReplaceInvitationCommand) (onboarding.InvitationAdministrationView, error) {
-	a.replace = command
-	return a.administrationView(), nil
-}
-func (a *invitationHTTPApplication) administrationView() onboarding.InvitationAdministrationView {
-	at := model.TimeFromMillis(1_800_000_000_000)
-	return onboarding.InvitationAdministrationView{InvitationView: onboarding.InvitationView{ID: model.NewInvitationID(),
-		Purpose: model.InvitationPurposeStudentClass, State: model.InvitationPending, ClassID: model.NewClassID(),
-		AcademicPeriodID: model.NewAcademicPeriodID(), IntendedStartsAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour)},
-		TargetEmail: "student@example.edu", InviterUserID: model.NewUserID(), CreatedAt: at, UpdatedAt: at, Revision: 1,
-		Delivery: &onboarding.InvitationDeliveryView{TemplateKey: model.MailTemplateAccessStudentClassInvitation,
-			State: model.MailDeliveryQueued, MaskedRecipient: "s***@example.edu", CreatedAt: at, UpdatedAt: at, Deadline: at.Add(7 * 24 * time.Hour)}}
+	require.Empty(t, fixture.invitations.listOptions, "a malformed cursor reached the Store")
 }
 
 func TestInvitationAcceptanceHTTPReturnsOnlyRecordIDsForFreshAndReplay(t *testing.T) {
 	for _, replayed := range []bool{false, true} {
 		t.Run(map[bool]string{false: "fresh", true: "replay"}[replayed], func(t *testing.T) {
+			fixture := newOnboardingFixture(t)
+			invitation, claim := fixture.pendingStudentInvitation(t, fixture.addClass("Biology 101"), "student@example.edu")
+			fixture.invitations.replayAcceptance = replayed
 			logger, _ := routetest.NewLogger(t)
-			userID := model.NewUserID()
-			invitationID := model.NewInvitationID()
-			affiliationID := model.NewAffiliationID()
-			classMemberID := model.NewClassMemberID()
-			applicationFake := &invitationHTTPApplication{acceptance: &onboarding.InvitationAcceptanceView{
-				Invitation:  onboarding.InvitationView{ID: invitationID},
-				User:        &model.User{ID: userID, Username: "student", Email: "student@example.edu", EmailVerified: true, LastLoginAt: model.OptionalTimeFrom(time.Now())},
-				Affiliation: &model.Affiliation{ID: affiliationID},
-				ClassMember: &model.ClassMember{ID: classMemberID},
-				Replayed:    replayed,
-			}}
-			httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, invitationResource(applicationFake))
-			body, _ := json.Marshal(map[string]string{"claim": model.NewCredentialToken(), "password": "correct horse battery staple", "username": "student"})
+			httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, invitationResource(fixture.service))
+			body, _ := json.Marshal(map[string]string{"claim": claim, "password": "correct horse battery staple", "username": "student"})
 			request := newJSONRequest(http.MethodPost, "/api/v1/invitations/student-class/accept", bytes.NewReader(body))
 			response := httptest.NewRecorder()
 
 			httpAPI.ServeHTTP(response, request)
 
 			require.Equal(t, http.StatusOK, response.Code, "accept invitation = %d: %s", response.Code, response.Body.String())
+			require.Len(t, fixture.invitations.studentAcceptances, 1, "the acceptance reached the Store")
+			accepted := fixture.invitations.studentAcceptances[0]
+			require.Equal(t, invitation.ClaimHash, accepted.ClaimHash)
+			require.Equal(t, "student", accepted.User.Username)
+			require.Equal(t, "student@example.edu", accepted.User.Email, "the account takes the Invitation's mailbox")
 			var projection map[string]any
 			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &projection))
 			expected := map[string]any{
-				"user_id":         userID.String(),
-				"invitation_id":   invitationID.String(),
-				"affiliation_id":  affiliationID.String(),
-				"class_member_id": classMemberID.String(),
+				"user_id":         accepted.User.ID.String(),
+				"invitation_id":   invitation.ID.String(),
+				"affiliation_id":  accepted.Affiliation.ID.String(),
+				"class_member_id": accepted.ClassMember.ID.String(),
 				"replayed":        replayed,
 			}
 			require.Equal(t, expected, projection, "acceptance projection")
@@ -349,123 +246,138 @@ func TestInvitationAcceptanceOpenAPIExposesOnlyRecordIDs(t *testing.T) {
 }
 
 func TestInvitationHTTPKeepsClaimOutOfIssueResponseAndAcceptsPublicly(t *testing.T) {
-	logger, _ := routetest.NewLogger(t)
-	applicationFake := &invitationHTTPApplication{}
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
-		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
-		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
-		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(applicationFake))
-	classID := model.NewClassID().String()
+	fixture := newOnboardingFixture(t)
+	principal := fixture.principal(model.AuthenticationSingleFactor)
+	principal.ClientType = model.SessionClientCLI
+	httpAPI := invitationAPI(t, fixture, principal)
+	class := fixture.addClass("Biology 101")
 	body, _ := json.Marshal(map[string]any{"email": "student@example.edu", "start_at": "2027-01-15T08:00:00Z",
 		"end_at": "2027-05-11T01:46:40.5Z", "suggested_username": "student-one"})
-	issue := newJSONRequest(http.MethodPost, "/api/v1/classes/"+classID+"/invitations/student", bytes.NewReader(body))
+	issue := newJSONRequest(http.MethodPost, "/api/v1/classes/"+class.ID.String()+"/invitations/student", bytes.NewReader(body))
 	issue.Header.Set("Authorization", "Bearer access")
 	issueResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(issueResponse, issue)
-	require.Equal(t, http.StatusCreated, issueResponse.Code, "issue response=%d %s command=%#v", issueResponse.Code, issueResponse.Body.String(), applicationFake.issue)
-	require.NotContains(t, issueResponse.Body.String(), "student@example.edu", "issue response=%d %s command=%#v", issueResponse.Code, issueResponse.Body.String(), applicationFake.issue)
-	require.NotContains(t, issueResponse.Body.String(), "claim", "issue response=%d %s command=%#v", issueResponse.Code, issueResponse.Body.String(), applicationFake.issue)
-	require.Equal(t, model.ClassID(classID), applicationFake.issue.ClassID, "issue response=%d %s command=%#v", issueResponse.Code, issueResponse.Body.String(), applicationFake.issue)
-	require.Equal(t, int64(1_800_000_000_000), applicationFake.issue.IntendedStartsAt, "issue response=%d %s command=%#v", issueResponse.Code, issueResponse.Body.String(), applicationFake.issue)
-	require.Equal(t, int64(1_810_000_000_500), applicationFake.issue.IntendedEndsAt, "issue response=%d %s command=%#v", issueResponse.Code, issueResponse.Body.String(), applicationFake.issue)
-	raw := model.NewCredentialToken()
+	require.Equal(t, http.StatusCreated, issueResponse.Code, "issue response=%d %s", issueResponse.Code, issueResponse.Body.String())
+	require.NotContains(t, issueResponse.Body.String(), "student@example.edu")
+	require.NotContains(t, issueResponse.Body.String(), "claim")
+	require.Len(t, fixture.invitations.studentIssues, 1, "the issue reached the Store")
+	issued := fixture.invitations.studentIssues[0].Invitation
+	require.Equal(t, class.ID, issued.ClassID)
+	require.Equal(t, int64(1_800_000_000_000), issued.IntendedStartsAt.UnixMilli())
+	require.Equal(t, int64(1_810_000_000_500), issued.IntendedEndsAt.Time.UnixMilli())
+	require.Equal(t, "student-one", issued.Suggestions.Username)
+	require.Equal(t, []model.MailTemplateKey{model.MailTemplateAccessStudentClassInvitation}, fixture.mail.templates(), "the claim was mailed")
+
+	invitation, raw := fixture.pendingStudentInvitation(t, class, "pending@example.edu")
 	acceptBody, _ := json.Marshal(map[string]string{"claim": raw, "password": "correct horse battery staple", "username": "student-one"})
 	accept := newJSONRequest(http.MethodPost, "/api/v1/invitations/student-class/accept", bytes.NewReader(acceptBody))
 	acceptResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(acceptResponse, accept)
-	require.Equal(t, http.StatusOK, acceptResponse.Code, "accept response=%d %s command=%#v", acceptResponse.Code, acceptResponse.Body.String(), applicationFake.accept)
-	require.Equal(t, raw, applicationFake.accept.Claim, "accept response=%d %s command=%#v", acceptResponse.Code, acceptResponse.Body.String(), applicationFake.accept)
-	require.NotContains(t, acceptResponse.Body.String(), raw, "accept response=%d %s command=%#v", acceptResponse.Code, acceptResponse.Body.String(), applicationFake.accept)
+	require.Equal(t, http.StatusOK, acceptResponse.Code, "accept response=%d %s", acceptResponse.Code, acceptResponse.Body.String())
+	require.Len(t, fixture.invitations.studentAcceptances, 1, "the acceptance reached the Store")
+	require.Equal(t, invitation.ClaimHash, fixture.invitations.studentAcceptances[0].ClaimHash, "the raw claim selected its Invitation")
+	require.NotContains(t, acceptResponse.Body.String(), raw)
 }
 
 func TestTeacherInvitationHTTPFreezesRoleAndReturnsRelationshipIDs(t *testing.T) {
-	logger, _ := routetest.NewLogger(t)
-	applicationFake := &invitationHTTPApplication{}
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
-		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(applicationFake))
-	unitID, roleID := model.NewAcademicUnitID().String(), model.NewRoleID().String()
-	body, _ := json.Marshal(map[string]string{"email": "teacher@example.edu", "role_id": roleID})
-	request := newJSONRequest(http.MethodPost, "/api/v1/academic-units/"+unitID+"/invitations/teacher", bytes.NewReader(body))
+	fixture := newOnboardingFixture(t)
+	principal := fixture.principal(model.AuthenticationSingleFactor)
+	principal.ClientType = model.SessionClientCLI
+	httpAPI := invitationAPI(t, fixture, principal)
+	role := fixture.addDelegableRole()
+	body, _ := json.Marshal(map[string]string{"email": "teacher@example.edu", "role_id": role.ID.String()})
+	request := newJSONRequest(http.MethodPost, "/api/v1/academic-units/"+fixture.unit.ID.String()+"/invitations/teacher", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer access")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
-	require.Equal(t, http.StatusCreated, response.Code, "teacher issue response=%d %s command=%#v", response.Code, response.Body.String(), applicationFake.teacherIssue)
-	require.Equal(t, model.AcademicUnitID(unitID), applicationFake.teacherIssue.AcademicUnitID, "teacher issue response=%d %s command=%#v", response.Code, response.Body.String(), applicationFake.teacherIssue)
-	require.Equal(t, model.RoleID(roleID), applicationFake.teacherIssue.RoleID, "teacher issue response=%d %s command=%#v", response.Code, response.Body.String(), applicationFake.teacherIssue)
-	require.NotContains(t, response.Body.String(), "teacher@example.edu", "teacher issue response=%d %s command=%#v", response.Code, response.Body.String(), applicationFake.teacherIssue)
-	require.NotContains(t, response.Body.String(), "claim", "teacher issue response=%d %s command=%#v", response.Code, response.Body.String(), applicationFake.teacherIssue)
-	raw := model.NewCredentialToken()
+	require.Equal(t, http.StatusCreated, response.Code, "teacher issue response=%d %s", response.Code, response.Body.String())
+	require.Len(t, fixture.invitations.teacherIssues, 1, "the teacher issue reached the Store")
+	issued := fixture.invitations.teacherIssues[0].Invitation
+	require.Equal(t, fixture.unit.ID, issued.AcademicUnitID)
+	require.Equal(t, role.ID, issued.RoleID)
+	require.Equal(t, role.Permissions, issued.RoleActions, "the Role's Actions are frozen into the Invitation")
+	require.Contains(t, response.Body.String(), string(model.ActionClassView), "the response names the frozen Actions")
+	require.NotContains(t, response.Body.String(), "teacher@example.edu")
+	require.NotContains(t, response.Body.String(), "claim")
+
+	invitation, raw := fixture.pendingTeacherInvitation(t, role, "pending.teacher@example.edu")
 	acceptBody, _ := json.Marshal(map[string]string{"claim": raw, "password": "correct horse battery staple", "username": "teacher-one"})
 	accept := newJSONRequest(http.MethodPost, "/api/v1/invitations/teacher-academic-unit/accept", bytes.NewReader(acceptBody))
 	acceptResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(acceptResponse, accept)
-	require.Equal(t, http.StatusOK, acceptResponse.Code, "teacher accept response=%d %s command=%#v", acceptResponse.Code, acceptResponse.Body.String(), applicationFake.teacherAccept)
-	require.Equal(t, raw, applicationFake.teacherAccept.Claim, "teacher accept response=%d %s command=%#v", acceptResponse.Code, acceptResponse.Body.String(), applicationFake.teacherAccept)
-	require.NotContains(t, acceptResponse.Body.String(), raw, "teacher accept response=%d %s command=%#v", acceptResponse.Code, acceptResponse.Body.String(), applicationFake.teacherAccept)
+	require.Equal(t, http.StatusOK, acceptResponse.Code, "teacher accept response=%d %s", acceptResponse.Code, acceptResponse.Body.String())
+	require.Len(t, fixture.invitations.teacherAcceptances, 1, "the teacher acceptance reached the Store")
+	accepted := fixture.invitations.teacherAcceptances[0]
+	require.Equal(t, invitation.ClaimHash, accepted.ClaimHash, "the raw claim selected its Invitation")
+	require.Equal(t, "teacher-one", accepted.User.Username)
+	require.Contains(t, acceptResponse.Body.String(), accepted.AcademicUnitMember.ID.String())
+	require.Contains(t, acceptResponse.Body.String(), accepted.RoleBinding.ID.String())
+	require.NotContains(t, acceptResponse.Body.String(), raw)
 }
 
 func TestScopedRoleInvitationHTTPRequiresAuthenticatedExistingUserAndInstitutionAssurance(t *testing.T) {
-	logger, _ := routetest.NewLogger(t)
-	applicationFake := &invitationHTTPApplication{}
-	now := time.Now()
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
-		ClientType: model.SessionClientWeb, AuthenticatedAt: now, MFACompletedAt: model.OptionalTimeFrom(now)}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(applicationFake))
-	unitID, institutionID, roleID := model.NewAcademicUnitID().String(), model.NewInstitutionID().String(), model.NewRoleID().String()
-	body, _ := json.Marshal(map[string]string{"email": "existing@example.edu", "role_id": roleID})
+	fixture := newOnboardingFixture(t)
+	principal := fixture.principal(model.AuthenticationMultiFactor)
+	httpAPI := invitationAPI(t, fixture, principal)
+	role := fixture.addDelegableRole()
+	institutionID := fixture.access.Institution.ID
+	body, _ := json.Marshal(map[string]string{"email": "existing@example.edu", "role_id": role.ID.String()})
 	for _, target := range []struct {
 		path    string
-		command func() (string, string)
+		purpose model.InvitationPurpose
+		scope   string
 	}{
-		{path: "/api/v1/academic-units/" + unitID + "/invitations/role", command: func() (string, string) {
-			return applicationFake.unitRoleIssue.AcademicUnitID.String(), applicationFake.unitRoleIssue.RoleID.String()
-		}},
-		{path: "/api/v1/institutions/" + institutionID + "/invitations/role", command: func() (string, string) {
-			return applicationFake.institutionRoleIssue.InstitutionID.String(), applicationFake.institutionRoleIssue.RoleID.String()
-		}},
+		{path: "/api/v1/academic-units/" + fixture.unit.ID.String() + "/invitations/role", purpose: model.InvitationPurposeAcademicUnitRole, scope: fixture.unit.ID.String()},
+		{path: "/api/v1/institutions/" + institutionID.String() + "/invitations/role", purpose: model.InvitationPurposeInstitutionRole, scope: institutionID.String()},
 	} {
 		t.Run(target.path, func(t *testing.T) {
+			before := len(fixture.invitations.scopedRoleIssues)
 			request := newJSONRequest(http.MethodPost, target.path, bytes.NewReader(body))
 			request.Header.Set("Authorization", "Bearer session")
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
-			first, second := target.command()
-			require.Equal(t, http.StatusCreated, response.Code, "scoped Role issue %s = %d %s command=%q", target.path, response.Code, response.Body.String(), first)
-			require.NotEmpty(t, first, "scoped Role issue %s = %d %s command=%q", target.path, response.Code, response.Body.String(), first)
-			require.Equal(t, roleID, second, "scoped Role issue %s = %d %s command=%q", target.path, response.Code, response.Body.String(), first)
-			require.NotContains(t, response.Body.String(), "existing@example.edu", "scoped Role issue %s = %d %s command=%q", target.path, response.Code, response.Body.String(), first)
+			require.Equal(t, http.StatusCreated, response.Code, "scoped Role issue %s = %d %s", target.path, response.Code, response.Body.String())
+			require.Len(t, fixture.invitations.scopedRoleIssues, before+1, "the scoped Role issue reached the Store")
+			issued := fixture.invitations.scopedRoleIssues[before].Invitation
+			require.Equal(t, target.purpose, issued.Purpose)
+			require.Equal(t, target.scope, issued.ScopeID)
+			require.Equal(t, role.ID, issued.RoleID)
+			require.NotContains(t, response.Body.String(), "existing@example.edu")
 		})
 	}
-	claim := model.NewCredentialToken()
 	for _, target := range []struct {
 		path    string
-		command func() string
+		purpose model.InvitationPurpose
 	}{
-		{path: "/api/v1/invitations/academic-unit-role/accept", command: func() string { return applicationFake.unitRoleAccept.Claim }},
-		{path: "/api/v1/invitations/institution-role/accept", command: func() string { return applicationFake.institutionRoleAccept.Claim }},
+		{path: "/api/v1/invitations/academic-unit-role/accept", purpose: model.InvitationPurposeAcademicUnitRole},
+		{path: "/api/v1/invitations/institution-role/accept", purpose: model.InvitationPurposeInstitutionRole},
 	} {
 		t.Run(target.path, func(t *testing.T) {
+			// Each route accepts only its own purpose, so each gets a claim of it.
+			invitation, claim := fixture.pendingRoleInvitation(t, target.purpose, role)
+			before := len(fixture.invitations.scopedAcceptances)
 			request := newJSONRequest(http.MethodPost, target.path, bytes.NewReader([]byte(`{"claim":"`+claim+`"}`)))
 			request.Header.Set("Authorization", "Bearer session")
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
-			require.Equal(t, http.StatusOK, response.Code, "scoped Role accept %s", target.path)
-			require.Equal(t, claim, target.command(), "scoped Role accept %s", target.path)
-			require.NotContains(t, response.Body.String(), claim, "scoped Role accept %s", target.path)
-			require.NotContains(t, response.Body.String(), "email", "scoped Role accept %s", target.path)
+			require.Equal(t, http.StatusOK, response.Code, "scoped Role accept %s = %d %s", target.path, response.Code, response.Body.String())
+			require.Len(t, fixture.invitations.scopedAcceptances, before+1, "the scoped Role acceptance reached the Store")
+			accepted := fixture.invitations.scopedAcceptances[before]
+			require.Equal(t, invitation.ClaimHash, accepted.ClaimHash, "the raw claim selected its Invitation")
+			require.Equal(t, principal.UserID, accepted.UserID, "the Role binds the Session's own User")
+			require.NotContains(t, response.Body.String(), claim)
+			require.NotContains(t, response.Body.String(), "email")
 		})
 	}
 	pat := principal
 	pat.CredentialType, pat.SessionID = model.CredentialPersonalAccessToken, ""
 	pat.CredentialID = model.PrincipalCredentialID(model.NewPersonalAccessTokenID())
-	patAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: pat}, invitationResource(applicationFake))
-	request := newJSONRequest(http.MethodPost, "/api/v1/institutions/"+institutionID+"/invitations/role", bytes.NewReader(body))
+	patAPI := invitationAPI(t, fixture, pat)
+	issued := len(fixture.invitations.scopedRoleIssues)
+	request := newJSONRequest(http.MethodPost, "/api/v1/institutions/"+institutionID.String()+"/invitations/role", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer pat")
 	response := httptest.NewRecorder()
 	patAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusUnauthorized, response.Code, "institution Role PAT issue = %d %s", response.Code, response.Body.String())
+	require.Len(t, fixture.invitations.scopedRoleIssues, issued, "a PAT issue reached the Store")
 }

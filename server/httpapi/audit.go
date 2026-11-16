@@ -12,13 +12,11 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -91,10 +89,10 @@ func auditEventResponseFromModel(request *http.Request, event *model.AuditEvent,
 }
 
 type auditHandlers struct {
-	app AuditListingApplication
+	app *administration.Service
 }
 
-func auditResource(app AuditListingApplication) route.Resource {
+func auditResource(app *administration.Service) route.Resource {
 	h := auditHandlers{app: app}
 	return route.NewResource(
 		"audits",
@@ -254,10 +252,4 @@ func auditCursorSpec() route.CursorSpec[auditCursor] {
 			return nil
 		},
 	}
-}
-
-// AuditListingApplication is the application port its handlers call; it lists audit events for administrators and for the caller.
-type AuditListingApplication interface {
-	ListAuditEvents(context.Context, invocation.Invocation, administration.ListAuditEventsQuery) (administration.AuditEventPage, error)
-	ListSelfAuditEvents(context.Context, invocation.Invocation, administration.ListSelfAuditEventsQuery) (administration.SelfAuditPage, error)
 }

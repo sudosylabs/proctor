@@ -8,11 +8,9 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
@@ -49,10 +47,10 @@ type updateAcademicUnitRequest struct {
 }
 
 type academicUnitHandlers struct {
-	app AcademicUnitApplication
+	app *academic.Service
 }
 
-func academicUnitResource(app AcademicUnitApplication) route.Resource {
+func academicUnitResource(app *academic.Service) route.Resource {
 	h := academicUnitHandlers{app: app}
 	collection := "/academic-units"
 	member := "/academic-units/{academic_unit_id}"
@@ -329,14 +327,4 @@ func academicUnitResponseFromModel(unit *model.AcademicUnit) academicUnitRespons
 		DisplayName:   unit.DisplayName,
 		Description:   unit.Description,
 	}
-}
-
-// AcademicUnitApplication is the application port its handlers call; it reads and changes Academic Units.
-type AcademicUnitApplication interface {
-	GetAcademicUnit(context.Context, invocation.Invocation, model.AcademicUnitID) (*model.AcademicUnit, error)
-	ListAcademicUnits(context.Context, invocation.Invocation, academic.ListAcademicUnitsQuery) (paging.Page[*model.AcademicUnit], error)
-	SearchAcademicUnits(context.Context, invocation.Invocation, academic.SearchAcademicUnitsQuery) (paging.Page[*model.AcademicUnit], error)
-	CreateAcademicUnit(context.Context, invocation.Invocation, academic.CreateAcademicUnitCommand) (*model.AcademicUnit, error)
-	UpdateAcademicUnit(context.Context, invocation.Invocation, academic.UpdateAcademicUnitCommand) (*model.AcademicUnit, error)
-	ArchiveAcademicUnit(context.Context, invocation.Invocation, academic.ArchiveAcademicUnitCommand) error
 }

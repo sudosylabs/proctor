@@ -8,11 +8,9 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
@@ -57,10 +55,10 @@ type updateClassRequest struct {
 }
 
 type classHandlers struct {
-	app ClassApplication
+	app *academic.Service
 }
 
-func classResource(app ClassApplication) route.Resource {
+func classResource(app *academic.Service) route.Resource {
 	h := classHandlers{app: app}
 	return route.NewResource(
 		"classes",
@@ -301,14 +299,4 @@ func classResponseFromModel(class *model.Class) classResponse {
 		DisplayName:      class.DisplayName,
 		Description:      class.Description,
 	}
-}
-
-// ClassApplication is the application port its handlers call; it reads and changes Classes.
-type ClassApplication interface {
-	GetClass(context.Context, invocation.Invocation, model.ClassID) (*model.Class, error)
-	ListClasses(context.Context, invocation.Invocation, academic.ListClassesQuery) (academic.ClassPage, error)
-	SearchClasses(context.Context, invocation.Invocation, academic.SearchClassesQuery) (academic.ClassPage, error)
-	CreateClass(context.Context, invocation.Invocation, academic.CreateClassCommand) (*model.Class, error)
-	UpdateClass(context.Context, invocation.Invocation, academic.UpdateClassCommand) (*model.Class, error)
-	ArchiveClass(context.Context, invocation.Invocation, academic.ArchiveClassCommand) error
 }

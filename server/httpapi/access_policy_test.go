@@ -8,7 +8,6 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -20,45 +19,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
-	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-type replayingAccessPolicyHTTPApplication struct {
-	command     *administration.ReplaceAccessPolicyCommand
-	view        administration.AccessPolicyView
-	preflight   administration.AccessPolicyPreflightResult
-	preflighted *administration.PreflightAccessPolicyCommand
-	discoveries int
-}
-
-func (a *replayingAccessPolicyHTTPApplication) GetAccessPolicy(context.Context, invocation.Invocation) (administration.AccessPolicyView, error) {
-	return a.view, nil
-}
-func (a *replayingAccessPolicyHTTPApplication) PreflightAccessPolicy(_ context.Context, _ invocation.Invocation, command administration.PreflightAccessPolicyCommand) (administration.AccessPolicyPreflightResult, error) {
-	a.preflighted = &command
-	return a.preflight, nil
-}
-func (a *replayingAccessPolicyHTTPApplication) DiscoverAccess(context.Context, invocation.Invocation) (administration.PublicAccessDiscovery, error) {
-	a.discoveries++
-	return administration.PublicAccessDiscovery{}, nil
-}
-func (a *replayingAccessPolicyHTTPApplication) ReplaceAccessPolicy(_ context.Context, _ invocation.Invocation, command administration.ReplaceAccessPolicyCommand) (administration.AccessPolicyView, error) {
-	if a.command == nil {
-		stored := command
-		a.command = &stored
-		return a.view, nil
-	}
-	if a.command.IdempotencyKey == command.IdempotencyKey &&
-		(a.command.ExpectedRevision != command.ExpectedRevision || a.command.RevokeExistingSessions != command.RevokeExistingSessions ||
-			a.command.Settings.DesktopAuthorizationEnabled != command.Settings.DesktopAuthorizationEnabled) {
-		return administration.AccessPolicyView{}, apperror.New("idempotency.conflict")
-	}
-	return a.view, nil
-}
 
 func TestPublicAccessDiscoveryDTOContainsNoPrivatePolicyOrDestinations(t *testing.T) {
 	t.Parallel()
@@ -88,13 +52,12 @@ func TestPublicAccessDiscoveryDTOContainsNoPrivatePolicyOrDestinations(t *testin
 func TestAccessPolicyHTTPRetriesLostResponseAndRejectsConflictingKeyReuse(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
-		AuthenticatedAt: time.Now(), MFACompletedAt: model.OptionalTimeFrom(time.Now()), ClientType: model.SessionClientWeb}
+	principal := administrationStrongPrincipal()
+	fixture := newAdministrationFixture(t, administrationAccessPolicyGrant(principal.UserID))
 	policy := model.NewInitialAccessPolicy(model.NewAccessPolicyID(), time.Now())
 	policy.Revision = 2
-	application := &replayingAccessPolicyHTTPApplication{view: administration.AccessPolicyView{Policy: policy, History: []*model.AccessPolicyTransition{}, AvailableProviders: []model.ExternalAuthenticationProvider{}}}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, accessPolicyResource(application))
+	fixture.accessPolicies.snapshot = &store.AccessPolicySnapshot{Policy: policy, History: []*model.AccessPolicyTransition{}}
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, accessPolicyResource(fixture.service))
 	body := `{"expected_revision":1,"revoke_existing_sessions":true,"local_login_enabled":true,"public_registration_enabled":false,"invitation_admission_enabled":true,"invitation_local_credential_enabled":true,"desktop_authorization_enabled":false,"provider_admissions":{},"role_holder_mfa_required":false,"session_idle_minutes":null,"session_absolute_minutes":null}`
 	do := func(candidate string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/access-policy", strings.NewReader(candidate))
@@ -109,24 +72,30 @@ func TestAccessPolicyHTTPRetriesLostResponseAndRejectsConflictingKeyReuse(t *tes
 	require.Equal(t, http.StatusOK, first.Code, "first")
 	require.Equal(t, http.StatusOK, replay.Code, "first")
 	require.Equal(t, replay.Body.String(), first.Body.String(), "first")
+	require.Len(t, fixture.accessPolicies.replacements, 1, "the replay committed nothing new")
+	replacement := fixture.accessPolicies.replacements[0]
+	require.Equal(t, int64(1), replacement.Preflight.ExpectedRevision)
+	require.True(t, replacement.Preflight.RevokeExistingSessions)
+	require.False(t, replacement.Preflight.Settings.DesktopAuthorizationEnabled)
+	require.Equal(t, principal.UserID, replacement.ActorID)
 	conflicting := strings.Replace(body, `"revoke_existing_sessions":true`, `"revoke_existing_sessions":false`, 1)
 	response := do(conflicting)
 	require.Equal(t, http.StatusConflict, response.Code, "conflict")
 	require.Contains(t, response.Body.String(), `"code":"idempotency.conflict"`, "conflict")
+	require.Len(t, fixture.accessPolicies.replacements, 1, "a conflicting reuse committed nothing")
 }
 
 func TestAccessPolicyHTTPCarriesRoleHolderMFARequirementAndPreflightCounts(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
-		AuthenticatedAt: time.Now(), MFACompletedAt: model.OptionalTimeFrom(time.Now()), ClientType: model.SessionClientWeb}
+	principal := administrationStrongPrincipal()
+	fixture := newAdministrationFixture(t, administrationAccessPolicyGrant(principal.UserID))
 	policy := model.NewInitialAccessPolicy(model.NewAccessPolicyID(), time.Now())
 	policy.RoleHolderMFARequired = true
-	application := &replayingAccessPolicyHTTPApplication{view: administration.AccessPolicyView{Policy: policy},
-		preflight: administration.AccessPolicyPreflightResult{Blockers: []store.AccessPolicyBlocker{{Code: store.AccessPolicyBlockerMFAUnavailable}},
-			RoleHoldersWithoutMFACount: 3, RoleHolderSingleFactorSessionCount: 5}}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, accessPolicyResource(application))
+	fixture.accessPolicies.snapshot = &store.AccessPolicySnapshot{Policy: policy}
+	fixture.accessPolicies.preflight = store.AccessPolicyPreflightResult{Blockers: []store.AccessPolicyBlocker{{Code: store.AccessPolicyBlockerMFAUnavailable}},
+		RoleHoldersWithoutMFACount: 3, RoleHolderSingleFactorSessionCount: 5}
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, accessPolicyResource(fixture.service))
 	do := func(method, path, body string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), method, path, strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer session")
@@ -142,23 +111,23 @@ func TestAccessPolicyHTTPCarriesRoleHolderMFARequirementAndPreflightCounts(t *te
 	preflight := do(http.MethodPost, "/api/v1/access-policy/preflight", `{"expected_revision":1,"revoke_existing_sessions":true,"local_login_enabled":true,"public_registration_enabled":false,"invitation_admission_enabled":true,"invitation_local_credential_enabled":true,"desktop_authorization_enabled":true,"provider_admissions":{},"role_holder_mfa_required":true,"session_idle_minutes":60,"session_absolute_minutes":null}`)
 	require.Equal(t, http.StatusOK, preflight.Code, preflight.Body.String())
 	require.JSONEq(t, `{"blockers":[{"code":"mfa_unavailable"}],"role_holders_without_mfa_count":3,"role_holder_single_factor_session_count":5}`, preflight.Body.String())
-	require.True(t, application.preflighted.Settings.RoleHolderMFARequired)
-	require.Equal(t, 60, application.preflighted.Settings.SessionIdleMinutes)
-	require.Zero(t, application.preflighted.Settings.SessionAbsoluteMinutes, "null keeps the deployment default")
+	preflighted := fixture.accessPolicies.lastPreflight(t)
+	require.True(t, preflighted.Settings.RoleHolderMFARequired)
+	require.Equal(t, 60, preflighted.Settings.SessionIdleMinutes)
+	require.Zero(t, preflighted.Settings.SessionAbsoluteMinutes, "null keeps the deployment default")
 }
 
 func TestAccessPolicyHTTPCarriesSessionLengthsAndTheirBounds(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
-		AuthenticatedAt: time.Now(), MFACompletedAt: model.OptionalTimeFrom(time.Now()), ClientType: model.SessionClientWeb}
+	principal := administrationStrongPrincipal()
+	// The deployment's Session lifetimes give an idle and absolute floor of 16
+	// minutes, and defaults and ceilings of seven and thirty days.
+	fixture := newAdministrationFixture(t, administrationAccessPolicyGrant(principal.UserID))
 	policy := model.NewInitialAccessPolicy(model.NewAccessPolicyID(), time.Now())
 	policy.SessionIdleMinutes = 480
-	application := &replayingAccessPolicyHTTPApplication{view: administration.AccessPolicyView{Policy: policy, SessionLimits: model.SessionLengthLimits{
-		IdleMinimumMinutes: 16, IdleDefaultMinutes: 10080, IdleMaximumMinutes: 10080,
-		AbsoluteMinimumMinutes: 16, AbsoluteDefaultMinutes: 43200, AbsoluteMaximumMinutes: 43200}}}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, accessPolicyResource(application))
+	fixture.accessPolicies.snapshot = &store.AccessPolicySnapshot{Policy: policy}
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, accessPolicyResource(fixture.service))
 	do := func(method, body string) *httptest.ResponseRecorder {
 		path := "/api/v1/access-policy"
 		if method == http.MethodPost {
@@ -205,16 +174,15 @@ func TestAccessPolicyHTTPCarriesSessionLengthsAndTheirBounds(t *testing.T) {
 			require.Contains(t, response.Body.String(), `"code":"request.invalid"`)
 		})
 	}
+	require.Zero(t, fixture.accessPolicies.touched(), "an incomplete Session length never reaches the Store")
 }
 
 func TestAccessPolicyHTTPRequiresExplicitSessionRevocationChoice(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
-		AuthenticatedAt: time.Now(), MFACompletedAt: model.OptionalTimeFrom(time.Now()), ClientType: model.SessionClientWeb}
-	application := &replayingAccessPolicyHTTPApplication{}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, accessPolicyResource(application))
+	principal := administrationStrongPrincipal()
+	fixture := newAdministrationFixture(t, administrationAccessPolicyGrant(principal.UserID))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, accessPolicyResource(fixture.service))
 	for _, candidate := range []string{
 		`{"expected_revision":1,"local_login_enabled":true,"public_registration_enabled":false,"invitation_admission_enabled":true,"invitation_local_credential_enabled":true,"desktop_authorization_enabled":false,"provider_admissions":{},"role_holder_mfa_required":false,"session_idle_minutes":null,"session_absolute_minutes":null}`,
 		`{"expected_revision":1,"revoke_existing_sessions":null,"local_login_enabled":true,"public_registration_enabled":false,"invitation_admission_enabled":true,"invitation_local_credential_enabled":true,"desktop_authorization_enabled":false,"provider_admissions":{},"role_holder_mfa_required":false,"session_idle_minutes":null,"session_absolute_minutes":null}`,
@@ -228,16 +196,15 @@ func TestAccessPolicyHTTPRequiresExplicitSessionRevocationChoice(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, response.Code, "response")
 		require.Contains(t, response.Body.String(), `"code":"request.invalid"`, "response")
 	}
+	require.Zero(t, fixture.accessPolicies.touched(), "a replacement without the choice never reaches the Store")
 }
 
 func TestAccessPolicyHTTPRequiresEveryCompleteReplacementSetting(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
-		AuthenticatedAt: time.Now(), MFACompletedAt: model.OptionalTimeFrom(time.Now()), ClientType: model.SessionClientWeb}
-	application := &replayingAccessPolicyHTTPApplication{}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, accessPolicyResource(application))
+	principal := administrationStrongPrincipal()
+	fixture := newAdministrationFixture(t, administrationAccessPolicyGrant(principal.UserID))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, accessPolicyResource(fixture.service))
 	valid := map[string]any{
 		"expected_revision": 1, "revoke_existing_sessions": false,
 		"local_login_enabled": true, "public_registration_enabled": false,
@@ -281,6 +248,7 @@ func TestAccessPolicyHTTPRequiresEveryCompleteReplacementSetting(t *testing.T) {
 			})
 		}
 	}
+	require.Zero(t, fixture.accessPolicies.touched(), "an incomplete replacement never reaches the Store")
 }
 
 func TestAccessPolicyOpenAPIDocument(t *testing.T) {

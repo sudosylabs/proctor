@@ -13,45 +13,27 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/search"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type searchHTTPApplication struct {
-	calls  int
-	query  search.Query
-	result search.Result
-}
-
-func (a *searchHTTPApplication) Search(_ context.Context, _ invocation.Invocation, query search.Query) (search.Result, error) {
-	a.calls++
-	a.query = query
-	return a.result, nil
-}
-
 func TestSearchResourcePresentsTypedItemsWithoutEmail(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{
-		UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password",
-		AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now(),
-	}
+	principal := academicCaller()
+	fixture := newSearchFixture(t, institutionWide(principal.UserID, model.ActionExamView, model.ActionClassView, model.ActionUserView))
 	examSummary := store.ExamSummary{}
 	examSummary.ID, examSummary.AcademicUnitID, examSummary.Title = model.ExamID(model.NewID()), model.AcademicUnitID(model.NewID()), "Algorithms midterm"
 	class := &model.Class{ID: model.ClassID(model.NewID()), ProgrammeLevelID: model.ProgrammeLevelID(model.NewID()), DisplayName: "Algorithms A"}
 	user := &model.User{ID: model.NewUserID(), Username: "ada.example", DisplayName: "Ada Example", Email: "ada@example.invalid"}
-	application := &searchHTTPApplication{result: search.Result{
-		Exams: []store.ExamSummary{examSummary}, Classes: []*model.Class{class}, Users: []*model.User{user},
-	}}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, searchResource(application))
+	fixture.exams.listed = []store.ExamSummary{examSummary}
+	fixture.classes.listed = []*model.Class{class}
+	fixture.users.listed = []*model.User{user}
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, searchResource(fixture.service))
 	serve := func(target string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, target, nil)
 		request.Header.Set("Authorization", "Bearer credential")
@@ -59,23 +41,39 @@ func TestSearchResourcePresentsTypedItemsWithoutEmail(t *testing.T) {
 		httpAPI.ServeHTTP(response, request)
 		return response
 	}
-
-	response := serve("/api/v1/search?q=algo&types=exam&types=user&limit=7")
-	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	require.Equal(t, search.Query{Query: "algo", Types: []search.Type{"exam", "user"}, Limit: 7}, application.query)
-	require.NotContains(t, response.Body.String(), "ada@example.invalid")
-	require.NotContains(t, response.Body.String(), "next_cursor")
-	var body struct {
-		Items []map[string]string `json:"items"`
+	type item = map[string]string
+	decode := func(response *httptest.ResponseRecorder) []item {
+		t.Helper()
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		require.NotContains(t, response.Body.String(), "ada@example.invalid")
+		require.NotContains(t, response.Body.String(), "next_cursor")
+		var body struct {
+			Items []item `json:"items"`
+		}
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+		return body.Items
 	}
-	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
-	require.Equal(t, []map[string]string{
-		{"type": "exam", "id": examSummary.ID.String(), "title": "Algorithms midterm", "academic_unit_id": examSummary.AcademicUnitID.String()},
-		{"type": "class", "id": class.ID.String(), "display_name": "Algorithms A", "programme_level_id": class.ProgrammeLevelID.String()},
-		{"type": "user", "id": user.ID.String(), "display_name": "Ada Example", "username": "ada.example"},
-	}, body.Items)
+	examItem := item{"type": "exam", "id": examSummary.ID.String(), "title": "Algorithms midterm", "academic_unit_id": examSummary.AcademicUnitID.String()}
+	classItem := item{"type": "class", "id": class.ID.String(), "display_name": "Algorithms A", "programme_level_id": class.ProgrammeLevelID.String()}
+	userItem := item{"type": "user", "id": user.ID.String(), "display_name": "Ada Example", "username": "ada.example"}
 
-	calls := application.calls
+	// The query, its types and its limit reach each requested type's Store,
+	// and only those.
+	items := decode(serve("/api/v1/search?q=algo&types=exam&types=user&limit=7"))
+	require.Equal(t, []item{examItem, userItem}, items)
+	require.Len(t, fixture.exams.lists, 1)
+	require.Equal(t, "algo", fixture.exams.lists[0].Query)
+	require.Equal(t, 8, fixture.exams.lists[0].Limit, "the Exam catalog reads one past the limit")
+	require.Equal(t, "algo", fixture.users.lastList(t).Query)
+	require.Equal(t, 8, fixture.users.lastList(t).Limit, "the User directory reads one past the limit")
+	require.Empty(t, fixture.classes.searches, "Classes were not requested")
+
+	// Without types every type is searched, each kind in its own order.
+	require.Equal(t, []item{examItem, classItem, userItem}, decode(serve("/api/v1/search?q=algo")))
+	require.Len(t, fixture.classes.searches, 1)
+	require.Equal(t, store.ClassSearchOptions{Term: "algo", Limit: 5, Visibility: fixture.classes.searches[0].Visibility}, fixture.classes.searches[0])
+
+	reads := fixture.storeReads()
 	for _, target := range []string{
 		"/api/v1/search?q=algo&cursor=abc",
 		"/api/v1/search?q=algo&limit=0",
@@ -87,7 +85,7 @@ func TestSearchResourcePresentsTypedItemsWithoutEmail(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, rejected.Code, "%s: %s", target, rejected.Body.String())
 		require.Contains(t, rejected.Body.String(), `"request.invalid"`, target)
 	}
-	require.Equal(t, calls, application.calls, "rejected requests reached the application")
+	require.Equal(t, reads, fixture.storeReads(), "rejected requests reached a Store")
 }
 
 func TestSearchOpenAPIDocument(t *testing.T) {

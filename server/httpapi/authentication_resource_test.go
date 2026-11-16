@@ -20,32 +20,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-// signinRegistration is the onboarding registration the authentication
-// resource hands public sign-up to.
-type signinRegistration struct {
-	commands []onboarding.RegisterLocalUserCommand
-	err      error
-}
-
-func (r *signinRegistration) RegisterLocalUser(
-	_ context.Context,
-	_ invocation.Invocation,
-	command onboarding.RegisterLocalUserCommand,
-) error {
-	r.commands = append(r.commands, command)
-	return r.err
-}
 
 // signinStudent is an active local User and their stored password.
 func signinStudent(t *testing.T, password string) (*model.User, *identityPasswords) {
@@ -461,7 +442,7 @@ func TestAuthenticationResourceRunsPublicAndSessionEntriesThroughKernel(t *testi
 	require.NoError(t, err)
 	httpAPI := newFocusedResourceAPI(
 		t, logger, routetest.Authenticator{Principal: principal},
-		authenticationResource(&signinRegistration{}, fixture.service, cookies),
+		authenticationResource(newOnboardingFixture(t).service, fixture.service, cookies),
 	)
 
 	loginRequest := newJSONRequest(
@@ -545,7 +526,7 @@ func TestAuthenticationResourceKernelRejectsMissingCredentialAndInvalidJSON(t *t
 	}})
 	httpAPI := newFocusedResourceAPI(
 		t, logger, routetest.Authenticator{},
-		authenticationResource(&signinRegistration{}, fixture.service, cookies),
+		authenticationResource(newOnboardingFixture(t).service, fixture.service, cookies),
 	)
 
 	refresh := httptest.NewRecorder()
@@ -609,9 +590,9 @@ func TestPublicRegistrationUsesStrictBodyAndReturnsNoAccountProjection(t *testin
 	t.Parallel()
 
 	logger, _ := routetest.NewLogger(t)
-	registration := &signinRegistration{}
+	registration := newOnboardingFixture(t)
 	fixture := newIdentityFixture(t, identityOptions{})
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, authenticationResource(registration, fixture.service, route.Cookies{}))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, authenticationResource(registration.service, fixture.service, route.Cookies{}))
 
 	request := newJSONRequest(http.MethodPost, "/api/v1/auth/register",
 		strings.NewReader(`{"username":"student","email":"student@example.edu","first_name":"New","last_name":"Student","password":"long-private-password"}`))
@@ -621,28 +602,36 @@ func TestPublicRegistrationUsesStrictBodyAndReturnsNoAccountProjection(t *testin
 	require.Equal(t, http.StatusAccepted, response.Code, "registration response = %d headers=%#v body=%s", response.Code, response.Header(), response.Body.String())
 	require.Equal(t, 0, response.Body.Len(), "registration response = %d headers=%#v body=%s", response.Code, response.Header(), response.Body.String())
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"), "registration response = %d headers=%#v body=%s", response.Code, response.Header(), response.Body.String())
-	require.Len(t, registration.commands, 1)
-	command := registration.commands[0]
-	require.Equal(t, "student", command.Username)
-	require.Equal(t, "student@example.edu", command.Email)
-	require.Equal(t, "New", command.FirstName)
-	require.Equal(t, "Student", command.LastName)
-	require.Equal(t, "long-private-password", command.Password)
-	require.NotEmpty(t, command.Source)
+	registered := registration.users.registered()
+	require.Len(t, registered, 1, "the registration reached the Store")
+	account := registered[0].User
+	require.Equal(t, "student", account.Username)
+	require.Equal(t, "student@example.edu", account.Email)
+	require.Equal(t, "New", account.FirstName)
+	require.Equal(t, "Student", account.LastName)
+	hasher, err := identity.NewPasswordHasher(identity.PasswordHasherDependencies{Settings: identityPasswordPolicy()})
+	require.NoError(t, err)
+	require.NoError(t, hasher.Verify(t.Context(), registered[0].PasswordCredential.PasswordHash, "long-private-password"),
+		"the stored credential verifies the submitted password")
+	require.Equal(t, "student@example.edu", registered[0].VerificationToken.Target, "the mailbox is sent a verification")
+	require.True(t, registration.sourceCounted(t, identity.AttemptPurposePublicRegistration, "register", "192.0.2.1"),
+		"the registration attempt was counted against the request's source")
 
 	invalid := httptest.NewRecorder()
 	httpAPI.ServeHTTP(invalid, newJSONRequest(http.MethodPost, "/api/v1/auth/register",
 		strings.NewReader(`{"username":"student","email":"student@example.edu","first_name":"New","last_name":"Student","password":"private","display_name":"New Student"}`)))
-	require.Equal(t, http.StatusBadRequest, invalid.Code, "display-name registration = %d calls=%d body=%s", invalid.Code, len(registration.commands), invalid.Body.String())
-	require.Len(t, registration.commands, 1, "display-name registration = %d calls=%d body=%s", invalid.Code, len(registration.commands), invalid.Body.String())
+	require.Equal(t, http.StatusBadRequest, invalid.Code, "display-name registration = %d body=%s", invalid.Code, invalid.Body.String())
+	require.Len(t, registration.users.registered(), 1, "a display-name registration reached the Store")
 
-	registration.err = apperror.New("authentication.registration.invitation_required")
+	// The Access Policy no longer admits public registration.
+	registration.accessPolicy.policy.PublicRegistrationEnabled = false
 	disabled := httptest.NewRecorder()
 	httpAPI.ServeHTTP(disabled, newJSONRequest(http.MethodPost, "/api/v1/auth/register",
 		strings.NewReader(`{"username":"student","email":"student@example.edu","first_name":"New","last_name":"Student","password":"private"}`)))
 	require.Equal(t, http.StatusForbidden, disabled.Code, "disabled registration")
 	require.Contains(t, disabled.Body.String(), `"code":"authentication.registration.invitation_required"`, "disabled registration")
 	require.NotContains(t, disabled.Body.String(), "student@example.edu", "disabled registration")
+	require.Len(t, registration.users.registered(), 1, "a disabled registration reached the Store")
 }
 
 func TestExternalAuthenticationRedirectIsNamedKernelProtocolOperation(t *testing.T) {

@@ -8,86 +8,34 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type institutionHTTPApplication struct {
-	principal model.Principal
-	result    *model.Institution
-	command   academic.UpdateInstitutionCommand
-}
-
-func (a *institutionHTTPApplication) AuthenticateAccess(
-	context.Context, string,
-) (*model.Principal, error) {
-	principal := a.principal
-	return &principal, nil
-}
-
-func (a *institutionHTTPApplication) AuthenticateBearer(
-	context.Context, string,
-) (*model.Principal, error) {
-	principal := a.principal
-	return &principal, nil
-}
-
-func (a *institutionHTTPApplication) GetInstitution(
-	_ context.Context,
-	inv invocation.Invocation,
-) (*model.Institution, error) {
-	if inv.Principal().UserID != a.principal.UserID {
-		return nil, apperror.New("request.invalid")
-	}
-	return a.result, nil
-}
-
-func (a *institutionHTTPApplication) UpdateInstitution(
-	_ context.Context,
-	inv invocation.Invocation,
-	command academic.UpdateInstitutionCommand,
-) (*model.Institution, error) {
-	if inv.Principal().UserID != a.principal.UserID {
-		return nil, apperror.New("request.invalid")
-	}
-	a.command = command
-	return a.result, nil
-}
-
 func TestInstitutionHTTPMapsDTOsWithoutPermissionPreflight(t *testing.T) {
 	t.Parallel()
 
 	logger, _ := routetest.NewLogger(t)
+	principal := academicCaller()
+	fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{institutionWide(principal.UserID, model.ActionInstitutionManage)}})
 	institution := &model.Institution{
-		ID: model.InstitutionID(model.NewID()), CreatedAt: model.TimeFromMillis(10), UpdatedAt: model.TimeFromMillis(20),
+		ID: fixture.access.Institution.ID, CreatedAt: model.TimeFromMillis(10), UpdatedAt: model.TimeFromMillis(20),
 		Name: "northbridge", DisplayName: "Northbridge University",
-		Description: "A university",
+		Description: "A university", ExamCapacity: model.DefaultExamCapacityPolicy(),
 	}
-	fakeApplication := &institutionHTTPApplication{
-		principal: model.Principal{
-			UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-			CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password",
-			AuthenticationStrength: model.AuthenticationSingleFactor,
-			ClientType:             model.SessionClientCLI, AuthenticatedAt: time.Now(),
-		},
-		result: institution,
-	}
-	httpAPI := newFocusedResourceAPI(t, logger, fakeApplication, institutionResource(fakeApplication))
+	fixture.institution.current = institution
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, institutionResource(fixture.service))
 
 	getRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/institution", nil)
 	getRequest.Header.Set("Authorization", "Bearer test-credential")
@@ -109,32 +57,23 @@ func TestInstitutionHTTPMapsDTOsWithoutPermissionPreflight(t *testing.T) {
 	patchResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(patchResponse, patchRequest)
 	require.Equal(t, http.StatusOK, patchResponse.Code, "patch status = %d: %s", patchResponse.Code, patchResponse.Body.String())
-	require.NotNil(t, fakeApplication.command.DisplayName)
-	require.Equal(t, "Northbridge", *fakeApplication.command.DisplayName)
+	require.Len(t, fixture.institution.updates, 1, "the PATCH reached the Institution Store")
+	updated := fixture.institution.updates[0].Institution
+	require.Equal(t, "Northbridge", updated.DisplayName)
+	require.Equal(t, institution.Name, updated.Name, "an omitted field keeps its value")
 	wantCapacity := model.ExamCapacityPolicy{ResourceMaximumCount: 25, ResourceMaximumBytes: 20 << 20,
 		WorkspaceMaximumEntries: 750, WorkspaceMaximumFileBytes: 20 << 20, WorkspaceMaximumTotalBytes: 100 << 20}
-	require.NotNil(t, fakeApplication.command.ExamCapacity)
-	require.Equal(t, wantCapacity, *fakeApplication.command.ExamCapacity)
+	require.Equal(t, wantCapacity, updated.ExamCapacity)
+	require.Equal(t, string(model.ActionInstitutionManage), fixture.onlyAttempt(t).Action)
 }
 
 func TestInstitutionResourceRejectsUnknownPatchFields(t *testing.T) {
 	t.Parallel()
 
 	logger, _ := routetest.NewLogger(t)
-	fakeApplication := &institutionHTTPApplication{
-		principal: model.Principal{
-			UserID: model.NewUserID(), SessionID: model.NewSessionID(),
-			CredentialID:           model.PrincipalCredentialID(model.NewID()),
-			CredentialType:         model.CredentialSessionAccess,
-			AuthenticationMethod:   "password",
-			AuthenticationStrength: model.AuthenticationSingleFactor,
-			ClientType:             model.SessionClientCLI,
-			AuthenticatedAt:        time.Now(),
-		},
-	}
-	httpAPI := newFocusedResourceAPI(
-		t, logger, fakeApplication, institutionResource(fakeApplication),
-	)
+	principal := academicCaller()
+	fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{institutionWide(principal.UserID, model.ActionInstitutionManage)}})
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, institutionResource(fixture.service))
 	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPatch, "/api/v1/institution",
 		strings.NewReader(`{"display_name":"Northbridge","unknown":true}`),
@@ -147,6 +86,7 @@ func TestInstitutionResourceRejectsUnknownPatchFields(t *testing.T) {
 	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, "request.invalid", problem.Code, "problem code")
+	require.Empty(t, fixture.institution.updates, "a rejected PATCH reached the Institution Store")
 }
 
 func TestOptionalDistinguishesInstitutionPatchWireStates(t *testing.T) {

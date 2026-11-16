@@ -17,24 +17,30 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestAcademicUnitMemberHTTPPagingUsesTheCollectionEnvelope(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
+	principal := academicCaller()
 	scopeID := model.NewAcademicUnitID()
-	member := &model.AcademicUnitMember{ID: model.NewAcademicUnitMemberID(), UserID: model.NewUserID(), AcademicUnitID: scopeID, StartsAt: time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)}
-	service := &academicUnitMemberHTTPApplication{pageResult: &academic.AcademicUnitMemberPage{
-		Members: []*model.AcademicUnitMember{member}, HasMore: true, ActiveAt: 1000, Total: paging.Total{Counted: true, Total: 2},
-	}}
-	firstPage, emptyPage := service.pageResult, &academic.AcademicUnitMemberPage{ActiveAt: 1000}
-	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(service))
+	user := academicUser("amina", "Amina Diallo", "amina@example.edu")
+	member := &model.AcademicUnitMember{ID: model.NewAcademicUnitMemberID(), UserID: user.ID, AcademicUnitID: scopeID, StartsAt: time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)}
+	// The clock fixes the effective instant a first page freezes.
+	fixture := newAcademicFixture(t, academicOptions{
+		Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, scopeID, model.ActionAcademicUnitMembersView)},
+		Now:    func() time.Time { return model.TimeFromMillis(1000) },
+	})
+	fixture.users.add(user)
+	members := fixture.unitMembers
+	firstPage, emptyPage := store.AcademicUnitMemberPage{Members: []*model.AcademicUnitMember{member}, HasMore: true}, store.AcademicUnitMemberPage{}
+	members.page, members.total = firstPage, 2
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(fixture.service))
 	path := "/api/v1/academic-units/" + scopeID.String() + "/members"
 	call := func(target string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)
@@ -54,28 +60,36 @@ func TestAcademicUnitMemberHTTPPagingUsesTheCollectionEnvelope(t *testing.T) {
 	require.NotNil(t, result.Total, "the first page carries its total")
 	require.Equal(t, 2, *result.Total)
 	target := path + "?limit=1&cursor=" + url.QueryEscape(result.NextCursor)
-	service.pageResult = &academic.AcademicUnitMemberPage{ActiveAt: 1000}
+	members.page = emptyPage
+	counted := len(members.countOptions)
 	response = call(target)
-	require.Equal(t, http.StatusOK, response.Code, "final page/query = %d %#v", response.Code, service.pageQuery)
-	require.Empty(t, decodeMembershipPage(t, response).NextCursor, "final page/query = %d %#v", response.Code, service.pageQuery)
-	require.Equal(t, member.ID, service.pageQuery.AfterID, "final page/query = %d %#v", response.Code, service.pageQuery)
-	require.True(t, member.StartsAt.Equal(service.pageQuery.AfterStartAt), "the default order continues from the start: %#v", service.pageQuery)
-	require.True(t, service.pageQuery.AfterUserID.IsZero(), "the start order carries no member: %#v", service.pageQuery)
+	page := members.lastPage(t)
+	require.Equal(t, http.StatusOK, response.Code, "final page/options = %d %#v", response.Code, page)
+	require.Empty(t, decodeMembershipPage(t, response).NextCursor, "final page/options = %d %#v", response.Code, page)
+	require.Equal(t, member.ID, page.AfterID, "final page/options = %d %#v", response.Code, page)
+	require.True(t, model.TimeFromMillis(1000).Equal(page.ActiveAt), "the continuation reads at the frozen instant: %#v", page)
+	require.True(t, member.StartsAt.Equal(page.AfterStartAt), "the default order continues from the start: %#v", page)
+	require.True(t, page.AfterUserID.IsZero(), "the start order carries no member: %#v", page)
 	require.Nil(t, decodeMembershipPage(t, response).Total, "a later page carries no total")
-	service.pageResult = firstPage
+	require.Len(t, members.countOptions, counted, "a later page is not counted")
+	members.page = firstPage
 	byName := decodeMembershipPage(t, call(path+"?limit=1&sort=name&dir=desc"))
-	service.pageResult = emptyPage
+	members.page = emptyPage
 	response = call(path + "?limit=1&sort=name&dir=desc&cursor=" + url.QueryEscape(byName.NextCursor))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	require.Equal(t, member.UserID, service.pageQuery.AfterUserID, "the name order continues from the member: %#v", service.pageQuery)
-	require.True(t, service.pageQuery.AfterStartAt.IsZero(), "the name order carries no start: %#v", service.pageQuery)
-	require.True(t, service.pageQuery.Descending)
+	page = members.lastPage(t)
+	require.Equal(t, member.UserID, page.AfterUserID, "the name order continues from the member: %#v", page)
+	require.True(t, page.AfterStartAt.IsZero(), "the name order carries no start: %#v", page)
+	require.Equal(t, store.MembershipOrderName, page.Order)
+	require.True(t, page.Descending)
 	require.Equal(t, http.StatusBadRequest, call(path+"?limit=1&cursor="+url.QueryEscape(byName.NextCursor)).Code,
 		"a name cursor cannot continue the default order")
+	listed := len(members.pageOptions)
 	for _, suffix := range []string{"?limit=0", "?limit=201", "?limit=1&limit=2", "?cursor=", "?limit=1&history=true&active_at=1970-01-01T00:00:01Z", "?limit=1&history=invalid"} {
 		require.Equal(t, http.StatusBadRequest, call(path+suffix).Code, "invalid page query %s", suffix)
 	}
-	service.pageResult = &academic.AcademicUnitMemberPage{HasMore: true, Members: []*model.AcademicUnitMember{member}, Total: paging.CountWhole(1)}
+	require.Len(t, members.pageOptions, listed, "an invalid page query reached the membership Store")
+	members.page, members.total = store.AcademicUnitMemberPage{HasMore: true, Members: []*model.AcademicUnitMember{member}}, 1
 	response = call(path + "?limit=1&history=true")
 	require.Equal(t, http.StatusOK, response.Code)
 	historyCursor, err := route.DecodeCursor(decodeMembershipPage(t, response).NextCursor, membershipPageCursorSpec())
@@ -86,14 +100,21 @@ func TestAcademicUnitMemberHTTPPagingUsesTheCollectionEnvelope(t *testing.T) {
 func TestClassMemberHTTPPagingUsesTheCollectionEnvelope(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	scopeID := model.NewClassID()
+	principal := academicCaller()
+	world := newAcademicWorld()
+	scopeID := world.class.ID
 	member := &model.ClassMember{ID: model.NewClassMemberID(), UserID: model.NewUserID(), ClassID: scopeID, StartsAt: time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)}
-	service := &classMemberHTTPApplication{pageResult: &academic.ClassMemberPage{
-		Members: []*model.ClassMember{member}, HasMore: true, ActiveAt: 1000, Total: paging.Total{Counted: true, Total: 2},
-	}}
-	firstPage, emptyPage := service.pageResult, &academic.ClassMemberPage{ActiveAt: 1000}
-	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classMemberResource(service))
+	// The clock fixes the effective instant a first page freezes.
+	fixture := newAcademicFixture(t, academicOptions{
+		Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, world.unit.ID, model.ActionClassMembersView)},
+		Units:  world.units(),
+		Now:    func() time.Time { return model.TimeFromMillis(1000) },
+	})
+	fixture.hold(world)
+	members := fixture.classMembers
+	firstPage, emptyPage := store.ClassMemberPage{Members: []*model.ClassMember{member}, HasMore: true}, store.ClassMemberPage{}
+	members.page, members.total = firstPage, 2
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classMemberResource(fixture.service))
 	path := "/api/v1/classes/" + scopeID.String() + "/members"
 	call := func(target string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)
@@ -113,28 +134,36 @@ func TestClassMemberHTTPPagingUsesTheCollectionEnvelope(t *testing.T) {
 	require.NotNil(t, result.Total, "the first page carries its total")
 	require.Equal(t, 2, *result.Total)
 	target := path + "?limit=1&cursor=" + url.QueryEscape(result.NextCursor)
-	service.pageResult = &academic.ClassMemberPage{ActiveAt: 1000}
+	members.page = emptyPage
+	counted := len(members.countOptions)
 	response = call(target)
-	require.Equal(t, http.StatusOK, response.Code, "final page/query = %d %#v", response.Code, service.pageQuery)
-	require.Empty(t, decodeMembershipPage(t, response).NextCursor, "final page/query = %d %#v", response.Code, service.pageQuery)
-	require.Equal(t, member.ID, service.pageQuery.AfterID, "final page/query = %d %#v", response.Code, service.pageQuery)
-	require.True(t, member.StartsAt.Equal(service.pageQuery.AfterStartAt), "the default order continues from the start: %#v", service.pageQuery)
-	require.True(t, service.pageQuery.AfterUserID.IsZero(), "the start order carries no member: %#v", service.pageQuery)
+	page := members.lastPage(t)
+	require.Equal(t, http.StatusOK, response.Code, "final page/options = %d %#v", response.Code, page)
+	require.Empty(t, decodeMembershipPage(t, response).NextCursor, "final page/options = %d %#v", response.Code, page)
+	require.Equal(t, member.ID, page.AfterID, "final page/options = %d %#v", response.Code, page)
+	require.True(t, model.TimeFromMillis(1000).Equal(page.ActiveAt), "the continuation reads at the frozen instant: %#v", page)
+	require.True(t, member.StartsAt.Equal(page.AfterStartAt), "the default order continues from the start: %#v", page)
+	require.True(t, page.AfterUserID.IsZero(), "the start order carries no member: %#v", page)
 	require.Nil(t, decodeMembershipPage(t, response).Total, "a later page carries no total")
-	service.pageResult = firstPage
+	require.Len(t, members.countOptions, counted, "a later page is not counted")
+	members.page = firstPage
 	byName := decodeMembershipPage(t, call(path+"?limit=1&sort=name&dir=desc"))
-	service.pageResult = emptyPage
+	members.page = emptyPage
 	response = call(path + "?limit=1&sort=name&dir=desc&cursor=" + url.QueryEscape(byName.NextCursor))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	require.Equal(t, member.UserID, service.pageQuery.AfterUserID, "the name order continues from the member: %#v", service.pageQuery)
-	require.True(t, service.pageQuery.AfterStartAt.IsZero(), "the name order carries no start: %#v", service.pageQuery)
-	require.True(t, service.pageQuery.Descending)
+	page = members.lastPage(t)
+	require.Equal(t, member.UserID, page.AfterUserID, "the name order continues from the member: %#v", page)
+	require.True(t, page.AfterStartAt.IsZero(), "the name order carries no start: %#v", page)
+	require.Equal(t, store.MembershipOrderName, page.Order)
+	require.True(t, page.Descending)
 	require.Equal(t, http.StatusBadRequest, call(path+"?limit=1&cursor="+url.QueryEscape(byName.NextCursor)).Code,
 		"a name cursor cannot continue the default order")
+	listed := len(members.pageOptions)
 	for _, suffix := range []string{"?limit=0", "?limit=201", "?limit=1&limit=2", "?cursor=", "?limit=1&history=true&active_at=1970-01-01T00:00:01Z", "?limit=1&history=invalid"} {
 		require.Equal(t, http.StatusBadRequest, call(path+suffix).Code, "invalid page query %s", suffix)
 	}
-	service.pageResult = &academic.ClassMemberPage{HasMore: true, Members: []*model.ClassMember{member}, Total: paging.CountWhole(1)}
+	require.Len(t, members.pageOptions, listed, "an invalid page query reached the membership Store")
+	members.page, members.total = store.ClassMemberPage{HasMore: true, Members: []*model.ClassMember{member}}, 1
 	response = call(path + "?limit=1&history=true")
 	require.Equal(t, http.StatusOK, response.Code)
 	historyCursor, err := route.DecodeCursor(decodeMembershipPage(t, response).NextCursor, membershipPageCursorSpec())

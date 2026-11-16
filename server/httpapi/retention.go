@@ -8,40 +8,18 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// RetentionApplication is the application port its handlers call; it lists the
-// caller's retention notices and reads, previews and changes the retention
-// control.
-type RetentionApplication interface {
-	ListRetentionNotices(context.Context, invocation.Invocation, model.RetentionRetirementID, int) (*administration.RetentionNoticePage, error)
-	GetRetentionControl(context.Context, invocation.Invocation) (*model.RetentionControl, error)
-	GetRetentionPreview(context.Context, invocation.Invocation, model.RetentionPreviewID) (*model.RetentionPreview, error)
-	CreateRetentionPreview(
-		context.Context,
-		invocation.Invocation,
-		administration.CreateRetentionPreviewCommand,
-	) (*model.RetentionPreview, error)
-	ChangeRetentionControl(
-		context.Context,
-		invocation.Invocation,
-		administration.ChangeRetentionControlCommand,
-	) (*model.RetentionControl, error)
-	ListRetentionRecords(context.Context, invocation.Invocation, model.SubmissionID, int) (*administration.RetentionRecordPage, error)
-}
+type retentionHandlers struct{ app *administration.Service }
 
-type retentionHandlers struct{ app RetentionApplication }
-
-func retentionResource(app RetentionApplication) route.Resource {
+func retentionResource(app *administration.Service) route.Resource {
 	h := retentionHandlers{app: app}
 	mutationErrors := operatorMutationErrorCodes(
 		"request.invalid",

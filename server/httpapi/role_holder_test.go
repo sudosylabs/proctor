@@ -8,7 +8,6 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -17,36 +16,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/administration"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
-// roleHolderApplication answers a Role listing with one more page after the
-// first, counting only the first, and records every query it receives.
-type roleHolderApplication struct {
-	focusedRoleBindingApplication
-	first   []*model.RoleBinding
-	later   []*model.RoleBinding
-	queries []administration.ListRoleBindingsQuery
-}
-
-func (a *roleHolderApplication) ListRoleBindings(_ context.Context, _ invocation.Invocation, query administration.ListRoleBindingsQuery) (paging.Counted[*model.RoleBinding], error) {
-	a.queries = append(a.queries, query)
-	if query.BeforeID.IsZero() {
-		return paging.Counted[*model.RoleBinding]{
-			Page:  paging.Page[*model.RoleBinding]{Items: a.first, HasMore: true},
-			Total: paging.Total{Counted: true, Total: len(a.first) + len(a.later)},
-		}, nil
-	}
-	return paging.Counted[*model.RoleBinding]{Page: paging.Page[*model.RoleBinding]{Items: a.later}}, nil
-}
-
 // TestRoleBindingListByRolesBindsItsCursorToTheRoleSet pins the Role form of
-// the listing: the Roles and page reach the application, the first page alone
+// the listing: the Roles and page reach the Store, the first page alone
 // carries the total, and a cursor continues only the same set of Roles.
 func TestRoleBindingListByRolesBindsItsCursorToTheRoleSet(t *testing.T) {
 	t.Parallel()
@@ -58,8 +35,11 @@ func TestRoleBindingListByRolesBindsItsCursorToTheRoleSet(t *testing.T) {
 			CreatedAt: model.TimeFromMillis(millis), StartsAt: model.TimeFromMillis(millis)}
 	}
 	newest, older, oldest := binding(300, reader), binding(200, marker), binding(100, reader)
-	application := &roleHolderApplication{first: []*model.RoleBinding{newest, older}, later: []*model.RoleBinding{oldest}}
-	httpAPI := newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: operatorTestPrincipal()}, roleBindingResource(application))
+	principal := operatorTestPrincipal()
+	fixture := newAdministrationFixture(t, institutionWide(principal.UserID, model.ActionRoleBindingView, model.ActionRoleView))
+	fixture.roles.add(&model.Role{ID: reader, Name: "reader"}, &model.Role{ID: marker, Name: "marker"})
+	fixture.bindings.holders = []*model.RoleBinding{newest, older, oldest}
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, roleBindingResource(fixture.service))
 	serve := func(query string) *httptest.ResponseRecorder {
 		return serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/role-bindings?"+query, "", true)
 	}
@@ -79,7 +59,13 @@ func TestRoleBindingListByRolesBindsItsCursorToTheRoleSet(t *testing.T) {
 	require.NotNil(t, first.TotalIsLowerBound)
 	require.False(t, *first.TotalIsLowerBound)
 	require.NotEmpty(t, first.NextCursor)
-	require.Equal(t, []administration.ListRoleBindingsQuery{{RoleIDs: []model.RoleID{reader, marker}, Limit: 2}}, application.queries)
+	listed := fixture.bindings.listedHolders()
+	require.Len(t, listed, 1)
+	require.Equal(t, []model.RoleID{reader, marker}, listed[0].RoleIDs)
+	require.Equal(t, 3, listed[0].Limit, "the page size reached the Store with its probe row")
+	require.True(t, listed[0].BeforeCreatedAt.IsZero())
+	require.True(t, listed[0].BeforeID.IsZero())
+	require.True(t, listed[0].Visibility.InstitutionWide)
 
 	cursor := "&cursor=" + url.QueryEscape(first.NextCursor)
 	later := decode(serve("role_id=" + marker.String() + "&role_id=" + reader.String() + "&role_id=" + marker.String() + "&limit=2" + cursor))
@@ -87,12 +73,15 @@ func TestRoleBindingListByRolesBindsItsCursorToTheRoleSet(t *testing.T) {
 	require.Nil(t, later.Total, "a later page carries no total")
 	require.Nil(t, later.TotalIsLowerBound)
 	require.Empty(t, later.NextCursor)
-	require.Equal(t, administration.ListRoleBindingsQuery{
-		RoleIDs: []model.RoleID{marker, reader, marker}, Limit: 2,
-		BeforeCreatedAt: older.CreatedAt, BeforeID: older.ID,
-	}, application.queries[1], "the same Roles in another order and with a repeat continue after the last binding")
+	listed = fixture.bindings.listedHolders()
+	require.Len(t, listed, 2)
+	require.Equal(t, []model.RoleID{marker, reader}, listed[1].RoleIDs,
+		"the same Roles in another order and with a repeat continue after the last binding")
+	require.Equal(t, 3, listed[1].Limit)
+	require.True(t, older.CreatedAt.Equal(listed[1].BeforeCreatedAt))
+	require.Equal(t, older.ID, listed[1].BeforeID)
 
-	asked := len(application.queries)
+	asked := len(listed)
 	for name, query := range map[string]string{
 		"one of the Roles":    "role_id=" + reader.String() + cursor,
 		"another Role":        "role_id=" + model.NewRoleID().String() + cursor,
@@ -105,40 +94,58 @@ func TestRoleBindingListByRolesBindsItsCursorToTheRoleSet(t *testing.T) {
 			assertHTTPProblem(t, serve(query), http.StatusBadRequest, "request.invalid")
 		})
 	}
-	require.Len(t, application.queries, asked, "a refused cursor or Role never reaches the application")
+	require.Len(t, fixture.bindings.listedHolders(), asked, "a refused cursor or Role never reaches the Store")
 }
 
 func TestRoleListPresentsHoldersAndContinuesByName(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
 	counted := &model.Role{ID: model.NewRoleID(), Name: "marker", DisplayName: "Marker", Permissions: []string{}}
-	uncounted := &model.Role{ID: model.NewRoleID(), Name: "reader", DisplayName: "Reader", Permissions: []string{}}
-	roles := &roleHTTPApplication{page: paging.Page[administration.RoleResult]{Items: []administration.RoleResult{
-		{Role: counted, Holders: &administration.RoleHolders{Bindings: 10_000, Users: 23, Scopes: 6, BindingsIsLowerBound: true, UsersIsLowerBound: true, ScopesIsLowerBound: true}},
-		{Role: uncounted},
-	}, HasMore: true}, result: counted, holders: &administration.RoleHolders{Bindings: 2, Users: 2, Scopes: 1}}
-	httpAPI := newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: operatorTestPrincipal()}, roleResource(roles))
-
-	response := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/roles?limit=2", "", true)
-	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	var page struct {
+	second := &model.Role{ID: model.NewRoleID(), Name: "reader", DisplayName: "Reader", Permissions: []string{}}
+	later := &model.Role{ID: model.NewRoleID(), Name: "supervisor", DisplayName: "Supervisor", Permissions: []string{}}
+	holderViewer, roleViewer := operatorTestPrincipal(), operatorTestPrincipal()
+	fixture := newAdministrationFixture(t,
+		institutionWide(holderViewer.UserID, model.ActionRoleView, model.ActionRoleBindingView),
+		institutionWide(roleViewer.UserID, model.ActionRoleView))
+	fixture.roles.add(later, second, counted)
+	fixture.bindings.setCount(store.RoleHolderCount{RoleID: counted.ID, Bindings: store.MaximumListCount, Users: 23, Scopes: 6})
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: holderViewer}, roleResource(fixture.service))
+	type rolePage struct {
 		Items      []map[string]json.RawMessage `json:"items"`
 		NextCursor string                       `json:"next_cursor"`
 	}
-	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+	decode := func(response *httptest.ResponseRecorder) rolePage {
+		t.Helper()
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		var page rolePage
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+		return page
+	}
+
+	page := decode(serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/roles?limit=2", "", true))
 	require.Len(t, page.Items, 2)
+	require.JSONEq(t, `"marker"`, string(page.Items[0]["name"]), "Roles are listed by name")
 	require.JSONEq(t, `{"bindings":10000,"users":23,"scopes":6,"bindings_is_lower_bound":true,"users_is_lower_bound":true,"scopes_is_lower_bound":true}`,
 		string(page.Items[0]["holders"]))
-	require.NotContains(t, page.Items[1], "holders", "a Role read without holders omits the member")
-	require.Equal(t, administration.ListRolesQuery{NameQuery: paging.NameQuery{Limit: 2}}, roles.listQuery)
+	require.JSONEq(t, `{"bindings":0,"users":0,"scopes":0,"bindings_is_lower_bound":false,"users_is_lower_bound":false,"scopes_is_lower_bound":false}`,
+		string(page.Items[1]["holders"]), "a Role nobody holds counts zero holders")
+	require.NotEmpty(t, page.NextCursor)
 
-	response = serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/roles?limit=2&cursor="+url.QueryEscape(page.NextCursor), "", true)
-	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	require.Equal(t, administration.ListRolesQuery{NameQuery: paging.NameQuery{AfterName: uncounted.Name, AfterID: uncounted.ID.String(), Limit: 2}}, roles.listQuery,
-		"the cursor continues after the page's last Role by name")
+	withoutHolders := decode(serveOperatorRequest(t,
+		newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: roleViewer}, roleResource(fixture.service)),
+		http.MethodGet, "/api/v1/roles?limit=2", "", true))
+	require.Len(t, withoutHolders.Items, 2)
+	require.NotContains(t, withoutHolders.Items[0], "holders", "a Role read without holders omits the member")
+	require.NotContains(t, withoutHolders.Items[1], "holders", "a Role read without holders omits the member")
+
+	next := decode(serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/roles?limit=2&cursor="+url.QueryEscape(page.NextCursor), "", true))
+	require.Len(t, next.Items, 1, "the cursor continues after the page's last Role by name")
+	require.JSONEq(t, `"`+later.ID.String()+`"`, string(next.Items[0]["id"]), "the cursor continues after the page's last Role by name")
+	require.Empty(t, next.NextCursor)
 	assertHTTPProblem(t, serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/roles?cursor=not-a-cursor", "", true), http.StatusBadRequest, "request.invalid")
 
-	response = serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/roles/"+counted.ID.String(), "", true)
+	fixture.bindings.setCount(store.RoleHolderCount{RoleID: counted.ID, Bindings: 2, Users: 2, Scopes: 1})
+	response := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/roles/"+counted.ID.String(), "", true)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	var one map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &one))

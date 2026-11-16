@@ -9,70 +9,71 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type academicAdministrationBatchHTTPApplication struct {
-	command onboarding.RunAcademicAdministrationBatchCommand
-}
-
-func (a *academicAdministrationBatchHTTPApplication) RunAcademicAdministrationBatch(_ context.Context, _ invocation.Invocation, command onboarding.RunAcademicAdministrationBatchCommand) (onboarding.AcademicAdministrationBatchResult, error) {
-	a.command = command
-	return onboarding.AcademicAdministrationBatchResult{Operation: command.Operation, Succeeded: 1, NoOp: 1, Failed: 1,
-		Items: []onboarding.AcademicAdministrationBatchItemResult{{Index: 0, Status: onboarding.InvitationBatchItemSucceeded, ResourceID: model.NewClassMemberID().String()},
-			{Index: 1, Status: onboarding.InvitationBatchItemNoOp, ResourceID: model.NewClassMemberID().String()},
-			{Index: 2, Status: onboarding.InvitationBatchItemFailed, ErrorCode: "class.enrollment_conflict"}}}, nil
-}
-
 func TestAcademicAdministrationBatchHTTPIsStrictBoundedAndSafe(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
-	applicationFake := &academicAdministrationBatchHTTPApplication{}
-	now := time.Now()
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
-		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
-		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
-		ClientType: model.SessionClientWeb, AuthenticatedAt: now, MFACompletedAt: model.OptionalTimeFrom(now)}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicAdministrationBatchResource(applicationFake))
-	classID := model.NewClassID().String()
-	userID := model.NewUserID().String()
-	previousID := model.NewClassMemberID().String()
-	body, _ := json.Marshal(map[string]any{"operation": "class.transfer", "scope_type": "class", "scope_id": classID,
-		"items": []map[string]any{{"key": "row-1", "user_id": userID, "relationship_id": previousID}}})
+	fixture := newOnboardingFixture(t)
+	source, destination := fixture.addClass("Biology 101"), fixture.addClass("Biology 102")
+	// The first User transfers, the second's transfer was already committed
+	// and the third has no membership to transfer from.
+	transferring, replayed, unenrolled := fixture.addUser("first"), fixture.addUser("second"), fixture.addUser("third")
+	previous := map[model.UserID]*model.ClassMember{}
+	for _, account := range []*model.User{transferring, replayed} {
+		member := &model.ClassMember{ID: model.NewClassMemberID(), ClassID: source.ID, AcademicPeriodID: source.AcademicPeriodID,
+			UserID: account.ID, StartsAt: fixture.period.StartsAt, Revision: 1}
+		fixture.classMembers.add(member)
+		previous[account.ID] = member
+	}
+	fixture.classMembers.replayUsers[replayed.ID] = true
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: fixture.principal(model.AuthenticationMultiFactor)},
+		academicAdministrationBatchResource(fixture.service))
+	body, _ := json.Marshal(map[string]any{"operation": "class.transfer", "scope_type": "class", "scope_id": destination.ID.String(),
+		"items": []map[string]any{
+			{"key": "row-1", "user_id": transferring.ID.String(), "relationship_id": previous[transferring.ID].ID.String()},
+			{"key": "row-2", "user_id": replayed.ID.String(), "relationship_id": previous[replayed.ID].ID.String()},
+			{"key": "row-3", "user_id": unenrolled.ID.String(), "relationship_id": model.NewClassMemberID().String()},
+		}})
 	request := newJSONRequest(http.MethodPost, "/api/v1/academic-administration-batches", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer session")
 	request.Header.Set("Idempotency-Key", "batch-key")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
-	require.Equal(t, http.StatusOK, response.Code, "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)
-	require.Equal(t, "no-store", response.Header().Get("Cache-Control"), "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)
-	require.Equal(t, onboarding.AcademicAdministrationClassTransfer, applicationFake.command.Operation, "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)
-	require.Equal(t, classID, applicationFake.command.ScopeID, "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)
-	require.Equal(t, "batch-key", applicationFake.command.IdempotencyKey, "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)
-	require.Len(t, applicationFake.command.Items, 1, "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)
-	require.Equal(t, model.UserID(userID), applicationFake.command.Items[0].UserID, "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)
-	require.Equal(t, previousID, applicationFake.command.Items[0].RelationshipID, "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)
-	require.Contains(t, response.Body.String(), `"succeeded":1`, "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)
-	require.Contains(t, response.Body.String(), `"no_op":1`, "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)
-	require.Contains(t, response.Body.String(), `"class.enrollment_conflict"`, "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)
-	require.NotContains(t, response.Body.String(), userID, "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)
+	enrollments := fixture.classMembers.enrollments
+	require.Equal(t, http.StatusOK, response.Code, "academic administration batch = %d %s", response.Code, response.Body.String())
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	require.Len(t, enrollments, 2, "the two transferable rows reached the Store: %s", response.Body.String())
+	for index, account := range []*model.User{transferring, replayed} {
+		require.Equal(t, destination.ID, enrollments[index].Member.ClassID, "row %d enrolls into the batch's Class", index)
+		require.Equal(t, account.ID, enrollments[index].Member.UserID, "row %d", index)
+		require.Equal(t, previous[account.ID].ID, enrollments[index].ExpectedPreviousID, "row %d transfers from its relationship", index)
+		require.Equal(t, sha256.Sum256([]byte("9:batch-key:row-"+strconv.Itoa(index+1))), enrollments[index].Command.KeyDigest,
+			"row %d is keyed under the batch's Idempotency-Key", index)
+	}
+	require.Contains(t, response.Body.String(), `"succeeded":1`)
+	require.Contains(t, response.Body.String(), `"no_op":1`)
+	require.Contains(t, response.Body.String(), `"class.enrollment_conflict"`)
+	for _, account := range []*model.User{transferring, replayed, unenrolled} {
+		require.NotContains(t, response.Body.String(), account.ID.String())
+	}
 
-	unknown := newJSONRequest(http.MethodPost, "/api/v1/academic-administration-batches", strings.NewReader(`{"operation":"class.end","scope_type":"class","scope_id":"`+classID+`","items":[],"command":"forbidden"}`))
+	unknown := newJSONRequest(http.MethodPost, "/api/v1/academic-administration-batches", strings.NewReader(`{"operation":"class.end","scope_type":"class","scope_id":"`+destination.ID.String()+`","items":[],"command":"forbidden"}`))
 	unknown.Header.Set("Authorization", "Bearer session")
 	unknown.Header.Set("Idempotency-Key", "unknown")
 	unknownResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(unknownResponse, unknown)
 	require.Equal(t, http.StatusBadRequest, unknownResponse.Code, "unknown command envelope = %d %s", unknownResponse.Code, unknownResponse.Body.String())
+	require.Empty(t, fixture.classMembers.ends, "a refused envelope reached the Store")
 }

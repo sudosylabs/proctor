@@ -8,24 +8,14 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-// EnvironmentProfileApplication is the transport's environment profile
-// administration capability.
-type EnvironmentProfileApplication interface {
-	ListEnvironmentProfiles(context.Context, invocation.Invocation, bool) ([]*model.EnvironmentProfile, error)
-	CreateEnvironmentProfile(context.Context, invocation.Invocation, administration.CreateEnvironmentProfileCommand) (*model.EnvironmentProfile, error)
-	RetireEnvironmentProfile(context.Context, invocation.Invocation, administration.RetireEnvironmentProfileCommand) (*model.EnvironmentProfile, error)
-}
 
 type environmentProfileRequest struct {
 	Name              string `json:"name"`
@@ -53,7 +43,7 @@ type environmentProfileResponse struct {
 }
 
 type environmentProfileHandlers struct {
-	app EnvironmentProfileApplication
+	app *administration.Service
 }
 
 var environmentProfileWriteErrors = []string{
@@ -71,7 +61,7 @@ var environmentProfileWriteErrors = []string{
 	"resource.not_found",
 }
 
-func environmentProfileResource(app EnvironmentProfileApplication) route.Resource {
+func environmentProfileResource(app *administration.Service) route.Resource {
 	h := environmentProfileHandlers{app: app}
 	return route.NewResource(
 		"environment-profiles",

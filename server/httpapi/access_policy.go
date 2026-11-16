@@ -8,34 +8,14 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 	"sort"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-// AccessPolicyApplication is the application port its handlers call; it reads,
-// preflights and replaces the Access Policy and answers public access
-// discovery.
-type AccessPolicyApplication interface {
-	GetAccessPolicy(context.Context, invocation.Invocation) (administration.AccessPolicyView, error)
-	PreflightAccessPolicy(
-		context.Context,
-		invocation.Invocation,
-		administration.PreflightAccessPolicyCommand,
-	) (administration.AccessPolicyPreflightResult, error)
-	ReplaceAccessPolicy(
-		context.Context,
-		invocation.Invocation,
-		administration.ReplaceAccessPolicyCommand,
-	) (administration.AccessPolicyView, error)
-	DiscoverAccess(context.Context, invocation.Invocation) (administration.PublicAccessDiscovery, error)
-}
 
 type accessPolicySettingsRequest struct {
 	ExpectedRevision                 int64                                                  `json:"expected_revision"`
@@ -133,9 +113,9 @@ type publicAccessDiscoveryResponse struct {
 	PasswordMinimumLength int    `json:"password_minimum_length"`
 }
 
-type accessPolicyHandlers struct{ app AccessPolicyApplication }
+type accessPolicyHandlers struct{ app *administration.Service }
 
-func accessPolicyResource(app AccessPolicyApplication) route.Resource {
+func accessPolicyResource(app *administration.Service) route.Resource {
 	h := accessPolicyHandlers{app: app}
 	replace := route.Endpoint{
 		Method:      http.MethodPut,

@@ -14,13 +14,11 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
@@ -111,10 +109,10 @@ func roleResponseFromModel(request *http.Request, role *model.Role) roleResponse
 }
 
 type roleHandlers struct {
-	app RoleApplication
+	app *administration.Service
 }
 
-func roleResource(app RoleApplication) route.Resource {
+func roleResource(app *administration.Service) route.Resource {
 	h := roleHandlers{app: app}
 	return route.NewResource(
 		"roles",
@@ -338,13 +336,4 @@ func (h roleHandlers) archive(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 	return route.NoContent(), nil
-}
-
-// RoleApplication is the application port its handlers call; it reads and changes Roles.
-type RoleApplication interface {
-	ListRoles(context.Context, invocation.Invocation, administration.ListRolesQuery) (paging.Page[administration.RoleResult], error)
-	GetRole(context.Context, invocation.Invocation, model.RoleID) (administration.RoleResult, error)
-	CreateRole(context.Context, invocation.Invocation, administration.CreateRoleCommand) (*model.Role, error)
-	UpdateRole(context.Context, invocation.Invocation, administration.UpdateRoleCommand) (*model.Role, error)
-	ArchiveRole(context.Context, invocation.Invocation, model.RoleID) error
 }

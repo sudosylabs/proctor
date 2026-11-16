@@ -8,7 +8,6 @@
 package httpapi
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
@@ -19,7 +18,6 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
@@ -63,10 +61,10 @@ func roleBindingResponseFromModel(binding *model.RoleBinding) roleBindingRespons
 }
 
 type roleBindingHandlers struct {
-	app RoleBindingApplication
+	app *administration.Service
 }
 
-func roleBindingResource(app RoleBindingApplication) route.Resource {
+func roleBindingResource(app *administration.Service) route.Resource {
 	h := roleBindingHandlers{app: app}
 	return route.NewResource(
 		"role-bindings",
@@ -320,11 +318,4 @@ func (h roleBindingHandlers) end(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 	return route.JSON(http.StatusOK, roleBindingResponseFromModel(ended)), nil
-}
-
-// RoleBindingApplication is the application port its handlers call; it lists, creates and ends Role Bindings.
-type RoleBindingApplication interface {
-	ListRoleBindings(context.Context, invocation.Invocation, administration.ListRoleBindingsQuery) (paging.Counted[*model.RoleBinding], error)
-	CreateRoleBinding(context.Context, invocation.Invocation, administration.CreateRoleBindingCommand) (*model.RoleBinding, error)
-	EndRoleBinding(context.Context, invocation.Invocation, administration.EndRoleBindingCommand) (*model.RoleBinding, error)
 }

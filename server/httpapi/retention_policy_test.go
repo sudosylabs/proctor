@@ -8,7 +8,7 @@
 package httpapi
 
 import (
-	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -18,42 +18,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/administration"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type retentionPolicyHTTPApplication struct {
-	policy  *model.RetentionPolicy
-	command administration.ReplaceRetentionPolicyCommand
-	calls   int
-}
-
-func (a *retentionPolicyHTTPApplication) GetRetentionPolicy(context.Context, invocation.Invocation) (*model.RetentionPolicy, error) {
-	a.calls++
-	return a.policy, nil
-}
-
-func (a *retentionPolicyHTTPApplication) ReplaceRetentionPolicy(_ context.Context, _ invocation.Invocation,
-	command administration.ReplaceRetentionPolicyCommand) (*model.RetentionPolicy, error) {
-	a.calls++
-	a.command = command
-	return a.policy, nil
-}
-
 func TestRetentionPolicyHTTPRequiresCompleteSettingsAndNeverEnablesDeletion(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{
-		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
-		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
-		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
-		AuthenticatedAt: time.Now(), MFACompletedAt: model.OptionalTimeFrom(time.Now()), ClientType: model.SessionClientWeb,
-	}
-	policy := model.NewInitialRetentionPolicy(model.NewInstitutionID(), time.Now())
-	application := &retentionPolicyHTTPApplication{policy: policy}
-	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, retentionPolicyResource(application))
+	principal := administrationStrongPrincipal()
+	fixture := newAdministrationFixture(t, institutionWide(principal.UserID, model.ActionRetentionPolicyView, model.ActionRetentionPolicyManage))
+	policies := fixture.retentionPolicies
+	policies.policy = model.NewInitialRetentionPolicy(fixture.institution().ID, time.Now())
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, retentionPolicyResource(fixture.service))
 	serve := func(method, body string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), method, "/api/v1/retention-policy", strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer session")
@@ -69,10 +45,12 @@ func TestRetentionPolicyHTTPRequiresCompleteSettingsAndNeverEnablesDeletion(t *t
 	response := serve(http.MethodPut, valid)
 	require.Equal(t, http.StatusOK, response.Code, "replace: %d %s", response.Code, response.Body.String())
 	require.Equal(t, "private, no-store", response.Header().Get("Cache-Control"), "replace: %d %s", response.Code, response.Body.String())
-	require.Equal(t, int64(1), application.command.ExpectedRevision)
-	require.Equal(t, "retention-policy-1", application.command.IdempotencyKey)
+	require.NotNil(t, policies.replacement, "the replacement never reached the Store")
+	require.Equal(t, int64(1), policies.replacement.ExpectedRevision)
+	require.Equal(t, sha256.Sum256([]byte("retention-policy-1")), policies.command.KeyDigest, "the Idempotency-Key did not key the replacement")
 	require.Equal(t, model.RetentionPolicySettings{SubmissionRetentionDays: 730, IntegrityRetentionDays: 365,
-		ExportRetentionDays: 7, DeletionGraceDays: 30}, application.command.Settings)
+		ExportRetentionDays: 7, DeletionGraceDays: 30}, policies.replacement.Settings)
+	require.Equal(t, principal.UserID, policies.replacement.Principal.UserID)
 	response = serve(http.MethodGet, "")
 	var output map[string]any
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &output))
@@ -104,17 +82,17 @@ func TestRetentionPolicyHTTPRequiresCompleteSettingsAndNeverEnablesDeletion(t *t
 				}
 				encoded, err := json.Marshal(body)
 				require.NoError(t, err)
-				before := application.calls
+				before := policies.callCount()
 				invalidResponse := serve(http.MethodPut, string(encoded))
-				require.Equal(t, http.StatusBadRequest, invalidResponse.Code, "invalid settings reached application: %d %s", invalidResponse.Code, invalidResponse.Body.String())
-				require.Equal(t, before, application.calls, "invalid settings reached application: %d %s", invalidResponse.Code, invalidResponse.Body.String())
+				require.Equal(t, http.StatusBadRequest, invalidResponse.Code, "invalid settings reached the Store: %d %s", invalidResponse.Code, invalidResponse.Body.String())
+				require.Equal(t, before, policies.callCount(), "invalid settings reached the Store: %d %s", invalidResponse.Code, invalidResponse.Body.String())
 			})
 		}
 	}
-	before := application.calls
+	before := policies.callCount()
 	response = serve(http.MethodPut, strings.TrimSuffix(valid, "}")+`,"automatic_deletion_enabled":true}`)
-	require.Equal(t, http.StatusBadRequest, response.Code, "deletion enable attempt reached application: %d %s", response.Code, response.Body.String())
-	require.Equal(t, before, application.calls, "deletion enable attempt reached application: %d %s", response.Code, response.Body.String())
+	require.Equal(t, http.StatusBadRequest, response.Code, "deletion enable attempt reached the Store: %d %s", response.Code, response.Body.String())
+	require.Equal(t, before, policies.callCount(), "deletion enable attempt reached the Store: %d %s", response.Code, response.Body.String())
 }
 
 func TestRetentionPolicyOpenAPIDocument(t *testing.T) {

@@ -8,11 +8,9 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -61,10 +59,10 @@ type createAcademicUnitMemberRequest struct {
 }
 
 type academicUnitMemberHandlers struct {
-	app AcademicUnitMemberApplication
+	app *academic.Service
 }
 
-func academicUnitMemberResource(app AcademicUnitMemberApplication) route.Resource {
+func academicUnitMemberResource(app *academic.Service) route.Resource {
 	h := academicUnitMemberHandlers{app: app}
 	return route.NewResource(
 		"academic-unit-members",
@@ -238,19 +236,4 @@ func academicUnitMemberListItemResponseFromPage(
 	}
 
 	return item
-}
-
-// AcademicUnitMemberApplication is the application port its handlers call; it lists, adds and ends Academic Unit memberships.
-type AcademicUnitMemberApplication interface {
-	ListAcademicUnitMembersPage(
-		context.Context,
-		invocation.Invocation,
-		academic.ListAcademicUnitMembersPageQuery,
-	) (*academic.AcademicUnitMemberPage, error)
-	CreateAcademicUnitMember(
-		context.Context,
-		invocation.Invocation,
-		academic.CreateAcademicUnitMemberCommand,
-	) (*model.AcademicUnitMember, error)
-	EndAcademicUnitMember(context.Context, invocation.Invocation, academic.EndAcademicUnitMemberCommand) (*model.AcademicUnitMember, error)
 }

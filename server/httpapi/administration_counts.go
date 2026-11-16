@@ -8,19 +8,11 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 )
-
-// AdministrationCountsApplication summarizes the administration work waiting
-// on the caller for navigation badges.
-type AdministrationCountsApplication interface {
-	AdministrationCounts(context.Context, invocation.Invocation) (administration.CountsResult, error)
-}
 
 // administrationCountsResponse carries each count the caller may see with its
 // lower-bound flag; a count the caller may not list is omitted with its flag.
@@ -36,10 +28,10 @@ type administrationCountsResponse struct {
 }
 
 type administrationCountsHandlers struct {
-	app AdministrationCountsApplication
+	app *administration.Counts
 }
 
-func administrationCountsResource(application AdministrationCountsApplication) route.Resource {
+func administrationCountsResource(application *administration.Counts) route.Resource {
 	h := administrationCountsHandlers{app: application}
 	return route.NewResource(
 		"administration-counts",

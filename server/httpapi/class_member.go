@@ -8,11 +8,9 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -41,10 +39,10 @@ type classEnrollmentResponse struct {
 }
 
 type classMemberHandlers struct {
-	app ClassMemberApplication
+	app *academic.Service
 }
 
-func classMemberResource(app ClassMemberApplication) route.Resource {
+func classMemberResource(app *academic.Service) route.Resource {
 	h := classMemberHandlers{app: app}
 	return route.NewResource(
 		"class-members",
@@ -189,11 +187,4 @@ func classEnrollmentResponseFromModel(enrollment *model.ClassEnrollment) classEn
 		response.Previous = &previous
 	}
 	return response
-}
-
-// ClassMemberApplication is the application port its handlers call; it lists, enrolls and ends Class memberships.
-type ClassMemberApplication interface {
-	ListClassMembersPage(context.Context, invocation.Invocation, academic.ListClassMembersPageQuery) (*academic.ClassMemberPage, error)
-	EnrollClassMember(context.Context, invocation.Invocation, academic.EnrollClassMemberCommand) (*model.ClassEnrollment, error)
-	EndClassMember(context.Context, invocation.Invocation, academic.EndClassMemberCommand) (*model.ClassMember, error)
 }

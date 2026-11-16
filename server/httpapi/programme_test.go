@@ -8,104 +8,60 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type programmeHTTPApplication struct {
-	archiveCommand academic.ArchiveProgrammeCommand
-	result         *model.Programme
-	list           []*model.Programme
-	createCommand  academic.CreateProgrammeCommand
-	updateCommand  academic.UpdateProgrammeCommand
-}
-
-func (a *programmeHTTPApplication) GetProgramme(context.Context, invocation.Invocation, model.ProgrammeID) (*model.Programme, error) {
-	return a.result, nil
-}
-func (a *programmeHTTPApplication) ListProgrammes(_ context.Context, _ invocation.Invocation, query academic.ListProgrammesQuery) (paging.Counted[*model.Programme], error) {
-	page := paging.Counted[*model.Programme]{Page: paging.Page[*model.Programme]{Items: a.list}}
-	if query.AfterID == "" {
-		page.Total = paging.CountWhole(len(a.list))
-	}
-	return page, nil
-}
-func (a *programmeHTTPApplication) CreateProgramme(_ context.Context, _ invocation.Invocation, command academic.CreateProgrammeCommand) (*model.Programme, error) {
-	a.createCommand = command
-	return a.result, nil
-}
-func (a *programmeHTTPApplication) UpdateProgramme(_ context.Context, _ invocation.Invocation, command academic.UpdateProgrammeCommand) (*model.Programme, error) {
-	a.updateCommand = command
-	return a.result, nil
-}
-func (a *programmeHTTPApplication) ArchiveProgramme(_ context.Context, _ invocation.Invocation, command academic.ArchiveProgrammeCommand) error {
-	a.archiveCommand = command
-	return nil
-}
-
 func TestProgrammeHTTPMapsDTOWithoutPermissionPreflight(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{
-		UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password",
-		AuthenticationStrength: model.AuthenticationSingleFactor,
-		ClientType:             model.SessionClientCLI, AuthenticatedAt: time.Now(),
-	}
-	programme := &model.Programme{ID: model.ProgrammeID(model.NewID()), AcademicUnitID: model.AcademicUnitID(model.NewID()), Name: "computer-science", DisplayName: "Computer Science"}
-	programmes := &programmeHTTPApplication{result: programme}
+	principal := academicCaller()
+	unitID := model.NewAcademicUnitID()
+	fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, unitID, model.ActionProgrammeManage)}})
 	httpAPI := newFocusedResourceAPI(
-		t, logger, routetest.Authenticator{Principal: principal}, programmeResource(programmes),
+		t, logger, routetest.Authenticator{Principal: principal}, programmeResource(fixture.service),
 	)
 
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/academic-units/"+programme.AcademicUnitID.String()+"/programmes", strings.NewReader(`{"name":"computer-science","display_name":"Computer Science"}`))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/academic-units/"+unitID.String()+"/programmes", strings.NewReader(`{"name":"computer-science","display_name":"Computer Science"}`))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusCreated, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	require.Equal(t, programme.AcademicUnitID, programmes.createCommand.AcademicUnitID)
-	require.Equal(t, programme.Name, programmes.createCommand.Name)
+	require.Len(t, fixture.programmes.created, 1, "the create reached the Programme Store")
+	created := fixture.programmes.created[0].Programme
+	require.Equal(t, unitID, created.AcademicUnitID)
+	require.Equal(t, "computer-science", created.Name)
+	require.Equal(t, "Computer Science", created.DisplayName)
 	var body programmeResponse
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
-	require.Equal(t, programme.ID.String(), body.ID)
-	require.Equal(t, programme.AcademicUnitID.String(), body.AcademicUnitID)
+	require.Equal(t, created.ID.String(), body.ID)
+	require.Equal(t, unitID.String(), body.AcademicUnitID)
 }
 
 func TestProgrammeResourceRejectsInvalidQueryLimit(t *testing.T) {
 	t.Parallel()
 
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{
-		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
-		CredentialID:           model.PrincipalCredentialID(model.NewID()),
-		CredentialType:         model.CredentialSessionAccess,
-		AuthenticationMethod:   "password",
-		AuthenticationStrength: model.AuthenticationSingleFactor,
-		ClientType:             model.SessionClientCLI,
-		AuthenticatedAt:        time.Now(),
-	}
-	programmes := &programmeHTTPApplication{}
+	principal := academicCaller()
+	unitID := model.NewAcademicUnitID()
+	fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, unitID, model.ActionProgrammeView)}})
 	httpAPI := newFocusedResourceAPI(
-		t, logger, routetest.Authenticator{Principal: principal}, programmeResource(programmes),
+		t, logger, routetest.Authenticator{Principal: principal}, programmeResource(fixture.service),
 	)
 	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
-		"/api/v1/academic-units/"+model.NewID()+"/programmes?limit=invalid",
+		"/api/v1/academic-units/"+unitID.String()+"/programmes?limit=invalid",
 		nil,
 	)
 	request.Header.Set("Authorization", "Bearer credential")
@@ -115,6 +71,7 @@ func TestProgrammeResourceRejectsInvalidQueryLimit(t *testing.T) {
 	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, "request.invalid", problem.Code, "problem code")
+	require.Empty(t, fixture.programmes.page.listOptions, "an invalid limit reached the Programme Store")
 }
 
 func TestProgrammePatchOptionalWireStates(t *testing.T) {

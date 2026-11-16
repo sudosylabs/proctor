@@ -165,7 +165,7 @@ func TestMailDeliveryEndpointForwardsExactCursorAndMapsMalformedCursor(t *testin
 	id := model.NewMailDeliveryID()
 	fake := &recordingMailAPI{view: mail.DeliveryView{ID: model.NewMailDeliveryID(), CreatedAt: at.Add(-time.Minute)}}
 	logger, _ := routetest.NewLogger(t)
-	httpAPI := newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: operatorTestPrincipal()}, mailResource(fake))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: operatorTestPrincipal()}, mailResource(fake))
 	cursor, err := encodeMailDeliveryCursor(mailDeliveryCursor{Sort: "updated", Dir: listDescending, At: at.Format(time.RFC3339Nano), ID: id.String()})
 	require.NoError(t, err)
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/mail/deliveries?cursor="+url.QueryEscape(cursor), nil)

@@ -22,10 +22,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
-	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
@@ -56,41 +54,6 @@ func directoryCaller() model.Principal {
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now(),
 	}
-}
-
-type roleHTTPApplication struct {
-	RoleApplication
-	page          paging.Page[administration.RoleResult]
-	listQuery     administration.ListRolesQuery
-	result        *model.Role
-	holders       *administration.RoleHolders
-	createCommand administration.CreateRoleCommand
-	updateCommand administration.UpdateRoleCommand
-	archiveID     model.RoleID
-}
-
-func (a *roleHTTPApplication) ListRoles(_ context.Context, _ invocation.Invocation, query administration.ListRolesQuery) (paging.Page[administration.RoleResult], error) {
-	a.listQuery = query
-	return a.page, nil
-}
-
-func (a *roleHTTPApplication) GetRole(context.Context, invocation.Invocation, model.RoleID) (administration.RoleResult, error) {
-	return administration.RoleResult{Role: a.result, Holders: a.holders}, nil
-}
-
-func (a *roleHTTPApplication) CreateRole(_ context.Context, _ invocation.Invocation, command administration.CreateRoleCommand) (*model.Role, error) {
-	a.createCommand = command
-	return a.result, nil
-}
-
-func (a *roleHTTPApplication) UpdateRole(_ context.Context, _ invocation.Invocation, command administration.UpdateRoleCommand) (*model.Role, error) {
-	a.updateCommand = command
-	return a.result, nil
-}
-
-func (a *roleHTTPApplication) ArchiveRole(_ context.Context, _ invocation.Invocation, id model.RoleID) error {
-	a.archiveID = id
-	return nil
 }
 
 func TestCurrentUserContextHTTPReturnsClosedNoStoreDTO(t *testing.T) {

@@ -8,62 +8,45 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type classMemberHTTPApplication struct {
-	pageQuery     academic.ListClassMembersPageQuery
-	pageResult    *academic.ClassMemberPage
-	result        *model.ClassEnrollment
-	ended         *model.ClassMember
-	enrollCommand academic.EnrollClassMemberCommand
-	endCommand    academic.EndClassMemberCommand
-}
-
-func (a *classMemberHTTPApplication) EnrollClassMember(_ context.Context, _ invocation.Invocation, command academic.EnrollClassMemberCommand) (*model.ClassEnrollment, error) {
-	a.enrollCommand = command
-	return a.result, nil
-}
-
-func (a *classMemberHTTPApplication) EndClassMember(_ context.Context, _ invocation.Invocation, command academic.EndClassMemberCommand) (*model.ClassMember, error) {
-	a.endCommand = command
-	return a.ended, nil
-}
-
 func TestClassMemberHTTPUsesDTOAndRouteOwnedClass(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	classID, userID := model.NewID(), model.NewID()
-	member := &model.ClassMember{
-		ID: model.NewClassMemberID(), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100),
-		Revision: 1, ClassID: model.ClassID(classID), AcademicPeriodID: model.NewAcademicPeriodID(),
-		UserID: model.UserID(userID), StartsAt: model.TimeFromMillis(100),
-	}
-	classMembers := &classMemberHTTPApplication{result: &model.ClassEnrollment{Membership: member}}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classMemberResource(classMembers))
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/classes/"+classID+"/members", strings.NewReader(`{"user_id":"`+userID+`","start_at":"1970-01-01T00:00:00.1Z"}`))
+	principal := academicCaller()
+	world := newAcademicWorld()
+	user := academicUser("amina", "Amina Diallo", "amina@example.edu")
+	fixture := newAcademicFixture(t, academicOptions{
+		Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, world.unit.ID, model.ActionClassMembersManage)},
+		Units:  world.units(),
+	})
+	fixture.hold(world)
+	fixture.users.add(user)
+	classID := world.class.ID
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classMemberResource(fixture.service))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/classes/"+classID.String()+"/members", strings.NewReader(`{"user_id":"`+user.ID.String()+`","start_at":"1970-01-01T00:00:00.1Z"}`))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusCreated, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	require.Equal(t, model.ClassID(classID), classMembers.enrollCommand.ClassID)
-	require.Equal(t, model.UserID(userID), classMembers.enrollCommand.UserID)
+	require.Len(t, fixture.classMembers.enrollments, 1, "the enrollment reached the Class Membership Store")
+	enrolled := fixture.classMembers.enrollments[0]
+	require.Equal(t, classID, enrolled.Member.ClassID)
+	require.Equal(t, user.ID, enrolled.Member.UserID)
+	require.Equal(t, world.period.ID, enrolled.Member.AcademicPeriodID, "the membership joins the Class's Period")
+	require.Equal(t, []model.MailTemplateKey{model.MailTemplateAcademicClassEnrolled}, fixture.mail.templates())
 	var body map[string]any
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	membership := body["membership"].(map[string]any)
@@ -74,29 +57,39 @@ func TestClassMemberHTTPUsesDTOAndRouteOwnedClass(t *testing.T) {
 func TestClassMemberResourceForwardsHistoryAndEndsMembership(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	classID := model.NewID()
-	member := &model.ClassMember{ID: model.NewClassMemberID(), ClassID: model.ClassID(classID), AcademicPeriodID: model.NewAcademicPeriodID(), UserID: model.NewUserID(), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), StartsAt: model.TimeFromMillis(100)}
-	members := &classMemberHTTPApplication{ended: member}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classMemberResource(members))
+	principal := academicCaller()
+	world := newAcademicWorld()
+	user := academicUser("amina", "Amina Diallo", "amina@example.edu")
+	fixture := newAcademicFixture(t, academicOptions{
+		Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, world.unit.ID, model.ActionClassMembersView, model.ActionClassMembersManage)},
+		Units:  world.units(),
+	})
+	fixture.hold(world)
+	fixture.users.add(user)
+	classID := world.class.ID
+	member := &model.ClassMember{ClassID: classID, AcademicPeriodID: world.period.ID, UserID: user.ID, StartsAt: model.TimeFromMillis(100)}
+	member.PrepareCreate(model.NewClassMemberID(), model.TimeFromMillis(100))
+	fixture.classMembers.byID[member.ID] = member
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classMemberResource(fixture.service))
 
-	list := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/classes/"+classID+"/members?history=true", nil)
+	list := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/classes/"+classID.String()+"/members?history=true", nil)
 	list.Header.Set("Authorization", "Bearer credential")
 	listed := httptest.NewRecorder()
 	httpAPI.ServeHTTP(listed, list)
-	require.Equal(t, http.StatusOK, listed.Code, "list status/query = %d/%#v: %s", listed.Code, members.pageQuery, listed.Body.String())
-	require.Equal(t, model.ClassID(classID), members.pageQuery.ClassID)
-	require.NotNil(t, members.pageQuery.History)
-	require.True(t, *members.pageQuery.History, "history listing")
+	require.Equal(t, http.StatusOK, listed.Code, "list status = %d: %s", listed.Code, listed.Body.String())
+	page := fixture.classMembers.lastPage(t)
+	require.Equal(t, classID, page.ClassID)
+	require.True(t, page.ActiveAt.Equal(model.TimeFromMillis(0)), "a history listing reads every retained membership: %#v", page)
 	require.JSONEq(t, `{"items":[],"total":0,"total_is_lower_bound":false}`, listed.Body.String(), "empty first page with its total")
 
 	end := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/api/v1/class-members/"+member.ID.String(), nil)
 	end.Header.Set("Authorization", "Bearer credential")
 	ended := httptest.NewRecorder()
 	httpAPI.ServeHTTP(ended, end)
-	require.Equal(t, http.StatusOK, ended.Code, "end status/command/cache = %d/%#v/%q: %s", ended.Code, members.endCommand, ended.Header().Get("Cache-Control"), ended.Body.String())
-	require.Equal(t, member.ID, members.endCommand.ID, "end status/command/cache = %d/%#v/%q: %s", ended.Code, members.endCommand, ended.Header().Get("Cache-Control"), ended.Body.String())
-	require.Equal(t, "no-store", ended.Header().Get("Cache-Control"), "end status/command/cache = %d/%#v/%q: %s", ended.Code, members.endCommand, ended.Header().Get("Cache-Control"), ended.Body.String())
+	require.Equal(t, http.StatusOK, ended.Code, "end status/cache = %d/%q: %s", ended.Code, ended.Header().Get("Cache-Control"), ended.Body.String())
+	require.Len(t, fixture.classMembers.ends, 1, "the end reached the Class Membership Store")
+	require.Equal(t, member.ID, fixture.classMembers.ends[0].ID)
+	require.Equal(t, "no-store", ended.Header().Get("Cache-Control"), "end status/cache = %d/%q: %s", ended.Code, ended.Header().Get("Cache-Control"), ended.Body.String())
 }
 
 func TestClassMemberHistoryQueryIsForwarded(t *testing.T) {
@@ -106,23 +99,6 @@ func TestClassMemberHistoryQueryIsForwarded(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, query.History)
 	require.True(t, *query.History, "history")
-}
-
-func (a *classMemberHTTPApplication) ListClassMembersPage(_ context.Context, _ invocation.Invocation, query academic.ListClassMembersPageQuery) (*academic.ClassMemberPage, error) {
-	a.pageQuery = query
-	if a.pageResult != nil {
-		if query.AfterID.IsZero() && !a.pageResult.Counted {
-			counted := *a.pageResult
-			counted.Total = paging.CountWhole(len(counted.Members))
-			return &counted, nil
-		}
-		return a.pageResult, nil
-	}
-	page := &academic.ClassMemberPage{}
-	if query.AfterID.IsZero() {
-		page.Total = paging.CountWhole(0)
-	}
-	return page, nil
 }
 
 func TestClassMemberOpenAPIDocument(t *testing.T) {

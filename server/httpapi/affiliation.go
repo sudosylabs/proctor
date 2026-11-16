@@ -8,11 +8,9 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -35,10 +33,10 @@ type createAffiliationRequest struct {
 }
 
 type affiliationHandlers struct {
-	app AffiliationApplication
+	app *academic.Service
 }
 
-func affiliationResource(app AffiliationApplication) route.Resource {
+func affiliationResource(app *academic.Service) route.Resource {
 	h := affiliationHandlers{app: app}
 	return route.NewResource(
 		"affiliations",
@@ -177,11 +175,4 @@ func affiliationResponseFromModel(value *model.Affiliation) affiliationResponse 
 		StartAt:    model.FormatRFC3339(value.StartsAt),
 		EndAt:      value.EndsAt.FormatRFC3339(),
 	}
-}
-
-// AffiliationApplication is the application port its handlers call; it lists, adds and ends a User's Affiliations.
-type AffiliationApplication interface {
-	ListAffiliations(context.Context, invocation.Invocation, model.UserID) ([]*model.Affiliation, error)
-	CreateAffiliation(context.Context, invocation.Invocation, academic.CreateAffiliationCommand) (*model.Affiliation, error)
-	EndAffiliation(context.Context, invocation.Invocation, academic.EndAffiliationCommand) (*model.Affiliation, error)
 }

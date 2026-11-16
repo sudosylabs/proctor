@@ -8,12 +8,9 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -44,10 +41,10 @@ type updateProgrammeRequest struct {
 }
 
 type programmeHandlers struct {
-	app ProgrammeApplication
+	app *academic.Service
 }
 
-func programmeResource(app ProgrammeApplication) route.Resource {
+func programmeResource(app *academic.Service) route.Resource {
 	h := programmeHandlers{app: app}
 	collection := "/academic-units/{academic_unit_id}/programmes"
 	member := "/programmes/{programme_id}"
@@ -227,13 +224,4 @@ func programmeResponseFromModel(programme *model.Programme) programmeResponse {
 		DisplayName:    programme.DisplayName,
 		Description:    programme.Description,
 	}
-}
-
-// ProgrammeApplication is the application port its handlers call; it reads and changes Programmes.
-type ProgrammeApplication interface {
-	GetProgramme(context.Context, invocation.Invocation, model.ProgrammeID) (*model.Programme, error)
-	ListProgrammes(context.Context, invocation.Invocation, academic.ListProgrammesQuery) (paging.Counted[*model.Programme], error)
-	CreateProgramme(context.Context, invocation.Invocation, academic.CreateProgrammeCommand) (*model.Programme, error)
-	UpdateProgramme(context.Context, invocation.Invocation, academic.UpdateProgrammeCommand) (*model.Programme, error)
-	ArchiveProgramme(context.Context, invocation.Invocation, academic.ArchiveProgrammeCommand) error
 }

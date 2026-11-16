@@ -15,6 +15,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
+
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
@@ -274,7 +276,7 @@ func TestScopedRoleAcceptanceTellsOnlyTheInviter(t *testing.T) {
 	require.NoError(t, err)
 	accept := func(persistence store.InvitationStore) (*realtimetest.Publisher, error) {
 		service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{},
-			&authorizerFake{}, &mailFake{}, now.Add(time.Minute))
+			permissiveAccess(t, accesstest.Options{}, nil), newTestComposer(t), now.Add(time.Minute))
 		publisher := &realtimetest.Publisher{}
 		service.publisher = publisher
 		principal := model.Principal{UserID: userID, SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),

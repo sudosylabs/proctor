@@ -71,7 +71,7 @@ func (s *Service) acceptStudentClassByClaimHash(
 		return nil, err
 	}
 
-	hash, err := s.hasher.Hash(ctx, command.Password)
+	hash, err := s.hashPassword(ctx, command.Password)
 	if err != nil {
 		return nil, identity.PasswordHashError(err, "invitation.unavailable")
 	}
@@ -225,7 +225,7 @@ func (s *Service) acceptTeacherAcademicUnitByClaimHash(
 		return nil, err
 	}
 
-	hash, err := s.hasher.Hash(ctx, command.Password)
+	hash, err := s.hashPassword(ctx, command.Password)
 	if err != nil {
 		return nil, identity.PasswordHashError(err, "invitation.unavailable")
 	}

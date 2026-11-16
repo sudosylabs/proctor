@@ -85,12 +85,6 @@ func directoryFor(t *testing.T, caller model.UserID, users *directoryUsers) *use
 	return directory
 }
 
-type auditDrafterFake struct{}
-
-func (auditDrafterFake) PrepareAtScope(context.Context, invocation.Invocation, model.Action, model.Resource, model.RoleScopeType, string, string, map[string]any) (*model.AuditEvent, error) {
-	return &model.AuditEvent{Status: model.AuditStatusAttempt}, nil
-}
-
 // previewImportStoreFake serves one import and records whether a preview
 // row was read through it.
 type previewImportStoreFake struct {
@@ -116,16 +110,6 @@ func (f *previewUserListFake) List(_ context.Context, options store.UserListOpti
 		return []*model.User{{ID: options.ID}}, nil
 	}
 	return nil, nil
-}
-
-func previewPrincipal(strength model.AuthenticationStrength, at time.Time) model.Principal {
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: strength,
-		ClientType: model.SessionClientWeb, AuthenticatedAt: at}
-	if strength == model.AuthenticationMultiFactor {
-		principal.MFACompletedAt = model.OptionalTimeFrom(at)
-	}
-	return principal
 }
 
 func TestAcademicAdministrationPreviewFilterAdmitsOnlyTheOperationsOwnFields(t *testing.T) {
@@ -197,7 +181,7 @@ func TestAcademicAdministrationPreviewFilterAdmitsOnlyTheOperationsOwnFields(t *
 
 func TestAcademicAdministrationPreviewRefusesMoreUsersThanOnePreviewHolds(t *testing.T) {
 	t.Parallel()
-	inv := invocation.New(previewPrincipal(model.AuthenticationMultiFactor, time.Now()), model.RequestMetadata{})
+	inv := invocation.New(sessionPrincipal(model.AuthenticationMultiFactor, time.Now()), model.RequestMetadata{})
 	filter := store.AcademicAdministrationFilter{Operation: string(AcademicAdministrationUserDisable)}
 
 	caller := inv.Principal().UserID
@@ -218,9 +202,10 @@ func TestAcademicAdministrationPreviewRefusesMoreUsersThanOnePreviewHolds(t *tes
 func TestAcademicAdministrationPreviewRequiresAStrongRecentSessionBeforeAuthorizing(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
-	authorizer := &authorizerFake{}
+	// No caller below holds a grant; each is refused before any decision.
+	authorization := accesstest.New(t, accesstest.Options{})
 	service := &Service{imports: previewImportStoreFake{}, directory: directoryFor(t, model.NewUserID(), newDirectoryUsers(0)),
-		drafts: auditDrafterFake{}, authorizer: authorizer,
+		authorizer: authorization.Authorizer, auditor: authorization.Auditor.MutationAudit(),
 		recentAuthenticationTTL: 15 * time.Minute, now: func() time.Time { return now }}
 	command := CreateAcademicAdministrationPreviewCommand{Operation: AcademicAdministrationUserDisable, ScopeType: model.RoleScopeInstitution,
 		ScopeID: model.NewInstitutionID().String()}
@@ -229,10 +214,10 @@ func TestAcademicAdministrationPreviewRequiresAStrongRecentSessionBeforeAuthoriz
 		principal model.Principal
 		code      string
 	}{
-		"single factor": {previewPrincipal(model.AuthenticationSingleFactor, now), "authentication.strong_required"},
-		"stale strong":  {previewPrincipal(model.AuthenticationMultiFactor, now.Add(-time.Hour)), "authentication.reauthentication_required"},
+		"single factor": {sessionPrincipal(model.AuthenticationSingleFactor, now), "authentication.strong_required"},
+		"stale strong":  {sessionPrincipal(model.AuthenticationMultiFactor, now.Add(-time.Hour)), "authentication.reauthentication_required"},
 		"personal access": {func() model.Principal {
-			p := previewPrincipal(model.AuthenticationMultiFactor, now)
+			p := sessionPrincipal(model.AuthenticationMultiFactor, now)
 			p.CredentialType = model.CredentialPersonalAccessToken
 			return p
 		}(), "authentication.token_invalid"},
@@ -246,21 +231,24 @@ func TestAcademicAdministrationPreviewRequiresAStrongRecentSessionBeforeAuthoriz
 			require.True(t, apperror.Is(err, apperror.Code(test.code)), "commit error = %v", err)
 		})
 	}
-	require.Empty(t, authorizer.actions, "nothing was authorized for a weak Session")
+	require.Empty(t, authorization.Audits.Decisions(), "nothing was authorized for a weak Session")
 }
 
 func TestAcademicAdministrationPreviewIsReadOnlyByItsCreatorThroughItsOwnSurface(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
-	creator := previewPrincipal(model.AuthenticationMultiFactor, now)
+	creator := sessionPrincipal(model.AuthenticationMultiFactor, now)
 	value := &store.OnboardingImport{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportAcademicAdministrationFilter,
 		State: model.OnboardingImportPreviewReady, ScopeType: model.RoleScopeInstitution, ScopeID: model.NewInstitutionID().String(),
 		ActorUserID: creator.UserID, Principal: creator, Filter: &store.AcademicAdministrationFilter{Operation: "user.disable"}}
+	// The other User holds every Action too; the preview is still its
+	// creator's alone.
+	other := invocation.New(sessionPrincipal(model.AuthenticationMultiFactor, now), model.RequestMetadata{})
+	authorization := permissiveAccess(t, accesstest.Options{}, []model.UserID{creator.UserID, other.Principal().UserID})
 	service := &Service{imports: previewImportStoreFake{value: value}, directory: directoryFor(t, model.NewUserID(), newDirectoryUsers(0)),
-		drafts: auditDrafterFake{}, authorizer: &authorizerFake{}, identity: &academicAdministrationBatchCommandsFake{}, recentAuthenticationTTL: 15 * time.Minute,
+		authorizer: authorization.Authorizer, auditor: authorization.Auditor.MutationAudit(), recentAuthenticationTTL: 15 * time.Minute,
 		now: func() time.Time { return now }}
 
-	other := invocation.New(previewPrincipal(model.AuthenticationMultiFactor, now), model.RequestMetadata{})
 	_, err := service.readAcademicAdministrationPreview(context.Background(), other, value.ID)
 	require.True(t, apperror.Is(err, "resource.not_found"), "another User reads the preview as absent: %v", err)
 	_, err = service.CommitAcademicAdministrationPreview(context.Background(), other, CommitAcademicAdministrationPreviewCommand{
@@ -282,7 +270,7 @@ func TestAcademicAdministrationPreviewIsReadOnlyByItsCreatorThroughItsOwnSurface
 func TestAcademicAdministrationPreviewRefusesAFilterTheCreatorMayNoLongerApply(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
-	creator := previewPrincipal(model.AuthenticationMultiFactor, now)
+	creator := sessionPrincipal(model.AuthenticationMultiFactor, now)
 	value := &store.OnboardingImport{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportAcademicAdministrationFilter,
 		State: model.OnboardingImportPreviewReady, ScopeType: model.RoleScopeInstitution, ScopeID: model.NewInstitutionID().String(),
 		ActorUserID: creator.UserID, Principal: creator, PreviewDigest: strings.Repeat("a", 64), Revision: 2,
@@ -299,8 +287,11 @@ func TestAcademicAdministrationPreviewRefusesAFilterTheCreatorMayNoLongerApply(t
 		Publisher: &realtimetest.Publisher{}, Now: time.Now,
 	})
 	require.NoError(t, err)
-	service := &Service{imports: previewImportStoreFake{value: value}, directory: directory, drafts: auditDrafterFake{},
-		authorizer: &authorizerFake{}, identity: &academicAdministrationBatchCommandsFake{}, recentAuthenticationTTL: 15 * time.Minute,
+	// The service's own decisions allow the creator everything; only the
+	// User directory's narrower view of the creator refuses the filter.
+	permissive := permissiveAccess(t, accesstest.Options{}, []model.UserID{creator.UserID})
+	service := &Service{imports: previewImportStoreFake{value: value}, directory: directory,
+		authorizer: permissive.Authorizer, auditor: permissive.Auditor.MutationAudit(), recentAuthenticationTTL: 15 * time.Minute,
 		now: func() time.Time { return now }}
 	inv := invocation.New(creator, model.RequestMetadata{})
 	lost := apperror.Code("academic_administration_preview.authorization_lost")
@@ -326,7 +317,7 @@ func TestAcademicAdministrationPreviewRefusesAFilterTheCreatorMayNoLongerApply(t
 func TestAcademicAdministrationFilterRowCheckRefusesWhatThePreviewWouldNotAdmitNow(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
-	actor := previewPrincipal(model.AuthenticationMultiFactor, now)
+	actor := sessionPrincipal(model.AuthenticationMultiFactor, now)
 	visible, hidden := model.NewUserID(), model.NewUserID()
 	users := &previewUserListFake{visible: map[model.UserID]bool{visible: true, actor.UserID: true}}
 	current := &store.OnboardingImport{Mode: model.OnboardingImportAcademicAdministrationFilter, Principal: actor,
@@ -435,7 +426,7 @@ func (f previewAffiliationFake) ListActiveByUser(_ context.Context, userID model
 func TestAcademicAdministrationPreviewEnrollmentSkipsOnlyWhatTheCallerSees(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
-	actor := previewPrincipal(model.AuthenticationMultiFactor, now)
+	actor := sessionPrincipal(model.AuthenticationMultiFactor, now)
 	period := model.NewAcademicPeriodID()
 	target, seenClass, hiddenClass := model.NewClassID(), model.NewClassID(), model.NewClassID()
 	inSeenClass, inHiddenClass, withoutStudent := model.NewUserID(), model.NewUserID(), model.NewUserID()
@@ -448,6 +439,17 @@ func TestAcademicAdministrationPreviewEnrollmentSkipsOnlyWhatTheCallerSees(t *te
 		inSeenClass: student, inHiddenClass: student, withoutStudent: {{Kind: model.AffiliationStaff}},
 	}}
 	current := &store.OnboardingImport{ScopeType: model.RoleScopeClass, ScopeID: target.String(), Principal: actor, ActorUserID: actor.UserID}
+	// The actor sees the members of seenClass only.
+	unit := &model.AcademicUnit{ID: model.NewAcademicUnitID(), Name: "Computing"}
+	owner := &model.AcademicPeriod{ID: period, Owner: model.AcademicPeriodOwner{InstitutionID: model.NewInstitutionID()}}
+	authorization := accesstest.New(t, accesstest.Options{
+		Units: []*model.AcademicUnit{unit}, AcademicPeriods: testPeriodStore{period: owner},
+		Classes: testClassStore{unitID: unit.ID, classes: map[model.ClassID]*model.Class{
+			seenClass: {ID: seenClass, AcademicPeriodID: period}, hiddenClass: {ID: hiddenClass, AcademicPeriodID: period},
+		}},
+		Grants: []accesstest.Grant{{UserID: actor.UserID, Actions: []model.Action{model.ActionClassMembersView},
+			ScopeType: model.RoleScopeClass, ScopeID: seenClass.String()}},
+	})
 
 	for name, test := range map[string]struct {
 		institutionUsers bool
@@ -465,8 +467,7 @@ func TestAcademicAdministrationPreviewEnrollmentSkipsOnlyWhatTheCallerSees(t *te
 		}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			authorizer := &authorizerFake{classMembersVisible: map[model.ClassID]bool{seenClass: true}}
-			service := &Service{classMembers: classMembers, affiliations: affiliations, authorizer: authorizer, now: func() time.Time { return now }}
+			service := &Service{classMembers: classMembers, affiliations: affiliations, authorizer: authorization.Authorizer, now: func() time.Time { return now }}
 			classifier := &academicAdministrationPreviewClassifier{service: service, current: current, period: period,
 				institutionUsers: test.institutionUsers, classMembersVisible: map[model.ClassID]bool{}}
 			got := map[model.UserID]string{}

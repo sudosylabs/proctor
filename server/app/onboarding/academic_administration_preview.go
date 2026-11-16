@@ -112,13 +112,12 @@ type AcademicAdministrationPreviewView struct {
 }
 
 // requireAcademicAdministrationPreviews refuses a filter preview use case on
-// a Service built without onboarding imports, the User directory, or the
-// audit drafts the batch entry needs.
+// a Service built without onboarding imports or the User directory.
 func (s *Service) requireAcademicAdministrationPreviews() error {
 	if err := s.requireImports(); err != nil {
 		return err
 	}
-	if s.directory == nil || s.drafts == nil {
+	if s.directory == nil {
 		return apperror.New("onboarding_import.unavailable")
 	}
 	return nil
@@ -736,7 +735,7 @@ func (s *Service) prepareAcademicAdministrationBatchAudit(
 	inv invocation.Invocation,
 	current *store.OnboardingImport,
 ) (*model.AuditEvent, error) {
-	if current == nil || current.Filter == nil || s.drafts == nil {
+	if current == nil || current.Filter == nil {
 		return nil, apperror.New("onboarding_import.unavailable")
 	}
 	groups, err := s.imports.CountAcademicAdministrationPreviewGroups(ctx, store.AcademicAdministrationPreviewGroupCountOptions{ImportID: current.ID})
@@ -761,7 +760,7 @@ func (s *Service) prepareAcademicAdministrationBatchAudit(
 	if err != nil {
 		return nil, err
 	}
-	return s.drafts.PrepareAtScope(
+	return s.auditor.PrepareAtScope(
 		ctx,
 		inv,
 		model.ActionOnboardingBatchManage,

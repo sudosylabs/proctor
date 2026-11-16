@@ -80,7 +80,7 @@ func (s *Service) RegisterLocalUser(ctx context.Context, inv invocation.Invocati
 		return err
 	}
 
-	passwordHash, err := s.hasher.Hash(ctx, command.Password)
+	passwordHash, err := s.hashPassword(ctx, command.Password)
 	if err != nil {
 		return identity.PasswordHashError(err, "authentication.registration.unavailable")
 	}

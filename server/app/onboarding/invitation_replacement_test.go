@@ -10,13 +10,12 @@ package onboarding
 import (
 	"context"
 	"fmt"
-	"slices"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
+
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -31,14 +30,12 @@ func TestInvitationReplacementReauthorizesAndBuildsANewImmutablePackage(t *testi
 		ScopeID: currentClassID.String(), ClaimHash: model.HashInvitationClaim(model.NewCredentialToken()), IssuedAt: now})
 	require.NoError(t, err)
 	persistence := &invitationStoreFake{invitation: invitation}
-	authorizer := &authorizerFake{}
-	composer := &mailFake{}
-	events := []string{}
-	auditIDs := []string{model.NewAuditEventID().String(), model.NewAuditEventID().String()}
-	auditor := &mutationAttemptAuditorFake{events: &events, beginIDs: auditIDs}
-	service := &Service{invitations: persistence, classes: invitationClassStoreFake{class: class}, periods: invitationPeriodStoreFake{period: period}, academicUnits: invitationAcademicUnitStoreFake{}, roles: invitationRoleStoreFake{}, authorizer: authorizer, mail: composer, hasher: passwordHasherFake{}, auditor: auditor, attempts: testAttempts(t), rateLimit: testRateLimit, publisher: &realtimetest.Publisher{}, nodeID: "node-1", publicURL: "https://proctor.example.edu", recentAuthenticationTTL: 15 * time.Minute, newToken: model.NewCredentialToken, now: func() time.Time { return now.Add(time.Hour) }}
 	actor := model.NewUserID()
-	result, err := service.ReplaceInvitation(context.Background(), invocation.New(model.Principal{UserID: actor}, model.RequestMetadata{}),
+	authorization := permissiveAccess(t, accesstest.Options{}, []model.UserID{actor})
+	composer, rendered := newTestMail(t, true)
+	service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{}, authorization, composer, now.Add(time.Hour))
+	service.classes, service.periods = invitationClassStoreFake{class: class}, invitationPeriodStoreFake{period: period}
+	result, err := service.ReplaceInvitation(context.Background(), sessionCaller(actor, now),
 		ReplaceInvitationCommand{ID: invitation.ID, ExpectedRevision: invitation.Revision,
 			Purpose: string(model.InvitationPurposeStudentClass), TargetEmail: "new@example.edu", ClassID: class.ID,
 			SuggestedUsername: "new-student"})
@@ -51,14 +48,18 @@ func TestInvitationReplacementReauthorizesAndBuildsANewImmutablePackage(t *testi
 	require.Equal(t, period.ID, persistence.replaced.Replacement.AcademicPeriodID, "Invitation replacement = %#v / %#v", result, persistence.replaced)
 	require.NotEqual(t, invitation.ClaimHash, persistence.replaced.Replacement.ClaimHash, "Invitation replacement = %#v / %#v", result, persistence.replaced)
 	require.Equal(t, invitation.Revision, persistence.replaced.ExpectedRevision, "Invitation replacement = %#v / %#v", result, persistence.replaced)
-	require.Equal(t, model.AuditEventID(auditIDs[0]), persistence.replaced.CurrentAuditEventID, "Invitation replacement = %#v / %#v", result, persistence.replaced)
-	require.Equal(t, model.AuditEventID(auditIDs[1]), persistence.replaced.ReplacementAuditEventID, "Invitation replacement = %#v / %#v", result, persistence.replaced)
-	require.Contains(t, composer.issueURL, "/join#token=", "Invitation replacement = %#v / %#v", result, persistence.replaced)
+	attempts := authorization.Audits.Attempts()
+	require.Len(t, attempts, 2)
+	require.Equal(t, attempts[0].ID, persistence.replaced.CurrentAuditEventID, "Invitation replacement = %#v / %#v", result, persistence.replaced)
+	require.Equal(t, attempts[1].ID, persistence.replaced.ReplacementAuditEventID, "Invitation replacement = %#v / %#v", result, persistence.replaced)
+	require.Len(t, rendered.actionURLs(), 1)
+	require.Contains(t, rendered.actionURLs()[0], "/join#token=", "Invitation replacement = %#v / %#v", result, persistence.replaced)
 	wantActions := []model.Action{model.ActionInvitationManage, model.ActionInvitationCreate, model.ActionClassMembersManage}
-	require.True(t, slices.Equal(authorizer.actions, wantActions), "Invitation replacement authorization = %v, want %v", authorizer.actions, wantActions)
-	require.Len(t, auditor.attempts, 2)
-	require.Equal(t, currentClassID.String(), auditor.attempts[0].ScopeID)
-	require.Equal(t, class.ID.String(), auditor.attempts[1].ScopeID)
-	require.NotContains(t, fmt.Sprint(auditor.attempts[0].Value), class.ID.String())
-	require.NotContains(t, fmt.Sprint(auditor.attempts[1].Value), currentClassID.String())
+	require.Equal(t, wantActions, decidedActions(authorization), "Invitation replacement authorization")
+	require.Equal(t, currentClassID.String(), attempts[0].ScopeID)
+	require.Equal(t, class.ID.String(), attempts[1].ScopeID)
+	_, currentValue := auditParameters(t, attempts[0])
+	_, replacementValue := auditParameters(t, attempts[1])
+	require.NotContains(t, fmt.Sprint(currentValue), class.ID.String())
+	require.NotContains(t, fmt.Sprint(replacementValue), currentClassID.String())
 }

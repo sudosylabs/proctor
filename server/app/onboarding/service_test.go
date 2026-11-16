@@ -8,31 +8,32 @@
 package onboarding
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/sudosylabs/proctor/server/app/access"
+
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// These fakes stand in for the identity and access mechanics that
+// These helpers build the real identity, access and mail mechanics that
 // Invitations and public registration borrow.
-
-// testPasswordHasher is the password work Invitations and registration ask
-// of the shared hasher.
-type testPasswordHasher interface {
-	Hash(context.Context, string) (string, error)
-	ReuseCheck(string) store.PasswordReuseCheck
-}
 
 type expiringAuthenticationAttemptCache struct {
 	mu      sync.Mutex
@@ -130,28 +131,32 @@ func invitationAttemptChecks(c *expiringAuthenticationAttemptCache) int {
 	return checks
 }
 
-// passwordHasherFake stands in for the shared password hasher: it refuses an
-// empty password and otherwise returns a recognizable encoding.
-type passwordHasherFake struct{}
-
-func (passwordHasherFake) Hash(_ context.Context, password string) (string, error) {
-	if password == "" {
-		return "", apperror.New("authentication.password.invalid")
-	}
-	return "encoded:" + password, nil
+// testPasswordHasher is the production Argon2id hasher at its cheapest
+// accepted cost.
+func testPasswordHasher(t testing.TB) *identity.PasswordHasher {
+	t.Helper()
+	settings := config.Default().Authentication.Password
+	hasher, err := identity.NewPasswordHasher(identity.PasswordHasherDependencies{Settings: identity.PasswordPolicy{
+		MinimumLength: settings.MinimumLength, MaximumLength: settings.MaximumLength, MaximumConcurrentOperations: 2,
+		ArgonMemoryKiB: 19 * 1024, ArgonIterations: 1, ArgonParallelism: 1,
+		ArgonSaltBytes: settings.ArgonSaltBytes, ArgonKeyBytes: settings.ArgonKeyBytes,
+	}})
+	require.NoError(t, err)
+	return hasher
 }
 
-type passwordHashFunc func(context.Context, string) (string, error)
-
-func (h passwordHashFunc) Hash(ctx context.Context, password string) (string, error) {
-	return h(ctx, password)
+// requirePasswordHash fails unless encoded is the hasher's encoding of
+// password.
+func requirePasswordHash(t *testing.T, hasher *identity.PasswordHasher, encoded, password string) {
+	t.Helper()
+	require.NoError(t, hasher.Verify(context.Background(), encoded, password), "stored hash does not verify the submitted password")
 }
 
-func (passwordHashFunc) ReuseCheck(string) store.PasswordReuseCheck {
-	return store.PasswordReuseCheck{}
-}
+// passwordHashHook is what a test puts in Service.hashHook to reach a
+// password work failure the real derivation never returns.
+type passwordHashHook = func(context.Context, string) (string, error)
 
-func testPasswordHashFailures(t *testing.T, unavailableCode string, invoke func(*testing.T, context.Context, testPasswordHasher) error) {
+func testPasswordHashFailures(t *testing.T, unavailableCode string, invoke func(*testing.T, context.Context, passwordHashHook) error) {
 	t.Helper()
 	for _, test := range []struct {
 		name string
@@ -167,12 +172,12 @@ func testPasswordHashFailures(t *testing.T, unavailableCode string, invoke func(
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			calls := 0
-			hasher := passwordHashFunc(func(got context.Context, _ string) (string, error) {
+			hook := func(got context.Context, _ string) (string, error) {
 				calls++
 				require.Equal(t, ctx, got, "password work did not receive the request context")
 				return "", test.err
-			})
-			err := invoke(t, ctx, hasher)
+			}
+			err := invoke(t, ctx, hook)
 			require.True(t, apperror.Is(err, test.code), "password failure = %v, calls %d; want %s wrapping %v after one call", err, calls, test.code, test.err)
 			require.Equal(t, 1, calls, "password failure = %v, calls %d; want %s wrapping %v after one call", err, calls, test.code, test.err)
 			require.ErrorIs(t, err, test.err, "password failure = %v, calls %d; want %s wrapping %v after one call", err, calls, test.code, test.err)
@@ -180,100 +185,134 @@ func testPasswordHashFailures(t *testing.T, unavailableCode string, invoke func(
 	}
 }
 
-// authorizerFake stands in for *access.Authorizer. It records every Action it
-// authorizes or resolves scopes for, the last Resource it authorized, the
-// delegation it was asked about and every scoped decision it recorded. err
-// refuses every check; actionErrors refuses one Action.
-type authorizerFake struct {
-	actions            []model.Action
-	resource           model.Resource
-	delegatedActions   []string
-	delegatedScopeType model.RoleScopeType
-	delegatedScopeID   string
-	actionErrors       map[model.Action]error
-	visibility         *store.InvitationVisibilityScope
-	institution        *model.Institution
-	decisions          []authorizationDecision
-	err                error
-	userVisibility     *store.UserVisibilityScope
-	userSearchErr      error
-	userSearches       int
-	// classMembersVisible are the Classes whose members the caller sees;
-	// classMemberViews records each Class asked about.
-	classMembersVisible map[model.ClassID]bool
-	classMemberViews    []model.Resource
-}
-
-// authorizationDecision is one scoped decision the Service recorded.
-type authorizationDecision struct {
-	action    model.Action
-	resource  model.Resource
-	scopeType model.RoleScopeType
-	scopeID   string
-	allowed   bool
-}
-
-func (f *authorizerFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource) error {
-	f.actions = append(f.actions, action)
-	f.resource = resource
-	if err := f.actionErrors[action]; err != nil {
-		return err
+// allActions is every Action the catalog defines, so one grant stands for a
+// caller who holds every permission.
+func allActions() []model.Action {
+	var actions []model.Action
+	for _, action := range model.AllActions() {
+		actions = append(actions, model.Action(action))
 	}
-	return f.err
+	return actions
 }
 
-func (f *authorizerFake) CanDelegateActionsAtScope(_ context.Context, _ model.Principal, actions []string, scopeType model.RoleScopeType, scopeID string) (bool, error) {
-	f.delegatedActions = append([]string(nil), actions...)
-	f.delegatedScopeType = scopeType
-	f.delegatedScopeID = scopeID
-	return f.err == nil, f.err
-}
-
-// GrantedScopes grants f.visibility, or the whole Institution when it is nil.
-func (f *authorizerFake) GrantedScopes(_ context.Context, _ model.Principal, action model.Action, _ model.ResourceType) (access.AuthorizedScopeConstraint, error) {
-	f.actions = append(f.actions, action)
-	if f.err != nil {
-		return access.AuthorizedScopeConstraint{}, f.err
+// grantAll grants each User every Action Institution-wide.
+func grantAll(users ...model.UserID) []accesstest.Grant {
+	grants := make([]accesstest.Grant, 0, len(users))
+	for _, id := range users {
+		grants = append(grants, accesstest.Grant{UserID: id, Actions: allActions()})
 	}
-	if f.visibility == nil {
-		return access.AuthorizedScopeConstraint{InstitutionWide: true}, nil
-	}
-	return access.AuthorizedScopeConstraint{InstitutionWide: f.visibility.InstitutionWide,
-		AcademicUnitRootIDs: f.visibility.AcademicUnitRootIDs, ClassIDs: f.visibility.ClassIDs}, nil
+	return grants
 }
 
-// AuthorizeUserSearch grants f.userVisibility, or the whole Institution
-// when it is nil, and refuses with f.userSearchErr.
-func (f *authorizerFake) AuthorizeUserSearch(context.Context, invocation.Invocation) (store.UserVisibilityScope, error) {
-	f.userSearches++
-	if f.userSearchErr != nil {
-		return store.UserVisibilityScope{}, f.userSearchErr
+// decidedActions returns the Action of every authorization decision the
+// real authorizer recorded, in order.
+func decidedActions(fixture *accesstest.Fixture) []model.Action {
+	var actions []model.Action
+	for _, decision := range fixture.Audits.Decisions() {
+		actions = append(actions, model.Action(decision.Action))
 	}
-	if f.userVisibility == nil {
-		return store.UserVisibilityScope{InstitutionWide: true}, nil
-	}
-	return *f.userVisibility, nil
+	return actions
 }
 
-// CanViewClassMembers grants class.members.view on exactly the Classes in
-// f.classMembersVisible.
-func (f *authorizerFake) CanViewClassMembers(_ context.Context, _ invocation.Invocation, resource model.Resource) (bool, error) {
-	f.classMemberViews = append(f.classMemberViews, resource)
-	return f.classMembersVisible[model.ClassID(resource.ID)], f.err
-}
-
-func (f *authorizerFake) Institution(context.Context) (*model.Institution, error) {
-	if f.institution == nil {
-		f.institution = &model.Institution{ID: model.NewInstitutionID()}
+// sessionPrincipal is an interactive web Session at the given strength,
+// authenticated at at.
+func sessionPrincipal(strength model.AuthenticationStrength, at time.Time) model.Principal {
+	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
+		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: strength,
+		ClientType: model.SessionClientWeb, AuthenticatedAt: at}
+	if strength == model.AuthenticationMultiFactor {
+		principal.MFACompletedAt = model.OptionalTimeFrom(at)
 	}
-	return f.institution, nil
+	return principal
 }
 
-func (f *authorizerFake) RecordAuthorizationDecision(_ context.Context, _ model.Principal, action model.Action, resource model.Resource,
-	scopeType model.RoleScopeType, scopeID string, _ model.RequestMetadata, allowed bool,
-) error {
-	f.decisions = append(f.decisions, authorizationDecision{action: action, resource: resource, scopeType: scopeType, scopeID: scopeID, allowed: allowed})
-	return nil
+// sessionCaller is a single-factor web Session of userID.
+func sessionCaller(userID model.UserID, at time.Time) invocation.Invocation {
+	principal := sessionPrincipal(model.AuthenticationSingleFactor, at)
+	principal.UserID = userID
+	return invocation.New(principal, model.RequestMetadata{})
+}
+
+// auditParameters decodes an attempt's recorded operation and value.
+func auditParameters(t *testing.T, event *model.AuditEvent) (string, map[string]any) {
+	t.Helper()
+	var parameters struct {
+		Operation string         `json:"operation"`
+		Value     map[string]any `json:"value"`
+	}
+	require.NoError(t, json.Unmarshal(event.Parameters, &parameters))
+	return parameters.Operation, parameters.Value
+}
+
+// mailRenderRecorder renders every message the real Composer freezes and
+// records what it was asked to render. A set err fails every render.
+type mailRenderRecorder struct {
+	mu       sync.Mutex
+	requests []mail.RenderRequest
+	err      error
+}
+
+func (r *mailRenderRecorder) Render(request mail.RenderRequest) (mail.FrozenContent, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.requests = append(r.requests, request)
+	if r.err != nil {
+		return mail.FrozenContent{}, r.err
+	}
+	return mail.FrozenContent{Subject: "Notice", Text: "Notice", HTML: "<p>Notice</p>"}, nil
+}
+
+// fail makes every later render return err.
+func (r *mailRenderRecorder) fail(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.err = err
+}
+
+// keys returns the template of each rendered message, in order.
+func (r *mailRenderRecorder) keys() []model.MailTemplateKey {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var keys []model.MailTemplateKey
+	for _, request := range r.requests {
+		keys = append(keys, request.Key)
+	}
+	return keys
+}
+
+// actionURLs returns the link each rendered message carries, in order.
+func (r *mailRenderRecorder) actionURLs() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var urls []string
+	for _, request := range r.requests {
+		urls = append(urls, request.ActionURL)
+	}
+	return urls
+}
+
+type mailSenderFake struct{ enabled bool }
+
+func (s mailSenderFake) Enabled() bool { return s.enabled }
+func (mailSenderFake) From() mail.Address {
+	return mail.Address{Name: "Proctor", Address: "no-reply@example.test"}
+}
+func (mailSenderFake) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
+	return mail.TransportUnknown, nil
+}
+
+// newTestMail builds the production mail Composer. An enabled sender queues
+// rendered mail; a disabled one makes the Composer record suppressed mail
+// without rendering it.
+func newTestMail(t testing.TB, enabled bool) (*mail.Composer, *mailRenderRecorder) {
+	t.Helper()
+	renderer := &mailRenderRecorder{}
+	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
+	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
+	require.NoError(t, err)
+	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: renderer, Sender: mailSenderFake{enabled: enabled}, Sealer: sealer})
+	require.NoError(t, err)
+	return composer, renderer
 }
 
 // institutionStoreFake answers the singleton Institution.
@@ -286,77 +325,86 @@ func (s institutionStoreFake) GetSingleton(context.Context) (*model.Institution,
 	return s.institution, nil
 }
 
-type mutationAttemptAuditorFake struct {
-	events   *[]string
-	beginID  string
-	beginIDs []string
-	beginErr error
-	failErr  error
-	failID   string
-	failCode string
-	attempt  access.Mutation
-	attempts []access.Mutation
+// testClassStore resolves its Classes, each owned by unitID.
+type testClassStore struct {
+	store.ClassStore
+	unitID  model.AcademicUnitID
+	classes map[model.ClassID]*model.Class
 }
 
-// Begin records the whole Mutation; the event names whether it carried an
-// explicit scope, as the two positional entry points once did.
-func (a *mutationAttemptAuditorFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
-	if attempt.ScopeType != "" {
-		*a.events = append(*a.events, "begin-at-scope")
-	} else {
-		*a.events = append(*a.events, "begin")
+func (s testClassStore) Get(_ context.Context, id model.ClassID) (*model.Class, error) {
+	if class := s.classes[id]; class != nil {
+		return class, nil
 	}
-
-	a.attempt = attempt
-	a.attempts = append(a.attempts, attempt)
-	return model.AuditEventID(a.nextBeginID()), a.beginErr
+	return nil, store.NewErrNotFound("class", id.String())
 }
 
-func (a *mutationAttemptAuditorFake) nextBeginID() string {
-	if len(a.beginIDs) == 0 {
-		return a.beginID
+func (s testClassStore) GetAcademicUnitID(context.Context, model.ClassID) (model.AcademicUnitID, error) {
+	return s.unitID, nil
+}
+
+// testPeriodStore resolves one Academic Period owned by an Institution.
+type testPeriodStore struct {
+	store.AcademicPeriodStore
+	period *model.AcademicPeriod
+}
+
+func (s testPeriodStore) Get(_ context.Context, id model.AcademicPeriodID) (*model.AcademicPeriod, error) {
+	if s.period == nil || s.period.ID != id {
+		return nil, store.NewErrNotFound("academic_period", id.String())
 	}
-	id := a.beginIDs[0]
-	a.beginIDs = a.beginIDs[1:]
-	return id
+	return s.period, nil
 }
 
-func (a *mutationAttemptAuditorFake) Fail(_ context.Context, id model.AuditEventID, code string) error {
-	*a.events = append(*a.events, "fail")
-	a.failID = id.String()
-	a.failCode = code
-	return a.failErr
+// classAccess builds the real authorizer over one Class in one Academic Unit
+// and an Institution-owned Academic Period, with the grants given.
+func classAccess(t *testing.T, classID model.ClassID, grants ...accesstest.Grant) *accesstest.Fixture {
+	t.Helper()
+	unit := &model.AcademicUnit{ID: model.NewAcademicUnitID(), Name: "Computing"}
+	period := &model.AcademicPeriod{ID: model.NewAcademicPeriodID(), Owner: model.AcademicPeriodOwner{InstitutionID: model.NewInstitutionID()}}
+	return accesstest.New(t, accesstest.Options{
+		Grants: grants, Units: []*model.AcademicUnit{unit}, AcademicPeriods: testPeriodStore{period: period},
+		Classes: testClassStore{unitID: unit.ID, classes: map[model.ClassID]*model.Class{classID: {ID: classID, AcademicPeriodID: period.ID}}},
+	})
 }
 
 func TestVisibilityRecordsOneDecisionAndFailsClosedWithoutGrants(t *testing.T) {
 	t.Parallel()
+	now := time.Now()
 	classID := model.NewClassID()
-	caller := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{RequestID: "visibility"})
+	caller := sessionCaller(model.NewUserID(), now)
 
-	granted := &authorizerFake{visibility: &store.InvitationVisibilityScope{ClassIDs: []model.ClassID{classID}}}
-	scope, err := (&Service{authorizer: granted}).visibility(context.Background(), caller, model.ActionAcademicProgressionManage)
+	granted := classAccess(t, classID, accesstest.Grant{UserID: caller.Principal().UserID,
+		Actions: []model.Action{model.ActionAcademicProgressionManage}, ScopeType: model.RoleScopeClass, ScopeID: classID.String()})
+	scope, err := (&Service{authorizer: granted.Authorizer}).visibility(context.Background(), caller, model.ActionAcademicProgressionManage)
 	require.NoError(t, err)
 	require.Equal(t, store.InvitationVisibilityScope{ClassIDs: []model.ClassID{classID}}, scope)
-	require.Equal(t, []authorizationDecision{{action: model.ActionAcademicProgressionManage,
-		resource: model.Resource{Type: model.ResourceClass, ID: classID.String()}, scopeType: model.RoleScopeClass,
-		scopeID: classID.String(), allowed: true}}, granted.decisions)
+	decisions := granted.Audits.Decisions()
+	require.Len(t, decisions, 1)
+	require.Equal(t, string(model.ActionAcademicProgressionManage), decisions[0].Action)
+	require.Equal(t, model.Resource{Type: model.ResourceClass, ID: classID.String()}, decisions[0].Resource)
+	require.Equal(t, model.RoleScopeClass, decisions[0].ScopeType)
+	require.Equal(t, classID.String(), decisions[0].ScopeID)
+	require.Equal(t, model.AuditStatusSuccess, decisions[0].Status)
 
 	// No grant anywhere is one recorded denial at the Institution.
-	none := &authorizerFake{visibility: &store.InvitationVisibilityScope{}}
-	_, err = (&Service{authorizer: none}).visibility(context.Background(), caller, model.ActionInvitationView)
+	none := accesstest.New(t, accesstest.Options{})
+	_, err = (&Service{authorizer: none.Authorizer}).visibility(context.Background(), caller, model.ActionInvitationView)
 	require.True(t, apperror.Is(err, "authorization.denied"), "visibility without grants = %v", err)
-	institution, institutionErr := none.Institution(context.Background())
-	require.NoError(t, institutionErr)
-	require.Equal(t, []authorizationDecision{{action: model.ActionInvitationView,
-		resource: model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}, scopeType: model.RoleScopeInstitution,
-		scopeID: institution.ID.String(), allowed: false}}, none.decisions)
+	decisions = none.Audits.Decisions()
+	require.Len(t, decisions, 1)
+	require.Equal(t, string(model.ActionInvitationView), decisions[0].Action)
+	require.Equal(t, model.Resource{Type: model.ResourceInstitution, ID: none.Institution.ID.String()}, decisions[0].Resource)
+	require.Equal(t, model.RoleScopeInstitution, decisions[0].ScopeType)
+	require.Equal(t, none.Institution.ID.String(), decisions[0].ScopeID)
+	require.Equal(t, model.AuditStatusFail, decisions[0].Status)
 
 	// An Action outside the institution family and a missing authorizer both
 	// refuse before any decision.
-	other := &authorizerFake{}
-	_, err = (&Service{authorizer: other}).visibility(context.Background(), caller, model.ActionRoleView)
+	other := accesstest.New(t, accesstest.Options{Grants: grantAll(caller.Principal().UserID)})
+	_, err = (&Service{authorizer: other.Authorizer}).visibility(context.Background(), caller, model.ActionRoleView)
 	require.True(t, apperror.Is(err, "invitation.unavailable"), "visibility for another Action = %v", err)
-	require.Empty(t, other.actions)
+	require.Empty(t, other.Audits.Decisions())
 	_, err = (&Service{}).visibility(context.Background(), caller, model.ActionInvitationView)
 	require.True(t, apperror.Is(err, "invitation.unavailable"), "visibility without an authorizer = %v", err)
 	require.True(t, apperror.Is((&Service{}).authorize(context.Background(), caller, model.ActionInvitationCreate, model.Resource{}), "invitation.unavailable"))
@@ -364,10 +412,10 @@ func TestVisibilityRecordsOneDecisionAndFailsClosedWithoutGrants(t *testing.T) {
 
 func TestImportUseCasesRefuseWithoutOnboardingImports(t *testing.T) {
 	t.Parallel()
-	authorizer := &authorizerFake{}
+	caller := sessionCaller(model.NewUserID(), time.Now())
+	authorization := accesstest.New(t, accesstest.Options{Grants: grantAll(caller.Principal().UserID)})
 	// A Service built from a reduced Store catalog holds no import Store.
-	service := &Service{authorizer: authorizer, now: time.Now}
-	caller := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+	service := &Service{authorizer: authorization.Authorizer, now: time.Now}
 	ctx, id := context.Background(), model.NewOnboardingImportID()
 	digest := strings.Repeat("a", 64)
 
@@ -401,5 +449,55 @@ func TestImportUseCasesRefuseWithoutOnboardingImports(t *testing.T) {
 	_, err = service.DryRunStudentProgression(ctx, caller, DryRunStudentProgressionCommand{SourcePeriodID: model.NewAcademicPeriodID(),
 		SourceClassID: model.NewClassID(), DestinationPeriodID: model.NewAcademicPeriodID(), DestinationClassID: model.NewClassID(), EffectiveAt: 1})
 	require.True(t, apperror.Is(err, "student_progression.unavailable"), "dry run = %v", err)
-	require.Empty(t, authorizer.actions, "a Service without imports authorized an import use case")
+	require.Empty(t, authorization.Audits.Decisions(), "a Service without imports authorized an import use case")
+}
+
+// newTestComposer is an enabled production Composer for tests that do not
+// look at the mail it freezes.
+func newTestComposer(t testing.TB) *mail.Composer {
+	t.Helper()
+	composer, _ := newTestMail(t, true)
+	return composer
+}
+
+// allActionsExcept is every Action but the ones given, for a caller refused
+// exactly those.
+func allActionsExcept(refused ...model.Action) []model.Action {
+	var actions []model.Action
+	for _, action := range allActions() {
+		if !slices.Contains(refused, action) {
+			actions = append(actions, action)
+		}
+	}
+	return actions
+}
+
+// scopedAccess grants userID the action at one Academic Unit and at one
+// Class of another Academic Unit, both resolvable by the real authorizer.
+func scopedAccess(t *testing.T, userID model.UserID, action model.Action, unitID model.AcademicUnitID, classID model.ClassID) *accesstest.Fixture {
+	t.Helper()
+	classUnit := &model.AcademicUnit{ID: model.NewAcademicUnitID(), Name: "Class unit"}
+	period := &model.AcademicPeriod{ID: model.NewAcademicPeriodID(), Owner: model.AcademicPeriodOwner{InstitutionID: model.NewInstitutionID()}}
+	return accesstest.New(t, accesstest.Options{
+		Units:           []*model.AcademicUnit{{ID: unitID, Name: "Granted unit"}, classUnit},
+		AcademicPeriods: testPeriodStore{period: period},
+		Classes:         testClassStore{unitID: classUnit.ID, classes: map[model.ClassID]*model.Class{classID: {ID: classID, AcademicPeriodID: period.ID}}},
+		Grants: []accesstest.Grant{
+			{UserID: userID, Actions: []model.Action{action}, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String()},
+			{UserID: userID, Actions: []model.Action{action}, ScopeType: model.RoleScopeClass, ScopeID: classID.String()},
+		},
+	})
+}
+
+// requireOneScopedDecision fails unless the authorizer recorded exactly one
+// allowed decision for action, naming the granted Academic Unit.
+func requireOneScopedDecision(t *testing.T, fixture *accesstest.Fixture, action model.Action, unitID model.AcademicUnitID) {
+	t.Helper()
+	decisions := fixture.Audits.Decisions()
+	require.Len(t, decisions, 1, "one scope decision precedes the Store read")
+	require.Equal(t, string(action), decisions[0].Action)
+	require.Equal(t, model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}, decisions[0].Resource, "the one decision names the first granted Academic Unit")
+	require.Equal(t, model.RoleScopeAcademicUnit, decisions[0].ScopeType)
+	require.Equal(t, unitID.String(), decisions[0].ScopeID)
+	require.Equal(t, model.AuditStatusSuccess, decisions[0].Status)
 }

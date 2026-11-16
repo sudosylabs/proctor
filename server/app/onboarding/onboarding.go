@@ -47,104 +47,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// resourceAuthorizer is the part of *access.Authorizer the onboarding use
-// cases call. A use case authorizes an Action on a concrete Resource
-// immediately before the work it guards; a scoped list resolves the caller's
-// granted scopes and records its one decision.
-type resourceAuthorizer interface {
-	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
-	CanDelegateActionsAtScope(context.Context, model.Principal, []string, model.RoleScopeType, string) (bool, error)
-	GrantedScopes(context.Context, model.Principal, model.Action, model.ResourceType) (access.AuthorizedScopeConstraint, error)
-	AuthorizeUserSearch(context.Context, invocation.Invocation) (store.UserVisibilityScope, error)
-	CanViewClassMembers(context.Context, invocation.Invocation, model.Resource) (bool, error)
-	Institution(context.Context) (*model.Institution, error)
-	RecordAuthorizationDecision(
-		context.Context,
-		model.Principal,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		model.RequestMetadata,
-		bool,
-	) error
-}
-
-var _ resourceAuthorizer = (*access.Authorizer)(nil)
-
-// auditDrafter prepares the audit draft a Store aggregate inserts itself:
-// the one batch-level entry of an academic administration filter preview.
-// The mutation auditor composition passes is probed for it.
-type auditDrafter interface {
-	PrepareAtScope(
-		context.Context,
-		invocation.Invocation,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		string,
-		map[string]any,
-	) (*model.AuditEvent, error)
-}
-
-var _ auditDrafter = access.MutationAuditAdapter{}
-
-// mailComposer is the part of *mail.Composer onboarding prepares frozen mail
-// with: the Invitation lifecycle messages and the public registration
-// verification.
-type mailComposer interface {
-	Enabled() bool
-	PrepareInvitation(*model.Invitation, string) (*store.PreparedMail, error)
-	PrepareInvitationResend(*model.Invitation, string, model.UserID, time.Time) (*store.PreparedMail, error)
-	PrepareInvitationRevocation(*model.Invitation, model.UserID, time.Time) (*store.PreparedMail, error)
-	PrepareInvitationAccepted(mail.NoticePreparation) (*store.PreparedMail, error)
-	PreparePublicRegistrationVerification(*model.User, model.MailOccurrenceID, string, time.Time, time.Time) (*store.PreparedMail, error)
-}
-
-var _ mailComposer = (*mail.Composer)(nil)
-
-// passwordHasher is the password work of the shared *identity.PasswordHasher.
-type passwordHasher interface {
-	Hash(context.Context, string) (string, error)
-}
-
-var _ passwordHasher = (*identity.PasswordHasher)(nil)
-
-// academicCommands, roleBindingCommands and identityCommands are the
-// ordinary use cases an academic administration batch row runs, held as the
-// academic, administration and identity Services themselves. identityCommands
-// also revalidates an onboarding import's frozen Principal.
-type academicCommands interface {
-	CreateAffiliation(context.Context, invocation.Invocation, academic.CreateAffiliationCommand) (*model.Affiliation, error)
-	EndAffiliation(context.Context, invocation.Invocation, academic.EndAffiliationCommand) (*model.Affiliation, error)
-	CreateAcademicUnitMember(
-		context.Context,
-		invocation.Invocation,
-		academic.CreateAcademicUnitMemberCommand,
-	) (*model.AcademicUnitMember, error)
-	EndAcademicUnitMember(context.Context, invocation.Invocation, academic.EndAcademicUnitMemberCommand) (*model.AcademicUnitMember, error)
-	EnrollClassMember(context.Context, invocation.Invocation, academic.EnrollClassMemberCommand) (*model.ClassEnrollment, error)
-	EndClassMember(context.Context, invocation.Invocation, academic.EndClassMemberCommand) (*model.ClassMember, error)
-}
-
-type roleBindingCommands interface {
-	CreateRoleBinding(context.Context, invocation.Invocation, administration.CreateRoleBindingCommand) (*model.RoleBinding, error)
-	EndRoleBinding(context.Context, invocation.Invocation, administration.EndRoleBindingCommand) (*model.RoleBinding, error)
-}
-
-type identityCommands interface {
-	SetUserEnabled(context.Context, invocation.Invocation, identity.SetUserEnabledCommand) (*model.User, error)
-	RevokeUserSessions(context.Context, invocation.Invocation, identity.RevokeUserSessionsCommand) error
-	ValidatePrincipal(context.Context, model.Principal) error
-}
-
-var (
-	_ academicCommands    = (*academic.Service)(nil)
-	_ roleBindingCommands = (*administration.Service)(nil)
-	_ identityCommands    = (*identity.Service)(nil)
-)
-
 // OnboardingImportFiles stages, opens, removes and pages the private files of
 // onboarding imports.
 type OnboardingImportFiles interface {
@@ -164,7 +66,7 @@ type Dependencies struct {
 	Store          store.Catalog
 	Content        OnboardingImportFiles
 	Authorizer     *access.Authorizer
-	Auditor        access.MutationAuditor
+	Auditor        *access.Auditor
 	Mail           *mail.Composer
 	Hasher         *identity.PasswordHasher
 	Attempts       *identity.AttemptAccounting
@@ -213,19 +115,27 @@ type Service struct {
 
 	// authorizer is nil when composition supplies no Authorizer; every
 	// authorization then refuses with invitation.unavailable.
-	authorizer     resourceAuthorizer
-	auditor        access.MutationAuditor
-	mail           mailComposer
-	hasher         passwordHasher
-	attempts       *identity.AttemptAccounting
-	publisher      realtime.Publisher
-	academic       academicCommands
-	administration roleBindingCommands
-	identity       identityCommands
-	// directory and drafts are nil when composition supplies no User
-	// directory or no drafting auditor; filter previews then refuse.
+	authorizer *access.Authorizer
+	// auditor also drafts the one batch-level audit entry a filter preview's
+	// Store aggregate inserts itself.
+	auditor access.MutationAuditAdapter
+	mail    *mail.Composer
+	hasher  *identity.PasswordHasher
+	// hashHook, when set, replaces the hasher's Hash. Only tests set it, to
+	// reach password work failures the real derivation never returns.
+	// Production leaves it nil.
+	hashHook  func(context.Context, string) (string, error)
+	attempts  *identity.AttemptAccounting
+	publisher realtime.Publisher
+	// academic, administration and identity run the ordinary use cases an
+	// academic administration batch row dispatches to; identity also
+	// revalidates an onboarding import's frozen Principal.
+	academic       *academic.Service
+	administration *administration.Service
+	identity       *identity.Service
+	// directory is nil when composition supplies no User directory; filter
+	// previews then refuse.
 	directory *user.Service
-	drafts    auditDrafter
 	wake      func()
 
 	nodeID    string
@@ -320,7 +230,8 @@ func New(deps Dependencies) (*Service, Ports, error) {
 		classMembers:            catalog.ClassMember(),
 		roleBindings:            catalog.RoleBinding(),
 		sittings:                catalog.ExamSitting(),
-		auditor:                 deps.Auditor,
+		authorizer:              deps.Authorizer,
+		auditor:                 deps.Auditor.MutationAudit(),
 		mail:                    deps.Mail,
 		hasher:                  deps.Hasher,
 		attempts:                deps.Attempts,
@@ -328,6 +239,7 @@ func New(deps Dependencies) (*Service, Ports, error) {
 		academic:                deps.Academic,
 		administration:          deps.Administration,
 		identity:                deps.Identity,
+		directory:               deps.Users,
 		nodeID:                  deps.NodeID,
 		publicURL:               deps.PublicURL,
 		rateLimit:               rateLimit,
@@ -336,16 +248,6 @@ func New(deps Dependencies) (*Service, Ports, error) {
 		newToken:                model.NewCredentialToken,
 		now:                     time.Now,
 	}
-	if deps.Authorizer != nil {
-		s.authorizer = deps.Authorizer
-	}
-	if deps.Users != nil {
-		s.directory = deps.Users
-	}
-	if drafter, ok := deps.Auditor.(auditDrafter); ok {
-		s.drafts = drafter
-	}
-
 	enabled, err := onboardingImportsEnabled(deps)
 	if err != nil {
 		return nil, Ports{}, err
@@ -395,4 +297,13 @@ func onboardingImportsEnabled(deps Dependencies) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// hashPassword hashes a new password with the shared hasher, or with
+// hashHook when a test set one.
+func (s *Service) hashPassword(ctx context.Context, password string) (string, error) {
+	if s.hashHook != nil {
+		return s.hashHook(ctx, password)
+	}
+	return s.hasher.Hash(ctx, password)
 }

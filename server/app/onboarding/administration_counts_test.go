@@ -14,7 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
@@ -44,19 +44,22 @@ func (f *openImportCountStoreFake) CountOpenOnboardingImports(_ context.Context,
 func TestOpenOnboardingImportCountUsesTheBatchViewScopes(t *testing.T) {
 	t.Parallel()
 	imports := &openImportCountStoreFake{}
-	authorizer := &authorizerFake{}
-	service := &Service{imports: imports, authorizer: authorizer}
-	total, err := service.countOpenOnboardingImports(context.Background(), administrationCountsSession(), administrationCountMaximum)
+	caller := administrationCountsSession()
+	authorization := accesstest.New(t, accesstest.Options{Grants: []accesstest.Grant{{UserID: caller.Principal().UserID,
+		Actions: []model.Action{model.ActionOnboardingBatchView}}}})
+	service := &Service{imports: imports, authorizer: authorization.Authorizer}
+	total, err := service.countOpenOnboardingImports(context.Background(), caller, administrationCountMaximum)
 	require.NoError(t, err)
 	require.Equal(t, 4, total)
-	require.Equal(t, []model.Action{model.ActionOnboardingBatchView}, authorizer.actions)
-	require.Len(t, authorizer.decisions, 1, "the count records one scoped decision")
-	require.Equal(t, model.RoleScopeInstitution, authorizer.decisions[0].scopeType)
-	require.True(t, authorizer.decisions[0].allowed)
+	decisions := authorization.Audits.Decisions()
+	require.Len(t, decisions, 1, "the count records one scoped decision")
+	require.Equal(t, string(model.ActionOnboardingBatchView), decisions[0].Action)
+	require.Equal(t, model.RoleScopeInstitution, decisions[0].ScopeType)
+	require.Equal(t, model.AuditStatusSuccess, decisions[0].Status)
 	require.Equal(t, store.OnboardingImportVisibilityScope{InstitutionWide: true}, imports.visibility, "the import scopes are the onboarding_batch.view scopes")
 	require.Equal(t, administrationCountMaximum, imports.maximum)
 
-	authorizer.err = access.DeniedError()
+	// Another caller holds no onboarding_batch.view.
 	_, err = service.countOpenOnboardingImports(context.Background(), administrationCountsSession(), administrationCountMaximum)
 	require.True(t, apperror.Is(err, "authorization.denied"), "a denial reaches the summary, which omits the count: %v", err)
 }
@@ -71,9 +74,9 @@ func TestInvitationListCountsTheFirstPageAndPendingSummary(t *testing.T) {
 		ScopeID: classID.String(), ClaimHash: model.HashInvitationClaim(model.NewCredentialToken()), IssuedAt: now})
 	require.NoError(t, err)
 	persistence := &invitationStoreFake{invitation: invitation, countTotal: 9}
-	authorizer := &authorizerFake{}
-	service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{}, authorizer, &mailFake{}, now.Add(time.Hour))
-	caller := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+	caller := administrationCountsSession()
+	authorization := permissiveAccess(t, accesstest.Options{}, []model.UserID{caller.Principal().UserID})
+	service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{}, authorization, newTestComposer(t), now.Add(time.Hour))
 
 	first, err := service.ListInvitations(context.Background(), caller, ListInvitationsQuery{State: model.InvitationPending, Limit: 25})
 	require.NoError(t, err)
@@ -84,11 +87,11 @@ func TestInvitationListCountsTheFirstPageAndPendingSummary(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, paging.Total{}, later.Total)
 
-	authorizer.actions = nil
+	before := len(authorization.Audits.Decisions())
 	pending, err := service.countPendingInvitations(context.Background(), caller, administrationCountMaximum)
 	require.NoError(t, err)
 	require.Equal(t, 9, pending)
-	require.Equal(t, []model.Action{model.ActionInvitationView}, authorizer.actions, "the summary authorizes like the list")
+	require.Equal(t, []model.Action{model.ActionInvitationView}, decidedActions(authorization)[before:], "the summary authorizes like the list")
 	require.Equal(t, store.InvitationListOptions{Visibility: store.InvitationVisibilityScope{InstitutionWide: true}, State: model.InvitationPending,
 		Unexpired: true, Limit: 1}, persistence.countOptions)
 	require.Equal(t, administrationCountMaximum, persistence.countMaximum)

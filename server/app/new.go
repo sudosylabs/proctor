@@ -433,7 +433,7 @@ func newOnboarding(
 		Store:                   deps.Store,
 		Content:                 deps.FileContent,
 		Authorizer:              authorizer,
-		Auditor:                 shared.audit.MutationAudit(),
+		Auditor:                 shared.audit,
 		Mail:                    shared.mail,
 		Hasher:                  shared.hasher,
 		Attempts:                shared.attempts,

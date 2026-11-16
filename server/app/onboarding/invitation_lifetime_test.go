@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -36,30 +37,32 @@ func TestInvitationIssueUsesTheChosenLifetime(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			periodID, classID := model.NewAcademicPeriodID(), model.NewClassID()
+			periodID, classID, callerID := model.NewAcademicPeriodID(), model.NewClassID(), model.NewUserID()
+			unitID, roleID := model.NewAcademicUnitID(), model.NewRoleID()
+			authorization := permissiveAccess(t, accesstest.Options{}, []model.UserID{callerID}, unitID)
+			call := sessionCaller(callerID, now)
 			persistence := &invitationStoreFake{}
 			service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{},
-				&authorizerFake{}, &mailFake{}, now)
+				authorization, newTestComposer(t), now)
 			service.classes = invitationClassStoreFake{class: &model.Class{ID: classID, AcademicPeriodID: periodID}}
 			service.periods = invitationPeriodStoreFake{period: &model.AcademicPeriod{ID: periodID, StartsAt: now.Add(time.Hour), EndsAt: now.Add(90 * invitationTestDay)}}
-			_, err := service.IssueStudentClassInvitation(context.Background(), invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{}),
+			_, err := service.IssueStudentClassInvitation(context.Background(), call,
 				IssueStudentClassInvitationCommand{TargetEmail: "student@example.edu", ClassID: classID, ExpiresInDays: test.days})
 			require.NoError(t, err)
 			require.NotNil(t, persistence.issued)
 			require.Equal(t, test.want, persistence.issued.Invitation.ExpiresAt.Sub(persistence.issued.Invitation.CreatedAt))
 
-			unitID, roleID := model.NewAcademicUnitID(), model.NewRoleID()
 			role := &model.Role{ID: roleID, Name: "unit-reviewer", DisplayName: "Unit Reviewer",
 				Permissions: []string{string(model.ActionProgrammeManage), string(model.ActionAcademicUnitView)}}
 			service = newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{unit: &model.AcademicUnit{ID: unitID}},
-				invitationRoleStoreFake{role: role}, &authorizerFake{}, &mailFake{}, now)
-			_, err = service.IssueTeacherAcademicUnitInvitation(context.Background(), invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{}),
+				invitationRoleStoreFake{role: role}, authorization, newTestComposer(t), now)
+			_, err = service.IssueTeacherAcademicUnitInvitation(context.Background(), call,
 				IssueTeacherAcademicUnitInvitationCommand{TargetEmail: "teacher@example.edu", AcademicUnitID: unitID, RoleID: roleID, ExpiresInDays: test.days})
 			require.NoError(t, err)
 			require.NotNil(t, persistence.teacherIssued)
 			require.Equal(t, test.want, persistence.teacherIssued.Lifetime)
 			require.Equal(t, test.want, persistence.teacherIssued.Invitation.ExpiresAt.Sub(persistence.teacherIssued.Invitation.CreatedAt))
-			_, err = service.IssueAcademicUnitRoleInvitation(context.Background(), invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{}),
+			_, err = service.IssueAcademicUnitRoleInvitation(context.Background(), call,
 				IssueAcademicUnitRoleInvitationCommand{TargetEmail: "reviewer@example.edu", AcademicUnitID: unitID, RoleID: roleID, ExpiresInDays: test.days})
 			require.NoError(t, err)
 			require.NotNil(t, persistence.scopedIssued)
@@ -78,10 +81,13 @@ func TestInvitationIssueRejectsALifetimeOutsideOneThroughThirtyDays(t *testing.T
 			unitID, roleID := model.NewAcademicUnitID(), model.NewRoleID()
 			role := &model.Role{ID: roleID, Name: "unit-reviewer", DisplayName: "Unit Reviewer", Permissions: []string{string(model.ActionAcademicUnitView)}}
 			persistence := &invitationStoreFake{}
-			authorizer := &authorizerFake{}
+			callerID := model.NewUserID()
+			authorization := permissiveAccess(t, accesstest.Options{}, []model.UserID{callerID}, unitID)
 			service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{unit: &model.AcademicUnit{ID: unitID}},
-				invitationRoleStoreFake{role: role}, authorizer, &mailFake{}, now)
-			call := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+				invitationRoleStoreFake{role: role}, authorization, newTestComposer(t), now)
+			principal := sessionPrincipal(model.AuthenticationMultiFactor, now)
+			principal.UserID = callerID
+			call := invocation.New(principal, model.RequestMetadata{})
 			_, err := service.IssueStudentClassInvitation(context.Background(), call,
 				IssueStudentClassInvitationCommand{TargetEmail: "student@example.edu", ClassID: model.NewClassID(), ExpiresInDays: invitationDays(days)})
 			require.True(t, apperror.Is(err, "invitation.invalid"), "student error = %v", err)
@@ -94,7 +100,7 @@ func TestInvitationIssueRejectsALifetimeOutsideOneThroughThirtyDays(t *testing.T
 			_, err = service.IssueInstitutionRoleInvitation(context.Background(), call,
 				IssueInstitutionRoleInvitationCommand{TargetEmail: "admin@example.edu", InstitutionID: model.NewInstitutionID(), RoleID: roleID, ExpiresInDays: invitationDays(days)})
 			require.Error(t, err)
-			require.Empty(t, authorizer.actions, "an invalid lifetime is refused before any authorization")
+			require.Empty(t, authorization.Audits.Decisions(), "an invalid lifetime is refused before any authorization")
 			require.Nil(t, persistence.issued)
 			require.Nil(t, persistence.teacherIssued)
 			require.Nil(t, persistence.scopedIssued)
@@ -130,11 +136,12 @@ func TestInvitationReplacementKeepsTheReplacedLifetimeByDefault(t *testing.T) {
 				ScopeID: currentClassID.String(), ClaimHash: model.HashInvitationClaim(model.NewCredentialToken()), IssuedAt: now, Lifetime: test.current})
 			require.NoError(t, err)
 			persistence := &invitationStoreFake{invitation: current}
+			callerID := model.NewUserID()
 			service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{},
-				&authorizerFake{}, &mailFake{}, now.Add(time.Hour))
+				permissiveAccess(t, accesstest.Options{}, []model.UserID{callerID}), newTestComposer(t), now.Add(time.Hour))
 			service.classes = invitationClassStoreFake{class: class}
 			service.periods = invitationPeriodStoreFake{period: period}
-			_, err = service.ReplaceInvitation(context.Background(), invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{}),
+			_, err = service.ReplaceInvitation(context.Background(), sessionCaller(callerID, now),
 				ReplaceInvitationCommand{ID: current.ID, ExpectedRevision: current.Revision, Purpose: string(model.InvitationPurposeStudentClass),
 					TargetEmail: "new@example.edu", ClassID: class.ID, ExpiresInDays: test.days})
 			if test.code != "" {

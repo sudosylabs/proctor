@@ -9,12 +9,12 @@ package onboarding
 
 import (
 	"context"
-	"slices"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/sudosylabs/proctor/server/app/invocation"
+
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -27,10 +27,11 @@ func TestInvitationAdministrationUsesAuthorizedSafeLifecycleCommands(t *testing.
 		ScopeID: classID.String(), ClaimHash: model.HashInvitationClaim(model.NewCredentialToken()), IssuedAt: now})
 	require.NoError(t, err)
 	persistence := &invitationStoreFake{invitation: invitation}
-	authorizer := &authorizerFake{}
-	composer := &mailFake{}
-	service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{}, authorizer, composer, now.Add(time.Hour))
-	inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+	callerID := model.NewUserID()
+	authorization := permissiveAccess(t, accesstest.Options{}, []model.UserID{callerID})
+	composer, rendered := newTestMail(t, true)
+	service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{}, authorization, composer, now.Add(time.Hour))
+	inv := sessionCaller(callerID, now)
 
 	page, err := service.ListInvitations(context.Background(), inv, ListInvitationsQuery{TargetEmail: "STUDENT@example.edu", Limit: 25})
 	require.NoError(t, err)
@@ -44,7 +45,8 @@ func TestInvitationAdministrationUsesAuthorizedSafeLifecycleCommands(t *testing.
 	require.NotNil(t, persistence.resent, "Invitation resend = %#v / %#v", resent, persistence.resent)
 	require.NotEqual(t, invitation.ClaimHash, persistence.resent.ClaimHash, "Invitation resend = %#v / %#v", resent, persistence.resent)
 	require.NotContains(t, resent.String(), persistence.resent.ClaimHash, "Invitation resend = %#v / %#v", resent, persistence.resent)
-	require.Contains(t, composer.issueURL, "/join#token=", "Invitation resend = %#v / %#v", resent, persistence.resent)
+	require.Len(t, rendered.actionURLs(), 1)
+	require.Contains(t, rendered.actionURLs()[0], "/join#token=", "Invitation resend = %#v / %#v", resent, persistence.resent)
 
 	revoked, err := service.RevokeInvitation(context.Background(), inv, RevokeInvitationCommand{ID: invitation.ID, ExpectedRevision: invitation.Revision})
 	require.NoError(t, err)
@@ -52,5 +54,5 @@ func TestInvitationAdministrationUsesAuthorizedSafeLifecycleCommands(t *testing.
 	require.Equal(t, model.InvitationRevoked, revoked.State, "Invitation revoke = %#v", revoked)
 	require.NotNil(t, persistence.revoked.RevocationNotice, "Invitation revoke = %#v", revoked)
 	require.Equal(t, model.MailTemplateAccessInvitationRevoked, persistence.revoked.RevocationNotice.Delivery.TemplateKey, "Invitation revoke = %#v", revoked)
-	require.True(t, slices.Equal(authorizer.actions, []model.Action{model.ActionInvitationView, model.ActionInvitationManage, model.ActionInvitationManage}), "Invitation administration authorization = %v", authorizer.actions)
+	require.Equal(t, []model.Action{model.ActionInvitationView, model.ActionInvitationManage, model.ActionInvitationManage}, decidedActions(authorization), "Invitation administration authorization")
 }

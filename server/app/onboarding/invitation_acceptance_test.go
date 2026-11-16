@@ -16,10 +16,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -33,9 +34,9 @@ func TestInvitationExternalIdentityAcceptancePreparesTheExactTerminalPackage(t *
 		ScopeID: classID.String(), ClaimHash: model.HashInvitationClaim(model.NewCredentialToken()), IssuedAt: now})
 	require.NoError(t, err)
 	persistence := &invitationStoreFake{invitation: invitation}
-	composer := &mailFake{}
+	composer, rendered := newTestMail(t, true)
 	service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{},
-		&authorizerFake{}, composer, now.Add(time.Minute))
+		permissiveAccess(t, accesstest.Options{}, nil), composer, now.Add(time.Minute))
 	state := &model.ExternalLoginState{ID: model.NewExternalLoginStateID(), Provider: "campus",
 		Purpose: model.ExternalAuthenticationPurposeInvitationAdmission, InvitationID: invitation.ID,
 		ConsumedAt: model.OptionalTimeFrom(now)}
@@ -66,8 +67,9 @@ func TestInvitationExternalIdentityAcceptancePreparesTheExactTerminalPackage(t *
 	require.Equal(t, "oidc", accepted.AuditEvent.AuthMethod, "external Invitation package/result = %#v / %#v", accepted, result)
 	require.Contains(t, string(accepted.AuditEvent.Parameters), `"provider":"campus"`, "external Invitation package/result = %#v / %#v", accepted, result)
 	require.True(t, slices.Equal(accepted.RequiredActions, []model.Action{model.ActionInvitationCreate, model.ActionClassMembersManage}), "external Invitation package/result = %#v / %#v", accepted, result)
-	require.Equal(t, model.JobTypeMailDeliver, composer.directJobType)
-	composer.directErr = fmt.Errorf("mail preparation unavailable")
+	require.Equal(t, model.JobTypeMailDeliver, accepted.Notice.Job.Type)
+	require.Equal(t, []model.MailTemplateKey{model.MailTemplateAccessInvitationAccepted}, rendered.keys())
+	rendered.fail(fmt.Errorf("mail preparation unavailable"))
 	assertion.Username = strings.Repeat("x", 1_000)
 	result, err = service.acceptExternalIdentity(context.Background(), state, assertion, capabilities,
 		model.RequestMetadata{RequestID: "request-2"}, "oidc")
@@ -95,11 +97,11 @@ func TestInvitationServiceAcceptsAcademicUnitRoleForAuthenticatedExistingUserWit
 	})
 	require.NoError(t, err)
 	events := []string{}
-	auditID := model.NewAuditEventID().String()
-	auditor := &mutationAttemptAuditorFake{events: &events, beginID: auditID}
 	persistence := &invitationStoreFake{invitation: invitation, events: &events}
-	composer := &mailFake{}
-	service := &Service{invitations: persistence, classes: invitationClassStoreFake{}, periods: invitationPeriodStoreFake{}, academicUnits: invitationAcademicUnitStoreFake{}, roles: invitationRoleStoreFake{}, authorizer: &authorizerFake{}, mail: composer, hasher: passwordHasherFake{}, auditor: auditor, attempts: testAttempts(t), rateLimit: testRateLimit, publisher: &realtimetest.Publisher{}, nodeID: "node-1", publicURL: "https://proctor.example.edu", recentAuthenticationTTL: 15 * time.Minute, newToken: model.NewCredentialToken, now: func() time.Time { return now.Add(time.Minute) }}
+	authorization := accesstest.New(t, accesstest.Options{Observe: func(event string) { events = append(events, event) }})
+	composer, rendered := newTestMail(t, true)
+	service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{},
+		authorization, composer, now.Add(time.Minute))
 	principal := model.Principal{UserID: userID, SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: now}
@@ -114,23 +116,25 @@ func TestInvitationServiceAcceptsAcademicUnitRoleForAuthenticatedExistingUserWit
 	require.Equal(t, model.RoleScopeAcademicUnit, accepted.RoleBinding.ScopeType, "scoped Role acceptance/result = %#v / %#v", accepted, result)
 	require.Equal(t, unitID.String(), accepted.RoleBinding.ScopeID, "scoped Role acceptance/result = %#v / %#v", accepted, result)
 	require.Equal(t, invitation.ID, accepted.RoleBinding.OriginInvitationID, "scoped Role acceptance/result = %#v / %#v", accepted, result)
-	require.Equal(t, model.AuditEventID(auditID), accepted.AuditEventID, "scoped Role acceptance/result = %#v / %#v", accepted, result)
+	attempts := authorization.Audits.Attempts()
+	require.Len(t, attempts, 1)
+	attempt := attempts[0]
+	require.Equal(t, attempt.ID, accepted.AuditEventID, "scoped Role acceptance/result = %#v / %#v", accepted, result)
 	require.True(t, model.TimeUTC(now.Add(time.Minute)).Equal(accepted.AuditAt), "scoped Role acceptance/result = %#v / %#v", accepted, result)
 	require.NotNil(t, result.User, "scoped Role acceptance/result = %#v / %#v", accepted, result)
 	require.Equal(t, userID, result.User.ID, "scoped Role acceptance/result = %#v / %#v", accepted, result)
 	require.NotNil(t, result.RoleBinding, "scoped Role acceptance/result = %#v / %#v", accepted, result)
-	require.Empty(t, composer.directJobType, "scoped Role acceptance/result = %#v / %#v", accepted, result)
-	require.True(t, slices.Equal(events, []string{"resolve", "begin-at-scope", "accept"}), "scoped Role audit attempt/events = %#v / %v", auditor.attempt, events)
-	require.Equal(t, model.Action("invitation.accept"), auditor.attempt.Action, "scoped Role audit attempt/events = %#v / %v", auditor.attempt, events)
-	require.Equal(t, model.ResourceAcademicUnit, auditor.attempt.Resource.Type, "scoped Role audit attempt/events = %#v / %v", auditor.attempt, events)
-	require.Equal(t, unitID.String(), auditor.attempt.Resource.ID, "scoped Role audit attempt/events = %#v / %v", auditor.attempt, events)
-	require.Equal(t, model.RoleScopeAcademicUnit, auditor.attempt.ScopeType, "scoped Role audit attempt/events = %#v / %v", auditor.attempt, events)
-	require.Equal(t, unitID.String(), auditor.attempt.ScopeID, "scoped Role audit attempt/events = %#v / %v", auditor.attempt, events)
-	require.Equal(t, "accept_scoped_role_invitation", auditor.attempt.Operation, "scoped Role audit attempt/events = %#v / %v", auditor.attempt, events)
-	encoded, encodeErr := model.EncodeAuditData(auditor.attempt.Value)
-	require.NoError(t, encodeErr, "scoped Role audit attempt leaked claim material")
-	require.NotContains(t, string(encoded), raw, "scoped Role audit attempt leaked claim material")
-	require.NotContains(t, string(encoded), invitation.ClaimHash, "scoped Role audit attempt leaked claim material")
+	require.Empty(t, rendered.keys(), "scoped Role acceptance/result = %#v / %#v", accepted, result)
+	require.True(t, slices.Equal(events, []string{"resolve", "audit-begin:invitation.accept", "accept"}), "scoped Role audit attempt/events = %#v / %v", attempt, events)
+	require.Equal(t, "invitation.accept", attempt.Action, "scoped Role audit attempt/events = %#v / %v", attempt, events)
+	require.Equal(t, model.ResourceAcademicUnit, attempt.Resource.Type, "scoped Role audit attempt/events = %#v / %v", attempt, events)
+	require.Equal(t, unitID.String(), attempt.Resource.ID, "scoped Role audit attempt/events = %#v / %v", attempt, events)
+	require.Equal(t, model.RoleScopeAcademicUnit, attempt.ScopeType, "scoped Role audit attempt/events = %#v / %v", attempt, events)
+	require.Equal(t, unitID.String(), attempt.ScopeID, "scoped Role audit attempt/events = %#v / %v", attempt, events)
+	operation, _ := auditParameters(t, attempt)
+	require.Equal(t, "accept_scoped_role_invitation", operation, "scoped Role audit attempt/events = %#v / %v", attempt, events)
+	require.NotContains(t, string(attempt.Parameters), raw, "scoped Role audit attempt leaked claim material")
+	require.NotContains(t, string(attempt.Parameters), invitation.ClaimHash, "scoped Role audit attempt leaked claim material")
 }
 
 func TestInvitationServiceTerminalizesScopedRoleAcceptanceConflict(t *testing.T) {
@@ -145,20 +149,23 @@ func TestInvitationServiceTerminalizesScopedRoleAcceptanceConflict(t *testing.T)
 	})
 	require.NoError(t, err)
 	events := []string{}
-	auditID := model.NewAuditEventID().String()
-	auditor := &mutationAttemptAuditorFake{events: &events, beginID: auditID}
 	persistence := &invitationStoreFake{invitation: invitation, events: &events,
 		scopedAcceptErr: store.NewErrConflict("invitation", "invitation_role_binding_conflict", nil)}
-	service := &Service{invitations: persistence, classes: invitationClassStoreFake{}, periods: invitationPeriodStoreFake{}, academicUnits: invitationAcademicUnitStoreFake{}, roles: invitationRoleStoreFake{}, authorizer: &authorizerFake{}, mail: &mailFake{}, hasher: passwordHasherFake{}, auditor: auditor, attempts: testAttempts(t), rateLimit: testRateLimit, publisher: &realtimetest.Publisher{}, nodeID: "node-1", publicURL: "https://proctor.example.edu", recentAuthenticationTTL: 15 * time.Minute, newToken: model.NewCredentialToken, now: func() time.Time { return now.Add(time.Minute) }}
+	authorization := accesstest.New(t, accesstest.Options{Observe: func(event string) { events = append(events, event) }})
+	composer, _ := newTestMail(t, true)
+	service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{},
+		authorization, composer, now.Add(time.Minute))
 	principal := model.Principal{UserID: userID, SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: now}
 	_, appErr := service.AcceptAcademicUnitRoleInvitation(context.Background(), invocation.New(principal, model.RequestMetadata{}),
 		AcceptAcademicUnitRoleInvitationCommand{Claim: raw, Source: "127.0.0.1"})
-	require.True(t, apperror.Is(appErr, "invitation.invalid"), "scoped Role conflict error/audit/events = %v / %#v / %v", appErr, auditor, events)
-	require.Equal(t, auditID, auditor.failID, "scoped Role conflict error/audit/events = %v / %#v / %v", appErr, auditor, events)
-	require.Equal(t, "invitation.invalid", auditor.failCode, "scoped Role conflict error/audit/events = %v / %#v / %v", appErr, auditor, events)
-	require.True(t, slices.Equal(events, []string{"resolve", "begin-at-scope", "accept", "fail"}), "scoped Role conflict error/audit/events = %v / %#v / %v", appErr, auditor, events)
+	attempts := authorization.Audits.Attempts()
+	require.True(t, apperror.Is(appErr, "invitation.invalid"), "scoped Role conflict error/audit/events = %v / %#v / %v", appErr, attempts, events)
+	require.Len(t, attempts, 1, "scoped Role conflict error/audit/events = %v / %#v / %v", appErr, attempts, events)
+	require.Equal(t, model.AuditStatusFail, attempts[0].Status, "scoped Role conflict error/audit/events = %v / %#v / %v", appErr, attempts, events)
+	require.Equal(t, "invitation.invalid", attempts[0].ErrorCode, "scoped Role conflict error/audit/events = %v / %#v / %v", appErr, attempts, events)
+	require.True(t, slices.Equal(events, []string{"resolve", "audit-begin:invitation.accept", "accept", "audit-fail"}), "scoped Role conflict error/audit/events = %v / %#v / %v", appErr, attempts, events)
 }
 
 func TestInvitationServiceAcceptsTeacherPackageArtifacts(t *testing.T) {
@@ -173,8 +180,9 @@ func TestInvitationServiceAcceptsTeacherPackageArtifacts(t *testing.T) {
 	})
 	require.NoError(t, err)
 	persistence := &invitationStoreFake{invitation: invitation}
+	composer, _ := newTestMail(t, true)
 	service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{},
-		&authorizerFake{}, &mailFake{}, now.Add(time.Minute))
+		permissiveAccess(t, accesstest.Options{}, nil), composer, now.Add(time.Minute))
 	result, err := service.AcceptTeacherAcademicUnitInvitation(context.Background(), invocation.Invocation{}, AcceptTeacherAcademicUnitInvitationCommand{
 		Claim: raw, Password: "correct horse battery staple", Username: "teacher-one", Source: "127.0.0.1",
 	})
@@ -200,12 +208,14 @@ func TestInvitationAcceptanceCommitsWithTerminalNoticeWhenMailIsDisabled(t *test
 		ScopeType: model.RoleScopeClass, ScopeID: classID.String(), ClaimHash: model.HashInvitationClaim(raw), IssuedAt: now})
 	require.NoError(t, err)
 	persistence := &invitationStoreFake{invitation: invitation}
-	composer := &mailFake{disabled: true}
-	service := &Service{invitations: persistence, classes: invitationClassStoreFake{}, periods: invitationPeriodStoreFake{}, academicUnits: invitationAcademicUnitStoreFake{}, roles: invitationRoleStoreFake{}, authorizer: &authorizerFake{}, mail: composer, hasher: passwordHasherFake{}, auditor: &mutationAttemptAuditorFake{}, attempts: testAttempts(t), rateLimit: testRateLimit, publisher: &realtimetest.Publisher{}, nodeID: "node-1", publicURL: "https://proctor.example.edu", recentAuthenticationTTL: 15 * time.Minute, newToken: model.NewCredentialToken, now: func() time.Time { return now.Add(time.Minute) }}
+	composer, rendered := newTestMail(t, false)
+	service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{},
+		permissiveAccess(t, accesstest.Options{}, nil), composer, now.Add(time.Minute))
 	_, appErr := service.AcceptStudentClassInvitation(context.Background(), invocation.Invocation{}, AcceptStudentClassInvitationCommand{Claim: raw,
 		Password: "correct horse battery staple", Username: "student-one", Source: "127.0.0.1"})
 	require.NoError(t, appErr)
-	require.Equal(t, model.JobTypeMailDeliver, composer.directJobType, "disabled acceptance mail = %#v / %#v", persistence.accepted.Delivery, persistence.accepted.DeliveryJob)
+	require.Empty(t, rendered.keys(), "suppressed mail is never rendered")
+	require.Equal(t, model.JobTypeMailDeliver, persistence.accepted.DeliveryJob.Type, "disabled acceptance mail = %#v / %#v", persistence.accepted.Delivery, persistence.accepted.DeliveryJob)
 	require.Equal(t, model.MailDeliverySuppressed, persistence.accepted.Delivery.State, "disabled acceptance mail = %#v / %#v", persistence.accepted.Delivery, persistence.accepted.DeliveryJob)
 	require.Equal(t, model.MailDeliveryDisabledCode, persistence.accepted.Delivery.PublicFailureCode, "disabled acceptance mail = %#v / %#v", persistence.accepted.Delivery, persistence.accepted.DeliveryJob)
 	require.Empty(t, persistence.accepted.Delivery.EncryptedPayload, "disabled acceptance mail = %#v / %#v", persistence.accepted.Delivery, persistence.accepted.DeliveryJob)
@@ -215,14 +225,14 @@ func TestInvitationAcceptanceCommitsWithTerminalNoticeWhenMailIsDisabled(t *test
 func TestInvitationPasswordWorkFailuresStopBeforeAcceptance(t *testing.T) {
 	for _, purpose := range []model.InvitationPurpose{model.InvitationPurposeStudentClass, model.InvitationPurposeTeacherAcademicUnit} {
 		t.Run(string(purpose), func(t *testing.T) {
-			testPasswordHashFailures(t, "invitation.unavailable", func(t *testing.T, ctx context.Context, hasher testPasswordHasher) error {
+			testPasswordHashFailures(t, "invitation.unavailable", func(t *testing.T, ctx context.Context, hook passwordHashHook) error {
 				raw := model.NewCredentialToken()
 				invitation := &model.Invitation{Purpose: purpose, ClaimHash: model.HashInvitationClaim(raw), TargetEmail: "invited@example.edu"}
 				persistence := &invitationStoreFake{invitation: invitation}
-				composer := &mailFake{}
+				composer, rendered := newTestMail(t, true)
 				service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{},
-					&authorizerFake{}, composer, time.Now())
-				service.hasher = hasher
+					permissiveAccess(t, accesstest.Options{}, nil), composer, time.Now())
+				service.hashHook = hook
 				var result *InvitationAcceptanceView
 				var err error
 				if purpose == model.InvitationPurposeStudentClass {
@@ -237,7 +247,7 @@ func TestInvitationPasswordWorkFailuresStopBeforeAcceptance(t *testing.T) {
 				require.Nil(t, result, "failed password work accepted an Invitation or prepared mail")
 				require.Nil(t, persistence.accepted, "failed password work accepted an Invitation or prepared mail")
 				require.Nil(t, persistence.teacherAccepted, "failed password work accepted an Invitation or prepared mail")
-				require.Empty(t, composer.directJobType, "failed password work accepted an Invitation or prepared mail")
+				require.Empty(t, rendered.keys(), "failed password work accepted an Invitation or prepared mail")
 				return err
 			})
 		})

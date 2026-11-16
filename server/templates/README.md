@@ -22,8 +22,8 @@ labelled facts, an optional aside, an optional action, and the colophon. Phones
 stack each fact's label above its value. Human prose still comes only from
 `../i18n`. Maintainers may restyle the partials without changing delivery
 logic, but must retain the semantic reading order, complete text equivalent,
-contextual escaping, accessibility, and privacy constraints in the repository
-[`transactional-mail` skill](../../.agents/skills/transactional-mail/SKILL.md).
+contextual escaping, accessibility, and privacy constraints: mail never carries
+answers, scores, evidence, codes, IP addresses or tokens.
 
 ## Inline branding
 

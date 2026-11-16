@@ -16,7 +16,7 @@ test('the tracked glossary is current and valid', async () => {
 test('the glossary skill produces the complete canonical vocabulary', async () => {
   const terms = parseGlossary(
     await readFile(
-      new URL('../../../.agents/skills/glossary/SKILL.md', import.meta.url),
+      new URL('../../glossary.md', import.meta.url),
       'utf8',
     ),
   );
@@ -39,7 +39,7 @@ test('renderers name the authority and remain deterministic', () => {
   );
   assert.match(
     renderGlossaryData(terms),
-    /Generated from \.agents\/skills\/glossary\/SKILL\.md/,
+    /Generated from docs\/glossary\.md/,
   );
   assert.match(renderGlossaryPage(1), /These 1 definitions/);
 });

@@ -1,7 +1,7 @@
 // Human-owned source for the Proctor documentation design system.
 //
 // Change values here, explain durable meaning in
-// .agents/skills/docs-site/references/design-system.md, then run `npm run generate:design-system`.
+// docs/site/DESIGN_SYSTEM.md, then run `npm run generate:design-system`.
 // Site CSS is an adapter of this module, not an independent token
 // authority.
 

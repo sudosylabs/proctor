@@ -518,7 +518,7 @@ Durable rules include:
 - confirm destructive actions or provide a genuine undo path.
 
 Interface copy uses active voice, stable action names, sentence case, and exact
-domain terms from the repository [`glossary` skill](../.agents/skills/glossary/SKILL.md).
+domain terms from the repository [glossary](../docs/glossary.md).
 Errors say what happened
 and the next safe step without exposing sensitive state. Empty states orient
 the user toward an available action. Loading copy uses the ellipsis character

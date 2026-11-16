@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url';
 
 const moduleRoot = dirname(fileURLToPath(import.meta.url));
 const defaultRepoRoot = resolve(moduleRoot, '../../..');
-const glossarySkill = '.agents/skills/glossary/SKILL.md';
+const glossarySkill = 'docs/glossary.md';
 
 function slugify(term) {
   return term

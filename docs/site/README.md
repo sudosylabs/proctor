@@ -42,7 +42,7 @@ and follow the browser's color preference independently of the site's reading
 theme. These are reviewed package-local assets; their tests
 validate the bundled copies without reading repository brand masters.
 
-The tracked [documentation visual-system reference](../../.agents/skills/docs-site/references/design-system.md)
+The tracked [documentation visual-system reference](DESIGN_SYSTEM.md)
 owns the brand palette, semantic colors, Geist typography, spacing,
 geometry, and illustration grammar. Human changes begin in
 `design-system/tokens.mjs`; `src/css/tokens.css` is generated:
@@ -76,7 +76,7 @@ contract keep domain and utility symbols consistent without an external icon
 library. Add a name only when the concept recurs and update the icon contract
 and its test in the same change.
 
-The repository [`glossary` skill](../../.agents/skills/glossary/SKILL.md) is the
+The repository [glossary](../glossary.md) is the
 single domain-language authority. `generate:glossary` produces the public
 glossary page and the typed runtime lookup used by explicit `<Term>` tooltips.
 The check rejects stale generated views, unknown identifiers, repeated
@@ -237,8 +237,7 @@ also keeps every content image inside the governed review below, so it stays
 until maintainers decide otherwise.
 
 Reviewed SVG and PNG content assets instead use the constrained static route
-governed by the repository
-[`docs-site-visual-assets` skill](../../.agents/skills/docs-site-visual-assets/SKILL.md).
+governed by `docs/public/assets.json` and the review rules in the `docs` skill.
 MDX supplies only a registry ID to `GovernedFigure`, so Docusaurus' authored
 image parser never reads those files. The asset gate independently permits only
 the two reviewed formats and checks inventory, ownership, provenance, license

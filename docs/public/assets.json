@@ -22,8 +22,9 @@
       "visual_system": "proctor-diagrams-v2",
       "last_reviewed": "2026-11-15",
       "review_triggers": [
-        ".agents/skills/server-boundaries/references/dependencies.md",
-        ".agents/skills/runtime-operations/references/runtime.md"
+        "server/composition.go",
+        "server/cluster/GUARANTEES.md",
+        "server/serving_node_lease.go"
       ],
       "visual_review": {
         "status": "approved",
@@ -72,10 +73,6 @@
       "visual_system": "proctor-diagrams-v2",
       "last_reviewed": "2026-11-15",
       "review_triggers": [
-        ".agents/skills/identity-and-access/references/identity.md",
-        ".agents/skills/authorization-audit/references/authorization.md",
-        ".agents/skills/server-boundaries/references/application.md",
-        ".agents/skills/http-api/references/transport.md",
         "server/httpapi/route/authentication.go",
         "server/app/access/session_assurance.go",
         "server/app/access/authorization.go"
@@ -127,8 +124,6 @@
       "visual_system": "proctor-diagrams-v2",
       "last_reviewed": "2026-11-15",
       "review_triggers": [
-        ".agents/skills/identity-and-access/references/access-and-onboarding.md",
-        ".agents/skills/identity-and-access/references/identity.md",
         "webapp/src/features/desktop-authorization/DesktopAuthorizationApi.ts",
         "server/openapi/fragments/authentication/auth-desktop.yaml"
       ],
@@ -179,7 +174,6 @@
       "visual_system": "proctor-diagrams-v2",
       "last_reviewed": "2026-11-15",
       "review_triggers": [
-        ".agents/skills/identity-and-access/references/identity.md",
         "server/app/identity/dpop.go",
         "server/httpapi/authentication.go",
         "server/openapi/fragments/authentication/auth-desktop.yaml"
@@ -231,7 +225,6 @@
       "visual_system": "proctor-diagrams-v2",
       "last_reviewed": "2026-11-15",
       "review_triggers": [
-        ".agents/skills/identity-and-access/references/access-and-onboarding.md",
         "server/model/invitation.go",
         "server/app/onboarding/invitation.go",
         "server/openapi/fragments/invitations-and-onboarding/shared.yaml"
@@ -283,7 +276,6 @@
       "visual_system": "proctor-diagrams-v2",
       "last_reviewed": "2026-11-15",
       "review_triggers": [
-        ".agents/skills/identity-and-access/references/access-and-onboarding.md",
         "server/app/onboarding/import.go",
         "server/app/onboarding/import_commit.go",
         "server/app/onboarding/import_execute.go",
@@ -339,7 +331,6 @@
       "visual_system": "proctor-diagrams-v2",
       "last_reviewed": "2026-11-15",
       "review_triggers": [
-        ".agents/skills/exam-lifecycle/references/examinations.md",
         "server/app/exam/sitting/lifecycle.go",
         "server/app/exam/sitting/system_lifecycle.go",
         "server/openapi/fragments/sittings/shared.yaml",
@@ -392,7 +383,6 @@
       "visual_system": "proctor-diagrams-v2",
       "last_reviewed": "2026-11-15",
       "review_triggers": [
-        ".agents/skills/exam-lifecycle/references/examinations.md",
         "server/app/exam/correction/apply.go",
         "server/app/exam/correction/resource_stage.go",
         "server/openapi/fragments/sittings/exams-sittings-corrections.yaml",
@@ -445,9 +435,7 @@
       "visual_system": "proctor-diagrams-v2",
       "last_reviewed": "2026-11-15",
       "review_triggers": [
-        ".agents/skills/glossary/SKILL.md",
-        ".agents/skills/academic-structure/SKILL.md",
-        ".agents/skills/authorization-audit/references/authorization.md",
+        "docs/glossary.md",
         "docs/api/recipes/academic-structure.mdx"
       ],
       "visual_review": {
@@ -497,8 +485,7 @@
       "visual_system": "proctor-diagrams-v2",
       "last_reviewed": "2026-11-15",
       "review_triggers": [
-        ".agents/skills/glossary/SKILL.md",
-        ".agents/skills/exam-lifecycle/references/examinations.md",
+        "docs/glossary.md",
         "docs/api/recipes/author-and-publish-exam.mdx",
         "docs/api/recipes/manage-sitting.mdx",
         "docs/api/recipes/candidate-attempt.mdx"
@@ -551,7 +538,6 @@
       "last_reviewed": "2026-11-15",
       "review_triggers": [
         "go.work",
-        ".agents/skills/server-boundaries/references/dependencies.md",
         "packages/cache/README.md",
         "packages/mail/README.md",
         "packages/vfs/README.md"
@@ -655,9 +641,6 @@
       "visual_system": "proctor-diagrams-v2",
       "last_reviewed": "2026-11-15",
       "review_triggers": [
-        ".agents/skills/http-api/references/transport.md",
-        ".agents/skills/server-boundaries/references/application.md",
-        ".agents/skills/runtime-operations/references/runtime.md",
         "server/httpapi/route/dispatch.go",
         "server/httpapi/route/problem.go",
         "server/metrics/module.go"
@@ -1033,8 +1016,6 @@
       "visual_system": "proctor-diagrams-v2",
       "last_reviewed": "2026-11-15",
       "review_triggers": [
-        ".agents/skills/exam-lifecycle/references/examinations.md",
-        ".agents/skills/identity-and-access/references/identity.md",
         "server/app/exam/attempt/candidate_access.go",
         "server/app/exam/attempt/connection.go",
         "server/httpapi/exam_attempt.go"
@@ -1086,7 +1067,6 @@
       "visual_system": "proctor-diagrams-v2",
       "last_reviewed": "2026-11-15",
       "review_triggers": [
-        ".agents/skills/exam-lifecycle/references/examinations.md",
         "server/app/exam/attempt/participation_renewal.go",
         "server/app/exam/attempt/participation_expiry.go",
         "server/app/exam/attempt/reallow.go",
@@ -1141,7 +1121,6 @@
       "visual_system": "proctor-diagrams-v2",
       "last_reviewed": "2026-11-15",
       "review_triggers": [
-        ".agents/skills/exam-lifecycle/references/examinations.md",
         "server/app/exam/attempt/browser_activity.go",
         "server/model/browser_activity.go",
         "server/openapi/fragments/attempts-and-workspaces/exam-attempts-presentation.yaml"
@@ -1193,7 +1172,6 @@
       "visual_system": "proctor-diagrams-v2",
       "last_reviewed": "2026-11-15",
       "review_triggers": [
-        ".agents/skills/exam-lifecycle/references/examinations.md",
         "server/model/exam_submission.go",
         "server/app/exam/attempt/submission.go",
         "server/store/sqlstore/exam_submission_store.go"
@@ -1245,7 +1223,6 @@
       "visual_system": "proctor-diagrams-v2",
       "last_reviewed": "2026-11-15",
       "review_triggers": [
-        ".agents/skills/exam-lifecycle/references/examinations.md",
         "server/model/exam_review.go",
         "server/app/exam/review/manager_authorization.go",
         "server/openapi/fragments/integrity-review/submissions-review.yaml",
@@ -1298,7 +1275,6 @@
       "visual_system": "proctor-diagrams-v2",
       "last_reviewed": "2026-11-15",
       "review_triggers": [
-        ".agents/skills/runtime-operations/references/runtime.md",
         "server/server.go",
         "server/serving_node_lease.go",
         "server/server_lifecycle_test.go",

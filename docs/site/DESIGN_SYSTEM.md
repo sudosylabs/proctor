@@ -7,8 +7,8 @@ It is neither a marketing skin, an application dashboard, nor a collection of
 page-specific visual ideas.
 
 This document owns the durable visual language. The human-edited values live in
-[`docs/site/design-system/tokens.mjs`](../../../../docs/site/design-system/tokens.mjs). The
-generated [`tokens.css`](../../../../docs/site/src/css/tokens.css) is the Docusaurus adapter,
+[`docs/site/design-system/tokens.mjs`](design-system/tokens.mjs). The
+generated [`tokens.css`](src/css/tokens.css) is the Docusaurus adapter,
 and the design-system module supplies the approved palettes to the visual-asset
 validator. Edit the source module, not either adapter.
 
@@ -222,7 +222,7 @@ three sizes, and an update to the icon contract test.
 A diagram is a YAML layout in `docs/public/diagrams/<id>.yaml`, registered in
 the asset registry with `visual_system: proctor-diagrams-v2`. The grammar and
 its validator live in
-[`diagrams/index.mjs`](../../../../docs/site/diagrams/index.mjs); the
+[`diagrams/index.mjs`](diagrams/index.mjs); the
 `Diagram` component draws it. Authors choose structure and words, never
 coordinates or colours.
 
@@ -253,7 +253,7 @@ coordinates or colours.
 ## Vocabulary in visual design
 
 Use canonical Proctor terms from the repository
-[`glossary` skill](../../glossary/SKILL.md). A
+[glossary](../glossary.md). A
 diagram label is not a place to create a shorter synonym such as “session”
 for Exam Sitting or “group” for Class. If a canonical term makes the drawing
 too dense, simplify the drawing rather than rename the concept.
@@ -278,7 +278,7 @@ and search results must work with keyboard, pointer, and touch input.
 
 To change a durable token:
 
-1. Edit [`tokens.mjs`](../../../../docs/site/design-system/tokens.mjs).
+1. Edit [`tokens.mjs`](design-system/tokens.mjs).
 2. Update this document when meaning, allowed use, or geometry changes.
 3. From `docs/site`, run `npm run generate:design-system`.
 4. Run `npm run check:design-system` and `npm run test:design-system`.

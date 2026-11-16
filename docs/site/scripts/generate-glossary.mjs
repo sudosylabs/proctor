@@ -10,7 +10,7 @@ import {
 
 const siteRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = resolve(siteRoot, '../..');
-const glossarySkill = '.agents/skills/glossary/SKILL.md';
+const glossarySkill = 'docs/glossary.md';
 const terms = parseGlossary(
   await readFile(resolve(repoRoot, glossarySkill), 'utf8'),
 );

@@ -1,4 +1,4 @@
-// Generated from .agents/skills/glossary/SKILL.md. Do not edit by hand.
+// Generated from docs/glossary.md. Do not edit by hand.
 
 export type GlossaryTerm = {
   id: string;

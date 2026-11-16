@@ -2,10 +2,8 @@
 
 This document records what Proctor’s cluster transports promise and what they
 deliberately do not. It is normative for tests under `cluster/` and for
-application security recovery expectations. The
-[`runtime-operations` reference](../../.agents/skills/runtime-operations/references/runtime.md#cluster-transport)
-owns the cross-component rationale; this file is the transport-facing contract
-used by recovery tests.
+application security recovery expectations. Durable state in PostgreSQL is the
+authority; cluster delivery only makes other nodes notice sooner.
 
 ## Guarantees
 

@@ -45,7 +45,7 @@ func TestInvitationAdministrationUsesAuthorizedSafeLifecycleCommands(t *testing.
 	require.NotNil(t, persistence.resent, "Invitation resend = %#v / %#v", resent, persistence.resent)
 	require.NotEqual(t, invitation.ClaimHash, persistence.resent.ClaimHash, "Invitation resend = %#v / %#v", resent, persistence.resent)
 	require.NotContains(t, resent.String(), persistence.resent.ClaimHash, "Invitation resend = %#v / %#v", resent, persistence.resent)
-	require.Equal(t, 1, rendered.renders())
+	require.Equal(t, 1, rendered.Count())
 	require.Contains(t, openedMail(t, persistence.resent.Delivery).Text, "/join#token=", "Invitation resend = %#v / %#v", resent, persistence.resent)
 
 	revoked, err := service.RevokeInvitation(context.Background(), inv, RevokeInvitationCommand{ID: invitation.ID, ExpectedRevision: invitation.Revision})

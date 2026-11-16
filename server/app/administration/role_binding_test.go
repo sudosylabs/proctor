@@ -140,7 +140,7 @@ func TestRoleBindingCreateCommitsBeforeInvalidation(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, created.ID, got.ID)
-	require.Equal(t, 1, rendered.rendered)
+	require.Equal(t, 1, rendered.Count())
 	notice := service.roleBindings.(*roleBindingStoreFake).createInput.Notice
 	require.NotNil(t, notice)
 	require.Equal(t, model.MailTemplateAuthorizationInstitutionRoleAssigned, notice.Delivery.TemplateKey)
@@ -215,7 +215,7 @@ func TestRoleBindingEndFailurePublishesNoInvalidation(t *testing.T) {
 	_, available := persistence.endInput.Capabilities.Providers["campus"]
 	require.True(t, available, "Store capability snapshot = %#v, want configured campus provider", persistence.endInput.Capabilities)
 	require.NotNil(t, persistence.endInput.Notice, "role ending mail = %#v", persistence.endInput)
-	require.Equal(t, 1, rendered.rendered, "role ending mail = %#v", persistence.endInput)
+	require.Equal(t, 1, rendered.Count(), "role ending mail = %#v", persistence.endInput)
 	require.Equal(t, model.MailTemplateAuthorizationScopedRoleEnded, persistence.endInput.Notice.Delivery.TemplateKey, "role ending mail = %#v", persistence.endInput)
 	// Contract (guardrail 8): authorization precedes the audit, the audit begins
 	// before the durable write, and the audit outcome follows the write. The

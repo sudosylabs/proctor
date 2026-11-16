@@ -48,7 +48,7 @@ func TestRequestPasswordResetPreservesGenericResponseAndIssuedToken(t *testing.T
 	require.True(t, tokens.issued.ExpiresAt.Equal(now.Add(45*time.Minute)), "token expiry = %s", tokens.issued.ExpiresAt)
 	require.NotNil(t, tokens.event)
 	require.Equal(t, string(model.ActionAuthenticationPasswordResetRequest), tokens.event.Action)
-	require.Equal(t, 1, rendered.renders())
+	require.Equal(t, 1, rendered.Count())
 	require.NotNil(t, tokens.issuedMail, "prepared reset mail")
 	require.Equal(t, model.MailTemplateIdentityPasswordReset, tokens.issuedMail.Delivery.TemplateKey)
 	require.Contains(t, openedMail(t, tokens.issuedMail.Delivery).Text, "#token="+accountTokenTestRawToken)
@@ -94,7 +94,7 @@ func TestRequestPasswordResetConcealsAtomicEnqueueFailure(t *testing.T) {
 	require.NoError(t, app.RequestPasswordReset(context.Background(), invocation.Invocation{}, RequestPasswordResetCommand{Email: user.Email}))
 	require.NotNil(t, tokens.issuedMail, "prepared durable reset aggregate")
 	require.Equal(t, model.JobTypeMailDeliverCredential, tokens.issuedMail.Job.Type, "prepared durable reset aggregate")
-	require.Equal(t, 1, rendered.renders(), "prepared durable reset aggregate")
+	require.Equal(t, 1, rendered.Count(), "prepared durable reset aggregate")
 }
 
 func TestRequestPasswordResetCreatesNoIntentForDisabledOrExternalOnlyAccount(t *testing.T) {
@@ -119,7 +119,7 @@ func TestRequestPasswordResetCreatesNoIntentForDisabledOrExternalOnlyAccount(t *
 			})
 			require.NoError(t, app.RequestPasswordReset(context.Background(), invocation.Invocation{}, RequestPasswordResetCommand{Email: test.user.Email}))
 			require.Nil(t, tokens.issuedMail, "ineligible account intent")
-			require.Zero(t, rendered.renders(), "ineligible account intent")
+			require.Zero(t, rendered.Count(), "ineligible account intent")
 		})
 	}
 }
@@ -140,7 +140,7 @@ func TestRequestPasswordResetIsGenericAndInertWhenCurrentPolicyDisablesLocalLogi
 		Email: user.Email, Source: "192.0.2.7",
 	}))
 	require.Nil(t, tokens.issued, "disabled local recovery issued")
-	require.Zero(t, rendered.renders(), "disabled local recovery issued")
+	require.Zero(t, rendered.Count(), "disabled local recovery issued")
 }
 
 func TestCompletePasswordResetCommitsBeforeEffects(t *testing.T) {

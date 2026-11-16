@@ -164,12 +164,7 @@ func (c *connectionRuntime) handleRequest(
 			subscription.Action,
 			subscription.Resource.model(),
 		); err != nil {
-			code := apperror.Classify(err, "authorization.denied")
-			presentation := websocketErrorSubscriptionDenied
-			if code != "authorization.denied" {
-				presentation = websocketErrorSubscriptionFailed
-			}
-
+			code, presentation := subscriptionFailure(err)
 			c.enqueueError(request.Sequence, code, presentation)
 			return
 		}
@@ -487,6 +482,17 @@ func (c *connectionRuntime) handleExamAttemptBrowserAppend(ctx context.Context, 
 	}
 
 	c.enqueueResponse(request.Sequence, encoded)
+}
+
+// subscriptionFailure maps a refused subscription to its protocol code and
+// prose. An error without an application code is reported as a denial, so an
+// unclassified failure never reads as a transient one.
+func subscriptionFailure(err error) (apperror.Code, websocketErrorPresentation) {
+	code := apperror.Classify(err, "authorization.denied")
+	if code != "authorization.denied" {
+		return code, websocketErrorSubscriptionFailed
+	}
+	return code, websocketErrorSubscriptionDenied
 }
 
 func streamResult(err error) string {

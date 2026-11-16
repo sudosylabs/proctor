@@ -36,6 +36,7 @@ type identityFixture struct {
 	access    *accesstest.Fixture
 	cache     *identityCache
 	mail      *identityMailSender
+	renders   *mailtest.Renders
 	publisher *realtimetest.Publisher
 	// mfaSealer is the MFA key ring; nil unless the options enable MFA.
 	mfaSealer *secretseal.Sealer
@@ -109,7 +110,9 @@ func newIdentityFixture(t *testing.T, options identityOptions) *identityFixture 
 	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
 	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
 	require.NoError(t, err)
-	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: httpMailRenderer(t), Sender: fixture.mail, Sealer: sealer})
+	var renderer *mail.TemplateRenderer
+	renderer, fixture.renders = recordingHTTPMailRenderer(t)
+	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: renderer, Sender: fixture.mail, Sealer: sealer})
 	require.NoError(t, err)
 	hasher, err := identity.NewPasswordHasher(identity.PasswordHasherDependencies{Settings: identityPasswordPolicy()})
 	require.NoError(t, err)
@@ -422,35 +425,25 @@ func httpMailRenderer(t *testing.T) *mail.TemplateRenderer {
 	return mailtest.NewRendererWithPolicy(t, mail.RendererPolicy{AllowLoopbackHTTPDevelopment: true})
 }
 
-// identityMailSender is the deployment's mail transport. The Composer only
-// asks whether it is enabled and who mail is from, and it reads From once for
-// each message right after rendering it, so From counts rendered messages;
-// delivery Jobs send.
-type identityMailSender struct {
-	enabled bool
-
-	mu       sync.Mutex
-	rendered int
+// recordingHTTPMailRenderer is httpMailRenderer that records what it renders.
+func recordingHTTPMailRenderer(t *testing.T) (*mail.TemplateRenderer, *mailtest.Renders) {
+	t.Helper()
+	renders := &mailtest.Renders{}
+	return mailtest.NewRendererWithPolicy(t, mail.RendererPolicy{AllowLoopbackHTTPDevelopment: true, Rendered: renders.Record}), renders
 }
+
+// identityMailSender is the deployment's mail transport. The Composer only
+// asks whether it is enabled and who mail is from; delivery Jobs send.
+type identityMailSender struct{ enabled bool }
 
 func (s *identityMailSender) Enabled() bool { return s.enabled }
 
-func (s *identityMailSender) From() mail.Address {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.rendered++
+func (*identityMailSender) From() mail.Address {
 	return mail.Address{Name: "Proctor", Address: "no-reply@example.test"}
 }
 
 func (s *identityMailSender) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
 	return mail.TransportUnknown, nil
-}
-
-// renders returns how many messages the Composer rendered.
-func (s *identityMailSender) renders() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.rendered
 }
 
 // identityProviders is the external provider registry.

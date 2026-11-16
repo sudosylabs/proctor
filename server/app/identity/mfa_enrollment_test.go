@@ -68,7 +68,7 @@ func TestMFASecurityTransitionsPrepareOneOrdinaryNoticeWithoutSecrets(t *testing
 		session: &model.Session{ID: principal.SessionID, UserID: principal.UserID},
 	}
 	service := newTestMFAApplicationService(t, persistence, newSecurityAuditLog(t, nil), &realtimetest.Publisher{}, now)
-	composer, sender := newTestMail(t, true)
+	composer, renders := newTestMail(t, true)
 	service.mail = composer
 	application := service
 	inv := invocation.New(principal, model.RequestMetadata{RequestID: "mfa-notices"})
@@ -91,7 +91,7 @@ func TestMFASecurityTransitionsPrepareOneOrdinaryNoticeWithoutSecrets(t *testing
 	require.NoError(t, application.DisableMFA(context.Background(), inv))
 	// The real Composer rendered exactly one notice per transition, and each
 	// transition's write carries that notice for the acting User.
-	require.Equal(t, 3, sender.renders(), "mail preparations")
+	require.Equal(t, 3, renders.Count(), "mail preparations")
 	wantKeys := []model.MailTemplateKey{
 		model.MailTemplateIdentityMFAEnabled,
 		model.MailTemplateIdentityMFARecoveryCodesRegenerated,

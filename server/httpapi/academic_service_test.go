@@ -20,6 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
@@ -44,6 +45,7 @@ type academicFixture struct {
 	users        *academicUserRecords
 	bindings     *academicBindingRecords
 	mail         *identityMailSender
+	renders      *mailtest.Renders
 	publisher    *realtimetest.Publisher
 	service      *academic.Service
 }
@@ -92,8 +94,10 @@ func newAcademicFixture(t *testing.T, options academicOptions) *academicFixture 
 	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
 	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
 	require.NoError(t, err)
+	var renderer *mail.TemplateRenderer
+	renderer, fixture.renders = recordingHTTPMailRenderer(t)
 	composer, err := mail.NewComposer(mail.ComposerDependencies{
-		Renderer: httpMailRenderer(t), Sender: fixture.mail, Sealer: sealer,
+		Renderer: renderer, Sender: fixture.mail, Sealer: sealer,
 	})
 	require.NoError(t, err)
 

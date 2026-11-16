@@ -80,7 +80,7 @@ func TestFinalizeAndReleaseUseDistinctAuthorizationAndEffects(t *testing.T) {
 	require.Equal(t, model.MailTemplateExamResultReleased, notice.Delivery.TemplateKey, "notice=%#v", notice)
 	require.Equal(t, f.candidateID, notice.Delivery.TargetUserID, "notice=%#v", notice)
 	require.True(t, notice.Occurrence.CreatedAt.Equal(f.at.Add(time.Minute)), "notice=%#v", notice)
-	require.Equal(t, 1, f.sender.renders(), "rendered notices")
+	require.Equal(t, 1, f.renders.Count(), "rendered notices")
 	opened, openErr := mail.OpenDelivery(reviewMailSealer(t), notice.Delivery)
 	require.NoError(t, openErr)
 	require.Contains(t, opened.Text, "Exam: "+reviewExamTitle, "rendered notice")
@@ -105,7 +105,7 @@ func TestReleasePreparationFailureIsAuditedAsAttempt(t *testing.T) {
 	require.Len(t, attempts, 1, "audit=%#v release", attempts)
 	require.Equal(t, model.AuditStatusFail, attempts[0].Status, "audit=%#v release", attempts[0])
 	require.Equal(t, fault.Code(), attempts[0].ErrorCode, "audit=%#v release", attempts[0])
-	require.Zero(t, f.sender.renders(), "a refused release prepared a notice")
+	require.Zero(t, f.renders.Count(), "a refused release prepared a notice")
 	require.Nil(t, f.persistence.release, "audit=%#v release", attempts)
 }
 
@@ -118,7 +118,7 @@ func TestReleaseReplayReturnsRetainedResultWithoutPreparingMail(t *testing.T) {
 	require.NoError(t, err, "released=%#v error=%v", released, err)
 	require.True(t, released.Replayed, "released=%#v error=%v", released, err)
 	require.Empty(t, f.publisher.Calls(), "a replayed release republished")
-	require.Zero(t, f.sender.renders(), "a replayed release prepared a notice")
+	require.Zero(t, f.renders.Count(), "a replayed release prepared a notice")
 	require.NotNil(t, f.persistence.release, "released=%#v error=%v", released, err)
 	require.Nil(t, f.persistence.release.Notice, "released=%#v error=%v", released, err)
 }

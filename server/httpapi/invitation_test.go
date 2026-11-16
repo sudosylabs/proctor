@@ -266,7 +266,7 @@ func TestInvitationHTTPKeepsClaimOutOfIssueResponseAndAcceptsPublicly(t *testing
 	require.Equal(t, int64(1_800_000_000_000), issued.IntendedStartsAt.UnixMilli())
 	require.Equal(t, int64(1_810_000_000_500), issued.IntendedEndsAt.Time.UnixMilli())
 	require.Equal(t, "student-one", issued.Suggestions.Username)
-	require.Equal(t, 1, fixture.mail.renders(), "the claim was mailed")
+	require.Equal(t, 1, fixture.renders.Count(), "the claim was mailed")
 	require.Equal(t, model.MailTemplateAccessStudentClassInvitation, fixture.invitations.studentIssues[0].Delivery.TemplateKey, "the claim was mailed")
 
 	invitation, raw := fixture.pendingStudentInvitation(t, class, "pending@example.edu")

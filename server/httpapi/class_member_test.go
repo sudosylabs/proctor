@@ -46,7 +46,7 @@ func TestClassMemberHTTPUsesDTOAndRouteOwnedClass(t *testing.T) {
 	require.Equal(t, classID, enrolled.Member.ClassID)
 	require.Equal(t, user.ID, enrolled.Member.UserID)
 	require.Equal(t, world.period.ID, enrolled.Member.AcademicPeriodID, "the membership joins the Class's Period")
-	require.Equal(t, 1, fixture.mail.renders(), "one notice was rendered")
+	require.Equal(t, 1, fixture.renders.Count(), "one notice was rendered")
 	require.NotNil(t, enrolled.Notice, "the enrollment notice is stored with the membership")
 	require.Equal(t, model.MailTemplateAcademicClassEnrolled, enrolled.Notice.Delivery.TemplateKey)
 	var body map[string]any

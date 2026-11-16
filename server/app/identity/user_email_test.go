@@ -75,7 +75,7 @@ func TestEmailChangePreparesFrozenOldWarningAndNewTargetVerification(t *testing.
 	require.Equal(t, "old@example.edu", undo.Target, "the undo token must restore the previous address")
 	require.Equal(t, model.HashToken(accountTokenTestRawToken), undo.TokenHash, "the undo token must be stored only as a hash")
 	require.Equal(t, now.Add(72*time.Hour), undo.ExpiresAt)
-	require.Equal(t, 2, rendered.renders())
+	require.Equal(t, 2, rendered.Count())
 	warning := openedMail(t, tokens.emailChange.WarningDelivery)
 	require.Equal(t, "old@example.edu", warning.To.Address)
 	require.Equal(t, model.MailTemplateIdentityEmailChangeWarningOld, tokens.emailChange.WarningDelivery.TemplateKey)

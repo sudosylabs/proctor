@@ -252,40 +252,32 @@ func mailTestUser(principal model.Principal, at time.Time) *model.User {
 	return user
 }
 
-// newMail builds the production mail Composer over the real renderer and an
-// enabled sender, so every eligible recipient's message is rendered and
-// sealed.
-func newMail(t *testing.T, events *[]string) (*mail.Composer, *mailSenderFake) {
+// newMail builds the production mail Composer over an enabled sender, so
+// every eligible recipient's message is rendered and sealed, and over a
+// renderer that places "render-mail" in the log a test shares with its other
+// fakes.
+func newMail(t *testing.T, events *[]string) (*mail.Composer, *mailtest.Renders) {
 	t.Helper()
-	sender := &mailSenderFake{enabled: true, from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}, events: events}
+	renderer, renders := mailtest.NewRecordingRenderer(t, func(model.MailTemplateKey) {
+		*events = append(*events, "render-mail")
+	})
 	composer, err := mail.NewComposer(mail.ComposerDependencies{
-		Renderer: mailtest.NewRenderer(t),
-		Sender:   sender,
+		Renderer: renderer,
+		Sender:   mailSenderFake{},
 		Sealer:   mailTestSealer(t),
 	})
 	require.NoError(t, err)
-	return composer, sender
+	return composer, renders
 }
 
-// mailSenderFake is the mail transport port. The Composer reads From once
-// for each message, right after rendering it, so From places "render-mail"
-// in the log a test shares with its other fakes and counts the messages.
-type mailSenderFake struct {
-	enabled  bool
-	from     mail.Address
-	events   *[]string
-	rendered int
-}
+// mailSenderFake is an enabled mail transport port.
+type mailSenderFake struct{}
 
-func (s *mailSenderFake) Enabled() bool { return s.enabled }
-func (s *mailSenderFake) From() mail.Address {
-	if s.events != nil {
-		*s.events = append(*s.events, "render-mail")
-	}
-	s.rendered++
-	return s.from
+func (mailSenderFake) Enabled() bool { return true }
+func (mailSenderFake) From() mail.Address {
+	return mail.Address{Name: "Proctor", Address: "no-reply@example.test"}
 }
-func (s *mailSenderFake) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
+func (mailSenderFake) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
 	return mail.TransportUnknown, nil
 }
 

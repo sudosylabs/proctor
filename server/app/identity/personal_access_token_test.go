@@ -109,7 +109,7 @@ func TestPersonalAccessTokenAdministrationCreatesThroughFocusedContracts(t *test
 	require.NotEqual(t, raw, tokens.candidate.TokenHash)
 	require.Equal(t, userID, tokens.candidate.UserID, "save candidate = %#v, maximum", tokens.candidate)
 	require.Equal(t, 3, tokens.maximum, "save candidate = %#v, maximum", tokens.candidate)
-	require.Equal(t, 1, rendered.renders(), "mail requests")
+	require.Equal(t, 1, rendered.Count(), "mail requests")
 	require.Equal(t, model.MailTemplateIdentityPersonalAccessTokenCreated, tokens.notice.Delivery.TemplateKey)
 	notice := openedMail(t, tokens.notice.Delivery)
 	require.Contains(t, notice.Text, "Token: automation")
@@ -151,7 +151,7 @@ func TestPersonalAccessTokenAdministrationExactStateReplayEmitsNoAuditOrMail(t *
 	require.NoError(t, appErr, "SetDisabled(replay)")
 	require.Same(t, token, got, "SetDisabled(replay)")
 	require.Empty(t, tokens.audits, "replay audit")
-	require.Zero(t, rendered.renders(), "replay audit")
+	require.Zero(t, rendered.Count(), "replay audit")
 	require.Equal(t, 0, tokens.stateCalls, "replay audit")
 
 	token.RevokedAt = model.OptionalTimeFrom(now)
@@ -159,7 +159,7 @@ func TestPersonalAccessTokenAdministrationExactStateReplayEmitsNoAuditOrMail(t *
 	require.NoError(t, appErr, "Revoke(replay)")
 	require.Same(t, token, got, "Revoke(replay)")
 	require.Empty(t, tokens.audits, "replay audit")
-	require.Zero(t, rendered.renders(), "replay audit")
+	require.Zero(t, rendered.Count(), "replay audit")
 	require.Equal(t, 0, tokens.revokeCalls, "replay audit")
 }
 
@@ -220,7 +220,7 @@ func TestPersonalAccessTokenAdministrationUsesControlledClockForStateChanges(t *
 	require.NoError(t, err)
 	require.Equal(t, now.UnixMilli(), tokens.revokedAt, "revoked at")
 	require.Equal(t, model.MailTemplateIdentityPersonalAccessTokenRevoked, tokens.notice.Delivery.TemplateKey, "revoke notice")
-	require.Equal(t, 3, rendered.renders(), "mail requests")
+	require.Equal(t, 3, rendered.Count(), "mail requests")
 }
 
 func TestPersonalAccessTokenAdministrationRequiresRecentSessionForCreationAndEnablement(t *testing.T) {
@@ -429,8 +429,8 @@ func TestPersonalAccessTokenAdministrationTerminalizesPreparationWhenRenderingFa
 	userID := model.NewUserID()
 	token := personalAccessTokenForTest(userID, now)
 	tokens := &personalAccessTokenStoreFake{current: token, preparedAt: now}
-	preparer, rendered := newTestMail(t, true)
-	rendered.fail()
+	preparer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: mailtest.NewRenderer(t), Sender: &mailSenderFake{enabled: true, failing: true}, Sealer: mailTestSealer(t)})
+	require.NoError(t, err)
 	service, err := personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: &personalAccessTokenUserStoreFake{}, academicUnits: &personalAccessTokenAcademicUnitStoreFake{}, institutions: &personalAccessTokenInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, securityAudit: newSecurityAuditLog(t, nil).auditor, authorizer: grantedAccess(t, nil).Authorizer, mail: preparer, personalAccessTokenPolicy: PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 3}, recentAuthenticationTTL: 15 * time.Minute, newCredential: func() string { return "credential" }, now: func() time.Time { return now }})
 	require.NoError(t, err)
 	_, appErr := service.SetPersonalAccessTokenDisabled(context.Background(), invocation.New(personalAccessTokenSessionPrincipal(userID, now), model.RequestMetadata{}), SetPersonalAccessTokenDisabledCommand{TokenID: token.ID, Disabled: true})

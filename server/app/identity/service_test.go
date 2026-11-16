@@ -271,19 +271,14 @@ func oldSealerKeyID(t *testing.T, key string) string {
 	return sealer.PrimaryKeyID()
 }
 
-// mailSenderFake is the mail transport port. The Composer reads From once
-// for each message, right after rendering it, so From counts the rendered
-// messages and places "prepare-mail" in events when a test shares its log. A
-// failing sender answers an invalid From address, which makes mail
-// preparation fail.
+// mailSenderFake is the mail transport port. A failing sender answers an
+// invalid From address, which makes mail preparation fail.
 type mailSenderFake struct {
 	enabled bool
 	from    mail.Address
-	events  *[]string
 
-	mu       sync.Mutex
-	failing  bool
-	rendered int
+	mu      sync.Mutex
+	failing bool
 }
 
 func (s *mailSenderFake) Enabled() bool { return s.enabled }
@@ -291,10 +286,6 @@ func (s *mailSenderFake) Enabled() bool { return s.enabled }
 func (s *mailSenderFake) From() mail.Address {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.rendered++
-	if s.events != nil {
-		*s.events = append(*s.events, "prepare-mail")
-	}
 	if s.failing {
 		return mail.Address{}
 	}
@@ -310,13 +301,6 @@ func (s *mailSenderFake) fail() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.failing = true
-}
-
-// renders returns how many messages were rendered.
-func (s *mailSenderFake) renders() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.rendered
 }
 
 // openedMail opens a delivery sealed with mailTestSealer, so a test reads the
@@ -426,19 +410,20 @@ func decodedAuditData(t testing.TB, raw json.RawMessage) any {
 	return value
 }
 
-// newTestMail builds the production mail Composer over the real renderer. An
-// enabled sender queues rendered mail; a disabled one makes the Composer
-// record suppressed mail without rendering it.
-func newTestMail(t testing.TB, enabled bool) (*mail.Composer, *mailSenderFake) {
+// newTestMail builds the production mail Composer over the real renderer and
+// returns the record of what it rendered. An enabled sender queues rendered
+// mail; a disabled one makes the Composer record suppressed mail without
+// rendering it.
+func newTestMail(t testing.TB, enabled bool) (*mail.Composer, *mailtest.Renders) {
 	t.Helper()
-	sender := &mailSenderFake{enabled: enabled, from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}}
+	renderer, renders := mailtest.NewRecordingRenderer(t, nil)
 	composer, err := mail.NewComposer(mail.ComposerDependencies{
-		Renderer: mailtest.NewRenderer(t),
-		Sender:   sender,
+		Renderer: renderer,
+		Sender:   &mailSenderFake{enabled: enabled, from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}},
 		Sealer:   mailTestSealer(t),
 	})
 	require.NoError(t, err)
-	return composer, sender
+	return composer, renders
 }
 
 // mailRecipient is an active User the real Composer can address.

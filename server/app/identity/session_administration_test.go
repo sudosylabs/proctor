@@ -19,6 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/internal/batchitem"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -68,13 +69,13 @@ func (s *sessionAdministrationStoreFake) RevokeAllForUser(_ context.Context, inp
 
 // sessionAdministrationTest is a Service built for Session administration,
 // the invocation of an administrator who holds session.view and
-// session.manage Institution-wide, the real auditor's fixture and the
-// sender of the real mail Composer.
+// session.manage Institution-wide, the real auditor's fixture and what the
+// real mail Composer rendered.
 type sessionAdministrationTest struct {
 	service *Service
 	inv     invocation.Invocation
 	access  *accesstest.Fixture
-	sender  *mailSenderFake
+	renders *mailtest.Renders
 }
 
 // newSessionAdministrationTest builds it. The authorizer's reads and
@@ -87,9 +88,9 @@ func newSessionAdministrationTest(t *testing.T, events *[]string, sessions store
 		Grants: []accesstest.Grant{institutionGrant(principal.UserID, model.ActionSessionView, model.ActionSessionManage)},
 		Users:  accountStateResolvedUsers{},
 	})
-	composer, sender := accountStateMail(t, events)
+	composer, _, renders := accountStateMail(t, events)
 	service := withAccess(&Service{sessions: sessions, users: users, mail: composer, publisher: sessionAdministrationPublisher(events), now: now}, fixture)
-	return sessionAdministrationTest{service: service, inv: invocation.New(principal, model.RequestMetadata{}), access: fixture, sender: sender}
+	return sessionAdministrationTest{service: service, inv: invocation.New(principal, model.RequestMetadata{}), access: fixture, renders: renders}
 }
 
 // sessionAdministrationPublisher returns a recording Publisher that also
@@ -205,7 +206,7 @@ func TestAdminSessionRevokeCommitsBeforePublishing(t *testing.T) {
 	require.NoError(t, service.RevokeUserSession(context.Background(), test.inv, model.UserID(userID), session.ID))
 	require.Equal(t, session.ID, persistence.revokeInput.SessionID)
 	require.NotEmpty(t, persistence.revokeInput.AuditEventID)
-	require.Equal(t, 1, test.sender.renders(), "mail input = %#v", persistence.revokeInput)
+	require.Equal(t, 1, test.renders.Count(), "mail input = %#v", persistence.revokeInput)
 	require.NotNil(t, persistence.revokeInput.Occurrence, "mail input = %#v", persistence.revokeInput)
 	require.NotNil(t, persistence.revokeInput.Delivery, "mail input = %#v", persistence.revokeInput)
 	require.Equal(t, model.MailTemplateIdentitySessionsRevokedByAdmin, persistence.revokeInput.Delivery.TemplateKey, "mail input = %#v", persistence.revokeInput)
@@ -271,7 +272,7 @@ func TestAdminSessionIdempotentNoOpPreparesNoticeForAuthoritativeRace(t *testing
 	service := test.service
 	inv := test.inv
 	require.NoError(t, service.RevokeUserSessions(context.Background(), inv, RevokeUserSessionsCommand{UserID: model.UserID(userID), IdempotencyKey: "row"}))
-	require.Equal(t, 1, test.sender.renders(), "idempotent no-op mail")
+	require.Equal(t, 1, test.renders.Count(), "idempotent no-op mail")
 	require.NotNil(t, persistence.revokeAllInput, "idempotent no-op mail")
 	require.NotNil(t, persistence.revokeAllInput.Occurrence, "idempotent no-op mail")
 }
@@ -287,7 +288,7 @@ func TestAdminSessionRetainedOutcomeBypassesMailAfterNewSession(t *testing.T) {
 	service := test.service
 	inv := test.inv
 	require.NoError(t, service.RevokeUserSessions(context.Background(), inv, RevokeUserSessionsCommand{UserID: model.UserID(userID), IdempotencyKey: "row", Batch: batchitem.New(batchitem.Fields{RetainedOutcome: true})}))
-	require.Zero(t, test.sender.renders(), "retained mail")
+	require.Zero(t, test.renders.Count(), "retained mail")
 	require.Equal(t, []string{"grants", "decision:session.manage:success", "get-user", "audit-begin:session.manage", "store-revoke-all"}, events)
 }
 

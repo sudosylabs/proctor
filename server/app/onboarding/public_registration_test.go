@@ -71,7 +71,7 @@ func TestPublicRegistrationPreparesOneAtomicUnverifiedLocalAccount(t *testing.T)
 	require.Equal(t, string(model.ActionAuthenticationPublicRegistration), input.AuditEvent.Action)
 	require.NotContains(t, string(input.AuditEvent.Parameters), input.User.Email)
 	require.NotContains(t, string(input.AuditEvent.Parameters), "correct horse")
-	require.Equal(t, 1, rendered.renders())
+	require.Equal(t, 1, rendered.Count())
 	verification := openedMail(t, input.VerificationDelivery).Text
 	require.Contains(t, verification, "#token="+rawToken)
 	require.NotContains(t, verification, input.VerificationToken.TokenHash)
@@ -109,7 +109,7 @@ func TestPublicRegistrationFailsClosedBeforeAccountPreparationWhenPolicyOrMailDi
 			})
 			require.True(t, apperror.Is(err, test.wantCode), "Register() = %v, want %s", err, test.wantCode)
 			require.Nil(t, persistence.input, "disabled registration reached preparation: input")
-			require.Zero(t, rendered.renders(), "disabled registration reached preparation: input")
+			require.Zero(t, rendered.Count(), "disabled registration reached preparation: input")
 		})
 	}
 }
@@ -158,8 +158,7 @@ func TestPublicRegistrationMailAndPersistenceFailuresCreateNoPartialApplicationS
 	t.Parallel()
 
 	mailFailureStore := &publicRegistrationStoreFake{}
-	failingMail, failingRender := newTestMail(t, true)
-	failingRender.fail()
+	failingMail, _ := newTestMailOver(t, &mailSenderFake{enabled: true, failing: true})
 	mailFailure := newTestPublicRegistrationService(t, mailFailureStore, failingMail, time.Now())
 	command := RegisterLocalUserCommand{
 		Username: "student", Email: "student@example.edu", FirstName: "New", LastName: "Student",
@@ -185,7 +184,7 @@ func TestPublicRegistrationPasswordWorkFailuresStopBeforeMailAndPersistence(t *t
 			Password: "correct horse battery staple", Source: "192.0.2.33",
 		})
 		require.Nil(t, persistence.input, "failed password work reached registration mail or persistence")
-		require.Zero(t, rendered.renders(), "failed password work reached registration mail or persistence")
+		require.Zero(t, rendered.Count(), "failed password work reached registration mail or persistence")
 		return err
 	})
 }
@@ -202,7 +201,7 @@ func TestPublicRegistrationRejectsAnInvalidPasswordBeforeMailOrPersistence(t *te
 	})
 	require.True(t, apperror.Is(err, "authentication.password.invalid"), "invalid password = %v", err)
 	require.Nil(t, persistence.input, "invalid password reached mail/Store: calls")
-	require.Zero(t, rendered.renders(), "invalid password reached mail/Store: calls")
+	require.Zero(t, rendered.Count(), "invalid password reached mail/Store: calls")
 }
 
 func TestPublicRegistrationRequiresFirstAndLastNamesBeforeCredentialPreparation(t *testing.T) {
@@ -229,7 +228,7 @@ func TestPublicRegistrationRequiresFirstAndLastNamesBeforeCredentialPreparation(
 			})
 			require.True(t, apperror.Is(err, "authentication.registration.invalid"), "missing personal name = %v", err)
 			require.Nil(t, persistence.input, "invalid personal name reached mail/Store: calls")
-			require.Zero(t, rendered.renders(), "invalid personal name reached mail/Store: calls")
+			require.Zero(t, rendered.Count(), "invalid personal name reached mail/Store: calls")
 		})
 	}
 }

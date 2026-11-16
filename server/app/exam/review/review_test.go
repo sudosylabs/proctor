@@ -13,7 +13,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"sync"
 	"testing"
 	"time"
 
@@ -40,10 +39,10 @@ type reviewFixture struct {
 	// Sitting service decides for them as it does for a current manager.
 	control   *accesstest.Fixture
 	publisher *realtimetest.Publisher
-	// sender counts the result-release notices the real mail composer
+	// renders records the result-release notices the real mail composer
 	// rendered.
-	sender *reviewMailSenderFake
-	userID model.UserID
+	renders *mailtest.Renders
+	userID  model.UserID
 	// candidateID made the Submission; the caller is another User, so the
 	// real authorizer does not deny them as its candidate.
 	candidateID  model.UserID
@@ -75,12 +74,12 @@ func newReviewFixture(t *testing.T) *reviewFixture {
 		Now:         func() time.Time { return f.at },
 	})
 	f.publisher = &realtimetest.Publisher{}
-	renderer := mailtest.NewRenderer(t)
 	sittings := reviewSittingStoreFake{f: f}
-	f.sender = &reviewMailSenderFake{enabled: true}
-	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: renderer, Sender: f.sender, Sealer: reviewMailSealer(t)})
+	var renderer *mail.TemplateRenderer
+	renderer, f.renders = mailtest.NewRecordingRenderer(t, nil)
+	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: renderer, Sender: &reviewMailSenderFake{enabled: true}, Sealer: reviewMailSealer(t)})
 	require.NoError(t, err)
-	scheduleComposer, err := mail.NewSittingComposer(mail.SittingComposerDependencies{Renderer: renderer,
+	scheduleComposer, err := mail.NewSittingComposer(mail.SittingComposerDependencies{Renderer: mailtest.NewRenderer(t),
 		Sender: &reviewMailSenderFake{}, Now: func() time.Time { return f.at }})
 	require.NoError(t, err)
 	sittingService, err := sitting.New(sitting.Dependencies{
@@ -279,29 +278,12 @@ type reviewClassesFake struct{ store.ClassStore }
 
 type reviewLifecycleJobsFake struct{ sitting.LifecycleJobFactory }
 
-// reviewMailSenderFake is the mail transport port. The mail composer reads
-// From once for each notice, right after rendering it, so From counts the
-// rendered notices.
-type reviewMailSenderFake struct {
-	enabled bool
-
-	mu       sync.Mutex
-	rendered int
-}
+// reviewMailSenderFake is the mail transport port.
+type reviewMailSenderFake struct{ enabled bool }
 
 func (s *reviewMailSenderFake) Enabled() bool { return s.enabled }
-func (s *reviewMailSenderFake) From() mail.Address {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.rendered++
+func (*reviewMailSenderFake) From() mail.Address {
 	return mail.Address{Name: "Proctor", Address: "no-reply@example.test"}
-}
-
-// renders returns how many notices were rendered.
-func (s *reviewMailSenderFake) renders() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.rendered
 }
 func (*reviewMailSenderFake) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
 	return mail.TransportUnknown, errors.New("review tests send no mail")

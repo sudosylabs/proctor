@@ -132,7 +132,7 @@ func TestClassMemberEnrollUsesDestinationPeriodAndAtomicStore(t *testing.T) {
 	require.True(t, model.TimeUTC(enrollment.Membership.CreatedAt).Equal(persistence.enrollInput.AuditAt), "clock calls/creation/audit time")
 	require.NotNil(t, persistence.enrollInput.Notice, "enrollment mail/input = %#v", persistence.enrollInput)
 	require.Equal(t, model.MailTemplateAcademicClassEnrolled, persistence.enrollInput.Notice.Occurrence.TemplateKey, "enrollment mail/input = %#v", persistence.enrollInput)
-	require.Equal(t, 1, rendered.rendered, "enrollment mail/input = %#v", persistence.enrollInput)
+	require.Equal(t, 1, rendered.Count(), "enrollment mail/input = %#v", persistence.enrollInput)
 	require.Contains(t, openedNotice(t, persistence.enrollInput.Notice).Text, classes.value.DisplayName, "enrollment mail/input = %#v", persistence.enrollInput)
 	require.False(t, persistence.enrollInput.ExpectedPreviousID.IsValid(), "enrollment mail/input = %#v", persistence.enrollInput)
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
@@ -192,7 +192,7 @@ func TestClassMemberRetainedEnrollmentBypassesChangedMembershipAndMail(t *testin
 		UserID: model.NewUserID(), StartAt: 100, IdempotencyKey: "row", Batch: batchitem.New(batchitem.Fields{RetainedOutcome: true})})
 	require.NoError(t, err, "retained enrollment")
 	require.NotNil(t, result, "retained enrollment")
-	require.Zero(t, rendered.rendered, "retained enrollment")
+	require.Zero(t, rendered.Count(), "retained enrollment")
 	// The only Class read resolves the Class's scope for the decision.
 	require.Equal(t, []string{"get-class", "grants", "decision:class.members.manage:success", "audit-begin:class.members.manage", "store-enroll"}, events)
 	require.NotNil(t, persistence.enrollInput, "retained enrollment")
@@ -217,7 +217,7 @@ func TestClassMemberAlreadySatisfiedEnrollmentPreparesNoticeForAuthoritativeRace
 	require.NotNil(t, result, "already-satisfied enrollment")
 	require.NotNil(t, persistence.enrollInput, "already-satisfied enrollment")
 	require.NotNil(t, persistence.enrollInput.Notice, "already-satisfied enrollment")
-	require.Equal(t, 1, rendered.rendered, "already-satisfied enrollment")
+	require.Equal(t, 1, rendered.Count(), "already-satisfied enrollment")
 }
 
 func TestClassMemberEnrollCommitsTerminalNoticeForInactiveRecipient(t *testing.T) {
@@ -243,7 +243,7 @@ func TestClassMemberEnrollCommitsTerminalNoticeForInactiveRecipient(t *testing.T
 	require.Equal(t, model.MailDeliverySuppressed, persistence.enrollInput.Notice.Delivery.State)
 	require.Equal(t, model.MailDeliveryRecipientIneligibleCode, persistence.enrollInput.Notice.Delivery.PublicFailureCode)
 	require.Equal(t, model.JobStatusCanceled, persistence.enrollInput.Notice.Job.Status)
-	require.Zero(t, rendered.rendered, "an inactive recipient's notice is never rendered")
+	require.Zero(t, rendered.Count(), "an inactive recipient's notice is never rendered")
 	require.Empty(t, persistence.enrollInput.Notice.Delivery.EncryptedPayload, "an inactive recipient's notice is never rendered")
 }
 
@@ -271,7 +271,7 @@ func TestClassMemberTransferAuthorizesSourceAndCreatesOneTransferNotice(t *testi
 				Metadata: &store.CommandBatch{GroupDigest: [32]byte{1}}})})
 	require.NoError(t, err)
 	require.Equal(t, model.MailTemplateAcademicClassTransferred, persistence.enrollInput.Notice.Occurrence.TemplateKey, "transfer mail/input = %#v", persistence.enrollInput)
-	require.Equal(t, 1, rendered.rendered, "transfer mail/input = %#v", persistence.enrollInput)
+	require.Equal(t, 1, rendered.Count(), "transfer mail/input = %#v", persistence.enrollInput)
 	transfer := openedNotice(t, persistence.enrollInput.Notice).Text
 	require.Contains(t, transfer, source.DisplayName, "transfer mail/input = %#v", persistence.enrollInput)
 	require.Contains(t, transfer, destination.DisplayName, "transfer mail/input = %#v", persistence.enrollInput)
@@ -321,7 +321,7 @@ func TestClassMemberEndCarriesRevision(t *testing.T) {
 	require.Equal(t, int64(4), persistence.endInput.ExpectedRevision, "end input/result = %#v / %#v", persistence.endInput, ended)
 	require.Equal(t, int64(5), ended.Revision, "end input/result = %#v / %#v", persistence.endInput, ended)
 	require.Equal(t, users.value.Revision, persistence.endInput.ExpectedRecipientRevision, "end expected recipient revision")
-	require.Equal(t, 1, rendered.rendered, "end mail/input = %#v", persistence.endInput)
+	require.Equal(t, 1, rendered.Count(), "end mail/input = %#v", persistence.endInput)
 	require.Equal(t, model.MailTemplateAcademicClassEnrollmentEnded, persistence.endInput.Notice.Occurrence.TemplateKey, "end mail/input = %#v", persistence.endInput)
 	require.NotNil(t, persistence.endInput.Notice, "end mail/input = %#v", persistence.endInput)
 	// Contract (guardrail 8): authorization precedes the audit, and the audit

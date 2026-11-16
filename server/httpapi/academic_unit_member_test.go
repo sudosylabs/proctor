@@ -74,7 +74,7 @@ func TestAcademicUnitMemberResourceRunsThroughRoutingKernel(t *testing.T) {
 	require.Equal(t, member.ID, stored.Member.UserID)
 	require.Equal(t, model.TimeFromMillis(100), stored.Member.StartsAt)
 	require.NotNil(t, stored.Notice, "the assignment notice is stored with the membership")
-	require.Equal(t, 1, fixture.mail.renders(), "one notice was rendered")
+	require.Equal(t, 1, fixture.renders.Count(), "one notice was rendered")
 	require.Equal(t, model.MailTemplateAcademicUnitAssigned, stored.Notice.Delivery.TemplateKey)
 	var body map[string]any
 	require.NoError(t, json.Unmarshal(created.Body.Bytes(), &body))

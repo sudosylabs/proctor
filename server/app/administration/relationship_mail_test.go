@@ -46,33 +46,31 @@ func (relationshipUserStoreTestFake) ListIdentities(_ context.Context, ids []mod
 }
 
 // newMail builds the production mail Composer over the real renderer and an
-// enabled sender, so every eligible recipient's message is rendered.
-func newMail(t *testing.T) (*mail.Composer, *mailSenderFake) {
+// enabled sender, so every eligible recipient's message is rendered, and
+// returns the record of what it rendered.
+func newMail(t *testing.T) (*mail.Composer, *mailtest.Renders) {
 	t.Helper()
-	sender := &mailSenderFake{}
+	renderer, renders := mailtest.NewRecordingRenderer(t, nil)
 	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
 	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
 	require.NoError(t, err)
 	composer, err := mail.NewComposer(mail.ComposerDependencies{
-		Renderer: mailtest.NewRenderer(t),
-		Sender:   sender,
+		Renderer: renderer,
+		Sender:   mailSenderFake{},
 		Sealer:   sealer,
 	})
 	require.NoError(t, err)
-	return composer, sender
+	return composer, renders
 }
 
-// mailSenderFake is the mail transport port. The Composer reads From once
-// for each message, right after rendering it, so rendered counts the
-// messages.
-type mailSenderFake struct{ rendered int }
+// mailSenderFake is an enabled mail transport port.
+type mailSenderFake struct{}
 
-func (*mailSenderFake) Enabled() bool { return true }
-func (s *mailSenderFake) From() mail.Address {
-	s.rendered++
+func (mailSenderFake) Enabled() bool { return true }
+func (mailSenderFake) From() mail.Address {
 	return mail.Address{Name: "Proctor", Address: "no-reply@example.test"}
 }
 
-func (*mailSenderFake) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
+func (mailSenderFake) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
 	return mail.TransportUnknown, nil
 }

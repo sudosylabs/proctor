@@ -743,6 +743,14 @@ func TestConnectionRuntimePreservesInboundErrorContract(t *testing.T) {
 			require.Equal(t, 0, count, "failed command retained")
 		})
 	}
+	// Real admission returns only application errors, so no row above
+	// reaches the fallback for an untyped one; the mapping is tested directly.
+	t.Run("untyped authorization error", func(t *testing.T) {
+		t.Parallel()
+		code, presentation := subscriptionFailure(errors.New("policy lookup denied"))
+		require.Equal(t, apperror.Code("authorization.denied"), code)
+		require.Equal(t, "WebSocket subscription denied.", websocketErrorMessage(presentation).fallback)
+	})
 }
 
 func TestConnectionRuntimeRevokesInvalidPrincipal(t *testing.T) {

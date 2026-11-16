@@ -264,7 +264,7 @@ func TestEmailMutationResponsesUseNarrowAccountStateProjection(t *testing.T) {
 	require.Len(t, attempts, 2)
 	require.Equal(t, attempts[0].ID, tokens.changes[0].AuditEventID)
 	require.Equal(t, attempts[1].ID, tokens.verifications[0].AuditEventID)
-	require.Equal(t, 3, identityFixture.mail.renders(), "three notices were rendered")
+	require.Equal(t, 3, identityFixture.renders.Count(), "three notices were rendered")
 	require.Equal(t, model.MailTemplateIdentityEmailChangeWarningOld, tokens.changes[0].WarningDelivery.TemplateKey)
 	require.Equal(t, model.MailTemplateIdentityEmailChangeVerifyNew, tokens.changes[0].VerificationDelivery.TemplateKey)
 	require.Len(t, tokens.verifications, 1)
@@ -588,7 +588,7 @@ func TestAccountDisableUsesApplicationCommandAndAllowlistedResponse(t *testing.T
 	require.Equal(t, model.AuditOperationDisableAccount, attempts[0].Operation())
 	_, reasoned := auditValue(t, attempts[0])["reason"]
 	require.False(t, reasoned, "a request without a body carries no reason")
-	require.Equal(t, 1, test.fixture.mail.renders(), "one notice was rendered")
+	require.Equal(t, 1, test.fixture.renders.Count(), "one notice was rendered")
 	require.Equal(t, model.MailTemplateIdentityAccountDisabled, change.Delivery.TemplateKey)
 }
 

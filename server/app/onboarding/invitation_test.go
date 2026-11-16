@@ -360,7 +360,7 @@ func TestInvitationServiceIssuesAndAcceptsWithoutPersistingRawClaim(t *testing.T
 	require.NotContains(t, view.String(), raw, "unsafe or incomplete issue: view=%#v input=%#v url", view, persistence.issued)
 	require.Equal(t, model.HashInvitationClaim(raw), persistence.issued.Invitation.ClaimHash, "unsafe or incomplete issue: view=%#v input=%#v url", view, persistence.issued)
 	require.NotContains(t, string(persistence.issued.Delivery.EncryptedPayload), raw, "unsafe or incomplete issue: view=%#v input=%#v url", view, persistence.issued)
-	require.Equal(t, 1, rendered.renders())
+	require.Equal(t, 1, rendered.Count())
 	require.Contains(t, openedMail(t, persistence.issued.Delivery).Text, "/join#token="+raw, "unsafe or incomplete issue: view=%#v input=%#v url", view, persistence.issued)
 	require.Equal(t, []model.Action{model.ActionInvitationCreate, model.ActionClassMembersManage}, decidedActions(authorization))
 	result, err := service.AcceptStudentClassInvitation(context.Background(), invocation.Invocation{}, AcceptStudentClassInvitationCommand{

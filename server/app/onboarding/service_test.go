@@ -245,23 +245,19 @@ func auditParameters(t *testing.T, event *model.AuditEvent) (string, map[string]
 	return parameters.Operation, parameters.Value
 }
 
-// mailSenderFake is the mail transport port. The Composer reads From once
-// for each message, right after rendering it, so the fake counts rendered
-// messages; a failing sender answers an invalid From address, which makes
-// mail preparation fail.
+// mailSenderFake is the mail transport port. A failing sender answers an
+// invalid From address, which makes mail preparation fail.
 type mailSenderFake struct {
 	enabled bool
 
-	mu       sync.Mutex
-	failing  bool
-	rendered int
+	mu      sync.Mutex
+	failing bool
 }
 
 func (s *mailSenderFake) Enabled() bool { return s.enabled }
 func (s *mailSenderFake) From() mail.Address {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.rendered++
 	if s.failing {
 		return mail.Address{}
 	}
@@ -278,13 +274,6 @@ func (s *mailSenderFake) fail() {
 	s.failing = true
 }
 
-// renders returns how many messages were rendered.
-func (s *mailSenderFake) renders() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.rendered
-}
-
 func testMailSealer(t testing.TB) *secretseal.Sealer {
 	t.Helper()
 	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
@@ -293,15 +282,22 @@ func testMailSealer(t testing.TB) *secretseal.Sealer {
 	return sealer
 }
 
-// newTestMail builds the production mail Composer over the real renderer. An
-// enabled sender queues rendered mail; a disabled one makes the Composer
-// record suppressed mail without rendering it.
-func newTestMail(t testing.TB, enabled bool) (*mail.Composer, *mailSenderFake) {
+// newTestMail builds the production mail Composer over the real renderer and
+// returns the record of what it rendered. An enabled sender queues rendered
+// mail; a disabled one makes the Composer record suppressed mail without
+// rendering it.
+func newTestMail(t testing.TB, enabled bool) (*mail.Composer, *mailtest.Renders) {
 	t.Helper()
-	sender := &mailSenderFake{enabled: enabled}
-	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: mailtest.NewRenderer(t), Sender: sender, Sealer: testMailSealer(t)})
+	return newTestMailOver(t, &mailSenderFake{enabled: enabled})
+}
+
+// newTestMailOver is newTestMail over sender, so a test can make it fail.
+func newTestMailOver(t testing.TB, sender *mailSenderFake) (*mail.Composer, *mailtest.Renders) {
+	t.Helper()
+	renderer, renders := mailtest.NewRecordingRenderer(t, nil)
+	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: renderer, Sender: sender, Sealer: testMailSealer(t)})
 	require.NoError(t, err)
-	return composer, sender
+	return composer, renders
 }
 
 // openedMail opens a prepared delivery, so a test reads the message its

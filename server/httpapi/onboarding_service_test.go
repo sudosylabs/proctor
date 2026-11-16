@@ -25,6 +25,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/app/user"
@@ -60,6 +61,7 @@ type onboardingFixture struct {
 	accessPolicy *onboardingAccessPolicy
 	attempts     *identityCache
 	mail         *identityMailSender
+	renders      *mailtest.Renders
 	publisher    *realtimetest.Publisher
 
 	service        *onboarding.Service
@@ -116,7 +118,9 @@ func newOnboardingFixture(t *testing.T) *onboardingFixture {
 	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
 	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
 	require.NoError(t, err)
-	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: httpMailRenderer(t), Sender: fixture.mail, Sealer: sealer})
+	var renderer *mail.TemplateRenderer
+	renderer, fixture.renders = recordingHTTPMailRenderer(t)
+	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: renderer, Sender: fixture.mail, Sealer: sealer})
 	require.NoError(t, err)
 	hasher, err := identity.NewPasswordHasher(identity.PasswordHasherDependencies{Settings: identityPasswordPolicy()})
 	require.NoError(t, err)

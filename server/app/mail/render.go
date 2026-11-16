@@ -83,6 +83,7 @@ type TemplateRenderer struct {
 	allowLoopbackHTTPDevelopment bool
 	supportAddress               string
 	displayLocation              *time.Location
+	rendered                     func(RenderRequest)
 }
 
 // RendererPolicy holds composition-proven transport exceptions and
@@ -95,6 +96,9 @@ type RendererPolicy struct {
 	// DisplayTimezone is the IANA zone for recipients whose own zone is unset
 	// or the UTC default. Empty means UTC.
 	DisplayTimezone string
+	// Rendered, when set, sees each request Render rendered, so a test can
+	// observe rendering itself. Composition leaves it nil.
+	Rendered func(RenderRequest)
 }
 
 // NewRenderer builds a renderer with the default policy.
@@ -127,6 +131,7 @@ func (r *TemplateRenderer) applyPolicy(policy RendererPolicy) error {
 		return err
 	}
 	r.displayLocation = location
+	r.rendered = policy.Rendered
 	return nil
 }
 
@@ -340,7 +345,11 @@ func (r *TemplateRenderer) Render(request RenderRequest) (FrozenContent, error) 
 		return FrozenContent{}, errors.New("mail presentation is invalid")
 	}
 
-	return r.renderContent(internal)
+	content, err := r.renderContent(internal)
+	if err == nil && r.rendered != nil {
+		r.rendered(request)
+	}
+	return content, err
 }
 
 // SittingLocales reports the default and supported locales, so a sitting

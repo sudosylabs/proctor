@@ -43,6 +43,15 @@ type Options struct {
 	// authorizer and the service under test see the same Users; nil means
 	// no User resolves.
 	Users store.UserStore
+	// Classes, AcademicPeriods, Programmes and ProgrammeLevels resolve the
+	// resources of those types. Pass the test's own stores so the authorizer
+	// and the service under test see the same records. A nil Classes or
+	// AcademicPeriods resolves nothing; nil Programmes or ProgrammeLevels
+	// leaves those resources unavailable, as production does without them.
+	Classes         store.ClassStore
+	AcademicPeriods store.AcademicPeriodStore
+	Programmes      store.ProgrammeStore
+	ProgrammeLevels store.ProgrammeLevelStore
 	// Now is the decision clock; nil means time.Now.
 	Now func() time.Time
 	// Observe, when set, is told what the authorizer and auditor do, in
@@ -84,6 +93,14 @@ func New(t testing.TB, options Options) *Fixture {
 	if users == nil {
 		users = noUsers{}
 	}
+	var classes store.ClassStore = noClasses{}
+	if options.Classes != nil {
+		classes = options.Classes
+	}
+	var periods store.AcademicPeriodStore = noAcademicPeriods{}
+	if options.AcademicPeriods != nil {
+		periods = options.AcademicPeriods
+	}
 
 	roles := &roleStore{roles: map[model.RoleID]*model.Role{}}
 	observe := options.Observe
@@ -114,9 +131,10 @@ func New(t testing.TB, options Options) *Fixture {
 	require.NoError(t, err)
 
 	resolver, err := access.NewScopeResolver(access.ScopeResolverDependencies{
-		Institutions: institutions, AcademicUnits: units, Classes: noClasses{}, Users: users,
+		Institutions: institutions, AcademicUnits: units, Classes: classes, Users: users,
 		ClassMembers: noClassMembers{}, Exams: noExams{}, Sittings: noSittings{},
-		Submissions: noSubmissions{}, AcademicPeriods: noAcademicPeriods{},
+		Submissions: noSubmissions{}, AcademicPeriods: periods,
+		Programmes: options.Programmes, ProgrammeLevels: options.ProgrammeLevels,
 	})
 	require.NoError(t, err)
 
@@ -158,6 +176,19 @@ func (a *Audits) Attempts() []*model.AuditEvent {
 		}
 	}
 	return attempts
+}
+
+// Decisions returns the recorded authorization decisions, in order.
+func (a *Audits) Decisions() []*model.AuditEvent {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	var decisions []*model.AuditEvent
+	for _, event := range a.events {
+		if !a.attempts[event.ID] {
+			decisions = append(decisions, event)
+		}
+	}
+	return decisions
 }
 
 // Save keeps the event, refusing a mutation attempt after FailAttempts.

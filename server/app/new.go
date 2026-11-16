@@ -335,7 +335,7 @@ func newAcademic(deps Dependencies, shared sharedMechanics, authorizer *access.A
 	return academic.New(academic.Dependencies{
 		Store:      deps.Store,
 		Authorizer: authorizer,
-		Auditor:    shared.audit.MutationAudit(),
+		Auditor:    shared.audit,
 		Mail:       shared.mail,
 		Publisher:  shared.realtime,
 		Now:        time.Now,

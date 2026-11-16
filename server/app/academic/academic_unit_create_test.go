@@ -15,9 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -73,74 +71,32 @@ func (*academicUnitCreateStore) Search(context.Context, model.InstitutionID, sto
 	panic("unexpected Search")
 }
 
-type academicUnitCommandAuditor struct {
-	events    *[]string
-	beginID   string
-	beginErr  error
-	failErr   error
-	failCode  string
-	beginData academicUnitMutationAudit
-}
-
-type academicUnitMutationAudit struct {
-	action    model.Action
-	resource  model.Resource
-	operation string
-	value     map[string]any
-	prior     map[string]any
-}
-
-func (a *academicUnitCommandAuditor) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
-	// This fake keeps neither a scope nor a subject, so it refuses a Mutation
-	// that names one instead of dropping it.
-	// It stands in for access.MutationAuditAdapter, which records both.
-	if attempt.ScopeType != "" || attempt.ScopeID != "" || !attempt.Subject.IsZero() {
-		return "", apperror.New("audit.internal")
-	}
-
-	*a.events = append(*a.events, "audit-begin")
-	a.beginData = academicUnitMutationAudit{
-		action: attempt.Action, resource: attempt.Resource, operation: attempt.Operation,
-		value: attempt.Value, prior: attempt.Prior,
-	}
-	return model.AuditEventID(a.beginID), a.beginErr
-}
-
-func (a *academicUnitCommandAuditor) Fail(_ context.Context, auditID model.AuditEventID, errorCode string) error {
-	*a.events = append(*a.events, "audit-fail")
-	a.failCode = errorCode
-	if auditID != model.AuditEventID(a.beginID) {
-		return errors.New("wrong audit ID")
-	}
-	return a.failErr
+// requireResourceScopedAttempt checks that a unit mutation is audited at its
+// resource's own scope and names no subject User.
+func requireResourceScopedAttempt(t *testing.T, attempt *model.AuditEvent, scopeType model.RoleScopeType, scopeID string) {
+	t.Helper()
+	require.Equal(t, scopeType, attempt.ScopeType, "audit scope")
+	require.Equal(t, scopeID, attempt.ScopeID, "audit scope")
+	require.True(t, attempt.SubjectUserID.IsZero(), "audit subject")
 }
 
 func TestAcademicUnitCreateRootCommitsAuditBeforePublishing(t *testing.T) {
 	t.Parallel()
 
-	institutionID := model.NewID()
+	events := []string{}
+	principal, caller := newCaller()
+	access := academicUnitAccess(t, &events, nil, institutionGrant(principal.UserID, model.ActionAcademicUnitManage))
+	institutionID := access.Institution.ID.String()
 	saved := &model.AcademicUnit{
-		ID: model.AcademicUnitID(model.NewID()), InstitutionID: model.InstitutionID(institutionID),
+		ID: model.AcademicUnitID(model.NewID()), InstitutionID: access.Institution.ID,
 		Name: "engineering", DisplayName: "Engineering",
 	}
-	events := []string{}
 	creator := &academicUnitCreateStore{events: &events, result: saved}
-	auditor := &academicUnitCommandAuditor{events: &events, beginID: model.NewID()}
 	publisher := academicUnitPublisherIn(&events)
 	createdID := model.NewID()
-	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: creator}, Authorizer: academicUnitAuthorizerStub{
-		authorize: func(context.Context, invocation.Invocation, model.Action, model.Resource) error {
-			panic("unexpected Authorize")
-		},
-		authorizeInstallation: func(
-			context.Context, invocation.Invocation, model.Action,
-		) (model.Resource, error) {
-			events = append(events, "authorize")
-			return model.Resource{Type: model.ResourceInstitution, ID: institutionID}, nil
-		},
-	}, Auditor: auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: func() string { return createdID }, Publisher: publisher})
+	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: creator}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: func() string { return createdID }, Publisher: publisher})
 
-	got, err := service.CreateAcademicUnit(context.Background(), invocation.Invocation{}, CreateAcademicUnitCommand{
+	got, err := service.CreateAcademicUnit(context.Background(), caller, CreateAcademicUnitCommand{
 		Name: "engineering", DisplayName: "Engineering", Description: "Faculty",
 	})
 	require.NoError(t, err)
@@ -150,99 +106,81 @@ func TestAcademicUnitCreateRootCommitsAuditBeforePublishing(t *testing.T) {
 	require.Empty(t, creator.input.Unit.ParentID.String())
 	require.Equal(t, createdID, creator.input.Unit.ID.String())
 	require.Equal(t, "engineering", creator.input.Unit.Name)
-	require.Equal(t, model.AuditEventID(auditor.beginID), creator.input.AuditEventID)
+	attempt := onlyAttempt(t, access)
+	require.Equal(t, attempt.ID, creator.input.AuditEventID)
+	requireResourceScopedAttempt(t, attempt, model.RoleScopeInstitution, institutionID)
 	require.True(t, time.UnixMilli(500).UTC().Equal(creator.input.AuditAt))
 	// Contract: creation publishes one event naming the saved unit and
 	// reports no failure.
 	require.Equal(t, []realtimetest.Call{academicUnitEventCall("academic_unit_created", saved.ID)}, publisher.Calls())
-	assertAcademicUnitCreateEvents(t, events, "authorize", "audit-begin", "store", "effect")
+	assertAcademicUnitCreateEvents(t, events, "grants", "decision:academic_unit.manage:success", "audit-begin:academic_unit.manage", "store", "effect")
 }
 
 func TestAcademicUnitCreateReplayDoesNotPublishAgain(t *testing.T) {
-	institutionID := model.NewID()
-	saved := &model.AcademicUnit{ID: model.NewAcademicUnitID(), InstitutionID: model.InstitutionID(institutionID), Name: "engineering", DisplayName: "Engineering"}
 	events := []string{}
+	principal, caller := newCaller()
+	access := academicUnitAccess(t, &events, nil, institutionGrant(principal.UserID, model.ActionAcademicUnitManage))
+	saved := &model.AcademicUnit{ID: model.NewAcademicUnitID(), InstitutionID: access.Institution.ID, Name: "engineering", DisplayName: "Engineering"}
 	creator := &academicUnitCreateStore{events: &events, idempotentResult: &store.AcademicUnitCommandResult{Value: saved, Replayed: true}}
-	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: creator}, Authorizer: academicUnitAuthorizerStub{authorizeInstallation: func(context.Context, invocation.Invocation, model.Action) (model.Resource, error) {
-		return model.Resource{Type: model.ResourceInstitution, ID: institutionID}, nil
-	}}, Auditor: &academicUnitCommandAuditor{events: &events, beginID: model.NewID()}, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID, Publisher: academicUnitPublisherIn(&events)})
-	inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
-	got, err := service.CreateAcademicUnit(context.Background(), inv, CreateAcademicUnitCommand{Name: "engineering", DisplayName: "Engineering", IdempotencyKey: "retry-key"})
+	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: creator}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID, Publisher: academicUnitPublisherIn(&events)})
+	got, err := service.CreateAcademicUnit(context.Background(), caller, CreateAcademicUnitCommand{Name: "engineering", DisplayName: "Engineering", IdempotencyKey: "retry-key"})
 	require.NoError(t, err)
 	require.Same(t, saved, got, "Create()")
-	assertAcademicUnitCreateEvents(t, events, "audit-begin", "store-idempotent")
+	assertAcademicUnitCreateEvents(t, events, "grants", "decision:academic_unit.manage:success", "audit-begin:academic_unit.manage", "store-idempotent")
 }
 
 func TestAcademicUnitCreateDenialStopsBeforeDurableWork(t *testing.T) {
 	t.Parallel()
 
 	events := []string{}
+	_, caller := newCaller()
+	access := academicUnitAccess(t, nil, nil)
 	creator := &academicUnitCreateStore{}
-	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: creator}, Authorizer: academicUnitAuthorizerStub{
-		authorize: func(context.Context, invocation.Invocation, model.Action, model.Resource) error {
-			panic("unexpected Authorize")
-		},
-		authorizeInstallation: func(
-			context.Context, invocation.Invocation, model.Action,
-		) (model.Resource, error) {
-			return model.Resource{}, apperror.New("authorization.denied")
-		},
-	}, Auditor: &academicUnitCommandAuditor{events: &events}, Now: time.Now, NewID: model.NewID, Publisher: academicUnitPublisherIn(&events)})
-	_, err := service.CreateAcademicUnit(context.Background(), invocation.Invocation{}, CreateAcademicUnitCommand{Name: "engineering"})
+	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: creator}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID, Publisher: academicUnitPublisherIn(&events)})
+	_, err := service.CreateAcademicUnit(context.Background(), caller, CreateAcademicUnitCommand{Name: "engineering"})
 	require.True(t, apperror.Is(err, "authorization.denied"), "Create() error = %v, want authorization.denied", err)
 	require.Nil(t, creator.input, "work after denial: input")
 	require.Empty(t, events, "work after denial: input")
+	require.Empty(t, access.Audits.Attempts(), "work after denial: audit")
 }
 
 func TestAcademicUnitCreateFailureAuditsAndDoesNotPublish(t *testing.T) {
 	t.Parallel()
 
 	events := []string{}
-	institutionID := model.NewID()
-	parentID := model.NewID()
+	principal, caller := newCaller()
+	parentID := model.NewAcademicUnitID()
+	access := academicUnitAccess(t, &events, nil, unitGrant(principal.UserID, parentID, model.ActionAcademicUnitManage))
 	creator := &academicUnitCreateStore{
 		events: &events,
 		err:    store.NewErrConflict("academic_unit", "name", errors.New("duplicate")),
 	}
-	auditor := &academicUnitCommandAuditor{events: &events, beginID: model.NewID()}
-	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: creator}, Authorizer: academicUnitAuthorizerStub{
-		authorize: func(
-			_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource,
-		) error {
-			events = append(events, "authorize")
-			require.Equal(t, model.ActionAcademicUnitManage, action, "authorization = %s %#v", action, resource)
-			require.Equal(t, model.ResourceAcademicUnit, resource.Type, "authorization = %s %#v", action, resource)
-			return nil
-		},
-		installation: func(context.Context) (model.Resource, error) {
-			return model.Resource{Type: model.ResourceInstitution, ID: institutionID}, nil
-		},
-	}, Auditor: auditor, Now: time.Now, NewID: model.NewID, Publisher: academicUnitPublisherIn(&events)})
-	_, err := service.CreateAcademicUnit(context.Background(), invocation.Invocation{}, CreateAcademicUnitCommand{
-		ParentID: model.AcademicUnitID(parentID), Name: "computing", DisplayName: "Computing",
+	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: creator}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID, Publisher: academicUnitPublisherIn(&events)})
+	_, err := service.CreateAcademicUnit(context.Background(), caller, CreateAcademicUnitCommand{
+		ParentID: parentID, Name: "computing", DisplayName: "Computing",
 	})
 	require.True(t, apperror.Is(err, "academic_unit.conflict"), "Create() error = %v, want academic_unit.conflict", err)
-	require.Equal(t, "academic_unit.conflict", auditor.failCode)
-	assertAcademicUnitCreateEvents(t, events, "authorize", "audit-begin", "store", "audit-fail")
+	require.Equal(t, []string{"academic_unit.manage academic_unit:" + parentID.String() + " success"}, decisions(access), "authorization")
+	attempt := onlyAttempt(t, access)
+	require.Equal(t, "academic_unit.conflict", attempt.ErrorCode)
+	requireResourceScopedAttempt(t, attempt, model.RoleScopeAcademicUnit, parentID.String())
+	require.Equal(t, access.Institution.ID, creator.input.Unit.InstitutionID, "a child unit joins the Institution")
+	assertAcademicUnitCreateEvents(t, events, "grants", "decision:academic_unit.manage:success", "audit-begin:academic_unit.manage", "store", "audit-fail")
 }
 
 func TestAcademicUnitCreateIgnoresPostCommitEffectFailure(t *testing.T) {
 	t.Parallel()
 
 	events := []string{}
-	saved := &model.AcademicUnit{ID: model.AcademicUnitID(model.NewID()), InstitutionID: model.InstitutionID(model.NewID()), Name: "engineering"}
+	principal, caller := newCaller()
+	access := academicUnitAccess(t, &events, nil, institutionGrant(principal.UserID, model.ActionAcademicUnitManage))
+	saved := &model.AcademicUnit{ID: model.AcademicUnitID(model.NewID()), InstitutionID: access.Institution.ID, Name: "engineering"}
 	creator := &academicUnitCreateStore{events: &events, result: saved}
 	effectErr := errors.New("cluster unavailable")
 	publisher := academicUnitPublisherIn(&events)
 	publisher.Fail = func(realtimetest.Call) error { return effectErr }
-	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: creator}, Authorizer: academicUnitAuthorizerStub{
-		authorizeInstallation: func(
-			context.Context, invocation.Invocation, model.Action,
-		) (model.Resource, error) {
-			return model.Resource{Type: model.ResourceInstitution, ID: saved.InstitutionID.String()}, nil
-		},
-	}, Auditor: &academicUnitCommandAuditor{events: &events, beginID: model.NewID()}, Now: time.Now, NewID: model.NewID, Publisher: publisher})
-	got, err := service.CreateAcademicUnit(context.Background(), invocation.Invocation{}, CreateAcademicUnitCommand{
+	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: creator}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID, Publisher: publisher})
+	got, err := service.CreateAcademicUnit(context.Background(), caller, CreateAcademicUnitCommand{
 		Name: "engineering", DisplayName: "Engineering",
 	})
 	require.NoError(t, err, "Create()")
@@ -253,7 +191,7 @@ func TestAcademicUnitCreateIgnoresPostCommitEffectFailure(t *testing.T) {
 		academicUnitEventCall("academic_unit_created", saved.ID),
 		{Method: realtimetest.Report, Operation: "academic_unit_created", Err: effectErr},
 	}, publisher.Calls())
-	assertAcademicUnitCreateEvents(t, events, "audit-begin", "store", "effect", "effect-report")
+	assertAcademicUnitCreateEvents(t, events, "grants", "decision:academic_unit.manage:success", "audit-begin:academic_unit.manage", "store", "effect", "effect-report")
 }
 
 func assertAcademicUnitCreateEvents(t *testing.T, got []string, want ...string) {

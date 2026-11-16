@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -60,37 +61,21 @@ func (s *academicPeriodStoreFake) Archive(_ context.Context, input *store.Academ
 	return s.current, nil
 }
 
-type academicPeriodAuthorizerFake struct {
-	Authorizer
-	events   *[]string
-	resource model.Resource
-	period   *model.AcademicPeriod
-	action   model.Action
-	err      error
-}
-
-func (a *academicPeriodAuthorizerFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource) error {
-	*a.events = append(*a.events, "authorize-period")
-	a.resource = resource
-	a.action = action
-	return a.err
-}
-func (a *academicPeriodAuthorizerFake) AuthorizeAcademicPeriodOwner(_ context.Context, _ invocation.Invocation, action model.Action, period *model.AcademicPeriod) error {
-	*a.events = append(*a.events, "authorize-period-owner")
-	a.resource = period.Owner.Resource()
-	a.action, a.period = action, period
-	return a.err
-}
-func (a *academicPeriodAuthorizerFake) AuthorizeAcademicPeriodList(context.Context, invocation.Invocation) (store.AcademicPeriodVisibilityScope, error) {
-	*a.events = append(*a.events, "authorize-period-list")
-	return store.AcademicPeriodVisibilityScope{InstitutionID: model.InstitutionID(a.resource.ID), InstitutionWide: true}, a.err
+// academicPeriodAccess builds the real authorizer over the grants, resolving
+// Academic Periods through the test's own store.
+func academicPeriodAccess(t *testing.T, events *[]string, periods store.AcademicPeriodStore, units []*model.AcademicUnit, grants ...accesstest.Grant) *accesstest.Fixture {
+	t.Helper()
+	return accessWith(t, events, accesstest.Options{Grants: grants, Units: units, AcademicPeriods: periods})
 }
 
 func TestAcademicPeriodCreateRejectsInvalidHalfOpenIntervalBeforeAudit(t *testing.T) {
 	t.Parallel()
 	events := []string{}
-	service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: &academicPeriodStoreFake{events: &events}}, Authorizer: &academicPeriodAuthorizerFake{events: &events}, Auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, Now: time.Now, NewID: model.NewID})
-	_, err := service.CreateAcademicPeriod(context.Background(), invocation.Invocation{}, CreateAcademicPeriodCommand{OwnerType: string(model.ResourceInstitution), OwnerID: model.NewID(), Name: "invalid", DisplayName: "Invalid", StartAt: 200, EndAt: 200})
+	principal, caller := newCaller()
+	persistence := &academicPeriodStoreFake{events: &events}
+	access := academicPeriodAccess(t, &events, persistence, nil, institutionGrant(principal.UserID, model.ActionAcademicPeriodManage))
+	service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID})
+	_, err := service.CreateAcademicPeriod(context.Background(), caller, CreateAcademicPeriodCommand{OwnerType: string(model.ResourceInstitution), OwnerID: model.NewID(), Name: "invalid", DisplayName: "Invalid", StartAt: 200, EndAt: 200})
 	require.True(t, apperror.Is(err, "academic_period.invalid"), "Create() error = %v", err)
 	require.Empty(t, events)
 }
@@ -98,6 +83,7 @@ func TestAcademicPeriodCreateRejectsInvalidHalfOpenIntervalBeforeAudit(t *testin
 func TestAcademicPeriodUpdatePreservesInstitutionOwnership(t *testing.T) {
 	t.Parallel()
 	events := []string{}
+	principal, caller := newCaller()
 	period := &model.AcademicPeriod{
 		ID:          model.AcademicPeriodID(model.NewID()),
 		CreatedAt:   model.TimeFromMillis(100),
@@ -110,9 +96,10 @@ func TestAcademicPeriodUpdatePreservesInstitutionOwnership(t *testing.T) {
 		EndsAt:      model.TimeFromMillis(200),
 	}
 	persistence := &academicPeriodStoreFake{events: &events, current: period}
-	service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: persistence}, Authorizer: &academicPeriodAuthorizerFake{events: &events}, Auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID})
+	access := academicPeriodAccess(t, &events, persistence, nil, institutionGrant(principal.UserID, model.ActionAcademicPeriodManage))
+	service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID})
 	name := "2026-revised"
-	updated, err := service.UpdateAcademicPeriod(context.Background(), invocation.Invocation{}, UpdateAcademicPeriodCommand{ID: period.ID, Name: &name})
+	updated, err := service.UpdateAcademicPeriod(context.Background(), caller, UpdateAcademicPeriodCommand{ID: period.ID, Name: &name})
 	require.NoError(t, err)
 	require.Equal(t, period.Owner, updated.Owner)
 	require.Equal(t, period.Owner, persistence.updateInput.Period.Owner)
@@ -121,36 +108,46 @@ func TestAcademicPeriodUpdatePreservesInstitutionOwnership(t *testing.T) {
 func TestAcademicPeriodCreateAuthorizationDenialStopsBeforeAuditAndStore(t *testing.T) {
 	t.Parallel()
 	events := []string{}
-	service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: &academicPeriodStoreFake{events: &events}}, Authorizer: &academicPeriodAuthorizerFake{events: &events, err: apperror.New("authorization.denied")}, Auditor: &institutionAuditorFake{events: &events}, Now: time.Now, NewID: model.NewID})
-	_, err := service.CreateAcademicPeriod(context.Background(), invocation.Invocation{}, CreateAcademicPeriodCommand{OwnerType: string(model.ResourceInstitution), OwnerID: model.NewID(), Name: "2026", DisplayName: "2026", StartAt: 100, EndAt: 200})
+	_, caller := newCaller()
+	persistence := &academicPeriodStoreFake{events: &events}
+	access := academicPeriodAccess(t, &events, persistence, nil)
+	service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID})
+	_, err := service.CreateAcademicPeriod(context.Background(), caller, CreateAcademicPeriodCommand{OwnerType: string(model.ResourceInstitution), OwnerID: model.NewID(), Name: "2026", DisplayName: "2026", StartAt: 100, EndAt: 200})
 	require.True(t, apperror.Is(err, "authorization.denied"), "Create() error = %v", err)
-	require.Equal(t, []string{"authorize-period-owner"}, events)
+	require.Equal(t, []string{"grants", "decision:academic_period.manage:fail"}, events)
 }
 
 func TestAcademicPeriodLookupOperationsAuthorizeBeforeReading(t *testing.T) {
 	t.Parallel()
-	operations := map[string]func(*Service) error{
-		"get": func(service *Service) error {
-			_, err := service.GetAcademicPeriod(context.Background(), invocation.Invocation{}, model.NewAcademicPeriodID())
+	operations := map[string]struct {
+		action model.Action
+		run    func(*Service, invocation.Invocation) error
+	}{
+		"get": {model.ActionAcademicPeriodView, func(service *Service, caller invocation.Invocation) error {
+			_, err := service.GetAcademicPeriod(context.Background(), caller, model.NewAcademicPeriodID())
 			return err
-		},
-		"update": func(service *Service) error {
-			_, err := service.UpdateAcademicPeriod(context.Background(), invocation.Invocation{}, UpdateAcademicPeriodCommand{ID: model.NewAcademicPeriodID()})
+		}},
+		"update": {model.ActionAcademicPeriodManage, func(service *Service, caller invocation.Invocation) error {
+			_, err := service.UpdateAcademicPeriod(context.Background(), caller, UpdateAcademicPeriodCommand{ID: model.NewAcademicPeriodID()})
 			return err
-		},
-		"archive": func(service *Service) error {
-			return service.ArchiveAcademicPeriod(context.Background(), invocation.Invocation{}, ArchiveAcademicPeriodCommand{ID: model.NewAcademicPeriodID()})
-		},
+		}},
+		"archive": {model.ActionAcademicPeriodManage, func(service *Service, caller invocation.Invocation) error {
+			return service.ArchiveAcademicPeriod(context.Background(), caller, ArchiveAcademicPeriodCommand{ID: model.NewAcademicPeriodID()})
+		}},
 	}
 	for name, operation := range operations {
-		name, operation := name, operation
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			events := []string{}
-			service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: &academicPeriodStoreFake{events: &events}}, Authorizer: &academicPeriodAuthorizerFake{events: &events, err: apperror.New("authorization.denied")}, Auditor: &institutionAuditorFake{events: &events}, Now: time.Now, NewID: model.NewID})
-			err := operation(service)
+			_, caller := newCaller()
+			persistence := &academicPeriodStoreFake{events: &events}
+			access := academicPeriodAccess(t, &events, persistence, nil)
+			service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID})
+			err := operation.run(service, caller)
 			require.True(t, apperror.Is(err, "authorization.denied"), "operation error = %v", err)
-			require.Equal(t, []string{"authorize-period"}, events)
+			// A caller without any Academic Period authority is refused before
+			// the Period is read.
+			require.Equal(t, []string{"grants", "decision:" + string(operation.action) + ":fail"}, events)
 		})
 	}
 }
@@ -158,24 +155,28 @@ func TestAcademicPeriodLookupOperationsAuthorizeBeforeReading(t *testing.T) {
 func TestAcademicPeriodCreateConflictCompletesFailedAttempt(t *testing.T) {
 	t.Parallel()
 	events := []string{}
-	auditor := &institutionAuditorFake{events: &events, beginID: model.NewID()}
-	service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: &academicPeriodStoreFake{events: &events, createErr: store.NewErrConflict("academic_period", "academic_periods_institution_id_name_key", nil)}}, Authorizer: &academicPeriodAuthorizerFake{events: &events}, Auditor: auditor, Now: time.Now, NewID: model.NewID})
-	_, err := service.CreateAcademicPeriod(context.Background(), invocation.Invocation{}, CreateAcademicPeriodCommand{OwnerType: string(model.ResourceInstitution), OwnerID: model.NewID(), Name: "2026", DisplayName: "2026", StartAt: 100, EndAt: 200})
+	principal, caller := newCaller()
+	persistence := &academicPeriodStoreFake{events: &events, createErr: store.NewErrConflict("academic_period", "academic_periods_institution_id_name_key", nil)}
+	access := academicPeriodAccess(t, &events, persistence, nil, institutionGrant(principal.UserID, model.ActionAcademicPeriodManage))
+	service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID})
+	_, err := service.CreateAcademicPeriod(context.Background(), caller, CreateAcademicPeriodCommand{OwnerType: string(model.ResourceInstitution), OwnerID: access.Institution.ID.String(), Name: "2026", DisplayName: "2026", StartAt: 100, EndAt: 200})
 	require.True(t, apperror.Is(err, "academic_period.conflict"), "Create() error = %v, audit code", err)
-	require.Equal(t, "academic_period.conflict", auditor.failCode, "Create() error = %v, audit code", err)
+	require.Equal(t, "academic_period.conflict", onlyAttempt(t, access).ErrorCode, "Create() error = %v, audit code", err)
 }
 
 func TestAcademicPeriodCreateOwnsTemporalValidationAndAtomicAudit(t *testing.T) {
 	t.Parallel()
 	events := []string{}
-	institutionID, periodID, auditID := model.NewID(), model.NewID(), model.NewID()
-	created := &model.AcademicPeriod{ID: model.AcademicPeriodID(periodID), Owner: model.NewInstitutionAcademicPeriodOwner(model.InstitutionID(institutionID))}
-	persistence := &academicPeriodStoreFake{events: &events, created: created}
-	auditor := &institutionAuditorFake{events: &events, beginID: auditID}
-	authorizer := &academicPeriodAuthorizerFake{events: &events, resource: model.Resource{Type: model.ResourceInstitution, ID: institutionID}}
-	service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: persistence}, Authorizer: authorizer, Auditor: auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: func() string { return periodID }})
+	principal, caller := newCaller()
+	periodID := model.NewID()
+	persistence := &academicPeriodStoreFake{events: &events}
+	access := academicPeriodAccess(t, &events, persistence, nil, institutionGrant(principal.UserID, model.ActionAcademicPeriodManage))
+	institutionID := access.Institution.ID.String()
+	created := &model.AcademicPeriod{ID: model.AcademicPeriodID(periodID), Owner: model.NewInstitutionAcademicPeriodOwner(access.Institution.ID)}
+	persistence.created = created
+	service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: func() string { return periodID }})
 
-	got, err := service.CreateAcademicPeriod(context.Background(), invocation.Invocation{}, CreateAcademicPeriodCommand{
+	got, err := service.CreateAcademicPeriod(context.Background(), caller, CreateAcademicPeriodCommand{
 		OwnerType: string(model.ResourceInstitution), OwnerID: institutionID,
 		Name: "2026-2027", DisplayName: "2026-2027", StartAt: 100, EndAt: 200,
 	})
@@ -184,42 +185,46 @@ func TestAcademicPeriodCreateOwnsTemporalValidationAndAtomicAudit(t *testing.T) 
 	require.NotNil(t, persistence.createInput)
 	require.Equal(t, institutionID, persistence.createInput.Period.Owner.InstitutionID.String())
 	require.Equal(t, periodID, persistence.createInput.Period.ID.String())
-	require.Equal(t, model.AuditEventID(auditID), persistence.createInput.AuditEventID)
-	require.Equal(t, model.ActionAcademicPeriodManage, auditor.action, "mutation audit")
-	require.Equal(t, model.Resource{Type: model.ResourceAcademicPeriod, ID: periodID}, auditor.resource, "mutation audit")
-	require.Equal(t, model.RoleScopeInstitution, auditor.scopeType, "mutation audit scope")
-	require.Equal(t, institutionID, auditor.scopeID, "mutation audit scope")
-	require.Equal(t, model.ActionAcademicPeriodManage, authorizer.action, "authorization")
-	require.NotNil(t, authorizer.period, "authorization")
-	require.Equal(t, periodID, authorizer.period.ID.String(), "authorization")
+	attempt := onlyAttempt(t, access)
+	require.Equal(t, attempt.ID, persistence.createInput.AuditEventID)
+	require.Equal(t, string(model.ActionAcademicPeriodManage), attempt.Action, "mutation audit")
+	require.Equal(t, model.Resource{Type: model.ResourceAcademicPeriod, ID: periodID}, attempt.Resource, "mutation audit")
+	require.Equal(t, model.RoleScopeInstitution, attempt.ScopeType, "mutation audit scope")
+	require.Equal(t, institutionID, attempt.ScopeID, "mutation audit scope")
+	// The decision names the new Period, authorized through its owner.
+	require.Equal(t, []string{"academic_period.manage academic_period:" + periodID + " success"}, decisions(access), "authorization")
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
-	// begins before the durable write.
-	require.Equal(t, []string{"authorize-period-owner", "audit-begin", "store-create"}, events)
+	// begins before the durable write. The owner's coarse authority is read
+	// before its exact scope.
+	require.Equal(t, []string{"grants", "grants", "decision:academic_period.manage:success", "audit-begin:academic_period.manage", "store-create"}, events)
 }
 
 func TestAcademicPeriodCreateIdempotencyBindsCanonicalOwner(t *testing.T) {
 	t.Parallel()
 	events := []string{}
+	principal, caller := newCaller()
+	unitID := model.NewAcademicUnitID()
 	makeService := func(persistence *academicPeriodStoreFake) *Service {
-		return mustNew(Dependencies{Store: &catalogFake{academicPeriod: persistence}, Authorizer: &academicPeriodAuthorizerFake{events: &events}, Auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID})
+		access := academicPeriodAccess(t, &events, persistence, []*model.AcademicUnit{{ID: unitID, Name: "unit"}},
+			institutionGrant(principal.UserID, model.ActionAcademicPeriodManage))
+		return mustNew(Dependencies{Store: &catalogFake{academicPeriod: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID})
 	}
-	inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
 	institutionID := model.NewInstitutionID().String()
 	institution := &academicPeriodStoreFake{events: &events}
-	_, err := makeService(institution).CreateAcademicPeriod(context.Background(), inv, CreateAcademicPeriodCommand{
+	_, err := makeService(institution).CreateAcademicPeriod(context.Background(), caller, CreateAcademicPeriodCommand{
 		OwnerType: " institution ", OwnerID: " " + institutionID + " ",
 		Name: "period", DisplayName: "Period", StartAt: 100, EndAt: 200, IdempotencyKey: "same-key",
 	})
 	require.NoError(t, err)
 	canonical := &academicPeriodStoreFake{events: &events}
-	_, err = makeService(canonical).CreateAcademicPeriod(context.Background(), inv, CreateAcademicPeriodCommand{
+	_, err = makeService(canonical).CreateAcademicPeriod(context.Background(), caller, CreateAcademicPeriodCommand{
 		OwnerType: string(model.ResourceInstitution), OwnerID: institutionID,
 		Name: "period", DisplayName: "Period", StartAt: 100, EndAt: 200, IdempotencyKey: "same-key",
 	})
 	require.NoError(t, err)
 	unit := &academicPeriodStoreFake{events: &events}
-	_, err = makeService(unit).CreateAcademicPeriod(context.Background(), inv, CreateAcademicPeriodCommand{
-		OwnerType: string(model.ResourceAcademicUnit), OwnerID: model.NewAcademicUnitID().String(),
+	_, err = makeService(unit).CreateAcademicPeriod(context.Background(), caller, CreateAcademicPeriodCommand{
+		OwnerType: string(model.ResourceAcademicUnit), OwnerID: unitID.String(),
 		Name: "period", DisplayName: "Period", StartAt: 100, EndAt: 200, IdempotencyKey: "same-key",
 	})
 	require.NoError(t, err)

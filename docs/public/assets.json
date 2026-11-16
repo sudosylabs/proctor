@@ -24,7 +24,7 @@
       "review_triggers": [
         "server/composition.go",
         "server/cluster/GUARANTEES.md",
-        "server/serving_node_lease.go"
+        "server/cluster/serving_lease.go"
       ],
       "visual_review": {
         "status": "approved",
@@ -1276,7 +1276,7 @@
       "last_reviewed": "2026-11-15",
       "review_triggers": [
         "server/server.go",
-        "server/serving_node_lease.go",
+        "server/cluster/serving_lease.go",
         "server/server_lifecycle_test.go",
         "deploy/systemd/proctor.service"
       ],

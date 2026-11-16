@@ -46,7 +46,8 @@ Don't add glue files to either root. If two packages can't import each other,
 fix the dependency direction or move the type the port exchanges.
 
 **Packages follow ownership**, not symmetry, file size or another project's
-taxonomy. A child never imports its parent.
+taxonomy. An `app` child never imports its parent; siblings may import each
+other. `server/architecture` holds the few import rules that guard layering.
 
 **Files split by responsibility, not length.** A store file serving one model
 can be long. A file doing three jobs should be three files.

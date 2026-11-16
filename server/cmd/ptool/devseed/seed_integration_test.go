@@ -51,11 +51,12 @@ func TestDevelopmentSeedIntegration(t *testing.T) {
 	suffix, err := randomHex(8)
 	require.NoError(t, err)
 	database := "ptool_seed_" + suffix
-	_, err = control.Exec(`CREATE DATABASE ` + database)
+	_, err = control.ExecContext(t.Context(), `CREATE DATABASE `+database)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_, err := control.Exec(`DROP DATABASE ` + database + ` WITH (FORCE)`)
-		assert.NoError(t, err)
+		// t.Context is already canceled when cleanups run.
+		_, dropErr := control.ExecContext(context.Background(), `DROP DATABASE `+database+` WITH (FORCE)`)
+		assert.NoError(t, dropErr)
 	})
 	u, err := url.Parse(dsn)
 	require.NoError(t, err)
@@ -80,8 +81,8 @@ func TestDevelopmentSeedIntegration(t *testing.T) {
 			writes.Add(1)
 		}
 		if req.Method == "PUT" && strings.HasSuffix(req.URL.Path, "/profile-picture") && losePictureRequest.CompareAndSwap(true, false) {
-			conn, _, err := w.(http.Hijacker).Hijack()
-			if err == nil {
+			conn, _, hijackErr := w.(http.Hijacker).Hijack()
+			if hijackErr == nil {
 				_ = conn.Close()
 			}
 			return
@@ -90,8 +91,8 @@ func TestDevelopmentSeedIntegration(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			helper.Handler().ServeHTTP(recorder, req)
 			assert.Equal(t, 201, recorder.Code, "fault target failed before response loss: HTTP")
-			conn, _, err := w.(http.Hijacker).Hijack()
-			if err == nil {
+			conn, _, hijackErr := w.(http.Hijacker).Hijack()
+			if hijackErr == nil {
 				_ = conn.Close()
 			}
 			return
@@ -100,8 +101,8 @@ func TestDevelopmentSeedIntegration(t *testing.T) {
 		helper.Handler().ServeHTTP(recorder, req)
 		if req.Method == "POST" && strings.HasSuffix(req.URL.Path, "/disable") && loseDisableResponse.CompareAndSwap(true, false) {
 			assert.Equal(t, http.StatusOK, recorder.Code, "disablement fault target failed: HTTP")
-			conn, _, err := w.(http.Hijacker).Hijack()
-			if err == nil {
+			conn, _, hijackErr := w.(http.Hijacker).Hijack()
+			if hijackErr == nil {
 				_ = conn.Close()
 			}
 			return
@@ -171,8 +172,8 @@ func TestDevelopmentSeedIntegration(t *testing.T) {
 	err = Run(ctx, options, &output)
 	require.NoError(t, err)
 	readJournal := func() *journal {
-		raw, err := os.ReadFile(filepath.Join(dir, "journal.json"))
-		require.NoError(t, err)
+		raw, readErr := os.ReadFile(filepath.Join(dir, "journal.json"))
+		require.NoError(t, readErr)
 		var state journal
 		err = json.Unmarshal(raw, &state)
 		require.NoError(t, err)
@@ -242,8 +243,8 @@ func TestDevelopmentSeedIntegration(t *testing.T) {
 	require.NoError(t, err, "duplicate or missing programmes after recovery")
 	require.Len(t, programmes, 2, "duplicate or missing programmes after recovery")
 	for _, key := range []string{"candidate-001", "academic-reader"} {
-		raw, err := r.get("/api/v1/users/me/mfa", state.Accounts[key].Token)
-		require.NoError(t, err, "MFA fixture %s missing", key)
+		raw, getErr := r.get("/api/v1/users/me/mfa", state.Accounts[key].Token)
+		require.NoError(t, getErr, "MFA fixture %s missing", key)
 		require.Equal(t, true, decode(raw)["enabled"], "MFA fixture %s missing", key)
 	}
 	raw, err := r.get(state.Records["exam/01/file/src/main.py"].URL, admin)

@@ -34,7 +34,7 @@ func TestBrowserInvitationStartPresentsTheInvitedAddressAndClass(t *testing.T) {
 		testlib.WithConfig(func(cfg *config.Config) { cfg.Server.PublicURL = "https://proctor.example.edu" }),
 		testlib.WithStore(persistence),
 	)
-	bootstrap, err := helper.App.Identity.BootstrapInstallation(context.Background(), invocation.Invocation{}, identity.BootstrapInstallationCommand{
+	bootstrap, err := helper.App.Identity.BootstrapInstallation(context.Background(), invocation.Invocation{}, identity.BootstrapInstallationCommand{ //nolint:gosec // G101: fixed test password and test bootstrap secret, not a real credential
 		InstitutionName: "invitation-university", InstitutionDisplayName: "Invitation University",
 		AdministratorUsername: "invitation-admin", AdministratorEmail: "invitation-admin@example.edu",
 		AdministratorDisplayName: "Invitation Admin", AdministratorLocale: "en", AdministratorTimezone: "UTC",
@@ -47,7 +47,7 @@ func TestBrowserInvitationStartPresentsTheInvitedAddressAndClass(t *testing.T) {
 	require.NoError(t, err)
 	claim, _ := seedExternalAdmissionInvitation(t, persistence, bootstrap.Institution, inviter, "invited.student@example.edu")
 
-	response := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/browser/invitations", map[string]any{"claim": claim}, "")
+	response := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/auth/browser/invitations", map[string]any{"claim": claim}, "")
 	require.Equal(t, http.StatusCreated, response.Code, "start = %d: %s", response.Code, response.Body.String())
 	require.NotContains(t, response.Body.String(), claim, "the start projection returned the claim")
 	var started struct {

@@ -36,8 +36,8 @@ func TestOfflineAdministratorMFAResetReconcilesAndRequiresReenrollment(t *testin
 		cfg.Authentication.MFA.Enabled = true
 		cfg.Authentication.MFA.EncryptionKey = base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{29}, 32))
 	}))
-	const password = "offline MFA existing correct horse battery staple"
-	bootstrap := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
+	const password = "offline MFA existing correct horse battery staple" //nolint:gosec // G101: fixed test password, not a real credential
+	bootstrap := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
 		"bootstrap_secret": testlib.BootstrapSecret,
 		"institution":      map[string]any{"name": "offline-mfa", "display_name": "Offline MFA"},
 		"administrator":    map[string]any{"username": "offline-mfa-admin", "email": "offline-mfa-admin@example.edu"},
@@ -63,7 +63,7 @@ func TestOfflineAdministratorMFAResetReconcilesAndRequiresReenrollment(t *testin
 	require.Len(t, events, 1, "reconciled recovery audit")
 	require.True(t, events[0].ActorID.IsZero(), "reconciled recovery audit")
 	require.Equal(t, model.AuditStatusSuccess, events[0].Status, "reconciled recovery audit")
-	old := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, before.Tokens.AccessToken)
+	old := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, before.Tokens.AccessToken)
 	require.NotEqual(t, http.StatusOK, old.Code, "old Session remained usable after offline reset")
 	_, err = helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{LoginID: "offline-mfa-admin", Password: password, ClientType: model.SessionClientCLI, DeviceID: "offline-cli", Source: "127.0.0.1:2"})
 	require.Error(t, err, "CLI login bypassed mandatory reenrollment")
@@ -73,9 +73,9 @@ func TestOfflineAdministratorMFAResetReconcilesAndRequiresReenrollment(t *testin
 	require.NotNil(t, fresh.Session, "restricted fresh Session")
 	require.True(t, fresh.Session.MFARecoveryRequired, "restricted fresh Session")
 	require.Equal(t, int64(1), fresh.Session.AuthenticationGeneration, "restricted fresh Session")
-	ordinary := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, fresh.Tokens.AccessToken)
+	ordinary := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, fresh.Tokens.AccessToken)
 	require.NotEqual(t, http.StatusOK, ordinary.Code, "restricted browser Session accessed ordinary account endpoint")
-	status := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/me/mfa", nil, fresh.Tokens.AccessToken)
+	status := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/me/mfa", nil, fresh.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, status.Code, "recovery status=%d %s", status.Code, status.Body.String())
 	var state struct {
 		Required bool `json:"mfa_recovery_required"`
@@ -88,6 +88,6 @@ func TestOfflineAdministratorMFAResetReconcilesAndRequiresReenrollment(t *testin
 	require.NoError(t, err, "activated recovery=%#v error", recovery)
 	require.False(t, recovery.ReenrollmentRequired, "activated recovery=%#v error", recovery)
 	require.Equal(t, int64(1), recovery.Generation, "activated recovery=%#v error", recovery)
-	ordinary = performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, fresh.Tokens.AccessToken)
+	ordinary = performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, fresh.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, ordinary.Code, "post-enrollment account=%d %s", ordinary.Code, ordinary.Body.String())
 }

@@ -57,6 +57,7 @@ func TestPrivilegedAuditListingIsScopedAndDurablyAudited(t *testing.T) {
 	)
 
 	denied := performJSONRequest(
+		t,
 		helper.Handler(), http.MethodGet, "/api/v1/audits", nil,
 		login.Tokens.AccessToken,
 	)
@@ -74,6 +75,7 @@ func TestPrivilegedAuditListingIsScopedAndDurablyAudited(t *testing.T) {
 	require.NoError(t, err)
 
 	allowed := performJSONRequest(
+		t,
 		helper.Handler(), http.MethodGet, "/api/v1/audits?limit=20", nil,
 		login.Tokens.AccessToken,
 	)
@@ -440,8 +442,8 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 		{AcademicUnitID: sibling.ID, UserID: siblingUser.ID, StartsAt: model.TimeFromMillis(now - 10_000)},
 		{AcademicUnitID: child.ID, UserID: historicalUser.ID, StartsAt: model.TimeFromMillis(now - 20_000), EndsAt: model.OptionalTimeFromMillis(now - 10_000)},
 	} {
-		_, err := persistence.AcademicUnitMember().Save(ctx, membership)
-		require.NoError(t, err)
+		_, saveErr := persistence.AcademicUnitMember().Save(ctx, membership)
+		require.NoError(t, saveErr)
 	}
 	_, err = persistence.Affiliation().Save(ctx, &model.Affiliation{
 		UserID: classUser.ID, Kind: model.AffiliationStudent,
@@ -516,7 +518,7 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 		RequestID: model.NewID(), IPAddress: "127.0.0.1", UserAgent: "access-visibility-integration-test",
 	})
 
-	search := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users?limit=50", nil, login.Tokens.AccessToken)
+	search := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users?limit=50", nil, login.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, search.Code, "scoped user search status = %d: %s", search.Code, search.Body.String())
 	var directory []map[string]any
 	require.NoError(t, json.Unmarshal(integrationListItems(t, search.Body.Bytes()), &directory))
@@ -557,7 +559,7 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 	)
 	assertClassMemberDirectory := func(label, credential string) {
 		t.Helper()
-		response := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users?limit=50", nil, credential)
+		response := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users?limit=50", nil, credential)
 		require.Equal(t, http.StatusOK, response.Code, "%s class-member search status = %d: %s", label, response.Code, response.Body.String())
 		var users []map[string]any
 		require.NoError(t, json.Unmarshal(integrationListItems(t, response.Body.Bytes()), &users))
@@ -579,18 +581,18 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 		require.True(t, seenClassMember, "%s class-member search omitted current Class member %s: %#v", label, classUser.ID, users)
 	}
 	assertClassMemberDirectory("academic-unit", classMembersLogin.Tokens.AccessToken)
-	classMemberRead := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/"+classUser.ID.String(), nil, classMembersLogin.Tokens.AccessToken)
+	classMemberRead := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/"+classUser.ID.String(), nil, classMembersLogin.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, classMemberRead.Code, "class-member exact read status = %d: %s", classMemberRead.Code, classMemberRead.Body.String())
-	classMemberPicture := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/"+classUser.ID.String()+"/profile-picture?size=128", nil, classMembersLogin.Tokens.AccessToken)
+	classMemberPicture := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/"+classUser.ID.String()+"/profile-picture?size=128", nil, classMembersLogin.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, classMemberPicture.Code, "class-member profile-picture status = %d: %s", classMemberPicture.Code, classMemberPicture.Body.String())
 	for label, userID := range map[string]string{
 		"academic-unit member": unitUser.ID.String(),
 		"active Role holder":   bindingUser.ID.String(),
 		"archived Role holder": archivedRoleUser.ID.String(),
 	} {
-		nonMemberRead := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/"+userID, nil, classMembersLogin.Tokens.AccessToken)
+		nonMemberRead := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/"+userID, nil, classMembersLogin.Tokens.AccessToken)
 		require.Equal(t, http.StatusForbidden, nonMemberRead.Code, "class-member %s non-roster read status = %d: %s", label, nonMemberRead.Code, nonMemberRead.Body.String())
-		nonMemberPicture := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/"+userID+"/profile-picture?size=128", nil, classMembersLogin.Tokens.AccessToken)
+		nonMemberPicture := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/"+userID+"/profile-picture?size=128", nil, classMembersLogin.Tokens.AccessToken)
 		require.Equal(t, http.StatusForbidden, nonMemberPicture.Code, "class-member %s non-roster profile-picture status = %d: %s", label, nonMemberPicture.Code, nonMemberPicture.Body.String())
 	}
 
@@ -606,7 +608,7 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 	)
 	assertClassMemberDirectory("institution", institutionClassMembersLogin.Tokens.AccessToken)
 
-	unitRead := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/"+unitUser.ID.String(), nil, login.Tokens.AccessToken)
+	unitRead := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/"+unitUser.ID.String(), nil, login.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, unitRead.Code, "descendant user read status = %d: %s", unitRead.Code, unitRead.Body.String())
 	readDecisions, err := persistence.Audit().List(ctx, store.AuditListOptions{
 		ActorID: viewer.ID, Actions: []string{string(model.ActionUserView)},
@@ -633,7 +635,7 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 	}))
 	require.NoError(t, err)
 	for _, path := range []string{"/api/v1/users?limit=50", "/api/v1/users?limit=50&include_disabled=true"} {
-		response := performJSONRequest(helper.Handler(), http.MethodGet, path, nil, login.Tokens.AccessToken)
+		response := performJSONRequest(t, helper.Handler(), http.MethodGet, path, nil, login.Tokens.AccessToken)
 		require.Equal(t, http.StatusOK, response.Code, "scoped disabled search %q status = %d: %s", path, response.Code, response.Body.String())
 		var users []struct {
 			ID string `json:"id"`
@@ -643,9 +645,9 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 			require.NotEqual(t, unitUser.ID.String(), user.ID, "scoped disabled search %q exposed User", path)
 		}
 	}
-	disabledRead := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/"+unitUser.ID.String(), nil, login.Tokens.AccessToken)
+	disabledRead := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/"+unitUser.ID.String(), nil, login.Tokens.AccessToken)
 	require.Equal(t, http.StatusForbidden, disabledRead.Code, "disabled exact read status = %d: %s", disabledRead.Code, disabledRead.Body.String())
-	disabledPicture := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/"+unitUser.ID.String()+"/profile-picture?size=128", nil, login.Tokens.AccessToken)
+	disabledPicture := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/"+unitUser.ID.String()+"/profile-picture?size=128", nil, login.Tokens.AccessToken)
 	require.Equal(t, http.StatusForbidden, disabledPicture.Code, "disabled profile-picture status = %d: %s", disabledPicture.Code, disabledPicture.Body.String())
 	globalViewer := createUser("institution-directory-viewer")
 	globalRole, err := storetest.SaveRole(ctx, persistence, &model.Role{
@@ -667,7 +669,7 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 		{path: "/api/v1/users?limit=50&include_disabled=true", want: true},
 	} {
 		t.Run(test.path, func(t *testing.T) {
-			response := performJSONRequest(helper.Handler(), http.MethodGet, test.path, nil, globalLogin.Tokens.AccessToken)
+			response := performJSONRequest(t, helper.Handler(), http.MethodGet, test.path, nil, globalLogin.Tokens.AccessToken)
 			require.Equal(t, http.StatusOK, response.Code, "institution-wide disabled search %q status = %d: %s", test.path, response.Code, response.Body.String())
 			var users []struct {
 				ID         string    `json:"id"`
@@ -684,9 +686,9 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 			require.Equal(t, test.want, found, "institution-wide disabled search %q found", test.path)
 		})
 	}
-	siblingRead := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/"+siblingUser.ID.String(), nil, login.Tokens.AccessToken)
+	siblingRead := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/"+siblingUser.ID.String(), nil, login.Tokens.AccessToken)
 	require.Equal(t, http.StatusForbidden, siblingRead.Code, "sibling user read status = %d: %s", siblingRead.Code, siblingRead.Body.String())
-	historicalRead := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/"+historicalUser.ID.String(), nil, login.Tokens.AccessToken)
+	historicalRead := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/"+historicalUser.ID.String(), nil, login.Tokens.AccessToken)
 	require.Equal(t, http.StatusForbidden, historicalRead.Code, "historical user read status = %d: %s", historicalRead.Code, historicalRead.Body.String())
 
 	bindings, listErr := helper.App.Administration.ListRoleBindings(ctx, inv, administration.ListRoleBindingsQuery{UserID: bindingUser.ID})
@@ -702,14 +704,14 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 
 	saveAudit := func(action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID string) string {
 		t.Helper()
-		event, err := persistence.Audit().Save(ctx, &model.AuditEvent{
+		event, saveErr := persistence.Audit().Save(ctx, &model.AuditEvent{
 			ActorID: viewer.ID, Action: string(action), Resource: resource,
 			ScopeType: scopeType, ScopeID: scopeID, Status: model.AuditStatusSuccess,
 			RequestID: model.NewID(), NodeID: "visibility-node", ClientType: "cli",
 			AuthMethod: "bearer", IPAddress: "127.0.0.1", UserAgent: "sensitive-agent",
 			Parameters: json.RawMessage(`{"fixture":true}`),
 		})
-		require.NoError(t, err)
+		require.NoError(t, saveErr)
 		return event.ID.String()
 	}
 	childAuditID := saveAudit(model.ActionAcademicUnitManage, model.Resource{Type: model.ResourceAcademicUnit, ID: child.ID.String()}, model.RoleScopeAcademicUnit, child.ID.String())
@@ -717,7 +719,7 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 	siblingAuditID := saveAudit(model.ActionAcademicUnitManage, model.Resource{Type: model.ResourceAcademicUnit, ID: sibling.ID.String()}, model.RoleScopeAcademicUnit, sibling.ID.String())
 	securityAuditID := saveAudit(model.ActionExternalIdentityManage, model.Resource{Type: model.ResourceUser, ID: bindingUser.ID.String()}, model.RoleScopeAcademicUnit, child.ID.String())
 
-	audits := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/audits?limit=100", nil, login.Tokens.AccessToken)
+	audits := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/audits?limit=100", nil, login.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, audits.Code, "scoped audit list status = %d: %s", audits.Code, audits.Body.String())
 	var auditBody struct {
 		Events []map[string]any `json:"items"`
@@ -761,7 +763,7 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 	)
 	assertInstitutionAcademicAudits := func(label, credential string) {
 		t.Helper()
-		response := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/audits?limit=100", nil, credential)
+		response := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/audits?limit=100", nil, credential)
 		require.Equal(t, http.StatusOK, response.Code, "%s academic audit status = %d: %s", label, response.Code, response.Body.String())
 		var body struct {
 			Events []map[string]any `json:"items"`
@@ -782,7 +784,7 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 		require.False(t, seen[securityAuditID], "%s academic audit leaked security history: %#v", label, seen)
 	}
 	assertInstitutionAcademicAudits("session", institutionAcademicLogin.Tokens.AccessToken)
-	createdToken := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/users/me/tokens", map[string]any{
+	createdToken := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/users/me/tokens", map[string]any{
 		"description": "academic audit automation",
 		"scopes":      []string{string(model.ActionAcademicAuditView)},
 		"expires_at":  integrationWireTime(model.GetMillis() + 2*60*60*1000),

@@ -11,7 +11,7 @@ package sqlstore
 
 import (
 	"context"
-	"crypto/elliptic"
+	"crypto/ecdh"
 	"encoding/base64"
 	"fmt"
 	"sync"
@@ -748,14 +748,18 @@ func desktopAuthorizationExchangeForSQLTest(code, state, verifier string, audit 
 }
 
 func desktopAuthorizationKeyForSQLTest() (model.DesktopPublicJWK, string) {
-	x, y := elliptic.P256().ScalarBaseMult([]byte{1})
-	encode := func(coordinate []byte) string {
-		padded := make([]byte, 32)
-		copy(padded[32-len(coordinate):], coordinate)
-		return base64.RawURLEncoding.EncodeToString(padded)
+	// Scalar one makes the public key the P-256 generator point.
+	scalar := make([]byte, 32)
+	scalar[31] = 1
+	key, err := ecdh.P256().NewPrivateKey(scalar)
+	if err != nil {
+		panic(err)
 	}
+	// An uncompressed point is 0x04 followed by the 32-byte X and Y coordinates.
+	point := key.PublicKey().Bytes()
 	publicJWK := model.DesktopPublicJWK{
-		Kty: "EC", Crv: "P-256", X: encode(x.Bytes()), Y: encode(y.Bytes()),
+		Kty: "EC", Crv: "P-256",
+		X: base64.RawURLEncoding.EncodeToString(point[1:33]), Y: base64.RawURLEncoding.EncodeToString(point[33:]),
 	}
 	thumbprint, err := publicJWK.Thumbprint()
 	if err != nil {

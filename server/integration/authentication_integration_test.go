@@ -133,6 +133,7 @@ func TestSessionExpiryEnforcementAcrossHTTPRefreshAndEstablishedWebSocket(t *tes
 	httpSession, httpTokens := login("expiry-http")
 	expire(httpSession.ID, httpTokens.AccessToken)
 	response := performJSONRequest(
+		t,
 		helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, httpTokens.AccessToken,
 	)
 	require.Equal(t, http.StatusUnauthorized, response.Code, "expired HTTP access status = %d: %s", response.Code, response.Body.String())
@@ -142,6 +143,7 @@ func TestSessionExpiryEnforcementAcrossHTTPRefreshAndEstablishedWebSocket(t *tes
 	refreshSession, refreshTokens := login("expiry-refresh")
 	expire(refreshSession.ID, refreshTokens.AccessToken)
 	response = performJSONRequest(
+		t,
 		helper.Handler(), http.MethodPost, "/api/v1/auth/refresh", nil, refreshTokens.RefreshToken,
 	)
 	require.Equal(t, http.StatusUnauthorized, response.Code, "expired refresh status = %d: %s", response.Code, response.Body.String())
@@ -208,6 +210,7 @@ func TestPersonalAccessTokenIntegration(t *testing.T) {
 	})
 	require.NoError(t, err)
 	login := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/login",
@@ -220,6 +223,7 @@ func TestPersonalAccessTokenIntegration(t *testing.T) {
 	require.Equal(t, http.StatusOK, login.Code, "login status = %d: %s", login.Code, login.Body.String())
 	session := decodeAuthenticationResponse(t, login)
 	create := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/users/me/tokens",
@@ -245,6 +249,7 @@ func TestPersonalAccessTokenIntegration(t *testing.T) {
 	require.Nil(t, created.Token.TokenHash)
 	require.Equal(t, "no-store", create.Header().Get("Cache-Control"))
 	me := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/users/me",
@@ -253,6 +258,7 @@ func TestPersonalAccessTokenIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusOK, me.Code, "PAT current-user status = %d: %s", me.Code, me.Body.String())
 	descendant := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/academic-units/"+childUnit.ID.String(),
@@ -261,6 +267,7 @@ func TestPersonalAccessTokenIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusOK, descendant.Code, "PAT descendant status = %d: %s", descendant.Code, descendant.Body.String())
 	outsideConstraint := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/academic-units/"+siblingUnit.ID.String(),
@@ -269,6 +276,7 @@ func TestPersonalAccessTokenIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusForbidden, outsideConstraint.Code, "PAT sibling status = %d: %s", outsideConstraint.Code, outsideConstraint.Body.String())
 	outsideScope := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/institution",
@@ -277,6 +285,7 @@ func TestPersonalAccessTokenIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusForbidden, outsideScope.Code, "PAT institution status = %d: %s", outsideScope.Code, outsideScope.Body.String())
 	sessionOnly := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/logout",
@@ -285,6 +294,7 @@ func TestPersonalAccessTokenIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusUnauthorized, sessionOnly.Code, "PAT session-only status = %d: %s", sessionOnly.Code, sessionOnly.Body.String())
 	list := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/users/me/tokens",
@@ -304,6 +314,7 @@ func TestPersonalAccessTokenIntegration(t *testing.T) {
 	require.False(t, bytes.Contains(encodedAudits, []byte(created.Credential)), "personal access token credential or hash leaked into audit events")
 	require.False(t, bytes.Contains(encodedAudits, []byte(model.HashToken(created.Credential))), "personal access token credential or hash leaked into audit events")
 	disable := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/users/me/tokens/"+created.Token.ID.String()+"/disable",
@@ -312,6 +323,7 @@ func TestPersonalAccessTokenIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusOK, disable.Code, "disable PAT status = %d: %s", disable.Code, disable.Body.String())
 	whileDisabled := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/users/me",
@@ -320,6 +332,7 @@ func TestPersonalAccessTokenIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusUnauthorized, whileDisabled.Code, "disabled PAT status = %d: %s", whileDisabled.Code, whileDisabled.Body.String())
 	enable := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/users/me/tokens/"+created.Token.ID.String()+"/enable",
@@ -328,6 +341,7 @@ func TestPersonalAccessTokenIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusOK, enable.Code, "enable PAT status = %d: %s", enable.Code, enable.Body.String())
 	afterEnable := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/users/me",
@@ -336,6 +350,7 @@ func TestPersonalAccessTokenIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusOK, afterEnable.Code, "reenabled PAT status = %d: %s", afterEnable.Code, afterEnable.Body.String())
 	revoke := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodDelete,
 		"/api/v1/users/me/tokens/"+created.Token.ID.String(),
@@ -344,6 +359,7 @@ func TestPersonalAccessTokenIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusNoContent, revoke.Code, "revoke PAT status = %d: %s", revoke.Code, revoke.Body.String())
 	afterRevoke := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/users/me",
@@ -377,6 +393,7 @@ func TestAuthenticationIntegration(t *testing.T) {
 	require.NoError(t, appErr)
 
 	wrong := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/login",
@@ -390,6 +407,7 @@ func TestAuthenticationIntegration(t *testing.T) {
 	assertProblemCode(t, wrong, "authentication.credentials_invalid")
 
 	login := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/login",
@@ -432,6 +450,7 @@ func TestAuthenticationIntegration(t *testing.T) {
 	require.NotContains(t, string(encodedLoginAudits), "wrong password")
 
 	me := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/users/me",
@@ -441,6 +460,7 @@ func TestAuthenticationIntegration(t *testing.T) {
 	require.Equal(t, http.StatusOK, me.Code, "me status = %d: %s", me.Code, me.Body.String())
 
 	refresh := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/refresh",
@@ -452,6 +472,7 @@ func TestAuthenticationIntegration(t *testing.T) {
 	require.NotEqual(t, first.Tokens.AccessToken, second.Tokens.AccessToken, "refresh did not rotate both credentials")
 	require.NotEqual(t, first.Tokens.RefreshToken, second.Tokens.RefreshToken, "refresh did not rotate both credentials")
 	oldAccess := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/users/me",
@@ -462,6 +483,7 @@ func TestAuthenticationIntegration(t *testing.T) {
 	assertProblemCode(t, oldAccess, "authentication.token_invalid")
 
 	replay := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/refresh",
@@ -471,6 +493,7 @@ func TestAuthenticationIntegration(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, replay.Code, "refresh replay status = %d: %s", replay.Code, replay.Body.String())
 	assertProblemCode(t, replay, "authentication.token_invalid")
 	revokedByReplay := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/users/me",
@@ -481,6 +504,7 @@ func TestAuthenticationIntegration(t *testing.T) {
 	assertProblemCode(t, revokedByReplay, "authentication.token_invalid")
 
 	loginAgain := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/login",
@@ -493,6 +517,7 @@ func TestAuthenticationIntegration(t *testing.T) {
 	require.Equal(t, http.StatusOK, loginAgain.Code, "second login status = %d: %s", loginAgain.Code, loginAgain.Body.String())
 	third := decodeAuthenticationResponse(t, loginAgain)
 	logout := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/logout",
@@ -501,6 +526,7 @@ func TestAuthenticationIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusNoContent, logout.Code, "logout status = %d: %s", logout.Code, logout.Body.String())
 	afterLogout := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/users/me",
@@ -511,6 +537,7 @@ func TestAuthenticationIntegration(t *testing.T) {
 	assertProblemCode(t, afterLogout, "authentication.token_invalid")
 
 	loginBeforeDisable := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/login",
@@ -537,6 +564,7 @@ func TestAuthenticationIntegration(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	refreshAfterDisable := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/refresh",
@@ -547,6 +575,7 @@ func TestAuthenticationIntegration(t *testing.T) {
 	assertProblemCode(t, refreshAfterDisable, "authentication.token_invalid")
 	for attempt := 1; attempt <= 3; attempt++ {
 		rateLimited := performJSONRequest(
+			t,
 			helper.Handler(),
 			http.MethodPost,
 			"/api/v1/auth/login",
@@ -608,6 +637,7 @@ func TestBrowserCookieAuthenticationIntegration(t *testing.T) {
 	require.NoError(t, appErr)
 
 	login := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/login",
@@ -631,23 +661,27 @@ func TestBrowserCookieAuthenticationIntegration(t *testing.T) {
 	}
 
 	me := performBrowserJSONRequest(
+		t,
 		helper.Handler(), http.MethodGet, "/api/v1/users/me",
 		nil, loginCookies, "", "",
 	)
 	require.Equal(t, http.StatusOK, me.Code, "browser current-user status = %d: %s", me.Code, me.Body.String())
 	ambiguous := performBrowserJSONRequest(
+		t,
 		helper.Handler(), http.MethodGet, "/api/v1/users/me",
 		nil, loginCookies, "another-access-token", "",
 	)
 	require.Equal(t, http.StatusBadRequest, ambiguous.Code, "ambiguous browser credential status = %d: %s", ambiguous.Code, ambiguous.Body.String())
 
 	missingLogoutCSRF := performBrowserJSONRequest(
+		t,
 		helper.Handler(), http.MethodPost, "/api/v1/auth/logout",
 		nil, loginCookies, "", "",
 	)
 	require.Equal(t, http.StatusForbidden, missingLogoutCSRF.Code, "missing logout CSRF status = %d: %s", missingLogoutCSRF.Code, missingLogoutCSRF.Body.String())
 	assertProblemCode(t, missingLogoutCSRF, "authentication.csrf.invalid")
 	missingRefreshCSRF := performBrowserJSONRequest(
+		t,
 		helper.Handler(), http.MethodPost, "/api/v1/auth/refresh",
 		nil, loginCookies, "", "",
 	)
@@ -655,6 +689,7 @@ func TestBrowserCookieAuthenticationIntegration(t *testing.T) {
 	assertProblemCode(t, missingRefreshCSRF, "authentication.csrf.invalid")
 
 	refresh := performBrowserJSONRequest(
+		t,
 		helper.Handler(), http.MethodPost, "/api/v1/auth/refresh",
 		nil, loginCookies, "",
 		loginCookies[route.BrowserCSRFCookieName].Value,
@@ -671,17 +706,20 @@ func TestBrowserCookieAuthenticationIntegration(t *testing.T) {
 	}
 
 	oldAccess := performBrowserJSONRequest(
+		t,
 		helper.Handler(), http.MethodGet, "/api/v1/users/me",
 		nil, loginCookies, "", "",
 	)
 	require.Equal(t, http.StatusUnauthorized, oldAccess.Code, "old browser access status")
 	currentAccess := performBrowserJSONRequest(
+		t,
 		helper.Handler(), http.MethodGet, "/api/v1/users/me",
 		nil, refreshedCookies, "", "",
 	)
 	require.Equal(t, http.StatusOK, currentAccess.Code, "refreshed browser access status = %d: %s", currentAccess.Code, currentAccess.Body.String())
 
 	logout := performBrowserJSONRequest(
+		t,
 		helper.Handler(), http.MethodPost, "/api/v1/auth/logout",
 		nil, refreshedCookies, "",
 		refreshedCookies[route.BrowserCSRFCookieName].Value,
@@ -727,6 +765,7 @@ func TestSessionManagementIntegration(t *testing.T) {
 	)
 
 	list := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/users/me/sessions",
@@ -746,6 +785,7 @@ func TestSessionManagementIntegration(t *testing.T) {
 	require.NotContains(t, list.Body.String(), firstLogin.Tokens.RefreshToken)
 
 	unknownField := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/users/me/sessions/revoke",
@@ -755,6 +795,7 @@ func TestSessionManagementIntegration(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, unknownField.Code, "unknown revoke field status")
 
 	revokeFirst := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/users/me/sessions/revoke",
@@ -763,6 +804,7 @@ func TestSessionManagementIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusNoContent, revokeFirst.Code, "revoke session status = %d: %s", revokeFirst.Code, revokeFirst.Body.String())
 	firstAfterRevoke := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/users/me",
@@ -771,6 +813,7 @@ func TestSessionManagementIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusUnauthorized, firstAfterRevoke.Code, "revoked access status")
 	secondStillActive := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/users/me",
@@ -780,6 +823,7 @@ func TestSessionManagementIntegration(t *testing.T) {
 	require.Equal(t, http.StatusOK, secondStillActive.Code, "unrelated session status")
 
 	invalidID := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/users/me/sessions/revoke",
@@ -804,6 +848,7 @@ func TestSessionManagementIntegration(t *testing.T) {
 		"other-device",
 	)
 	crossUserRevoke := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/users/me/sessions/revoke",
@@ -813,6 +858,7 @@ func TestSessionManagementIntegration(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, crossUserRevoke.Code, "cross-user revoke status = %d: %s", crossUserRevoke.Code, crossUserRevoke.Body.String())
 	assertProblemCode(t, crossUserRevoke, "session.not_found")
 	otherStillActive := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/users/me",
@@ -822,6 +868,7 @@ func TestSessionManagementIntegration(t *testing.T) {
 	require.Equal(t, http.StatusOK, otherStillActive.Code, "cross-user session status")
 
 	revokeAll := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/users/me/sessions/revoke-all",
@@ -830,6 +877,7 @@ func TestSessionManagementIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusNoContent, revokeAll.Code, "revoke-all status = %d: %s", revokeAll.Code, revokeAll.Body.String())
 	secondAfterRevokeAll := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/users/me",
@@ -847,6 +895,7 @@ func TestSessionManagementIntegration(t *testing.T) {
 		"third-device",
 	)
 	activeAfterRevokeAll := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/users/me/sessions",
@@ -883,6 +932,7 @@ func loginIntegrationUser(
 ) authenticationResponse {
 	t.Helper()
 	response := performJSONRequest(
+		t,
 		handler,
 		http.MethodPost,
 		"/api/v1/auth/login",
@@ -1024,6 +1074,7 @@ func decodeSessionList(t *testing.T, response *httptest.ResponseRecorder) []*mod
 }
 
 func performJSONRequest(
+	t testing.TB,
 	handler http.Handler,
 	method string,
 	path string,
@@ -1034,7 +1085,7 @@ func performJSONRequest(
 	if body != nil {
 		encoded, _ = json.Marshal(body)
 	}
-	request := httptest.NewRequest(method, path, bytes.NewReader(encoded))
+	request := httptest.NewRequestWithContext(t.Context(), method, path, bytes.NewReader(encoded))
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
@@ -1047,6 +1098,7 @@ func performJSONRequest(
 }
 
 func performBrowserJSONRequest(
+	t testing.TB,
 	handler http.Handler,
 	method string,
 	path string,
@@ -1059,7 +1111,7 @@ func performBrowserJSONRequest(
 	if body != nil {
 		encoded, _ = json.Marshal(body)
 	}
-	request := httptest.NewRequest(method, path, bytes.NewReader(encoded))
+	request := httptest.NewRequestWithContext(t.Context(), method, path, bytes.NewReader(encoded))
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
@@ -1145,9 +1197,9 @@ func openAuthenticationStore(t *testing.T, dataSource string) *sqlstore.SQLStore
 	settings := sqlstore.SettingsFromConfig(database)
 	migrator, err := sqlstore.NewMigrator(context.Background(), settings)
 	require.NoError(t, err)
-	if err := migrator.Up(); err != nil {
+	if upErr := migrator.Up(); upErr != nil {
 		_ = migrator.Close()
-		require.NoError(t, err)
+		require.NoError(t, upErr)
 	}
 	require.NoError(t, migrator.Close())
 	persistence, err := sqlstore.New(context.Background(), settings)

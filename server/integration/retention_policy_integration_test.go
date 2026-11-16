@@ -41,7 +41,7 @@ func TestRetentionPolicyHTTPAcrossNodesPreservesAuthorizationAndRetry(t *testing
 	}
 	primary := testlib.Setup(t, testlib.WithConfig(mfaConfig), testlib.WithStore(primaryStore))
 	secondary := testlib.Setup(t, testlib.WithConfig(mfaConfig), testlib.WithStore(secondaryStore))
-	bootstrap := performJSONRequest(primary.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
+	bootstrap := performJSONRequest(t, primary.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
 		"bootstrap_secret": testlib.BootstrapSecret,
 		"institution":      map[string]any{"name": "retention-institution", "display_name": "Retention Institution"},
 		"administrator":    map[string]any{"username": "retention-admin", "email": "retention-admin@example.edu"},
@@ -59,7 +59,7 @@ func TestRetentionPolicyHTTPAcrossNodesPreservesAuthorizationAndRetry(t *testing
 		if method == http.MethodPut {
 			content = body
 		}
-		req := httptest.NewRequest(method, "/api/v1/retention-policy", bytes.NewBufferString(content))
+		req := httptest.NewRequestWithContext(t.Context(), method, "/api/v1/retention-policy", bytes.NewBufferString(content))
 		req.Header.Set("Authorization", "Bearer "+token)
 		if method == http.MethodPut {
 			req.Header.Set("Content-Type", "application/json")
@@ -130,7 +130,7 @@ func TestRetentionPolicyHTTPAcrossNodesPreservesAuthorizationAndRetry(t *testing
 	commandRequest := func(handler http.Handler, method, path, key, token string, body any) *httptest.ResponseRecorder {
 		encoded, err := json.Marshal(body)
 		require.NoError(t, err)
-		req := httptest.NewRequest(method, path, bytes.NewReader(encoded))
+		req := httptest.NewRequestWithContext(t.Context(), method, path, bytes.NewReader(encoded))
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Content-Type", "application/json")
 		if key != "" {

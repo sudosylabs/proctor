@@ -65,33 +65,33 @@ func TestSearchIntegrationScopesEveryTypeToTheCaller(t *testing.T) {
 		class *model.Class
 	}
 	newDepartment := func(name string) department {
-		unit, err := storetest.SaveAcademicUnit(ctx, persistence, &model.AcademicUnit{InstitutionID: institutionID, Name: name, DisplayName: name})
-		require.NoError(t, err)
-		programme, err := storetest.SaveProgramme(ctx, persistence, &model.Programme{AcademicUnitID: unit.ID, Name: name + "-programme", DisplayName: name + " Programme"})
-		require.NoError(t, err)
-		level, err := storetest.SaveProgrammeLevel(ctx, persistence, &model.ProgrammeLevel{ProgrammeID: programme.ID, Name: name + "-level", DisplayName: name + " Level"})
-		require.NoError(t, err)
-		class, err := storetest.SaveClass(ctx, persistence, &model.Class{ProgrammeLevelID: level.ID, AcademicPeriodID: period.ID, Name: "orbit-" + name, DisplayName: "Orbit " + name})
-		require.NoError(t, err)
+		unit, saveErr := storetest.SaveAcademicUnit(ctx, persistence, &model.AcademicUnit{InstitutionID: institutionID, Name: name, DisplayName: name})
+		require.NoError(t, saveErr)
+		programme, saveErr := storetest.SaveProgramme(ctx, persistence, &model.Programme{AcademicUnitID: unit.ID, Name: name + "-programme", DisplayName: name + " Programme"})
+		require.NoError(t, saveErr)
+		level, saveErr := storetest.SaveProgrammeLevel(ctx, persistence, &model.ProgrammeLevel{ProgrammeID: programme.ID, Name: name + "-level", DisplayName: name + " Level"})
+		require.NoError(t, saveErr)
+		class, saveErr := storetest.SaveClass(ctx, persistence, &model.Class{ProgrammeLevelID: level.ID, AcademicPeriodID: period.ID, Name: "orbit-" + name, DisplayName: "Orbit " + name})
+		require.NoError(t, saveErr)
 		return department{unit: unit, class: class}
 	}
 	physics, chemistry := newDepartment("physics"), newDepartment("chemistry")
 
 	newCaller := func(username string) (*model.User, invocation.Invocation) {
-		user, appErr := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
+		user, callerErr := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 			Username: username, Email: username + "@example.edu", DisplayName: username,
 		}, Password: password})
-		require.NoError(t, appErr)
+		require.NoError(t, callerErr)
 		login := loginIntegrationUser(t, helper.Handler(), username, password, model.SessionClientCLI, username+"-cli")
-		principal, appErr := helper.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
-		require.NoError(t, appErr)
+		principal, callerErr := helper.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
+		require.NoError(t, callerErr)
 		return user, invocation.New(*principal, model.RequestMetadata{RequestID: username + "-search"})
 	}
 	teach := func(user *model.User, unit *model.AcademicUnit) {
-		_, err := persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: user.ID, StartsAt: startedAt})
-		require.NoError(t, err)
-		_, err = storetest.SaveRoleBinding(ctx, persistence, &model.RoleBinding{UserID: user.ID, RoleID: role.ID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unit.ID.String(), StartsAt: startedAt})
-		require.NoError(t, err)
+		_, saveErr := persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: user.ID, StartsAt: startedAt})
+		require.NoError(t, saveErr)
+		_, saveErr = storetest.SaveRoleBinding(ctx, persistence, &model.RoleBinding{UserID: user.ID, RoleID: role.ID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unit.ID.String(), StartsAt: startedAt})
+		require.NoError(t, saveErr)
 	}
 	physicist, physicistCall := newCaller("orbit-physicist")
 	teach(physicist, physics.unit)

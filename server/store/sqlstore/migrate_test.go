@@ -171,8 +171,8 @@ func TestMigrationsRoundTrip(t *testing.T) {
 	case 0:
 	case 1:
 		truncateBaselineTables(t, ctx, migrator)
-		rolledBack, err := migrator.Down(ctx, 1)
-		require.NoError(t, err, "prepare version-zero database: Down(1)")
+		rolledBack, downErr := migrator.Down(ctx, 1)
+		require.NoError(t, downErr, "prepare version-zero database: Down(1)")
 		require.Equal(t, 1, rolledBack, "prepare version-zero database: Down(1)")
 	default:
 		require.FailNow(t, fmt.Sprintf("database schema version = %d; recreate this pre-release development database before testing baseline version 1", version))

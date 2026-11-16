@@ -42,7 +42,7 @@ func TestAccountRecoveryIntegration(t *testing.T) {
 		}),
 		testlib.WithStore(persistence),
 	)
-	bootstrap, appErr := helper.App.Identity.BootstrapInstallation(context.Background(), invocation.Invocation{}, identity.BootstrapInstallationCommand{
+	bootstrap, appErr := helper.App.Identity.BootstrapInstallation(context.Background(), invocation.Invocation{}, identity.BootstrapInstallationCommand{ //nolint:gosec // G101: fixed test password and test bootstrap secret, not a real credential
 		InstitutionName: "recovery-university", InstitutionDisplayName: "Recovery University",
 		AdministratorUsername: "recovery-admin", AdministratorEmail: "recovery-admin@example.edu",
 		AdministratorDisplayName: "Recovery Admin", AdministratorLocale: "en", AdministratorTimezone: "UTC",
@@ -68,6 +68,7 @@ func TestAccountRecoveryIntegration(t *testing.T) {
 	)
 
 	verificationRequest := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/email-verification/request",
@@ -80,6 +81,7 @@ func TestAccountRecoveryIntegration(t *testing.T) {
 	verificationToken := credentialFromDelivery(t, deliveries[0])
 	require.NotContains(t, helper.Logs.String(), verificationToken, "verification token appeared in logs")
 	verificationComplete := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/email-verification/complete",
@@ -91,6 +93,7 @@ func TestAccountRecoveryIntegration(t *testing.T) {
 	require.NoError(t, err, "verified user = %#v", verified)
 	require.True(t, verified.EmailVerified, "verified user = %#v", verified)
 	verificationReplay := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/email-verification/complete",
@@ -100,6 +103,7 @@ func TestAccountRecoveryIntegration(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, verificationReplay.Code, "verification replay status")
 
 	unknownReset := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/password-reset/request",
@@ -107,6 +111,7 @@ func TestAccountRecoveryIntegration(t *testing.T) {
 		"",
 	)
 	knownReset := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/password-reset/request",
@@ -120,6 +125,7 @@ func TestAccountRecoveryIntegration(t *testing.T) {
 	resetToken := credentialFromDelivery(t, deliveries[1])
 	require.NotContains(t, helper.Logs.String(), resetToken, "password reset token appeared in logs")
 	resetComplete := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/password-reset/complete",
@@ -132,6 +138,7 @@ func TestAccountRecoveryIntegration(t *testing.T) {
 	require.False(t, credentialPattern.MatchString(changedMessage), "password-changed notice contains a credential or lacks expected copy")
 	require.Contains(t, changedMessage, "Your password was changed", "password-changed notice contains a credential or lacks expected copy")
 	oldSession := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/users/me",
@@ -140,6 +147,7 @@ func TestAccountRecoveryIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusUnauthorized, oldSession.Code, "pre-reset session status")
 	oldLogin := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/login",
@@ -151,6 +159,7 @@ func TestAccountRecoveryIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusUnauthorized, oldLogin.Code, "old password login status")
 	newLogin := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/login",
@@ -162,6 +171,7 @@ func TestAccountRecoveryIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusOK, newLogin.Code, "new password login status = %d: %s", newLogin.Code, newLogin.Body.String())
 	resetReplay := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/password-reset/complete",
@@ -201,6 +211,7 @@ func TestPasswordResetRequestRateLimitDoesNotDependOnAccountExistence(
 	)
 	for attempt := 1; attempt <= 2; attempt++ {
 		response := performJSONRequest(
+			t,
 			helper.Handler(),
 			http.MethodPost,
 			"/api/v1/auth/password-reset/request",
@@ -223,7 +234,7 @@ func TestCurrentAccessPolicyGatesLocalLoginAndPasswordRecoveryRealGraph(t *testi
 		cfg.Authentication.AccountRecovery.RateLimit.MaximumAttempts = 20
 		cfg.Authentication.AccountRecovery.RateLimit.MaximumSourceAttempts = 100
 	}), testlib.WithStore(persistence))
-	bootstrap, appErr := helper.App.Identity.BootstrapInstallation(context.Background(), invocation.Invocation{}, identity.BootstrapInstallationCommand{
+	bootstrap, appErr := helper.App.Identity.BootstrapInstallation(context.Background(), invocation.Invocation{}, identity.BootstrapInstallationCommand{ //nolint:gosec // G101: fixed test password and test bootstrap secret, not a real credential
 		InstitutionName: "policy-recovery", InstitutionDisplayName: "Policy Recovery",
 		AdministratorUsername: "policy-recovery-admin", AdministratorEmail: "policy-recovery-admin@example.edu",
 		AdministratorLocale: "en", AdministratorTimezone: "UTC",
@@ -237,7 +248,7 @@ func TestCurrentAccessPolicyGatesLocalLoginAndPasswordRecoveryRealGraph(t *testi
 	}, Password: password})
 	require.NoError(t, appErr)
 	startIntegrationServer(t, helper)
-	issued := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/password-reset/request",
+	issued := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/auth/password-reset/request",
 		map[string]any{"email": user.Email}, "")
 	require.Equal(t, http.StatusAccepted, issued.Code, "initial reset status")
 	resetToken := credentialFromDelivery(t, waitForRecoveryDeliveries(t, helper, 1)[0])
@@ -245,15 +256,15 @@ func TestCurrentAccessPolicyGatesLocalLoginAndPasswordRecoveryRealGraph(t *testi
 		`UPDATE access_policies SET local_login_enabled=FALSE,
 		 invitation_local_credential_enabled=FALSE WHERE singleton=1`)
 	require.NoError(t, err)
-	login := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/login", map[string]any{
+	login := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/auth/login", map[string]any{
 		"login_id": user.Email, "password": password, "client_type": model.SessionClientWeb,
 	}, "")
 	require.Equal(t, http.StatusUnauthorized, login.Code, "disabled local login status=%d: %s", login.Code, login.Body.String())
-	hidden := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/password-reset/request",
+	hidden := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/auth/password-reset/request",
 		map[string]any{"email": user.Email}, "")
 	require.Equal(t, http.StatusAccepted, hidden.Code, "disabled reset status")
 	require.Len(t, helper.Mailer.Deliveries(), 1, "disabled reset status")
-	completed := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/password-reset/complete",
+	completed := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/auth/password-reset/complete",
 		map[string]any{"token": resetToken, "password": "new correct horse battery staple"}, "")
 	require.Equal(t, http.StatusBadRequest, completed.Code, "disabled reset completion status=%d: %s", completed.Code, completed.Body.String())
 	retained, err := persistence.UserToken().GetByHash(context.Background(), model.HashToken(resetToken), model.UserTokenPasswordReset)

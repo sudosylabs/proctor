@@ -43,7 +43,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	handler := helper.Handler()
 	password := "correct horse battery staple"
 
-	bootstrap := performJSONRequest(handler, http.MethodPost, "/api/v1/bootstrap", map[string]any{
+	bootstrap := performJSONRequest(t, handler, http.MethodPost, "/api/v1/bootstrap", map[string]any{
 		"bootstrap_secret": testlib.BootstrapSecret,
 		"institution": map[string]any{
 			"name": "northbridge", "display_name": "Northbridge University",
@@ -144,7 +144,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	csvBatchUser := createIntegrationUser(t, helper, "csv-batch-user", password)
 	cancelBatchUser := createIntegrationUser(t, helper, "cancel-batch-user", password)
 
-	jsonBatch := performIdempotentJSONRequest(handler, "/api/v1/academic-administration-batches", map[string]any{
+	jsonBatch := performIdempotentJSONRequest(t, handler, "/api/v1/academic-administration-batches", map[string]any{
 		"operation": "affiliation.add", "scope_type": "institution", "scope_id": installation.Institution.ID.String(),
 		"items": []map[string]any{{
 			"key": "json-staff", "user_id": jsonBatchUser.ID.String(), "affiliation_kind": "staff", "start_at": integrationWireTime(now - 2_000),
@@ -159,7 +159,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	require.Equal(t, model.AffiliationStaff, jsonAffiliations[0].Kind, "JSON batch affiliations")
 
 	csvStart := model.NowUTC().Add(-time.Minute).Format(time.RFC3339)
-	csvUpload := performCSVUpload(handler,
+	csvUpload := performCSVUpload(t, handler,
 		"/api/v1/onboarding-imports?mode=academic_administration&scope_type=institution&scope_id="+installation.Institution.ID.String(),
 		"operation,user_id,affiliation_kind,start_at,reference\n"+
 			"affiliation.add,"+csvBatchUser.ID.String()+",staff,"+csvStart+",csv-staff\n",
@@ -173,7 +173,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	require.Equal(t, 1, csvImport.ValidRows)
 	require.Len(t, csvImport.Rows, 1)
 	require.Equal(t, "valid", csvImport.Rows[0].Status)
-	csvCommit := performIdempotentJSONRequest(handler, "/api/v1/onboarding-imports/"+csvImport.ID+"/commit", map[string]any{
+	csvCommit := performIdempotentJSONRequest(t, handler, "/api/v1/onboarding-imports/"+csvImport.ID+"/commit", map[string]any{
 		"expected_revision": csvImport.Revision, "preview_digest": csvImport.PreviewDigest, "policy": "require_all_valid",
 	}, adminToken, "academic-csv-commit")
 	require.Equal(t, http.StatusAccepted, csvCommit.Code, "academic CSV commit = %d: %s", csvCommit.Code, csvCommit.Body.String())
@@ -181,7 +181,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	require.Equal(t, 1, csvImport.SucceededRows)
 	require.Equal(t, 0, csvImport.FailedRows)
 	require.NotEmpty(t, csvImport.Rows[0].ResourceID)
-	csvReport := performJSONRequest(handler, http.MethodGet, "/api/v1/onboarding-imports/"+csvImport.ID+"/report", nil, adminToken)
+	csvReport := performJSONRequest(t, handler, http.MethodGet, "/api/v1/onboarding-imports/"+csvImport.ID+"/report", nil, adminToken)
 	require.Equal(t, http.StatusOK, csvReport.Code, "academic CSV report = %d %q headers=%v", csvReport.Code, csvReport.Body.String(), csvReport.Header())
 	require.Contains(t, csvReport.Body.String(), csvImport.Rows[0].ResourceID, "academic CSV report = %d %q headers=%v", csvReport.Code, csvReport.Body.String(), csvReport.Header())
 	require.NotContains(t, csvReport.Body.String(), csvBatchUser.Email, "academic CSV report = %d %q headers=%v", csvReport.Code, csvReport.Body.String(), csvReport.Header())
@@ -193,7 +193,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 
 	// A CSV row that ends a relationship names only that relationship, and
 	// executes even though its frozen row also records the resolved User.
-	endUpload := performCSVUpload(handler,
+	endUpload := performCSVUpload(t, handler,
 		"/api/v1/onboarding-imports?mode=academic_administration&scope_type=institution&scope_id="+installation.Institution.ID.String(),
 		"operation,relationship_id,reference\n"+
 			"affiliation.end,"+csvAffiliations[0].ID.String()+",csv-staff-end\n",
@@ -204,7 +204,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	decodeIntegrationResponse(t, endUpload, &endImport)
 	endImport = waitForOnboardingImportState(t, handler, adminToken, onboardingImportsCollection, endImport.ID, "preview_ready")
 	require.Equal(t, 1, endImport.ValidRows)
-	endCommit := performIdempotentJSONRequest(handler, "/api/v1/onboarding-imports/"+endImport.ID+"/commit", map[string]any{
+	endCommit := performIdempotentJSONRequest(t, handler, "/api/v1/onboarding-imports/"+endImport.ID+"/commit", map[string]any{
 		"expected_revision": endImport.Revision, "preview_digest": endImport.PreviewDigest, "policy": "require_all_valid",
 	}, adminToken, "academic-csv-end-commit")
 	require.Equal(t, http.StatusAccepted, endCommit.Code, "academic CSV end commit = %d: %s", endCommit.Code, endCommit.Body.String())
@@ -215,7 +215,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	require.NoError(t, err, "CSV ended affiliation")
 	require.True(t, endedAffiliation.EndsAt.Valid, "the CSV end row ended the affiliation")
 
-	cancelUpload := performCSVUpload(handler,
+	cancelUpload := performCSVUpload(t, handler,
 		"/api/v1/onboarding-imports?mode=academic_administration&scope_type=institution&scope_id="+installation.Institution.ID.String(),
 		"operation,user_id,affiliation_kind,start_at,reference\n"+
 			"affiliation.add,"+cancelBatchUser.ID.String()+",staff,"+csvStart+",cancel-staff\n",
@@ -230,7 +230,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 		cfg.Cluster.NodeID = "academic-administration-cancel-secondary"
 		cfg.Server.ListenAddress = "127.0.0.1:0"
 	}))
-	canceled := performJSONRequest(secondary.Handler(), http.MethodPost, "/api/v1/onboarding-imports/"+cancelImport.ID+"/cancel", nil, adminToken)
+	canceled := performJSONRequest(t, secondary.Handler(), http.MethodPost, "/api/v1/onboarding-imports/"+cancelImport.ID+"/cancel", nil, adminToken)
 	require.Equal(t, http.StatusOK, canceled.Code, "cross-node CSV cancellation")
 	require.Contains(t, canceled.Body.String(), `"state":"canceled"`, "cross-node CSV cancellation")
 	cancelImport = waitForOnboardingImportState(t, handler, adminToken, onboardingImportsCollection, cancelImport.ID, "canceled")
@@ -263,6 +263,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 		adminToken,
 	)
 	firstEnrollmentResponse := performJSONRequest(
+		t,
 		handler, http.MethodPost, "/api/v1/classes/"+firstClass.ID.String()+"/members",
 		map[string]any{"user_id": student.ID.String(), "start_at": integrationWireTime(now - 5_000)}, adminToken,
 	)
@@ -271,6 +272,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	decodeIntegrationResponse(t, firstEnrollmentResponse, &firstEnrollment)
 	require.Nil(t, firstEnrollment.Previous, "first enrollment = %#v", &firstEnrollment)
 	transferResponse := performJSONRequest(
+		t,
 		handler, http.MethodPost, "/api/v1/classes/"+secondClass.ID.String()+"/members",
 		map[string]any{"user_id": student.ID.String(), "start_at": integrationWireTime(now - 1_000)}, adminToken,
 	)
@@ -281,7 +283,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	require.Equal(t, firstEnrollment.Membership.ID, transfer.Previous.ID)
 	require.True(t, transfer.Previous.EndAt.Equal(time.UnixMilli(now-1_000)))
 	effectiveAt := destinationPeriod.StartsAt.Add(time.Hour)
-	dryRun := performJSONRequest(handler, http.MethodPost, "/api/v1/student-progressions", map[string]any{
+	dryRun := performJSONRequest(t, handler, http.MethodPost, "/api/v1/student-progressions", map[string]any{
 		"source_period_id": period.ID.String(), "source_class_id": secondClass.ID.String(),
 		"destination_period_id": destinationPeriod.ID.String(), "destination_class_id": destinationClass.ID.String(),
 		"effective_at": effectiveAt.Format(time.RFC3339Nano),
@@ -294,7 +296,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	require.Equal(t, 1, progression.ValidRows)
 	require.Len(t, progression.Rows, 1)
 	require.Equal(t, "valid", progression.Rows[0].Status)
-	committedProgression := performIdempotentJSONRequest(handler, "/api/v1/student-progressions/"+progression.ID+"/commit", map[string]any{
+	committedProgression := performIdempotentJSONRequest(t, handler, "/api/v1/student-progressions/"+progression.ID+"/commit", map[string]any{
 		"expected_revision": progression.Revision, "preview_digest": progression.PreviewDigest,
 	}, adminToken, "academic-progression-commit")
 	require.Equal(t, http.StatusAccepted, committedProgression.Code, "progression commit = %d: %s", committedProgression.Code, committedProgression.Body.String())
@@ -303,7 +305,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	require.Equal(t, 0, progression.FailedRows)
 	require.Len(t, progression.Rows, 1)
 	require.NotEmpty(t, progression.Rows[0].ResourceID)
-	progressionReport := performJSONRequest(handler, http.MethodGet, "/api/v1/student-progressions/"+progression.ID+"/report", nil, adminToken)
+	progressionReport := performJSONRequest(t, handler, http.MethodGet, "/api/v1/student-progressions/"+progression.ID+"/report", nil, adminToken)
 	require.Equal(t, http.StatusOK, progressionReport.Code, "progression report = %d %q headers=%v", progressionReport.Code, progressionReport.Body.String(), progressionReport.Header())
 	require.Contains(t, progressionReport.Body.String(), progression.Rows[0].ResourceID, "progression report = %d %q headers=%v", progressionReport.Code, progressionReport.Body.String(), progressionReport.Header())
 	require.NotContains(t, progressionReport.Body.String(), student.Email, "progression report = %d %q headers=%v", progressionReport.Code, progressionReport.Body.String(), progressionReport.Header())
@@ -334,6 +336,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 		model.SessionClientCLI, "teacher-cli",
 	)
 	visible := performJSONRequest(
+		t,
 		handler, http.MethodGet, "/api/v1/users/"+student.ID.String(), nil,
 		teacherLogin.Tokens.AccessToken,
 	)
@@ -354,11 +357,13 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	require.Equal(t, model.RoleScopeAcademicUnit, visibilityEvents[0].ScopeType)
 	require.Equal(t, root.ID.String(), visibilityEvents[0].ScopeID)
 	hidden := performJSONRequest(
+		t,
 		handler, http.MethodGet, "/api/v1/users/"+unrelated.ID.String(), nil,
 		teacherLogin.Tokens.AccessToken,
 	)
 	require.Equal(t, http.StatusForbidden, hidden.Code, "unrelated student visibility = %d: %s", hidden.Code, hidden.Body.String())
 	patchUser := performJSONRequest(
+		t,
 		handler,
 		http.MethodPatch,
 		"/api/v1/users/"+student.ID.String(),
@@ -367,6 +372,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusOK, patchUser.Code, "patch user = %d: %s", patchUser.Code, patchUser.Body.String())
 	userSearch := performJSONRequest(
+		t,
 		handler, http.MethodGet, "/api/v1/users?q=Student+One+Updated&limit=10", nil,
 		adminToken,
 	)
@@ -376,6 +382,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	require.Len(t, foundUsers, 1)
 	require.Equal(t, student.ID, foundUsers[0].ID)
 	endUnitMembership := performJSONRequest(
+		t,
 		handler,
 		http.MethodDelete,
 		"/api/v1/academic-unit-members/"+unitMember.ID,
@@ -383,7 +390,8 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 		adminToken,
 	)
 	require.Equal(t, http.StatusOK, endUnitMembership.Code, "end academic unit membership = %d: %s", endUnitMembership.Code, endUnitMembership.Body.String()+"; logs="+helper.Logs.String())
-	malformed := httptest.NewRequest(
+	malformed := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/api/v1/academic-units/"+child.ID.String()+"/children",
 		strings.NewReader("{"),
@@ -395,6 +403,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, malformedResponse.Code, "malformed academic unit body was not rejected at transport: %d: %s", malformedResponse.Code, malformedResponse.Body.String())
 
 	activeMembers := performJSONRequest(
+		t,
 		handler, http.MethodGet, "/api/v1/classes/"+secondClass.ID.String()+"/members", nil,
 		adminToken,
 	)
@@ -409,16 +418,19 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 		model.SessionClientCLI, "disabled-cli",
 	)
 	disableResponse := performJSONRequest(
+		t,
 		handler, http.MethodPost, "/api/v1/users/"+disabled.ID.String()+"/disable", nil,
 		adminToken,
 	)
 	require.Equal(t, http.StatusOK, disableResponse.Code, "disable user = %d: %s", disableResponse.Code, disableResponse.Body.String())
 	revoked := performJSONRequest(
+		t,
 		handler, http.MethodGet, "/api/v1/users/me", nil,
 		disabledLogin.Tokens.AccessToken,
 	)
 	require.Equal(t, http.StatusUnauthorized, revoked.Code, "disabled session remained valid = %d: %s", revoked.Code, revoked.Body.String())
 	refreshRevoked := performJSONRequest(
+		t,
 		handler, http.MethodPost, "/api/v1/auth/refresh", nil,
 		disabledLogin.Tokens.RefreshToken,
 	)
@@ -433,6 +445,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 		model.SessionClientCLI, "student-second-cli",
 	)
 	teacherSessionList := performJSONRequest(
+		t,
 		handler,
 		http.MethodGet,
 		"/api/v1/users/"+student.ID.String()+"/sessions",
@@ -441,6 +454,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusForbidden, teacherSessionList.Code, "teacher session list = %d: %s", teacherSessionList.Code, teacherSessionList.Body.String())
 	sessionList := performJSONRequest(
+		t,
 		handler,
 		http.MethodGet,
 		"/api/v1/users/"+student.ID.String()+"/sessions",
@@ -452,6 +466,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	decodeIntegrationResponse(t, sessionList, &studentSessions)
 	require.Len(t, studentSessions, 2)
 	revokeOne := performJSONRequest(
+		t,
 		handler,
 		http.MethodDelete,
 		"/api/v1/users/"+student.ID.String()+"/sessions/"+firstStudentSession.Session.ID.String(),
@@ -460,6 +475,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusNoContent, revokeOne.Code, "administrator session revoke = %d: %s", revokeOne.Code, revokeOne.Body.String())
 	firstRevoked := performJSONRequest(
+		t,
 		handler,
 		http.MethodGet,
 		"/api/v1/users/me",
@@ -468,6 +484,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusUnauthorized, firstRevoked.Code, "revoked student session")
 	secondActive := performJSONRequest(
+		t,
 		handler,
 		http.MethodGet,
 		"/api/v1/users/me",
@@ -476,6 +493,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusOK, secondActive.Code, "unrelated student session")
 	revokeAll := performJSONRequest(
+		t,
 		handler,
 		http.MethodPost,
 		"/api/v1/users/"+student.ID.String()+"/sessions/revoke-all",
@@ -484,6 +502,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusNoContent, revokeAll.Code, "administrator revoke all sessions = %d: %s", revokeAll.Code, revokeAll.Body.String())
 	secondRevoked := performJSONRequest(
+		t,
 		handler,
 		http.MethodGet,
 		"/api/v1/users/me",
@@ -492,6 +511,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusUnauthorized, secondRevoked.Code, "student session survived revoke all")
 	endClassMembership := performJSONRequest(
+		t,
 		handler,
 		http.MethodDelete,
 		"/api/v1/class-members/"+transfer.Membership.ID,
@@ -578,7 +598,7 @@ func waitForOnboardingImportState(t *testing.T, handler http.Handler, token stri
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		response := performJSONRequest(handler, http.MethodGet, "/api/v1/"+string(collection)+"/"+id, nil, token)
+		response := performJSONRequest(t, handler, http.MethodGet, "/api/v1/"+string(collection)+"/"+id, nil, token)
 		require.Equal(t, http.StatusOK, response.Code, "get progression = %d: %s", response.Code, response.Body.String())
 		var current onboardingImportIntegrationResponse
 		decodeIntegrationResponse(t, response, &current)
@@ -594,8 +614,8 @@ func waitForOnboardingImportState(t *testing.T, handler http.Handler, token stri
 	return onboardingImportIntegrationResponse{}
 }
 
-func performCSVUpload(handler http.Handler, path, body, bearer string) *httptest.ResponseRecorder {
-	request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+func performCSVUpload(t testing.TB, handler http.Handler, path, body, bearer string) *httptest.ResponseRecorder {
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer "+bearer)
 	request.Header.Set("Content-Type", "text/csv; charset=utf-8")
 	response := httptest.NewRecorder()
@@ -641,7 +661,7 @@ func createIntegrationResource[T any](
 	token string,
 ) *T {
 	t.Helper()
-	response := performJSONRequest(handler, method, path, body, token)
+	response := performJSONRequest(t, handler, method, path, body, token)
 	require.Equal(t, http.StatusCreated, response.Code, "%s %s = %d: %s", method, path, response.Code, response.Body.String())
 	var result T
 	var wire wireAcademicResourceResponse

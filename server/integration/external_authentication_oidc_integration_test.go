@@ -150,6 +150,7 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	begin := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/auth/providers/"+providerID+
@@ -179,7 +180,8 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 	callbackPath := model.APIURLSuffix + "/auth/providers/" +
 		providerID + "/callback?state=" + url.QueryEscape(state) +
 		"&code=" + url.QueryEscape(code)
-	callbackRequest := httptest.NewRequest(
+	callbackRequest := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		callbackPath,
 		nil,
@@ -189,7 +191,7 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 	helper.Handler().ServeHTTP(callback, callbackRequest)
 	require.Equal(t, http.StatusSeeOther, callback.Code, "callback status=%d location=%q body=%s", callback.Code, callback.Header().Get("Location"), callback.Body.String())
 	require.Equal(t, "/oidc-complete", callback.Header().Get("Location"), "callback status=%d location=%q body=%s", callback.Code, callback.Header().Get("Location"), callback.Body.String())
-	replayRequest := httptest.NewRequest(http.MethodGet, callbackPath, nil)
+	replayRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, callbackPath, nil)
 	replayRequest.AddCookie(bindingCookie)
 	replay := httptest.NewRecorder()
 	helper.Handler().ServeHTTP(replay, replayRequest)
@@ -235,7 +237,7 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 	invitedEmail := "invited.oidc@example.edu"
 	claim, pendingInvitation := seedExternalAdmissionInvitation(t, persistence, institution, user, invitedEmail)
 	subject, claimedUsername, claimedEmail = "invited-oidc-subject", "invited.oidc", " Provider.OIDC@Example.EDU "
-	invitationBegin := performJSONRequest(helper.Handler(), http.MethodPost,
+	invitationBegin := performJSONRequest(t, helper.Handler(), http.MethodPost,
 		"/api/v1/auth/providers/"+invitationProviderID+"/login",
 		map[string]any{"invitation_claim": claim, "return_to": "/join"}, "")
 	require.Equal(t, http.StatusSeeOther, invitationBegin.Code, "OIDC invitation begin = %d location=%q body=%s", invitationBegin.Code, invitationBegin.Header().Get("Location"), invitationBegin.Body.String())
@@ -255,7 +257,7 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 	require.NotNil(t, invitationBinding, "OIDC invitation binding cookie is missing")
 	invitationCallbackPath := model.APIURLSuffix + "/auth/providers/" + invitationProviderID +
 		"/callback?state=" + url.QueryEscape(invitationAuthorizationURL.Query().Get("state")) + "&code=" + url.QueryEscape(code)
-	invitationCallbackRequest := httptest.NewRequest(http.MethodGet, invitationCallbackPath, nil)
+	invitationCallbackRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, invitationCallbackPath, nil)
 	invitationCallbackRequest.AddCookie(invitationBinding)
 	invitationCallback := httptest.NewRecorder()
 	helper.Handler().ServeHTTP(invitationCallback, invitationCallbackRequest)
@@ -288,7 +290,7 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 	require.NoError(t, err, "OIDC Invitation acceptance audits")
 	require.Len(t, invitationAudits, 1, "OIDC Invitation acceptance audits")
 	require.Equal(t, "oidc", invitationAudits[0].AuthMethod, "OIDC Invitation acceptance audits")
-	invitationReplayRequest := httptest.NewRequest(http.MethodGet, invitationCallbackPath, nil)
+	invitationReplayRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, invitationCallbackPath, nil)
 	invitationReplayRequest.AddCookie(invitationBinding)
 	invitationReplay := httptest.NewRecorder()
 	helper.Handler().ServeHTTP(invitationReplay, invitationReplayRequest)
@@ -297,6 +299,7 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 	subject, claimedUsername, claimedEmail = linkedSubject, "oidc.student", "oidc.student@example.edu"
 
 	deniedBegin := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/auth/providers/"+providerID+
@@ -316,7 +319,8 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 		}
 	}
 	require.NotNil(t, deniedBindingCookie, "denied-flow external login binding cookie is missing")
-	deniedCallbackRequest := httptest.NewRequest(
+	deniedCallbackRequest := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		model.APIURLSuffix+"/auth/providers/"+providerID+
 			"/callback?state="+url.QueryEscape(
@@ -346,7 +350,7 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 	}
 
 	loginAgain := func() *httptest.ResponseRecorder {
-		begin := performJSONRequest(helper.Handler(), http.MethodGet,
+		begin := performJSONRequest(t, helper.Handler(), http.MethodGet,
 			"/api/v1/auth/providers/"+providerID+"/login?client_type=web", nil, "")
 		require.Equal(t, http.StatusSeeOther, begin.Code, "OIDC repeat begin status=%d body=%s", begin.Code, begin.Body.String())
 		authorizationURL, parseErr := url.Parse(begin.Header().Get("Location"))
@@ -362,7 +366,7 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 			}
 		}
 		require.NotNil(t, repeatBinding, "OIDC repeat binding cookie is missing")
-		request := httptest.NewRequest(http.MethodGet, model.APIURLSuffix+"/auth/providers/"+providerID+
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, model.APIURLSuffix+"/auth/providers/"+providerID+
 			"/callback?state="+url.QueryEscape(authorizationURL.Query().Get("state"))+"&code="+url.QueryEscape(code), nil)
 		request.AddCookie(repeatBinding)
 		response := httptest.NewRecorder()

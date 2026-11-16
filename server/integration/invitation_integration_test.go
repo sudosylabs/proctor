@@ -40,8 +40,8 @@ func TestInvitationBatchCommitsMixedRowsAndRecoversAcrossRequests(t *testing.T) 
 	}), testlib.WithStore(persistence))
 	startIntegrationServer(t, server)
 
-	const password = "bootstrap correct horse battery staple"
-	bootstrap := performJSONRequest(server.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
+	const password = "bootstrap correct horse battery staple" //nolint:gosec // G101: fixed test password, not a real credential
+	bootstrap := performJSONRequest(t, server.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
 		"bootstrap_secret": testlib.BootstrapSecret,
 		"institution":      map[string]any{"name": "batch-university", "display_name": "Batch University"},
 		"administrator":    map[string]any{"username": "batch-admin", "email": "batch-admin@example.edu"},
@@ -72,7 +72,7 @@ func TestInvitationBatchCommitsMixedRowsAndRecoversAcrossRequests(t *testing.T) 
 			{"key": "row-3", "email": " BATCH-FIRST@example.edu "},
 			{"key": "row-4", "email": "batch-second@example.edu", "suggested_username": "batch-second"},
 		}}
-	first := performIdempotentJSONRequest(server.Handler(), "/api/v1/invitation-batches", body, token, "batch-request")
+	first := performIdempotentJSONRequest(t, server.Handler(), "/api/v1/invitation-batches", body, token, "batch-request")
 	require.Equal(t, http.StatusOK, first.Code, "first Invitation batch = %d: %s; logs=%s", first.Code, first.Body.String(), server.Logs.String())
 	require.Contains(t, first.Body.String(), `"succeeded":2`, "first Invitation batch = %d: %s; logs=%s", first.Code, first.Body.String(), server.Logs.String())
 	require.Contains(t, first.Body.String(), `"failed":2`, "first Invitation batch = %d: %s; logs=%s", first.Code, first.Body.String(), server.Logs.String())
@@ -97,7 +97,7 @@ func TestInvitationBatchCommitsMixedRowsAndRecoversAcrossRequests(t *testing.T) 
 			{"key": "row-2", "email": "batch-invalid@example.edu", "role_id": invalidRoleID},
 			{"key": "row-1", "email": "batch-first@example.edu", "suggested_username": "batch-first"},
 		}}
-	replay := performIdempotentJSONRequest(server.Handler(), "/api/v1/invitation-batches", reordered, token, "batch-request")
+	replay := performIdempotentJSONRequest(t, server.Handler(), "/api/v1/invitation-batches", reordered, token, "batch-request")
 	require.Equal(t, http.StatusOK, replay.Code, "replayed Invitation batch")
 	require.Contains(t, replay.Body.String(), `"no_op":2`, "replayed Invitation batch")
 	require.Contains(t, replay.Body.String(), `"failed":2`, "replayed Invitation batch")
@@ -113,15 +113,15 @@ func TestInvitationBatchCommitsMixedRowsAndRecoversAcrossRequests(t *testing.T) 
 			{"key": "row-3", "email": "changed@example.edu"},
 			{"key": "row-4", "email": "batch-second@example.edu", "suggested_username": "batch-second"},
 		}}
-	conflict := performIdempotentJSONRequest(server.Handler(), "/api/v1/invitation-batches", changed, token, "batch-request")
+	conflict := performIdempotentJSONRequest(t, server.Handler(), "/api/v1/invitation-batches", changed, token, "batch-request")
 	require.Equal(t, http.StatusOK, conflict.Code, "changed Invitation batch reuse")
 	require.Contains(t, conflict.Body.String(), `"error_code":"idempotency.conflict"`, "changed Invitation batch reuse")
 	require.Contains(t, conflict.Body.String(), `"no_op":1`, "changed Invitation batch reuse")
 }
 
-func performIdempotentJSONRequest(handler http.Handler, path string, body any, bearer, key string) *httptest.ResponseRecorder {
+func performIdempotentJSONRequest(t testing.TB, handler http.Handler, path string, body any, bearer, key string) *httptest.ResponseRecorder {
 	encoded, _ := json.Marshal(body)
-	request := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(encoded))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, bytes.NewReader(encoded))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Authorization", "Bearer "+bearer)
 	request.Header.Set("Idempotency-Key", key)
@@ -149,8 +149,8 @@ func TestStudentClassInvitationIssuesMailAndAcceptsAcrossNodes(t *testing.T) {
 	startIntegrationServer(t, primary)
 	startIntegrationServer(t, secondary)
 
-	const adminPassword = "bootstrap correct horse battery staple"
-	bootstrap := performJSONRequest(primary.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
+	const adminPassword = "bootstrap correct horse battery staple" //nolint:gosec // G101: fixed test password, not a real credential
+	bootstrap := performJSONRequest(t, primary.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
 		"bootstrap_secret": testlib.BootstrapSecret,
 		"institution":      map[string]any{"name": "invitation-university", "display_name": "Invitation University"},
 		"administrator":    map[string]any{"username": "invitation-admin", "email": "invitation-admin@example.edu"},
@@ -176,7 +176,7 @@ func TestStudentClassInvitationIssuesMailAndAcceptsAcrossNodes(t *testing.T) {
 		"/api/v1/programme-levels/"+level.ID.String()+"/classes",
 		map[string]any{"academic_period_id": period.ID.String(), "name": "class-a", "display_name": "Class A"}, token)
 
-	issue := performJSONRequest(primary.Handler(), http.MethodPost,
+	issue := performJSONRequest(t, primary.Handler(), http.MethodPost,
 		"/api/v1/classes/"+class.ID.String()+"/invitations/student",
 		map[string]any{"email": " invited.student@example.edu ", "suggested_username": "invited-student",
 			"suggested_display_name": "Invited Student", "suggested_locale": "en"}, token)
@@ -188,7 +188,7 @@ func TestStudentClassInvitationIssuesMailAndAcceptsAcrossNodes(t *testing.T) {
 	claim := credentialFromDelivery(t, deliveries[0])
 	require.NotContains(t, primary.Logs.String(), claim, "invitation claim appeared in logs")
 	require.NotContains(t, secondary.Logs.String(), claim, "invitation claim appeared in logs")
-	accept := performJSONRequest(secondary.Handler(), http.MethodPost, "/api/v1/invitations/student-class/accept",
+	accept := performJSONRequest(t, secondary.Handler(), http.MethodPost, "/api/v1/invitations/student-class/accept",
 		map[string]any{"claim": claim, "password": "student correct horse battery staple", "username": "invited-student",
 			"display_name": "Invited Student", "locale": "en", "timezone": "UTC"}, "")
 	require.Equal(t, http.StatusOK, accept.Code, "accept invitation = %d: %s; logs=%s", accept.Code, accept.Body.String(), secondary.Logs.String())
@@ -208,7 +208,7 @@ func TestStudentClassInvitationIssuesMailAndAcceptsAcrossNodes(t *testing.T) {
 	notice := waitForInvitationDeliveryContaining(t, primary, secondary, "Welcome to Proctor")
 	require.NotNil(t, notice, "acceptance notice lacks semantic copy")
 
-	replay := performJSONRequest(primary.Handler(), http.MethodPost, "/api/v1/invitations/student-class/accept",
+	replay := performJSONRequest(t, primary.Handler(), http.MethodPost, "/api/v1/invitations/student-class/accept",
 		map[string]any{"claim": claim, "password": "student correct horse battery staple", "username": "invited-student",
 			"display_name": "Invited Student", "locale": "en", "timezone": "UTC"}, "")
 	require.Equal(t, http.StatusOK, replay.Code, "acceptance replay")
@@ -234,8 +234,8 @@ func TestTeacherAcademicUnitInvitationIssuesMailAndAcceptsAcrossNodes(t *testing
 	startIntegrationServer(t, primary)
 	startIntegrationServer(t, secondary)
 
-	const adminPassword = "bootstrap correct horse battery staple"
-	bootstrap := performJSONRequest(primary.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
+	const adminPassword = "bootstrap correct horse battery staple" //nolint:gosec // G101: fixed test password, not a real credential
+	bootstrap := performJSONRequest(t, primary.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
 		"bootstrap_secret": testlib.BootstrapSecret,
 		"institution":      map[string]any{"name": "teacher-invitation-university", "display_name": "Teacher Invitation University"},
 		"administrator":    map[string]any{"username": "teacher-invitation-admin", "email": "teacher-invitation-admin@example.edu"},
@@ -246,7 +246,7 @@ func TestTeacherAcademicUnitInvitationIssuesMailAndAcceptsAcrossNodes(t *testing
 	token := login.Tokens.AccessToken
 	unit := createIntegrationResource[model.AcademicUnit](t, primary.Handler(), http.MethodPost, "/api/v1/academic-units",
 		map[string]any{"name": "teacher-science", "display_name": "Teacher Science"}, token)
-	roleResponse := performJSONRequest(primary.Handler(), http.MethodPost, "/api/v1/roles", map[string]any{
+	roleResponse := performJSONRequest(t, primary.Handler(), http.MethodPost, "/api/v1/roles", map[string]any{
 		"name": "invited-teacher", "display_name": "Invited Teacher",
 		"permissions": []string{string(model.ActionAcademicUnitView), string(model.ActionProgrammeView)},
 	}, token)
@@ -255,7 +255,7 @@ func TestTeacherAcademicUnitInvitationIssuesMailAndAcceptsAcrossNodes(t *testing
 		ID string `json:"id"`
 	}
 	require.NoError(t, json.Unmarshal(roleResponse.Body.Bytes(), &role))
-	issue := performJSONRequest(primary.Handler(), http.MethodPost, "/api/v1/academic-units/"+unit.ID.String()+"/invitations/teacher",
+	issue := performJSONRequest(t, primary.Handler(), http.MethodPost, "/api/v1/academic-units/"+unit.ID.String()+"/invitations/teacher",
 		map[string]any{"email": " invited.teacher@example.edu ", "role_id": role.ID, "suggested_username": "invited-teacher",
 			"suggested_display_name": "Invited Teacher", "suggested_locale": "en"}, token)
 	require.Equal(t, http.StatusCreated, issue.Code, "issue teacher invitation = %d: %s; logs=%s", issue.Code, issue.Body.String(), primary.Logs.String())
@@ -263,7 +263,7 @@ func TestTeacherAcademicUnitInvitationIssuesMailAndAcceptsAcrossNodes(t *testing
 	require.NotContains(t, issue.Body.String(), "token", "issue teacher invitation = %d: %s; logs=%s", issue.Code, issue.Body.String(), primary.Logs.String())
 	deliveries := waitForInvitationDeliveries(t, primary, secondary, 1)
 	claim := credentialFromDelivery(t, deliveries[0])
-	accept := performJSONRequest(secondary.Handler(), http.MethodPost, "/api/v1/invitations/teacher-academic-unit/accept",
+	accept := performJSONRequest(t, secondary.Handler(), http.MethodPost, "/api/v1/invitations/teacher-academic-unit/accept",
 		map[string]any{"claim": claim, "password": "teacher correct horse battery staple", "username": "invited-teacher",
 			"display_name": "Invited Teacher", "locale": "en", "timezone": "UTC"}, "")
 	require.Equal(t, http.StatusOK, accept.Code, "accept teacher invitation = %d: %s; logs=%s", accept.Code, accept.Body.String(), secondary.Logs.String())
@@ -279,7 +279,7 @@ func TestTeacherAcademicUnitInvitationIssuesMailAndAcceptsAcrossNodes(t *testing
 	require.Equal(t, accepted.ID, binding.OriginInvitationID, "teacher package Role Binding = %#v", binding)
 	notice := waitForInvitationDeliveryContaining(t, primary, secondary, "Welcome to Proctor")
 	require.NotNil(t, notice, "teacher acceptance notice lacks semantic copy")
-	replay := performJSONRequest(primary.Handler(), http.MethodPost, "/api/v1/invitations/teacher-academic-unit/accept",
+	replay := performJSONRequest(t, primary.Handler(), http.MethodPost, "/api/v1/invitations/teacher-academic-unit/accept",
 		map[string]any{"claim": claim, "password": "teacher correct horse battery staple", "username": "invited-teacher"}, "")
 	require.Equal(t, http.StatusOK, replay.Code, "teacher acceptance replay")
 	require.Contains(t, replay.Body.String(), `"replayed":true`, "teacher acceptance replay")
@@ -307,8 +307,8 @@ func TestScopedRoleInvitationAcceptsAsExistingUserAcrossNodesWithoutProfileOrWel
 	startIntegrationServer(t, primary)
 	startIntegrationServer(t, secondary)
 
-	const adminPassword = "bootstrap correct horse battery staple"
-	bootstrap := performJSONRequest(primary.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
+	const adminPassword = "bootstrap correct horse battery staple" //nolint:gosec // G101: fixed test password, not a real credential
+	bootstrap := performJSONRequest(t, primary.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
 		"bootstrap_secret": testlib.BootstrapSecret,
 		"institution":      map[string]any{"name": "scoped-role-university", "display_name": "Scoped Role University"},
 		"administrator":    map[string]any{"username": "scoped-role-admin", "email": "canonical-admin@example.edu"},
@@ -319,7 +319,7 @@ func TestScopedRoleInvitationAcceptsAsExistingUserAcrossNodesWithoutProfileOrWel
 	token := login.Tokens.AccessToken
 	unit := createIntegrationResource[model.AcademicUnit](t, primary.Handler(), http.MethodPost, "/api/v1/academic-units",
 		map[string]any{"name": "scoped-role-science", "display_name": "Scoped Role Science"}, token)
-	roleResponse := performJSONRequest(primary.Handler(), http.MethodPost, "/api/v1/roles", map[string]any{
+	roleResponse := performJSONRequest(t, primary.Handler(), http.MethodPost, "/api/v1/roles", map[string]any{
 		"name": "academic-auditor", "display_name": "Academic Auditor",
 		"permissions": []string{string(model.ActionAcademicAuditView)},
 	}, token)
@@ -328,7 +328,7 @@ func TestScopedRoleInvitationAcceptsAsExistingUserAcrossNodesWithoutProfileOrWel
 		ID string `json:"id"`
 	}
 	require.NoError(t, json.Unmarshal(roleResponse.Body.Bytes(), &role))
-	issue := performJSONRequest(primary.Handler(), http.MethodPost,
+	issue := performJSONRequest(t, primary.Handler(), http.MethodPost,
 		"/api/v1/academic-units/"+unit.ID.String()+"/invitations/role",
 		map[string]any{"email": "proof-mailbox@example.edu", "role_id": role.ID}, token)
 	require.Equal(t, http.StatusCreated, issue.Code, "issue scoped Role Invitation = %d: %s; logs=%s", issue.Code, issue.Body.String(), primary.Logs.String())
@@ -336,7 +336,7 @@ func TestScopedRoleInvitationAcceptsAsExistingUserAcrossNodesWithoutProfileOrWel
 	require.NotContains(t, issue.Body.String(), "claim", "issue scoped Role Invitation = %d: %s; logs=%s", issue.Code, issue.Body.String(), primary.Logs.String())
 	deliveries := waitForInvitationDeliveries(t, primary, secondary, 1)
 	claim := credentialFromDelivery(t, deliveries[0])
-	accept := performJSONRequest(secondary.Handler(), http.MethodPost, "/api/v1/invitations/academic-unit-role/accept",
+	accept := performJSONRequest(t, secondary.Handler(), http.MethodPost, "/api/v1/invitations/academic-unit-role/accept",
 		map[string]any{"claim": claim}, token)
 	require.Equal(t, http.StatusOK, accept.Code, "accept scoped Role Invitation = %d: %s; logs=%s", accept.Code, accept.Body.String(), secondary.Logs.String())
 	require.Contains(t, accept.Body.String(), `"user_id":"`+login.User.ID.String()+`"`, "accept scoped Role Invitation = %d: %s; logs=%s", accept.Code, accept.Body.String(), secondary.Logs.String())
@@ -355,7 +355,7 @@ func TestScopedRoleInvitationAcceptsAsExistingUserAcrossNodesWithoutProfileOrWel
 	require.Equal(t, "scoped-role-admin", current.Username, "canonical User changed during scoped Role acceptance = %#v", current)
 	time.Sleep(300 * time.Millisecond)
 	require.Len(t, deliveries, (len(primary.Mailer.Deliveries()) + len(secondary.Mailer.Deliveries())), "existing-User scoped Role acceptance emitted redundant mail: deliveries")
-	replay := performJSONRequest(primary.Handler(), http.MethodPost, "/api/v1/invitations/academic-unit-role/accept",
+	replay := performJSONRequest(t, primary.Handler(), http.MethodPost, "/api/v1/invitations/academic-unit-role/accept",
 		map[string]any{"claim": claim}, token)
 	require.Equal(t, http.StatusOK, replay.Code, "scoped Role acceptance replay")
 	require.Contains(t, replay.Body.String(), `"replayed":true`, "scoped Role acceptance replay")

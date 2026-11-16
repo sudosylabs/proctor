@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -59,7 +58,7 @@ func testExamCatalogBoundedPlan(t *testing.T, persistence *SQLStore) {
 	ids := make([]model.ExamID, examCount)
 	tx, err := persistence.GetMaster().DB().BeginTxx(ctx, nil)
 	require.NoError(t, err)
-	exams, err := tx.Prepare(pq.CopyIn("exams", "id", "academic_unit_id", "creator_user_id", "owner_user_id", "created_at", "updated_at", "archived_at", "revision"))
+	exams, err := tx.PrepareContext(ctx, `COPY exams (id, academic_unit_id, creator_user_id, owner_user_id, created_at, updated_at, archived_at, revision) FROM STDIN`)
 	if err != nil {
 		_ = tx.Rollback()
 		require.NoError(t, err)
@@ -75,22 +74,22 @@ func testExamCatalogBoundedPlan(t *testing.T, persistence *SQLStore) {
 		if index%5 == 0 {
 			archivedAt = updatedAt
 		}
-		if _, err := exams.Exec(ids[index].String(), academicUnitID.String(), actor.ID.String(), actor.ID.String(), at, updatedAt, archivedAt, 1); err != nil {
+		if _, err = exams.ExecContext(ctx, ids[index].String(), academicUnitID.String(), actor.ID.String(), actor.ID.String(), at, updatedAt, archivedAt, 1); err != nil {
 			_ = exams.Close()
 			_ = tx.Rollback()
 			require.NoError(t, err)
 		}
 	}
-	if _, err := exams.Exec(); err != nil {
+	if _, err = exams.ExecContext(ctx); err != nil {
 		_ = exams.Close()
 		_ = tx.Rollback()
 		require.NoError(t, err)
 	}
-	if err := exams.Close(); err != nil {
+	if err = exams.Close(); err != nil {
 		_ = tx.Rollback()
 		require.NoError(t, err)
 	}
-	drafts, err := tx.Prepare(pq.CopyIn("exam_drafts", "exam_id", "title", "instructions_markdown", "policy", "updated_at", "revision"))
+	drafts, err := tx.PrepareContext(ctx, `COPY exam_drafts (exam_id, title, instructions_markdown, policy, updated_at, revision) FROM STDIN`)
 	if err != nil {
 		_ = tx.Rollback()
 		require.NoError(t, err)
@@ -101,39 +100,39 @@ func testExamCatalogBoundedPlan(t *testing.T, persistence *SQLStore) {
 		if index%100 == 0 {
 			title = fmt.Sprintf("Needle catalog %04d", index)
 		}
-		if _, err := drafts.Exec(id.String(), title, "", `{}`, updatedAt, 1); err != nil {
+		if _, err = drafts.ExecContext(ctx, id.String(), title, "", `{}`, updatedAt, 1); err != nil {
 			_ = drafts.Close()
 			_ = tx.Rollback()
 			require.NoError(t, err)
 		}
 	}
-	if _, err := drafts.Exec(); err != nil {
+	if _, err = drafts.ExecContext(ctx); err != nil {
 		_ = drafts.Close()
 		_ = tx.Rollback()
 		require.NoError(t, err, "finish drafts copy")
 	}
-	if err := drafts.Close(); err != nil {
+	if err = drafts.Close(); err != nil {
 		_ = tx.Rollback()
 		require.NoError(t, err)
 	}
-	managers, err := tx.Prepare(pq.CopyIn("exam_managers", "exam_id", "user_id", "granted_by_user_id", "granted_at"))
+	managers, err := tx.PrepareContext(ctx, `COPY exam_managers (exam_id, user_id, granted_by_user_id, granted_at) FROM STDIN`)
 	if err != nil {
 		_ = tx.Rollback()
 		require.NoError(t, err)
 	}
 	for _, id := range ids {
-		if _, err := managers.Exec(id.String(), actor.ID.String(), actor.ID.String(), at); err != nil {
+		if _, err = managers.ExecContext(ctx, id.String(), actor.ID.String(), actor.ID.String(), at); err != nil {
 			_ = managers.Close()
 			_ = tx.Rollback()
 			require.NoError(t, err)
 		}
 	}
-	if _, err := managers.Exec(); err != nil {
+	if _, err = managers.ExecContext(ctx); err != nil {
 		_ = managers.Close()
 		_ = tx.Rollback()
 		require.NoError(t, err, "finish managers copy")
 	}
-	if err := managers.Close(); err != nil {
+	if err = managers.Close(); err != nil {
 		_ = tx.Rollback()
 		require.NoError(t, err)
 	}

@@ -39,7 +39,7 @@ import (
 
 func freeTCPPort(t *testing.T) int {
 	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer listener.Close()
 	return listener.Addr().(*net.TCPAddr).Port
@@ -60,6 +60,7 @@ func TestWebSocketIntegration(t *testing.T) {
 
 	password := "correct horse battery staple"
 	bootstrap := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/bootstrap",
@@ -94,13 +95,19 @@ func TestWebSocketIntegration(t *testing.T) {
 	headers := http.Header{"Authorization": []string{"Bearer " + login.Tokens.AccessToken}}
 	invalidOriginHeaders := headers.Clone()
 	invalidOriginHeaders.Set("Origin", "https://attacker.example")
-	_, response, err := gwebsocket.DefaultDialer.Dial(socketURL, invalidOriginHeaders)
+	_, response, err := gwebsocket.DefaultDialer.DialContext(t.Context(), socketURL, invalidOriginHeaders)
+	if response != nil {
+		defer response.Body.Close()
+	}
 	require.Error(t, err, "cross-origin WebSocket response")
 	require.NotNil(t, response, "cross-origin WebSocket response")
 	require.Equal(t, http.StatusForbidden, response.StatusCode, "cross-origin WebSocket response")
 
 	resyncURL := socketURL + "?connection_id=" + model.NewID() + "&sequence_number=0"
-	resyncConnection, response, err := gwebsocket.DefaultDialer.Dial(resyncURL, headers)
+	resyncConnection, response, err := gwebsocket.DefaultDialer.DialContext(t.Context(), resyncURL, headers)
+	if response != nil {
+		defer response.Body.Close()
+	}
 	require.NoError(t, err, "WebSocket resync dial = %v, response = %#v", err, response)
 	resyncHello := readWebSocketEvent(t, resyncConnection)
 	require.Equal(t, "hello", resyncHello.Event)
@@ -110,7 +117,10 @@ func TestWebSocketIntegration(t *testing.T) {
 	require.Equal(t, int64(2), resyncRequired.Sequence)
 	_ = resyncConnection.Close()
 
-	connection, response, err := gwebsocket.DefaultDialer.Dial(socketURL, headers)
+	connection, response, err := gwebsocket.DefaultDialer.DialContext(t.Context(), socketURL, headers)
+	if response != nil {
+		defer response.Body.Close()
+	}
 	if err != nil {
 		require.Nil(t, response, "WebSocket dial")
 		require.NoError(t, err)
@@ -171,7 +181,10 @@ func TestWebSocketIntegration(t *testing.T) {
 		url.QueryEscape(helloData.ConnectionID) + "&sequence_number=1"
 	var resumed *gwebsocket.Conn
 	for attempt := 0; attempt < 20; attempt++ {
-		candidate, candidateResponse, dialErr := gwebsocket.DefaultDialer.Dial(resumeURL, headers)
+		candidate, candidateResponse, dialErr := gwebsocket.DefaultDialer.DialContext(t.Context(), resumeURL, headers)
+		if candidateResponse != nil {
+			defer candidateResponse.Body.Close()
+		}
 		require.NoError(t, dialErr, "WebSocket resume dial = %v, response = %#v", dialErr, candidateResponse)
 		first := readWebSocketEvent(t, candidate)
 		if first.Event == "access_policy_changed" && first.Sequence == 2 {
@@ -213,7 +226,10 @@ func TestWebSocketIntegration(t *testing.T) {
 
 	unauthenticatedURL, err := url.Parse(socketURL)
 	require.NoError(t, err)
-	_, response, err = gwebsocket.DefaultDialer.Dial(unauthenticatedURL.String(), nil)
+	_, response, err = gwebsocket.DefaultDialer.DialContext(t.Context(), unauthenticatedURL.String(), nil)
+	if response != nil {
+		defer response.Body.Close()
+	}
 	require.Error(t, err, "unauthenticated WebSocket connection succeeded")
 	require.NotNil(t, response, "unauthenticated WebSocket response = %#v, %v", response, err)
 	require.Equal(t, http.StatusUnauthorized, response.StatusCode, "unauthenticated WebSocket response = %#v, %v", response, err)
@@ -275,6 +291,7 @@ func TestWebSocketTwoNodeConformance(t *testing.T) {
 
 	password := "correct horse battery staple"
 	bootstrap := performJSONRequest(
+		t,
 		nodeA.Handler(),
 		http.MethodPost,
 		"/api/v1/bootstrap",
@@ -307,7 +324,10 @@ func TestWebSocketTwoNodeConformance(t *testing.T) {
 	t.Cleanup(serverB.Close)
 	socketURL := "ws" + strings.TrimPrefix(serverB.URL, "http") + "/api/v1/websocket"
 	headers := http.Header{"Authorization": []string{"Bearer " + login.Tokens.AccessToken}}
-	connection, response, err := gwebsocket.DefaultDialer.Dial(socketURL, headers)
+	connection, response, err := gwebsocket.DefaultDialer.DialContext(t.Context(), socketURL, headers)
+	if response != nil {
+		defer response.Body.Close()
+	}
 	if err != nil {
 		require.Nil(t, response, "node B WebSocket dial")
 		require.NoError(t, err)
@@ -364,7 +384,10 @@ func TestWebSocketTwoNodeConformance(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, websocket.CloseAuthorizationChanged, readWebSocketClose(t, connection).Code)
 
-	connection, response, err = gwebsocket.DefaultDialer.Dial(socketURL, headers)
+	connection, response, err = gwebsocket.DefaultDialer.DialContext(t.Context(), socketURL, headers)
+	if response != nil {
+		defer response.Body.Close()
+	}
 	if err != nil {
 		require.Nil(t, response, "node B reconnect")
 		require.NoError(t, err)

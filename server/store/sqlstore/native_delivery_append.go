@@ -490,7 +490,7 @@ func retainNativeAppendBatch(
 	}
 
 	if pq.SummaryOnly || aq.SummaryOnly {
-		if _, err := tx.Exec(ctx, `ROLLBACK TO SAVEPOINT native_sources`); err != nil {
+		if _, err = tx.Exec(ctx, `ROLLBACK TO SAVEPOINT native_sources`); err != nil {
 			return nil, err
 		}
 
@@ -498,7 +498,7 @@ func retainNativeAppendBatch(
 		if aq.SummaryOnly {
 			reason, attempt = aq.StopReason, true
 		}
-		if err := latchNativeDelivery(ctx, tx, input.Access.Access.AttemptID, owner.ParticipationID, *reason, attempt); err != nil {
+		if err = latchNativeDelivery(ctx, tx, input.Access.Access.AttemptID, owner.ParticipationID, *reason, attempt); err != nil {
 			return nil, err
 		}
 
@@ -511,7 +511,7 @@ func retainNativeAppendBatch(
 		return nil, nativeAppendConflict("pending_capacity")
 	}
 
-	if err := storeNativeAppendBatch(ctx, tx, input, owner, batch, delta, pq, aq); err != nil {
+	if err = storeNativeAppendBatch(ctx, tx, input, owner, batch, delta, pq, aq); err != nil {
 		return nil, err
 	}
 	// Pending records cannot become authoritative ahead of a gap, so only the

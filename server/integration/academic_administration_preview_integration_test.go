@@ -112,7 +112,7 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 	ctx := context.Background()
 	password := "correct horse battery staple"
 
-	bootstrap := performJSONRequest(handler, http.MethodPost, "/api/v1/bootstrap", map[string]any{
+	bootstrap := performJSONRequest(t, handler, http.MethodPost, "/api/v1/bootstrap", map[string]any{
 		"bootstrap_secret": testlib.BootstrapSecret,
 		"institution":      map[string]any{"name": "northbridge", "display_name": "Northbridge University"},
 		"administrator":    map[string]any{"username": "preview-owner", "email": "preview-owner@example.edu"},
@@ -151,7 +151,7 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 
 	t.Run("RequiresAStrongRecentSession", func(t *testing.T) {
 		single := loginIntegrationUser(t, handler, "preview-alpha", password, model.SessionClientCLI, "preview-alpha-single")
-		response := performJSONRequest(handler, http.MethodPost, "/api/v1/academic-administration-previews", map[string]any{
+		response := performJSONRequest(t, handler, http.MethodPost, "/api/v1/academic-administration-previews", map[string]any{
 			"operation": "user.disable", "scope_type": "institution", "scope_id": institutionID, "filter": map[string]any{},
 		}, single.Tokens.AccessToken)
 		require.Equal(t, http.StatusForbidden, response.Code, response.Body.String())
@@ -186,9 +186,9 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 			academicAdministrationPreviewRowUsers(t, handler, owner, disable.ID, "group=skipped&reason=academic_administration_preview.system_administrator"))
 	})
 	t.Run("IsReadOnlyThroughItsOwnSurface", func(t *testing.T) {
-		response := performJSONRequest(handler, http.MethodGet, "/api/v1/onboarding-imports/"+disable.ID, nil, owner)
+		response := performJSONRequest(t, handler, http.MethodGet, "/api/v1/onboarding-imports/"+disable.ID, nil, owner)
 		require.Equal(t, http.StatusNotFound, response.Code, response.Body.String())
-		report := performJSONRequest(handler, http.MethodGet, "/api/v1/onboarding-imports/"+disable.ID+"/report", nil, owner)
+		report := performJSONRequest(t, handler, http.MethodGet, "/api/v1/onboarding-imports/"+disable.ID+"/report", nil, owner)
 		require.Equal(t, http.StatusNotFound, report.Code, report.Body.String())
 	})
 
@@ -198,12 +198,12 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 
 	commitPath := "/api/v1/academic-administration-previews/" + disable.ID + "/commit"
 	t.Run("RefusesAStaleDigestOrRevision", func(t *testing.T) {
-		wrongDigest := performIdempotentJSONRequest(handler, commitPath, map[string]any{
+		wrongDigest := performIdempotentJSONRequest(t, handler, commitPath, map[string]any{
 			"expected_revision": disable.Revision, "preview_digest": strings.Repeat("0", 64),
 		}, owner, "preview-wrong-digest")
 		require.Equal(t, http.StatusConflict, wrongDigest.Code, wrongDigest.Body.String())
 		require.Contains(t, wrongDigest.Body.String(), "academic_administration_preview.conflict")
-		wrongRevision := performIdempotentJSONRequest(handler, commitPath, map[string]any{
+		wrongRevision := performIdempotentJSONRequest(t, handler, commitPath, map[string]any{
 			"expected_revision": disable.Revision + 1, "preview_digest": disable.PreviewDigest,
 		}, owner, "preview-wrong-revision")
 		require.Equal(t, http.StatusConflict, wrongRevision.Code, wrongRevision.Body.String())
@@ -211,13 +211,13 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 	})
 
 	commitBody := map[string]any{"expected_revision": disable.Revision, "preview_digest": disable.PreviewDigest}
-	committed := performIdempotentJSONRequest(handler, commitPath, commitBody, owner, "preview-commit")
+	committed := performIdempotentJSONRequest(t, handler, commitPath, commitBody, owner, "preview-commit")
 	require.Equal(t, http.StatusAccepted, committed.Code, committed.Body.String())
 	var commitView academicAdministrationPreviewWire
 	decodeIntegrationResponse(t, committed, &commitView)
 	require.NotEmpty(t, commitView.ExecutionJobID)
 	t.Run("ReplaysTheCommit", func(t *testing.T) {
-		replayed := performIdempotentJSONRequest(handler, commitPath, commitBody, owner, "preview-commit")
+		replayed := performIdempotentJSONRequest(t, handler, commitPath, commitBody, owner, "preview-commit")
 		require.Equal(t, http.StatusAccepted, replayed.Code, replayed.Body.String())
 		var replay academicAdministrationPreviewWire
 		decodeIntegrationResponse(t, replayed, &replay)
@@ -227,7 +227,7 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 	disable = waitForAcademicAdministrationPreview(t, handler, owner, disable.ID, "completed")
 	t.Run("ReplaysTheCommittedSnapshot", func(t *testing.T) {
 		require.Equal(t, "executing", commitView.State, "the commit answers with the snapshot it committed")
-		replayed := performIdempotentJSONRequest(handler, commitPath, commitBody, owner, "preview-commit")
+		replayed := performIdempotentJSONRequest(t, handler, commitPath, commitBody, owner, "preview-commit")
 		require.Equal(t, http.StatusAccepted, replayed.Code, replayed.Body.String())
 		require.JSONEq(t, committed.Body.String(), replayed.Body.String(), "a replay after execution returns the same commit")
 	})
@@ -281,7 +281,7 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 		_, bindErr := storetest.SaveRoleBinding(ctx, persistence, &model.RoleBinding{UserID: charlie.ID, RoleID: systemAdministrator.ID,
 			ScopeType: model.RoleScopeInstitution, ScopeID: institutionID, StartsAt: model.TimeFromMillis(now - 60_000)})
 		require.NoError(t, bindErr)
-		response := performIdempotentJSONRequest(handler, "/api/v1/academic-administration-previews/"+preview.ID+"/commit", map[string]any{
+		response := performIdempotentJSONRequest(t, handler, "/api/v1/academic-administration-previews/"+preview.ID+"/commit", map[string]any{
 			"expected_revision": preview.Revision, "preview_digest": preview.PreviewDigest,
 		}, owner, "preview-administrator-commit")
 		require.Equal(t, http.StatusAccepted, response.Code, response.Body.String())
@@ -311,7 +311,7 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 		roleBindings.hidden.Store(foxtrot.ID)
 		t.Cleanup(func() { roleBindings.hidden.Store(model.UserID("")) })
 
-		response := performIdempotentJSONRequest(handler, "/api/v1/academic-administration-previews/"+preview.ID+"/commit", map[string]any{
+		response := performIdempotentJSONRequest(t, handler, "/api/v1/academic-administration-previews/"+preview.ID+"/commit", map[string]any{
 			"expected_revision": preview.Revision, "preview_digest": preview.PreviewDigest,
 		}, owner, "preview-transaction-refusal-commit")
 		require.Equal(t, http.StatusAccepted, response.Code, response.Body.String())
@@ -348,7 +348,7 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 		_, execErr := persistence.GetMaster().Exec(ctx,
 			`UPDATE onboarding_imports SET preview_expires_at = statement_timestamp() - interval '1 second' WHERE id = $1`, expiring.ID)
 		require.NoError(t, execErr)
-		response := performIdempotentJSONRequest(handler, "/api/v1/academic-administration-previews/"+expiring.ID+"/commit", map[string]any{
+		response := performIdempotentJSONRequest(t, handler, "/api/v1/academic-administration-previews/"+expiring.ID+"/commit", map[string]any{
 			"expected_revision": expiring.Revision, "preview_digest": expiring.PreviewDigest,
 		}, owner, "preview-expired")
 		require.Equal(t, http.StatusGone, response.Code, response.Body.String())
@@ -401,7 +401,7 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 	}
 
 	t.Run("ScopedViewerCannotWidenThroughTheFilter", func(t *testing.T) {
-		activity := performJSONRequest(handler, http.MethodPost, "/api/v1/academic-administration-previews",
+		activity := performJSONRequest(t, handler, http.MethodPost, "/api/v1/academic-administration-previews",
 			withFilter(map[string]any{"never_signed_in": true}), scopedToken)
 		require.Equal(t, http.StatusBadRequest, activity.Code, activity.Body.String())
 		require.Contains(t, activity.Body.String(), "never_signed_in")
@@ -416,7 +416,7 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 		require.Equal(t, []string{delta.ID.String()}, academicAdministrationPreviewRowUsers(t, handler, scopedToken, students.ID, "group=will_change"))
 		require.NotContains(t, academicAdministrationPreviewRowUsers(t, handler, scopedToken, students.ID, "group=skipped"), echo.ID.String())
 
-		foreign := performJSONRequest(handler, http.MethodGet, "/api/v1/academic-administration-previews/"+disable.ID, nil, scopedToken)
+		foreign := performJSONRequest(t, handler, http.MethodGet, "/api/v1/academic-administration-previews/"+disable.ID, nil, scopedToken)
 		require.Equal(t, http.StatusForbidden, foreign.Code, "a preview outside the reader's scope is refused: %s", foreign.Body.String())
 		require.NotContains(t, foreign.Body.String(), "user.disable")
 	})
@@ -426,7 +426,7 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 		preview = waitForAcademicAdministrationPreview(t, handler, scopedToken, preview.ID, "preview_ready")
 		require.Equal(t, []string{delta.ID.String()}, academicAdministrationPreviewRowUsers(t, handler, scopedToken, preview.ID, "group=will_change"))
 
-		ended := performJSONRequest(handler, http.MethodDelete, "/api/v1/academic-unit-members/"+deltaMembership.ID, nil, owner)
+		ended := performJSONRequest(t, handler, http.MethodDelete, "/api/v1/academic-unit-members/"+deltaMembership.ID, nil, owner)
 		require.Equal(t, http.StatusOK, ended.Code, ended.Body.String())
 		require.Empty(t, academicAdministrationPreviewRowUsers(t, handler, scopedToken, preview.ID, "group=will_change"),
 			"a User the reader no longer sees is not shown")
@@ -434,7 +434,7 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 		require.NotNil(t, summary.Summary)
 		require.Equal(t, 0, summary.Summary.WillChange, "a User the reader no longer sees is not counted")
 
-		response := performIdempotentJSONRequest(handler, "/api/v1/academic-administration-previews/"+preview.ID+"/commit", map[string]any{
+		response := performIdempotentJSONRequest(t, handler, "/api/v1/academic-administration-previews/"+preview.ID+"/commit", map[string]any{
 			"expected_revision": preview.Revision, "preview_digest": preview.PreviewDigest,
 		}, scopedToken, "preview-scoped-commit")
 		require.Equal(t, http.StatusAccepted, response.Code, response.Body.String())
@@ -477,14 +477,14 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 		})
 		preview = waitForAcademicAdministrationPreview(t, handler, golfToken, preview.ID, "preview_ready")
 
-		ended := performJSONRequest(handler, http.MethodDelete, "/api/v1/role-bindings/"+institutionDirectory.ID, nil, owner)
+		ended := performJSONRequest(t, handler, http.MethodDelete, "/api/v1/role-bindings/"+institutionDirectory.ID, nil, owner)
 		require.Equal(t, http.StatusOK, ended.Code, ended.Body.String())
 
 		previewPath := "/api/v1/academic-administration-previews/" + preview.ID
 		for name, response := range map[string]*httptest.ResponseRecorder{
-			"summary": performJSONRequest(handler, http.MethodGet, previewPath, nil, golfToken),
-			"rows":    performJSONRequest(handler, http.MethodGet, previewPath+"/rows?group=will_change", nil, golfToken),
-			"commit": performIdempotentJSONRequest(handler, previewPath+"/commit", map[string]any{
+			"summary": performJSONRequest(t, handler, http.MethodGet, previewPath, nil, golfToken),
+			"rows":    performJSONRequest(t, handler, http.MethodGet, previewPath+"/rows?group=will_change", nil, golfToken),
+			"commit": performIdempotentJSONRequest(t, handler, previewPath+"/commit", map[string]any{
 				"expected_revision": preview.Revision, "preview_digest": preview.PreviewDigest,
 			}, golfToken, "preview-lost-commit"),
 		} {
@@ -503,16 +503,16 @@ func strongIntegrationSession(t *testing.T, handler http.Handler, username, pass
 	t.Helper()
 	login := loginIntegrationUser(t, handler, username, password, model.SessionClientCLI, device)
 	token := login.Tokens.AccessToken
-	setupResponse := performJSONRequest(handler, http.MethodPost, "/api/v1/users/me/mfa/setup", nil, token)
+	setupResponse := performJSONRequest(t, handler, http.MethodPost, "/api/v1/users/me/mfa/setup", nil, token)
 	require.Equal(t, http.StatusCreated, setupResponse.Code, setupResponse.Body.String())
 	var setup wireMFASetup
 	require.NoError(t, json.Unmarshal(setupResponse.Body.Bytes(), &setup))
-	activateResponse := performJSONRequest(handler, http.MethodPost, "/api/v1/users/me/mfa/activate",
+	activateResponse := performJSONRequest(t, handler, http.MethodPost, "/api/v1/users/me/mfa/activate",
 		map[string]any{"code": integrationTOTP(t, setup.Secret, time.Now().UTC().Unix()/30)}, token)
 	require.Equal(t, http.StatusOK, activateResponse.Code, activateResponse.Body.String())
 	var activation wireMFAActivation
 	require.NoError(t, json.Unmarshal(activateResponse.Body.Bytes(), &activation))
-	challenge := performJSONRequest(handler, http.MethodPost, "/api/v1/users/me/mfa/challenge",
+	challenge := performJSONRequest(t, handler, http.MethodPost, "/api/v1/users/me/mfa/challenge",
 		map[string]any{"code": activation.RecoveryCodes[0]}, token)
 	require.Equal(t, http.StatusOK, challenge.Code, challenge.Body.String())
 	return token
@@ -520,7 +520,7 @@ func strongIntegrationSession(t *testing.T, handler http.Handler, username, pass
 
 func createAcademicAdministrationPreview(t *testing.T, handler http.Handler, token string, body map[string]any) academicAdministrationPreviewWire {
 	t.Helper()
-	response := performJSONRequest(handler, http.MethodPost, "/api/v1/academic-administration-previews", body, token)
+	response := performJSONRequest(t, handler, http.MethodPost, "/api/v1/academic-administration-previews", body, token)
 	require.Equal(t, http.StatusAccepted, response.Code, "create preview = %d: %s", response.Code, response.Body.String())
 	var view academicAdministrationPreviewWire
 	decodeIntegrationResponse(t, response, &view)
@@ -531,7 +531,7 @@ func waitForAcademicAdministrationPreview(t *testing.T, handler http.Handler, to
 	t.Helper()
 	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {
-		response := performJSONRequest(handler, http.MethodGet, "/api/v1/academic-administration-previews/"+id, nil, token)
+		response := performJSONRequest(t, handler, http.MethodGet, "/api/v1/academic-administration-previews/"+id, nil, token)
 		require.Equal(t, http.StatusOK, response.Code, "get preview = %d: %s", response.Code, response.Body.String())
 		var current academicAdministrationPreviewWire
 		decodeIntegrationResponse(t, response, &current)
@@ -548,7 +548,7 @@ func waitForAcademicAdministrationPreview(t *testing.T, handler http.Handler, to
 
 func academicAdministrationPreviewRowUsers(t *testing.T, handler http.Handler, token, id, query string) []string {
 	t.Helper()
-	response := performJSONRequest(handler, http.MethodGet, "/api/v1/academic-administration-previews/"+id+"/rows?"+query, nil, token)
+	response := performJSONRequest(t, handler, http.MethodGet, "/api/v1/academic-administration-previews/"+id+"/rows?"+query, nil, token)
 	require.Equal(t, http.StatusOK, response.Code, "preview rows = %d: %s", response.Code, response.Body.String())
 	var page struct {
 		Items []academicAdministrationPreviewRowWire `json:"items"`

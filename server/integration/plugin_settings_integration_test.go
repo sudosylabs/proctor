@@ -37,7 +37,7 @@ func TestPluginSettingsHTTPSavesAuditedSettingsAndRefusesWhatItMust(t *testing.T
 		cfg.Authentication.MFA.EncryptionKey = base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{23}, 32))
 	}
 	node := testlib.Setup(t, testlib.WithConfig(mfaConfig), testlib.WithStore(persistence))
-	bootstrap := performJSONRequest(node.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
+	bootstrap := performJSONRequest(t, node.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
 		"bootstrap_secret": testlib.BootstrapSecret,
 		"institution":      map[string]any{"name": "plugin-institution", "display_name": "Plugin Institution"},
 		"administrator":    map[string]any{"username": "plugin-admin", "email": "plugin-admin@example.edu"},
@@ -50,7 +50,7 @@ func TestPluginSettingsHTTPSavesAuditedSettingsAndRefusesWhatItMust(t *testing.T
 	})
 	require.NoError(t, err)
 	request := func(method, path, key, token, body string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
+		req := httptest.NewRequestWithContext(t.Context(), method, path, bytes.NewBufferString(body))
 		req.Header.Set("Authorization", "Bearer "+token)
 		if method == http.MethodPut {
 			req.Header.Set("Content-Type", "application/json")

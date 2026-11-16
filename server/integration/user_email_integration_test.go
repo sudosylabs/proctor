@@ -62,25 +62,25 @@ func TestEmailTransitionsUseRealServerGraphAndFrozenRecipients(t *testing.T) {
 
 	unprivilegedLogin := loginIntegrationUser(t, helper.Handler(), first.Username, password, model.SessionClientCLI, "email-transition-unprivileged")
 	strengthenRoleAdministratorSession(t, helper.Handler(), unprivilegedLogin.Tokens.AccessToken)
-	denied := performJSONRequest(helper.Handler(), http.MethodPut, "/api/v1/users/"+second.ID.String()+"/email",
+	denied := performJSONRequest(t, helper.Handler(), http.MethodPut, "/api/v1/users/"+second.ID.String()+"/email",
 		map[string]any{"email": "denied@example.edu"}, unprivilegedLogin.Tokens.AccessToken)
 	require.Equal(t, http.StatusForbidden, denied.Code, "unprivileged email change status = %d: %s", denied.Code, denied.Body.String())
 
 	login := loginIntegrationUser(t, helper.Handler(), bootstrap.Administrator.Username, password, model.SessionClientCLI, "email-transition-admin")
 	strengthenRoleAdministratorSession(t, helper.Handler(), login.Tokens.AccessToken)
-	changeFirst := performJSONRequest(helper.Handler(), http.MethodPut, "/api/v1/users/"+first.ID.String()+"/email",
+	changeFirst := performJSONRequest(t, helper.Handler(), http.MethodPut, "/api/v1/users/"+first.ID.String()+"/email",
 		map[string]any{"email": "first-new@example.edu"}, login.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, changeFirst.Code, "first email change status = %d: %s", changeFirst.Code, changeFirst.Body.String())
 	assertNarrowEmailTransitionResponse(t, changeFirst.Body.Bytes(), first.ID, false)
-	changeFirstReplay := performJSONRequest(helper.Handler(), http.MethodPut, "/api/v1/users/"+first.ID.String()+"/email",
+	changeFirstReplay := performJSONRequest(t, helper.Handler(), http.MethodPut, "/api/v1/users/"+first.ID.String()+"/email",
 		map[string]any{"email": " FIRST-NEW@EXAMPLE.EDU "}, login.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, changeFirstReplay.Code, "first email change replay status = %d: %s", changeFirstReplay.Code, changeFirstReplay.Body.String())
 	assertNarrowEmailTransitionResponse(t, changeFirstReplay.Body.Bytes(), first.ID, false)
-	changeSecond := performJSONRequest(helper.Handler(), http.MethodPut, "/api/v1/users/"+second.ID.String()+"/email",
+	changeSecond := performJSONRequest(t, helper.Handler(), http.MethodPut, "/api/v1/users/"+second.ID.String()+"/email",
 		map[string]any{"email": "second-new@example.edu"}, login.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, changeSecond.Code, "second email change status = %d: %s", changeSecond.Code, changeSecond.Body.String())
 	assertNarrowEmailTransitionResponse(t, changeSecond.Body.Bytes(), second.ID, false)
-	privileged := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/users/"+second.ID.String()+"/email/verify", nil, login.Tokens.AccessToken)
+	privileged := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/users/"+second.ID.String()+"/email/verify", nil, login.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, privileged.Code, "privileged verification status = %d: %s", privileged.Code, privileged.Body.String())
 	assertNarrowEmailTransitionResponse(t, privileged.Body.Bytes(), second.ID, true)
 
@@ -107,13 +107,13 @@ func TestEmailTransitionsUseRealServerGraphAndFrozenRecipients(t *testing.T) {
 
 	// Inspection names the addresses from authoritative state without
 	// consuming either token, so the consuming operations still succeed.
-	inspectedVerification := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/email-verification/inspect",
+	inspectedVerification := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/auth/email-verification/inspect",
 		map[string]any{"token": verificationToken}, "")
 	require.Equal(t, http.StatusOK, inspectedVerification.Code, "verification inspection = %d: %s", inspectedVerification.Code, inspectedVerification.Body.String())
 	require.Equal(t, "no-store", inspectedVerification.Header().Get("Cache-Control"))
 	require.JSONEq(t, `{"email":"first-new@example.edu"}`, inspectedVerification.Body.String())
 	undoToken := credentialFromDelivery(t, firstUndo)
-	inspectedUndo := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/email-change/undo/inspect",
+	inspectedUndo := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/auth/email-change/undo/inspect",
 		map[string]any{"token": undoToken}, "")
 	require.Equal(t, http.StatusOK, inspectedUndo.Code, "undo inspection = %d: %s", inspectedUndo.Code, inspectedUndo.Body.String())
 	var undoFacts struct {
@@ -127,15 +127,15 @@ func TestEmailTransitionsUseRealServerGraphAndFrozenRecipients(t *testing.T) {
 	require.False(t, undoFacts.ChangedAt.IsZero())
 	require.False(t, undoFacts.ChangedAt.After(time.Now()), "the change time is in the future")
 	require.NotContains(t, helper.Logs.String(), undoToken, "inspected undo token appeared in logs")
-	unknown := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/email-change/undo/inspect",
+	unknown := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/auth/email-change/undo/inspect",
 		map[string]any{"token": model.NewCredentialToken()}, "")
 	require.Equal(t, http.StatusBadRequest, unknown.Code, "unknown undo inspection = %d: %s", unknown.Code, unknown.Body.String())
 	require.Contains(t, unknown.Body.String(), "authentication.account_token.invalid")
 
-	completed := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/email-verification/complete",
+	completed := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/auth/email-verification/complete",
 		map[string]any{"token": verificationToken}, "")
 	require.Equal(t, http.StatusNoContent, completed.Code, "email-change verification completion status = %d: %s", completed.Code, completed.Body.String())
-	consumed := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/email-verification/inspect",
+	consumed := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/auth/email-verification/inspect",
 		map[string]any{"token": verificationToken}, "")
 	require.Equal(t, http.StatusBadRequest, consumed.Code, "consumed verification inspection = %d: %s", consumed.Code, consumed.Body.String())
 	require.Contains(t, consumed.Body.String(), "authentication.account_token.invalid")

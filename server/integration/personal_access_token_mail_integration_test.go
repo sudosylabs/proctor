@@ -33,7 +33,7 @@ func TestPersonalAccessTokenSecurityNoticeIntegration(t *testing.T) {
 	require.NotEmpty(t, dataSource, "PROCTOR_TEST_DATABASE_URL is not set")
 	persistence := openAuthenticationStore(t, dataSource)
 	helper := testlib.Setup(t, testlib.WithStore(persistence))
-	bootstrap := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
+	bootstrap := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{ //nolint:gosec // G101: fixed test password and test bootstrap secret, not a real credential
 		"bootstrap_secret": testlib.BootstrapSecret,
 		"institution":      map[string]any{"name": "northbridge", "display_name": "Northbridge University"},
 		"administrator":    map[string]any{"username": "pat-admin", "email": "pat-admin@example.edu"},
@@ -44,7 +44,7 @@ func TestPersonalAccessTokenSecurityNoticeIntegration(t *testing.T) {
 	login := loginIntegrationUser(t, helper.Handler(), "pat-admin", "bootstrap correct horse battery staple", model.SessionClientCLI, "pat-notices")
 
 	description := "Reporting automation <safe>"
-	create := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/users/me/tokens", map[string]any{
+	create := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/users/me/tokens", map[string]any{
 		"description": description,
 		"scopes":      []string{string(model.ActionClassView)},
 		"expires_at":  model.FormatRFC3339(time.Now().Add(24 * time.Hour)),
@@ -68,7 +68,7 @@ func TestPersonalAccessTokenSecurityNoticeIntegration(t *testing.T) {
 		disableGroup.Add(1)
 		go func() {
 			defer disableGroup.Done()
-			disableResponses <- performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/users/me/tokens/"+created.Token.ID+"/disable", nil, login.Tokens.AccessToken)
+			disableResponses <- performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/users/me/tokens/"+created.Token.ID+"/disable", nil, login.Tokens.AccessToken)
 		}()
 	}
 	disableGroup.Wait()
@@ -86,7 +86,7 @@ func TestPersonalAccessTokenSecurityNoticeIntegration(t *testing.T) {
 		{http.MethodDelete, "/api/v1/users/me/tokens/" + created.Token.ID, http.StatusNoContent},
 	} {
 		t.Run(operation.path, func(t *testing.T) {
-			response := performJSONRequest(helper.Handler(), operation.method, operation.path, nil, login.Tokens.AccessToken)
+			response := performJSONRequest(t, helper.Handler(), operation.method, operation.path, nil, login.Tokens.AccessToken)
 			require.Equal(t, operation.status, response.Code, "%s %s = %d: %s", operation.method, operation.path, response.Code, response.Body.String())
 		})
 	}

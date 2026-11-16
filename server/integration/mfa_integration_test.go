@@ -18,7 +18,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
-	"crypto/sha1"
+	"crypto/sha1" //nolint:gosec // G505: RFC 6238 TOTP is defined over HMAC-SHA1
 	"encoding/base32"
 	"encoding/base64"
 	"encoding/binary"
@@ -77,7 +77,7 @@ func TestMFAIntegration(t *testing.T) {
 		}),
 		testlib.WithStore(persistence),
 	)
-	bootstrap := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
+	bootstrap := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{ //nolint:gosec // G101: fixed test password and test bootstrap secret, not a real credential
 		"bootstrap_secret": testlib.BootstrapSecret,
 		"institution":      map[string]any{"name": "northbridge", "display_name": "Northbridge University"},
 		"administrator":    map[string]any{"username": "mfa-admin", "email": "mfa-admin@example.edu"},
@@ -103,6 +103,7 @@ func TestMFAIntegration(t *testing.T) {
 		"mfa-initial",
 	)
 	setupResponse := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/users/me/mfa/setup",
@@ -126,6 +127,7 @@ func TestMFAIntegration(t *testing.T) {
 	require.Equal(t, persisted.EncryptionKeyID, envelope.KeyID, "persisted MFA envelope = %#v; key reference", envelope)
 	code := integrationTOTP(t, setup.Secret, time.Now().UTC().Unix()/30)
 	activateResponse := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/users/me/mfa/activate",
@@ -137,6 +139,7 @@ func TestMFAIntegration(t *testing.T) {
 	require.NoError(t, json.Unmarshal(activateResponse.Body.Bytes(), &activation))
 	require.Len(t, activation.RecoveryCodes, helper.ConfigStore.Get().Authentication.MFA.RecoveryCodeCount)
 	statusResponse := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/users/me/mfa",
@@ -160,6 +163,7 @@ func TestMFAIntegration(t *testing.T) {
 	require.True(t, status.RecentlyUntil.After(time.Now()), "a fresh login reported no recent-authentication end")
 	require.False(t, status.RecentlyUntil.After(time.Now().Add(configured.RecentAuthenticationTTL.Duration)), "recent-authentication end exceeds the configured window")
 	rechallenge := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/users/me/mfa/challenge",
@@ -173,6 +177,7 @@ func TestMFAIntegration(t *testing.T) {
 	require.Equal(t, model.AuthenticationMultiFactor, rechallenged.AuthenticationStrength)
 	require.True(t, rechallenged.MFACompletedAt.Valid)
 	withoutSecondFactor := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/login",
@@ -185,6 +190,7 @@ func TestMFAIntegration(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, withoutSecondFactor.Code, "MFA-required login status = %d: %s", withoutSecondFactor.Code, withoutSecondFactor.Body.String())
 	recoveryCode := activation.RecoveryCodes[0]
 	recoveryLogin := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/login",
@@ -200,6 +206,7 @@ func TestMFAIntegration(t *testing.T) {
 	require.Equal(t, model.AuthenticationMultiFactor, recovered.Session.AuthenticationStrength)
 	require.True(t, recovered.Session.MFACompletedAt.Valid)
 	replay := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/login",
@@ -211,6 +218,7 @@ func TestMFAIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusUnauthorized, replay.Code, "MFA recovery replay status = %d: %s", replay.Code, replay.Body.String())
 	regenerate := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/users/me/mfa/recovery-codes/regenerate",
@@ -225,6 +233,7 @@ func TestMFAIntegration(t *testing.T) {
 	require.Len(t, regenerated.RecoveryCodes, len(activation.RecoveryCodes))
 	require.NotEqual(t, activation.RecoveryCodes[0], regenerated.RecoveryCodes[0])
 	disable := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/users/me/mfa/disable",
@@ -233,6 +242,7 @@ func TestMFAIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusNoContent, disable.Code, "MFA disable = %d: %s", disable.Code, disable.Body.String())
 	afterDisable := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodPost,
 		"/api/v1/auth/login",
@@ -306,6 +316,10 @@ func integrationTOTP(t *testing.T, secret string, timeStep int64) string {
 	t.Helper()
 	key, err := base32.StdEncoding.DecodeString(secret)
 	require.NoError(t, err)
+	if timeStep < 0 {
+		t.Fatalf("TOTP time step = %d, want a non-negative counter", timeStep)
+		return ""
+	}
 	var counter [8]byte
 	binary.BigEndian.PutUint64(counter[:], uint64(timeStep))
 	mac := hmac.New(sha1.New, key)

@@ -198,10 +198,10 @@ var mailpitHTTPClient = &http.Client{Timeout: 5 * time.Second}
 
 func clearMailpit(t *testing.T, baseURL string) {
 	t.Helper()
-	request, err := http.NewRequest(http.MethodDelete, baseURL+"/api/v1/messages", strings.NewReader(`{}`))
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, baseURL+"/api/v1/messages", strings.NewReader(`{}`)) //nolint:gosec // G704: request goes to the test Mailpit URL from PROCTOR_TEST_MAILPIT_HTTP_URL
 	require.NoError(t, err)
 	request.Header.Set("Content-Type", "application/json")
-	response, err := mailpitHTTPClient.Do(request)
+	response, err := mailpitHTTPClient.Do(request) //nolint:gosec // G704: request goes to the test Mailpit URL from PROCTOR_TEST_MAILPIT_HTTP_URL
 	require.NoError(t, err)
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
@@ -241,7 +241,10 @@ func waitForMailpitMessages(t *testing.T, baseURL string, count int) []mailpitMe
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		response, err := mailpitHTTPClient.Get(fmt.Sprintf("%s/api/v1/messages?limit=%d", baseURL, count+5))
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, //nolint:gosec // G704: request goes to the test Mailpit URL from PROCTOR_TEST_MAILPIT_HTTP_URL
+			fmt.Sprintf("%s/api/v1/messages?limit=%d", baseURL, count+5), nil)
+		require.NoError(t, err)
+		response, err := mailpitHTTPClient.Do(request) //nolint:gosec // G704: request goes to the test Mailpit URL from PROCTOR_TEST_MAILPIT_HTTP_URL
 		require.NoError(t, err)
 		var page struct {
 			Messages []mailpitMessageSummary `json:"messages"`
@@ -260,7 +263,9 @@ func waitForMailpitMessages(t *testing.T, baseURL string, count int) []mailpitMe
 
 func readMailpitRaw(t *testing.T, baseURL, id string) []byte {
 	t.Helper()
-	response, err := mailpitHTTPClient.Get(baseURL + "/api/v1/message/" + id + "/raw")
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/api/v1/message/"+id+"/raw", nil) //nolint:gosec // G704: request goes to the test Mailpit URL from PROCTOR_TEST_MAILPIT_HTTP_URL
+	require.NoError(t, err)
+	response, err := mailpitHTTPClient.Do(request) //nolint:gosec // G704: request goes to the test Mailpit URL from PROCTOR_TEST_MAILPIT_HTTP_URL
 	require.NoError(t, err)
 	defer response.Body.Close()
 	require.Equal(t, http.StatusOK, response.StatusCode, "read Mailpit message %q status", id)

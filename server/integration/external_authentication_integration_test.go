@@ -113,6 +113,7 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	providers := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/auth/providers",
@@ -130,6 +131,7 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 	require.NotContains(t, providers.Body.String(), casServer.URL, "provider discovery status")
 
 	begin := performJSONRequest(
+		t,
 		helper.Handler(),
 		http.MethodGet,
 		"/api/v1/auth/providers/"+providerID+
@@ -158,7 +160,7 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 	callbackQuery := callbackURL.Query()
 	callbackQuery.Set("ticket", ticket)
 	callbackPath := callbackURL.Path + "?" + callbackQuery.Encode()
-	callbackRequest := httptest.NewRequest(http.MethodGet, callbackPath, nil)
+	callbackRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, callbackPath, nil)
 	callbackRequest.RemoteAddr = "127.0.0.1:4321"
 	callbackRequest.AddCookie(bindingCookie)
 	callback := httptest.NewRecorder()
@@ -228,13 +230,14 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 			event.Action != "authentication.external_login")
 	}
 
-	meRequest := httptest.NewRequest(http.MethodGet, "/api/v1/users/me", nil)
+	meRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me", nil)
 	meRequest.AddCookie(accessCookie)
 	me := httptest.NewRecorder()
 	helper.Handler().ServeHTTP(me, meRequest)
 	require.Equal(t, http.StatusOK, me.Code, "cookie-authenticated current user = %d: %s", me.Code, me.Body.String())
 	loginProvider := func(loginProviderID, deviceID string) *httptest.ResponseRecorder {
 		begin := performJSONRequest(
+			t,
 			helper.Handler(), http.MethodGet,
 			"/api/v1/auth/providers/"+loginProviderID+"/login?client_type=web&device_id="+deviceID,
 			nil, "",
@@ -246,7 +249,7 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 		require.NoError(t, parseErr)
 		query := service.Query()
 		query.Set("ticket", ticket)
-		request := httptest.NewRequest(http.MethodGet, service.Path+"?"+query.Encode(), nil)
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, service.Path+"?"+query.Encode(), nil)
 		for _, cookie := range begin.Result().Cookies() {
 			if cookie.Name == route.BrowserExternalLoginCookieName {
 				request.AddCookie(cookie)
@@ -271,7 +274,7 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 	invitedEmail := "claimed.external.student@example.edu"
 	claim, pendingInvitation := seedExternalAdmissionInvitation(t, persistence, institution, user, invitedEmail)
 	subject, claimedUsername, claimedEmail = "invited-opaque-subject", "claimed.external.student", invitedEmail
-	disabledBegin := performJSONRequest(helper.Handler(), http.MethodPost,
+	disabledBegin := performJSONRequest(t, helper.Handler(), http.MethodPost,
 		"/api/v1/auth/providers/"+invitationProviderID+"/login",
 		map[string]any{"invitation_claim": claim, "return_to": "/join"}, "")
 	require.Equal(t, http.StatusSeeOther, disabledBegin.Code, "pre-toggle invitation begin = %d body=%s", disabledBegin.Code, disabledBegin.Body.String())
@@ -287,7 +290,7 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 	require.NoError(t, err)
 	disabledQuery := disabledServiceURL.Query()
 	disabledQuery.Set("ticket", ticket)
-	disabledCallbackRequest := httptest.NewRequest(http.MethodGet,
+	disabledCallbackRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet,
 		disabledServiceURL.Path+"?"+disabledQuery.Encode(), nil)
 	for _, cookie := range disabledBegin.Result().Cookies() {
 		if cookie.Name == route.BrowserExternalLoginCookieName {
@@ -309,7 +312,7 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 		       revision=revision+1, updated_at=clock_timestamp()
 		 WHERE singleton=1`)
 	require.NoError(t, err)
-	invitationBegin := performJSONRequest(helper.Handler(), http.MethodPost,
+	invitationBegin := performJSONRequest(t, helper.Handler(), http.MethodPost,
 		"/api/v1/auth/providers/"+invitationProviderID+"/login",
 		map[string]any{"invitation_claim": claim, "return_to": "/join"}, "")
 	require.Equal(t, http.StatusSeeOther, invitationBegin.Code, "claimed invitation begin = %d location=%q body=%s", invitationBegin.Code, invitationBegin.Header().Get("Location"), invitationBegin.Body.String())
@@ -320,7 +323,7 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 	require.NoError(t, err)
 	invitationQuery := invitationServiceURL.Query()
 	invitationQuery.Set("ticket", ticket)
-	invitationCallbackRequest := httptest.NewRequest(http.MethodGet,
+	invitationCallbackRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet,
 		invitationServiceURL.Path+"?"+invitationQuery.Encode(), nil)
 	for _, cookie := range invitationBegin.Result().Cookies() {
 		if cookie.Name == route.BrowserExternalLoginCookieName {
@@ -364,7 +367,7 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 	require.NotContains(t, helper.Logs.String(), claim, "raw Invitation claim appeared in CAS logs")
 	subject, claimedUsername, claimedEmail = linkedSubject, "external.student", "external.student@example.edu"
 
-	connectRequest := httptest.NewRequest(http.MethodPost,
+	connectRequest := httptest.NewRequestWithContext(t.Context(), http.MethodPost,
 		"/api/v1/authentication-methods/providers/"+connectionProviderID+"/connect",
 		strings.NewReader(`{"return_to":"/connected"}`))
 	connectRequest.Header.Set("Content-Type", "application/json")
@@ -391,7 +394,7 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 	require.True(t, connectionStart.ExpiresAt.Equal(time.UnixMilli(connectionState.ExpiresAt.UnixMilli())), "provider connection state = %#v response expiry=%s error", connectionState, connectionStart.ExpiresAt)
 	connectionQuery := connectionService.Query()
 	connectionQuery.Set("ticket", ticket)
-	connectionCallbackRequest := httptest.NewRequest(http.MethodGet,
+	connectionCallbackRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet,
 		connectionService.Path+"?"+connectionQuery.Encode(), nil)
 	for _, cookie := range connect.Result().Cookies() {
 		if cookie.Name == route.BrowserExternalLoginCookieName {
@@ -409,7 +412,7 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 	require.NoError(t, err, "provider connection created a Session")
 	require.Len(t, connectedSessions, 1, "provider connection created a Session")
 	require.Equal(t, http.StatusSeeOther, loginProvider(connectionProviderID, "linked-linked-only").Code, "existing linked_only identity login status")
-	unlinkRequest := httptest.NewRequest(http.MethodDelete,
+	unlinkRequest := httptest.NewRequestWithContext(t.Context(), http.MethodDelete,
 		"/api/v1/authentication-methods/providers/"+connectedIdentity.ID.String(), nil)
 	unlinkRequest.Header.Set("Authorization", "Bearer "+accessCookie.Value)
 	unlink := httptest.NewRecorder()
@@ -419,7 +422,7 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 	require.NoError(t, err, "unrelated provider Session was revoked: %#v", retainedSession)
 	require.False(t, retainedSession.RevokedAt.Valid, "unrelated provider Session was revoked: %#v", retainedSession)
 
-	replayRequest := httptest.NewRequest(http.MethodGet, callbackPath, nil)
+	replayRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, callbackPath, nil)
 	replayRequest.AddCookie(bindingCookie)
 	replay := httptest.NewRecorder()
 	helper.Handler().ServeHTTP(replay, replayRequest)
@@ -445,7 +448,7 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 	claimedUsername, claimedEmail = "external.student", "external.student@example.edu"
 	claimedFirstName, claimedLastName = "External", "Student"
 
-	removalBegin := performJSONRequest(helper.Handler(), http.MethodGet,
+	removalBegin := performJSONRequest(t, helper.Handler(), http.MethodGet,
 		"/api/v1/auth/providers/"+providerID+"/login?client_type=web&device_id=provider-removal", nil, "")
 	require.Equal(t, http.StatusSeeOther, removalBegin.Code, "provider-removal begin status = %d: %s", removalBegin.Code, removalBegin.Body.String())
 	removalLoginURL, err := url.Parse(removalBegin.Header().Get("Location"))
@@ -470,7 +473,7 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 		}),
 		testlib.WithStore(persistence),
 	)
-	removedRequest := httptest.NewRequest(http.MethodGet, removalCallbackPath, nil)
+	removedRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, removalCallbackPath, nil)
 	removedRequest.AddCookie(removalBinding)
 	removedResponse := httptest.NewRecorder()
 	removedProviderNode.Handler().ServeHTTP(removedResponse, removedRequest)
@@ -479,7 +482,7 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 	require.NoError(t, err, "provider removal changed durable identity = %#v", preservedIdentity)
 	require.Equal(t, identity.ID, preservedIdentity.ID, "provider removal changed durable identity = %#v", preservedIdentity)
 	require.Equal(t, user.ID, preservedIdentity.UserID, "provider removal changed durable identity = %#v", preservedIdentity)
-	restoredRequest := httptest.NewRequest(http.MethodGet, removalCallbackPath, nil)
+	restoredRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, removalCallbackPath, nil)
 	restoredRequest.AddCookie(removalBinding)
 	restoredResponse := httptest.NewRecorder()
 	helper.Handler().ServeHTTP(restoredResponse, restoredRequest)

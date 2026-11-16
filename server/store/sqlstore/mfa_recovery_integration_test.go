@@ -190,13 +190,13 @@ func TestMFAAssistedResetAtomicRetirementAndRestrictedReenrollment(t *testing.T)
 		{name: "current Session", sessionID: activated.Session.ID, permitted: true},
 	} {
 		t.Run(source.name, func(t *testing.T) {
-			audit, err := s.Audit().Save(ctx, &model.AuditEvent{ActorID: f.target.ID, SessionID: source.sessionID, Action: string(model.ActionExternalIdentityManage), Resource: model.Resource{Type: model.ResourceUser, ID: f.target.ID.String()}, ScopeType: model.RoleScopeInstitution, ScopeID: model.NewInstitutionID().String(), Status: model.AuditStatusAttempt, NodeID: "recovery-fence"})
-			require.NoError(t, err)
-			err = requireMFARecoveryAuthenticationMethodSource(ctx, s.GetMaster(), f.target.ID, audit.ID)
-			require.Equal(t, source.permitted, err == nil, "%s credential change authority: %v", source.name, err)
+			audit, sourceErr := s.Audit().Save(ctx, &model.AuditEvent{ActorID: f.target.ID, SessionID: source.sessionID, Action: string(model.ActionExternalIdentityManage), Resource: model.Resource{Type: model.ResourceUser, ID: f.target.ID.String()}, ScopeType: model.RoleScopeInstitution, ScopeID: model.NewInstitutionID().String(), Status: model.AuditStatusAttempt, NodeID: "recovery-fence"})
+			require.NoError(t, sourceErr)
+			sourceErr = requireMFARecoveryAuthenticationMethodSource(ctx, s.GetMaster(), f.target.ID, audit.ID)
+			require.Equal(t, source.permitted, sourceErr == nil, "%s credential change authority: %v", source.name, sourceErr)
 			if !source.permitted {
-				_, err = s.PasswordCredential().Enroll(ctx, &store.PasswordCredentialEnrollment{Credential: &model.PasswordCredential{UserID: f.target.ID, PasswordHash: "new-primary"}, AuditEventID: audit.ID, AuditAt: model.NowUTC()})
-				require.True(t, store.IsNotFound(err), "old request reached password enrollment")
+				_, sourceErr = s.PasswordCredential().Enroll(ctx, &store.PasswordCredentialEnrollment{Credential: &model.PasswordCredential{UserID: f.target.ID, PasswordHash: "new-primary"}, AuditEventID: audit.ID, AuditAt: model.NowUTC()})
+				require.True(t, store.IsNotFound(sourceErr), "old request reached password enrollment")
 			}
 		})
 	}
@@ -211,9 +211,9 @@ func TestMFAAssistedResetAtomicRetirementAndRestrictedReenrollment(t *testing.T)
 func saveMFARecoveryExternalState(t *testing.T, ctx context.Context, s *SQLStore, provider string, purpose model.ExternalAuthenticationPurpose, target model.UserID) *model.ExternalLoginState {
 	t.Helper()
 	stateHash, bindingHash := model.HashToken(model.NewCredentialToken()), model.HashToken(model.NewCredentialToken())
-	state, err := s.ExternalLoginState().Save(ctx, &store.ExternalLoginStateCreation{State: &model.ExternalLoginState{Provider: provider, Purpose: purpose, TargetUserID: target, StateHash: stateHash, BindingHash: bindingHash, ReturnTo: "/account/security", ClientType: model.SessionClientWeb}, Lifetime: time.Minute})
+	_, err := s.ExternalLoginState().Save(ctx, &store.ExternalLoginStateCreation{State: &model.ExternalLoginState{Provider: provider, Purpose: purpose, TargetUserID: target, StateHash: stateHash, BindingHash: bindingHash, ReturnTo: "/account/security", ClientType: model.SessionClientWeb}, Lifetime: time.Minute})
 	require.NoError(t, err)
-	state, err = s.ExternalLoginState().Consume(ctx, &store.ExternalLoginStateConsumption{Provider: provider, StateHash: stateHash, BindingHash: bindingHash})
+	state, err := s.ExternalLoginState().Consume(ctx, &store.ExternalLoginStateConsumption{Provider: provider, StateHash: stateHash, BindingHash: bindingHash})
 	require.NoError(t, err)
 	return state
 }

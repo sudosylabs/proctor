@@ -34,7 +34,7 @@ func TestPublicLocalRegistrationRealGraph(t *testing.T) {
 			cfg.Authentication.AccountRecovery.RateLimit.MaximumSourceAttempts = 100
 		}),
 	)
-	_, err := helper.App.Identity.BootstrapInstallation(context.Background(), invocation.Invocation{}, identity.BootstrapInstallationCommand{
+	_, err := helper.App.Identity.BootstrapInstallation(context.Background(), invocation.Invocation{}, identity.BootstrapInstallationCommand{ //nolint:gosec // G101: fixed test password and test bootstrap secret, not a real credential
 		InstitutionName: "registration-university", InstitutionDisplayName: "Registration University",
 		AdministratorUsername: "registration-admin", AdministratorEmail: "registration-admin@example.edu",
 		Password: "bootstrap correct horse battery staple", BootstrapSecret: testlib.BootstrapSecret, Source: "127.0.0.1:1",
@@ -48,7 +48,7 @@ func TestPublicLocalRegistrationRealGraph(t *testing.T) {
 		"username": "new.public.student", "email": email, "first_name": "New",
 		"last_name": "Student", "password": password,
 	}
-	disabled := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/register", body, "")
+	disabled := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/auth/register", body, "")
 	require.Equal(t, http.StatusForbidden, disabled.Code, "disabled registration")
 	require.Contains(t, disabled.Body.String(), "authentication.registration.invitation_required", "disabled registration")
 	require.NotContains(t, disabled.Body.String(), email, "disabled registration")
@@ -60,8 +60,8 @@ func TestPublicLocalRegistrationRealGraph(t *testing.T) {
 		 WHERE singleton=1 AND local_login_enabled=TRUE`)
 	require.NoError(t, err)
 
-	accepted := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/register", body, "")
-	replay := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/register", body, "")
+	accepted := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/auth/register", body, "")
+	replay := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/auth/register", body, "")
 	require.Equal(t, http.StatusAccepted, accepted.Code, "registration statuses accepted=%d replay=%d bodies=%q/%q", accepted.Code, replay.Code, accepted.Body.String(), replay.Body.String())
 	require.Equal(t, http.StatusAccepted, replay.Code, "registration statuses accepted=%d replay=%d bodies=%q/%q", accepted.Code, replay.Code, accepted.Body.String(), replay.Body.String())
 	require.Equal(t, 0, accepted.Body.Len(), "registration statuses accepted=%d replay=%d bodies=%q/%q", accepted.Code, replay.Code, accepted.Body.String(), replay.Body.String())
@@ -88,10 +88,10 @@ func TestPublicLocalRegistrationRealGraph(t *testing.T) {
 	require.NotContains(t, logs, email)
 	require.NotContains(t, logs, password)
 	require.NotContains(t, logs, token)
-	verification := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/email-verification/complete",
+	verification := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/auth/email-verification/complete",
 		map[string]any{"token": token}, "")
 	require.Equal(t, http.StatusNoContent, verification.Code, "verification = %d %s", verification.Code, verification.Body.String())
-	login := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/login", map[string]any{
+	login := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/auth/login", map[string]any{
 		"login_id": email, "password": password, "client_type": model.SessionClientCLI,
 	}, "")
 	require.Equal(t, http.StatusOK, login.Code, "registered login = %d %s", login.Code, login.Body.String())

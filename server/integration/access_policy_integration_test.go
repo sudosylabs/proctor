@@ -57,7 +57,7 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 	primary := testlib.Setup(t, testlib.WithConfig(mfaConfig), testlib.WithStore(primaryStore), testlib.WithCluster(primaryCluster))
 	secondary := testlib.Setup(t, testlib.WithConfig(mfaConfig), testlib.WithStore(secondaryStore), testlib.WithCluster(secondaryCluster))
 
-	bootstrap := performJSONRequest(primary.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
+	bootstrap := performJSONRequest(t, primary.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
 		"bootstrap_secret": testlib.BootstrapSecret,
 		"institution":      map[string]any{"name": "policy-two-node", "display_name": "Policy Two Node"},
 		"administrator":    map[string]any{"username": "policy-admin", "email": "policy-admin@example.edu"},
@@ -161,7 +161,7 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 	request := func(candidate map[string]any) *httptest.ResponseRecorder {
 		encoded, encodeErr := json.Marshal(candidate)
 		require.NoError(t, encodeErr)
-		req := httptest.NewRequest(http.MethodPut, "/api/v1/access-policy", bytes.NewReader(encoded))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/access-policy", bytes.NewReader(encoded))
 		req.Header.Set("Authorization", "Bearer "+login.Tokens.AccessToken)
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Idempotency-Key", "access-policy-lost-response")

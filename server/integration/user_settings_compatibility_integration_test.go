@@ -12,6 +12,7 @@ package integration_test
 import (
 	"context"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -83,7 +84,7 @@ func TestUserSettingsUnsupportedFormatIsOpaqueAndReadOnlyAfterRollback(t *testin
 		t.Run(name, func(t *testing.T) {
 			_, replaceErr := helper.App.Users.ReplaceOwnUserSettings(ctx, inv, user.ReplaceOwnUserSettingsCommand{
 				Source: "{}\n", FormatVersion: targetVersion, ExpectedRevision: view.Revision,
-				IdempotencyKey: "settings-compatibility-" + string(rune('0'+targetVersion)),
+				IdempotencyKey: "settings-compatibility-" + strconv.Itoa(targetVersion),
 			})
 			require.True(t, apperror.Is(replaceErr, "user_settings.format_unsupported"), "ReplaceOwnUserSettings() error = %v", replaceErr)
 		})

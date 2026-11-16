@@ -89,10 +89,10 @@ func testDesktopAuthorizationRotatingSession(t *testing.T, development bool) {
 		// The test graph must ignore the host environment and default to strict
 		// compatibility even when the test binary itself was built without production.
 		strict := testlib.Setup(t, testlib.WithConfig(publicOrigin), testlib.WithStore(openAdditionalUserSettingsStore(t, dataSource)))
-		result, err := strict.App.Identity.EvaluateDesktopCompatibility(t.Context(), invocation.Invocation{}, identity.DesktopCompatibilityQuery{
+		result, strictErr := strict.App.Identity.EvaluateDesktopCompatibility(t.Context(), invocation.Invocation{}, identity.DesktopCompatibilityQuery{
 			DesktopRelease: build.DesktopRelease, DesktopBuildID: build.DesktopBuildID, Platform: string(build.Platform), Architecture: string(build.Architecture), RealtimeProtocol: build.RealtimeProtocol,
 		})
-		require.NoError(t, err, "default test graph bypassed compatibility: %#v", result)
+		require.NoError(t, strictErr, "default test graph bypassed compatibility: %#v", result)
 		require.Equal(t, identity.DesktopCompatibilityUnsupportedTarget, result.Compatibility, "default test graph bypassed compatibility: %#v", result)
 	}
 

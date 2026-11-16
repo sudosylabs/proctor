@@ -37,8 +37,8 @@ func TestOfflineAdministratorRecoveryRejectsAnotherServingNode(t *testing.T) {
 		}
 	}
 	primary := testlib.Setup(t, testlib.WithStore(primaryStore), testlib.WithConfig(configureNode("serving-node-primary")))
-	const oldPassword = "live node old correct horse battery staple"
-	bootstrap := performJSONRequest(primary.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
+	const oldPassword = "live node old correct horse battery staple" //nolint:gosec // G101: fixed test password, not a real credential
+	bootstrap := performJSONRequest(t, primary.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
 		"bootstrap_secret": testlib.BootstrapSecret,
 		"institution":      map[string]any{"name": "live-node-recovery", "display_name": "Live Node Recovery"},
 		"administrator":    map[string]any{"username": "live-node-admin", "email": "live-node-admin@example.edu"},
@@ -98,8 +98,8 @@ func TestOfflineAdministratorRecoveryRejectsAnotherServingNode(t *testing.T) {
 
 	cancelServing()
 	select {
-	case err := <-serveDone:
-		require.NoError(t, err)
+	case serveErr := <-serveDone:
+		require.NoError(t, serveErr)
 	case <-time.After(5 * time.Second):
 		require.FailNow(t, "primary server did not stop")
 	}
@@ -119,7 +119,7 @@ func TestOfflineAdministratorRecoveryReconcilesBeforeNormalAuthentication(t *tes
 	}))
 	const oldPassword = "old correct horse battery staple"
 	const newPassword = "new correct horse battery staple"
-	bootstrap := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
+	bootstrap := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
 		"bootstrap_secret": testlib.BootstrapSecret,
 		"institution":      map[string]any{"name": "offline-recovery", "display_name": "Offline Recovery"},
 		"administrator":    map[string]any{"username": "offline-admin", "email": "offline-admin@example.edu"},
@@ -167,7 +167,7 @@ func TestOfflineAdministratorRecoveryReconcilesBeforeNormalAuthentication(t *tes
 	login := loginIntegrationUser(t, helper.Handler(), "offline-admin", newPassword, model.SessionClientCLI, "offline-recovery-cli")
 	require.Equal(t, created.Administrator.ID, login.User.ID.String())
 	require.NotNil(t, login.Session)
-	oldLogin := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/login", map[string]any{
+	oldLogin := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/auth/login", map[string]any{
 		"login_id": "offline-admin", "password": oldPassword, "client_type": model.SessionClientCLI,
 	}, "")
 	require.NotEqual(t, http.StatusOK, oldLogin.Code, "old password authenticated after rotation")

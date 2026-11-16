@@ -42,7 +42,7 @@ func TestRoleHolderMFAPolicyRestrictsSignInUntilEnrollment(t *testing.T) {
 		cfg.Authentication.MFA.EncryptionKey = base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{31}, 32))
 	}))
 	const adminPassword = "amber walrus ledger tidal frost"
-	bootstrap := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
+	bootstrap := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
 		"bootstrap_secret": testlib.BootstrapSecret,
 		"institution":      map[string]any{"name": "role-holder-mfa", "display_name": "Role Holder MFA"},
 		"administrator":    map[string]any{"username": "role-holder-mfa-admin", "email": "role-holder-mfa-admin@example.edu"},
@@ -65,7 +65,7 @@ func TestRoleHolderMFAPolicyRestrictsSignInUntilEnrollment(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, replaced.Policy.RoleHolderMFARequired)
-	stillAdmin := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, admin.Tokens.AccessToken)
+	stillAdmin := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, admin.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, stillAdmin.Code, "a multi-factor role holder's Session is kept: %s", stillAdmin.Body.String())
 
 	const roleHolderPassword = "cobalt fennel canyon brisk otter"
@@ -82,9 +82,9 @@ func TestRoleHolderMFAPolicyRestrictsSignInUntilEnrollment(t *testing.T) {
 		ClientType: model.SessionClientWeb, Source: "127.0.0.1:2"})
 	require.NoError(t, err)
 	require.True(t, restricted.Session.MFAEnrollmentRequired, "a role holder without two-step gets a restricted Session")
-	ordinary := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, restricted.Tokens.AccessToken)
+	ordinary := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, restricted.Tokens.AccessToken)
 	require.Equal(t, http.StatusUnauthorized, ordinary.Code, "restricted Session reached an ordinary route: %s", ordinary.Body.String())
-	status := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/me/mfa", nil, restricted.Tokens.AccessToken)
+	status := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/me/mfa", nil, restricted.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, status.Code, "status=%s", status.Body.String())
 	var state struct {
 		EnrollmentRequired bool `json:"mfa_enrollment_required"`
@@ -106,9 +106,9 @@ func TestRoleHolderMFAPolicyRestrictsSignInUntilEnrollment(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, enrolled.MFAEnrollmentRequired, "enrollment lifted the restriction")
 	require.Equal(t, model.AuthenticationMultiFactor, enrolled.AuthenticationStrength)
-	ordinary = performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, restricted.Tokens.AccessToken)
+	ordinary = performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, restricted.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, ordinary.Code, "enrolled Session=%d %s", ordinary.Code, ordinary.Body.String())
-	disabled := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/users/me/mfa/disable", nil, restricted.Tokens.AccessToken)
+	disabled := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/users/me/mfa/disable", nil, restricted.Tokens.AccessToken)
 	require.Equal(t, http.StatusConflict, disabled.Code, "disable=%s", disabled.Body.String())
 	require.Contains(t, disabled.Body.String(), `"code":"mfa.required_by_policy"`)
 }
@@ -124,7 +124,7 @@ func TestAccessPolicySessionLengthAppliesToRunningAndNewSessions(t *testing.T) {
 		cfg.Authentication.MFA.EncryptionKey = base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{37}, 32))
 	}))
 	const adminPassword = "pebble lantern orchard quiet harbor"
-	bootstrap := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
+	bootstrap := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
 		"bootstrap_secret": testlib.BootstrapSecret,
 		"institution":      map[string]any{"name": "session-length", "display_name": "Session Length"},
 		"administrator":    map[string]any{"username": "session-length-admin", "email": "session-length-admin@example.edu"},
@@ -158,7 +158,7 @@ func TestAccessPolicySessionLengthAppliesToRunningAndNewSessions(t *testing.T) {
 	shortened, err := persistence.Session().Get(ctx, running.Session.ID)
 	require.NoError(t, err)
 	require.False(t, shortened.ExpiresAt.After(running.Session.CreatedAt.Add(time.Hour)), "running Session pulled in: %s", shortened.ExpiresAt)
-	still := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, running.Tokens.AccessToken)
+	still := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, running.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, still.Code, "a shortened Session stays live: %s", still.Body.String())
 
 	fresh, err := helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{LoginID: "session-length-learner", Password: learnerPassword,
@@ -189,7 +189,7 @@ func TestRoleHolderMFAPolicyPausesWhileMFAIsDisabled(t *testing.T) {
 		cfg.Authentication.MFA.Enabled = false
 	}))
 	const adminPassword = "saffron glacier pylon murmur quill"
-	bootstrap := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
+	bootstrap := performJSONRequest(t, helper.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
 		"bootstrap_secret": testlib.BootstrapSecret,
 		"institution":      map[string]any{"name": "paused-rule", "display_name": "Paused Rule"},
 		"administrator":    map[string]any{"username": "paused-rule-admin", "email": "paused-rule-admin@example.edu"},
@@ -205,10 +205,10 @@ func TestRoleHolderMFAPolicyPausesWhileMFAIsDisabled(t *testing.T) {
 		ClientType: model.SessionClientWeb, Source: "127.0.0.1:1"})
 	require.NoError(t, err)
 	require.False(t, admin.Session.MFAEnrollmentRequired, "a paused rule restricts nobody")
-	ordinary := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, admin.Tokens.AccessToken)
+	ordinary := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, admin.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, ordinary.Code, "ordinary=%s", ordinary.Body.String())
 
-	read := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/access-policy", nil, admin.Tokens.AccessToken)
+	read := performJSONRequest(t, helper.Handler(), http.MethodGet, "/api/v1/access-policy", nil, admin.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, read.Code, "read=%s", read.Body.String())
 	var policy struct {
 		Required bool `json:"role_holder_mfa_required"`

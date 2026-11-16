@@ -9,7 +9,6 @@ package websocket
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -17,46 +16,8 @@ import (
 	gorilla "github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-// runtimeTestApplication admits every subscription and records when each
-// principal revalidation happened.
-type runtimeTestApplication struct {
-	mu        sync.Mutex
-	validated []runtimeValidation
-}
-
-type runtimeValidation struct {
-	principal model.Principal
-	at        time.Time
-}
-
-func (a *runtimeTestApplication) AuthorizeWebSocketSubscription(
-	context.Context,
-	invocation.Invocation,
-	model.Action,
-	model.Resource,
-) error {
-	return nil
-}
-
-func (a *runtimeTestApplication) ValidateWebSocketPrincipal(
-	_ context.Context,
-	principal model.Principal,
-) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.validated = append(a.validated, runtimeValidation{principal: principal, at: time.Now()})
-	return nil
-}
-
-func (a *runtimeTestApplication) validations() []runtimeValidation {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return append([]runtimeValidation(nil), a.validated...)
-}
 
 // TestConnectionRuntimeUsesDeterministicLivenessAndValidation runs a
 // connection on the bubble's clock: it pings once a pingInterval,
@@ -67,15 +28,19 @@ func TestConnectionRuntimeUsesDeterministicLivenessAndValidation(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		socket, peer := newSocketPair(t)
 		peer.listen()
-		application := &runtimeTestApplication{}
 		principal := model.Principal{
-			UserID:         model.NewUserID(),
-			SessionID:      model.NewSessionID(),
-			CredentialID:   model.PrincipalCredentialID(model.NewID()),
-			CredentialType: model.CredentialSessionAccess,
+			UserID:                 model.NewUserID(),
+			SessionID:              model.NewSessionID(),
+			CredentialID:           model.PrincipalCredentialID(model.NewID()),
+			CredentialType:         model.CredentialSessionAccess,
+			AuthenticationMethod:   "password",
+			AuthenticationStrength: model.AuthenticationSingleFactor,
+			ClientType:             model.SessionClientWeb,
+			AuthenticatedAt:        time.Now(),
 		}
+		world := newAdmissionWorld(t, admissionOptions{principal: principal})
 		runtime := &connectionRuntime{
-			application:   application,
+			admission:     world.admission,
 			socket:        socket,
 			principal:     principal,
 			subscriptions: make(map[string]Subscription),
@@ -93,10 +58,11 @@ func TestConnectionRuntimeUsesDeterministicLivenessAndValidation(t *testing.T) {
 		pings := peer.received(gorilla.PingMessage)
 		require.Len(t, pings, 1, "pings after one ping interval")
 		require.Equal(t, started.Add(pingInterval), pings[0].at, "ping time")
-		validations := application.validations()
+		// Each revalidation reads the principal's Session from the store.
+		validations := world.sessions.read()
 		require.Len(t, validations, int(pingInterval/sessionCheck), "principal revalidations after one ping interval")
 		require.Equal(t, started.Add(sessionCheck), validations[0].at, "first revalidation time")
-		require.Equal(t, principal.SessionID, validations[0].principal.SessionID, "validated session")
+		require.Equal(t, principal.SessionID, validations[0].id, "validated session")
 
 		time.Sleep(pongWait - pingInterval - time.Nanosecond)
 		synctest.Wait()

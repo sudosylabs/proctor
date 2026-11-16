@@ -19,12 +19,8 @@ import (
 
 const commandLocalizationOrigin = "cmd/proctor/commands"
 
-type commandLocalizer interface {
-	Translate(locale, id string, args any) (string, error)
-}
-
 type commandText struct {
-	localizer commandLocalizer
+	localizer *localization.Localizer
 	locale    string
 }
 

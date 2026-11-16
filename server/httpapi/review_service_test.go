@@ -118,6 +118,10 @@ func (f *reviewFixture) AuthenticateBearer(ctx context.Context, token string) (*
 	return f.AuthenticateAccess(ctx, token)
 }
 
+func (f *reviewFixture) AuthenticateDPoP(ctx context.Context, token, _, _, _ string) (*model.Principal, error) {
+	return f.AuthenticateAccess(ctx, token)
+}
+
 // api serves the Integrity Review resource over the fixture's service.
 func (f *reviewFixture) api(t *testing.T) *route.API {
 	t.Helper()

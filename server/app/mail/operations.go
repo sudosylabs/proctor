@@ -137,7 +137,7 @@ type OperationsDependencies struct {
 	Authorization           InstitutionAuthorization
 	Audit                   *access.Auditor
 	Attempts                testLimiter
-	Renderer                Renderer
+	Renderer                *TemplateRenderer
 	Sender                  Sender
 	Metrics                 MetricsReader
 	Sealer                  *secretseal.Sealer

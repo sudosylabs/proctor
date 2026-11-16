@@ -112,7 +112,7 @@ type OwnerDependencies struct {
 	Hosts     Hosts
 	// Settled tells the seal waiting on a settle that the owner completed
 	// it. Nil tells nobody: the waiter rereads the row when its budget ends.
-	Settled SettleNotifier
+	Settled *ClusterSettles
 	// Now is the clock; nil uses time.Now.
 	Now func() time.Time
 	// Report receives failures an owner recovers from by retrying. Nil

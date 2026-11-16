@@ -43,7 +43,7 @@ type academicFixture struct {
 	affiliations *academicAffiliationRecords
 	users        *academicUserRecords
 	bindings     *academicBindingRecords
-	mail         *identityMailRenderer
+	mail         *identityMailSender
 	publisher    *realtimetest.Publisher
 	service      *academic.Service
 }
@@ -71,7 +71,7 @@ func newAcademicFixture(t *testing.T, options academicOptions) *academicFixture 
 		affiliations: &academicAffiliationRecords{},
 		users:        &academicUserRecords{identityUsers: newIdentityUsers()},
 		bindings:     &academicBindingRecords{},
-		mail:         &identityMailRenderer{},
+		mail:         &identityMailSender{enabled: true},
 		publisher:    &realtimetest.Publisher{},
 	}
 	fixture.access = accesstest.New(t, accesstest.Options{
@@ -93,7 +93,7 @@ func newAcademicFixture(t *testing.T, options academicOptions) *academicFixture 
 	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
 	require.NoError(t, err)
 	composer, err := mail.NewComposer(mail.ComposerDependencies{
-		Renderer: fixture.mail, Sender: &identityMailSender{enabled: true}, Sealer: sealer,
+		Renderer: httpMailRenderer(t), Sender: fixture.mail, Sealer: sealer,
 	})
 	require.NoError(t, err)
 

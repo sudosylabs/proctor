@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -27,8 +28,7 @@ func TestSittingMailPreparerFreezesAllFourSafeRenderVariants(t *testing.T) {
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(),
 		at.Add(24*time.Hour), at.Add(26*time.Hour), at)
 	require.NoError(t, err)
-	renderer := sittingMailRendererFake{}
-	preparer, err := newSittingMailPreparer(renderer, &mailSenderFake{enabled: true,
+	preparer, err := newSittingMailPreparer(mailtest.NewRenderer(t), &mailSenderFake{enabled: true,
 		from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), func() time.Time { return at }, nil)
 	require.NoError(t, err)
 	prepared, err := preparer.Prepare(model.NewUserID(), sitting, store.ExamSittingMailScheduled,
@@ -45,20 +45,6 @@ func TestSittingMailPreparerFreezesAllFourSafeRenderVariants(t *testing.T) {
 	require.NoError(t, err, "opened bundle=(%#v,%v)", opened, err)
 	require.Len(t, opened.Messages, 1, "opened bundle=(%#v,%v)", opened, err)
 	require.NotEmpty(t, opened.Messages["en"][model.MailTemplateExamSittingCanceled].Subject, "opened bundle=(%#v,%v)", opened, err)
-}
-
-type sittingMailRendererFake struct{}
-
-func (sittingMailRendererFake) SittingLocales() (string, []string) { return "en", []string{"en"} }
-
-func (sittingMailRendererFake) Render(request mail.RenderRequest) (mail.FrozenContent, error) {
-	details, ok := request.Presentation.(mail.SittingScheduleDetails)
-	if !ok {
-		return mail.FrozenContent{}, nil
-	}
-	key := request.Key
-	return mail.FrozenContent{Subject: string(key), Text: details.ExamTitle + " " + details.ClassDisplayName,
-		HTML: "<p>" + details.ExamTitle + " " + details.ClassDisplayName + "</p>"}, nil
 }
 
 type mailSenderFake struct {

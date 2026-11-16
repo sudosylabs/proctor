@@ -10,27 +10,22 @@ package route
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/app/apperror"
 )
-
-type localizedFailure struct{}
-
-func (localizedFailure) Error() string { return "private cause" }
-
-func (localizedFailure) Code() string { return "authorization.denied" }
-
-func (localizedFailure) Fields() map[string]string { return nil }
 
 func TestWriteErrorLocalizesPresentationWithoutChangingMachineCode(t *testing.T) {
 	t.Parallel()
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/protected", nil)
 	request = request.WithContext(WithLocalization(context.Background(), problemTestLocalizer{}, "fr"))
 	response := httptest.NewRecorder()
-	WriteError(response, request, localizedFailure{})
+	WriteError(response, request, apperror.New("authorization.denied").Wrap(errors.New("private cause")))
 
 	var problem Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))

@@ -19,10 +19,13 @@ import (
 	"github.com/sudosylabs/proctor/server/secretseal"
 )
 
-type mailRendererFake struct{ content FrozenContent }
-
-func (r mailRendererFake) Render(RenderRequest) (FrozenContent, error) {
-	return r.content, nil
+// mailTestRenderer is the production renderer over the server's own
+// templates and catalogs.
+func mailTestRenderer(t *testing.T) *TemplateRenderer {
+	t.Helper()
+	renderer, err := testRenderer()
+	require.NoError(t, err)
+	return renderer
 }
 
 type mailSenderFake struct {
@@ -47,6 +50,15 @@ func (s *mailSenderFake) Send(_ context.Context, message Outbound) (TransportOut
 		return s.outcome, s.err
 	}
 	return TransportUnknown, nil
+}
+
+// openedMail opens a delivery sealed with mailTestSealer, so a test sees the
+// message the recipient would get.
+func openedMail(t *testing.T, delivery *model.MailDelivery) Outbound {
+	t.Helper()
+	opened, err := OpenDelivery(mailTestSealer(t), delivery)
+	require.NoError(t, err)
+	return opened
 }
 
 func mailTestSealer(t *testing.T) *secretseal.Sealer {
@@ -76,7 +88,7 @@ func mailTestUser(principal model.Principal, at time.Time) *model.User {
 }
 
 // newDirectMailPreparer builds the production Composer for a test.
-func newDirectMailPreparer(renderer Renderer, sender Sender, sealer *secretseal.Sealer, institution func() string) (*Composer, error) {
+func newDirectMailPreparer(renderer *TemplateRenderer, sender Sender, sealer *secretseal.Sealer, institution func() string) (*Composer, error) {
 	return NewComposer(ComposerDependencies{Renderer: renderer, Sender: sender, Sealer: sealer, Institution: institution})
 }
 

@@ -16,6 +16,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -29,7 +30,7 @@ func TestSittingMailReconciliationPeriodicRunnerPreparesOneBoundedFanout(t *test
 		Sitting: record, ActorUserID: model.NewUserID(),
 	}}}
 	actor := persistence.candidates[0].ActorUserID
-	composer, err := mail.NewSittingComposer(mail.SittingComposerDependencies{Renderer: sittingMailRendererFake{}, Sender: &mailSenderFake{enabled: true,
+	composer, err := mail.NewSittingComposer(mail.SittingComposerDependencies{Renderer: mailtest.NewRenderer(t), Sender: &mailSenderFake{enabled: true,
 		from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}}, Sealer: mailTestSealer(t), Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	classes := &sittingMailClassStoreFake{class: &model.Class{ID: record.ClassID, DisplayName: "Class A"}}

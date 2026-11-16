@@ -272,7 +272,8 @@ func TestAdminSessionRevokeUsesApplicationCommand(t *testing.T) {
 	require.Equal(t, model.SessionRevocationAdministratorSession, revocation.Reason)
 	require.Equal(t, attempts[0].ID, revocation.AuditEventID)
 	require.NotNil(t, revocation.Delivery, "the User is told an administrator signed a Session out")
-	require.Equal(t, []model.MailTemplateKey{model.MailTemplateIdentitySessionsRevokedByAdmin}, fixture.mail.templates())
+	require.Equal(t, 1, fixture.mail.renders(), "one notice was rendered")
+	require.Equal(t, model.MailTemplateIdentitySessionsRevokedByAdmin, revocation.Delivery.TemplateKey)
 	require.Equal(t, []realtimetest.Call{{
 		Method: realtimetest.SessionsRevoked, UserID: subject.ID,
 		SessionIDs: []model.SessionID{session.ID}, AccessTokenHashes: sessions.hashes[session.ID],

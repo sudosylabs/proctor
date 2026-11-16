@@ -107,39 +107,20 @@ func (f *settleStoreFake) counts() (gets, requests int, gaps []store.AttemptEnvi
 	return f.gets, f.requests, append([]store.AttemptEnvironmentSettleGap(nil), f.gaps...)
 }
 
-// signalsFake fans completed settles out to this node's subscribers.
-type signalsFake struct {
-	mu      sync.Mutex
-	waiters map[model.ExamAttemptID][]chan struct{}
-}
-
-func (s *signalsFake) SubscribeSettled(attemptID model.ExamAttemptID) (<-chan struct{}, func()) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.waiters == nil {
-		s.waiters = map[model.ExamAttemptID][]chan struct{}{}
-	}
-	signal := make(chan struct{}, 1)
-	s.waiters[attemptID] = append(s.waiters[attemptID], signal)
-	return signal, func() {}
-}
-
-func (s *signalsFake) Settled(attemptID model.ExamAttemptID) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, signal := range s.waiters[attemptID] {
-		select {
-		case signal <- struct{}{}:
-		default:
-		}
-	}
+// newSettles returns the settle signals a node builds. They are never
+// started, so a settle signals this node's waiters and reaches no peer.
+func newSettles(t *testing.T) *ClusterSettles {
+	t.Helper()
+	settles, err := newClusterSettles(&wakeTransportFake{}, nil)
+	require.NoError(t, err)
+	return settles
 }
 
 // signalingWaker plays an owner that settles and signals once it is woken,
 // from its own goroutine as a remote owner would.
 type signalingWaker struct {
 	environments *settleStoreFake
-	signals      *signalsFake
+	signals      *ClusterSettles
 }
 
 func (w signalingWaker) Wake(attemptID model.ExamAttemptID) {
@@ -152,7 +133,7 @@ func (w signalingWaker) Wake(attemptID model.ExamAttemptID) {
 func TestSettlerWaitsForTheOwnersSignalWithoutPolling(t *testing.T) {
 	t.Parallel()
 	attemptID := model.NewExamAttemptID()
-	environments, signals := newSettleStoreFake(), &signalsFake{}
+	environments, signals := newSettleStoreFake(), newSettles(t)
 	environments.add(attemptID, settleRow{})
 	settler, err := NewSettler(SettlerDependencies{Environments: environments, Signals: signals,
 		Waker: signalingWaker{environments, signals}, Budget: time.Hour, NewEvidenceID: model.NewIntegrityEvidenceID})
@@ -170,7 +151,7 @@ func TestSettlerRecordsTheGapOfAnOwnerThatNeverAnswers(t *testing.T) {
 	attemptID := model.NewExamAttemptID()
 	environments := newSettleStoreFake()
 	environments.add(attemptID, settleRow{})
-	silent, err := NewSettler(SettlerDependencies{Environments: environments, Signals: &signalsFake{},
+	silent, err := NewSettler(SettlerDependencies{Environments: environments, Signals: newSettles(t),
 		Budget: 50 * time.Millisecond, NewEvidenceID: model.NewIntegrityEvidenceID})
 	require.NoError(t, err)
 
@@ -188,7 +169,7 @@ func TestSettlerRecordsTheGapOfAnOwnerThatNeverAnswers(t *testing.T) {
 	_, _, gaps = environments.counts()
 	require.Len(t, gaps, 1)
 
-	_, err = NewSettler(SettlerDependencies{Environments: environments, Signals: &signalsFake{}})
+	_, err = NewSettler(SettlerDependencies{Environments: environments, Signals: newSettles(t)})
 	require.Error(t, err, "an evidence ID source is required")
 	_, err = NewSettler(SettlerDependencies{Environments: environments, NewEvidenceID: model.NewIntegrityEvidenceID})
 	require.Error(t, err, "the settle signals are required")
@@ -196,7 +177,7 @@ func TestSettlerRecordsTheGapOfAnOwnerThatNeverAnswers(t *testing.T) {
 
 func TestSettlerAwaitsAPendingSettleWithoutAskingAnother(t *testing.T) {
 	t.Parallel()
-	environments, signals := newSettleStoreFake(), &signalsFake{}
+	environments, signals := newSettleStoreFake(), newSettles(t)
 	settler, err := NewSettler(SettlerDependencies{Environments: environments, Signals: signals, Budget: time.Hour,
 		NewEvidenceID: model.NewIntegrityEvidenceID})
 	require.NoError(t, err)
@@ -240,7 +221,7 @@ func TestSettlerBoundsASittingCloseOfUnreachableHosts(t *testing.T) {
 		targets[index] = model.NewExamAttemptID()
 		environments.add(targets[index], settleRow{requested: 1, requestedAt: asked})
 	}
-	settler, err := NewSettler(SettlerDependencies{Environments: environments, Signals: &signalsFake{},
+	settler, err := NewSettler(SettlerDependencies{Environments: environments, Signals: newSettles(t),
 		NewEvidenceID: model.NewIntegrityEvidenceID})
 	require.NoError(t, err)
 

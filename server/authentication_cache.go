@@ -18,7 +18,7 @@ import (
 
 // platformAuthenticationCache adapts platform.Cache to app.authenticationCache.
 type platformAuthenticationCache struct {
-	cache borrowedCache
+	cache platform.Cache
 }
 
 func (c platformAuthenticationCache) Get(ctx context.Context, key string) ([]byte, error) {

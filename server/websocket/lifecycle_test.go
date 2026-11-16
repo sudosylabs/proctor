@@ -16,29 +16,17 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/websocket"
 )
 
-type lifecycleApplication struct{}
-
-func (lifecycleApplication) AuthorizeWebSocketSubscription(
-	context.Context,
-	invocation.Invocation,
-	model.Action,
-	model.Resource,
-) error {
-	return nil
-}
-
-func (lifecycleApplication) ValidateWebSocketPrincipal(
-	context.Context,
-	model.Principal,
-) error {
-	return nil
+// lifecycleAdmission has no collaborators: no test here gets as far as
+// admitting a subscription or revalidating a principal.
+func lifecycleAdmission() *app.RealtimeAdmission {
+	return app.NewRealtimeAdmission(app.RealtimeAdmissionDependencies{})
 }
 
 // newTestLogger returns a real logger writing to a buffer the test may read.
@@ -61,7 +49,7 @@ func newTestHub(t *testing.T) *websocket.Hub {
 	t.Helper()
 	logger, _ := newTestLogger(t)
 	hub, err := websocket.NewHub(
-		lifecycleApplication{},
+		lifecycleAdmission(),
 		nil,
 		logger,
 		"https://proctor.example",
@@ -172,7 +160,7 @@ func TestHubOriginAllowedMatchesHTTPOriginNormalization(t *testing.T) {
 
 	for _, publicURL := range []string{"https://Proctor.Example:443/", "https://proctor.example", "HTTPS://PROCTOR.EXAMPLE"} {
 		logger, _ := newTestLogger(t)
-		hub, err := websocket.NewHub(lifecycleApplication{}, nil, logger, publicURL, "node-a", nil)
+		hub, err := websocket.NewHub(lifecycleAdmission(), nil, logger, publicURL, "node-a", nil)
 		require.NoError(t, err, "NewHub(%q) error", publicURL)
 		t.Cleanup(func() { _ = hub.Close(context.Background()) })
 		for _, origin := range []string{"https://proctor.example", "https://PROCTOR.example", "https://proctor.example:443"} {

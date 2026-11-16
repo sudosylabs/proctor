@@ -24,29 +24,13 @@ const (
 	settleRecordTimeout = 5 * time.Second
 )
 
-// SettleNotifier tells whoever waits on an Attempt's settle that its owner
-// completed one, wherever the waiter runs. It never blocks and never
-// fails: a lost signal costs the waiter its budget, never a false gap,
-// because the gap is recorded only for a settle the row still has pending.
-type SettleNotifier interface {
-	Settled(attemptID model.ExamAttemptID)
-}
-
-// SettleSubscriber delivers completed settles to waiters on this node.
-// SubscribeSettled returns a channel that is signaled, without blocking the
-// notifier, after each settle the Attempt's owner completes from then on,
-// and a cancel that ends the subscription.
-type SettleSubscriber interface {
-	SubscribeSettled(attemptID model.ExamAttemptID) (<-chan struct{}, func())
-}
-
 // SettlerDependencies is what NewSettler needs.
 type SettlerDependencies struct {
 	Environments store.AttemptEnvironmentStore
 	Waker        Waker
 	// Signals delivers the owner's completed settles; the settler reads the
 	// row only when it wakes the owner and when a signal arrives.
-	Signals SettleSubscriber
+	Signals *ClusterSettles
 	// Budget bounds one settle; zero means DefaultSettleBudget.
 	Budget        time.Duration
 	Now           func() time.Time

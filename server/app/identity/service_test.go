@@ -22,6 +22,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -270,37 +271,64 @@ func oldSealerKeyID(t *testing.T, key string) string {
 	return sealer.PrimaryKeyID()
 }
 
-type mailRendererFake struct{ content mail.FrozenContent }
-
-func (r mailRendererFake) Render(mail.RenderRequest) (mail.FrozenContent, error) {
-	return r.content, nil
-}
-
+// mailSenderFake is the mail transport port. The Composer reads From once
+// for each message, right after rendering it, so From counts the rendered
+// messages and places "prepare-mail" in events when a test shares its log. A
+// failing sender answers an invalid From address, which makes mail
+// preparation fail.
 type mailSenderFake struct {
-	enabled   bool
-	from      mail.Address
-	messages  []mail.Outbound
-	err       error
-	outcome   mail.TransportOutcome
-	afterSend func()
+	enabled bool
+	from    mail.Address
+	events  *[]string
+
+	mu       sync.Mutex
+	failing  bool
+	rendered int
 }
 
 func (s *mailSenderFake) Enabled() bool { return s.enabled }
 
-func (s *mailSenderFake) From() mail.Address { return s.from }
+func (s *mailSenderFake) From() mail.Address {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rendered++
+	if s.events != nil {
+		*s.events = append(*s.events, "prepare-mail")
+	}
+	if s.failing {
+		return mail.Address{}
+	}
+	return s.from
+}
 
-func (s *mailSenderFake) Send(_ context.Context, message mail.Outbound) (mail.TransportOutcome, error) {
-	s.messages = append(s.messages, message)
-	if s.afterSend != nil {
-		s.afterSend()
-	}
-	if s.err != nil {
-		return s.outcome, s.err
-	}
+func (*mailSenderFake) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
 	return mail.TransportUnknown, nil
 }
 
-func mailTestSealer(t *testing.T) *secretseal.Sealer {
+// fail makes every later mail preparation fail.
+func (s *mailSenderFake) fail() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.failing = true
+}
+
+// renders returns how many messages were rendered.
+func (s *mailSenderFake) renders() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.rendered
+}
+
+// openedMail opens a delivery sealed with mailTestSealer, so a test reads the
+// message its recipient would get.
+func openedMail(t *testing.T, delivery *model.MailDelivery) mail.Outbound {
+	t.Helper()
+	opened, err := mail.OpenDelivery(mailTestSealer(t), delivery)
+	require.NoError(t, err)
+	return opened
+}
+
+func mailTestSealer(t testing.TB) *secretseal.Sealer {
 	t.Helper()
 	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
 	value, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
@@ -398,65 +426,19 @@ func decodedAuditData(t testing.TB, raw json.RawMessage) any {
 	return value
 }
 
-// mailRenderRecorder renders every message the real Composer freezes and
-// records what it was asked to render. A set err fails every render.
-type mailRenderRecorder struct {
-	mu       sync.Mutex
-	requests []mail.RenderRequest
-	err      error
-}
-
-func (r *mailRenderRecorder) Render(request mail.RenderRequest) (mail.FrozenContent, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.requests = append(r.requests, request)
-	if r.err != nil {
-		return mail.FrozenContent{}, r.err
-	}
-	return mail.FrozenContent{Subject: "Notice", Text: "Notice", HTML: "<p>Notice</p>"}, nil
-}
-
-// rendered returns what the Composer asked to render, in order.
-func (r *mailRenderRecorder) rendered() []mail.RenderRequest {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return append([]mail.RenderRequest(nil), r.requests...)
-}
-
-// keys returns the template of each rendered message, in order.
-func (r *mailRenderRecorder) keys() []model.MailTemplateKey {
-	var keys []model.MailTemplateKey
-	for _, request := range r.rendered() {
-		keys = append(keys, request.Key)
-	}
-	return keys
-}
-
-// actionURLs returns the link each rendered message carries, in order.
-func (r *mailRenderRecorder) actionURLs() []string {
-	var urls []string
-	for _, request := range r.rendered() {
-		urls = append(urls, request.ActionURL)
-	}
-	return urls
-}
-
-// newTestMail builds the production mail Composer. An enabled sender queues
-// rendered mail; a disabled one makes the Composer record suppressed mail
-// without rendering it.
-func newTestMail(t testing.TB, enabled bool) (*mail.Composer, *mailRenderRecorder) {
+// newTestMail builds the production mail Composer over the real renderer. An
+// enabled sender queues rendered mail; a disabled one makes the Composer
+// record suppressed mail without rendering it.
+func newTestMail(t testing.TB, enabled bool) (*mail.Composer, *mailSenderFake) {
 	t.Helper()
-	renderer := &mailRenderRecorder{}
-	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
-	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
-	require.NoError(t, err)
+	sender := &mailSenderFake{enabled: enabled, from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}}
 	composer, err := mail.NewComposer(mail.ComposerDependencies{
-		Renderer: renderer,
-		Sender:   &mailSenderFake{enabled: enabled, from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}},
-		Sealer:   sealer,
+		Renderer: mailtest.NewRenderer(t),
+		Sender:   sender,
+		Sealer:   mailTestSealer(t),
 	})
 	require.NoError(t, err)
-	return composer, renderer
+	return composer, sender
 }
 
 // mailRecipient is an active User the real Composer can address.

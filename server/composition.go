@@ -288,7 +288,7 @@ func composeEnvironments(
 
 // composeLocalization opens the embedded catalogs and templates and constructs
 // the localizer and the mail renderer that translates through it.
-func composeLocalization(snapshot config.Config) (*localization.Localizer, mail.Renderer, error) {
+func composeLocalization(snapshot config.Config) (*localization.Localizer, *mail.TemplateRenderer, error) {
 	catalogFiles, err := runtimeAssetDirectory("i18n")
 	if err != nil {
 		return nil, nil, fmt.Errorf("open localization catalogs: %w", err)
@@ -322,7 +322,7 @@ func composeApplicationDependencies(
 	snapshot config.Config,
 	capabilities constructionCapabilities,
 	input compositionInput,
-	mailRenderer mail.Renderer,
+	mailRenderer *mail.TemplateRenderer,
 ) (app.Dependencies, error) {
 	var contentRecorder filecontent.WorkRecorder
 	if capabilities.metrics.Enabled() {

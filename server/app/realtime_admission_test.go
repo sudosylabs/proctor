@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/jobs"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -138,7 +139,7 @@ func newRealtimeGateFixture(t *testing.T) realtimeGateFixture {
 	require.NoError(t, err)
 	// A subscription never schedules, so the schedule notices have nothing
 	// to read; the composer is the production one over a disabled sender.
-	sittingMail, err := newSittingMailPreparer(sittingMailRendererFake{}, &mailSenderFake{}, nil, time.Now, nil)
+	sittingMail, err := newSittingMailPreparer(mailtest.NewRenderer(t), &mailSenderFake{}, nil, time.Now, nil)
 	require.NoError(t, err)
 	sittingService, err := sitting.New(sitting.Dependencies{
 		Persistence: sittings, Access: exams, Memberships: memberships,

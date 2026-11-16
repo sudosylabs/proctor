@@ -10,11 +10,15 @@ package mail
 import (
 	"context"
 	"encoding/base64"
+	"os"
+	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/localization"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -24,7 +28,7 @@ func TestSittingComposerFreezesAndSelectsRecipientLocales(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 21, 9, 0, 0, 0, time.UTC)
 	sealer := sittingTestSealer(t)
-	composer, err := NewSittingComposer(SittingComposerDependencies{Renderer: localizedSittingRenderer{}, Sender: &sittingSenderFake{enabled: true,
+	composer, err := NewSittingComposer(SittingComposerDependencies{Renderer: frenchSittingRenderer(t), Sender: &sittingSenderFake{enabled: true,
 		from: Address{Name: "Proctor", Address: "no-reply@example.test"}}, Sealer: sealer, Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(),
@@ -42,7 +46,7 @@ func TestSittingComposerFreezesAndSelectsRecipientLocales(t *testing.T) {
 	for _, test := range []struct {
 		locale      string
 		wantSubject string
-	}{{locale: "fr-FR", wantSubject: "fr:exam.sitting_scheduled"}, {locale: "de", wantSubject: "en:exam.sitting_scheduled"}} {
+	}{{locale: "fr-FR", wantSubject: "Examen planifié : Algorithms"}, {locale: "de", wantSubject: "Exam scheduled: Algorithms"}} {
 		t.Run(test.locale, func(t *testing.T) {
 			recipient := &model.User{Username: "student", Email: model.NewID() + "@example.test", DisplayName: "Student",
 				EmailVerified: true, Locale: test.locale, Timezone: "UTC"}
@@ -52,25 +56,24 @@ func TestSittingComposerFreezesAndSelectsRecipientLocales(t *testing.T) {
 			payload, openErr := OpenDelivery(sealer, delivery)
 			require.NoError(t, openErr)
 			require.Contains(t, payload.HTML, `src="cid:`+testLockupCID+`"`, "fan-out changed the immutable logo reference")
-			require.Equal(t, test.wantSubject, payload.Subject, "PrepareRecipient(%q) subject", test.locale)
+			require.True(t, strings.HasPrefix(payload.Subject, test.wantSubject), "PrepareRecipient(%q) subject = %q", test.locale, payload.Subject)
 		})
 	}
 }
 
-type localizedSittingRenderer struct{}
-
-func (localizedSittingRenderer) SittingLocales() (string, []string) {
-	return "en", []string{"en", "fr"}
-}
-
-func (localizedSittingRenderer) Render(request RenderRequest) (FrozenContent, error) {
-	details, ok := request.Presentation.(SittingScheduleDetails)
-	if !ok {
-		return FrozenContent{}, nil
-	}
-	key, locale := request.Key, request.Locale
-	return FrozenContent{Subject: locale + ":" + string(key), Text: locale + ":" + details.ExamTitle,
-		HTML: `<img src="cid:` + testLockupCID + `"><p>` + locale + ":" + details.ExamTitle + "</p>"}, nil
+// frenchSittingRenderer is the production renderer over the server's
+// catalogs plus a French catalog that translates only the scheduled subject,
+// so locale selection and English fallback are both visible.
+func frenchSittingRenderer(t *testing.T) *TemplateRenderer {
+	t.Helper()
+	english, err := os.ReadFile("../../i18n/en.json")
+	require.NoError(t, err)
+	french := `[{"id": "mail.exam.sitting_scheduled.subject", "translation": "Examen planifié : {{.ExamTitle}}, {{.When}}"}]`
+	localizer, err := localization.New(fstest.MapFS{"en.json": {Data: english}, "fr.json": {Data: []byte(french)}}, localization.EnglishLocale)
+	require.NoError(t, err)
+	renderer, err := NewRenderer(os.DirFS("../../templates"), localizer)
+	require.NoError(t, err)
+	return renderer
 }
 
 type sittingSenderFake struct {

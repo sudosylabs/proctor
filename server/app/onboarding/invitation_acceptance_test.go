@@ -9,7 +9,6 @@ package onboarding
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -68,8 +67,9 @@ func TestInvitationExternalIdentityAcceptancePreparesTheExactTerminalPackage(t *
 	require.Contains(t, string(accepted.AuditEvent.Parameters), `"provider":"campus"`, "external Invitation package/result = %#v / %#v", accepted, result)
 	require.True(t, slices.Equal(accepted.RequiredActions, []model.Action{model.ActionInvitationCreate, model.ActionClassMembersManage}), "external Invitation package/result = %#v / %#v", accepted, result)
 	require.Equal(t, model.JobTypeMailDeliver, accepted.Notice.Job.Type)
-	require.Equal(t, []model.MailTemplateKey{model.MailTemplateAccessInvitationAccepted}, rendered.keys())
-	rendered.fail(fmt.Errorf("mail preparation unavailable"))
+	require.Equal(t, 1, rendered.renders())
+	require.Equal(t, model.MailTemplateAccessInvitationAccepted, accepted.Notice.Delivery.TemplateKey)
+	rendered.fail()
 	assertion.Username = strings.Repeat("x", 1_000)
 	result, err = service.acceptExternalIdentity(context.Background(), state, assertion, capabilities,
 		model.RequestMetadata{RequestID: "request-2"}, "oidc")
@@ -124,7 +124,7 @@ func TestInvitationServiceAcceptsAcademicUnitRoleForAuthenticatedExistingUserWit
 	require.NotNil(t, result.User, "scoped Role acceptance/result = %#v / %#v", accepted, result)
 	require.Equal(t, userID, result.User.ID, "scoped Role acceptance/result = %#v / %#v", accepted, result)
 	require.NotNil(t, result.RoleBinding, "scoped Role acceptance/result = %#v / %#v", accepted, result)
-	require.Empty(t, rendered.keys(), "scoped Role acceptance/result = %#v / %#v", accepted, result)
+	require.Zero(t, rendered.renders(), "scoped Role acceptance/result = %#v / %#v", accepted, result)
 	require.True(t, slices.Equal(events, []string{"resolve", "audit-begin:invitation.accept", "accept"}), "scoped Role audit attempt/events = %#v / %v", attempt, events)
 	require.Equal(t, "invitation.accept", attempt.Action, "scoped Role audit attempt/events = %#v / %v", attempt, events)
 	require.Equal(t, model.ResourceAcademicUnit, attempt.Resource.Type, "scoped Role audit attempt/events = %#v / %v", attempt, events)
@@ -214,7 +214,7 @@ func TestInvitationAcceptanceCommitsWithTerminalNoticeWhenMailIsDisabled(t *test
 	_, appErr := service.AcceptStudentClassInvitation(context.Background(), invocation.Invocation{}, AcceptStudentClassInvitationCommand{Claim: raw,
 		Password: "correct horse battery staple", Username: "student-one", Source: "127.0.0.1"})
 	require.NoError(t, appErr)
-	require.Empty(t, rendered.keys(), "suppressed mail is never rendered")
+	require.Zero(t, rendered.renders(), "suppressed mail is never rendered")
 	require.Equal(t, model.JobTypeMailDeliver, persistence.accepted.DeliveryJob.Type, "disabled acceptance mail = %#v / %#v", persistence.accepted.Delivery, persistence.accepted.DeliveryJob)
 	require.Equal(t, model.MailDeliverySuppressed, persistence.accepted.Delivery.State, "disabled acceptance mail = %#v / %#v", persistence.accepted.Delivery, persistence.accepted.DeliveryJob)
 	require.Equal(t, model.MailDeliveryDisabledCode, persistence.accepted.Delivery.PublicFailureCode, "disabled acceptance mail = %#v / %#v", persistence.accepted.Delivery, persistence.accepted.DeliveryJob)
@@ -247,7 +247,7 @@ func TestInvitationPasswordWorkFailuresStopBeforeAcceptance(t *testing.T) {
 				require.Nil(t, result, "failed password work accepted an Invitation or prepared mail")
 				require.Nil(t, persistence.accepted, "failed password work accepted an Invitation or prepared mail")
 				require.Nil(t, persistence.teacherAccepted, "failed password work accepted an Invitation or prepared mail")
-				require.Empty(t, rendered.keys(), "failed password work accepted an Invitation or prepared mail")
+				require.Zero(t, rendered.renders(), "failed password work accepted an Invitation or prepared mail")
 				return err
 			})
 		})

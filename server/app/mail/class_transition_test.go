@@ -21,8 +21,7 @@ func TestClassTransitionMailPreparerCreatesOneBoundedOrdinaryNotice(t *testing.T
 	at := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
 	recipient := &model.User{Username: "student", Email: "student@example.edu", DisplayName: "Student", EmailVerified: true}
 	recipient.PrepareCreate(model.NewUserID(), at.Add(-time.Hour))
-	renderer := &classTransitionRendererFake{}
-	preparer, err := newDirectMailPreparer(renderer, &mailSenderFake{enabled: true,
+	preparer, err := newDirectMailPreparer(mailTestRenderer(t), &mailSenderFake{enabled: true,
 		from: Address{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), nil)
 	require.NoError(t, err)
 	details := ClassTransitionDetails{PreviousClassDisplayName: `Old <Class>`, ClassDisplayName: `New & Class`,
@@ -37,7 +36,10 @@ func TestClassTransitionMailPreparerCreatesOneBoundedOrdinaryNotice(t *testing.T
 	require.Equal(t, model.MailTemplateAcademicClassTransferred, prepared.Delivery.TemplateKey)
 	require.Equal(t, 72*time.Hour, prepared.Delivery.Deadline.Sub(prepared.Delivery.CreatedAt))
 	require.Equal(t, model.JobTypeMailDeliver, prepared.Job.Type)
-	require.Equal(t, details, renderer.details, "render details")
+	opened := openedMail(t, prepared.Delivery)
+	require.Contains(t, opened.Text, "Old <Class>", "the previous Class is rendered")
+	require.Contains(t, opened.Text, "New & Class", "the new Class is rendered")
+	require.Contains(t, opened.HTML, "New &amp; Class", "the HTML body escapes the Class name")
 }
 
 func TestClassTransitionMailPreparerRecordsDisabledSuppression(t *testing.T) {
@@ -46,8 +48,7 @@ func TestClassTransitionMailPreparerRecordsDisabledSuppression(t *testing.T) {
 	recipient := &model.User{Username: "student", Email: "student@example.edu", DisplayName: "Student"}
 	recipient.PrepareCreate(model.NewUserID(), at.Add(-time.Hour))
 	recipient.DisabledAt = model.OptionalTimeFrom(at.Add(-time.Minute))
-	renderer := &classTransitionRendererFake{}
-	preparer, err := newDirectMailPreparer(renderer, &mailSenderFake{enabled: true,
+	preparer, err := newDirectMailPreparer(mailTestRenderer(t), &mailSenderFake{enabled: true,
 		from: Address{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), nil)
 	require.NoError(t, err)
 	prepared, err := preparer.PrepareClassTransition(ClassTransitionPreparation{
@@ -61,20 +62,4 @@ func TestClassTransitionMailPreparerRecordsDisabledSuppression(t *testing.T) {
 	require.Equal(t, model.MailDeliveryRecipientIneligibleCode, prepared.Delivery.PublicFailureCode, "disabled Class transition mail = %#v / %#v", prepared.Delivery, prepared.Job)
 	require.Empty(t, prepared.Delivery.EncryptedPayload, "disabled Class transition mail = %#v / %#v", prepared.Delivery, prepared.Job)
 	require.Equal(t, model.JobStatusCanceled, prepared.Job.Status, "disabled Class transition mail = %#v / %#v", prepared.Delivery, prepared.Job)
-	require.Equal(t, 0, renderer.calls, "renderer calls")
-}
-
-type classTransitionRendererFake struct {
-	details ClassTransitionDetails
-	calls   int
-}
-
-func (r *classTransitionRendererFake) Render(request RenderRequest) (FrozenContent, error) {
-	details, ok := request.Presentation.(ClassTransitionDetails)
-	if !ok {
-		return FrozenContent{}, nil
-	}
-	r.calls++
-	r.details = details
-	return FrozenContent{Subject: "Class changed", Text: details.ClassDisplayName, HTML: "<p>Class changed</p>"}, nil
 }

@@ -25,9 +25,9 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/internal/weborigin"
 	"github.com/sudosylabs/proctor/server/localization"
@@ -77,7 +77,7 @@ const (
 // Construction is inert: Start owns the replay reaper; Close is idempotent and
 // drains connections when the hub was started.
 type Hub struct {
-	application  Application
+	admission    *app.RealtimeAdmission
 	attempts     *attempt.Service
 	logger       *logging.Logger
 	localizer    *localization.Localizer
@@ -119,24 +119,17 @@ type shard struct {
 	budgets map[string]*sharedFrameBudget
 }
 
-// Application is the narrow application surface each connection runtime needs
-// for subscription authorization and principal revalidation.
-type Application interface {
-	AuthorizeWebSocketSubscription(context.Context, invocation.Invocation, model.Action, model.Resource) error
-	ValidateWebSocketPrincipal(context.Context, model.Principal) error
-}
-
 // NewHub constructs an inert hub. Call Start before Accept; Close drains its
 // connections and background work within the shutdown budget it is handed.
 func NewHub(
-	application Application,
+	admission *app.RealtimeAdmission,
 	attempts *attempt.Service,
 	logger *logging.Logger,
 	publicURL string,
 	nodeID string,
 	localizer *localization.Localizer,
 ) (*Hub, error) {
-	if application == nil {
+	if admission == nil {
 		return nil, errors.New("WebSocket application is required")
 	}
 	if logger == nil {
@@ -150,7 +143,7 @@ func NewHub(
 
 	shardCount := max(runtime.NumCPU(), 1)
 	hub := &Hub{
-		application:  application,
+		admission:    admission,
 		attempts:     attempts,
 		logger:       logger,
 		localizer:    localizer,
@@ -337,7 +330,7 @@ func (h *Hub) register(
 	}
 	resume := takeReplayResumeLocked(shard, principal, requestedID, requestedSequence)
 	connection := newConnectionRuntime(
-		h.application,
+		h.admission,
 		h.attempts,
 		h.logger,
 		h.localizer,

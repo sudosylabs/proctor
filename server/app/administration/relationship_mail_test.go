@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -44,41 +45,34 @@ func (relationshipUserStoreTestFake) ListIdentities(_ context.Context, ids []mod
 	return identities, nil
 }
 
-// mailRendererFake renders every message the real Composer freezes and
-// records what it was asked to render.
-type mailRendererFake struct {
-	requests []mail.RenderRequest
-}
-
-func (r *mailRendererFake) Render(request mail.RenderRequest) (mail.FrozenContent, error) {
-	r.requests = append(r.requests, request)
-	return mail.FrozenContent{Subject: "Notice", Text: "Notice", HTML: "<p>Notice</p>"}, nil
-}
-
-// newMail builds the production mail Composer over an enabled sender, so
-// every eligible recipient's message is rendered.
-func newMail(t *testing.T) (*mail.Composer, *mailRendererFake) {
+// newMail builds the production mail Composer over the real renderer and an
+// enabled sender, so every eligible recipient's message is rendered.
+func newMail(t *testing.T) (*mail.Composer, *mailSenderFake) {
 	t.Helper()
-	renderer := &mailRendererFake{}
+	sender := &mailSenderFake{}
 	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
 	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
 	require.NoError(t, err)
 	composer, err := mail.NewComposer(mail.ComposerDependencies{
-		Renderer: renderer,
-		Sender:   mailSenderFake{},
+		Renderer: mailtest.NewRenderer(t),
+		Sender:   sender,
 		Sealer:   sealer,
 	})
 	require.NoError(t, err)
-	return composer, renderer
+	return composer, sender
 }
 
-type mailSenderFake struct{}
+// mailSenderFake is the mail transport port. The Composer reads From once
+// for each message, right after rendering it, so rendered counts the
+// messages.
+type mailSenderFake struct{ rendered int }
 
-func (mailSenderFake) Enabled() bool { return true }
-func (mailSenderFake) From() mail.Address {
+func (*mailSenderFake) Enabled() bool { return true }
+func (s *mailSenderFake) From() mail.Address {
+	s.rendered++
 	return mail.Address{Name: "Proctor", Address: "no-reply@example.test"}
 }
 
-func (mailSenderFake) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
+func (*mailSenderFake) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
 	return mail.TransportUnknown, nil
 }

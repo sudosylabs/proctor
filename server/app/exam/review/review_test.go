@@ -23,6 +23,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
@@ -39,10 +40,10 @@ type reviewFixture struct {
 	// Sitting service decides for them as it does for a current manager.
 	control   *accesstest.Fixture
 	publisher *realtimetest.Publisher
-	// renderer records what the real mail composer rendered for the
-	// result-release notice.
-	renderer *reviewRendererFake
-	userID   model.UserID
+	// sender counts the result-release notices the real mail composer
+	// rendered.
+	sender *reviewMailSenderFake
+	userID model.UserID
 	// candidateID made the Submission; the caller is another User, so the
 	// real authorizer does not deny them as its candidate.
 	candidateID  model.UserID
@@ -74,12 +75,12 @@ func newReviewFixture(t *testing.T) *reviewFixture {
 		Now:         func() time.Time { return f.at },
 	})
 	f.publisher = &realtimetest.Publisher{}
-	f.renderer = &reviewRendererFake{}
+	renderer := mailtest.NewRenderer(t)
 	sittings := reviewSittingStoreFake{f: f}
-	sender := &reviewMailSenderFake{enabled: true}
-	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: f.renderer, Sender: sender, Sealer: reviewMailSealer(t)})
+	f.sender = &reviewMailSenderFake{enabled: true}
+	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: renderer, Sender: f.sender, Sealer: reviewMailSealer(t)})
 	require.NoError(t, err)
-	scheduleComposer, err := mail.NewSittingComposer(mail.SittingComposerDependencies{Renderer: f.renderer,
+	scheduleComposer, err := mail.NewSittingComposer(mail.SittingComposerDependencies{Renderer: renderer,
 		Sender: &reviewMailSenderFake{}, Now: func() time.Time { return f.at }})
 	require.NoError(t, err)
 	sittingService, err := sitting.New(sitting.Dependencies{
@@ -278,33 +279,29 @@ type reviewClassesFake struct{ store.ClassStore }
 
 type reviewLifecycleJobsFake struct{ sitting.LifecycleJobFactory }
 
-// reviewRendererFake renders every notice the same way and records each
-// request, for both the mail composer and the Sitting composer.
-type reviewRendererFake struct {
+// reviewMailSenderFake is the mail transport port. The mail composer reads
+// From once for each notice, right after rendering it, so From counts the
+// rendered notices.
+type reviewMailSenderFake struct {
+	enabled bool
+
 	mu       sync.Mutex
-	requests []mail.RenderRequest
+	rendered int
 }
-
-func (r *reviewRendererFake) Render(request mail.RenderRequest) (mail.FrozenContent, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.requests = append(r.requests, request)
-	return mail.FrozenContent{Subject: "Notice", Text: "Notice", HTML: "<p>Notice</p>"}, nil
-}
-
-func (*reviewRendererFake) SittingLocales() (string, []string) { return "en", []string{"en"} }
-
-func (r *reviewRendererFake) rendered() []mail.RenderRequest {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return append([]mail.RenderRequest(nil), r.requests...)
-}
-
-type reviewMailSenderFake struct{ enabled bool }
 
 func (s *reviewMailSenderFake) Enabled() bool { return s.enabled }
-func (*reviewMailSenderFake) From() mail.Address {
+func (s *reviewMailSenderFake) From() mail.Address {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rendered++
 	return mail.Address{Name: "Proctor", Address: "no-reply@example.test"}
+}
+
+// renders returns how many notices were rendered.
+func (s *reviewMailSenderFake) renders() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.rendered
 }
 func (*reviewMailSenderFake) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
 	return mail.TransportUnknown, errors.New("review tests send no mail")

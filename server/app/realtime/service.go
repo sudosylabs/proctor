@@ -15,31 +15,17 @@ import (
 	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
-
-// SessionAttemptTarget is one Attempt a Session revocation affects: its
-// Candidate and the Exam and Sitting whose board lists it.
-type SessionAttemptTarget struct {
-	CandidateUserID model.UserID
-	ExamID          model.ExamID
-	SittingID       model.ExamSittingID
-}
-
-// SessionAttemptTargets finds the Attempts whose Candidate and Sitting board
-// must hear that some of the Candidate's Sessions were revoked. It only reads;
-// the parent application answers it from the Exam Attempt Store.
-type SessionAttemptTargets interface {
-	// ListSessionAttemptTargets returns the Candidate's Attempts that were
-	// suspended through a Participation bound to one of the given Sessions.
-	ListSessionAttemptTargets(ctx context.Context, candidateID model.UserID, sessionIDs []model.SessionID) ([]SessionAttemptTarget, error)
-}
 
 // Dependencies are the collaborators of Service; New validates them once and
 // Service keeps them in deps.
 type Dependencies struct {
 	Delivery    *Delivery
 	Diagnostics *logging.Logger
-	Attempts    SessionAttemptTargets
+	// Attempts finds the Attempts whose Candidate and Sitting board must hear
+	// that some of the Candidate's Sessions were revoked. Service only reads it.
+	Attempts store.ExamAttemptStore
 }
 
 // Service is the Publisher the application areas hold. It translates
@@ -160,7 +146,7 @@ func (s *Service) SessionsRevoked(
 		}
 	}
 
-	targets, err := s.deps.Attempts.ListSessionAttemptTargets(ctx, candidateID, parsedSessionIDs)
+	targets, err := s.deps.Attempts.ListSessionRevocationInvalidationTargets(ctx, candidateID, parsedSessionIDs)
 	if err != nil {
 		s.Report(ctx, "session_revocation.attempt_invalidations", err)
 		return

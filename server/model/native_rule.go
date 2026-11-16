@@ -131,20 +131,16 @@ type NativeRule struct {
 
 var errNativeRule = errors.New("native rule is invalid")
 
-// NativeRuleCatalog is the application catalog rules name: whether an
-// application is registered, and whether a policy may allow it. The release
-// registry is the catalog; baseline rules are checked against none.
-type NativeRuleCatalog interface {
-	Application(id string) (allowable, known bool)
-}
-
 // ValidateNativeRules checks a rule list against the registry, the activated
-// capabilities and the application catalog.
+// capabilities and the application catalog. The catalog says whether an
+// application is registered and whether a policy may allow it. Policy rules
+// pass the release registry as their catalog; baseline rules pass nil, so no
+// application condition is valid in them.
 func ValidateNativeRules(
 	rules []NativeRule,
 	registry *NativeCapabilityRegistry,
 	activated map[NativeCapabilityID]bool,
-	catalog NativeRuleCatalog,
+	catalog *NativeCapabilityRegistry,
 ) error {
 	if len(rules) > NativeRuleLimit {
 		return errNativeRule
@@ -162,7 +158,7 @@ func ValidateNativeRules(
 func (r NativeRule) validate(
 	registry *NativeCapabilityRegistry,
 	activated map[NativeCapabilityID]bool,
-	catalog NativeRuleCatalog,
+	catalog *NativeCapabilityRegistry,
 ) error {
 	capability, ok := registry.Capability(r.Capability)
 	if !ok || !activated[r.Capability] || !isNativeRuleID(r.RuleID) ||
@@ -209,7 +205,7 @@ func (c NativeCondition) members() int {
 func (c NativeCondition) valid(
 	registry *NativeCapabilityRegistry,
 	capability NativeCapabilityDefinition,
-	catalog NativeRuleCatalog,
+	catalog *NativeCapabilityRegistry,
 	depth int,
 	comparisons *int,
 ) bool {
@@ -277,7 +273,7 @@ func (s NativeScalar) fits(field NativeFieldDefinition) bool {
 
 // validNativeAppIDs checks an application list: sorted, unique, every ID
 // registered, and, for an allowlist, every application allowable.
-func validNativeAppIDs(ids []string, catalog NativeRuleCatalog, allowlist bool) bool {
+func validNativeAppIDs(ids []string, catalog *NativeCapabilityRegistry, allowlist bool) bool {
 	if len(ids) == 0 || len(ids) > NativeRuleAppIDLimit || !slices.IsSorted(ids) {
 		return false
 	}

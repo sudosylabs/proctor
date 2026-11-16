@@ -196,7 +196,7 @@ func newMailFixture(t *testing.T, principal model.Principal) *mailFixture {
 		},
 		Audit:                   fixture.access.Auditor,
 		Attempts:                fixture.limiter,
-		Renderer:                &identityMailRenderer{},
+		Renderer:                httpMailRenderer(t),
 		Sender:                  &identityMailSender{enabled: true},
 		Metrics:                 fixture.metrics,
 		Sealer:                  sealer,

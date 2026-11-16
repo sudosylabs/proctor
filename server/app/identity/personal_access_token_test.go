@@ -9,8 +9,6 @@ package identity
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -21,6 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -110,21 +109,16 @@ func TestPersonalAccessTokenAdministrationCreatesThroughFocusedContracts(t *test
 	require.NotEqual(t, raw, tokens.candidate.TokenHash)
 	require.Equal(t, userID, tokens.candidate.UserID, "save candidate = %#v, maximum", tokens.candidate)
 	require.Equal(t, 3, tokens.maximum, "save candidate = %#v, maximum", tokens.candidate)
-	requests := rendered.rendered()
-	require.Len(t, requests, 1, "mail requests")
-	request := requests[0]
-	require.Equal(t, model.MailTemplateIdentityPersonalAccessTokenCreated, request.Key)
-	details, ok := request.Presentation.(mail.PersonalAccessTokenDetails)
-	require.True(t, ok, "mail presentation = %#v", request.Presentation)
-	require.Equal(t, "automation", details.Description)
-	require.Equal(t, 1, details.ActionCount)
-	require.True(t, details.AcademicUnitScoped)
-	require.True(t, details.ExpiresAt.Equal(now.Add(time.Hour)))
-	require.True(t, details.ActionAt.Equal(now))
-	got := fmt.Sprintf("%#v", request)
-	require.NotContains(t, got, raw)
-	require.NotContains(t, got, tokens.candidate.TokenHash)
-	require.NotContains(t, got, string(model.ActionClassView))
+	require.Equal(t, 1, rendered.renders(), "mail requests")
+	require.Equal(t, model.MailTemplateIdentityPersonalAccessTokenCreated, tokens.notice.Delivery.TemplateKey)
+	notice := openedMail(t, tokens.notice.Delivery)
+	require.Contains(t, notice.Text, "Token: automation")
+	require.Contains(t, notice.Text, "Access: Limited to one academic unit")
+	require.Contains(t, notice.Text, "Expires: Wednesday 12 August 2026\n", "the expiry is rendered")
+	require.Contains(t, notice.Text, "Created: Wednesday 12 August 2026, 12:00 UTC", "the action time is rendered")
+	for _, secret := range []string{raw, tokens.candidate.TokenHash, string(model.ActionClassView)} {
+		require.NotContains(t, notice.Subject+notice.Text+notice.HTML, secret)
+	}
 	// The audit draft travels inside the durable preparation, which records
 	// it as the token aggregate's pending attempt.
 	require.Len(t, tokens.audits, 1, "audit drafts")
@@ -157,7 +151,7 @@ func TestPersonalAccessTokenAdministrationExactStateReplayEmitsNoAuditOrMail(t *
 	require.NoError(t, appErr, "SetDisabled(replay)")
 	require.Same(t, token, got, "SetDisabled(replay)")
 	require.Empty(t, tokens.audits, "replay audit")
-	require.Empty(t, rendered.rendered(), "replay audit")
+	require.Zero(t, rendered.renders(), "replay audit")
 	require.Equal(t, 0, tokens.stateCalls, "replay audit")
 
 	token.RevokedAt = model.OptionalTimeFrom(now)
@@ -165,7 +159,7 @@ func TestPersonalAccessTokenAdministrationExactStateReplayEmitsNoAuditOrMail(t *
 	require.NoError(t, appErr, "Revoke(replay)")
 	require.Same(t, token, got, "Revoke(replay)")
 	require.Empty(t, tokens.audits, "replay audit")
-	require.Empty(t, rendered.rendered(), "replay audit")
+	require.Zero(t, rendered.renders(), "replay audit")
 	require.Equal(t, 0, tokens.revokeCalls, "replay audit")
 }
 
@@ -210,11 +204,13 @@ func TestPersonalAccessTokenAdministrationUsesControlledClockForStateChanges(t *
 	require.NoError(t, err)
 	require.Equal(t, now.UnixMilli(), tokens.stateAt, "state change at")
 	require.Equal(t, 3, tokens.stateMaximum, "state change at")
+	require.Equal(t, model.MailTemplateIdentityPersonalAccessTokenDisabled, tokens.notice.Delivery.TemplateKey, "disable notice")
 	_, err = service.SetPersonalAccessTokenDisabled(
 		context.Background(), inv,
 		SetPersonalAccessTokenDisabledCommand{TokenID: token.ID, Disabled: false},
 	)
 	require.NoError(t, err)
+	require.Equal(t, model.MailTemplateIdentityPersonalAccessTokenEnabled, tokens.notice.Delivery.TemplateKey, "enable notice")
 
 	tokens.current = token
 	_, err = service.RevokePersonalAccessToken(
@@ -223,12 +219,8 @@ func TestPersonalAccessTokenAdministrationUsesControlledClockForStateChanges(t *
 	)
 	require.NoError(t, err)
 	require.Equal(t, now.UnixMilli(), tokens.revokedAt, "revoked at")
-	wantKeys := []model.MailTemplateKey{
-		model.MailTemplateIdentityPersonalAccessTokenDisabled,
-		model.MailTemplateIdentityPersonalAccessTokenEnabled,
-		model.MailTemplateIdentityPersonalAccessTokenRevoked,
-	}
-	require.Equal(t, wantKeys, rendered.keys(), "mail request keys")
+	require.Equal(t, model.MailTemplateIdentityPersonalAccessTokenRevoked, tokens.notice.Delivery.TemplateKey, "revoke notice")
+	require.Equal(t, 3, rendered.renders(), "mail requests")
 }
 
 func TestPersonalAccessTokenAdministrationRequiresRecentSessionForCreationAndEnablement(t *testing.T) {
@@ -401,7 +393,7 @@ func TestPersonalAccessTokenAdministrationRendersPostgreSQLPreparedActionTime(t 
 	token := personalAccessTokenForTest(userID, nodeAt)
 	tokens := &personalAccessTokenStoreFake{current: token, preparedAt: databaseAt}
 	sealer := mailTestSealer(t)
-	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: personalAccessTokenActionTimeRenderer{}, Sender: &mailSenderFake{enabled: true, from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}}, Sealer: sealer, Institution: nil})
+	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: mailtest.NewRenderer(t), Sender: &mailSenderFake{enabled: true, from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}}, Sealer: sealer, Institution: nil})
 	require.NoError(t, err)
 	service, err := personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: &personalAccessTokenUserStoreFake{}, academicUnits: &personalAccessTokenAcademicUnitStoreFake{}, institutions: &personalAccessTokenInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, securityAudit: newSecurityAuditLog(t, nil).auditor, authorizer: grantedAccess(t, nil).Authorizer, mail: composer, personalAccessTokenPolicy: PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 3}, recentAuthenticationTTL: 15 * time.Minute, newCredential: func() string { return "credential" }, now: func() time.Time { return nodeAt }})
 	require.NoError(t, err)
@@ -411,18 +403,8 @@ func TestPersonalAccessTokenAdministrationRendersPostgreSQLPreparedActionTime(t 
 	require.NotEmpty(t, tokens.notice.Delivery.EncryptedPayload)
 	payload, err := mail.OpenDelivery(sealer, tokens.notice.Delivery)
 	require.NoError(t, err)
-	require.Contains(t, payload.Text, databaseAt.Format(time.RFC3339Nano), "rendered text %q does not contain PostgreSQL action time %s", payload.Text, databaseAt)
-}
-
-type personalAccessTokenActionTimeRenderer struct{}
-
-func (personalAccessTokenActionTimeRenderer) Render(request mail.RenderRequest) (mail.FrozenContent, error) {
-	details, ok := request.Presentation.(mail.PersonalAccessTokenDetails)
-	if !ok {
-		return mail.FrozenContent{}, errors.New("unexpected mail presentation")
-	}
-	value := details.ActionAt.Format(time.RFC3339Nano)
-	return mail.FrozenContent{Subject: "PAT notice", Text: value, HTML: "<p>" + value + "</p>"}, nil
+	require.Contains(t, payload.Text, "Disabled: Thursday 20 August 2026, 14:00 UTC", "rendered text %q does not contain PostgreSQL action time %s", payload.Text, databaseAt)
+	require.NotContains(t, payload.Text, "Thursday 20 August 2026, 12:00 UTC", "rendered text %q shows the node clock %s", payload.Text, nodeAt)
 }
 
 func TestPersonalAccessTokenAdministrationTerminalReplayIsSuccessful(t *testing.T) {
@@ -448,7 +430,7 @@ func TestPersonalAccessTokenAdministrationTerminalizesPreparationWhenRenderingFa
 	token := personalAccessTokenForTest(userID, now)
 	tokens := &personalAccessTokenStoreFake{current: token, preparedAt: now}
 	preparer, rendered := newTestMail(t, true)
-	rendered.err = errors.New("render unavailable")
+	rendered.fail()
 	service, err := personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: &personalAccessTokenUserStoreFake{}, academicUnits: &personalAccessTokenAcademicUnitStoreFake{}, institutions: &personalAccessTokenInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, securityAudit: newSecurityAuditLog(t, nil).auditor, authorizer: grantedAccess(t, nil).Authorizer, mail: preparer, personalAccessTokenPolicy: PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 3}, recentAuthenticationTTL: 15 * time.Minute, newCredential: func() string { return "credential" }, now: func() time.Time { return now }})
 	require.NoError(t, err)
 	_, appErr := service.SetPersonalAccessTokenDisabled(context.Background(), invocation.New(personalAccessTokenSessionPrincipal(userID, now), model.RequestMetadata{}), SetPersonalAccessTokenDisabledCommand{TokenID: token.ID, Disabled: true})

@@ -8,7 +8,6 @@
 package app
 
 import (
-	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
@@ -120,16 +119,9 @@ func newExamAuthoring(
 	})
 }
 
-// newSittingMail builds the Sitting mail composer, which needs the Sitting
-// renderer capability of the configured template renderer.
 func newSittingMail(deps Dependencies) (*mail.SittingComposer, error) {
-	sittingRenderer, ok := deps.MailTemplateRenderer.(mail.SittingRenderer)
-	if !ok {
-		return nil, errors.New("Sitting mail template renderer is unavailable")
-	}
-
 	return newSittingMailPreparer(
-		sittingRenderer,
+		deps.MailTemplateRenderer,
 		deps.MailDeliverySender,
 		deps.MailSecretSealer,
 		time.Now,
@@ -140,7 +132,7 @@ func newSittingMail(deps Dependencies) (*mail.SittingComposer, error) {
 // newSittingMailPreparer builds the Sitting mail composer over an explicit
 // clock, so its tests freeze time.
 func newSittingMailPreparer(
-	renderer mail.SittingRenderer,
+	renderer *mail.TemplateRenderer,
 	sender mail.Sender,
 	sealer *secretseal.Sealer,
 	now func() time.Time,

@@ -12,23 +12,12 @@ import (
 	"errors"
 
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 // sittingCandidatePage is how many candidates of one Sitting a candidate
 // activity invalidation reads at a time.
 const sittingCandidatePage = 200
-
-// SittingCandidates reads, in pages ordered by User, the Users whose Exam
-// activity can contain a Sitting. The Exam Sitting Store satisfies it; it is
-// declared here because this package does not import store.
-type SittingCandidates interface {
-	ListCandidateInvalidationTargetsBySitting(
-		ctx context.Context,
-		sittingID model.ExamSittingID,
-		afterUserID model.UserID,
-		limit int,
-	) ([]model.UserID, error)
-}
 
 // PublishSittingBoardChanged tells the managers of a Sitting to refresh its
 // board. Scheduling, correction, archive, Attempt and Review changes all owe
@@ -59,7 +48,7 @@ func PublishSittingBoardChanged(
 func PublishCandidateActivityChangedForSitting(
 	ctx context.Context,
 	publisher Publisher,
-	candidates SittingCandidates,
+	candidates store.ExamSittingStore,
 	sittingID model.ExamSittingID,
 ) error {
 	if candidates == nil || publisher == nil {

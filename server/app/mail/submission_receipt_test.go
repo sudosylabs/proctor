@@ -22,8 +22,7 @@ func TestSubmissionReceiptMailPreparerCreatesBoundedReceipt(t *testing.T) {
 	at := time.Date(2026, 8, 21, 9, 30, 0, 0, time.UTC)
 	recipient := &model.User{Username: "candidate", Email: "candidate@example.edu", DisplayName: "Candidate"}
 	recipient.PrepareCreate(model.NewUserID(), at.Add(-time.Hour))
-	renderer := &submissionReceiptRendererFake{}
-	preparer, err := newDirectMailPreparer(renderer, &mailSenderFake{enabled: true,
+	preparer, err := newDirectMailPreparer(mailTestRenderer(t), &mailSenderFake{enabled: true,
 		from: Address{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), nil)
 	require.NoError(t, err)
 	details := SubmissionReceiptDetails{ExamTitle: "Algorithms", SittingID: model.NewExamSittingID(),
@@ -38,7 +37,10 @@ func TestSubmissionReceiptMailPreparerCreatesBoundedReceipt(t *testing.T) {
 	require.Equal(t, model.MailTemplateExamSubmissionReceived, prepared.Delivery.TemplateKey, "prepared=%#v details", prepared)
 	require.Equal(t, 72*time.Hour, prepared.Delivery.Deadline.Sub(prepared.Delivery.CreatedAt), "prepared=%#v details", prepared)
 	require.Equal(t, model.JobTypeMailDeliver, prepared.Job.Type, "prepared=%#v details", prepared)
-	require.Equal(t, details, renderer.details, "prepared=%#v details", prepared)
+	opened := openedMail(t, prepared.Delivery)
+	require.Contains(t, opened.Text, "Exam: "+details.ExamTitle, "the receipt names the Exam")
+	require.Contains(t, opened.Text, "Receipt code: "+details.ReceiptCode.Display(), "the receipt shows its code")
+	require.Contains(t, opened.Text, "Submitted: Friday 21 August 2026, 09:30:00 UTC", "the receipt shows when it was sealed")
 	relevance, relevanceErr := evaluateDeliveryRelevance(context.Background(), prepared.Delivery)
 	require.NoError(t, relevanceErr, "receipt relevance")
 	require.Equal(t, deliveryRelevant, relevance, "receipt relevance")
@@ -59,8 +61,7 @@ func TestSubmissionReceiptMailPreparerSuppressesInactiveRecipient(t *testing.T) 
 	recipient := &model.User{Username: "candidate", Email: "candidate@example.edu", DisplayName: "Candidate"}
 	recipient.PrepareCreate(model.NewUserID(), at.Add(-time.Hour))
 	recipient.DisabledAt = model.OptionalTimeFrom(at.Add(-time.Minute))
-	renderer := &submissionReceiptRendererFake{}
-	preparer, err := newDirectMailPreparer(renderer, &mailSenderFake{enabled: true,
+	preparer, err := newDirectMailPreparer(mailTestRenderer(t), &mailSenderFake{enabled: true,
 		from: Address{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), nil)
 	require.NoError(t, err)
 	submissionID := model.NewSubmissionID()
@@ -69,23 +70,7 @@ func TestSubmissionReceiptMailPreparerSuppressesInactiveRecipient(t *testing.T) 
 		Details: SubmissionReceiptDetails{ExamTitle: "Algorithms", SittingID: model.NewExamSittingID(),
 			SubmissionID: submissionID, ReceiptCode: model.NewSubmissionReceiptCode(), SealedAt: at}, ActionAt: at})
 	require.NoError(t, err)
-	require.Equal(t, model.MailDeliverySuppressed, prepared.Delivery.State, "suppressed=%#v renderer calls", prepared.Delivery)
-	require.Equal(t, model.MailDeliveryRecipientIneligibleCode, prepared.Delivery.PublicFailureCode, "suppressed=%#v renderer calls", prepared.Delivery)
-	require.Equal(t, 0, renderer.calls, "suppressed=%#v renderer calls", prepared.Delivery)
-}
-
-type submissionReceiptRendererFake struct {
-	mailRendererFake
-	details SubmissionReceiptDetails
-	calls   int
-}
-
-func (r *submissionReceiptRendererFake) Render(request RenderRequest) (FrozenContent, error) {
-	details, ok := request.Presentation.(SubmissionReceiptDetails)
-	if !ok {
-		return r.mailRendererFake.Render(request)
-	}
-	r.calls++
-	r.details = details
-	return FrozenContent{Subject: "Receipt", Text: details.SubmissionID.String(), HTML: "<p>Receipt</p>"}, nil
+	require.Equal(t, model.MailDeliverySuppressed, prepared.Delivery.State, "suppressed=%#v", prepared.Delivery)
+	require.Equal(t, model.MailDeliveryRecipientIneligibleCode, prepared.Delivery.PublicFailureCode, "suppressed=%#v", prepared.Delivery)
+	require.Empty(t, prepared.Delivery.EncryptedPayload, "a suppressed receipt renders and seals nothing")
 }

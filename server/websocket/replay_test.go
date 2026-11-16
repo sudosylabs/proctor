@@ -74,11 +74,10 @@ func TestConnectionRuntimeClonesTheAcceptedPrincipal(t *testing.T) {
 		SessionID:        model.NewSessionID(),
 		CredentialScopes: []string{"class.view"},
 	}
-	application := &inboundTestApplication{}
 	logger, _ := newTestLogger(t)
 	socket, _ := newSocketPair(t)
 	runtime := newConnectionRuntime(
-		application,
+		newAdmissionWorld(t, admissionOptions{}).admission,
 		nil,
 		logger,
 		nil,
@@ -193,7 +192,7 @@ func newInternalTestHub(t *testing.T) *Hub {
 	t.Helper()
 	logger, _ := newTestLogger(t)
 	hub, err := NewHub(
-		&inboundTestApplication{},
+		newAdmissionWorld(t, admissionOptions{}).admission,
 		newAttemptFixture(t).service,
 		logger,
 		"https://proctor.example",

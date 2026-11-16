@@ -54,7 +54,7 @@ type Dependencies struct {
 	Store                store.Catalog
 	Cache                identity.AuthenticationCache
 	MailDeliverySender   mail.Sender
-	MailTemplateRenderer mail.Renderer
+	MailTemplateRenderer *mail.TemplateRenderer
 	MailDeliveryRecorder mail.DeliveryRecorder
 	MailMetricsReader    mail.MetricsReader
 	JobRecorder          job.Recorder
@@ -90,7 +90,7 @@ type Dependencies struct {
 	EnvironmentWaker environment.Waker
 	// EnvironmentSettles delivers the settles owners complete, which a seal
 	// waits on. Nil settles nothing before a seal.
-	EnvironmentSettles environment.SettleSubscriber
+	EnvironmentSettles *environment.ClusterSettles
 	// EnvironmentDiagnostics receives execution environment failures nobody
 	// else sees, such as a settle that could not be asked. Nil drops them.
 	EnvironmentDiagnostics func(model.ExamAttemptID, error)

@@ -24,65 +24,20 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type inboundAuthorizationCall struct {
-	principal model.Principal
-	metadata  model.RequestMetadata
-	action    model.Action
-	resource  model.Resource
-}
-
-// inboundTestApplication decides subscriptions and principal revalidation,
-// recording each question it was asked.
-type inboundTestApplication struct {
-	mu             sync.Mutex
-	authorizeErr   error
-	validationErr  error
-	authorizations []inboundAuthorizationCall
-	validations    []model.Principal
-}
-
-func (a *inboundTestApplication) AuthorizeWebSocketSubscription(
-	_ context.Context,
-	inv invocation.Invocation,
-	action model.Action,
-	resource model.Resource,
-) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.authorizations = append(a.authorizations, inboundAuthorizationCall{
-		principal: inv.Principal(),
-		metadata:  inv.RequestMetadata(),
-		action:    action,
-		resource:  resource,
-	})
-	return a.authorizeErr
-}
-
-func (a *inboundTestApplication) ValidateWebSocketPrincipal(
-	_ context.Context,
-	principal model.Principal,
-) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.validations = append(a.validations, principal)
-	return a.validationErr
-}
-
-// newInboundRuntime is a candidate's connection on a real socket, not yet
-// running, whose Attempt commands go to attempts.
-func newInboundRuntime(t testing.TB, application Application, attempts *attempt.Service) (*connectionRuntime, *testPeer) {
+// newInboundRuntime is the connection of world's principal on a real socket,
+// not yet running, admitted by world and running Attempt commands on attempts.
+func newInboundRuntime(t testing.TB, world *admissionWorld, attempts *attempt.Service) (*connectionRuntime, *testPeer) {
 	t.Helper()
 	socket, peer := newSocketPair(t)
 	return &connectionRuntime{
-		application:   application,
+		admission:     world.admission,
 		attempts:      attempts,
 		socket:        socket,
-		principal:     testCandidatePrincipal(),
+		principal:     world.principal,
 		metadata:      model.RequestMetadata{RequestID: "upgrade-request"},
 		id:            model.NewID(),
 		subscriptions: make(map[string]Subscription),
@@ -129,7 +84,7 @@ func pingRequestOfSize(sequence int64, size int) []byte {
 func TestConnectionRuntimeReadPumpRejectsInvalidRequestAndContinues(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
-		runtime, peer := newInboundRuntime(t, &inboundTestApplication{}, nil)
+		runtime, peer := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{}), nil)
 		done := make(chan struct{})
 		go func() {
 			runtime.readPump(context.Background())
@@ -161,7 +116,7 @@ func TestConnectionRuntimeReadPumpRejectsInvalidRequestAndContinues(t *testing.T
 func TestConnectionRuntimeParentCancellationStopsBlockedRead(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
-		runtime, _ := newInboundRuntime(t, &inboundTestApplication{}, nil)
+		runtime, _ := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{}), nil)
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan struct{})
 		go func() {
@@ -193,7 +148,7 @@ func TestConnectionRuntimeParentCancellationStopsBlockedRead(t *testing.T) {
 func TestConnectionRuntimePongExtendsReadDeadline(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
-		runtime, peer := newInboundRuntime(t, &inboundTestApplication{}, nil)
+		runtime, peer := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{}), nil)
 		peer.listen()
 		done := make(chan struct{})
 		go func() {
@@ -227,7 +182,7 @@ func TestConnectionRuntimePongExtendsReadDeadline(t *testing.T) {
 	})
 
 	synctest.Test(t, func(t *testing.T) {
-		runtime, peer := newInboundRuntime(t, &inboundTestApplication{}, nil)
+		runtime, peer := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{}), nil)
 		peer.listen()
 		done := make(chan struct{})
 		go func() {
@@ -251,8 +206,8 @@ func TestConnectionRuntimePongExtendsReadDeadline(t *testing.T) {
 func TestConnectionRuntimeOwnsAuthorizedSubscriptionSet(t *testing.T) {
 	t.Parallel()
 
-	application := &inboundTestApplication{}
-	runtime, _ := newInboundRuntime(t, application, nil)
+	world := newAdmissionWorld(t, admissionOptions{})
+	runtime, _ := newInboundRuntime(t, world, nil)
 	runtime.metadata = model.RequestMetadata{
 		RequestID: "upgrade-request",
 		IPAddress: "192.0.2.10",
@@ -303,23 +258,25 @@ func TestConnectionRuntimeOwnsAuthorizedSubscriptionSet(t *testing.T) {
 	require.Equal(t, int64(11), response.Sequence, "unsubscribe response = %#v, still subscribed", response)
 	require.False(t, runtime.hasSubscription(subscription), "unsubscribe response = %#v, still subscribed", response)
 
-	application.mu.Lock()
-	calls := append([]inboundAuthorizationCall(nil), application.authorizations...)
-	application.mu.Unlock()
-	require.Len(t, calls, 4, "authorization calls")
-	first := calls[0]
-	require.Equal(t, runtime.principal.UserID, first.principal.UserID)
-	require.Equal(t, runtime.id+":7", first.metadata.RequestID)
-	require.Equal(t, runtime.metadata.IPAddress, first.metadata.IPAddress)
-	require.Equal(t, runtime.metadata.UserAgent, first.metadata.UserAgent)
-	require.Equal(t, subscription.Action, first.action)
-	require.Equal(t, subscription.Resource.model(), first.resource)
+	// Every subscribe, the over-limit one included, took a recorded decision
+	// for the connection's principal and the upgrade request's client, under
+	// a request ID naming the connection and the command's sequence.
+	decisions := world.access.Audits.Decisions()
+	require.Len(t, decisions, 4, "authorization decisions")
+	first := decisions[0]
+	require.Equal(t, runtime.principal.UserID, first.ActorID)
+	require.Equal(t, runtime.id+":7", first.RequestID)
+	require.Equal(t, runtime.metadata.IPAddress, first.IPAddress)
+	require.Equal(t, runtime.metadata.UserAgent, first.UserAgent)
+	require.Equal(t, string(subscription.Action), first.Action)
+	require.Equal(t, subscription.Resource.model(), first.Resource)
+	require.Equal(t, model.AuditStatusSuccess, first.Status)
 }
 
 func TestConnectionRuntimeConnectsExamAttemptAndOwnsCandidateSubscription(t *testing.T) {
 	t.Parallel()
 	f := newAttemptFixture(t)
-	runtime, _ := newInboundRuntime(t, &inboundTestApplication{}, f.service)
+	runtime, _ := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{}), f.service)
 	sittingID := f.sitting.ID
 	credential := model.NewCredentialToken()
 	connectRequest := validExamAttemptConnectRequest(t, sittingID, "admit-once", credential)
@@ -395,7 +352,7 @@ func TestConnectionRuntimeConnectsExamAttemptAndOwnsCandidateSubscription(t *tes
 func TestConnectionRuntimeRejectsNonStrictExamAttemptConnectPayload(t *testing.T) {
 	t.Parallel()
 	f := newAttemptFixture(t)
-	runtime, _ := newInboundRuntime(t, &inboundTestApplication{}, f.service)
+	runtime, _ := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{}), f.service)
 	runtime.handleRequest(context.Background(), &Request{Sequence: 31, Action: "exam_attempt.connect",
 		Data: json.RawMessage(`{"exam_sitting_id":"bad","idempotency_key":"one","idempotency_key":"two","continuity_credential":"secret"}`)})
 	response := nextInboundResponse(t, runtime)
@@ -411,7 +368,7 @@ func TestConnectionRuntimeRenewsBoundParticipationWithoutTreatingPingAsRenewal(t
 	f.store.generation = 4
 	databaseNow := f.at.Add(5 * time.Second)
 	f.store.databaseTime = databaseNow
-	runtime, _ := newInboundRuntime(t, &inboundTestApplication{}, f.service)
+	runtime, _ := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{}), f.service)
 	credential := model.NewCredentialToken()
 	runtime.handleRequest(context.Background(), requestWithData(t, 40, examAttemptConnectAction,
 		validExamAttemptConnectRequest(t, f.sitting.ID, "connect", credential)))
@@ -456,7 +413,7 @@ func TestConnectionRuntimeBrowserActivityUsesAttemptBindingAndClosedWireContract
 	f.store.browserSeen = 4
 	sourceID := model.BrowserSourceSessionID("018f47a0-6e53-4cc4-9d0b-97c9b6d98011")
 	credential := model.NewCredentialToken()
-	runtime, _ := newInboundRuntime(t, &inboundTestApplication{}, f.service)
+	runtime, _ := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{}), f.service)
 	binding := f.admit(runtime, 2)
 
 	start := examAttemptBrowserStartRequest{Generation: 2, PolicyRevisionID: model.NewExamRevisionID().String(), PolicyDigest: "sha256:" + strings.Repeat("a", 64), Transition: model.BrowserStartTransition{Kind: "initial"},
@@ -608,7 +565,7 @@ func TestDecodeBrowserActivityAppendAcceptsSafeBlockedLocations(t *testing.T) {
 func TestConnectionRuntimeRenewalUsesStrictPayloadAndSafeConnectionLossMessage(t *testing.T) {
 	t.Parallel()
 	f := newAttemptFixture(t)
-	runtime, _ := newInboundRuntime(t, &inboundTestApplication{}, f.service)
+	runtime, _ := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{}), f.service)
 	runtime.handleRequest(context.Background(), &Request{Sequence: 50, Action: examAttemptRenewAction,
 		Data: json.RawMessage(`{"generation":1,"sequence":1,"sequence":2,"continuity_credential":"bad"}`)})
 	response := nextInboundResponse(t, runtime)
@@ -641,7 +598,7 @@ func TestConnectionRuntimeSubmitsBoundFocusLossAndClearsPolicySuspendedBinding(t
 	f.store.generation = 4
 	receivedAt := f.at.Add(2 * time.Second)
 	f.store.databaseTime = receivedAt
-	runtime, _ := newInboundRuntime(t, &inboundTestApplication{}, f.service)
+	runtime, _ := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{}), f.service)
 	credential := model.NewCredentialToken()
 	runtime.handleRequest(context.Background(), requestWithData(t, 60, examAttemptConnectAction,
 		validExamAttemptConnectRequest(t, f.sitting.ID, "connect", credential)))
@@ -710,14 +667,14 @@ func TestConnectionRuntimePreservesInboundErrorContract(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		request     func(*testing.T) *Request
-		authorize   error
+		request     func(*testing.T, *admissionWorld) *Request
+		options     admissionOptions
 		wantCode    string
 		wantMessage string
 	}{
 		{
 			name: "invalid subscription",
-			request: func(t *testing.T) *Request {
+			request: func(t *testing.T, _ *admissionWorld) *Request {
 				return requestWithData(t, 21, "subscribe", Subscription{})
 			},
 			wantCode:    "websocket.subscription.invalid",
@@ -725,7 +682,7 @@ func TestConnectionRuntimePreservesInboundErrorContract(t *testing.T) {
 		},
 		{
 			name: "invalid unsubscribe",
-			request: func(t *testing.T) *Request {
+			request: func(t *testing.T, _ *admissionWorld) *Request {
 				return requestWithData(t, 22, "unsubscribe", Subscription{})
 			},
 			wantCode:    "websocket.subscription.invalid",
@@ -733,43 +690,32 @@ func TestConnectionRuntimePreservesInboundErrorContract(t *testing.T) {
 		},
 		{
 			name: "authorization denial",
-			request: func(t *testing.T) *Request {
+			request: func(t *testing.T, _ *admissionWorld) *Request {
 				return requestWithData(t, 23, "subscribe", validInboundSubscription())
 			},
-			authorize:   errors.New("policy lookup denied"),
-			wantCode:    "authorization.denied",
-			wantMessage: "WebSocket subscription denied.",
-		},
-		{
-			name: "typed authorization denial",
-			request: func(t *testing.T) *Request {
-				return requestWithData(t, 24, "subscribe", validInboundSubscription())
-			},
-			authorize:   apperror.New("authorization.denied"),
+			options:     admissionOptions{withoutClassView: true},
 			wantCode:    "authorization.denied",
 			wantMessage: "WebSocket subscription denied.",
 		},
 		{
 			name: "authorization failure",
-			request: func(t *testing.T) *Request {
-				return requestWithData(t, 25, "subscribe", validInboundSubscription())
+			request: func(t *testing.T, world *admissionWorld) *Request {
+				return requestWithData(t, 25, "subscribe", world.unreadableClass())
 			},
-			authorize:   apperror.New("authorization.unavailable"),
 			wantCode:    "authorization.unavailable",
 			wantMessage: "WebSocket subscription failed.",
 		},
 		{
-			name: "concealed exam subscription",
-			request: func(t *testing.T) *Request {
-				return requestWithData(t, 27, "subscribe", validInboundSubscription())
+			name: "missing class subscription",
+			request: func(t *testing.T, world *admissionWorld) *Request {
+				return requestWithData(t, 27, "subscribe", world.missingClass())
 			},
-			authorize:   apperror.New("resource.not_found"),
 			wantCode:    "resource.not_found",
 			wantMessage: "WebSocket subscription failed.",
 		},
 		{
 			name: "unknown action",
-			request: func(*testing.T) *Request {
+			request: func(*testing.T, *admissionWorld) *Request {
 				return &Request{Sequence: 26, Action: "future-command"}
 			},
 			wantCode:    "websocket.action.unknown",
@@ -779,9 +725,9 @@ func TestConnectionRuntimePreservesInboundErrorContract(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			application := &inboundTestApplication{authorizeErr: test.authorize}
-			runtime, _ := newInboundRuntime(t, application, nil)
-			request := test.request(t)
+			world := newAdmissionWorld(t, test.options)
+			runtime, _ := newInboundRuntime(t, world, nil)
+			request := test.request(t, world)
 
 			runtime.handleRequest(context.Background(), request)
 
@@ -802,10 +748,8 @@ func TestConnectionRuntimePreservesInboundErrorContract(t *testing.T) {
 func TestConnectionRuntimeRevokesInvalidPrincipal(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
-		application := &inboundTestApplication{
-			validationErr: apperror.New("authentication.session.invalid"),
-		}
-		runtime, peer := newInboundRuntime(t, application, nil)
+		world := newAdmissionWorld(t, admissionOptions{disabled: true})
+		runtime, peer := newInboundRuntime(t, world, nil)
 		peer.listen()
 		done := make(chan struct{})
 		go func() {
@@ -826,19 +770,19 @@ func TestConnectionRuntimeRevokesInvalidPrincipal(t *testing.T) {
 		replayable := runtime.replayable
 		runtime.mu.Unlock()
 		require.False(t, replayable, "session-revoked connection remained replayable")
-		application.mu.Lock()
-		validations := append([]model.Principal(nil), application.validations...)
-		application.mu.Unlock()
-		require.Len(t, validations, 1)
-		require.Equal(t, runtime.principal.UserID, validations[0].UserID)
-		require.Equal(t, runtime.principal.SessionID, validations[0].SessionID)
+		// One revalidation read the principal's Session and found its User
+		// disabled.
+		sessions := world.sessions.read()
+		require.Len(t, sessions, 1)
+		require.Equal(t, runtime.principal.SessionID, sessions[0].id)
+		require.Equal(t, []model.UserID{runtime.principal.UserID}, world.users.read())
 	})
 }
 
 func TestConnectionRuntimeSubscriptionMembershipIsConcurrentSafe(t *testing.T) {
 	t.Parallel()
 
-	runtime, _ := newInboundRuntime(t, &inboundTestApplication{}, nil)
+	runtime, _ := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{}), nil)
 	runtime.send = make(chan outboundMessage, 2048)
 	subscription := validInboundSubscription()
 	subscribe := requestWithData(t, 31, "subscribe", subscription)
@@ -868,8 +812,7 @@ func TestConnectionRuntimeJoinsSimultaneousInboundTermination(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		for iteration := range 20 {
-			runtime, peer := newInboundRuntime(t,
-				&inboundTestApplication{validationErr: apperror.New("authentication.session.invalid")}, nil)
+			runtime, peer := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{disabled: true}), nil)
 			peer.listen()
 			done := make(chan struct{})
 			go func() {
@@ -918,7 +861,7 @@ func TestDeliveryErrorHasBoundedPrivateRecoveryAndRetryDelay(t *testing.T) {
 	for _, name := range []string{"valid", "invalid", "unrelated"} {
 		t.Run(name, func(t *testing.T) {
 			at := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
-			runtime, _ := newInboundRuntime(t, &inboundTestApplication{}, nil)
+			runtime, _ := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{}), nil)
 			state := &model.DeliveryRecovery{Family: "browser", Budget: model.DeliveryBudgetSnapshot{ParticipationID: model.NewAttemptParticipationID(), Generation: 1, ServerTime: at, Native: model.DeliveryFamilyBudget{Participation: model.NewDeliveryQuotaUsage(true, false), Attempt: model.NewDeliveryQuotaUsage(true, true), PendingByteLimit: model.DeliveryPendingByteLimit}, Browser: model.DeliveryFamilyBudget{Participation: model.NewDeliveryQuotaUsage(false, false), Attempt: model.NewDeliveryQuotaUsage(false, true), PendingByteLimit: model.DeliveryPendingByteLimit}}}
 			code := apperror.Code("exam.delivery.pending_capacity")
 			if name == "invalid" {
@@ -951,7 +894,7 @@ func TestConnectionRuntimeAppendBackpressurePreservesRenewalAndCancelsWorker(t *
 		f := newAttemptFixture(t)
 		gate := newAppendGate()
 		f.store.appendGate = gate
-		runtime, peer := newInboundRuntime(t, &inboundTestApplication{}, f.service)
+		runtime, peer := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{}), f.service)
 		binding := f.admit(runtime, 1)
 		credential, revision := model.NewCredentialToken(), model.NewExamRevisionID().String()
 		event, err := json.Marshal(examAttemptBrowserEventRequest{Sequence: 1, Kind: string(model.BrowserActivityOpened), PolicyRevisionID: revision, ClientOccurredAt: f.at.Format(time.RFC3339Nano)})
@@ -997,7 +940,7 @@ func TestConnectionRuntimeAppendBackpressurePreservesRenewalAndCancelsWorker(t *
 }
 
 func TestControlRateRefusalHasRetryAdviceWithoutClosingBinding(t *testing.T) {
-	runtime, _ := newInboundRuntime(t, &inboundTestApplication{}, nil)
+	runtime, _ := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{}), nil)
 	binding := &examAttemptBinding{attemptID: model.NewExamAttemptID()}
 	runtime.attempt = binding
 	runtime.enqueueError(77, "exam.delivery.control_rate_limited", websocketErrorAttemptRenewalFailed)

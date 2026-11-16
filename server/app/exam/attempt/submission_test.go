@@ -13,9 +13,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"regexp"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -23,6 +23,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -324,17 +325,17 @@ type submissionStoreFake struct {
 }
 
 // receiptMail is the production receipt preparation, SubmissionReceiptMail
-// over the real mail Composer, with a renderer that records what the
-// Composer froze. Reading the candidate enters the call order as
-// "submission.mail".
+// over the real mail Composer and renderer. Reading the candidate enters the
+// call order as "submission.mail".
 type receiptMail struct {
 	f        *fixture
 	preparer SubmissionReceiptMail
-	renderer *receiptRenderer
-	// candidate and examID are what the preparation read: the candidate it
-	// addressed and the Exam whose Sitting it read.
+	sealer   *secretseal.Sealer
+	// candidate, examID and sittingID are what the preparation read: the
+	// candidate it addressed and the Exam and Sitting it read.
 	candidate model.UserID
 	examID    model.ExamID
+	sittingID model.ExamSittingID
 }
 
 // preparedReceipt is what a frozen receipt says, in the terms of the request
@@ -354,50 +355,53 @@ func newReceiptMail(t *testing.T, f *fixture) *receiptMail {
 	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
 	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
 	require.NoError(t, err)
-	renderer := &receiptRenderer{}
-	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: renderer,
+	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: mailtest.NewRenderer(t),
 		Sender: receiptSender{}, Sealer: sealer})
 	require.NoError(t, err)
-	m := &receiptMail{f: f, renderer: renderer}
+	m := &receiptMail{f: f, sealer: sealer}
 	m.preparer = SubmissionReceiptMail{Composer: composer, Users: receiptUsers{m: m},
 		Sittings: receiptSittings{m: m}, Revisions: receiptRevisions{}}
 	return m
 }
 
-// receipt is the last receipt the Composer froze.
+// receiptSealedAt finds the sealing time a receipt shows under whichever
+// label its provenance uses.
+var receiptSealedAt = regexp.MustCompile(`(?m)^(?:Submitted|Ended|Sealed): (.+)$`)
+
+// receipt is what the receipt the Store received says, read back from the
+// sealed message the candidate would get.
 func (m *receiptMail) receipt() preparedReceipt {
-	requests := m.renderer.rendered()
-	if len(requests) == 0 {
+	t := m.f.t
+	var notice *store.PreparedMail
+	switch submissions := m.f.submissions; {
+	case submissions.seal != nil && submissions.seal.Notice != nil:
+		notice = submissions.seal.Notice
+	case submissions.automaticInput != nil && submissions.automaticInput.Notice != nil:
+		notice = submissions.automaticInput.Notice
+	case submissions.managerInput != nil && submissions.managerInput.Notice != nil:
+		notice = submissions.managerInput.Notice
+	default:
 		return preparedReceipt{}
 	}
-	request := requests[len(requests)-1]
-	details, ok := request.Presentation.(mail.SubmissionReceiptDetails)
-	require.True(m.f.t, ok, "a receipt presents its Submission")
+	message, err := mail.OpenDelivery(m.sealer, notice.Delivery)
+	require.NoError(t, err)
+	submissionID, err := model.ParseSubmissionID(string(notice.Occurrence.ID))
+	require.NoError(t, err, "a receipt occurs once per Submission")
+	_, codeText, found := strings.Cut(message.Text, "Receipt code: ")
+	require.True(t, found, "a receipt shows its code: %s", message.Text)
+	code, err := model.ParseSubmissionReceiptCode(strings.SplitN(codeText, "\n", 2)[0])
+	require.NoError(t, err)
+	sealed := receiptSealedAt.FindStringSubmatch(message.Text)
+	require.Len(t, sealed, 2, "a receipt shows when it was sealed: %s", message.Text)
+	sealedAt, err := time.Parse("Monday 2 January 2006, 15:04:05 MST", sealed[1])
+	require.NoError(t, err)
 	provenance := map[model.MailTemplateKey]model.ExamSubmissionProvenance{
 		model.MailTemplateExamSubmissionReceived:            model.ExamSubmissionCandidateSubmitted,
 		model.MailTemplateExamSubmissionManagerEnded:        model.ExamSubmissionManagerEndedAttempt,
 		model.MailTemplateExamSubmissionAutomaticallySealed: model.ExamSubmissionSittingClosed,
-	}[request.Key]
-	return preparedReceipt{CandidateUserID: m.candidate, ExamID: m.examID, SittingID: details.SittingID,
-		SubmissionID: details.SubmissionID, ReceiptCode: details.ReceiptCode, SealedAt: details.SealedAt, Provenance: provenance}
-}
-
-type receiptRenderer struct {
-	mu       sync.Mutex
-	requests []mail.RenderRequest
-}
-
-func (r *receiptRenderer) Render(request mail.RenderRequest) (mail.FrozenContent, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.requests = append(r.requests, request)
-	return mail.FrozenContent{Subject: "Receipt", Text: "Receipt", HTML: "<p>Receipt</p>"}, nil
-}
-
-func (r *receiptRenderer) rendered() []mail.RenderRequest {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return append([]mail.RenderRequest(nil), r.requests...)
+	}[notice.Delivery.TemplateKey]
+	return preparedReceipt{CandidateUserID: notice.Delivery.TargetUserID, ExamID: m.examID, SittingID: m.sittingID,
+		SubmissionID: submissionID, ReceiptCode: code, SealedAt: sealedAt, Provenance: provenance}
 }
 
 type receiptSender struct{}
@@ -433,8 +437,8 @@ type receiptSittings struct {
 	m *receiptMail
 }
 
-func (s receiptSittings) Get(_ context.Context, examID model.ExamID, _ model.ExamSittingID) (*store.ExamSittingSnapshot, error) {
-	s.m.examID = examID
+func (s receiptSittings) Get(_ context.Context, examID model.ExamID, sittingID model.ExamSittingID) (*store.ExamSittingSnapshot, error) {
+	s.m.examID, s.m.sittingID = examID, sittingID
 	return &store.ExamSittingSnapshot{Sitting: s.m.f.sitting}, nil
 }
 

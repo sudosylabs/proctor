@@ -19,6 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
@@ -251,54 +252,51 @@ func mailTestUser(principal model.Principal, at time.Time) *model.User {
 	return user
 }
 
-// mailRendererFake renders every message the real Composer freezes and
-// records what it was asked to render, placing "render-mail" in the log a
-// test shares with its other fakes.
-type mailRendererFake struct {
-	events   *[]string
-	requests []mail.RenderRequest
-}
-
-func (r *mailRendererFake) Render(request mail.RenderRequest) (mail.FrozenContent, error) {
-	if r.events != nil {
-		*r.events = append(*r.events, "render-mail")
-	}
-	r.requests = append(r.requests, request)
-	return mail.FrozenContent{Subject: "Notice", Text: "Notice", HTML: "<p>Notice</p>"}, nil
-}
-
-// classTransition returns the Class details of the one message rendered.
-func (r *mailRendererFake) classTransition(t *testing.T) mail.ClassTransitionDetails {
+// newMail builds the production mail Composer over the real renderer and an
+// enabled sender, so every eligible recipient's message is rendered and
+// sealed.
+func newMail(t *testing.T, events *[]string) (*mail.Composer, *mailSenderFake) {
 	t.Helper()
-	require.Len(t, r.requests, 1, "rendered mail")
-	details, ok := r.requests[0].Presentation.(mail.ClassTransitionDetails)
-	require.True(t, ok, "rendered mail = %#v", r.requests[0])
-	return details
-}
-
-// newMail builds the production mail Composer over an enabled sender, so
-// every eligible recipient's message is rendered.
-func newMail(t *testing.T, events *[]string) (*mail.Composer, *mailRendererFake) {
-	t.Helper()
-	renderer := &mailRendererFake{events: events}
+	sender := &mailSenderFake{enabled: true, from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}, events: events}
 	composer, err := mail.NewComposer(mail.ComposerDependencies{
-		Renderer: renderer,
-		Sender:   &mailSenderFake{enabled: true, from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}},
+		Renderer: mailtest.NewRenderer(t),
+		Sender:   sender,
 		Sealer:   mailTestSealer(t),
 	})
 	require.NoError(t, err)
-	return composer, renderer
+	return composer, sender
 }
 
+// mailSenderFake is the mail transport port. The Composer reads From once
+// for each message, right after rendering it, so From places "render-mail"
+// in the log a test shares with its other fakes and counts the messages.
 type mailSenderFake struct {
-	enabled bool
-	from    mail.Address
+	enabled  bool
+	from     mail.Address
+	events   *[]string
+	rendered int
 }
 
-func (s *mailSenderFake) Enabled() bool      { return s.enabled }
-func (s *mailSenderFake) From() mail.Address { return s.from }
+func (s *mailSenderFake) Enabled() bool { return s.enabled }
+func (s *mailSenderFake) From() mail.Address {
+	if s.events != nil {
+		*s.events = append(*s.events, "render-mail")
+	}
+	s.rendered++
+	return s.from
+}
 func (s *mailSenderFake) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
 	return mail.TransportUnknown, nil
+}
+
+// openedNotice opens a prepared notice, so a test reads the message its
+// recipient would get.
+func openedNotice(t *testing.T, notice *store.PreparedMail) mail.Outbound {
+	t.Helper()
+	require.NotNil(t, notice, "prepared notice")
+	opened, err := mail.OpenDelivery(mailTestSealer(t), notice.Delivery)
+	require.NoError(t, err)
+	return opened
 }
 
 func mailTestSealer(t *testing.T) *secretseal.Sealer {

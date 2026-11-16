@@ -143,6 +143,10 @@ func (f *attemptFixture) AuthenticateBearer(ctx context.Context, token string) (
 	return f.AuthenticateAccess(ctx, token)
 }
 
+func (f *attemptFixture) AuthenticateDPoP(ctx context.Context, token, _, _, _ string) (*model.Principal, error) {
+	return f.AuthenticateAccess(ctx, token)
+}
+
 // api compiles resources over the fixture's service, authenticating each
 // request as the candidate or the manager by its bearer token.
 func (f *attemptFixture) api(t *testing.T, resources ...route.Resource) *route.API {

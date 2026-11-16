@@ -22,6 +22,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -231,7 +232,7 @@ type (
 func newLifecycleSittings(t *testing.T, persistence *sittingLifecycleStore) (*sitting.Service, *accesstest.Fixture) {
 	t.Helper()
 	control := accesstest.New(t, accesstest.Options{})
-	composer, err := mail.NewSittingComposer(mail.SittingComposerDependencies{Renderer: sittingMailRendererFake{}, Sender: &mailSenderFake{},
+	composer, err := mail.NewSittingComposer(mail.SittingComposerDependencies{Renderer: mailtest.NewRenderer(t), Sender: &mailSenderFake{},
 		Now: time.Now})
 	require.NoError(t, err)
 	service, err := sitting.New(sitting.Dependencies{

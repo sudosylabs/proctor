@@ -21,8 +21,7 @@ func TestDirectMailPreparerFreezesEncryptedCredentialPayload(t *testing.T) {
 	principal := mailTestPrincipal(at)
 	user := mailTestUser(principal, at)
 	actionURL := "https://proctor.example.test/account/verify-email#token=credential-secret"
-	content := FrozenContent{Subject: "Verify", Text: "Use " + actionURL, HTML: "<a href=\"" + actionURL + "\">Verify</a>"}
-	preparer, err := newDirectMailPreparer(mailRendererFake{content: content}, &mailSenderFake{enabled: true, from: Address{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), nil)
+	preparer, err := newDirectMailPreparer(mailTestRenderer(t), &mailSenderFake{enabled: true, from: Address{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), nil)
 	require.NoError(t, err)
 	prepared, err := preparer.PrepareEmailVerification(AccountTokenPreparation{Recipient: user,
 		OccurrenceID: model.NewMailOccurrenceID(), ActionURL: actionURL, At: at, Deadline: at.Add(time.Hour)})
@@ -35,7 +34,7 @@ func TestDirectMailPreparerFreezesEncryptedCredentialPayload(t *testing.T) {
 	require.NotContains(t, string(prepared.Delivery.EncryptedPayload), user.Email)
 	opened, err := OpenDelivery(mailTestSealer(t), prepared.Delivery)
 	require.NoError(t, err, "opened payload = %#v", opened)
-	require.Equal(t, content.Text, opened.Text, "opened payload = %#v", opened)
+	require.Contains(t, opened.Text, actionURL, "opened payload = %#v", opened)
 	require.Equal(t, user.Email, opened.To.Address, "opened payload = %#v", opened)
 }
 
@@ -43,7 +42,7 @@ func TestRelationshipMailComposerSupportsCompleteCatalog(t *testing.T) {
 	at := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 	user := mailTestUser(mailTestPrincipal(at), at)
 	preparer, err := newDirectMailPreparer(
-		mailRendererFake{content: FrozenContent{Subject: "Relationship changed", Text: "Relationship changed", HTML: "<p>Relationship changed</p>"}},
+		mailTestRenderer(t),
 		&mailSenderFake{enabled: true, from: Address{Name: "Proctor", Address: "no-reply@example.test"}},
 		mailTestSealer(t),
 		nil,
@@ -83,7 +82,7 @@ func TestDirectMailPreparerSelectsTeacherInvitationTemplate(t *testing.T) {
 		ClaimHash: model.HashInvitationClaim(model.NewCredentialToken()), IssuedAt: at,
 	})
 	require.NoError(t, err)
-	preparer, err := newDirectMailPreparer(mailRendererFake{content: FrozenContent{Subject: "Invite", Text: "Invite", HTML: "<p>Invite</p>"}},
+	preparer, err := newDirectMailPreparer(mailTestRenderer(t),
 		&mailSenderFake{enabled: true, from: Address{Address: "no-reply@example.test"}}, mailTestSealer(t), nil)
 	require.NoError(t, err)
 	prepared, err := preparer.PrepareInvitation(invitation, "https://proctor.example.test/join#token=secret")
@@ -117,7 +116,7 @@ func TestDirectMailPreparerSelectsScopedRoleInvitationTemplates(t *testing.T) {
 				IntendedStartsAt: at, InviterUserID: model.NewUserID(), ScopeType: test.scopeType, ScopeID: test.scopeID,
 				ClaimHash: model.HashInvitationClaim(model.NewCredentialToken()), IssuedAt: at})
 			require.NoError(t, err)
-			preparer, err := newDirectMailPreparer(mailRendererFake{content: FrozenContent{Subject: "Invite", Text: "Invite", HTML: "<p>Invite</p>"}},
+			preparer, err := newDirectMailPreparer(mailTestRenderer(t),
 				&mailSenderFake{enabled: true, from: Address{Address: "no-reply@example.test"}}, mailTestSealer(t), nil)
 			require.NoError(t, err)
 			prepared, err := preparer.PrepareInvitation(invitation, "https://proctor.example.test/join#token=secret")
@@ -131,7 +130,7 @@ func TestDirectMailPreparerSelectsScopedRoleInvitationTemplates(t *testing.T) {
 func TestDirectMailPreparerCreatesTerminalSuppressedIntentWhenDisabled(t *testing.T) {
 	at := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
 	principal := mailTestPrincipal(at)
-	preparer, err := newDirectMailPreparer(mailRendererFake{}, &mailSenderFake{enabled: false}, nil, nil)
+	preparer, err := newDirectMailPreparer(mailTestRenderer(t), &mailSenderFake{enabled: false}, nil, nil)
 	require.NoError(t, err)
 	prepared, err := preparer.PreparePasswordChanged(NoticePreparation{Recipient: mailTestUser(principal, at), At: at})
 	require.NoError(t, err)

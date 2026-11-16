@@ -68,7 +68,7 @@ func TestMFASecurityTransitionsPrepareOneOrdinaryNoticeWithoutSecrets(t *testing
 		session: &model.Session{ID: principal.SessionID, UserID: principal.UserID},
 	}
 	service := newTestMFAApplicationService(t, persistence, newSecurityAuditLog(t, nil), &realtimetest.Publisher{}, now)
-	composer, renderer := newTestMail(t, true)
+	composer, sender := newTestMail(t, true)
 	service.mail = composer
 	application := service
 	inv := invocation.New(principal, model.RequestMetadata{RequestID: "mfa-notices"})
@@ -91,18 +91,20 @@ func TestMFASecurityTransitionsPrepareOneOrdinaryNoticeWithoutSecrets(t *testing
 	require.NoError(t, application.DisableMFA(context.Background(), inv))
 	// The real Composer rendered exactly one notice per transition, and each
 	// transition's write carries that notice for the acting User.
-	require.Equal(t, []model.MailTemplateKey{
+	require.Equal(t, 3, sender.renders(), "mail preparations")
+	wantKeys := []model.MailTemplateKey{
 		model.MailTemplateIdentityMFAEnabled,
 		model.MailTemplateIdentityMFARecoveryCodesRegenerated,
 		model.MailTemplateIdentityMFADisabled,
-	}, renderer.keys(), "mail preparations")
+	}
 	for index, notice := range []store.MFASecurityNotice{
 		persistence.activation.Notice, persistence.regeneration.Notice, persistence.disablement.Notice,
 	} {
-		require.Equal(t, renderer.keys()[index], notice.Occurrence.TemplateKey, "notice %d = %#v", index, notice)
+		require.Equal(t, wantKeys[index], notice.Occurrence.TemplateKey, "notice %d = %#v", index, notice)
+		require.Equal(t, wantKeys[index], notice.Delivery.TemplateKey, "notice %d = %#v", index, notice)
 		require.Equal(t, principal.UserID, notice.Delivery.TargetUserID, "notice %d = %#v", index, notice)
 		require.True(t, notice.Occurrence.CreatedAt.Equal(now), "notice %d = %#v", index, notice)
-		require.True(t, renderer.rendered()[index].At.Equal(now), "notice %d = %#v", index, notice)
+		require.True(t, openedMail(t, notice.Delivery).Date.Equal(now), "notice %d = %#v", index, notice)
 	}
 }
 

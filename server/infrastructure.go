@@ -60,15 +60,10 @@ const (
 	schemaRequireCurrent
 )
 
-type schemaPersistence interface {
-	ApplyPendingMigrations(context.Context) (sqlstore.MigrationResult, error)
-	ValidateSchema(context.Context) error
-}
-
 // prepareSchema converges or verifies the schema. A required-current check
 // never writes: it reports a behind or ahead schema and points the operator
 // at the explicit migrate command.
-func prepareSchema(ctx context.Context, persistence schemaPersistence, policy schemaPolicy) (*sqlstore.MigrationResult, error) {
+func prepareSchema(ctx context.Context, persistence *sqlstore.SQLStore, policy schemaPolicy) (*sqlstore.MigrationResult, error) {
 	if policy == schemaRequireCurrent {
 		if err := persistence.ValidateSchema(ctx); err != nil {
 			return nil, fmt.Errorf(
@@ -113,7 +108,7 @@ type ownedInfrastructure struct {
 type constructionCapabilities struct {
 	logger                 *logging.Logger
 	persistence            store.Catalog
-	cache                  borrowedCache
+	cache                  platform.Cache
 	cluster                cluster.Transport
 	mailer                 platform.Mailer
 	filesystem             vfs.FileSystem
@@ -126,13 +121,6 @@ type constructionCapabilities struct {
 	// then to the Server, which deactivates it.
 	plugins             *pluginhost.Host
 	pluginSettingsCount int64
-}
-
-type borrowedCache interface {
-	Get(context.Context, string) ([]byte, error)
-	Set(context.Context, string, []byte, time.Duration, platform.CacheCondition) error
-	Delete(context.Context, string) error
-	Add(context.Context, string, int64, time.Duration) (int64, error)
 }
 
 func openRuntimeInfrastructure(

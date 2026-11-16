@@ -22,6 +22,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/internal/batchitem"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -64,30 +65,18 @@ func accountStatePublisher(t *testing.T, events *[]string) *realtimetest.Publish
 // pass the validation the real mail Composer applies to a recipient.
 const accountStateTestSeed = "0000000000000000000000000000000000000000000000000000000000000000"
 
-// accountStateRenderer places "prepare-mail" in the shared log each time the
-// real Composer renders an account state notice, and fails when err is set.
-type accountStateRenderer struct {
-	mailRenderRecorder
-	events *[]string
-}
-
-func (r *accountStateRenderer) Render(request mail.RenderRequest) (mail.FrozenContent, error) {
-	*r.events = append(*r.events, "prepare-mail")
-	return r.mailRenderRecorder.Render(request)
-}
-
 // accountStateMail builds the production mail Composer over an enabled
-// sender, rendering through an accountStateRenderer that logs to events.
-func accountStateMail(t *testing.T, events *[]string) (*mail.Composer, *accountStateRenderer) {
+// sender that logs "prepare-mail" to events for each rendered notice.
+func accountStateMail(t *testing.T, events *[]string) (*mail.Composer, *mailSenderFake) {
 	t.Helper()
-	renderer := &accountStateRenderer{events: events}
+	sender := &mailSenderFake{enabled: true, from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}, events: events}
 	composer, err := mail.NewComposer(mail.ComposerDependencies{
-		Renderer: renderer,
-		Sender:   &mailSenderFake{enabled: true, from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}},
+		Renderer: mailtest.NewRenderer(t),
+		Sender:   sender,
 		Sealer:   mailTestSealer(t),
 	})
 	require.NoError(t, err)
-	return composer, renderer
+	return composer, sender
 }
 
 // accountStateResolvedUsers resolves every User the authorizer is asked
@@ -103,12 +92,12 @@ func (accountStateResolvedUsers) Get(_ context.Context, id model.UserID) (*model
 
 // accountStateTest is a Service built for account state, the invocation of a
 // manager who holds user.manage Institution-wide, the real auditor's fixture
-// and the renderer of the real mail Composer.
+// and the sender of the real mail Composer.
 type accountStateTest struct {
-	service  *Service
-	inv      invocation.Invocation
-	access   *accesstest.Fixture
-	renderer *accountStateRenderer
+	service *Service
+	inv     invocation.Invocation
+	access  *accesstest.Fixture
+	sender  *mailSenderFake
 }
 
 // newAccountStateTest builds it over users. actor is the manager's User; a
@@ -124,13 +113,13 @@ func newAccountStateTest(t *testing.T, events *[]string, users store.UserStore, 
 		Grants: []accesstest.Grant{institutionGrant(principal.UserID, model.ActionUserManage)},
 		Users:  accountStateResolvedUsers{},
 	})
-	composer, renderer := accountStateMail(t, events)
+	composer, sender := accountStateMail(t, events)
 	if capabilities == nil {
 		capabilities = noCapabilities()
 	}
 	service := withAccess(&Service{users: users, capabilities: capabilities, mail: composer,
 		publisher: accountStatePublisher(t, events), now: time.Now}, fixture)
-	return accountStateTest{service: service, inv: invocation.New(principal, model.RequestMetadata{}), access: fixture, renderer: renderer}
+	return accountStateTest{service: service, inv: invocation.New(principal, model.RequestMetadata{}), access: fixture, sender: sender}
 }
 
 func TestAccountDisableCommitsBeforePublishingRevocation(t *testing.T) {
@@ -157,11 +146,11 @@ func TestAccountDisableCommitsBeforePublishingRevocation(t *testing.T) {
 	require.NotEmpty(t, persistence.input.AuditEventID, "result/input = %#v / %#v", result, persistence.input)
 	_, available := persistence.input.Capabilities.Providers["campus"]
 	require.True(t, available, "Store capability snapshot = %#v, want configured campus provider", persistence.input.Capabilities)
-	rendered := test.renderer.keys()
-	require.Equal(t, []model.MailTemplateKey{model.MailTemplateIdentityAccountDisabled}, rendered, "mail request/input = %#v / %#v", rendered, persistence.input)
-	require.NotNil(t, persistence.input.Occurrence, "mail request/input = %#v / %#v", rendered, persistence.input)
-	require.NotNil(t, persistence.input.Delivery, "mail request/input = %#v / %#v", rendered, persistence.input)
-	require.NotNil(t, persistence.input.DeliveryJob, "mail request/input = %#v / %#v", rendered, persistence.input)
+	require.Equal(t, 1, test.sender.renders(), "mail input = %#v", persistence.input)
+	require.NotNil(t, persistence.input.Occurrence, "mail input = %#v", persistence.input)
+	require.NotNil(t, persistence.input.Delivery, "mail input = %#v", persistence.input)
+	require.Equal(t, model.MailTemplateIdentityAccountDisabled, persistence.input.Delivery.TemplateKey, "mail input = %#v", persistence.input)
+	require.NotNil(t, persistence.input.DeliveryJob, "mail input = %#v", persistence.input)
 	attempts := recordedAttempts(t, test.access)
 	require.Len(t, attempts, 1)
 	require.Equal(t, attempts[0].ID, persistence.input.AuditEventID)
@@ -264,7 +253,8 @@ func TestAccountEnablePublishesNoRevocation(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, result.DisabledAt.Valid, "result/input = %#v / %#v", result, persistence.input)
 	require.False(t, persistence.input.Disabled, "result/input = %#v / %#v", result, persistence.input)
-	require.Equal(t, []model.MailTemplateKey{model.MailTemplateIdentityAccountEnabled}, fixture.renderer.keys())
+	require.Equal(t, 1, fixture.sender.renders())
+	require.Equal(t, model.MailTemplateIdentityAccountEnabled, persistence.input.Delivery.TemplateKey)
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
 	// begins before the durable write.
 	require.Equal(t, []string{"grants", "decision:user.manage:success", "get-user", "prepare-mail", "audit-begin:user.manage", "store-set-disabled"}, events)
@@ -289,7 +279,7 @@ func TestAccountStateReplayDoesNotCreateAnotherNoticeOrAudit(t *testing.T) {
 	result, err := fixture.service.SetUserEnabled(context.Background(), fixture.inv, SetUserEnabledCommand{ID: user.ID, Enabled: false})
 	require.NoError(t, err, "replay result/error/mail")
 	require.Same(t, user, result, "replay result/error/mail")
-	require.Empty(t, fixture.renderer.rendered(), "replay result/error/mail")
+	require.Zero(t, fixture.sender.renders(), "replay result/error/mail")
 	require.Equal(t, []string{"grants", "decision:user.manage:success", "get-user"}, events)
 }
 
@@ -305,7 +295,7 @@ func TestAccountStateIdempotentNoOpPreparesNoticeForAuthoritativeRace(t *testing
 		SetUserEnabledCommand{ID: user.ID, Enabled: false, IdempotencyKey: "row"})
 	require.NoError(t, err, "idempotent no-op result")
 	require.Same(t, user, result, "idempotent no-op result")
-	require.Len(t, fixture.renderer.rendered(), 1, "idempotent no-op result")
+	require.Equal(t, 1, fixture.sender.renders(), "idempotent no-op result")
 	require.NotNil(t, persistence.input, "idempotent no-op result")
 	require.NotNil(t, persistence.input.Occurrence, "idempotent no-op result")
 }
@@ -320,12 +310,12 @@ func TestAccountStateRetainedOutcomeBypassesMailAfterLaterStateChange(t *testing
 	original.DisabledAt = model.OptionalTimeFromMillis(200)
 	persistence := &accountStateStoreFake{events: &events, user: current, result: &store.UserDisabledStateResult{User: &original}}
 	fixture := newAccountStateTest(t, &events, persistence, actor, nil)
-	fixture.renderer.err = errors.New("mail unavailable")
+	fixture.sender.fail()
 	result, err := fixture.service.SetUserEnabled(context.Background(), fixture.inv,
 		SetUserEnabledCommand{ID: current.ID, Enabled: false, IdempotencyKey: "row", Batch: batchitem.New(batchitem.Fields{RetainedOutcome: true})})
 	require.NoError(t, err, "retained result=%#v error=%v mail", result, err)
 	require.False(t, result != &original && result.ID != original.ID, "retained result=%#v error=%v mail", result, err)
-	require.Empty(t, fixture.renderer.rendered(), "retained result=%#v error=%v mail", result, err)
+	require.Zero(t, fixture.sender.renders(), "retained result=%#v error=%v mail", result, err)
 }
 
 func TestAccountStateMailPreparationFailureStartsNoMutation(t *testing.T) {
@@ -334,7 +324,7 @@ func TestAccountStateMailPreparationFailureStartsNoMutation(t *testing.T) {
 	user := &model.User{ID: model.NewUserID(), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), Revision: 3,
 		Username: "student", Email: "student@example.edu", Locale: "en", Timezone: "UTC", DefaultProfilePictureSeed: accountStateTestSeed}
 	fixture := newAccountStateTest(t, &events, &accountStateStoreFake{events: &events, user: user}, "", nil)
-	fixture.renderer.err = errors.New("render failed")
+	fixture.sender.fail()
 	_, err := fixture.service.SetUserEnabled(context.Background(), fixture.inv, SetUserEnabledCommand{ID: user.ID, Enabled: false})
 	require.True(t, apperror.Is(err, "administration.unavailable"), "error = %v", err)
 	require.Equal(t, []string{"grants", "decision:user.manage:success", "get-user", "prepare-mail"}, events)

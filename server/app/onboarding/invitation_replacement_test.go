@@ -52,8 +52,8 @@ func TestInvitationReplacementReauthorizesAndBuildsANewImmutablePackage(t *testi
 	require.Len(t, attempts, 2)
 	require.Equal(t, attempts[0].ID, persistence.replaced.CurrentAuditEventID, "Invitation replacement = %#v / %#v", result, persistence.replaced)
 	require.Equal(t, attempts[1].ID, persistence.replaced.ReplacementAuditEventID, "Invitation replacement = %#v / %#v", result, persistence.replaced)
-	require.Len(t, rendered.actionURLs(), 1)
-	require.Contains(t, rendered.actionURLs()[0], "/join#token=", "Invitation replacement = %#v / %#v", result, persistence.replaced)
+	require.Equal(t, 1, rendered.renders())
+	require.Contains(t, openedMail(t, persistence.replaced.Delivery).Text, "/join#token=", "Invitation replacement = %#v / %#v", result, persistence.replaced)
 	wantActions := []model.Action{model.ActionInvitationManage, model.ActionInvitationCreate, model.ActionClassMembersManage}
 	require.Equal(t, wantActions, decidedActions(authorization), "Invitation replacement authorization")
 	require.Equal(t, currentClassID.String(), attempts[0].ScopeID)

@@ -20,6 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
@@ -34,7 +35,7 @@ import (
 type identityFixture struct {
 	access    *accesstest.Fixture
 	cache     *identityCache
-	mail      *identityMailRenderer
+	mail      *identityMailSender
 	publisher *realtimetest.Publisher
 	// mfaSealer is the MFA key ring; nil unless the options enable MFA.
 	mfaSealer *secretseal.Sealer
@@ -98,7 +99,7 @@ func newIdentityFixture(t *testing.T, options identityOptions) *identityFixture 
 	t.Helper()
 	fixture := &identityFixture{
 		cache:     newIdentityCache(),
-		mail:      &identityMailRenderer{},
+		mail:      &identityMailSender{enabled: !options.MailDisabled},
 		publisher: &realtimetest.Publisher{},
 	}
 	fixture.access = accesstest.New(t, accesstest.Options{Grants: options.Grants, Users: options.Stores.Users})
@@ -108,8 +109,7 @@ func newIdentityFixture(t *testing.T, options identityOptions) *identityFixture 
 	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
 	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
 	require.NoError(t, err)
-	sender := &identityMailSender{enabled: !options.MailDisabled}
-	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: fixture.mail, Sender: sender, Sealer: sealer})
+	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: httpMailRenderer(t), Sender: fixture.mail, Sealer: sealer})
 	require.NoError(t, err)
 	hasher, err := identity.NewPasswordHasher(identity.PasswordHasherDependencies{Settings: identityPasswordPolicy()})
 	require.NoError(t, err)
@@ -150,7 +150,7 @@ func newIdentityFixture(t *testing.T, options identityOptions) *identityFixture 
 		Authorizer: fixture.access.Authorizer,
 		Auditor:    fixture.access.Auditor,
 		Capabilities: &identity.DeploymentCapabilities{
-			Providers: providers, Mail: sender, Health: mail.NewHealth(true), MFAEnabled: options.MFA,
+			Providers: providers, Mail: fixture.mail, Health: mail.NewHealth(true), MFAEnabled: options.MFA,
 		},
 		Publisher:               fixture.publisher,
 		Mail:                    composer,
@@ -415,42 +415,42 @@ func (c *identityCache) Add(_ context.Context, key string, delta int64, _ time.D
 	return c.counters[key], nil
 }
 
-// identityMailRenderer records the templates the real Composer rendered.
-type identityMailRenderer struct {
-	mu       sync.Mutex
-	requests []mail.RenderRequest
-}
-
-func (r *identityMailRenderer) Render(request mail.RenderRequest) (mail.FrozenContent, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.requests = append(r.requests, request)
-	return mail.FrozenContent{Subject: "Notice", Text: "Notice", HTML: "<p>Notice</p>"}, nil
-}
-
-// templates returns the template of each rendered message, in order.
-func (r *identityMailRenderer) templates() []model.MailTemplateKey {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	keys := make([]model.MailTemplateKey, 0, len(r.requests))
-	for _, request := range r.requests {
-		keys = append(keys, request.Key)
-	}
-	return keys
+// httpMailRenderer is the production mail renderer for the fixtures' loopback
+// HTTP public URL, for which the composition allows HTTP action links.
+func httpMailRenderer(t *testing.T) *mail.TemplateRenderer {
+	t.Helper()
+	return mailtest.NewRendererWithPolicy(t, mail.RendererPolicy{AllowLoopbackHTTPDevelopment: true})
 }
 
 // identityMailSender is the deployment's mail transport. The Composer only
-// asks whether it is enabled and who mail is from; delivery Jobs send.
-type identityMailSender struct{ enabled bool }
+// asks whether it is enabled and who mail is from, and it reads From once for
+// each message right after rendering it, so From counts rendered messages;
+// delivery Jobs send.
+type identityMailSender struct {
+	enabled bool
+
+	mu       sync.Mutex
+	rendered int
+}
 
 func (s *identityMailSender) Enabled() bool { return s.enabled }
 
 func (s *identityMailSender) From() mail.Address {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rendered++
 	return mail.Address{Name: "Proctor", Address: "no-reply@example.test"}
 }
 
 func (s *identityMailSender) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
 	return mail.TransportUnknown, nil
+}
+
+// renders returns how many messages the Composer rendered.
+func (s *identityMailSender) renders() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.rendered
 }
 
 // identityProviders is the external provider registry.

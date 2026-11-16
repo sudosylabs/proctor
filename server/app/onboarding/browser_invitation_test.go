@@ -113,7 +113,7 @@ func TestBrowserInvitationPreservesPasswordWorkFailures(t *testing.T) {
 				require.Nil(t, result, "failed password work advanced hosted Invitation acceptance")
 				require.Nil(t, persistence.accepted, "failed password work advanced hosted Invitation acceptance")
 				require.Nil(t, persistence.teacherAccepted, "failed password work advanced hosted Invitation acceptance")
-				require.Empty(t, rendered.keys(), "failed password work advanced hosted Invitation acceptance")
+				require.Zero(t, rendered.renders(), "failed password work advanced hosted Invitation acceptance")
 				return err
 			})
 		})

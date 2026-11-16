@@ -8,12 +8,12 @@
 package route
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/logging"
 )
 
@@ -61,8 +61,7 @@ func (a *API) writeOperationError(
 	retryInProgress bool,
 ) {
 	headers, cause := responseErrorParts(err)
-	var failure applicationFailure
-	if retryInProgress && errors.As(cause, &failure) && failure.Code() == "idempotency.in_progress" {
+	if retryInProgress && apperror.Is(cause, "idempotency.in_progress") {
 		if headers == nil {
 			headers = make(http.Header)
 		}

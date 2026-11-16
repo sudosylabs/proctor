@@ -59,7 +59,7 @@ type onboardingFixture struct {
 	classMembers *onboardingClassMembers
 	accessPolicy *onboardingAccessPolicy
 	attempts     *identityCache
-	mail         *identityMailRenderer
+	mail         *identityMailSender
 	publisher    *realtimetest.Publisher
 
 	service        *onboarding.Service
@@ -84,7 +84,7 @@ func newOnboardingFixture(t *testing.T) *onboardingFixture {
 		files:        &onboardingImportFiles{staged: map[model.OnboardingImportID][]byte{}},
 		classMembers: &onboardingClassMembers{byID: map[model.ClassMemberID]*model.ClassMember{}, replayUsers: map[model.UserID]bool{}},
 		attempts:     newIdentityCache(),
-		mail:         &identityMailRenderer{},
+		mail:         &identityMailSender{enabled: true},
 		publisher:    &realtimetest.Publisher{},
 	}
 	fixture.users = newOnboardingUsers(&model.User{ID: fixture.callerID, Username: "operator", Email: "operator@example.edu",
@@ -116,8 +116,7 @@ func newOnboardingFixture(t *testing.T) *onboardingFixture {
 	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
 	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
 	require.NoError(t, err)
-	sender := &identityMailSender{enabled: true}
-	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: fixture.mail, Sender: sender, Sealer: sealer})
+	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: httpMailRenderer(t), Sender: fixture.mail, Sealer: sealer})
 	require.NoError(t, err)
 	hasher, err := identity.NewPasswordHasher(identity.PasswordHasherDependencies{Settings: identityPasswordPolicy()})
 	require.NoError(t, err)

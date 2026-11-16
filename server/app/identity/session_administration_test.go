@@ -69,12 +69,12 @@ func (s *sessionAdministrationStoreFake) RevokeAllForUser(_ context.Context, inp
 // sessionAdministrationTest is a Service built for Session administration,
 // the invocation of an administrator who holds session.view and
 // session.manage Institution-wide, the real auditor's fixture and the
-// renderer of the real mail Composer.
+// sender of the real mail Composer.
 type sessionAdministrationTest struct {
-	service  *Service
-	inv      invocation.Invocation
-	access   *accesstest.Fixture
-	renderer *accountStateRenderer
+	service *Service
+	inv     invocation.Invocation
+	access  *accesstest.Fixture
+	sender  *mailSenderFake
 }
 
 // newSessionAdministrationTest builds it. The authorizer's reads and
@@ -87,9 +87,9 @@ func newSessionAdministrationTest(t *testing.T, events *[]string, sessions store
 		Grants: []accesstest.Grant{institutionGrant(principal.UserID, model.ActionSessionView, model.ActionSessionManage)},
 		Users:  accountStateResolvedUsers{},
 	})
-	composer, renderer := accountStateMail(t, events)
+	composer, sender := accountStateMail(t, events)
 	service := withAccess(&Service{sessions: sessions, users: users, mail: composer, publisher: sessionAdministrationPublisher(events), now: now}, fixture)
-	return sessionAdministrationTest{service: service, inv: invocation.New(principal, model.RequestMetadata{}), access: fixture, renderer: renderer}
+	return sessionAdministrationTest{service: service, inv: invocation.New(principal, model.RequestMetadata{}), access: fixture, sender: sender}
 }
 
 // sessionAdministrationPublisher returns a recording Publisher that also
@@ -205,11 +205,11 @@ func TestAdminSessionRevokeCommitsBeforePublishing(t *testing.T) {
 	require.NoError(t, service.RevokeUserSession(context.Background(), test.inv, model.UserID(userID), session.ID))
 	require.Equal(t, session.ID, persistence.revokeInput.SessionID)
 	require.NotEmpty(t, persistence.revokeInput.AuditEventID)
-	rendered := test.renderer.keys()
-	require.Equal(t, []model.MailTemplateKey{model.MailTemplateIdentitySessionsRevokedByAdmin}, rendered, "mail request/input = %#v / %#v", rendered, persistence.revokeInput)
-	require.NotNil(t, persistence.revokeInput.Occurrence, "mail request/input = %#v / %#v", rendered, persistence.revokeInput)
-	require.NotNil(t, persistence.revokeInput.Delivery, "mail request/input = %#v / %#v", rendered, persistence.revokeInput)
-	require.NotNil(t, persistence.revokeInput.DeliveryJob, "mail request/input = %#v / %#v", rendered, persistence.revokeInput)
+	require.Equal(t, 1, test.sender.renders(), "mail input = %#v", persistence.revokeInput)
+	require.NotNil(t, persistence.revokeInput.Occurrence, "mail input = %#v", persistence.revokeInput)
+	require.NotNil(t, persistence.revokeInput.Delivery, "mail input = %#v", persistence.revokeInput)
+	require.Equal(t, model.MailTemplateIdentitySessionsRevokedByAdmin, persistence.revokeInput.Delivery.TemplateKey, "mail input = %#v", persistence.revokeInput)
+	require.NotNil(t, persistence.revokeInput.DeliveryJob, "mail input = %#v", persistence.revokeInput)
 	attempts := recordedAttempts(t, test.access)
 	require.Len(t, attempts, 1)
 	require.Equal(t, attempts[0].ID, persistence.revokeInput.AuditEventID)
@@ -271,7 +271,7 @@ func TestAdminSessionIdempotentNoOpPreparesNoticeForAuthoritativeRace(t *testing
 	service := test.service
 	inv := test.inv
 	require.NoError(t, service.RevokeUserSessions(context.Background(), inv, RevokeUserSessionsCommand{UserID: model.UserID(userID), IdempotencyKey: "row"}))
-	require.Len(t, test.renderer.rendered(), 1, "idempotent no-op mail")
+	require.Equal(t, 1, test.sender.renders(), "idempotent no-op mail")
 	require.NotNil(t, persistence.revokeAllInput, "idempotent no-op mail")
 	require.NotNil(t, persistence.revokeAllInput.Occurrence, "idempotent no-op mail")
 }
@@ -287,7 +287,7 @@ func TestAdminSessionRetainedOutcomeBypassesMailAfterNewSession(t *testing.T) {
 	service := test.service
 	inv := test.inv
 	require.NoError(t, service.RevokeUserSessions(context.Background(), inv, RevokeUserSessionsCommand{UserID: model.UserID(userID), IdempotencyKey: "row", Batch: batchitem.New(batchitem.Fields{RetainedOutcome: true})}))
-	require.Empty(t, test.renderer.rendered(), "retained mail")
+	require.Zero(t, test.sender.renders(), "retained mail")
 	require.Equal(t, []string{"grants", "decision:session.manage:success", "get-user", "audit-begin:session.manage", "store-revoke-all"}, events)
 }
 

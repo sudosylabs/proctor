@@ -107,7 +107,7 @@ func administrationComposer(t *testing.T, sender mail.Sender) *mail.Composer {
 	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
 	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
 	require.NoError(t, err)
-	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: &identityMailRenderer{}, Sender: sender, Sealer: sealer})
+	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: httpMailRenderer(t), Sender: sender, Sealer: sealer})
 	require.NoError(t, err)
 	return composer
 }
@@ -573,7 +573,7 @@ func newAdministrationCounts(t *testing.T, fixture *administrationFixture) (*adm
 		Authorization:           mail.InstitutionAuthorization{Authorizer: fixture.access.Authorizer, Institutions: institutions},
 		Audit:                   fixture.access.Auditor,
 		Attempts:                administrationMailTestLimiter{},
-		Renderer:                &identityMailRenderer{},
+		Renderer:                httpMailRenderer(t),
 		Sender:                  &identityMailSender{enabled: false},
 		Metrics:                 administrationMailMetrics{},
 		RecentAuthenticationTTL: administrationRecentAuthentication,

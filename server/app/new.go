@@ -135,13 +135,13 @@ func New(deps Dependencies) (*App, error) {
 		Search:            searches,
 		Counts:            counts,
 		Realtime:          shared.realtime,
-		RealtimeAdmission: &RealtimeAdmission{
-			principals:    identities,
-			exams:         exams.authoring,
-			sittings:      exams.sittings,
-			authorization: authorizer,
-			operational:   deps.OperationalRecorder,
-		},
+		RealtimeAdmission: NewRealtimeAdmission(RealtimeAdmissionDependencies{
+			Principals:  identities,
+			Exams:       exams.authoring,
+			Sittings:    exams.sittings,
+			Authorizer:  authorizer,
+			Operational: deps.OperationalRecorder,
+		}),
 		Jobs:      runtime.operations,
 		Mail:      runtime.mail,
 		jobEngine: runtime.engine,
@@ -232,7 +232,7 @@ func newSharedMechanics(deps Dependencies) (sharedMechanics, error) {
 	publication, err := realtime.New(realtime.Dependencies{
 		Delivery:    delivery,
 		Diagnostics: deps.RealtimeDiagnostics,
-		Attempts:    realtime.StoreSessionAttemptTargets(examAttempts),
+		Attempts:    examAttempts,
 	})
 	if err != nil {
 		return sharedMechanics{}, err

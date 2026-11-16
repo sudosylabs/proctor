@@ -130,7 +130,7 @@ func (c *connectionRuntime) sessionPump(ctx context.Context) {
 			c.closeTransport()
 			return
 		case <-ticker.C:
-			if appErr := c.application.ValidateWebSocketPrincipal(
+			if appErr := c.admission.ValidateWebSocketPrincipal(
 				ctx,
 				c.principal,
 			); appErr != nil {
@@ -158,7 +158,7 @@ func (c *connectionRuntime) handleRequest(
 
 		metadata := c.metadata
 		metadata.RequestID = fmt.Sprintf("%s:%d", c.id, request.Sequence)
-		if err := c.application.AuthorizeWebSocketSubscription(
+		if err := c.admission.AuthorizeWebSocketSubscription(
 			ctx,
 			invocation.New(c.principal, metadata),
 			subscription.Action,

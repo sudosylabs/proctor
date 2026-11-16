@@ -55,7 +55,7 @@ func startShutdownAttempt(t *testing.T) (*Hub, *shutdownAttempt, <-chan struct{}
 	f := newAttemptFixture(t)
 	f.store.closeGate = held.close
 	logger, _ := newTestLogger(t)
-	hub, err := NewHub(&inboundTestApplication{}, f.service, logger, "https://proctor.example", "node-a", nil)
+	hub, err := NewHub(newAdmissionWorld(t, admissionOptions{}).admission, f.service, logger, "https://proctor.example", "node-a", nil)
 	require.NoError(t, err)
 	err = hub.Start(context.Background())
 	require.NoError(t, err)

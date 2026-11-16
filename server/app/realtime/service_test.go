@@ -15,6 +15,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestRealtimePublishRequiresClusterFanout(t *testing.T) {
@@ -43,12 +44,12 @@ func TestSessionRevocationPublishesAttemptProjectionInvalidations(t *testing.T) 
 	t.Parallel()
 	candidateID := model.NewUserID()
 	sessionID := model.NewSessionID()
-	target := SessionAttemptTarget{
+	target := store.ExamAttemptInvalidationTarget{
 		CandidateUserID: candidateID,
 		ExamID:          model.NewExamID(),
 		SittingID:       model.NewExamSittingID(),
 	}
-	attempts := &sessionAttemptTargetsFake{targets: []SessionAttemptTarget{target}}
+	attempts := &sessionAttemptTargetsFake{targets: []store.ExamAttemptInvalidationTarget{target}}
 	service := newTestService(t, attempts)
 	sink := &recordingSink{}
 	require.NoError(t, service.AttachSink(sink))
@@ -117,24 +118,27 @@ func TestServiceRequiresItsCollaborators(t *testing.T) {
 	require.Error(t, err, "nil session attempt targets were accepted")
 }
 
+// sessionAttemptTargetsFake is the Exam Attempt Store as Session revocation
+// reads it: it answers the revocation lookup and records what was asked.
 type sessionAttemptTargetsFake struct {
+	store.ExamAttemptStore
 	candidateID model.UserID
 	sessionIDs  []model.SessionID
-	targets     []SessionAttemptTarget
+	targets     []store.ExamAttemptInvalidationTarget
 	err         error
 }
 
-func (f *sessionAttemptTargetsFake) ListSessionAttemptTargets(
+func (f *sessionAttemptTargetsFake) ListSessionRevocationInvalidationTargets(
 	_ context.Context,
 	candidateID model.UserID,
 	sessionIDs []model.SessionID,
-) ([]SessionAttemptTarget, error) {
+) ([]store.ExamAttemptInvalidationTarget, error) {
 	f.candidateID = candidateID
 	f.sessionIDs = append([]model.SessionID(nil), sessionIDs...)
-	return append([]SessionAttemptTarget(nil), f.targets...), f.err
+	return append([]store.ExamAttemptInvalidationTarget(nil), f.targets...), f.err
 }
 
-func newTestService(t *testing.T, attempts SessionAttemptTargets) *Service {
+func newTestService(t *testing.T, attempts store.ExamAttemptStore) *Service {
 	t.Helper()
 	service, err := New(Dependencies{
 		Delivery:    mustNewDelivery(t, &recordingInvalidator{}, newDiscardLogger(t)),

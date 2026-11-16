@@ -15,19 +15,15 @@ package route
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-type dpopAuthenticator interface {
-	AuthenticateDPoP(context.Context, string, string, string, string) (*model.Principal, error)
-}
 
 func (a *API) newHandlerWithErrorPolicy(
 	handler http.Handler,
@@ -167,16 +163,11 @@ func authenticateAccessCredential(
 	var authErr error
 	spec, _ := specFor(requirement)
 	if credential.Source == CredentialDPoP {
-		dpop, ok := application.(dpopAuthenticator)
-		if !ok {
-			authErr = applicationError("authentication.dpop.unavailable")
+		proof, proofErr := DPoPProof(request)
+		if proofErr != nil {
+			authErr = proofErr
 		} else {
-			proof, proofErr := DPoPProof(request)
-			if proofErr != nil {
-				authErr = proofErr
-			} else {
-				principal, authErr = dpop.AuthenticateDPoP(request.Context(), credential.Token, proof, request.Method, request.URL.EscapedPath())
-			}
+			principal, authErr = application.AuthenticateDPoP(request.Context(), credential.Token, proof, request.Method, request.URL.EscapedPath())
 		}
 	} else if spec.personalAccessToken &&
 		credential.Source == CredentialBearer {
@@ -209,14 +200,11 @@ func DPoPProof(request *http.Request) (string, error) {
 	return values[0], nil
 }
 
-// dpopNonceChallenge is a DPoP authentication failure that asks the client to
-// sign its proof again with the server-issued nonce it carries (RFC 9449
-// section 8). The kernel answers it with DPoP-Nonce and use_dpop_nonce; any
-// other DPoP failure is invalid_dpop_proof.
-type dpopNonceChallenge interface {
-	DPoPNonce() string
-}
-
+// writeDPoPApplicationError answers a failed DPoP authentication. When the
+// Identity service refused the proof only because it lacked the current
+// server-issued nonce, the client may sign again with the nonce it is sent
+// (RFC 9449 section 8), so the answer is use_dpop_nonce. Any other DPoP
+// failure is invalid_dpop_proof.
 func writeDPoPApplicationError(
 	writer http.ResponseWriter,
 	request *http.Request,
@@ -224,9 +212,8 @@ func writeDPoPApplicationError(
 	policy routeErrorPolicy,
 	err error,
 ) {
-	var challenge dpopNonceChallenge
-	if errors.As(err, &challenge) && challenge.DPoPNonce() != "" {
-		writer.Header().Set("DPoP-Nonce", challenge.DPoPNonce())
+	if nonce, ok := identity.DPoPChallengeNonce(err); ok {
+		writer.Header().Set("DPoP-Nonce", nonce)
 		writer.Header().Set("WWW-Authenticate", `DPoP error="use_dpop_nonce"`)
 	} else {
 		writer.Header().Set("WWW-Authenticate", `DPoP error="invalid_dpop_proof"`)
@@ -284,13 +271,13 @@ func RequiresCSRF(method string) bool {
 	}
 }
 
-// Authenticator resolves the credentials the kernel extracts.
-// AuthenticateBearer answers a bearer credential on a route that also admits a
-// Personal Access Token; every other access credential goes to
-// AuthenticateAccess. An authenticator that also has AuthenticateDPoP serves
-// proof-bound Desktop credentials; without it they fail with
-// authentication.dpop.unavailable.
+// Authenticator resolves the credentials the kernel extracts. A proof-bound
+// Desktop credential goes to AuthenticateDPoP with its proof, method and path.
+// A bearer credential on a route that also admits a Personal Access Token goes
+// to AuthenticateBearer. Every other access credential goes to
+// AuthenticateAccess.
 type Authenticator interface {
 	AuthenticateAccess(context.Context, string) (*model.Principal, error)
 	AuthenticateBearer(context.Context, string) (*model.Principal, error)
+	AuthenticateDPoP(ctx context.Context, token, proof, method, path string) (*model.Principal, error)
 }

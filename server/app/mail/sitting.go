@@ -37,14 +37,6 @@ type SittingScheduleDetails struct {
 
 func (SittingScheduleDetails) mailPresentation() {}
 
-// SittingRenderer is a Renderer that also reports its default and supported
-// locales, so a bundle can be frozen in every locale before recipients are
-// known.
-type SittingRenderer interface {
-	Renderer
-	SittingLocales() (string, []string)
-}
-
 // FrozenSittingBundle freezes every supported locale for one template
 // release. Expansion selects a recipient locale without consulting mutable
 // runtime assets.
@@ -57,7 +49,7 @@ type FrozenSittingBundle struct {
 // SittingComposerDependencies are the collaborators of SittingComposer;
 // NewSittingComposer validates them once and SittingComposer keeps them in deps.
 type SittingComposerDependencies struct {
-	Renderer SittingRenderer
+	Renderer *TemplateRenderer
 	Sender   Sender
 	Sealer   *secretseal.Sealer
 	Now      func() time.Time

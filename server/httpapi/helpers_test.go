@@ -47,6 +47,10 @@ func (a *testHTTPApplication) AuthenticateBearer(context.Context, string) (*mode
 	return a.principal, nil
 }
 
+func (a *testHTTPApplication) AuthenticateDPoP(context.Context, string, string, string, string) (*model.Principal, error) {
+	return a.principal, nil
+}
+
 // readyHealth is the real node health with readiness published as
 // composition publishes it after startup, and no dependency probe.
 func readyHealth(t *testing.T, ready bool) *app.Health {

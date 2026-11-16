@@ -68,15 +68,19 @@ type renderedMessage struct {
 	HTML    string
 }
 
-// templateRendererDependencies are the collaborators of templateRenderer;
-// newRenderer validates them once and templateRenderer keeps them in deps.
+// templateRendererDependencies are the collaborators of TemplateRenderer;
+// newRenderer validates them once and TemplateRenderer keeps them in deps.
 type templateRendererDependencies struct {
 	Files                   fs.FS
 	Localizer               *localization.Localizer
 	ValidateCompleteCatalog bool
 }
 
-type templateRenderer struct {
+// TemplateRenderer renders every transactional mail template from the
+// installation's presentation assets and message catalogs. It parses and
+// validates all templates once, so a renderer that was built can render any
+// template key.
+type TemplateRenderer struct {
 	deps templateRendererDependencies
 
 	html                         map[model.MailTemplateKey]*htmltemplate.Template
@@ -100,13 +104,13 @@ type RendererPolicy struct {
 
 // NewRenderer constructs the application-owned renderer from presentation
 // assets and the installation localizer.
-func NewRenderer(files fs.FS, localizer *localization.Localizer) (Renderer, error) {
+func NewRenderer(files fs.FS, localizer *localization.Localizer) (*TemplateRenderer, error) {
 	return NewRendererWithPolicy(files, localizer, RendererPolicy{})
 }
 
 // NewRendererWithPolicy constructs a renderer with an explicit
 // composition-owned policy.
-func NewRendererWithPolicy(files fs.FS, localizer *localization.Localizer, policy RendererPolicy) (Renderer, error) {
+func NewRendererWithPolicy(files fs.FS, localizer *localization.Localizer, policy RendererPolicy) (*TemplateRenderer, error) {
 	renderer, err := newRenderer(templateRendererDependencies{Files: files, Localizer: localizer, ValidateCompleteCatalog: true})
 	if err != nil {
 		return nil, err
@@ -117,7 +121,7 @@ func NewRendererWithPolicy(files fs.FS, localizer *localization.Localizer, polic
 	return renderer, nil
 }
 
-func (r *templateRenderer) applyPolicy(policy RendererPolicy) error {
+func (r *TemplateRenderer) applyPolicy(policy RendererPolicy) error {
 	r.allowLoopbackHTTPDevelopment = policy.AllowLoopbackHTTPDevelopment
 	if address := strings.ToLower(strings.TrimSpace(policy.SupportAddress)); address != "" {
 		if !model.IsValidEmail(address) {
@@ -145,7 +149,7 @@ func loadDisplayLocation(name string) (*time.Location, error) {
 	return location, nil
 }
 
-func newRenderer(deps templateRendererDependencies) (*templateRenderer, error) {
+func newRenderer(deps templateRendererDependencies) (*TemplateRenderer, error) {
 	if deps.Files == nil || deps.Localizer == nil {
 		return nil, errors.New("mail renderer dependencies are invalid")
 	}
@@ -155,7 +159,7 @@ func newRenderer(deps templateRendererDependencies) (*templateRenderer, error) {
 		return nil, fmt.Errorf("load mail inline assets: %w", err)
 	}
 
-	renderer := &templateRenderer{
+	renderer := &TemplateRenderer{
 		deps:            deps,
 		displayLocation: time.UTC,
 		html:            make(map[model.MailTemplateKey]*htmltemplate.Template),
@@ -204,7 +208,7 @@ func newRenderer(deps templateRendererDependencies) (*templateRenderer, error) {
 // clockFor picks the recipient's own time zone when they have set one, and the
 // installation display time zone otherwise. UTC is the unset default, so it
 // falls back too.
-func (r *templateRenderer) clockFor(timezone string) clock {
+func (r *TemplateRenderer) clockFor(timezone string) clock {
 	timezone = strings.TrimSpace(timezone)
 	if timezone != "" && timezone != model.DefaultTimezone && timezone != "Local" {
 		if location, err := time.LoadLocation(timezone); err == nil {
@@ -217,7 +221,7 @@ func (r *templateRenderer) clockFor(timezone string) clock {
 	return clock{location: r.displayLocation}
 }
 
-func (r *templateRenderer) render(request renderRequest) (renderedMessage, error) {
+func (r *TemplateRenderer) render(request renderRequest) (renderedMessage, error) {
 	if r == nil || r.deps.Localizer == nil {
 		return renderedMessage{}, errors.New("mail template renderer is nil")
 	}
@@ -288,7 +292,7 @@ func firstName(displayName string) string {
 }
 
 // executeTemplates executes the HTML and text templates for the key and enforces the rendered size bound.
-func (r *templateRenderer) executeTemplates(key model.MailTemplateKey, properties templateProperties) (text, html string, err error) {
+func (r *TemplateRenderer) executeTemplates(key model.MailTemplateKey, properties templateProperties) (text, html string, err error) {
 	htmlValue, ok := r.html[key]
 	if !ok {
 		return "", "", fmt.Errorf("HTML mail template %q is unavailable", key)
@@ -311,7 +315,8 @@ func (r *templateRenderer) executeTemplates(key model.MailTemplateKey, propertie
 	return textOutput.String(), htmlOutput.String(), nil
 }
 
-func (r *templateRenderer) Render(request RenderRequest) (FrozenContent, error) {
+// Render turns a RenderRequest into FrozenContent in the requested locale.
+func (r *TemplateRenderer) Render(request RenderRequest) (FrozenContent, error) {
 	internal := renderRequest{
 		Key:               request.Key,
 		RecipientLocale:   request.Locale,
@@ -348,11 +353,13 @@ func (r *templateRenderer) Render(request RenderRequest) (FrozenContent, error) 
 	return r.renderContent(internal)
 }
 
-func (r *templateRenderer) SittingLocales() (string, []string) {
+// SittingLocales reports the default and supported locales, so a Sitting
+// bundle can be frozen in every locale before its recipients are known.
+func (r *TemplateRenderer) SittingLocales() (string, []string) {
 	return r.deps.Localizer.DefaultLocale(), r.deps.Localizer.SupportedLocales()
 }
 
-func (r *templateRenderer) renderContent(request renderRequest) (FrozenContent, error) {
+func (r *TemplateRenderer) renderContent(request renderRequest) (FrozenContent, error) {
 	message, err := r.render(request)
 	if err != nil {
 		return FrozenContent{}, err

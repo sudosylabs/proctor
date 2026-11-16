@@ -17,6 +17,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -120,12 +121,6 @@ func (r *jobMailMetricsFake) RecordMailDelivery(_ context.Context, metric mail.D
 
 func (r *jobMailMetricsFake) RecordMailAttempt(_ context.Context, metric mail.AttemptMetric) {
 	r.attempts = append(r.attempts, metric)
-}
-
-type mailRendererFake struct{ content mail.FrozenContent }
-
-func (r mailRendererFake) Render(mail.RenderRequest) (mail.FrozenContent, error) {
-	return r.content, nil
 }
 
 func TestMailDeliveryHandlerUsesStableMessageIDAndRecordsAcceptance(t *testing.T) {
@@ -237,7 +232,7 @@ func TestMailDeliveryHandlerExpiresRetryWhenSMTPReturnsAfterDeadline(t *testing.
 func mailDeliveryHandlerFixture(t *testing.T, at time.Time, deadlineAfter time.Duration) (*secretseal.Sealer, *model.Job, *model.MailDelivery) {
 	t.Helper()
 	sealer := mailTestSealer(t)
-	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: mailRendererFake{mail.FrozenContent{Subject: "test", Text: "text", HTML: "<p>html</p>"}}, Sender: &mailSenderFake{enabled: true, from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}}, Sealer: sealer})
+	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: mailtest.NewRenderer(t), Sender: &mailSenderFake{enabled: true, from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}}, Sealer: sealer})
 	require.NoError(t, err)
 	prepared, err := composer.PrepareOperatorTest(mail.NoticePreparation{Recipient: mailTestUser(mailTestPrincipal(at), at), At: at})
 	require.NoError(t, err)

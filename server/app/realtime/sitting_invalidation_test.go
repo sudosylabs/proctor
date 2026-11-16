@@ -17,11 +17,14 @@ import (
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
-// candidatePagesFake serves the candidates of one Sitting in the pages a test
-// gives it and records the cursor of every read.
+// candidatePagesFake is the Exam Sitting Store as candidate invalidation reads
+// it: it serves the candidates of one Sitting in the pages a test gives it and
+// records the cursor of every read.
 type candidatePagesFake struct {
+	store.ExamSittingStore
 	pages  [][]model.UserID
 	err    error
 	afters []model.UserID

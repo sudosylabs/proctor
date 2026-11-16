@@ -73,7 +73,7 @@ func newSittingFixtureWith(t *testing.T, caller model.Principal, actions ...mode
 	f.correctionContent = &correctionRenditions{}
 
 	composer, err := mail.NewSittingComposer(mail.SittingComposerDependencies{
-		Renderer: sittingMailRenderer{&identityMailRenderer{}}, Sender: &identityMailSender{}, Now: time.Now,
+		Renderer: httpMailRenderer(t), Sender: &identityMailSender{}, Now: time.Now,
 	})
 	require.NoError(t, err)
 	f.sittingService, err = sitting.New(sitting.Dependencies{
@@ -141,11 +141,6 @@ type sittingMailClasses struct{ store.ClassStore }
 func (sittingMailClasses) Get(_ context.Context, id model.ClassID) (*model.Class, error) {
 	return &model.Class{ID: id, DisplayName: "Algorithms A"}, nil
 }
-
-// sittingMailRenderer renders schedule notices in English only.
-type sittingMailRenderer struct{ *identityMailRenderer }
-
-func (sittingMailRenderer) SittingLocales() (string, []string) { return "en", []string{"en"} }
 
 // sittingLedger holds Sittings by identity and applies each manager command
 // under the revision fence and lifecycle rules the SQL Store applies,

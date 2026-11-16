@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -22,7 +23,7 @@ func TestPersonalAccessTokenSecurityNoticeIsTerminalWhenMailIsDisabled(t *testin
 
 	at := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
 	principal := mailTestPrincipal(at)
-	preparer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: mailRendererFake{}, Sender: &mailSenderFake{enabled: false}, Sealer: nil, Institution: nil})
+	preparer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: mailtest.NewRenderer(t), Sender: &mailSenderFake{enabled: false}, Sealer: nil, Institution: nil})
 	require.NoError(t, err)
 	prepared, err := preparer.PreparePersonalAccessTokenSecurityNotice(mail.PersonalAccessTokenPreparation{
 		Recipient:   mailTestUser(principal, at),

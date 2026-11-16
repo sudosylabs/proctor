@@ -62,8 +62,8 @@ func NewLocalizer(tb testing.TB) *localization.Localizer {
 	return localizer
 }
 
-// Authenticator admits every access and bearer credential as Principal, or
-// refuses every one with Err when it is set.
+// Authenticator admits every access, bearer and DPoP credential as Principal,
+// or refuses every one with Err when it is set. It checks no DPoP proof.
 type Authenticator struct {
 	Principal model.Principal
 	Err       error
@@ -81,6 +81,15 @@ func (a Authenticator) AuthenticateAccess(context.Context, string) (*model.Princ
 // AuthenticateBearer answers a bearer credential that may be a Personal
 // Access Token.
 func (a Authenticator) AuthenticateBearer(context.Context, string) (*model.Principal, error) {
+	if a.Err != nil {
+		return nil, a.Err
+	}
+	principal := a.Principal
+	return &principal, nil
+}
+
+// AuthenticateDPoP answers a proof-bound Desktop credential.
+func (a Authenticator) AuthenticateDPoP(context.Context, string, string, string, string) (*model.Principal, error) {
 	if a.Err != nil {
 		return nil, a.Err
 	}

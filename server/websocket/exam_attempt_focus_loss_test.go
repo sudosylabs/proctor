@@ -31,7 +31,7 @@ func TestConnectionRuntimeRejectsMissingOrUnknownFocusLossSchemaBeforeApplicatio
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			f := newAttemptFixture(t)
-			runtime, _ := newInboundRuntime(t, &inboundTestApplication{}, f.service)
+			runtime, _ := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{}), f.service)
 			f.admit(runtime, 1)
 
 			runtime.handleRequest(context.Background(), &Request{Sequence: 1, Action: examAttemptFocusLossAction, Data: test.body})

@@ -23,9 +23,50 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/exam/environment"
+	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
+
+// settledEvent is the cluster event that tells peers an owner completed a
+// settle. The name is the wire contract between nodes.
+const settledEvent cluster.Event = "exam.attempt.environment.settled"
+
+// transportFake is a cluster with no peers that records what this node
+// broadcasts to them.
+type transportFake struct {
+	cluster.Transport
+	mu        sync.Mutex
+	broadcast []*cluster.Message
+}
+
+func (*transportFake) RegisterHandler(cluster.Event, cluster.Handler) error { return nil }
+
+func (f *transportFake) Broadcast(_ context.Context, message *cluster.Message) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.broadcast = append(f.broadcast, message)
+	return nil
+}
+
+// sent returns the Attempt ID each broadcast of event names, in order.
+func (f *transportFake) sent(event cluster.Event) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var attemptIDs []string
+	for _, message := range f.broadcast {
+		if message.Event != event {
+			continue
+		}
+		var decoded struct {
+			AttemptID string `json:"attempt_id"`
+		}
+		if err := json.Unmarshal(message.Data, &decoded); err == nil {
+			attemptIDs = append(attemptIDs, decoded.AttemptID)
+		}
+	}
+	return attemptIDs
+}
 
 // environmentsFake is the environment row, written by the owner under its
 // revision and moved on by facts.

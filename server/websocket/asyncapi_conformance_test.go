@@ -22,7 +22,6 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/internal/asyncapidoc"
 	"github.com/sudosylabs/proctor/server/model"
@@ -103,8 +102,10 @@ func TestProtocolFramesMatchAsyncAPI(t *testing.T) {
 	sort.Strings(owned)
 	require.Equal(t, protocolMessages, owned, "every protocol message is checked below")
 
-	application := &inboundTestApplication{}
-	connection, _ := newInboundRuntime(t, application, nil)
+	// The caller may view one Sitting and no Class, so subscribing to the
+	// Sitting succeeds and subscribing to a Class is denied.
+	world := newAdmissionWorld(t, admissionOptions{sitting: true, withoutClassView: true})
+	connection, _ := newInboundRuntime(t, world, nil)
 	connection.nodeID = "node-a"
 
 	connection.enqueueHello(false, true)
@@ -113,7 +114,7 @@ func TestProtocolFramesMatchAsyncAPI(t *testing.T) {
 
 	subscription := Subscription{
 		Action:   model.ActionExamSittingView,
-		Resource: Resource{Type: model.ResourceExamSitting, ID: model.NewExamSittingID().String()},
+		Resource: Resource{Type: model.ResourceExamSitting, ID: world.sitting.ID.String()},
 	}
 	ping := &Request{Sequence: 1, Action: "ping"}
 	contract.requireFrame(t, "ping", ping)
@@ -137,8 +138,7 @@ func TestProtocolFramesMatchAsyncAPI(t *testing.T) {
 	connection.enqueueError(6, "websocket.rate_limited", websocketErrorRateLimited)
 	contract.requireFrame(t, "command_error", nextInboundResponse(t, connection))
 	requireExamAttemptControlFrames(t, contract)
-	application.authorizeErr = apperror.New("authorization.denied")
-	connection.handleRequest(context.Background(), requestWithData(t, 7, "subscribe", subscription))
+	connection.handleRequest(context.Background(), requestWithData(t, 7, "subscribe", validInboundSubscription()))
 	contract.requireFrame(t, "command_error", nextInboundResponse(t, connection))
 }
 
@@ -149,7 +149,7 @@ func TestApplicationEventFramesMatchAsyncAPI(t *testing.T) {
 	t.Parallel()
 
 	contract := loadAsyncAPIContract(t)
-	connection, _ := newInboundRuntime(t, &inboundTestApplication{}, nil)
+	connection, _ := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{}), nil)
 
 	archived, err := realtime.NewExamArchivedEvent(model.NewExamID(), 3, time.Now())
 	require.NoError(t, err)
@@ -245,7 +245,7 @@ func TestExamAttemptConnectAndFocusLossFramesMatchAsyncAPI(t *testing.T) {
 	f.store.focusOutcome = model.IntegrityOutcomeFlagAndWarn
 	f.store.databaseTime = f.at.Add(time.Minute)
 	sittingID := f.sitting.ID
-	runtime, _ := newInboundRuntime(t, &inboundTestApplication{}, f.service)
+	runtime, _ := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{}), f.service)
 	credential := model.NewCredentialToken()
 
 	connect := requestWithData(t, 1, examAttemptConnectAction, validExamAttemptConnectRequest(t, sittingID, "connect", credential))

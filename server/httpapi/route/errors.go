@@ -65,8 +65,7 @@ func writeApplicationError(
 }
 
 func applicationErrorCode(err error) string {
-	var failure applicationFailure
-	if errors.As(err, &failure) {
+	if failure, ok := apperror.As(err); ok {
 		return failure.Code()
 	}
 	return serverInternalCode
@@ -76,8 +75,7 @@ func applicationErrorCode(err error) string {
 // operation fails with err: every failure presented as a 5xx or without a
 // mapped code, except service.busy, which its work pool counts instead.
 func errorIsLogged(err error) bool {
-	var failure applicationFailure
-	if errors.As(err, &failure) {
+	if failure, ok := apperror.As(err); ok {
 		// Capacity refusals are expected overload outcomes counted by the owning
 		// work pool. Logging each refusal would amplify a request burst.
 		if failure.Code() == "service.busy" {
@@ -141,22 +139,15 @@ func writeRouteApplicationError(
 // fail with an oversized body or an unexpected internal fault, which carry no
 // application code; an application error must be declared by the route.
 func routeErrorAllowed(policy routeErrorPolicy, err error) bool {
-	var failure applicationFailure
-	if policy == nil || requestBodyTooLarge(err) || !errors.As(err, &failure) {
+	if policy == nil || requestBodyTooLarge(err) {
+		return true
+	}
+	failure, ok := apperror.As(err)
+	if !ok {
 		return true
 	}
 	_, allowed := policy[failure.Code()]
 	return allowed
-}
-
-// applicationFailure is the transport-facing view of a transport-neutral
-// application error such as *apperror.Error (Code + Fields). The interface keeps
-// HTTP mapping duck-typed over any error exposing a stable code and safe
-// fields.
-type applicationFailure interface {
-	error
-	Code() string
-	Fields() map[string]string
 }
 
 // applicationErrorMapping is the HTTP presentation for one public error code.
@@ -186,7 +177,7 @@ const (
 	problemExtensionDeliveryMetadataCapacity
 )
 
-func problemFromApplicationFailure(request *http.Request, failure applicationFailure) Problem {
+func problemFromApplicationFailure(request *http.Request, failure *apperror.Error) Problem {
 	mapping, ok := applicationErrorMappings[failure.Code()]
 	if !ok {
 		return internalProblem(request)
@@ -237,18 +228,16 @@ func ProblemStatuses() map[string]int {
 	return maps.Clone(transportProblemCodes)
 }
 
-// WriteError maps a failure to RFC 9457 Problem Details. Transport-neutral
-// application failures (*apperror.Error) use the centralized code table through the
-// applicationFailure interface. Unexpected errors become a generic correlated
-// internal response with no internal detail.
+// WriteError maps a failure to RFC 9457 Problem Details. An *apperror.Error is
+// presented through the generated code table. Any other error becomes a generic
+// correlated internal response, so no internal detail reaches the client.
 func WriteError(writer http.ResponseWriter, request *http.Request, err error) {
 	if requestBodyTooLarge(err) {
 		writeRequestTooLarge(writer, request)
 		return
 	}
 
-	var failure applicationFailure
-	if errors.As(err, &failure) {
+	if failure, ok := apperror.As(err); ok {
 		mapping := applicationErrorMappings[failure.Code()]
 		if mapping.retryAfter > 0 {
 			writer.Header().Set("Retry-After", strconv.Itoa(mapping.retryAfter))

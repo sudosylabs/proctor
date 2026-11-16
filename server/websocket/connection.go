@@ -19,6 +19,7 @@ import (
 
 	gorilla "github.com/gorilla/websocket"
 
+	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/localization"
 	"github.com/sudosylabs/proctor/server/logging"
@@ -27,17 +28,17 @@ import (
 )
 
 type connectionRuntime struct {
-	application Application
-	attempts    *attempt.Service
-	logger      *logging.Logger
-	localizer   *localization.Localizer
-	locale      string
-	nodeID      string
-	socket      *gorilla.Conn
-	principal   model.Principal
-	metadata    model.RequestMetadata
-	id          string
-	recorder    *metrics.Module
+	admission *app.RealtimeAdmission
+	attempts  *attempt.Service
+	logger    *logging.Logger
+	localizer *localization.Localizer
+	locale    string
+	nodeID    string
+	socket    *gorilla.Conn
+	principal model.Principal
+	metadata  model.RequestMetadata
+	id        string
+	recorder  *metrics.Module
 
 	mu                 sync.Mutex
 	nextSequence       int64
@@ -77,7 +78,7 @@ type examAttemptBinding struct {
 }
 
 func newConnectionRuntime(
-	application Application,
+	admission *app.RealtimeAdmission,
 	attempts *attempt.Service,
 	logger *logging.Logger,
 	localizer *localization.Localizer,
@@ -93,7 +94,7 @@ func newConnectionRuntime(
 	replayEvents []*Event,
 ) *connectionRuntime {
 	runtime := &connectionRuntime{
-		application:   application,
+		admission:     admission,
 		attempts:      attempts,
 		logger:        logger,
 		localizer:     localizer,

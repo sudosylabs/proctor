@@ -29,7 +29,7 @@ import (
 // Attempt service the application builds.
 type Node struct {
 	waker   *clusterWaker
-	settles *clusterSettles
+	settles *ClusterSettles
 	runtime *Runtime
 	hosts   NodeHosts
 	deps    NodeDependencies
@@ -79,7 +79,7 @@ func (n *Node) Waker() Waker { return n.waker }
 
 // Settles delivers the settles owners complete, here or on a peer, to the
 // seals waiting on them.
-func (n *Node) Settles() SettleSubscriber { return n.settles }
+func (n *Node) Settles() *ClusterSettles { return n.settles }
 
 // Hosts are the execution host clients, for the terminals.
 func (n *Node) Hosts() Hosts { return n.hosts }

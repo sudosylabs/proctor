@@ -31,7 +31,7 @@ func applicationDependencies(
 	capabilities constructionCapabilities,
 	cfg config.Config,
 	content app.FileContent,
-	mailRenderer mail.Renderer,
+	mailRenderer *mail.TemplateRenderer,
 ) (app.Dependencies, error) {
 	auth := cfg.Authentication
 	cache := platformAuthenticationCache{cache: capabilities.cache}

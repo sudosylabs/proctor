@@ -164,11 +164,6 @@ type RenderRequest struct {
 	Deadline time.Time
 }
 
-// Renderer turns a RenderRequest into FrozenContent in the requested locale.
-type Renderer interface {
-	Render(RenderRequest) (FrozenContent, error)
-}
-
 type directPreparation struct {
 	Recipient    *model.User
 	OccurrenceID model.MailOccurrenceID
@@ -265,7 +260,7 @@ type RelationshipTransitionPreparation struct {
 // ComposerDependencies are the collaborators of Composer;
 // NewComposer validates them once and Composer keeps them in deps.
 type ComposerDependencies struct {
-	Renderer Renderer
+	Renderer *TemplateRenderer
 	Sender   Sender
 	Sealer   *secretseal.Sealer
 	// Institution returns the current institution display name for message

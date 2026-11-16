@@ -48,8 +48,8 @@ func TestConnectionRuntimeRateLimitsEveryInboundFrame(t *testing.T) {
 	t.Parallel()
 	// No time passes in the bubble, so the budget never refills.
 	synctest.Test(t, func(t *testing.T) {
-		application := &inboundTestApplication{}
-		runtime, peer := newInboundRuntime(t, application, nil)
+		world := newAdmissionWorld(t, admissionOptions{})
+		runtime, peer := newInboundRuntime(t, world, nil)
 		peer.listen()
 		runtime.send = make(chan outboundMessage, inboundFrameBurst+inboundRefusalsBeforeClose+8)
 		requests := make([]*Request, inboundFrameBurst+inboundRefusalsBeforeClose)
@@ -76,9 +76,7 @@ func TestConnectionRuntimeRateLimitsEveryInboundFrame(t *testing.T) {
 			require.FailNow(t, "read pump did not stop after a sustained flood")
 		}
 
-		application.mu.Lock()
-		authorized := len(application.authorizations)
-		application.mu.Unlock()
+		authorized := len(world.access.Audits.Decisions())
 		require.Equal(t, inboundFrameBurst, authorized, "authorized subscriptions")
 		limited := 0
 		for len(runtime.send) > 0 {

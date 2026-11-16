@@ -32,6 +32,28 @@ type RealtimeAdmission struct {
 	operational   operational.Recorder
 }
 
+// RealtimeAdmissionDependencies are the collaborators a RealtimeAdmission
+// consults. Exams and Sittings answer only subscriptions to those Resources,
+// so a caller that never subscribes to them may leave them out.
+type RealtimeAdmissionDependencies struct {
+	Principals  *identity.Service
+	Exams       *exam.Authoring
+	Sittings    *sitting.Service
+	Authorizer  *access.Authorizer
+	Operational operational.Recorder
+}
+
+// NewRealtimeAdmission returns the admission over deps.
+func NewRealtimeAdmission(deps RealtimeAdmissionDependencies) *RealtimeAdmission {
+	return &RealtimeAdmission{
+		principals:    deps.Principals,
+		exams:         deps.Exams,
+		sittings:      deps.Sittings,
+		authorization: deps.Authorizer,
+		operational:   deps.Operational,
+	}
+}
+
 var (
 	realtimeExamFailures = apperror.Concealment{
 		Unavailable: "exam.unavailable",

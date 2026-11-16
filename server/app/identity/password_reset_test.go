@@ -48,8 +48,10 @@ func TestRequestPasswordResetPreservesGenericResponseAndIssuedToken(t *testing.T
 	require.True(t, tokens.issued.ExpiresAt.Equal(now.Add(45*time.Minute)), "token expiry = %s", tokens.issued.ExpiresAt)
 	require.NotNil(t, tokens.event)
 	require.Equal(t, string(model.ActionAuthenticationPasswordResetRequest), tokens.event.Action)
-	require.Equal(t, []model.MailTemplateKey{model.MailTemplateIdentityPasswordReset}, rendered.keys())
-	require.Contains(t, rendered.actionURLs()[0], "#token="+accountTokenTestRawToken)
+	require.Equal(t, 1, rendered.renders())
+	require.NotNil(t, tokens.issuedMail, "prepared reset mail")
+	require.Equal(t, model.MailTemplateIdentityPasswordReset, tokens.issuedMail.Delivery.TemplateKey)
+	require.Contains(t, openedMail(t, tokens.issuedMail.Delivery).Text, "#token="+accountTokenTestRawToken)
 
 	unknown := newAccountTokenTestApp(t, accountTokenTestDependencies{
 		users:     &accountTokenUserStoreFake{byEmailErr: store.NewErrNotFound("user", "")},
@@ -92,7 +94,7 @@ func TestRequestPasswordResetConcealsAtomicEnqueueFailure(t *testing.T) {
 	require.NoError(t, app.RequestPasswordReset(context.Background(), invocation.Invocation{}, RequestPasswordResetCommand{Email: user.Email}))
 	require.NotNil(t, tokens.issuedMail, "prepared durable reset aggregate")
 	require.Equal(t, model.JobTypeMailDeliverCredential, tokens.issuedMail.Job.Type, "prepared durable reset aggregate")
-	require.Len(t, rendered.rendered(), 1, "prepared durable reset aggregate")
+	require.Equal(t, 1, rendered.renders(), "prepared durable reset aggregate")
 }
 
 func TestRequestPasswordResetCreatesNoIntentForDisabledOrExternalOnlyAccount(t *testing.T) {
@@ -117,7 +119,7 @@ func TestRequestPasswordResetCreatesNoIntentForDisabledOrExternalOnlyAccount(t *
 			})
 			require.NoError(t, app.RequestPasswordReset(context.Background(), invocation.Invocation{}, RequestPasswordResetCommand{Email: test.user.Email}))
 			require.Nil(t, tokens.issuedMail, "ineligible account intent")
-			require.Empty(t, rendered.rendered(), "ineligible account intent")
+			require.Zero(t, rendered.renders(), "ineligible account intent")
 		})
 	}
 }
@@ -138,7 +140,7 @@ func TestRequestPasswordResetIsGenericAndInertWhenCurrentPolicyDisablesLocalLogi
 		Email: user.Email, Source: "192.0.2.7",
 	}))
 	require.Nil(t, tokens.issued, "disabled local recovery issued")
-	require.Empty(t, rendered.rendered(), "disabled local recovery issued")
+	require.Zero(t, rendered.renders(), "disabled local recovery issued")
 }
 
 func TestCompletePasswordResetCommitsBeforeEffects(t *testing.T) {

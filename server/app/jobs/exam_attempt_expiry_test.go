@@ -20,6 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -65,7 +66,7 @@ func newJobAttempts(t *testing.T, stores *jobAttemptStores, sittings *sitting.Se
 		sittings, _ = newLifecycleSittings(t, newSittingLifecycleStore())
 	}
 	composer, err := mail.NewComposer(mail.ComposerDependencies{
-		Renderer: mailRendererFake{mail.FrozenContent{Subject: "receipt", Text: "text", HTML: "<p>html</p>"}},
+		Renderer: mailtest.NewRenderer(t),
 		Sender:   &mailSenderFake{enabled: true, from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}},
 		Sealer:   mailTestSealer(t),
 	})

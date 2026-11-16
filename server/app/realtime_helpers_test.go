@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 func newRealtimeService(
@@ -34,13 +35,14 @@ func newRealtimeService(
 	return realtime.New(realtime.Dependencies{Delivery: delivery, Diagnostics: diagnostics, Attempts: noSessionAttemptTargets{}})
 }
 
-// noSessionAttemptTargets is the Session-revocation lookup of a realtime
-// service built without a Store: no Attempt is ever affected.
-type noSessionAttemptTargets struct{}
+// noSessionAttemptTargets is the Exam Attempt Store of a realtime service
+// built without a real Store: no Attempt is ever affected by a Session
+// revocation.
+type noSessionAttemptTargets struct{ store.ExamAttemptStore }
 
-func (noSessionAttemptTargets) ListSessionAttemptTargets(
+func (noSessionAttemptTargets) ListSessionRevocationInvalidationTargets(
 	context.Context, model.UserID, []model.SessionID,
-) ([]realtime.SessionAttemptTarget, error) {
+) ([]store.ExamAttemptInvalidationTarget, error) {
 	return nil, nil
 }
 

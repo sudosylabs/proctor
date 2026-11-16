@@ -8553,7 +8553,7 @@ export interface components {
             /** @description The student's earlier enrollment in the same Academic Period that this request ended, for a transfer or progression. Omitted when there was none. */
             previous?: components["schemas"]["ClassMemberResponse"];
         };
-        /** @description One Class in a Class listing. It includes the current student count when the caller holds class.members.view on the listing's scope. */
+        /** @description One Class in a Class listing. It includes the current student count when the caller holds class.members.view on that Class. */
         ClassListItemResponse: {
             /** @description The Academic Period the Class runs in. */
             academic_period_id: components["schemas"]["ID"];
@@ -8582,7 +8582,7 @@ export interface components {
              * @description Starts at 1 and goes up with every change. Send it as `expected_revision` on an update or archive so the change fails if someone else changed the Class first.
              */
             revision: number;
-            /** @description How many members the Class has now, counted up to 10,000. Present only when the caller holds class.members.view on the listing's scope. To sort a page by it, sort on the client. */
+            /** @description How many members the Class has now, counted up to 10,000. Present only when the caller holds class.members.view on this Class. To sort a page by it, sort on the client. */
             student_count?: number;
             /** @description True when `student_count` reached 10,000. Present with `student_count`. */
             student_count_is_lower_bound?: boolean;

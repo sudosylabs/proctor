@@ -10,6 +10,7 @@ package environment_test
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -46,9 +47,31 @@ type rig struct {
 
 	mu      sync.Mutex
 	reports []error
+	settled []model.ExamAttemptID
+}
+
+// Settled records the owner's settle signals.
+func (r *rig) Settled(attemptID model.ExamAttemptID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.settled = append(r.settled, attemptID)
+}
+
+func (r *rig) settleSignals() []model.ExamAttemptID {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.settled)
 }
 
 func newRig(t *testing.T, timing environment.OwnerTiming, wrap ...func(environment.Hosts) environment.Hosts) *rig {
+	t.Helper()
+	return newSeededRig(t, timing, nil, wrap...)
+}
+
+// newSeededRig is newRig over a Workspace that seed adds to before the
+// owner starts.
+func newSeededRig(t *testing.T, timing environment.OwnerTiming, seed func(*workspaceFake),
+	wrap ...func(environment.Hosts) environment.Hosts) *rig {
 	t.Helper()
 	host, err := memory.New(memory.Config{Images: []execenv.Image{"python"}, WorkDir: t.TempDir()})
 	require.NoError(t, err)
@@ -80,7 +103,7 @@ func newRig(t *testing.T, timing environment.OwnerTiming, wrap ...func(environme
 		ported = wrapped(ported)
 	}
 	factory, err := environment.NewOwners(environment.OwnerDependencies{
-		Environments: r.environments, Evidence: r.evidence, Workspace: r.workspace, Hosts: ported, Timing: timing,
+		Environments: r.environments, Evidence: r.evidence, Workspace: r.workspace, Hosts: ported, Timing: timing, Settled: r,
 		Report: func(_ model.ExamAttemptID, err error) {
 			r.mu.Lock()
 			defer r.mu.Unlock()
@@ -100,6 +123,9 @@ func newRig(t *testing.T, timing environment.OwnerTiming, wrap ...func(environme
 	})
 	r.workspace.mkdir("src")
 	r.workspace.edit("src/main.py", "print(1)\n")
+	if seed != nil {
+		seed(r.workspace)
+	}
 	go func() {
 		r.done <- factory(r.attemptID).Run(ctx, store.AttemptRuntimeLease{AttemptID: r.attemptID, NodeID: "node-a", Fence: 7,
 			ExpiresAt: time.Now().Add(time.Minute)}, r.wake)
@@ -265,10 +291,73 @@ func TestOwnerLetsTheJournalWinAConflict(t *testing.T) {
 	require.Zero(t, r.environments.snapshot().Incarnation)
 	require.Zero(t, r.evidence.gaps("environment_restarted"))
 	require.Len(t, r.evidence.details(model.AttemptEvidenceOverwritten), 1, "the lost change is recorded once")
+	require.Equal(t, []model.AttemptEnvironmentSyncPath{{Path: "src/main.py", Status: model.AttemptEnvironmentPathRefused,
+		Reason: "exam.attempt.workspace.content_conflict"}}, r.environments.snapshot().SyncPaths, "the lost path is refused")
 
 	// The machine goes on syncing both ways.
 	require.NoError(t, r.host.WriteGuest(t.Context(), r.grant(), "src/main.py", []byte("guest again\n")))
 	require.Eventually(t, r.workspaceHolds("src/main.py", "guest again\n"), eventually, tick)
+	require.Eventually(t, func() bool { return len(r.environments.snapshot().SyncPaths) == 0 }, eventually, tick,
+		"a later stored change syncs the path again")
+}
+
+func TestOwnerGivesANewWorkspaceTheDefaultIgnoreFile(t *testing.T) {
+	t.Parallel()
+	r := newRig(t, environment.OwnerTiming{})
+	r.running()
+	held, ok := r.workspace.file(environment.IgnoreFile)
+	require.True(t, ok, "the Workspace has the default ignore file")
+	require.Equal(t, string(environment.DefaultIgnoreFile()), held)
+	require.Equal(t, []model.AttemptWorkspaceAuthor{model.NewEnvironmentWorkspaceAuthor(0, "")}, r.workspace.authors(environment.IgnoreFile))
+	require.Equal(t, held, r.guest(environment.IgnoreFile), "the machine holds it")
+
+	// A new incarnation never writes it again, even once the candidate
+	// deleted it.
+	r.workspace.mu.Lock()
+	item := r.workspace.byPath(environment.IgnoreFile)
+	r.workspace.commit(model.AttemptWorkspaceJournalEntry{EntryID: item.id, EntryKind: item.kind,
+		Operation: model.AttemptWorkspaceMutationDeleteEntry, OldPath: item.path,
+		Author: model.NewCandidateWorkspaceAuthor(model.NewAttemptConnectionID())}, nil)
+	r.workspace.mu.Unlock()
+	r.poke()
+	r.running()
+	require.True(t, r.host.Lose(r.grant()))
+	require.Eventually(t, func() bool {
+		row := r.environments.snapshot()
+		return row.Incarnation == 1 && row.State == model.AttemptEnvironmentRunning && row.ProjectionCursor == r.workspace.cursor()
+	}, eventually, tick)
+	_, ok = r.workspace.file(environment.IgnoreFile)
+	require.False(t, ok, "the candidate's deletion stands")
+}
+
+func TestOwnerKeepsTheStartersIgnoreFile(t *testing.T) {
+	t.Parallel()
+	r := newSeededRig(t, environment.OwnerTiming{}, func(workspace *workspaceFake) {
+		workspace.edit(environment.IgnoreFile, "secret/\n")
+	})
+	r.running()
+	held, _ := r.workspace.file(environment.IgnoreFile)
+	require.Equal(t, "secret/\n", held, "a Workspace's own ignore file is never replaced")
+	require.Len(t, r.workspace.authors(environment.IgnoreFile), 1)
+}
+
+func TestOwnerSignalsACompletedSettle(t *testing.T) {
+	t.Parallel()
+	r := newRig(t, environment.OwnerTiming{})
+	r.running()
+	require.NoError(t, r.host.WriteGuest(t.Context(), r.grant(), "src/last.txt", []byte("last")))
+	r.environments.mu.Lock()
+	r.environments.row.SettleRequested++
+	r.environments.row.SettleRequestedAt = time.Now()
+	r.environments.row.Revision++
+	r.environments.mu.Unlock()
+	r.poke()
+	require.Eventually(t, func() bool { return len(r.settleSignals()) == 1 }, eventually, tick)
+	require.Equal(t, []model.ExamAttemptID{r.attemptID}, r.settleSignals())
+	row := r.environments.snapshot()
+	require.Equal(t, row.SettleRequested, row.SettleCompleted, "the signal follows the recorded completion")
+	held, _ := r.workspace.file("src/last.txt")
+	require.Equal(t, "last", held, "the settle harvested the guest's last change")
 }
 
 func TestOwnerJournalsAChangeByTheProcessThatWroteIt(t *testing.T) {
@@ -391,4 +480,29 @@ func TestOwnerRecordsASuspendedMachineAndThawsIt(t *testing.T) {
 	require.Zero(t, r.environments.snapshot().Incarnation)
 	require.NoError(t, r.host.WriteGuest(ctx, r.grant(), "src/after.txt", []byte("after")))
 	require.Eventually(t, r.workspaceHolds("src/after.txt", "after"), eventually, tick)
+}
+
+func TestOwnerReportsThePathsItDidNotStore(t *testing.T) {
+	t.Parallel()
+	r := newSeededRig(t, environment.OwnerTiming{ObserveWait: time.Second, HarvestQuiet: 300 * time.Millisecond, HarvestMax: time.Second,
+		Idle: 50 * time.Millisecond, Retry: 10 * time.Millisecond, RetryMax: 50 * time.Millisecond}, func(workspace *workspaceFake) {
+		workspace.edit(environment.IgnoreFile, "")
+	})
+	ctx := t.Context()
+	r.running()
+	// The guest writes a file; before it is harvested, the candidate's
+	// ignore file comes to name it.
+	require.NoError(t, r.host.WriteGuest(ctx, r.grant(), "a.o", []byte("object")))
+	r.workspace.edit(environment.IgnoreFile, "*.o\n")
+	r.poke()
+	ignored := []model.AttemptEnvironmentSyncPath{{Path: "a.o", Status: model.AttemptEnvironmentPathIgnored,
+		Reason: model.AttemptEnvironmentIgnoredByFile}}
+	require.Eventually(t, func() bool { return slices.Equal(ignored, r.environments.snapshot().SyncPaths) }, eventually, tick,
+		"the path is ignored by the Workspace's ignore file")
+	_, held := r.workspace.file("a.o")
+	require.False(t, held)
+
+	// A path the guest removes has no status left.
+	require.NoError(t, r.host.RemoveGuest(ctx, r.grant(), "a.o"))
+	require.Eventually(t, func() bool { return len(r.environments.snapshot().SyncPaths) == 0 }, eventually, tick)
 }

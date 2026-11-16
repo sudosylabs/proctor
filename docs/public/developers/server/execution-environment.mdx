@@ -128,25 +128,42 @@ best-effort accelerator, and a slow backstop catches a missed hint.
 
 ### Retention by cursor
 
-The journal is kept back to the lowest cursor a live reader still needs, such
-as the projection or an open editor, up to a hard ceiling. A fixed count would
-let a busy build push the editor past the retained window. A reader past the
-ceiling refreshes from the manifest.
+The journal is kept back to the lowest cursor a live reader still needs, up to
+a hard ceiling. A fixed count alone would let a busy build push the projection
+past the retained window. Each batch keeps at least the last 4,096 entries,
+which serve the editors, and while the Attempt's environment has not ended it
+also keeps every entry after the environment's projection cursor, never more
+than 65,536 entries. A reader past what is kept refreshes from the manifest;
+for the owner that means a new machine built from the Workspace.
 
 ### Budgets per author kind
 
 Write-rate budgets are kept per Attempt **and** per author kind. An editor's
 budget suits a person; the environment's is sized by its profile, because a
-build can write hundreds of files in a second. Quotas on entries, file size and
-total size stay per Workspace and bind every author.
+build can write hundreds of files in a second. Per CPU core of the profile,
+counted from 1 to 8, the environment may write 128 mutations and 16 MiB a
+second, with bursts of 2,048 mutations and 256 MiB, and its byte burst never
+falls below one maximum batch. Quotas on entries, file size and total size
+stay per Workspace and bind every author.
 
 ### Sync status
 
 A guest file can fail to reach the Workspace: it is over quota, on a path the
 Workspace refuses, or it lost a conflict. Each path the environment reports has
 a *sync status*, `synced`, `ignored` or `refused` with a reason, that the
-editor and the terminal show. It is derived from the last harvest and is not an
+editor and the terminal show. It is derived from the harvests and is not an
 authority.
+
+- The owner keeps, on the environment row, the latest status of each guest
+  path it did not store: `ignored` with what ignored it (`.proctorignore`,
+  `default` for the default patterns, or `parent_not_synced`), or `refused`
+  with the Workspace's public code. Every other path is synced.
+- At most the 256 most recent are kept, oldest dropped first. A path leaves
+  the list once a later change to it is stored or the guest removes it, and a
+  new machine starts with none.
+- execenv's matcher does not say which pattern matched, so an ignored path
+  names the file that decided, not the line.
+- The statuses never enter logs or audit.
 
 ### What is kept: `.proctorignore`
 
@@ -156,7 +173,10 @@ Workspace.
 
 - **A default copy.** A new Attempt Workspace that uses execution gets a
   `.proctorignore` holding Proctor's default patterns, unless its Starter
-  Workspace has one. They play the part of a standard `.gitignore`:
+  Workspace has one. The owner writes it, as the environment, when the
+  Attempt's first machine is first prepared and the Workspace has none, under
+  one idempotency key per Attempt; a candidate's copy is never replaced, and a
+  later machine never writes it again. They play the part of a standard `.gitignore`:
   `node_modules/`, `.venv/`, `__pycache__/`, `target/`, `build/`, `dist/`,
   `*.o`, `*.class` and similar build output. While the file is missing or does
   not parse, the defaults apply.
@@ -207,7 +227,7 @@ The owner drives the environment from Attempt facts:
 
 | Attempt fact | Environment |
 | --- | --- |
-| First admission with execution on | `creating`: restore from the profile's template and the Revision's seed, then project the Workspace |
+| First admission with execution on | `creating`: restore from the profile's template, then initialize the projection with the full Workspace |
 | Participation active | `running` |
 | Participation ended without a Submission, or the Sitting paused | `frozen` |
 | Frozen longer than the profile's idle window | `suspended` |
@@ -231,12 +251,13 @@ extended for a wait.
 - **Placement** picks the host with the most free resources for the profile,
   and tries the next on `ErrCapacity`.
 - **Templates.** Every host builds a template per image and profile shape.
-- **Seeds.** When a Sitting opens, the Revision's Starter Workspace is put to
-  each host as a seed, once. An environment starts from the seed, and the
-  projection applies only what differs.
-- **Pre-warm** at Sitting open is the seed upload and a capacity forecast,
-  Class size times the profile, shown to the manager. Admission reserves no
-  capacity.
+- **Seeds (deferred).** When a Sitting opens, the Revision's Starter
+  Workspace is to be put to each host as a seed, once, so an environment
+  starts from it and the projection applies only what differs. Until then an
+  environment starts empty and is initialized with the full Workspace.
+- **Pre-warm (deferred)** at Sitting open is to be the seed upload and a
+  capacity forecast, Class size times the profile, shown to the manager.
+  Nothing is pre-warmed yet. Admission reserves no capacity.
 
 ### The owner
 
@@ -290,14 +311,19 @@ should not lose its last second. A *settle* runs before every seal:
    observation once a machine is frozen, so the drain comes first.
 
 A settle is asked through the environment's row, so the owner answers it on
-whichever node holds the lease: the seal counts one more requested settle,
-wakes the owner, and waits until the owner records it complete. A voluntary
-submit and a manager end settle, then seal; a replay settles nothing. A
-closing Sitting asks every environment of the Sitting to settle, and its
-sealing Job waits the settle budget before it runs. Each settle has 5 seconds.
-Past that, or with the host unreachable, the seal records a *settle gap*
-(`{"gap": "settle_incomplete"}`, by the current incarnation's `settle`
-stream) and goes ahead. A voluntary seal's expected cursor fences only the
+whichever node holds the lease: the seal subscribes to the owner's completion
+signal, counts one more requested settle, wakes the owner, reads the row once,
+and waits for the signal, confirming it with one more read. The signal is a
+cluster message carrying only the Attempt ID; a lost one costs the wait its
+budget, never a false gap. A voluntary submit and a manager end settle, then
+seal; a replay settles nothing. A closing Sitting asks every environment of
+the Sitting to settle, and its sealing Job waits the settle budget before it
+runs. Each automatic seal then asks for no new settle: it waits only what is
+left of the budget of the settle still pending, so a Sitting of unreachable
+hosts seals without spending a budget per Attempt. Each settle has 5 seconds
+from when it was asked. Past that, or with the host unreachable, the seal
+records a *settle gap* (`{"gap": "settle_incomplete"}`, by the current
+incarnation's `settle` stream) and goes ahead. A voluntary seal's expected cursor fences only the
 candidate's own changes, so what the settle harvested is sealed.
 
 Only Attempt Workspace content counts. Terminal output, shell history, the
@@ -411,7 +437,7 @@ execution is on for the installation. Publication never dials a host.
 
 | Route | Purpose |
 | --- | --- |
-| `GET /exam-attempts/{id}/environment` | State, incarnation, terminal limit, and `projection_cursor`: a Workspace entry whose last change is past it is not in the machine yet |
+| `GET /exam-attempts/{id}/environment` | State, incarnation, terminal limit, `projection_cursor` (a Workspace entry whose last change is past it is not in the machine yet), and `paths`, the sync status of each guest path not in the Workspace |
 | `POST /exam-attempts/{id}/environment/terminals` | Open a terminal; answers with its number and tag |
 | `GET /exam-attempts/{id}/environment/terminals` | The terminals on the current machine and the policy's limit |
 | `GET /exam-attempts/{id}/environment/terminals/{n}/socket` | Binary socket: output and input by offset, resize, screen |
@@ -419,7 +445,8 @@ execution is on for the installation. Publication never dials a host.
 
 A terminal is addressed by its number `n`, so terminal `1` is `terminal:1`.
 
-The Workspace routes are unchanged, apart from the per-path sync status.
+The Workspace routes are unchanged; the per-path sync status is on the
+environment route.
 
 ### Managers and reviewers
 
@@ -486,7 +513,9 @@ fenced lease is the environment's Workspace access.
 
 ## Build order
 
-Each step is a vertical slice with its own tests. Steps 1 to 6 are built; the execenv additions of step 6 are adopted from execenv v0.5.0.
+Each step is a vertical slice with its own tests. Steps 1 to 6 are built, and
+the execenv additions of step 6 are adopted from execenv v0.5.0. Two parts of
+step 3 are deferred: seeds and the pre-warm at Sitting open.
 
 1. **Workspace foundation:** authors on the journal, audit and idempotency
    outcomes, the last author of every entry sealed in the Submission, and
@@ -499,10 +528,10 @@ Each step is a vertical slice with its own tests. Steps 1 to 6 are built; the ex
    the execution configuration first, since nothing can create an
    environment without them; then the model, lifecycle, placement, sync and
    the settle, under the owner's fenced runtime lease with wakeups. Seeds and
-   retention by cursor are deferred: an environment starts empty and is
-   initialized with the full Workspace, and a pruned journal restarts it. The three Workspace changes whose only reader is the owner land
-   here with it: change notifications in the core, retention by cursor, and
-   grouped harvest batches. `server/plugin/execution` and its seams are
+   the pre-warm are deferred: an environment starts empty and is initialized
+   with the full Workspace. The three Workspace changes whose only reader is
+   the owner land here with it: change notifications in the core, retention
+   by cursor, and grouped harvest batches. `server/plugin/execution` and its seams are
    deleted in this step, and evidence is appended under the owner's fence
    instead of a binding.
 4. **Processes and terminals:** tags, the terminal routes and socket with

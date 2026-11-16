@@ -8,12 +8,14 @@
 package sqlstore
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -31,8 +33,8 @@ func newSQLAttemptEnvironmentStore(sqlStore *SQLStore) store.AttemptEnvironmentS
 const attemptEnvironmentColumns = `exam_attempt_id, exam_sitting_id, environment_profile_id, image, cpu_millis,
 	memory_bytes, disk_bytes, network, idle_window_seconds, terminals, record_input, desired, state, generation,
 	incarnation, host, grant_id, epoch, control_fence, projection_cursor, observation_cursor, process_cursor,
-	projected_versions, evidence_sequence, waiting_since, settle_requested, settle_completed, replace_before, revision,
-	created_at, updated_at`
+	projected_versions, evidence_sequence, waiting_since, settle_requested, settle_completed, settle_requested_at,
+	sync_paths, replace_before, revision, created_at, updated_at`
 
 type attemptEnvironmentRow struct {
 	AttemptID         string         `db:"exam_attempt_id"`
@@ -61,6 +63,8 @@ type attemptEnvironmentRow struct {
 	EvidenceSequence  int64          `db:"evidence_sequence"`
 	SettleRequested   int64          `db:"settle_requested"`
 	SettleCompleted   int64          `db:"settle_completed"`
+	SettleRequestedAt sql.NullTime   `db:"settle_requested_at"`
+	SyncPaths         []byte         `db:"sync_paths"`
 	ReplaceBefore     int64          `db:"replace_before"`
 	WaitingSince      sql.NullTime   `db:"waiting_since"`
 	Revision          int64          `db:"revision"`
@@ -89,6 +93,14 @@ func (r attemptEnvironmentRow) model() (*model.AttemptEnvironment, error) {
 	if r.WaitingSince.Valid {
 		environment.WaitingSince = model.TimeUTC(r.WaitingSince.Time)
 	}
+	if r.SettleRequestedAt.Valid {
+		environment.SettleRequestedAt = model.TimeUTC(r.SettleRequestedAt.Time)
+	}
+	syncPaths, err := decodeAttemptEnvironmentSyncPaths(r.SyncPaths)
+	if err != nil {
+		return nil, invalidPersistedState("attempt_environment", "sync_paths", err)
+	}
+	environment.SyncPaths = syncPaths
 	if err := environment.Validate(); err != nil {
 		return nil, invalidPersistedState("attempt_environment", "value", err)
 	}
@@ -244,7 +256,8 @@ func createAttemptEnvironment(
 		return nil, store.NewErrInvalidInput("attempt_environment", "creation", nil).Wrap(err)
 	}
 	if _, err = tx.Exec(ctx, `INSERT INTO exam_attempt_environments (`+attemptEnvironmentColumns+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, 0, 0, 0, 0, '{}', 0, NULL, 0, 0, 0, 1, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, 0, 0, 0, 0, '{}', 0, NULL, 0, 0, NULL, '[]', 0, 1,
+			?, ?)`,
 		environment.AttemptID.String(), environment.SittingID.String(), environment.ProfileID.String(), environment.Image,
 		environment.Resources.CPUMillis, environment.Resources.MemoryBytes, environment.Resources.DiskBytes,
 		string(environment.Network), int64(environment.IdleWindow/time.Second), environment.Terminals, environment.RecordInput,
@@ -266,10 +279,11 @@ func attemptParticipationActive(ctx context.Context, tx *sqlxTxWrapper, attemptI
 
 func saveAttemptEnvironmentFact(ctx context.Context, tx *sqlxTxWrapper, environment *model.AttemptEnvironment) error {
 	if _, err := tx.Exec(ctx, `UPDATE exam_attempt_environments
-		SET desired = ?, generation = ?, settle_requested = ?, revision = ?, updated_at = ?
+		SET desired = ?, generation = ?, settle_requested = ?, settle_requested_at = ?, revision = ?, updated_at = ?
 		WHERE exam_attempt_id = ?`,
-		string(environment.Desired), environment.Generation, environment.SettleRequested, environment.Revision,
-		environment.UpdatedAt, environment.AttemptID.String()); err != nil {
+		string(environment.Desired), environment.Generation, environment.SettleRequested,
+		nullableEnvironmentTime(environment.SettleRequestedAt), environment.Revision, environment.UpdatedAt,
+		environment.AttemptID.String()); err != nil {
 		return fmt.Errorf("save attempt environment fact: %w", err)
 	}
 	return nil
@@ -327,6 +341,7 @@ func (s SQLAttemptEnvironmentStore) SaveOwner(
 		saved.ObservationCursor, saved.ProcessCursor = owner.ObservationCursor, owner.ProcessCursor
 		saved.ProjectedVersions, saved.EvidenceSequence = maps.Clone(owner.ProjectedVersions), owner.EvidenceSequence
 		saved.WaitingSince = owner.WaitingSince
+		saved.SyncPaths = slices.Clone(owner.SyncPaths)
 		if owner.SettleCompleted < current.SettleCompleted || owner.SettleCompleted > current.SettleRequested {
 			return nil, store.NewErrInvalidInput("attempt_environment", "settle", nil)
 		}
@@ -343,15 +358,19 @@ func (s SQLAttemptEnvironmentStore) SaveOwner(
 		if err != nil {
 			return nil, err
 		}
+		syncPaths, err := encodeAttemptEnvironmentSyncPaths(saved.SyncPaths)
+		if err != nil {
+			return nil, err
+		}
 		if _, err = tx.Exec(ctx, `UPDATE exam_attempt_environments
 			SET state = ?, incarnation = ?, host = NULLIF(?, ''), grant_id = NULLIF(?, ''), epoch = NULLIF(?, ''),
 				control_fence = ?, projection_cursor = ?, observation_cursor = ?, process_cursor = ?,
-				projected_versions = ?, evidence_sequence = ?, waiting_since = ?, settle_completed = ?, revision = ?,
-				updated_at = ?
+				projected_versions = ?, evidence_sequence = ?, waiting_since = ?, settle_completed = ?, sync_paths = ?,
+				revision = ?, updated_at = ?
 			WHERE exam_attempt_id = ?`,
 			string(saved.State), saved.Incarnation, saved.Host, saved.GrantID, saved.Epoch, saved.ControlFence,
 			saved.ProjectionCursor, saved.ObservationCursor, saved.ProcessCursor, versions, saved.EvidenceSequence,
-			nullableEnvironmentTime(saved.WaitingSince), saved.SettleCompleted,
+			nullableEnvironmentTime(saved.WaitingSince), saved.SettleCompleted, syncPaths,
 			saved.Revision, saved.UpdatedAt, saved.AttemptID.String()); err != nil {
 			return nil, fmt.Errorf("save attempt environment owner state: %w", err)
 		}
@@ -369,6 +388,46 @@ func encodeProjectedVersions(versions map[model.AttemptWorkspaceEntryID]model.Wo
 		return nil, fmt.Errorf("encode projected versions: %w", err)
 	}
 	return encoded, nil
+}
+
+// attemptEnvironmentSyncPathDocument is the persisted spelling of one
+// guest path's sync status.
+type attemptEnvironmentSyncPathDocument struct {
+	Path   string `json:"path"`
+	Status string `json:"status"`
+	Reason string `json:"reason"`
+}
+
+// encodeAttemptEnvironmentSyncPaths writes the statuses as a JSON array,
+// never null.
+func encodeAttemptEnvironmentSyncPaths(paths []model.AttemptEnvironmentSyncPath) ([]byte, error) {
+	documents := make([]attemptEnvironmentSyncPathDocument, len(paths))
+	for index, path := range paths {
+		documents[index] = attemptEnvironmentSyncPathDocument{Path: path.Path, Status: string(path.Status), Reason: path.Reason}
+	}
+	encoded, err := json.Marshal(documents)
+	if err != nil {
+		return nil, fmt.Errorf("encode attempt environment sync paths: %w", err)
+	}
+	return encoded, nil
+}
+
+func decodeAttemptEnvironmentSyncPaths(encoded []byte) ([]model.AttemptEnvironmentSyncPath, error) {
+	var documents []attemptEnvironmentSyncPathDocument
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&documents); err != nil {
+		return nil, err
+	}
+	if len(documents) == 0 {
+		return nil, nil
+	}
+	paths := make([]model.AttemptEnvironmentSyncPath, len(documents))
+	for index, document := range documents {
+		paths[index] = model.AttemptEnvironmentSyncPath{Path: document.Path,
+			Status: model.AttemptEnvironmentSyncStatus(document.Status), Reason: document.Reason}
+	}
+	return paths, nil
 }
 
 func nullableEnvironmentTime(at time.Time) sql.NullTime {

@@ -67,6 +67,8 @@ func TestAutomaticSealUsesBoundedSystemAuditAndPublishesOnlyFreshResult(t *testi
 	require.Equal(t, jobID.String(), f.systemAudit.values["job_id"])
 	require.Equal(t, jobAttemptID.String(), f.systemAudit.values["job_attempt_id"])
 	require.Equal(t, target.AttemptID.String(), f.systemAudit.values["exam_attempt_id"])
+	require.Equal(t, []model.ExamAttemptID{target.AttemptID}, f.settler.awaited, "the seal waits for the settle the closing Sitting asked")
+	require.Empty(t, f.settler.settled, "the automatic seal asks for no new settle")
 	f.submissions.automaticResult.Replayed = true
 	f.submissions.automaticResult.ConnectionClosed = false
 	_, err = f.service.SealForSittingClose(context.Background(), invocation.System{JobID: jobID, AttemptID: jobAttemptID}, target)

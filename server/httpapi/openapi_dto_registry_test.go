@@ -118,6 +118,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"CandidateWorkspaceBatchMutation":                reflect.TypeOf(candidateWorkspaceBatchMutation{}),
 	"CandidateWorkspaceBatchResponse":                reflect.TypeOf(candidateWorkspaceBatchResponse{}),
 	"CandidateEnvironmentResponse":                   reflect.TypeOf(candidateEnvironmentResponse{}),
+	"CandidateEnvironmentPath":                       reflect.TypeOf(candidateEnvironmentPath{}),
 	"CandidateTerminal":                              reflect.TypeOf(terminalResponse{}),
 	"CandidateTerminals":                             reflect.TypeOf(terminalsResponse{}),
 	"OpenCandidateTerminalRequest":                   reflect.TypeOf(openTerminalRequest{}),

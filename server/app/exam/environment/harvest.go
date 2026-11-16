@@ -128,13 +128,15 @@ type harvestNotes struct {
 
 // harvester plans and commits one harvest against the Workspace view.
 type harvester struct {
-	owner   *owner
-	policy  IgnorePolicy
-	sim     *tree
-	ignored map[string]bool
-	dropped map[uint64]bool
-	limit   int
-	notes   harvestNotes
+	owner  *owner
+	policy IgnorePolicy
+	// ignoredBy names what the policy's ignore decisions come from.
+	ignoredBy string
+	sim       *tree
+	ignored   map[string]bool
+	dropped   map[uint64]bool
+	limit     int
+	notes     harvestNotes
 }
 
 // The outcomes of one batch commit.
@@ -163,6 +165,10 @@ func (o *owner) harvest(ctx context.Context) error {
 	}
 	h := &harvester{owner: o, policy: policy, ignored: map[string]bool{}, dropped: map[uint64]bool{},
 		limit: MaxProjectionMutations, notes: harvestNotes{codes: map[string]int{}}}
+	h.ignoredBy = model.AttemptEnvironmentIgnoredByFile
+	if policy.Fallback() {
+		h.ignoredBy = model.AttemptEnvironmentIgnoredByDefault
+	}
 	observations := coalesce(o.pending)
 	start, splitUntil := 0, 0
 	for start < len(observations) {
@@ -250,12 +256,14 @@ func (h *harvester) plan(observation Observation) (plannedChange, bool, bool) {
 		}
 		if !h.policy.Observed(observation.Path, directory) {
 			h.ignored[observation.NodeIdentity] = true
+			h.status(observation.Path, model.AttemptEnvironmentPathIgnored, h.ignoredBy)
 			return plannedChange{}, true, false
 		}
 		if parent := path.Dir(observation.Path); parent != "." {
 			if container := h.sim.byPath[parent]; container == nil || container.Kind != kindDirectory {
 				// Under a directory the Workspace does not hold.
 				h.ignored[observation.NodeIdentity] = true
+				h.status(observation.Path, model.AttemptEnvironmentPathIgnored, model.AttemptEnvironmentIgnoredByParent)
 				return plannedChange{}, true, false
 			}
 		}
@@ -265,11 +273,16 @@ func (h *harvester) plan(observation Observation) (plannedChange, bool, bool) {
 		return link(createFile(observation)), false, false
 	case ObserveWriteFile:
 		if item == nil {
-			if h.ignored[observation.NodeIdentity] || !h.policy.Observed(observation.Path, false) || observation.Content == nil {
+			if h.ignored[observation.NodeIdentity] || observation.Content == nil {
+				return plannedChange{}, true, false
+			}
+			if !h.policy.Observed(observation.Path, false) {
+				h.status(observation.Path, model.AttemptEnvironmentPathIgnored, h.ignoredBy)
 				return plannedChange{}, true, false
 			}
 			if parent := path.Dir(observation.Path); parent != "." {
 				if container := h.sim.byPath[parent]; container == nil || container.Kind != kindDirectory {
+					h.status(observation.Path, model.AttemptEnvironmentPathIgnored, model.AttemptEnvironmentIgnoredByParent)
 					return plannedChange{}, true, false
 				}
 			}
@@ -294,6 +307,8 @@ func (h *harvester) plan(observation Observation) (plannedChange, bool, bool) {
 		}), false, false
 	case ObserveMove:
 		if item == nil {
+			// A path the Workspace never held moved away.
+			h.owner.row.ClearSyncPath(observation.Path)
 			return plannedChange{}, true, false
 		}
 		if item.pending {
@@ -309,6 +324,8 @@ func (h *harvester) plan(observation Observation) (plannedChange, bool, bool) {
 		}), false, false
 	case ObserveDelete:
 		if item == nil {
+			// A path the Workspace never held is gone.
+			h.owner.row.ClearSyncPath(observation.Path)
 			return plannedChange{}, true, false
 		}
 		if item.pending {
@@ -415,6 +432,7 @@ func (h *harvester) commit(ctx context.Context, batch []plannedChange) (batchOut
 	entries, err := o.deps.Workspace.Apply(ctx, access, WorkspaceBatch{
 		Mutations: mutations, ExpectedCursor: expected, Content: content,
 		IdempotencyKey: harvestKey(o.row.GrantID, o.row.Epoch, access.Tag, mutations, expected),
+		Resources:      o.row.Resources,
 	})
 	for _, body := range opened {
 		_ = body.Close()
@@ -445,6 +463,13 @@ func (h *harvester) commit(ctx context.Context, batch []plannedChange) (batchOut
 	}
 	if len(entries) != len(batch) {
 		return 0, fmt.Errorf("a harvest batch answered %d changes for %d mutations", len(entries), len(batch))
+	}
+	for _, planned := range batch {
+		// A stored change is synced.
+		h.owner.row.ClearSyncPath(planned.source.Path)
+		if planned.mutation.DestinationPath != "" {
+			h.owner.row.ClearSyncPath(planned.mutation.DestinationPath)
+		}
 	}
 	for index, planned := range batch {
 		if !planned.confirm {
@@ -506,6 +531,7 @@ func (h *harvester) note(observation Observation, code string) {
 		return
 	}
 	h.dropped[observation.HostSequence] = true
+	h.status(observation.Path, model.AttemptEnvironmentPathRefused, code)
 	h.notes.refused++
 	h.notes.codes[code]++
 	if len(h.notes.paths) < maxNotedChanges {
@@ -517,6 +543,7 @@ func (h *harvester) note(observation Observation, code string) {
 // journal's version stays; the projection brings it back to the machine.
 func (h *harvester) lose(observation Observation, code string) {
 	h.dropped[observation.HostSequence] = true
+	h.status(observation.Path, model.AttemptEnvironmentPathRefused, code)
 	h.notes.overwritten++
 	if len(h.notes.lost) >= maxNotedChanges {
 		return
@@ -529,6 +556,12 @@ func (h *harvester) lose(observation Observation, code string) {
 		change["sha256"], change["size"] = observation.Content.SHA256, observation.Content.Size
 	}
 	h.notes.lost = append(h.notes.lost, change)
+}
+
+// status records the sync status of a guest path the harvest did not store.
+// It is kept on the environment row, never in logs or audit.
+func (h *harvester) status(name string, status model.AttemptEnvironmentSyncStatus, reason string) {
+	h.owner.row.NoteSyncPath(model.AttemptEnvironmentSyncPath{Path: name, Status: status, Reason: reason})
 }
 
 // record stores what the harvest could not keep, one record per kind.

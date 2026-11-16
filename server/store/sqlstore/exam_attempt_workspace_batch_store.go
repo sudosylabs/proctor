@@ -559,6 +559,9 @@ func applyAttemptWorkspaceBatch(
 		outcome.ProtectedObjectIDs = append(outcome.ProtectedObjectIDs, effect.protected...)
 	}
 
+	if err = trimAttemptWorkspaceJournal(ctx, tx, target.WorkspaceID); err != nil {
+		return zero, err
+	}
 	if err = ensureAttemptWorkspaceCapacity(ctx, tx, target.WorkspaceID); err != nil {
 		return zero, err
 	}

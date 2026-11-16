@@ -54,7 +54,10 @@ func (o EnvironmentOwner) access() (store.ExamAttemptWorkspaceEnvironmentAccess,
 // EnvironmentWorkspaceBatchCommand is a batch an execution environment
 // harvested from its guest, written on the candidate's behalf.
 type EnvironmentWorkspaceBatchCommand struct {
-	Owner                   EnvironmentOwner
+	Owner EnvironmentOwner
+	// Resources are the environment's profile resources, which size its
+	// write budget.
+	Resources               model.EnvironmentResources
 	Mutations               []WorkspaceBatchMutation
 	ExpectedWorkspaceCursor *int64
 	Content                 WorkspaceBatchContent
@@ -81,9 +84,13 @@ func (s *Service) ApplyEnvironmentWorkspaceBatch(
 	if err != nil {
 		return WorkspaceBatchResult{}, err
 	}
+	if !command.Resources.Valid() {
+		return WorkspaceBatchResult{}, apperror.Invalid("exam.attempt.invalid", "environment_resources")
+	}
 
 	return s.applyWorkspaceWrite(ctx, workspaceWriter{
-		access: environmentAccess,
+		access:    environmentAccess,
+		resources: command.Resources,
 		beginAudit: func(ctx context.Context, target *store.ExamAttemptWorkspaceMutationTarget, value map[string]any) (model.AuditEventID, error) {
 			// The audit leads back to the system work that wrote.
 			if system.Task != "" {

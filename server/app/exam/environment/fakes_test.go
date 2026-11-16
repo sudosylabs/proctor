@@ -60,6 +60,7 @@ func (f *environmentsFake) SaveOwner(_ context.Context, input *store.AttemptEnvi
 		owner.ObservationCursor
 	saved.ProcessCursor, saved.ProjectedVersions = owner.ProcessCursor, maps.Clone(owner.ProjectedVersions)
 	saved.EvidenceSequence, saved.WaitingSince = owner.EvidenceSequence, owner.WaitingSince
+	saved.SyncPaths, saved.SettleCompleted = slices.Clone(owner.SyncPaths), owner.SettleCompleted
 	saved.Revision++
 	saved.UpdatedAt = time.Now().UTC()
 	if err := saved.Validate(); err != nil {

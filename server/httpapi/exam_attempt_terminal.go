@@ -251,7 +251,8 @@ func (h examAttemptTerminalHandlers) open(request route.Request) (route.Result, 
 
 // candidateEnvironmentResponse is the candidate's execution environment.
 // A Workspace entry whose last change is past projection_cursor is not in
-// the machine yet.
+// the machine yet; paths lists the guest paths that are not in the
+// Workspace.
 type candidateEnvironmentResponse struct {
 	State            model.AttemptEnvironmentState   `json:"state"`
 	Desired          model.AttemptEnvironmentDesired `json:"desired"`
@@ -259,6 +260,15 @@ type candidateEnvironmentResponse struct {
 	ProjectionCursor int64                           `json:"projection_cursor"`
 	TerminalLimit    int                             `json:"terminal_limit"`
 	WaitingSince     *string                         `json:"waiting_since,omitempty"`
+	Paths            []candidateEnvironmentPath      `json:"paths"`
+}
+
+// candidateEnvironmentPath is the sync status of one guest path the
+// environment did not store.
+type candidateEnvironmentPath struct {
+	Path   string                             `json:"path"`
+	Status model.AttemptEnvironmentSyncStatus `json:"status"`
+	Reason string                             `json:"reason"`
 }
 
 func (h examAttemptTerminalHandlers) environment(request route.Request) (route.Result, error) {
@@ -272,7 +282,10 @@ func (h examAttemptTerminalHandlers) environment(request route.Request) (route.R
 	}
 	response := candidateEnvironmentResponse{State: environment.State, Desired: environment.Desired,
 		Incarnation: environment.Incarnation, ProjectionCursor: environment.ProjectionCursor,
-		TerminalLimit: environment.Terminals}
+		TerminalLimit: environment.Terminals, Paths: make([]candidateEnvironmentPath, len(environment.SyncPaths))}
+	for index, path := range environment.SyncPaths {
+		response.Paths[index] = candidateEnvironmentPath{Path: path.Path, Status: path.Status, Reason: path.Reason}
+	}
 	if !environment.WaitingSince.IsZero() {
 		value := model.FormatRFC3339(environment.WaitingSince)
 		response.WaitingSince = &value

@@ -1861,7 +1861,7 @@ export interface paths {
         };
         /**
          * Read the Attempt's execution environment
-         * @description Returns what the Attempt's execution environment does and how far the Attempt Workspace has reached it. A Workspace entry whose last journal change is past projection_cursor is not in the machine yet, which a client can mark as not yet synced. A guest change waits about a second at most before it is saved, so the client needs no marker for that direction.
+         * @description Returns what the Attempt's execution environment does and the sync status of its files in both directions. A Workspace entry whose last journal change is past projection_cursor is not in the machine yet, which a client can mark as not yet synced. A guest change waits about a second at most before it is saved; paths lists the guest paths the environment did not save, each ignored (by the Workspace's .proctorignore, the default patterns, or a parent directory that is not saved) or refused with the Workspace's reason, such as a quota or a conflict the Workspace won. Every other guest path is synced. The list keeps the latest status of at most 256 paths, the newest last, and a path leaves it once a later change to it is saved or the guest removes it.
          */
         get: operations["getCandidateEnvironment"];
         put?: never;
@@ -7423,10 +7423,23 @@ export interface components {
             /** @enum {string} */
             reason: "attempt_in_progress";
         };
+        CandidateEnvironmentPath: {
+            /** @description The path under /workspace. */
+            path: string;
+            /** @description For ignored, what ignored it: .proctorignore, default (the default patterns, while the Workspace has no .proctorignore that parses) or parent_not_synced. For refused, the Workspace's public error code, such as exam.attempt.workspace.size_limit or exam.attempt.workspace.content_conflict. */
+            reason: string;
+            /**
+             * @description ignored stays on the machine; refused was not accepted by the Workspace.
+             * @enum {string}
+             */
+            status: "ignored" | "refused";
+        };
         CandidateEnvironmentResponse: {
             desired: components["schemas"]["AttemptEnvironmentDesired"];
             /** Format: int64 */
             incarnation: number;
+            /** @description The guest paths that are not in the Attempt Workspace, oldest first. */
+            paths: components["schemas"]["CandidateEnvironmentPath"][];
             /**
              * Format: int64
              * @description The Workspace journal cursor the machine holds.

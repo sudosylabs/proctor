@@ -90,6 +90,9 @@ type Dependencies struct {
 	// after its facts or Workspace change. Nil wakes nobody; the runtime's
 	// backstop still finds the change.
 	EnvironmentWaker environment.Waker
+	// EnvironmentSettles delivers the settles owners complete, which a seal
+	// waits on. Nil settles nothing before a seal.
+	EnvironmentSettles environment.SettleSubscriber
 	// EnvironmentDiagnostics receives execution environment failures nobody
 	// else sees, such as a settle that could not be asked. Nil drops them.
 	EnvironmentDiagnostics func(model.ExamAttemptID, error)

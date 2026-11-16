@@ -5791,6 +5791,11 @@ CREATE TABLE exam_attempt_environments (
     settle_requested bigint NOT NULL DEFAULT 0 CHECK (settle_requested >= 0),
     settle_completed bigint NOT NULL DEFAULT 0
         CHECK (settle_completed >= 0 AND settle_completed <= settle_requested),
+    -- When the last settle was asked; its budget counts from then.
+    settle_requested_at timestamptz,
+    -- The latest sync status of guest paths the owner did not store, oldest
+    -- first: [{"path", "status", "reason"}]. Derived state, never audited.
+    sync_paths jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(sync_paths) = 'array'),
     -- A manager's replacement: the owner replaces the machine until its
     -- incarnation reaches this one.
     replace_before bigint NOT NULL DEFAULT 0
@@ -5801,7 +5806,10 @@ CREATE TABLE exam_attempt_environments (
     CONSTRAINT exam_attempt_environments_grant_check CHECK (
         (host IS NULL) = (grant_id IS NULL) AND (grant_id IS NULL) = (epoch IS NULL)
     ),
-    CONSTRAINT exam_attempt_environments_ended_check CHECK (state <> 'ended' OR desired = 'ended')
+    CONSTRAINT exam_attempt_environments_ended_check CHECK (state <> 'ended' OR desired = 'ended'),
+    CONSTRAINT exam_attempt_environments_settle_asked_check CHECK (
+        (settle_requested = 0) = (settle_requested_at IS NULL)
+    )
 );
 CREATE INDEX exam_attempt_environments_sitting_idx ON exam_attempt_environments (exam_sitting_id);
 CREATE INDEX exam_attempt_environments_profile_idx ON exam_attempt_environments (environment_profile_id);

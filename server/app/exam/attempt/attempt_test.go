@@ -480,11 +480,17 @@ func chainHasCode(err error, code string) bool {
 	return false
 }
 
-// settlerFake records the Attempts it was asked to settle.
+// settlerFake records the Attempts it was asked to settle, and those whose
+// pending settle it was asked to wait for.
 type settlerFake struct {
 	settled []model.ExamAttemptID
+	awaited []model.ExamAttemptID
 }
 
 func (s *settlerFake) Settle(_ context.Context, attemptID model.ExamAttemptID) {
 	s.settled = append(s.settled, attemptID)
+}
+
+func (s *settlerFake) AwaitPendingSettle(_ context.Context, attemptID model.ExamAttemptID) {
+	s.awaited = append(s.awaited, attemptID)
 }

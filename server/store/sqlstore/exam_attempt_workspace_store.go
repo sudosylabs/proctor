@@ -1407,16 +1407,35 @@ func appendAttemptWorkspaceJournal(
 		}
 	}
 
+	return change, nil
+}
+
+// trimAttemptWorkspaceJournal drops the journal entries no reader needs.
+// It keeps the last AttemptWorkspaceJournalRetention entries, and while the
+// Attempt's execution environment has not ended, every entry after its
+// projection cursor too, so a busy build never pushes the projection past
+// the window; never more than AttemptWorkspaceJournalCeiling entries. A
+// reader past what is kept refreshes from the manifest.
+func trimAttemptWorkspaceJournal(ctx context.Context, tx *sqlxTxWrapper, workspaceID model.ExamAttemptWorkspaceID) error {
 	if _, err := tx.Exec(
 		ctx,
-		`DELETE FROM exam_attempt_workspace_journal WHERE workspace_id = ? AND cursor <= ?`,
+		`DELETE FROM exam_attempt_workspace_journal journal
+		USING exam_attempt_workspaces workspace
+		LEFT JOIN exam_attempt_environments environment
+			ON environment.exam_attempt_id = workspace.exam_attempt_id AND environment.state <> 'ended'
+		WHERE workspace.id = ?
+			AND journal.workspace_id = workspace.id
+			AND journal.cursor <= GREATEST(
+				workspace.cursor - ?,
+				LEAST(COALESCE(environment.projection_cursor, workspace.cursor), workspace.cursor - ?)
+			)`,
 		workspaceID.String(),
-		cursor-model.AttemptWorkspaceJournalRetention,
+		model.AttemptWorkspaceJournalCeiling,
+		model.AttemptWorkspaceJournalRetention,
 	); err != nil {
-		return nil, fmt.Errorf("trim Attempt Workspace journal: %w", err)
+		return fmt.Errorf("trim Attempt Workspace journal: %w", err)
 	}
-
-	return change, nil
+	return nil
 }
 
 func translateAttemptWorkspaceMutationError(operation string, err error) error {

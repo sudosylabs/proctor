@@ -21,7 +21,13 @@ const (
 	AttemptWorkspaceMaximumPathBytes    = 1024
 	AttemptWorkspaceMaximumFileBytes    = ExamWorkspaceMaximumFileBytes
 	AttemptWorkspaceMaximumTotalBytes   = ExamWorkspaceMaximumTotalBytes
-	AttemptWorkspaceJournalRetention    = 4096
+	// AttemptWorkspaceJournalRetention is how many journal entries an
+	// Attempt Workspace keeps at least. While its execution environment has
+	// not ended, the journal also reaches back to the environment's
+	// projection cursor, up to AttemptWorkspaceJournalCeiling entries; a
+	// reader past what is kept refreshes from the manifest.
+	AttemptWorkspaceJournalRetention = 4096
+	AttemptWorkspaceJournalCeiling   = 65536
 	// AttemptWorkspaceBatchMaximumMutations bounds one atomic Workspace batch,
 	// the only way Workspace content changes. It matches the execution
 	// environment's journal batch, so one harvest is at most one batch.

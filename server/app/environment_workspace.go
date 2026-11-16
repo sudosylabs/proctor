@@ -117,7 +117,7 @@ func (w environmentWorkspace) Apply(
 	result, err := w.attempts.ApplyEnvironmentWorkspaceBatch(ctx, invocation.Task(environmentTask),
 		attempt.EnvironmentWorkspaceBatchCommand{
 			Owner: environmentOwner(access), Mutations: mutations, ExpectedWorkspaceCursor: batch.ExpectedCursor,
-			Content: content, IdempotencyKey: batch.IdempotencyKey,
+			Content: content, IdempotencyKey: batch.IdempotencyKey, Resources: batch.Resources,
 		})
 	if err != nil {
 		return nil, environmentWriteError(err)

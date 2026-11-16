@@ -9,6 +9,7 @@ package storetest
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -143,6 +144,9 @@ func testAttemptEnvironmentWriter(t *testing.T, ss store.Store, workspace store.
 	ctx := context.Background()
 	t.Run("environment writer", func(t *testing.T) {
 		testAttemptEnvironmentWriterLifecycle(t, ctx, ss, workspace)
+	})
+	t.Run("journal kept back to the projection", func(t *testing.T) {
+		testAttemptWorkspaceJournalRetention(t, ctx, ss, workspace)
 	})
 	if len(probes) == 0 || probes[0].SetParticipationLeaseExpired == nil || probes[0].PassSittingScheduledEnd == nil {
 		return
@@ -300,4 +304,80 @@ func testAttemptEnvironmentWriterLifecycle(t *testing.T, ctx context.Context, ss
 	_, err = RevokeAllUserSessions(ctx, ss, fixture.candidate.ID, model.NowUTC())
 	require.NoError(t, err)
 	requireEnvironmentWrites(t, ctx, ss, fixture, reclaimed, "after-revocation", "a revoked Session")
+}
+
+// testAttemptWorkspaceJournalRetention checks that the journal reaches back
+// to a live environment's projection cursor past the fixed window, and to
+// the fixed window once the environment has ended.
+func testAttemptWorkspaceJournalRetention(t *testing.T, ctx context.Context, ss store.Store, workspace store.ExamAttemptWorkspaceStore) {
+	t.Helper()
+	fixture := newExecutionAttemptFixture(t, ctx, ss)
+	connected, editor := connectEnvironmentFixture(t, ctx, ss, fixture, "retention-connect")
+	attemptID := connected.Attempt.ID
+	owner, _ := ownTestEnvironment(t, ctx, ss, attemptID, fixture.sitting.ID, connected.Participation.Generation)
+
+	entryID := model.NewAttemptWorkspaceEntryID()
+	created, err := workspace.ApplyBatch(ctx, newAttemptWorkspaceBatch(t, ctx, ss, fixture, editor, store.ExamAttemptWorkspaceMutation{
+		Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: entryID, DestinationPath: "loop"}),
+		attemptWorkspaceBatchCommand(fixture.candidate.ID, "retention-create"))
+	require.NoError(t, err)
+	projected := created.Changes[0].Cursor
+
+	// The machine holds the Workspace up to the directory.
+	current, err := ss.AttemptEnvironment().Get(ctx, attemptID)
+	require.NoError(t, err)
+	running := *current
+	running.State, running.ProjectionCursor = model.AttemptEnvironmentRunning, projected
+	_, err = ss.AttemptEnvironment().SaveOwner(ctx, &store.AttemptEnvironmentOwnerSave{Lease: owner.lease,
+		ExpectedRevision: current.Revision, Environment: running})
+	require.NoError(t, err)
+
+	// A build moves the directory back and forth, well past the fixed
+	// window, while the projection stays behind.
+	cursor := projected
+	for batch := 0; cursor-projected <= model.AttemptWorkspaceJournalRetention+model.AttemptWorkspaceBatchMaximumMutations; batch++ {
+		mutations := make([]store.ExamAttemptWorkspaceMutation, model.AttemptWorkspaceBatchMaximumMutations)
+		for index := range mutations {
+			from, to := "loop", "spin"
+			if index%2 == 1 {
+				from, to = to, from
+			}
+			mutations[index] = store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationMoveEntry,
+				EntryID: entryID, ExpectedPath: from, DestinationPath: to}
+		}
+		applied, applyErr := workspace.ApplyBatch(ctx, newAttemptWorkspaceBatch(t, ctx, ss, fixture, editor, mutations...),
+			attemptWorkspaceBatchCommand(fixture.candidate.ID, "retention-move-"+strconv.Itoa(batch)))
+		require.NoError(t, applyErr)
+		cursor = applied.Changes[len(applied.Changes)-1].Cursor
+	}
+	behind, err := workspace.ListJournal(ctx, store.CandidateWorkspaceJournalOptions{Access: journalAccess(editor),
+		AfterCursor: projected, Limit: 10})
+	require.NoError(t, err)
+	require.False(t, behind.RefreshRequired, "the journal reaches back to the live projection")
+	require.Equal(t, projected+1, behind.Entries[0].Cursor)
+
+	// Once the environment has ended, the next batch keeps only the fixed
+	// window, and the old projection must refresh.
+	_, err = ss.AttemptEnvironment().ApplyFact(ctx, model.AttemptEnvironmentFact{Kind: model.AttemptEnvironmentFactSubmitted,
+		AttemptID: attemptID, SittingID: fixture.sitting.ID, OccurredAt: model.NowUTC()})
+	require.NoError(t, err)
+	current, err = ss.AttemptEnvironment().Get(ctx, attemptID)
+	require.NoError(t, err)
+	ended := *current
+	ended.State, ended.Host, ended.GrantID, ended.Epoch = model.AttemptEnvironmentEnded, "", "", ""
+	_, err = ss.AttemptEnvironment().SaveOwner(ctx, &store.AttemptEnvironmentOwnerSave{Lease: owner.lease,
+		ExpectedRevision: current.Revision, Environment: ended})
+	require.NoError(t, err)
+	last, err := workspace.ApplyBatch(ctx, newAttemptWorkspaceBatch(t, ctx, ss, fixture, editor, store.ExamAttemptWorkspaceMutation{
+		Operation: model.AttemptWorkspaceMutationCreateDirectory, EntryID: model.NewAttemptWorkspaceEntryID(), DestinationPath: "after"}),
+		attemptWorkspaceBatchCommand(fixture.candidate.ID, "retention-after"))
+	require.NoError(t, err)
+	pruned, err := workspace.ListJournal(ctx, store.CandidateWorkspaceJournalOptions{Access: journalAccess(editor),
+		AfterCursor: projected, Limit: 10})
+	require.NoError(t, err)
+	require.True(t, pruned.RefreshRequired, "without a live environment the fixed window applies")
+	window, err := workspace.ListJournal(ctx, store.CandidateWorkspaceJournalOptions{Access: journalAccess(editor),
+		AfterCursor: last.Changes[0].Cursor - model.AttemptWorkspaceJournalRetention, Limit: 10})
+	require.NoError(t, err)
+	require.False(t, window.RefreshRequired, "the fixed window is kept")
 }

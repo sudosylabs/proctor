@@ -347,10 +347,22 @@ func (h *Hosts) IgnoreRules(file string, fallback []string) (environment.IgnoreR
 type ignoreRules struct{ rules *ignore.Rules }
 
 func (r ignoreRules) Policy(body []byte, present bool) environment.IgnorePolicy {
-	return ignorePolicy{policy: r.rules.Policy(body, present)}
+	fallback := !present || len(body) > ignore.MaxFileBytes
+	if !fallback {
+		_, err := ignore.Parse(body)
+		fallback = err != nil
+	}
+	return ignorePolicy{policy: r.rules.Policy(body, present), fallback: fallback}
 }
 
-type ignorePolicy struct{ policy ignore.Policy }
+// ignorePolicy is execenv's decision and whether it is the fallback's,
+// which execenv's matcher decides by the same parse.
+type ignorePolicy struct {
+	policy   ignore.Policy
+	fallback bool
+}
+
+func (p ignorePolicy) Fallback() bool { return p.fallback }
 
 func (p ignorePolicy) Observed(name string, directory bool) bool {
 	return p.policy.Observed(name, directory, false)

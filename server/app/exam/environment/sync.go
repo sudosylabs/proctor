@@ -10,6 +10,8 @@ package environment
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -42,11 +44,70 @@ func (o *owner) prepare(ctx context.Context) error {
 		return err
 	}
 	if o.row.State == model.AttemptEnvironmentCreating {
+		if o.row.Incarnation == 0 && manifest.byPath[IgnoreFile] == nil {
+			written, err := o.writeDefaultIgnore(ctx)
+			if err != nil {
+				return err
+			}
+			if written {
+				if manifest, err = o.listManifest(ctx); err != nil {
+					return err
+				}
+			}
+		}
 		return o.initialize(ctx, manifest)
 	}
 	o.ahead = manifest
 	o.ready = true
 	return nil
+}
+
+// defaultIgnoreHeader opens the default ignore file, so the candidate sees
+// what it does.
+const defaultIgnoreHeader = `# Paths that stay on the execution machine: they are never saved to your
+# Workspace or submitted. The syntax is .gitignore's. A pattern stops only
+# new paths; a file already saved keeps syncing until you delete it in the
+# editor. This file is saved and submitted itself.
+`
+
+// DefaultIgnoreFile is the IgnoreFile a new Attempt Workspace that uses
+// execution gets: the header and DefaultIgnorePatterns, one per line.
+func DefaultIgnoreFile() []byte {
+	return []byte(defaultIgnoreHeader + strings.Join(DefaultIgnorePatterns, "\n") + "\n")
+}
+
+// writeDefaultIgnore gives the Workspace the default IgnoreFile, as the
+// environment, when the first machine of an Attempt is first prepared and
+// the Workspace has none: a Starter's own copy, or one the candidate wrote,
+// is never replaced. Its idempotency key is the Attempt's, so an owner that
+// restarts before recording the projection replays the same write instead
+// of making another. A refusal, such as a candidate's file created
+// meanwhile or a full Workspace, leaves it out; the defaults apply anyway.
+func (o *owner) writeDefaultIgnore(ctx context.Context) (bool, error) {
+	body := DefaultIgnoreFile()
+	sum := sha256.Sum256(body)
+	served := false
+	_, err := o.deps.Workspace.Apply(ctx, o.access(), WorkspaceBatch{
+		Mutations: []WorkspaceMutation{{Operation: model.AttemptWorkspaceMutationCreateFile, DestinationPath: IgnoreFile,
+			MediaType: "text/plain", SHA256: hex.EncodeToString(sum[:]), Size: int64(len(body))}},
+		Content: func(context.Context) (io.Reader, error) {
+			if served {
+				return nil, io.ErrUnexpectedEOF
+			}
+			served = true
+			return bytes.NewReader(body), nil
+		},
+		IdempotencyKey: "execution.default-ignore:" + o.attemptID.String(),
+		Resources:      o.row.Resources,
+	})
+	var refusal *WorkspaceRefusal
+	if errors.As(err, &refusal) {
+		return false, nil
+	}
+	if err != nil {
+		return false, o.workspaceError(err)
+	}
+	return true, nil
 }
 
 // listManifest reads the whole Workspace manifest at one cursor.

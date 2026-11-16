@@ -146,6 +146,9 @@ type IgnoreRules interface {
 type IgnorePolicy interface {
 	// Observed reports whether a path the Workspace does not hold is kept.
 	Observed(name string, directory bool) bool
+	// Fallback reports whether the default patterns decide, because the
+	// Workspace has no ignore file or one that does not parse.
+	Fallback() bool
 }
 
 // Fence names one authorized effect on one machine. Revision grows with

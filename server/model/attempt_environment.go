@@ -8,7 +8,9 @@
 package model
 
 import (
+	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // AttemptEnvironmentDesired is what Attempt facts ask of an environment.
@@ -117,8 +119,16 @@ type AttemptEnvironment struct {
 	// SettleRequested counts the settles asked of the environment before a
 	// seal; SettleCompleted is the last of them the owner finished, or that
 	// was recorded as incomplete. A settle is pending while it is behind.
-	SettleRequested int64
-	SettleCompleted int64
+	// SettleRequestedAt is when the last of them was asked: its budget
+	// counts from then.
+	SettleRequested   int64
+	SettleCompleted   int64
+	SettleRequestedAt time.Time
+	// SyncPaths is the latest sync status of each guest path the owner did
+	// not store, oldest first and at most AttemptEnvironmentSyncPathsMaximum.
+	// A path the Workspace holds is synced and not listed. It is derived from
+	// the harvests and is no authority.
+	SyncPaths []AttemptEnvironmentSyncPath
 	// ReplaceBefore is the incarnation a manager's replacement asked for:
 	// while Incarnation is below it, the owner replaces the machine.
 	ReplaceBefore int64
@@ -154,8 +164,10 @@ func (e *AttemptEnvironment) Validate() error {
 		return invalidModelError(where, "attempt_environment", "cursors", "cannot be negative", "")
 	case e.ReplaceBefore < 0 || e.ReplaceBefore > e.Incarnation+1:
 		return invalidModelError(where, "attempt_environment", "replace_before", "asks at most for the next incarnation", "")
-	case e.SettleCompleted < 0 || e.SettleRequested < e.SettleCompleted:
-		return invalidModelError(where, "attempt_environment", "settle", "completes only what was requested", "")
+	case e.SettleCompleted < 0 || e.SettleRequested < e.SettleCompleted || (e.SettleRequested > 0) == e.SettleRequestedAt.IsZero():
+		return invalidModelError(where, "attempt_environment", "settle", "completes only what was requested, when it was asked", "")
+	case !validSyncPaths(e.SyncPaths):
+		return invalidModelError(where, "attempt_environment", "sync_paths", "lists distinct, bounded path statuses", "")
 	case !validProjectedVersions(e.ProjectedVersions):
 		return invalidModelError(where, "attempt_environment", "projected_versions", "names valid files and versions", "")
 	case e.CreatedAt.IsZero() || e.UpdatedAt.Before(e.CreatedAt):
@@ -174,6 +186,124 @@ func validProjectedVersions(versions map[AttemptWorkspaceEntryID]WorkspaceConten
 		}
 	}
 	return true
+}
+
+// AttemptEnvironmentSyncStatus says why a guest path is not in the
+// Attempt Workspace.
+type AttemptEnvironmentSyncStatus string
+
+const (
+	// AttemptEnvironmentPathIgnored stays on the machine: an ignore rule,
+	// or the default patterns, keep it there.
+	AttemptEnvironmentPathIgnored AttemptEnvironmentSyncStatus = "ignored"
+	// AttemptEnvironmentPathRefused was refused by the Workspace, such as
+	// over a quota, or lost a conflict to a newer Workspace version.
+	AttemptEnvironmentPathRefused AttemptEnvironmentSyncStatus = "refused"
+)
+
+func (s AttemptEnvironmentSyncStatus) IsValid() bool {
+	return s == AttemptEnvironmentPathIgnored || s == AttemptEnvironmentPathRefused
+}
+
+// The reasons of an ignored path that name what ignored it.
+const (
+	// AttemptEnvironmentIgnoredByDefault: the default patterns apply, as the
+	// Workspace has no ignore file or one that does not parse.
+	AttemptEnvironmentIgnoredByDefault = "default"
+	// AttemptEnvironmentIgnoredByFile: a pattern of the Workspace's
+	// .proctorignore.
+	AttemptEnvironmentIgnoredByFile = ".proctorignore"
+	// AttemptEnvironmentIgnoredByParent: the path is under a directory the
+	// Workspace does not hold.
+	AttemptEnvironmentIgnoredByParent = "parent_not_synced"
+)
+
+const (
+	// AttemptEnvironmentSyncPathsMaximum bounds the paths an environment
+	// keeps a status for; the oldest go first.
+	AttemptEnvironmentSyncPathsMaximum = 256
+	// AttemptEnvironmentSyncReasonMaximumBytes bounds one reason.
+	AttemptEnvironmentSyncReasonMaximumBytes = 128
+)
+
+// AttemptEnvironmentSyncPath is the sync status of one guest path: ignored
+// with what ignored it, or refused with the Workspace's public code.
+type AttemptEnvironmentSyncPath struct {
+	Path   string
+	Status AttemptEnvironmentSyncStatus
+	Reason string
+}
+
+// Valid reports whether the path is a bounded relative path with a known
+// status and a reason token.
+func (p AttemptEnvironmentSyncPath) Valid() bool {
+	return validSyncPathName(p.Path) && p.Status.IsValid() && validSyncReason(p.Reason)
+}
+
+func validSyncPathName(name string) bool {
+	return name != "" && len(name) <= AttemptWorkspaceMaximumPathBytes && utf8.ValidString(name) &&
+		!strings.ContainsRune(name, 0) && !strings.HasPrefix(name, "/")
+}
+
+func validSyncReason(reason string) bool {
+	if reason == "" || len(reason) > AttemptEnvironmentSyncReasonMaximumBytes {
+		return false
+	}
+	for index := 0; index < len(reason); index++ {
+		c := reason[index]
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '.' && c != '_' && c != '-' {
+			return false
+		}
+	}
+	return true
+}
+
+func validSyncPaths(paths []AttemptEnvironmentSyncPath) bool {
+	if len(paths) > AttemptEnvironmentSyncPathsMaximum {
+		return false
+	}
+	seen := make(map[string]bool, len(paths))
+	for _, path := range paths {
+		if !path.Valid() || seen[path.Path] {
+			return false
+		}
+		seen[path.Path] = true
+	}
+	return true
+}
+
+// NoteSyncPath records the latest status of a guest path the owner did not
+// store, dropping the oldest past the bound. A path too long for the
+// Workspace keeps no status.
+func (e *AttemptEnvironment) NoteSyncPath(path AttemptEnvironmentSyncPath) {
+	if !path.Valid() {
+		return
+	}
+	e.clearSyncPath(path.Path, false)
+	e.SyncPaths = append(e.SyncPaths, path)
+	if excess := len(e.SyncPaths) - AttemptEnvironmentSyncPathsMaximum; excess > 0 {
+		e.SyncPaths = append([]AttemptEnvironmentSyncPath(nil), e.SyncPaths[excess:]...)
+	}
+}
+
+// ClearSyncPath forgets the status of name, which is stored or gone, and of
+// every path under it.
+func (e *AttemptEnvironment) ClearSyncPath(name string) {
+	e.clearSyncPath(name, true)
+}
+
+func (e *AttemptEnvironment) clearSyncPath(name string, descendants bool) {
+	kept := e.SyncPaths[:0:0]
+	for _, path := range e.SyncPaths {
+		if path.Path == name || (descendants && strings.HasPrefix(path.Path, name+"/")) {
+			continue
+		}
+		kept = append(kept, path)
+	}
+	if len(kept) == 0 {
+		kept = nil
+	}
+	e.SyncPaths = kept
 }
 
 // Done reports whether nothing is left to do: the Attempt is sealed and its
@@ -292,6 +422,7 @@ func (e *AttemptEnvironment) ApplyFact(fact AttemptEnvironmentFact, participatio
 		// The Sitting's sealing Job waits for its environments to settle.
 		e.SettleRequested++
 		e.touch(at)
+		e.SettleRequestedAt = e.UpdatedAt
 		return true
 	}
 	if e.Desired == before && generation == e.Generation {
@@ -321,6 +452,7 @@ func (e *AttemptEnvironment) RequestSettle(at time.Time) int64 {
 	}
 	e.SettleRequested++
 	e.touch(at)
+	e.SettleRequestedAt = e.UpdatedAt
 	return e.SettleRequested
 }
 

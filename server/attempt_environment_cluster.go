@@ -28,24 +28,27 @@ import (
 const attemptEnvironmentWakeEvent cluster.Event = "exam.attempt.environment.wake"
 
 const (
-	// attemptEnvironmentWakeQueue bounds the wakes waiting to be broadcast;
-	// beyond it a wake is dropped for the backstop to find.
-	attemptEnvironmentWakeQueue = 1024
-	// attemptEnvironmentWakeTimeout bounds one broadcast.
-	attemptEnvironmentWakeTimeout = 2 * time.Second
+	// attemptEnvironmentBroadcastQueue bounds the messages waiting to be
+	// broadcast; beyond it a message is dropped for its backstop to cover.
+	attemptEnvironmentBroadcastQueue = 1024
+	// attemptEnvironmentBroadcastTimeout bounds one broadcast.
+	attemptEnvironmentBroadcastTimeout = 2 * time.Second
 )
 
-type attemptEnvironmentWakeMessage struct {
+// attemptEnvironmentMessage is every environment cluster message: only the
+// Attempt ID travels.
+type attemptEnvironmentMessage struct {
 	AttemptID string `json:"attempt_id"`
 }
 
-// environmentWaker implements environment.Waker across the cluster: it wakes
-// the owner on this node, when the runtime is attached, and broadcasts the
-// wake to peers from one sender, never blocking the caller.
-type environmentWaker struct {
+// attemptBroadcast sends one event naming an Attempt to every peer from one
+// sender, never blocking the caller, and hands each valid message a peer
+// sends to deliver.
+type attemptBroadcast struct {
 	cluster borrowedCluster
+	event   cluster.Event
 	report  func(error)
-	runtime atomic.Pointer[environment.Runtime]
+	deliver func(model.ExamAttemptID)
 
 	queue   chan model.ExamAttemptID
 	stop    chan struct{}
@@ -55,30 +58,125 @@ type environmentWaker struct {
 	started atomic.Bool
 }
 
-func newEnvironmentWaker(transport borrowedCluster, report func(error)) (*environmentWaker, error) {
+func newAttemptBroadcast(
+	transport borrowedCluster,
+	event cluster.Event,
+	report func(error),
+	deliver func(model.ExamAttemptID),
+) (*attemptBroadcast, error) {
 	if transport == nil {
 		return nil, errors.New("cluster is nil")
 	}
-	w := &environmentWaker{
+	b := &attemptBroadcast{
 		cluster: transport,
+		event:   event,
 		report:  report,
-		queue:   make(chan model.ExamAttemptID, attemptEnvironmentWakeQueue),
+		deliver: deliver,
+		queue:   make(chan model.ExamAttemptID, attemptEnvironmentBroadcastQueue),
 		stop:    make(chan struct{}),
 		done:    make(chan struct{}),
 	}
-	if err := transport.RegisterHandler(attemptEnvironmentWakeEvent, w.receive); err != nil {
-		return nil, fmt.Errorf("register attempt environment wake: %w", err)
+	if err := transport.RegisterHandler(event, b.receive); err != nil {
+		return nil, fmt.Errorf("register %s: %w", event, err)
 	}
-	return w, nil
+	return b, nil
 }
 
-// Start begins broadcasting queued wakes. It runs once.
-func (w *environmentWaker) Start(context.Context) error {
-	w.start.Do(func() {
-		w.started.Store(true)
-		go w.send()
+// Start begins broadcasting queued messages. It runs once.
+func (b *attemptBroadcast) Start(context.Context) error {
+	b.start.Do(func() {
+		b.started.Store(true)
+		go b.send()
 	})
 	return nil
+}
+
+// enqueue queues attemptID for the peers, or drops it when the queue is
+// full.
+func (b *attemptBroadcast) enqueue(attemptID model.ExamAttemptID) {
+	select {
+	case b.queue <- attemptID:
+	default:
+	}
+}
+
+func (b *attemptBroadcast) send() {
+	defer close(b.done)
+	for {
+		select {
+		case <-b.stop:
+			return
+		case attemptID := <-b.queue:
+			data, err := json.Marshal(attemptEnvironmentMessage{AttemptID: attemptID.String()})
+			if err != nil {
+				b.fail(err)
+				continue
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), attemptEnvironmentBroadcastTimeout)
+			err = b.cluster.Broadcast(ctx, &cluster.Message{Event: b.event, Data: data})
+			cancel()
+			if err != nil {
+				b.fail(fmt.Errorf("broadcast %s: %w", b.event, err))
+			}
+		}
+	}
+}
+
+func (b *attemptBroadcast) receive(_ context.Context, message *cluster.Message) error {
+	if message == nil {
+		return errors.New("cluster message is nil")
+	}
+	if err := message.Validate(); err != nil {
+		return err
+	}
+	var decoded attemptEnvironmentMessage
+	if err := json.Unmarshal(message.Data, &decoded); err != nil {
+		return fmt.Errorf("decode %s: %w", b.event, err)
+	}
+	attemptID := model.ExamAttemptID(decoded.AttemptID)
+	if !attemptID.IsValid() {
+		return fmt.Errorf("%s names an invalid Attempt ID", b.event)
+	}
+	b.deliver(attemptID)
+	return nil
+}
+
+// Close stops the sender; queued messages are dropped for their backstop.
+func (b *attemptBroadcast) Close(ctx context.Context) error {
+	b.once.Do(func() { close(b.stop) })
+	if !b.started.Load() {
+		return nil
+	}
+	select {
+	case <-b.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (b *attemptBroadcast) fail(err error) {
+	if b.report != nil {
+		b.report(err)
+	}
+}
+
+// environmentWaker implements environment.Waker across the cluster: it wakes
+// the owner on this node, when the runtime is attached, and broadcasts the
+// wake to peers, never blocking the caller.
+type environmentWaker struct {
+	*attemptBroadcast
+	runtime atomic.Pointer[environment.Runtime]
+}
+
+func newEnvironmentWaker(transport borrowedCluster, report func(error)) (*environmentWaker, error) {
+	w := &environmentWaker{}
+	broadcast, err := newAttemptBroadcast(transport, attemptEnvironmentWakeEvent, report, w.wakeHere)
+	if err != nil {
+		return nil, fmt.Errorf("construct attempt environment wake: %w", err)
+	}
+	w.attemptBroadcast = broadcast
+	return w, nil
 }
 
 // attach makes runtime the local owner runtime that wakes reach.
@@ -91,75 +189,13 @@ func (w *environmentWaker) Wake(attemptID model.ExamAttemptID) {
 	if !attemptID.IsValid() {
 		return
 	}
+	w.wakeHere(attemptID)
+	w.enqueue(attemptID)
+}
+
+func (w *environmentWaker) wakeHere(attemptID model.ExamAttemptID) {
 	if runtime := w.runtime.Load(); runtime != nil {
 		runtime.Wake(attemptID)
-	}
-	select {
-	case w.queue <- attemptID:
-	default:
-	}
-}
-
-func (w *environmentWaker) send() {
-	defer close(w.done)
-	for {
-		select {
-		case <-w.stop:
-			return
-		case attemptID := <-w.queue:
-			data, err := json.Marshal(attemptEnvironmentWakeMessage{AttemptID: attemptID.String()})
-			if err != nil {
-				w.fail(err)
-				continue
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), attemptEnvironmentWakeTimeout)
-			err = w.cluster.Broadcast(ctx, &cluster.Message{Event: attemptEnvironmentWakeEvent, Data: data})
-			cancel()
-			if err != nil {
-				w.fail(fmt.Errorf("broadcast attempt environment wake: %w", err))
-			}
-		}
-	}
-}
-
-func (w *environmentWaker) receive(_ context.Context, message *cluster.Message) error {
-	if message == nil {
-		return errors.New("cluster message is nil")
-	}
-	if err := message.Validate(); err != nil {
-		return err
-	}
-	var wake attemptEnvironmentWakeMessage
-	if err := json.Unmarshal(message.Data, &wake); err != nil {
-		return fmt.Errorf("decode attempt environment wake: %w", err)
-	}
-	attemptID := model.ExamAttemptID(wake.AttemptID)
-	if !attemptID.IsValid() {
-		return errors.New("attempt environment wake ID is invalid")
-	}
-	if runtime := w.runtime.Load(); runtime != nil {
-		runtime.Wake(attemptID)
-	}
-	return nil
-}
-
-// Close stops the sender; queued wakes are dropped for the backstop.
-func (w *environmentWaker) Close(ctx context.Context) error {
-	w.once.Do(func() { close(w.stop) })
-	if !w.started.Load() {
-		return nil
-	}
-	select {
-	case <-w.done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-func (w *environmentWaker) fail(err error) {
-	if w.report != nil {
-		w.report(err)
 	}
 }
 

@@ -22,11 +22,13 @@ import (
 )
 
 // attemptEnvironments is the node's execution environment runtime: the
-// cluster waker, the owner runtime and the execution host clients. It is
-// inert until Start; Close stops the owners, then the waker, then the host
-// clients. Machines keep running on their hosts for the next owner.
+// cluster waker and settle signals, the owner runtime and the execution host
+// clients. It is inert until Start; Close stops the owners, then the cluster
+// senders, then the host clients. Machines keep running on their hosts for
+// the next owner.
 type attemptEnvironments struct {
 	waker   *environmentWaker
+	settles *environmentSettles
 	runtime *environment.Runtime
 	hosts   *executionhost.Hosts
 }
@@ -58,21 +60,28 @@ func prepareAttemptEnvironments(snapshot config.Config, inputs attemptEnvironmen
 	if err != nil {
 		return nil, fmt.Errorf("construct attempt environment waker: %w", err)
 	}
+	settles, err := newEnvironmentSettles(inputs.cluster, func(err error) {
+		logger.Warn("could not broadcast an attempt environment settle", logging.Err(err))
+	})
+	if err != nil {
+		return nil, err
+	}
 	hosts, err := executionhost.New(executionhost.Config{Hosts: snapshot.Execution.Hosts, Dial: inputs.dial,
 		AllowUnisolated: inputs.allowUnisolated || inputs.dial != nil})
 	if err != nil {
 		return nil, fmt.Errorf("construct execution hosts: %w", err)
 	}
-	return &attemptEnvironments{waker: waker, hosts: hosts}, nil
+	return &attemptEnvironments{waker: waker, settles: settles, hosts: hosts}, nil
 }
 
-// attach gives the application the waker, its diagnostics and the hosts
-// its terminals reach machines through.
+// attach gives the application the waker, the settle signals its seals wait
+// on, its diagnostics and the hosts its terminals reach machines through.
 func (e *attemptEnvironments) attach(deps *app.Dependencies, inputs attemptEnvironmentInputs) {
 	if e == nil {
 		return
 	}
 	deps.EnvironmentWaker = e.waker
+	deps.EnvironmentSettles = e.settles
 	deps.EnvironmentDiagnostics = environmentReporter(inputs)
 	deps.EnvironmentHosts = e.hosts
 }
@@ -97,6 +106,7 @@ func (e *attemptEnvironments) complete(
 		Evidence:     inputs.persistence.ExamAttemptWorkspace(),
 		Workspace:    workspace,
 		Hosts:        hosts,
+		Settled:      e.settles,
 		Report:       report,
 	})
 	if err != nil {
@@ -125,15 +135,18 @@ func environmentReporter(inputs attemptEnvironmentInputs) func(model.ExamAttempt
 	}
 }
 
-// Start begins broadcasting wakes and owning environments.
+// Start begins broadcasting wakes and settles and owning environments.
 func (e *attemptEnvironments) Start(ctx context.Context) error {
 	if err := e.waker.Start(ctx); err != nil {
+		return err
+	}
+	if err := e.settles.Start(ctx); err != nil {
 		return err
 	}
 	return e.runtime.Start(ctx)
 }
 
-// Close stops the owners, the waker and the host clients.
+// Close stops the owners, the cluster senders and the host clients.
 func (e *attemptEnvironments) Close(ctx context.Context) error {
-	return errors.Join(e.runtime.Close(ctx), e.waker.Close(ctx), e.hosts.Close())
+	return errors.Join(e.runtime.Close(ctx), e.waker.Close(ctx), e.settles.Close(ctx), e.hosts.Close())
 }

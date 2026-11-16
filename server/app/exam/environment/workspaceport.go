@@ -102,7 +102,7 @@ type WorkspaceMutation struct {
 	Size                   int64
 }
 
-// WorkspaceBatch is one harvested batch. Content returns the body of each
+// WorkspaceBatch is one batch the environment writes. Content returns the body of each
 // file mutation, in order; the Workspace reads each before asking for the
 // next.
 type WorkspaceBatch struct {
@@ -110,6 +110,9 @@ type WorkspaceBatch struct {
 	ExpectedCursor *int64
 	Content        func(ctx context.Context) (io.Reader, error)
 	IdempotencyKey string
+	// Resources are the environment's profile resources, which size the
+	// environment's write budget.
+	Resources model.EnvironmentResources
 }
 
 // Workspace is the owner's port to the Attempt Workspace: the environment

@@ -183,8 +183,8 @@ type Dependencies struct {
 	// the owner's backstop finds the change.
 	EnvironmentWaker EnvironmentWaker
 	// EnvironmentSettler brings an execution environment's last guest
-	// changes into the Workspace before a voluntary or manager seal. It is
-	// optional: without one, nothing is settled.
+	// changes into the Workspace before a voluntary, manager or automatic
+	// seal. It is optional: without one, nothing is settled.
 	EnvironmentSettler EnvironmentSettler
 	// Environments are the Attempt Environments a manager replaces. It is
 	// optional: without it, no Attempt has one.
@@ -192,12 +192,16 @@ type Dependencies struct {
 }
 
 // EnvironmentSettler settles an Attempt's execution environment before its
-// seal: the owner freezes the guest and harvests every change it made. Settle
-// returns once that is done or its bounded budget is spent; an incomplete
-// settle is recorded as an execution gap, never returned as a refusal, so the
-// seal always goes ahead. An Attempt without an environment settles at once.
+// seal: the owner harvests every change the guest made. Settle asks for a
+// settle and returns once it is done or its bounded budget is spent;
+// AwaitPendingSettle asks for none and waits, within what is left of its
+// budget, for the settle a closing Sitting already asked. An incomplete
+// settle is recorded as an execution gap, never returned as a refusal, so
+// the seal always goes ahead. An Attempt without an environment, or with
+// nothing pending, settles at once.
 type EnvironmentSettler interface {
 	Settle(ctx context.Context, attemptID model.ExamAttemptID)
+	AwaitPendingSettle(ctx context.Context, attemptID model.ExamAttemptID)
 }
 
 // EnvironmentWaker wakes the owner of an Attempt's execution environment,
@@ -341,6 +345,6 @@ func New(deps Dependencies) (*Service, error) {
 		newJobID:             deps.NewJob,
 		liveControls:         controlAdmission{lane: liveControlLane},
 		deliveryControls:     controlAdmission{lane: deliveryControlLane},
-		workspaceBudget:      newWorkspaceWriteBudget(workspaceWriteRates),
+		workspaceBudget:      newWorkspaceWriteBudget(workspaceWriteRateFor),
 	}, nil
 }

@@ -132,8 +132,11 @@ func (s *Service) ApplyCandidateExamWorkspaceBatch(
 // before the Store resolves one (zero for the environment), and how the audit
 // attempt records the candidate as actor.
 type workspaceWriter struct {
-	access     store.ExamAttemptWorkspaceWriteAccess
-	candidate  model.UserID
+	access    store.ExamAttemptWorkspaceWriteAccess
+	candidate model.UserID
+	// resources are the environment's profile, which size its budget; zero
+	// for the editor.
+	resources  model.EnvironmentResources
 	beginAudit func(context.Context, *store.ExamAttemptWorkspaceMutationTarget, map[string]any) (model.AuditEventID, error)
 }
 
@@ -178,7 +181,8 @@ func (s *Service) applyWorkspaceWrite(ctx context.Context, writer workspaceWrite
 
 	// The budget is spent before anything is reserved or staged, so a writer
 	// that outruns it costs storage nothing. An exact retry spends again.
-	if !s.workspaceBudget.spend(attemptID, writer.access.WorkspaceAuthor().Kind, len(write.Mutations), bytes, s.now()) {
+	if !s.workspaceBudget.spend(attemptID, writer.access.WorkspaceAuthor().Kind, writer.resources, len(write.Mutations),
+		bytes, s.now()) {
 		return WorkspaceBatchResult{}, apperror.New("exam.attempt.workspace.rate_limited")
 	}
 

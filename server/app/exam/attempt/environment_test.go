@@ -40,7 +40,8 @@ func TestEnvironmentBatchWritesAsTheCandidateThroughTheSameBatch(t *testing.T) {
 	mutations := []WorkspaceBatchMutation{createFile("main.go", checksum, 4)}
 
 	result, err := f.service.ApplyEnvironmentWorkspaceBatch(context.Background(), environmentCaller, EnvironmentWorkspaceBatchCommand{
-		Owner: owner, Mutations: mutations, Content: batchContent(f, "main"), IdempotencyKey: "harvest-1"})
+		Owner: owner, Resources: environmentResourcesFixture, Mutations: mutations, Content: batchContent(f, "main"),
+		IdempotencyKey: "harvest-1"})
 	require.NoError(t, err)
 
 	want := store.ExamAttemptWorkspaceEnvironmentAccess{AttemptID: owner.AttemptID, Incarnation: owner.Incarnation, Fence: owner.Fence,
@@ -139,7 +140,8 @@ func TestEnvironmentBatchMapsAStaleOwnerToAClosedConnection(t *testing.T) {
 	workspaceTargetFixture(f)
 	f.workspace.reserveErr = store.NewErrConflict("attempt_environment", "attempt_environment_owner", nil)
 	_, err := f.service.ApplyEnvironmentWorkspaceBatch(context.Background(), environmentCaller, EnvironmentWorkspaceBatchCommand{
-		Owner: environmentOwnerFixture(f), Mutations: []WorkspaceBatchMutation{createDirectory("src")}, IdempotencyKey: "harvest"})
+		Owner: environmentOwnerFixture(f), Resources: environmentResourcesFixture, Mutations: []WorkspaceBatchMutation{createDirectory("src")},
+		IdempotencyKey: "harvest"})
 	requireBatchFault(t, err, "exam.attempt.connection_closed", "", "")
 	require.Nil(t, f.systemAudit.values, "a refused writer begins no audit")
 }
@@ -166,3 +168,6 @@ func TestEnvironmentReadsUseTheOwnerAsReadAccess(t *testing.T) {
 	_, err = f.service.OpenEnvironmentWorkspaceFile(context.Background(), environmentCaller, EnvironmentWorkspaceFileQuery{Owner: owner})
 	requireBatchFault(t, err, "exam.attempt.invalid", "attempt_workspace_entry_id", "")
 }
+
+// environmentResourcesFixture is the profile an environment batch carries.
+var environmentResourcesFixture = model.EnvironmentResources{CPUMillis: 1000, MemoryBytes: 512 << 20, DiskBytes: 1 << 30}

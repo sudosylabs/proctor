@@ -381,12 +381,13 @@ func sittingLifecycleJobs(deps Dependencies) jobs.ExamSittingLifecycleJobFactory
 // environmentSettler settles execution environments before their seals when
 // the installation runs them; otherwise nothing settles.
 func environmentSettler(deps Dependencies) attempt.EnvironmentSettler {
-	if !deps.ExecutionEnabled || deps.Store.AttemptEnvironment() == nil {
+	if !deps.ExecutionEnabled || deps.Store.AttemptEnvironment() == nil || deps.EnvironmentSettles == nil {
 		return nil
 	}
 	settler, err := environment.NewSettler(environment.SettlerConfig{
 		Environments:  deps.Store.AttemptEnvironment(),
 		Waker:         deps.EnvironmentWaker,
+		Signals:       deps.EnvironmentSettles,
 		Budget:        attemptEnvironmentSettleBudget,
 		NewEvidenceID: model.NewIntegrityEvidenceID,
 		Report:        deps.EnvironmentDiagnostics,

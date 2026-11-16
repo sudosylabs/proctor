@@ -110,6 +110,9 @@ type OwnerDependencies struct {
 	Evidence  store.ExamAttemptWorkspaceStore
 	Workspace Workspace
 	Hosts     Hosts
+	// Settled tells the seal waiting on a settle that the owner completed
+	// it. Nil tells nobody: the waiter rereads the row when its budget ends.
+	Settled SettleNotifier
 	// Now is the clock; nil uses time.Now.
 	Now func() time.Time
 	// Report receives failures an owner recovers from by retrying. Nil
@@ -426,7 +429,13 @@ func (o *owner) completeSettle(ctx context.Context) error {
 		}
 	}
 	o.row.SettleCompleted = o.row.SettleRequested
-	return o.save(ctx)
+	if err := o.save(ctx); err != nil {
+		return err
+	}
+	if o.deps.Settled != nil {
+		o.deps.Settled.Settled(o.attemptID)
+	}
+	return nil
 }
 
 // spec is the machine the row names. It is derived from the row alone, so
@@ -563,7 +572,7 @@ func (o *owner) place(ctx context.Context) error {
 		o.row.Host, o.row.GrantID, o.row.Epoch = candidate.Name, grantID, machine.Epoch()
 		o.row.State, o.row.WaitingSince = model.AttemptEnvironmentCreating, time.Time{}
 		o.row.ControlFence, o.row.ProjectionCursor, o.row.ObservationCursor, o.row.ProcessCursor = 0, 0, 0, 0
-		o.row.ProjectedVersions = nil
+		o.row.ProjectedVersions, o.row.SyncPaths = nil, nil
 		if err := o.save(ctx); err != nil {
 			_ = machine.Revoke(ctx)
 			return err
@@ -643,6 +652,8 @@ func (o *owner) restart(ctx context.Context, reason string) error {
 	o.row.Host, o.row.GrantID, o.row.Epoch = "", "", ""
 	o.row.State, o.row.ControlFence, o.row.EvidenceSequence = model.AttemptEnvironmentLost, 0, 0
 	o.row.ProjectionCursor, o.row.ObservationCursor, o.row.ProcessCursor, o.row.ProjectedVersions = 0, 0, 0, nil
+	// A new machine holds only the Workspace.
+	o.row.SyncPaths = nil
 	if err := o.save(ctx); err != nil {
 		return err
 	}
@@ -722,7 +733,8 @@ func (o *owner) ownerStateChanged() bool {
 		row.ControlFence != saved.ControlFence || row.ProjectionCursor != saved.ProjectionCursor ||
 		row.ObservationCursor != saved.ObservationCursor || row.ProcessCursor != saved.ProcessCursor ||
 		row.EvidenceSequence != saved.EvidenceSequence || !row.WaitingSince.Equal(saved.WaitingSince) ||
-		!maps.Equal(row.ProjectedVersions, saved.ProjectedVersions) || row.SettleCompleted != saved.SettleCompleted
+		!maps.Equal(row.ProjectedVersions, saved.ProjectedVersions) || row.SettleCompleted != saved.SettleCompleted ||
+		!slices.Equal(row.SyncPaths, saved.SyncPaths)
 }
 
 // copyOwnerState puts the owner's fields of from onto to.
@@ -732,7 +744,7 @@ func copyOwnerState(to, from *model.AttemptEnvironment) {
 	to.ControlFence, to.ProjectionCursor = from.ControlFence, from.ProjectionCursor
 	to.ObservationCursor, to.ProcessCursor = from.ObservationCursor, from.ProcessCursor
 	to.ProjectedVersions, to.EvidenceSequence = from.ProjectedVersions, from.EvidenceSequence
-	to.WaitingSince = from.WaitingSince
+	to.WaitingSince, to.SyncPaths = from.WaitingSince, from.SyncPaths
 	to.SettleCompleted = max(to.SettleCompleted, from.SettleCompleted)
 	if to.Desired != model.AttemptEnvironmentDesiredEnded && to.State == model.AttemptEnvironmentEnded {
 		to.State = model.AttemptEnvironmentPending

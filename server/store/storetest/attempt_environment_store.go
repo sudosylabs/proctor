@@ -168,6 +168,10 @@ func TestAttemptEnvironmentStore(t *testing.T, ss store.Store) {
 	owned.ProjectedVersions = map[model.AttemptWorkspaceEntryID]model.WorkspaceContentVersion{
 		projectedFile: model.NewWorkspaceContentVersion(),
 	}
+	owned.SyncPaths = []model.AttemptEnvironmentSyncPath{
+		{Path: "node_modules", Status: model.AttemptEnvironmentPathIgnored, Reason: model.AttemptEnvironmentIgnoredByDefault},
+		{Path: "big.bin", Status: model.AttemptEnvironmentPathRefused, Reason: "exam.attempt.workspace.size_limit"},
+	}
 	saved, err := environments.SaveOwner(ctx, &store.AttemptEnvironmentOwnerSave{Lease: *renewed,
 		ExpectedRevision: environment.Revision, Environment: owned})
 	require.NoError(t, err)
@@ -176,6 +180,12 @@ func TestAttemptEnvironmentStore(t *testing.T, ss store.Store) {
 	reread, err := environments.Get(ctx, attemptID)
 	require.NoError(t, err)
 	require.Equal(t, owned.ProjectedVersions, reread.ProjectedVersions, "the projected versions round-trip")
+	require.Equal(t, owned.SyncPaths, reread.SyncPaths, "the sync statuses round-trip in order")
+	invalid := owned
+	invalid.SyncPaths = []model.AttemptEnvironmentSyncPath{{Path: "x", Status: "synced", Reason: "default"}}
+	_, err = environments.SaveOwner(ctx, &store.AttemptEnvironmentOwnerSave{Lease: *renewed,
+		ExpectedRevision: saved.Revision, Environment: invalid})
+	requireInvalidInput(t, err, "SaveOwner(an unknown sync status)")
 	require.Equal(t, int64(2), reread.EvidenceSequence)
 	require.Equal(t, model.AttemptEnvironmentDesiredRunning, saved.Desired, "the owner does not set what is desired")
 	_, err = environments.SaveOwner(ctx, &store.AttemptEnvironmentOwnerSave{Lease: *renewed,
@@ -202,6 +212,7 @@ func TestAttemptEnvironmentStore(t *testing.T, ss store.Store) {
 	pending, err := environments.Get(ctx, attemptID)
 	require.NoError(t, err)
 	require.True(t, pending.SettlePending())
+	require.False(t, pending.SettleRequestedAt.IsZero(), "the settle's budget counts from when it was asked")
 	settled := *pending
 	settled.SettleCompleted = 2
 	_, err = environments.SaveOwner(ctx, &store.AttemptEnvironmentOwnerSave{Lease: *next,

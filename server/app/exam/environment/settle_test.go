@@ -19,76 +19,241 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// settleStoreFake completes a settle when told to, and records gaps.
+// settleRow is one environment's settle counters in settleStoreFake.
+type settleRow struct {
+	requested, completed int64
+	requestedAt          time.Time
+}
+
+// settleStoreFake keeps settle counters per Attempt, counts every call, and
+// records gaps.
 type settleStoreFake struct {
 	store.AttemptEnvironmentStore
-	mu        sync.Mutex
-	none      bool
-	requested int64
-	completed int64
-	gaps      []store.AttemptEnvironmentSettleGap
+	mu       sync.Mutex
+	rows     map[model.ExamAttemptID]*settleRow
+	gets     int
+	requests int
+	gaps     []store.AttemptEnvironmentSettleGap
+	// onGet runs after each read, outside the lock.
+	onGet func(model.ExamAttemptID)
 }
 
-func (f *settleStoreFake) RequestSettle(context.Context, model.ExamAttemptID) (int64, error) {
+func newSettleStoreFake() *settleStoreFake {
+	return &settleStoreFake{rows: map[model.ExamAttemptID]*settleRow{}}
+}
+
+func (f *settleStoreFake) add(attemptID model.ExamAttemptID, row settleRow) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.none {
+	f.rows[attemptID] = &row
+}
+
+func (f *settleStoreFake) RequestSettle(_ context.Context, attemptID model.ExamAttemptID) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.requests++
+	row := f.rows[attemptID]
+	if row == nil {
 		return 0, nil
 	}
-	f.requested++
-	return f.requested, nil
+	row.requested++
+	row.requestedAt = time.Now()
+	return row.requested, nil
 }
 
-func (f *settleStoreFake) Get(context.Context, model.ExamAttemptID) (*model.AttemptEnvironment, error) {
+func (f *settleStoreFake) Get(_ context.Context, attemptID model.ExamAttemptID) (*model.AttemptEnvironment, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
-	return &model.AttemptEnvironment{SettleRequested: f.requested, SettleCompleted: f.completed}, nil
+	f.gets++
+	row := f.rows[attemptID]
+	onGet := f.onGet
+	var environment *model.AttemptEnvironment
+	if row != nil {
+		environment = &model.AttemptEnvironment{AttemptID: attemptID, SettleRequested: row.requested,
+			SettleCompleted: row.completed, SettleRequestedAt: row.requestedAt}
+	}
+	f.mu.Unlock()
+	if onGet != nil {
+		onGet(attemptID)
+	}
+	if environment == nil {
+		return nil, store.NewErrNotFound("attempt_environment", attemptID.String())
+	}
+	return environment, nil
 }
 
 func (f *settleStoreFake) RecordSettleIncomplete(_ context.Context, gap *store.AttemptEnvironmentSettleGap) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	row := f.rows[gap.AttemptID]
+	if row.completed >= gap.Settle {
+		return nil
+	}
 	f.gaps = append(f.gaps, *gap)
-	f.completed = gap.Settle
+	row.completed = gap.Settle
 	return nil
 }
 
-// completingWaker plays an owner that settles as soon as it is woken.
-type completingWaker struct{ environments *settleStoreFake }
-
-func (w completingWaker) Wake(model.ExamAttemptID) {
-	w.environments.mu.Lock()
-	defer w.environments.mu.Unlock()
-	w.environments.completed = w.environments.requested
+// complete plays the owner finishing every settle asked of attemptID.
+func (f *settleStoreFake) complete(attemptID model.ExamAttemptID) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	row := f.rows[attemptID]
+	row.completed = row.requested
 }
 
-func TestSettlerWaitsForTheOwnerOrRecordsTheGap(t *testing.T) {
+func (f *settleStoreFake) counts() (gets, requests int, gaps []store.AttemptEnvironmentSettleGap) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.gets, f.requests, append([]store.AttemptEnvironmentSettleGap(nil), f.gaps...)
+}
+
+// signalsFake fans completed settles out to this node's subscribers.
+type signalsFake struct {
+	mu      sync.Mutex
+	waiters map[model.ExamAttemptID][]chan struct{}
+}
+
+func (s *signalsFake) SubscribeSettled(attemptID model.ExamAttemptID) (<-chan struct{}, func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.waiters == nil {
+		s.waiters = map[model.ExamAttemptID][]chan struct{}{}
+	}
+	signal := make(chan struct{}, 1)
+	s.waiters[attemptID] = append(s.waiters[attemptID], signal)
+	return signal, func() {}
+}
+
+func (s *signalsFake) Settled(attemptID model.ExamAttemptID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, signal := range s.waiters[attemptID] {
+		select {
+		case signal <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// signalingWaker plays an owner that settles and signals once it is woken,
+// from its own goroutine as a remote owner would.
+type signalingWaker struct {
+	environments *settleStoreFake
+	signals      *signalsFake
+}
+
+func (w signalingWaker) Wake(attemptID model.ExamAttemptID) {
+	go func() {
+		w.environments.complete(attemptID)
+		w.signals.Settled(attemptID)
+	}()
+}
+
+func TestSettlerWaitsForTheOwnersSignalWithoutPolling(t *testing.T) {
 	t.Parallel()
 	attemptID := model.NewExamAttemptID()
-	environments := &settleStoreFake{}
-	settler, err := NewSettler(SettlerConfig{Environments: environments, Waker: completingWaker{environments},
-		Budget: 200 * time.Millisecond, Poll: 5 * time.Millisecond, NewEvidenceID: model.NewIntegrityEvidenceID})
+	environments, signals := newSettleStoreFake(), &signalsFake{}
+	environments.add(attemptID, settleRow{})
+	settler, err := NewSettler(SettlerConfig{Environments: environments, Signals: signals,
+		Waker: signalingWaker{environments, signals}, Budget: time.Hour, NewEvidenceID: model.NewIntegrityEvidenceID})
 	require.NoError(t, err)
 
 	settler.Settle(t.Context(), attemptID)
-	require.Empty(t, environments.gaps, "an owner that settles in time leaves no gap")
+	gets, requests, gaps := environments.counts()
+	require.Empty(t, gaps, "an owner that settles in time leaves no gap")
+	require.Equal(t, 1, requests)
+	require.LessOrEqual(t, gets, 2, "the row is read once after the wake and once on the signal, never on a timer")
+}
 
-	// An owner that never answers costs the budget and a recorded gap.
-	silent, err := NewSettler(SettlerConfig{Environments: environments, Budget: 50 * time.Millisecond,
-		Poll: 5 * time.Millisecond, NewEvidenceID: model.NewIntegrityEvidenceID})
+func TestSettlerRecordsTheGapOfAnOwnerThatNeverAnswers(t *testing.T) {
+	t.Parallel()
+	attemptID := model.NewExamAttemptID()
+	environments := newSettleStoreFake()
+	environments.add(attemptID, settleRow{})
+	silent, err := NewSettler(SettlerConfig{Environments: environments, Signals: &signalsFake{},
+		Budget: 50 * time.Millisecond, NewEvidenceID: model.NewIntegrityEvidenceID})
 	require.NoError(t, err)
+
 	started := time.Now()
 	silent.Settle(t.Context(), attemptID)
-	require.GreaterOrEqual(t, time.Since(started), 50*time.Millisecond)
-	require.Len(t, environments.gaps, 1)
-	require.Equal(t, int64(2), environments.gaps[0].Settle)
-	require.Equal(t, attemptID, environments.gaps[0].AttemptID)
+	require.GreaterOrEqual(t, time.Since(started), 50*time.Millisecond, "the budget is spent")
+	gets, _, gaps := environments.counts()
+	require.Equal(t, 1, gets, "the wait reads the row once, not on a timer")
+	require.Len(t, gaps, 1)
+	require.Equal(t, int64(1), gaps[0].Settle)
+	require.Equal(t, attemptID, gaps[0].AttemptID)
 
 	// An Attempt without an environment settles at once.
-	environments.none = true
-	silent.Settle(t.Context(), attemptID)
-	require.Len(t, environments.gaps, 1)
+	silent.Settle(t.Context(), model.NewExamAttemptID())
+	_, _, gaps = environments.counts()
+	require.Len(t, gaps, 1)
 
-	_, err = NewSettler(SettlerConfig{Environments: environments})
+	_, err = NewSettler(SettlerConfig{Environments: environments, Signals: &signalsFake{}})
 	require.Error(t, err, "an evidence ID source is required")
+	_, err = NewSettler(SettlerConfig{Environments: environments, NewEvidenceID: model.NewIntegrityEvidenceID})
+	require.Error(t, err, "the settle signals are required")
+}
+
+func TestSettlerAwaitsAPendingSettleWithoutAskingAnother(t *testing.T) {
+	t.Parallel()
+	environments, signals := newSettleStoreFake(), &signalsFake{}
+	settler, err := NewSettler(SettlerConfig{Environments: environments, Signals: signals, Budget: time.Hour,
+		NewEvidenceID: model.NewIntegrityEvidenceID})
+	require.NoError(t, err)
+
+	// Nothing pending returns at once.
+	settled := model.NewExamAttemptID()
+	environments.add(settled, settleRow{requested: 1, completed: 1, requestedAt: time.Now()})
+	settler.AwaitPendingSettle(t.Context(), settled)
+	settler.AwaitPendingSettle(t.Context(), model.NewExamAttemptID())
+
+	// A pending settle the owner completes within its budget leaves no gap.
+	pending := model.NewExamAttemptID()
+	environments.add(pending, settleRow{requested: 1, requestedAt: time.Now()})
+	environments.mu.Lock()
+	environments.onGet = func(attemptID model.ExamAttemptID) {
+		if attemptID == pending {
+			go func() {
+				environments.complete(pending)
+				signals.Settled(pending)
+			}()
+		}
+	}
+	environments.mu.Unlock()
+	settler.AwaitPendingSettle(t.Context(), pending)
+
+	_, requests, gaps := environments.counts()
+	require.Zero(t, requests, "the automatic seal asks for no settle")
+	require.Empty(t, gaps)
+}
+
+func TestSettlerBoundsASittingCloseOfUnreachableHosts(t *testing.T) {
+	t.Parallel()
+	// Every environment of the Sitting was asked to settle when it began
+	// closing, the sealing Job waited the budget, and no owner answered.
+	// Each target finds its budget spent: the gap is recorded without a
+	// wait, so the close takes no budget per Attempt.
+	environments := newSettleStoreFake()
+	asked := time.Now().Add(-2 * DefaultSettleBudget)
+	targets := make([]model.ExamAttemptID, 200)
+	for index := range targets {
+		targets[index] = model.NewExamAttemptID()
+		environments.add(targets[index], settleRow{requested: 1, requestedAt: asked})
+	}
+	settler, err := NewSettler(SettlerConfig{Environments: environments, Signals: &signalsFake{},
+		NewEvidenceID: model.NewIntegrityEvidenceID})
+	require.NoError(t, err)
+
+	started := time.Now()
+	for _, attemptID := range targets {
+		settler.AwaitPendingSettle(t.Context(), attemptID)
+	}
+	require.Less(t, time.Since(started), DefaultSettleBudget, "the close is bounded by no budget per Attempt")
+	_, requests, gaps := environments.counts()
+	require.Zero(t, requests)
+	require.Len(t, gaps, len(targets), "every unsettled environment has its gap")
+	for index, gap := range gaps {
+		require.Equal(t, targets[index], gap.AttemptID)
+		require.Equal(t, int64(1), gap.Settle)
+	}
 }

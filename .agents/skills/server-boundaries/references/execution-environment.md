@@ -24,7 +24,10 @@ This file holds only the rules that must not drift.
   settle (drain, harvest, confirm, then freeze) runs before each seal within
   its budget. It is asked through the environment row, so the owner answers
   it on any node; anything it misses is a settle gap recorded before the
-  seal, and the seal proceeds. A voluntary seal's expected cursor fences only
+  seal, and the seal proceeds. The seal waits for the owner's completion
+  signal, never by rereading the row on a timer. A closing Sitting asks every
+  environment once; its automatic seals ask no new settle and wait only what
+  is left of that one's budget. A voluntary seal's expected cursor fences only
   candidate changes.
 - One Attempt Environment per Attempt, across Participations. It is driven by
   Attempt facts, never by a client.
@@ -58,8 +61,11 @@ This file holds only the rules that must not drift.
   observation. Do not add polling loops; a slow backstop is the only timer.
   The long poll runs beside the owner loop and only signals it, so it never
   delays a reaction to a journal wake or a fact.
-- Write budgets are per Attempt and author kind; quotas stay per Workspace and
-  bind every author.
+- Write budgets are per Attempt and author kind, the environment's sized by
+  its profile; quotas stay per Workspace and bind every author.
+- The journal is retained back to a live environment's projection cursor, up
+  to a hard ceiling; never shrink it to a fixed count while an environment
+  still projects.
 - `.proctorignore`:
   - It follows the git rule: patterns stop only new paths; already-synced
     paths keep syncing.

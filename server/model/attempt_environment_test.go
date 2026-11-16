@@ -8,6 +8,7 @@
 package model
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -95,11 +96,53 @@ func TestAttemptEnvironmentCountsSettles(t *testing.T) {
 	require.True(t, environment.ApplyFact(AttemptEnvironmentFact{Kind: AttemptEnvironmentFactSittingClosing,
 		SittingID: environment.SittingID}, true, false, at), "a closing Sitting asks for a settle")
 	require.Equal(t, int64(2), environment.SettleRequested)
+	require.Equal(t, at, environment.SettleRequestedAt, "the budget counts from the last settle asked")
 	require.True(t, environment.SettlePending())
 	environment.SettleCompleted = 3
 	require.Error(t, environment.Validate(), "nothing completes before it is asked")
 	environment.SettleCompleted = 2
 	require.NoError(t, environment.Validate())
+	environment.SettleRequestedAt = time.Time{}
+	require.Error(t, environment.Validate(), "a settle asked names when")
+	environment.SettleRequestedAt = at
 	environment.Desired = AttemptEnvironmentDesiredEnded
 	require.Zero(t, environment.RequestSettle(at), "an ended environment has nothing to settle")
+}
+
+func TestAttemptEnvironmentKeepsBoundedSyncPaths(t *testing.T) {
+	t.Parallel()
+	environment := testAttemptEnvironment()
+	ignored := AttemptEnvironmentSyncPath{Path: "build/out.o", Status: AttemptEnvironmentPathIgnored, Reason: AttemptEnvironmentIgnoredByDefault}
+	refused := AttemptEnvironmentSyncPath{Path: "big.bin", Status: AttemptEnvironmentPathRefused, Reason: "exam.attempt.workspace.size_limit"}
+	environment.NoteSyncPath(ignored)
+	environment.NoteSyncPath(refused)
+	environment.NoteSyncPath(AttemptEnvironmentSyncPath{Path: "/abs", Status: AttemptEnvironmentPathRefused, Reason: "x"})
+	environment.NoteSyncPath(AttemptEnvironmentSyncPath{Path: "a", Status: "synced", Reason: "x"})
+	environment.NoteSyncPath(AttemptEnvironmentSyncPath{Path: "a", Status: AttemptEnvironmentPathRefused, Reason: "Not A Code"})
+	require.Equal(t, []AttemptEnvironmentSyncPath{ignored, refused}, environment.SyncPaths, "only valid statuses are kept")
+	require.NoError(t, environment.Validate())
+
+	// The latest status of a path replaces its earlier one, as the newest.
+	again := ignored
+	again.Reason = AttemptEnvironmentIgnoredByFile
+	environment.NoteSyncPath(again)
+	require.Equal(t, []AttemptEnvironmentSyncPath{refused, again}, environment.SyncPaths)
+
+	// A stored or removed path, and every path under it, is synced.
+	environment.ClearSyncPath("build")
+	require.Equal(t, []AttemptEnvironmentSyncPath{refused}, environment.SyncPaths)
+	environment.ClearSyncPath("big.bin")
+	require.Nil(t, environment.SyncPaths)
+
+	// Past the bound the oldest go first.
+	for index := range AttemptEnvironmentSyncPathsMaximum + 2 {
+		environment.NoteSyncPath(AttemptEnvironmentSyncPath{Path: fmt.Sprintf("f%d", index), Status: AttemptEnvironmentPathIgnored,
+			Reason: AttemptEnvironmentIgnoredByDefault})
+	}
+	require.Len(t, environment.SyncPaths, AttemptEnvironmentSyncPathsMaximum)
+	require.Equal(t, "f2", environment.SyncPaths[0].Path)
+	require.NoError(t, environment.Validate())
+
+	environment.SyncPaths = append(environment.SyncPaths, environment.SyncPaths[0])
+	require.Error(t, environment.Validate(), "a path has one status")
 }

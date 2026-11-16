@@ -175,24 +175,30 @@ type httpRuntime interface {
 
 // ownershipListener transfers the bound listener at the first HTTP accept.
 // Until then Server remains responsible for closing it on cancellation.
+// A Close that arrives before the first accept is remembered: the accept
+// then refuses instead of taking ownership, because nothing would close the
+// listener it would block on and shutdown would wait forever.
 type ownershipListener struct {
 	net.Listener
 	accept func() bool
 	mu     sync.Mutex
 	once   sync.Once
 	owned  bool
+	closed bool
 }
 
 func (l *ownershipListener) Accept() (net.Conn, error) {
 	l.once.Do(func() {
 		l.mu.Lock()
-		l.owned = l.accept()
+		if !l.closed {
+			l.owned = l.accept()
+		}
 		l.mu.Unlock()
 	})
 	l.mu.Lock()
-	owned := l.owned
+	owned, closed := l.owned, l.closed
 	l.mu.Unlock()
-	if !owned {
+	if !owned || closed {
 		return nil, net.ErrClosed
 	}
 	return l.Listener.Accept()
@@ -200,6 +206,7 @@ func (l *ownershipListener) Accept() (net.Conn, error) {
 
 func (l *ownershipListener) Close() error {
 	l.mu.Lock()
+	l.closed = true
 	owned := l.owned
 	l.mu.Unlock()
 	if !owned {

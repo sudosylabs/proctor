@@ -366,6 +366,25 @@ func TestOwnershipListenerTransfersAtFirstAccept(t *testing.T) {
 	}
 }
 
+// A shutdown can close the listener before the HTTP server's first accept.
+// The accept must then refuse rather than take ownership of a listener no
+// one will close, or Shutdown waits for it forever.
+func TestOwnershipListenerRefusesAcceptAfterEarlyClose(t *testing.T) {
+	t.Parallel()
+
+	underlying := &lifecycleListener{}
+	var handoffs atomic.Int64
+	listener := &ownershipListener{Listener: underlying, accept: func() bool {
+		handoffs.Add(1)
+		return true
+	}}
+	require.NoError(t, listener.Close())
+	_, err := listener.Accept()
+	require.ErrorIs(t, err, net.ErrClosed)
+	require.Equal(t, int64(0), handoffs.Load(), "a closed listener is never handed off")
+	require.Equal(t, int64(0), underlying.accepted.Load(), "a closed listener never blocks in Accept")
+}
+
 func TestOwnershipListenerCloseWaitsForAtomicHandoff(t *testing.T) {
 	t.Parallel()
 

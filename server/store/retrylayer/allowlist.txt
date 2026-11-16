@@ -91,6 +91,8 @@ ExamAttemptStore.List                                      always
 ExamAttemptStore.GetCandidatePresentation                  always
 ExamAttemptStore.ResolveCandidateAccess                    always
 ExamAttemptStore.ResolveCandidateResource                  always
+# A replay finds its own receipt in the security control ledger, keyed by
+# control sequence and digest, and returns it without applying again.
 ExamAttemptStore.UpdateSecurity                            always
 
 # RecordFocusLoss is deliberately absent: after an unknown commit an

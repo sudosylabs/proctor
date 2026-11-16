@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sudosylabs/proctor/server/cluster"
 )
 
@@ -114,3 +115,120 @@ func (m *measuredCluster) metricEvent(event cluster.Event) string {
 }
 
 var _ cluster.Transport = (*measuredCluster)(nil)
+
+func (m *Module) newClusterCollectors() {
+	m.clusterOperations = prometheus.NewCounterVec(
+		prometheus.CounterOpts{Namespace: "proctor", Subsystem: "cluster", Name: "operations_total", Help: "Cluster transport operations."},
+		[]string{"operation", "event", "outcome"},
+	)
+	m.clusterDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "proctor",
+			Subsystem: "cluster",
+			Name:      "operation_duration_seconds",
+			Help:      "Cluster transport operation duration.",
+			Buckets:   prometheus.DefBuckets,
+		},
+		[]string{"operation", "event"},
+	)
+	m.clusterMessages = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "proctor",
+			Subsystem: "cluster",
+			Name:      "messages_total",
+			Help:      "Cluster messages by direction, registered event, and outcome.",
+		},
+		[]string{"direction", "event", "outcome"},
+	)
+	m.clusterMessageBytes = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "proctor",
+			Subsystem: "cluster",
+			Name:      "message_bytes_total",
+			Help:      "Cluster wire bytes by direction and registered event.",
+		},
+		[]string{"direction", "event"},
+	)
+	m.clusterMembership = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "proctor",
+			Subsystem: "cluster",
+			Name:      "membership_events_total",
+			Help:      "Memberlist membership transitions.",
+		},
+		[]string{"event"},
+	)
+	m.clusterDiscovery = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "proctor",
+			Subsystem: "cluster",
+			Name:      "discovery_operations_total",
+			Help:      "Cluster discovery and rejoin work by operation and outcome.",
+		},
+		[]string{"operation", "outcome"},
+	)
+	m.clusterAdmission = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "proctor",
+			Subsystem: "cluster",
+			Name:      "admission_rejections_total",
+			Help:      "Rejected cluster peers by bounded reason.",
+		},
+		[]string{"reason"},
+	)
+	m.clusterFanout = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: "proctor",
+		Subsystem: "cluster",
+		Name:      "broadcast_recipients",
+		Help:      "Peer nodes selected by cluster broadcasts.",
+		Buckets:   prometheus.ExponentialBuckets(1, 2, 10),
+	})
+}
+func (m *Module) ObserveCluster(operation, event string, err error, duration time.Duration) {
+	m.clusterOperations.WithLabelValues(operation, event, outcome(err)).Inc()
+	m.clusterDuration.WithLabelValues(operation, event).Observe(duration.Seconds())
+}
+func (m *Module) ObserveClusterMessage(direction, event, result string, bytes int) {
+	if m == nil {
+		return
+	}
+	m.clusterMessages.WithLabelValues(direction, event, result).Inc()
+	if bytes > 0 {
+		m.clusterMessageBytes.WithLabelValues(direction, event).Add(float64(bytes))
+	}
+}
+func (m *Module) ObserveClusterMembership(event string) {
+	if m != nil {
+		m.clusterMembership.WithLabelValues(event).Inc()
+	}
+}
+func (m *Module) ObserveClusterDiscovery(operation, result string) {
+	if m != nil {
+		m.clusterDiscovery.WithLabelValues(operation, result).Inc()
+	}
+}
+func (m *Module) ObserveClusterAdmission(reason string) {
+	if m != nil {
+		m.clusterAdmission.WithLabelValues(reason).Inc()
+	}
+}
+func (m *Module) ObserveClusterFanout(recipients int) {
+	if m != nil {
+		m.clusterFanout.Observe(float64(max(recipients, 0)))
+	}
+}
+func (m *Module) SetClusterPeers(peers int) { m.clusterPeerCount.Store(int64(max(peers, 0))) }
+func (m *Module) SetClusterPeerSource(source func() int) {
+	m.clusterPeerMu.Lock()
+	m.clusterPeerSource = source
+	m.clusterPeerMu.Unlock()
+}
+func (m *Module) currentClusterPeers() float64 {
+	m.clusterPeerMu.RLock()
+	source := m.clusterPeerSource
+	m.clusterPeerMu.RUnlock()
+	if source != nil {
+		return float64(max(source(), 0))
+	}
+	return float64(m.clusterPeerCount.Load())
+}

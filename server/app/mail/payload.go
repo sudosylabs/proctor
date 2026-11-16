@@ -162,3 +162,10 @@ func (p frozenPayload) validate() error {
 
 	return nil
 }
+
+// DeliverySealingPurpose binds a delivery's sealed payload to its delivery ID,
+// so a payload copied onto another delivery fails to open. Mail rekeying
+// reseals under the same purpose.
+const (
+	DeliverySealingPurpose = "mail.delivery"
+)

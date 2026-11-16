@@ -7,7 +7,48 @@
 
 package metrics
 
-import "time"
+import (
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+)
+
+// newWorkCollectors creates the expensive-work pool collectors and pre-creates each pool's series.
+func (m *Module) newWorkCollectors() {
+	m.workActive = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "proctor",
+			Subsystem: "work",
+			Name:      "active",
+			Help:      "Expensive operations currently admitted on this node.",
+		},
+		[]string{"pool"},
+	)
+	m.workRejected = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "proctor",
+			Subsystem: "work",
+			Name:      "rejected_total",
+			Help:      "Expensive operations refused because their node-local pool was full.",
+		},
+		[]string{"pool"},
+	)
+	m.workDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "proctor",
+			Subsystem: "work",
+			Name:      "duration_seconds",
+			Help:      "Duration of admitted expensive operations, including failed operations.",
+			Buckets:   prometheus.DefBuckets,
+		},
+		[]string{"pool"},
+	)
+	for _, pool := range []string{"password", "file_content"} {
+		m.workActive.WithLabelValues(pool)
+		m.workRejected.WithLabelValues(pool)
+		m.workDuration.WithLabelValues(pool)
+	}
+}
 
 // WorkStarted records admission to one of the two fixed node-local work pools.
 func (m *Module) WorkStarted(pool string) {

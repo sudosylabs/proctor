@@ -339,3 +339,15 @@ func decodePayload(data []byte, target any) error {
 	}
 	return json.Unmarshal(data, target)
 }
+
+// ConnectionCloseReason is a transport-neutral reason the local connection
+// boundary maps to protocol close codes and text.
+type ConnectionCloseReason string
+
+// SessionRevoked closes the connections of a revoked Session or user;
+// AuthorizationChanged closes connections whose subscriptions may no longer be
+// authorized.
+const (
+	ConnectionCloseSessionRevoked       ConnectionCloseReason = "session_revoked"
+	ConnectionCloseAuthorizationChanged ConnectionCloseReason = "authorization_changed"
+)

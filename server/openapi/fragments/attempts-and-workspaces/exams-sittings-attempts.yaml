@@ -161,7 +161,6 @@ paths:
         - audit.unavailable
         - exam.delivery.metadata_capacity
         - exam.sitting.invalid
-        - exam.sitting.not_found
         - exam.sitting.unavailable
         - authentication.required
         - authentication.token_invalid

@@ -143,7 +143,6 @@ func examAttemptResource(app *attempt.Service) route.Resource {
 				"audit.unavailable",
 				"exam.delivery.metadata_capacity",
 				"exam.sitting.invalid",
-				"exam.sitting.not_found",
 				"exam.sitting.unavailable",
 			},
 			Handle: h.listBrowserActivity,

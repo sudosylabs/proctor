@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -64,6 +65,7 @@ func TestBrowserActivityRequiresCurrentExactManagerAndDedicatedPermission(t *tes
 			}
 			if !wantAllowed {
 				require.Empty(t, unit.AcademicUnitID, "denial returned a scope")
+				require.True(t, apperror.Is(err, "resource.not_found"), "a refusal is concealed: %v", err)
 			}
 			// Every outcome, the relationship denial included, is one recorded
 			// decision on the dedicated action and the exact Sitting.

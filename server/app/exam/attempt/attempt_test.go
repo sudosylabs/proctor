@@ -34,9 +34,8 @@ func TestManagerAttemptOperationsAuthorizeBeforeReadingAttempts(t *testing.T) {
 	manageDenied := []string{"grants", "decision:" + string(model.ActionExamSittingManageOverride) + ":fail"}
 	browserDenied := []string{"decision:" + string(model.ActionExamAttemptBrowserActivityView) + ":fail"}
 	// A caller outside the Exam is refused with the same code whether or
-	// not the Attempt exists. The Sitting area conceals the browser-activity
-	// refusal itself, as exam.sitting.not_found, before any decision is
-	// asked, so it records only the denial.
+	// not the Attempt exists. The Sitting area refuses browser activity
+	// before any decision is asked, so it records only the denial.
 	operations := map[string]struct {
 		authorization []string
 		code          string
@@ -64,7 +63,7 @@ func TestManagerAttemptOperationsAuthorizeBeforeReadingAttempts(t *testing.T) {
 				ExpectedAttemptRevision: 2, PrivateReason: "probe", IdempotencyKey: "probe-key"})
 			return err
 		}},
-		"browser_activity": {authorization: browserDenied, code: "exam.sitting.not_found", run: func(f *fixture, attemptID model.ExamAttemptID) error {
+		"browser_activity": {authorization: browserDenied, code: "resource.not_found", run: func(f *fixture, attemptID model.ExamAttemptID) error {
 			_, err := f.service.ListExamAttemptBrowserActivity(context.Background(), f.inv, BrowserActivityPageQuery{
 				ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: attemptID, Limit: 10})
 			return err

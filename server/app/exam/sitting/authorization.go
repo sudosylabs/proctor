@@ -53,14 +53,16 @@ func (s *Service) AuthorizeSittingView(ctx context.Context, inv invocation.Invoc
 
 // AuthorizeBrowserActivityView requires current exam manager membership and
 // the dedicated permission on every read, including later pages. Browser
-// history deliberately has no administrator override.
+// history deliberately has no administrator override. A refusal and a
+// missing Sitting both answer resource.not_found, as the other Sitting
+// reads do, so an outsider cannot probe which Sittings exist.
 func (s *Service) AuthorizeBrowserActivityView(
 	ctx context.Context,
 	inv invocation.Invocation,
 	sittingID model.ExamSittingID,
 ) (access.BrowserActivityAuthorization, error) {
 	unitID, err := s.authorizeBrowserActivityView(ctx, inv, sittingID)
-	return access.BrowserActivityAuthorization{AcademicUnitID: unitID}, err
+	return access.BrowserActivityAuthorization{AcademicUnitID: unitID}, publicFailures.Conceal(err)
 }
 
 func (s *Service) authorizeBrowserActivityView(
@@ -99,7 +101,7 @@ func (s *Service) authorizeBrowserActivityView(
 			return "", err
 		}
 
-		return "", apperror.New("exam.sitting.not_found")
+		return "", access.DeniedError()
 	}
 
 	if err := s.authorizer.Authorize(ctx, inv, model.ActionExamAttemptBrowserActivityView, resource); err != nil {

@@ -43,8 +43,9 @@ func DefaultPolicy(classifier func(error) bool) Policy {
 	}
 }
 
-// Layer retries only its handwritten overrides; embedded methods are
-// forwarded exactly once.
+// Layer retries only the methods listed in allowlist.txt, whose overrides
+// are generated into forwarding_gen.go; embedded methods are forwarded
+// exactly once.
 type Layer struct {
 	store.Store
 	policy   Policy
@@ -74,21 +75,6 @@ func newLayer(next store.Store, policy Policy, recorder Recorder) (*Layer, error
 		return nil, errors.New("retry transient classifier is nil")
 	}
 	return &Layer{Store: next, policy: policy, recorder: recorder}, nil
-}
-
-// Ping retries the idempotent database health query.
-func (l *Layer) Ping(ctx context.Context) error {
-	return retryCall0(ctx, l, func() error { return l.Store.Ping(ctx) })
-}
-
-// GetDBSchemaVersion retries the idempotent schema version query.
-func (l *Layer) GetDBSchemaVersion(ctx context.Context) (int, error) {
-	return retryCall1(ctx, l, func() (int, error) { return l.Store.GetDBSchemaVersion(ctx) })
-}
-
-// ValidateSchema retries the idempotent schema inspection.
-func (l *Layer) ValidateSchema(ctx context.Context) error {
-	return retryCall0(ctx, l, func() error { return l.Store.ValidateSchema(ctx) })
 }
 
 func retryCall1[T any](ctx context.Context, layer *Layer, call func() (T, error)) (T, error) {

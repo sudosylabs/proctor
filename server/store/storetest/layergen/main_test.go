@@ -69,3 +69,38 @@ type Store interface {
 	}
 	require.Equal(t, "Zebra,Apple,Close", strings.Join(methods, ","))
 }
+
+func TestRetryAllowlistRejectsStaleAndMismatchedEntries(t *testing.T) {
+	t.Parallel()
+
+	interfaces := []interfaceSpec{{name: "AppleStore", methods: []methodSpec{{
+		name:    "Get",
+		params:  []valueSpec{{name: "arg0", typeName: "context.Context"}},
+		results: []valueSpec{{name: "result0", typeName: "error"}},
+	}}}}
+	known := map[string]string{"context": "context", "store": "store", "sync": "sync"}
+	tests := map[string]struct {
+		allowlist string
+		want      string
+	}{
+		"stale method":        {allowlist: "AppleStore.Gone always\n", want: "AppleStore.Gone is not a store contract method"},
+		"stale contract":      {allowlist: "PearStore.Get always\n", want: "PearStore.Get is not a store contract method"},
+		"command without one": {allowlist: "AppleStore.Get command\n", want: "takes 0 *store.CommandIdempotency arguments"},
+		"unknown mode":        {allowlist: "AppleStore.Get sometimes\n", want: `mode "sometimes"`},
+		"duplicate":           {allowlist: "AppleStore.Get always\nAppleStore.Get always # again\n", want: "already listed on line 1"},
+		"missing method":      {allowlist: "AppleStore always\n", want: "is not Contract.Method"},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			path := filepath.Join(t.TempDir(), "allowlist.txt")
+			require.NoError(t, os.WriteFile(path, []byte(test.allowlist), 0o600))
+			entries, err := parseAllowlist(path)
+			if err == nil {
+				_, err = renderRetryMethods(interfaces, entries, known)
+			}
+			require.ErrorContains(t, err, test.want)
+		})
+	}
+}

@@ -648,7 +648,8 @@ func TestRetryGeneratedForwardingIsCurrent(t *testing.T) {
 	temporary := t.TempDir()
 	generatedPath := filepath.Join(temporary, "forwarding_gen.go")
 	command := exec.CommandContext(t.Context(),
-		"go", "run", "../storetest/layergen", "-layer", "retry", "-source", "..", "-output", generatedPath,
+		"go", "run", "../storetest/layergen", "-layer", "retry", "-source", "..", "-allowlist", "allowlist.txt",
+		"-output", generatedPath,
 	)
 	command.Env = append(os.Environ(), "GOCACHE="+filepath.Join(temporary, "go-cache"))
 	output, err := command.CombinedOutput()

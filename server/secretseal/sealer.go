@@ -26,13 +26,13 @@ import (
 const (
 	// EnvelopeVersion1 is the first persisted secret-envelope format.
 	EnvelopeVersion1 = 1
-	// AlgorithmAES256GCM identifies AES-256-GCM without implying negotiability.
+	// AlgorithmAES256GCM is the only accepted algorithm; it is never negotiated.
 	AlgorithmAES256GCM = "AES-256-GCM"
 
-	// MaximumPlaintextBytes is the absolute module bound. Callers may construct
-	// a Sealer with a smaller domain-specific bound.
+	// MaximumPlaintextBytes is the largest bound a Sealer accepts; callers may
+	// set a smaller one.
 	MaximumPlaintextBytes = 4 << 20
-	// MaximumFallbackKeys bounds operational key-ring size during rotation.
+	// MaximumFallbackKeys caps the decryption-only keys kept during rotation.
 	MaximumFallbackKeys = 8
 
 	maximumPurposeBytes = 64
@@ -47,21 +47,20 @@ var (
 	ErrInvalidBinding = errors.New("secret sealing binding is invalid")
 	// ErrPlaintextTooLarge reports plaintext beyond the configured bound.
 	ErrPlaintextTooLarge = errors.New("secret sealing plaintext exceeds its bound")
-	// ErrInvalidEnvelope deliberately combines unsupported, unavailable,
-	// malformed, and unauthenticated envelopes into one safe read error.
+	// ErrInvalidEnvelope covers unsupported, unknown-key, malformed and forged
+	// envelopes alike, so a caller learns nothing about which check failed.
 	ErrInvalidEnvelope = errors.New("sealed value is invalid or unavailable")
 )
 
-// Settings configures one immutable key ring. Keys use canonical standard
-// base64 encoding of exactly 32 bytes. Its diagnostic representations redact
-// all key material.
+// Settings configures one key ring. Keys are canonical standard base64 of
+// exactly 32 bytes; every formatting and logging path redacts them.
 type Settings struct {
 	EncryptionKey    string   `json:"-"`
 	DecryptionKeys   []string `json:"-"`
 	MaximumPlaintext int      `json:"maximum_plaintext"`
 }
 
-// String provides a safe diagnostic representation.
+// String redacts key material.
 func (s Settings) String() string {
 	return fmt.Sprintf(
 		"secretseal.Settings{EncryptionKey:%s, DecryptionKeys:%d, MaximumPlaintext:%d}",
@@ -71,10 +70,10 @@ func (s Settings) String() string {
 	)
 }
 
-// GoString provides a safe %#v diagnostic representation.
+// GoString redacts key material from %#v.
 func (s Settings) GoString() string { return s.String() }
 
-// LogValue prevents structured logging from reflecting secret-bearing fields.
+// LogValue stops slog from reflecting the key fields.
 func (s Settings) LogValue() slog.Value { return slog.StringValue(s.String()) }
 
 // MarshalJSON returns only the non-secret operational setting.
@@ -84,8 +83,8 @@ func (s Settings) MarshalJSON() ([]byte, error) {
 	}{MaximumPlaintext: s.MaximumPlaintext})
 }
 
-// Auditable returns deliberately safe configuration metadata. It satisfies
-// the server's structural audit contract without importing the domain model.
+// Auditable returns only non-secret metadata. It matches the server's audit
+// contract structurally, so this package need not import the domain model.
 func (s Settings) Auditable() map[string]any {
 	return map[string]any{
 		"configured":         s.EncryptionKey != "",
@@ -94,16 +93,15 @@ func (s Settings) Auditable() map[string]any {
 	}
 }
 
-// Binding supplies authenticated domain separation. Purpose is a fixed
-// application namespace; Owner is the stable identity of the owning record.
-// Neither value is stored in the Envelope.
+// Binding is authenticated as additional data but never stored in the
+// Envelope, so a sealed value cannot be replayed onto another record. Purpose
+// is a fixed namespace; Owner is the stable ID of the owning record.
 type Binding struct {
 	Purpose string
 	Owner   string
 }
 
-// Envelope is the complete persisted cryptographic value. JSON contains
-// ciphertext metadata but never plaintext or the authenticated Binding.
+// Envelope is the persisted value. It never carries plaintext or the Binding.
 type Envelope struct {
 	Version    int    `json:"version"`
 	Algorithm  string `json:"algorithm"`
@@ -128,8 +126,7 @@ func (e Envelope) GoString() string { return e.String() }
 // LogValue excludes nonce and ciphertext from structured logs.
 func (e Envelope) LogValue() slog.Value { return slog.StringValue(e.String()) }
 
-// Auditable excludes nonce, ciphertext, and the authenticated Binding while
-// retaining only non-secret format and key-selection metadata.
+// Auditable keeps only the format and key ID.
 func (e Envelope) Auditable() map[string]any {
 	return map[string]any{
 		"version":   e.Version,
@@ -145,9 +142,8 @@ type Sealer struct {
 	maximumPlaintext int
 }
 
-// HasKey reports whether this immutable ring can open envelopes bearing the
-// supplied non-secret key identifier. It does not validate ciphertext and is
-// intended for startup reconciliation of persisted envelope metadata.
+// HasKey reports whether the ring holds keyID. It checks no ciphertext;
+// startup uses it to confirm stored envelopes are still readable.
 func (s *Sealer) HasKey(keyID string) bool {
 	if s == nil || !ValidKeyID(keyID) {
 		return false
@@ -156,8 +152,8 @@ func (s *Sealer) HasKey(keyID string) bool {
 	return ok
 }
 
-// PrimaryKeyID returns the non-secret identity of the key used for new
-// envelopes. It never exposes key material and is safe for fencing rotation.
+// PrimaryKeyID returns the ID of the key used for new envelopes, or "" for a
+// nil Sealer. The ID is not secret and is safe to store for fencing rotation.
 func (s *Sealer) PrimaryKeyID() string {
 	if s == nil {
 		return ""
@@ -165,7 +161,8 @@ func (s *Sealer) PrimaryKeyID() string {
 	return s.primaryKeyID
 }
 
-// New constructs an immutable key ring.
+// New returns ErrInvalidSettings for a malformed, duplicate or excess key, or
+// an out-of-range plaintext bound.
 func New(settings Settings) (*Sealer, error) {
 	if settings.MaximumPlaintext < 1 ||
 		settings.MaximumPlaintext > MaximumPlaintextBytes ||
@@ -243,8 +240,8 @@ func (s *Sealer) Seal(binding Binding, plaintext []byte) (Envelope, error) {
 	return envelope, nil
 }
 
-// Open authenticates the envelope and Binding before returning a fresh
-// plaintext slice. All caller-controlled envelope failures use one safe error.
+// Open returns a fresh plaintext slice only after the envelope and Binding
+// authenticate. Every caller-controlled failure is ErrInvalidEnvelope.
 func (s *Sealer) Open(binding Binding, envelope Envelope) ([]byte, error) {
 	if s == nil ||
 		!validBinding(binding) ||
@@ -329,8 +326,8 @@ func keyIdentity(key [32]byte) string {
 	return hex.EncodeToString(digest[:keyIDBytes])
 }
 
-// ValidKeyID reports whether keyID is a key ring key identifier: exactly 32
-// lowercase hexadecimal characters. Mail and MFA rekey commands share it.
+// ValidKeyID reports whether keyID is exactly 32 lowercase hex characters.
+// The mail and MFA rekey commands share it.
 func ValidKeyID(keyID string) bool {
 	if len(keyID) != keyIDBytes*2 {
 		return false

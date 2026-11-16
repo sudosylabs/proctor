@@ -10,6 +10,7 @@ package websocket
 import (
 	"context"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -45,55 +46,49 @@ func TestFrameBudgetAdmitsBurstThenRefillsAtSustainedRate(t *testing.T) {
 // sustained flood closes the connection with the rate-limit close code.
 func TestConnectionRuntimeRateLimitsEveryInboundFrame(t *testing.T) {
 	t.Parallel()
+	// No time passes in the bubble, so the budget never refills.
+	synctest.Test(t, func(t *testing.T) {
+		world := newAdmissionWorld(t, admissionOptions{})
+		runtime, peer := newInboundRuntime(t, world, nil)
+		peer.listen()
+		runtime.send = make(chan outboundMessage, inboundFrameBurst+inboundRefusalsBeforeClose+8)
+		requests := make([]*Request, inboundFrameBurst+inboundRefusalsBeforeClose)
+		for index := range requests {
+			requests[index] = requestWithData(t, int64(index+1), "subscribe", validInboundSubscription())
+		}
+		go func() {
+			for _, request := range requests {
+				if peer.send(request) != nil {
+					return
+				}
+			}
+		}()
 
-	clock := newRuntimeTestClock(time.Date(2026, time.October, 19, 9, 0, 0, 0, time.UTC))
-	socket := newInboundTestSocket()
-	application := &inboundTestApplication{}
-	runtime := newInboundRuntime(application, socket, clock)
-	runtime.send = make(chan outboundMessage, inboundFrameBurst+inboundRefusalsBeforeClose+8)
-	requests := make([]Request, inboundFrameBurst+inboundRefusalsBeforeClose)
-	for index := range requests {
-		requests[index] = *requestWithData(t, int64(index+1), "subscribe", validInboundSubscription())
-	}
-	go func() {
-		for _, request := range requests {
-			select {
-			case socket.reads <- inboundReadResult{request: request}:
-			case <-socket.closed:
-				return
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			runtime.readPump(context.Background())
+		}()
+		synctest.Wait()
+		select {
+		case <-done:
+		default:
+			require.FailNow(t, "read pump did not stop after a sustained flood")
+		}
+
+		authorized := len(world.access.Audits.Decisions())
+		require.Equal(t, inboundFrameBurst, authorized, "authorized subscriptions")
+		limited := 0
+		for len(runtime.send) > 0 {
+			message := <-runtime.send
+			if response := message.response; response != nil && response.Error != nil && response.Error.Code == "websocket.rate_limited" {
+				require.Equal(t, 1, response.Error.RetryAfterSeconds)
+				limited++
 			}
 		}
-	}()
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		runtime.readPump(context.Background())
-	}()
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		require.FailNow(t, "read pump did not stop after a sustained flood")
-	}
-
-	application.mu.Lock()
-	authorized := len(application.authorizations)
-	application.mu.Unlock()
-	require.Equal(t, inboundFrameBurst, authorized, "authorized subscriptions")
-	limited := 0
-	for len(runtime.send) > 0 {
-		message := <-runtime.send
-		if response := message.response; response != nil && response.Error != nil && response.Error.Code == "websocket.rate_limited" {
-			require.Equal(t, 1, response.Error.RetryAfterSeconds)
-			limited++
-		}
-	}
-	require.Equal(t, inboundRefusalsBeforeClose-1, limited, "rate-limited responses")
-	socket.mu.Lock()
-	closeCode, closeReason := socket.closeCode, socket.closeReason
-	socket.mu.Unlock()
-	require.Equal(t, CloseRateLimited, closeCode, "close")
-	require.Equal(t, "too many requests", closeReason, "close")
+		require.Equal(t, inboundRefusalsBeforeClose-1, limited, "rate-limited responses")
+		require.Equal(t, []peerClose{{code: CloseRateLimited, reason: "too many requests"}}, peer.closeFrames(), "close")
+	})
 }
 
 // TestFrameBudgetIsSharedBySessionAcrossConnectionsAndReconnects spends the
@@ -107,8 +102,10 @@ func TestFrameBudgetIsSharedBySessionAcrossConnectionsAndReconnects(t *testing.T
 	require.NoError(t, hub.Start(context.Background()))
 	defer func() { _ = hub.Close(context.Background()) }()
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}
-	first, _ := hub.register(newRuntimeTestSocket(), principal, model.RequestMetadata{}, "", 0, "")
-	second, _ := hub.register(newRuntimeTestSocket(), principal, model.RequestMetadata{}, "", 0, "")
+	firstSocket, _ := newSocketPair(t)
+	secondSocket, _ := newSocketPair(t)
+	first, _ := hub.register(firstSocket, principal, model.RequestMetadata{}, "", 0, "")
+	second, _ := hub.register(secondSocket, principal, model.RequestMetadata{}, "", 0, "")
 	now := time.Now()
 	for range inboundFrameBurst {
 		require.True(t, first.inbound.allow(now))
@@ -123,10 +120,12 @@ func TestFrameBudgetIsSharedBySessionAcrossConnectionsAndReconnects(t *testing.T
 		hub.pruneReplayLocked(shard, time.Now())
 		shard.mu.Unlock()
 	}
-	reconnected, _ := hub.register(newRuntimeTestSocket(), principal, model.RequestMetadata{}, "", 0, "")
+	reconnectedSocket, _ := newSocketPair(t)
+	reconnected, _ := hub.register(reconnectedSocket, principal, model.RequestMetadata{}, "", 0, "")
 	require.False(t, reconnected.inbound.allow(now), "reconnecting does not reset a spent budget")
 
-	other, _ := hub.register(newRuntimeTestSocket(), model.Principal{UserID: principal.UserID, SessionID: model.NewSessionID()},
+	otherSocket, _ := newSocketPair(t)
+	other, _ := hub.register(otherSocket, model.Principal{UserID: principal.UserID, SessionID: model.NewSessionID()},
 		model.RequestMetadata{}, "", 0, "")
 	require.True(t, other.inbound.allow(now), "another Session has its own budget")
 }

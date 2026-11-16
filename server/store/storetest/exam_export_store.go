@@ -68,8 +68,8 @@ func TestExamExportStore(t *testing.T, ss store.Store, probe ExamExportSQLProbe)
 	require.Equal(t, 24*time.Hour, created.ExpiresAt.Sub(created.CreatedAt))
 	require.Equal(t, created.ExpiresAt, created.SourceExpiresAt)
 	require.Equal(t, 1, probe.SourceProtectionCount(t, ctx, created.ID), "source protections")
-	// The build Job names its requester and reads its subject from the sealed
-	// revision the Sitting runs.
+	// The build job names its requester and reads its subject from the sealed
+	// revision the sitting runs.
 	buildJob, err := ss.Job().Get(ctx, input.JobID)
 	require.NoError(t, err)
 	require.Equal(t, f.manager.ID, buildJob.CreatedByUserID)
@@ -105,7 +105,7 @@ func TestExamExportStore(t *testing.T, ss store.Store, probe ExamExportSQLProbe)
 	require.Equal(t, created.ID, value.Export.ID)
 	require.Len(t, value.Submissions, 1)
 	// A live permission edit must take effect across nodes despite an unchanged
-	// Session principal or a previously successful metadata read.
+	// session principal or a previously successful metadata read.
 	withoutPermission := func(action model.Action, check func()) {
 		changed := *role
 		changed.Permissions = slices.DeleteFunc(slices.Clone(permissions), func(p string) bool { return p == string(action) })
@@ -250,8 +250,8 @@ func TestExamExportStore(t *testing.T, ss store.Store, probe ExamExportSQLProbe)
 		require.True(t, store.IsConflict(getErr), "history export skipped dedicated authority")
 	})
 
-	// Holding every export/read action does not turn a different User into an
-	// exact Exam Manager, including through the explicit general export override.
+	// Holding every export/read action does not turn a different user into an
+	// exact exam manager, including through the explicit general export override.
 	nonmanager := saveUser(t, ctx, ss)
 	nonmanagerPrincipal := saveRecordsPrincipal(t, ctx, ss, nonmanager.ID, false)
 	_, err = SaveRoleBinding(ctx, ss, &model.RoleBinding{UserID: nonmanager.ID, RoleID: role.ID,
@@ -266,7 +266,7 @@ func TestExamExportStore(t *testing.T, ss store.Store, probe ExamExportSQLProbe)
 		require.True(t, store.IsConflict(err), "nonmanager override created Browser Activity archive")
 		require.Equal(t, 0, probe.SourceProtectionCount(t, ctx, denied.ExportID), "denial left export protections")
 	}
-	// A real exact Manager with valid scoped actions can use the general export
+	// A real exact manager with valid scoped actions can use the general export
 	// override without inventing an extra unit-membership history condition.
 	exam, err := ss.ExamAuthoring().Resolve(ctx, f.examID)
 	require.NoError(t, err)
@@ -292,7 +292,7 @@ func TestExamExportStore(t *testing.T, ss store.Store, probe ExamExportSQLProbe)
 	_, err = peer.Get(ctx, &managedAccess)
 	require.NoError(t, err)
 	// Remove that exact relationship through its real command. Every role and
-	// Session remains current; peer reads and retained retries must now deny.
+	// session remains current; peer reads and retained retries must now deny.
 	at = model.NowUTC()
 	removal := newExamManagerMutation(t, ctx, ss, f.examID, f.manager.ID, nonmanager.ID, added.Exam.Revision, at, false)
 	removal.Notices = examManagerMailNotices(t, at, examManagerMailRecipient{nonmanager.ID, model.MailTemplateExamManagerRemoved})

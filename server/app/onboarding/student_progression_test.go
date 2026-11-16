@@ -16,8 +16,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
+
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -55,15 +56,16 @@ func TestStudentProgressionListingScopesBothClassesThroughOneDecision(t *testing
 	values := []*store.StudentProgressionSummary{studentProgressionSummary(at, "Year 1 Blue", "Year 2 Blue"),
 		studentProgressionSummary(at.Add(-time.Minute), "Year 1 Red", "Year 2 Red"), studentProgressionSummary(at.Add(-2*time.Minute), "", "")}
 	persistence := &studentProgressionListingFake{values: values, total: 5}
-	authorizer := &authorizerFake{visibility: &store.InvitationVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{unitID}, ClassIDs: []model.ClassID{classID}}}
-	service := &Service{imports: persistence, authorizer: authorizer}
+	caller := sessionCaller(model.NewUserID(), at)
+	authorization := scopedAccess(t, caller.Principal().UserID, model.ActionAcademicProgressionManage, unitID, classID)
+	service := &Service{imports: persistence, authorizer: authorization.Authorizer}
 	sourcePeriodID, destinationClassID := model.NewAcademicPeriodID(), model.NewClassID()
-	page, err := service.ListStudentProgressions(context.Background(), invocation.Invocation{}, ListStudentProgressionsQuery{
+	page, err := service.ListStudentProgressions(context.Background(), caller, ListStudentProgressionsQuery{
 		States:         []model.OnboardingImportState{model.OnboardingImportFailed, model.OnboardingImportFailed},
 		SourcePeriodID: sourcePeriodID, DestinationClassID: destinationClassID, Limit: 2})
 	require.NoError(t, err)
 	// One academic_progression.manage scope decision precedes the Store reads.
-	require.Equal(t, []model.Action{model.ActionAcademicProgressionManage}, authorizer.actions)
+	requireOneScopedDecision(t, authorization, model.ActionAcademicProgressionManage, unitID)
 	expected := store.StudentProgressionListOptions{
 		Visibility: store.StudentProgressionVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{unitID}, ClassIDs: []model.ClassID{classID}},
 		States:     []model.OnboardingImportState{model.OnboardingImportFailed}, SourcePeriodID: sourcePeriodID, DestinationClassID: destinationClassID, Limit: 3}
@@ -77,7 +79,7 @@ func TestStudentProgressionListingScopesBothClassesThroughOneDecision(t *testing
 	require.Equal(t, paging.Total{Counted: true, Total: 5}, page.Total)
 
 	persistence.options, persistence.counted, persistence.values = nil, nil, values[:1]
-	page, err = service.ListStudentProgressions(context.Background(), invocation.Invocation{}, ListStudentProgressionsQuery{
+	page, err = service.ListStudentProgressions(context.Background(), caller, ListStudentProgressionsQuery{
 		BeforeCreatedAt: at.Add(time.Hour), BeforeID: model.NewOnboardingImportID()})
 	require.NoError(t, err)
 	require.False(t, page.HasMore)
@@ -91,26 +93,26 @@ func TestStudentProgressionListingRefusesAContradictoryCountOrForeignMode(t *tes
 	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
 	summary := studentProgressionSummary(at, "Year 1", "Year 2")
 	persistence := &studentProgressionListingFake{values: []*store.StudentProgressionSummary{summary}, total: 0}
-	service := &Service{imports: persistence, authorizer: &authorizerFake{}}
-	_, err := service.ListStudentProgressions(context.Background(), invocation.Invocation{}, ListStudentProgressionsQuery{})
+	caller := sessionCaller(model.NewUserID(), at)
+	service := &Service{imports: persistence, authorizer: permissiveAccess(t, accesstest.Options{}, []model.UserID{caller.Principal().UserID}).Authorizer}
+	_, err := service.ListStudentProgressions(context.Background(), caller, ListStudentProgressionsQuery{})
 	require.True(t, apperror.Is(err, "student_progression.unavailable"), "error = %v", err)
 
 	foreign := studentProgressionSummary(at, "", "")
 	foreign.Progression.Mode = model.OnboardingImportStudentClass
 	persistence.values, persistence.total = []*store.StudentProgressionSummary{foreign}, 1
-	_, err = service.ListStudentProgressions(context.Background(), invocation.Invocation{}, ListStudentProgressionsQuery{})
+	_, err = service.ListStudentProgressions(context.Background(), caller, ListStudentProgressionsQuery{})
 	require.True(t, apperror.Is(err, "student_progression.unavailable"), "error = %v", err)
 }
 
 func TestStudentProgressionListingRefusesWithoutAuthorityOrValidQuery(t *testing.T) {
 	t.Parallel()
-	denied := apperror.New("authorization.denied")
 	for name, test := range map[string]struct {
-		query ListStudentProgressionsQuery
-		err   error
-		code  string
+		query  ListStudentProgressionsQuery
+		denied bool
+		code   string
 	}{
-		"denied":              {err: denied, code: "authorization.denied"},
+		"denied":              {denied: true, code: "authorization.denied"},
 		"unknown state":       {query: ListStudentProgressionsQuery{States: []model.OnboardingImportState{"archived"}}, code: "request.invalid"},
 		"half cursor":         {query: ListStudentProgressionsQuery{BeforeID: model.NewOnboardingImportID()}, code: "request.invalid"},
 		"invalid cursor":      {query: ListStudentProgressionsQuery{BeforeID: "bad", BeforeCreatedAt: time.Now()}, code: "request.invalid"},
@@ -121,8 +123,13 @@ func TestStudentProgressionListingRefusesWithoutAuthorityOrValidQuery(t *testing
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			persistence := &studentProgressionListingFake{}
-			service := &Service{imports: persistence, authorizer: &authorizerFake{err: test.err}}
-			_, err := service.ListStudentProgressions(context.Background(), invocation.Invocation{}, test.query)
+			caller := sessionCaller(model.NewUserID(), time.Now())
+			var granted []model.UserID
+			if !test.denied {
+				granted = append(granted, caller.Principal().UserID)
+			}
+			service := &Service{imports: persistence, authorizer: permissiveAccess(t, accesstest.Options{}, granted).Authorizer}
+			_, err := service.ListStudentProgressions(context.Background(), caller, test.query)
 			require.True(t, apperror.Is(err, test.code), "error = %v", err)
 			require.Empty(t, persistence.options)
 		})
@@ -134,16 +141,17 @@ func TestOnboardingImportUploadRefusesAnUnsafeFileNameBeforeAuthorizing(t *testi
 	for name, raw := range map[string]string{"blank": "  ", "path": "imports/roster.csv", "parent": "..", "control": "roster\x07.csv"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			authorizer := &authorizerFake{}
-			service := &Service{authorizer: authorizer}
-			_, err := service.UploadOnboardingImport(context.Background(), invocation.Invocation{}, UploadOnboardingImportCommand{
+			caller := sessionCaller(model.NewUserID(), time.Now())
+			authorization := permissiveAccess(t, accesstest.Options{}, []model.UserID{caller.Principal().UserID})
+			service := &Service{authorizer: authorization.Authorizer}
+			_, err := service.UploadOnboardingImport(context.Background(), caller, UploadOnboardingImportCommand{
 				Mode: model.OnboardingImportStudentClass, ScopeType: model.RoleScopeClass, ScopeID: model.NewClassID().String(),
 				FileName: &raw, Body: strings.NewReader("email\n")})
 			failure, ok := apperror.As(err)
 			require.True(t, ok, "error = %v", err)
 			require.Equal(t, "request.invalid", failure.Code())
 			require.Equal(t, "file_name", failure.Fields()["field"])
-			require.Empty(t, authorizer.actions)
+			require.Empty(t, authorization.Audits.Decisions())
 		})
 	}
 }
@@ -214,16 +222,17 @@ func TestStudentProgressionReadNamesBothClassesAfterAuthorizingBoth(t *testing.T
 	progression := &store.OnboardingImport{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportStudentProgression,
 		State: model.OnboardingImportParsing, ScopeType: model.RoleScopeClass, ScopeID: destination.ID.String(),
 		SourceClassID: source.ID, DestinationClassID: destination.ID, CreatedAt: at}
-	authorizer := &authorizerFake{}
+	caller := sessionCaller(model.NewUserID(), at)
+	authorization := permissiveAccess(t, accesstest.Options{}, []model.UserID{caller.Principal().UserID})
 	service := &Service{imports: studentProgressionReadFake{value: progression},
-		authorizer: authorizer, classes: studentProgressionClassesFake{values: map[model.ClassID]*model.Class{source.ID: source, destination.ID: destination}}}
-	view, _, err := service.GetStudentProgression(context.Background(), invocation.Invocation{}, progression.ID)
+		authorizer: authorization.Authorizer, classes: studentProgressionClassesFake{values: map[model.ClassID]*model.Class{source.ID: source, destination.ID: destination}}}
+	view, _, err := service.GetStudentProgression(context.Background(), caller, progression.ID)
 	require.NoError(t, err)
-	require.Equal(t, []model.Action{model.ActionAcademicProgressionManage, model.ActionAcademicProgressionManage}, authorizer.actions)
+	require.Equal(t, []model.Action{model.ActionAcademicProgressionManage, model.ActionAcademicProgressionManage}, decidedActions(authorization))
 	require.Equal(t, "Year 1 Blue", view.SourceClassName)
 	require.Equal(t, "Year 2 Blue", view.DestinationClassName)
 
-	authorizer.actions, authorizer.err = nil, apperror.New("authorization.denied")
-	_, _, err = service.GetStudentProgression(context.Background(), invocation.Invocation{}, progression.ID)
+	// Another caller holds no grant.
+	_, _, err = service.GetStudentProgression(context.Background(), sessionCaller(model.NewUserID(), at), progression.ID)
 	require.True(t, apperror.Is(err, "authorization.denied"), "error = %v", err)
 }

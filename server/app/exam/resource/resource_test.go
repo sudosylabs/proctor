@@ -16,7 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
@@ -39,11 +39,11 @@ func TestMetadataAndOrderNoOpsDoNotBeginAudit(t *testing.T) {
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault, "metadata no-op error")
 	require.Equal(t, "exam.resource.no_changes", fault.Code(), "metadata no-op error")
-	require.False(t, f.auditor.began, "metadata no-op error")
+	require.False(t, f.auditBegan(), "metadata no-op error")
 	_, err = f.service.ReorderExamResources(context.Background(), f.inv, ReorderCommand{ExamID: f.examID, ExpectedDraftRevision: 1, ResourceIDs: []model.ExamResourceID{record.Resource.ID}, IdempotencyKey: "test-key"})
 	require.ErrorAs(t, err, &fault, "reorder no-op error")
 	require.Equal(t, "exam.resource.no_changes", fault.Code(), "reorder no-op error")
-	require.False(t, f.auditor.began, "reorder no-op error")
+	require.False(t, f.auditBegan(), "reorder no-op error")
 }
 
 type fixture struct {
@@ -56,10 +56,11 @@ type fixture struct {
 	persistence *storeFake
 	access      *accessFake
 	memberships *membershipFake
-	authorizer  *authFake
-	auditor     *auditFake
-	publisher   *realtimetest.Publisher
-	content     *contentFake
+	// control is the real authorizer and auditor, granted every Exam action
+	// at the Exam's Academic Unit.
+	control   *accesstest.Fixture
+	publisher *realtimetest.Publisher
+	content   *contentFake
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -68,21 +69,32 @@ func newFixture(t *testing.T) *fixture {
 	f.persistence = &storeFake{f: f}
 	f.access = &accessFake{f: f, draftRevision: 1}
 	f.memberships = &membershipFake{f: f}
-	f.auditor = &auditFake{f: f}
 	f.publisher = &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
 		if call.Method == realtimetest.Publish {
 			f.order = append(f.order, "effect")
 		}
 	}}
 	f.content = &contentFake{f: f}
-	f.authorizer = &authFake{f: f}
+	f.control = accesstest.New(t, accesstest.Options{
+		Grants: []accesstest.Grant{{
+			UserID: f.userID,
+			Actions: []model.Action{
+				model.ActionExamView, model.ActionExamViewOverride,
+				model.ActionExamManage, model.ActionExamManageOverride,
+			},
+			ScopeType: model.RoleScopeAcademicUnit,
+			ScopeID:   f.unitID.String(),
+		}},
+		Exams:   f.access,
+		Observe: func(event string) { f.order = append(f.order, event) },
+	})
 	at := time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)
 	service, err := New(Dependencies{
 		Persistence:   f.persistence,
 		Access:        f.access,
 		Memberships:   f.memberships,
-		Authorizer:    f.authorizer,
-		Auditor:       f.auditor,
+		Authorizer:    f.control.Authorizer,
+		Auditor:       f.control.Auditor,
 		Publisher:     f.publisher,
 		Content:       f.content,
 		Now:           func() time.Time { return at },
@@ -175,6 +187,11 @@ func (a *accessFake) Access(context.Context, model.ExamID, model.UserID) (*store
 	return &store.ExamAccessSnapshot{Exam: exam, ActorIsManager: true}, nil
 }
 
+// Resolve answers the Exam's ownership to the real authorizer.
+func (a *accessFake) Resolve(context.Context, model.ExamID) (*model.Exam, error) {
+	return model.NewExam(a.f.examID, a.f.unitID, a.f.userID, time.Now().UTC())
+}
+
 func (a *accessFake) Get(context.Context, model.ExamID, model.UserID) (*store.ExamAuthoringSnapshot, error) {
 	at := time.Now().UTC()
 	exam, _ := model.NewExam(a.f.examID, a.f.unitID, a.f.userID, at)
@@ -206,30 +223,19 @@ func (m *membershipFake) ListActiveByUser(context.Context, model.UserID, time.Ti
 	return m.items, m.err
 }
 
-type authFake struct {
-	f      *fixture
-	action model.Action
+// auditBegan reports whether the auditor recorded a mutation attempt.
+func (f *fixture) auditBegan() bool {
+	return len(f.control.Audits.Attempts()) > 0
 }
 
-func (a *authFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, _ model.Resource) error {
-	a.f.order = append(a.f.order, "authorize")
-	a.action = action
-	return nil
-}
-
-type auditFake struct {
-	f     *fixture
-	began bool
-}
-
-func (a *auditFake) Begin(context.Context, access.Mutation) (model.AuditEventID, error) {
-	a.f.order = append(a.f.order, "audit.begin")
-	a.began = true
-	return model.NewAuditEventID(), nil
-}
-func (a *auditFake) Fail(context.Context, model.AuditEventID, string) error {
-	a.f.order = append(a.f.order, "audit.fail")
-	return nil
+// decidedActions lists the actions of the recorded authorization decisions,
+// in order.
+func (f *fixture) decidedActions() []model.Action {
+	var actions []model.Action
+	for _, decision := range f.control.Audits.Decisions() {
+		actions = append(actions, model.Action(decision.Action))
+	}
+	return actions
 }
 
 // draftUpdated is the call a committed Exam Resource change publishes: the

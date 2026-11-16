@@ -78,8 +78,8 @@ func nativeDeliverySelector(inv invocation.Invocation, query NativeDeliveryQuery
 	}, nil
 }
 
-// NativeDeliveryStatus returns the delivery status of one native security
-// stream of the candidate's Attempt, as seen from a registered desktop.
+// NativeDeliveryStatus returns one native stream's delivery status, as seen
+// from a registered desktop.
 func (s *Service) NativeDeliveryStatus(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -108,8 +108,8 @@ func (s *Service) NativeDeliveryStatus(
 	return value, nil
 }
 
-// NativeDeliveryReceipt returns the receipt for the native security batch
-// with the given sequence in one stream of the candidate's Attempt.
+// NativeDeliveryReceipt returns the receipt for the batch with the given
+// sequence in one stream.
 func (s *Service) NativeDeliveryReceipt(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -166,8 +166,8 @@ func (s *Service) beginNativeDeliveryAudit(
 	})
 }
 
-// DeclareNativeDeliveryGaps idempotently records native security batches the
-// client declares it can no longer deliver for one stream.
+// DeclareNativeDeliveryGaps idempotently records batches the client can no
+// longer deliver.
 func (s *Service) DeclareNativeDeliveryGaps(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -231,9 +231,8 @@ func (s *Service) DeclareNativeDeliveryGaps(
 	return value, nil
 }
 
-// SealNativeDelivery idempotently records the final delivered batch sequence
-// for one native security stream, fenced by the declaration's expected
-// revision.
+// SealNativeDelivery idempotently records a stream's final delivered
+// sequence, fenced by the declaration's expected revision.
 func (s *Service) SealNativeDelivery(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -295,7 +294,7 @@ func (s *Service) SealNativeDelivery(
 }
 
 // UpdateNativeDeliverySummary idempotently records the client's summary of
-// native security records it did not retain for one stream.
+// records it did not retain.
 func (s *Service) UpdateNativeDeliverySummary(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -345,8 +344,6 @@ func (s *Service) UpdateNativeDeliverySummary(
 	return value, nil
 }
 
-// nativeDeliveryStoreErrors adds the native delivery sentinels and conflict
-// reasons to the Attempt table.
 var nativeDeliveryStoreErrors = storeErrors.With(slices.Concat(
 	[]apperror.StoreRule{
 		{Kind: apperror.StoreSentinel, Sentinel: model.ErrDeliveryExpired, Code: "exam.delivery.upload_expired"},
@@ -355,7 +352,6 @@ var nativeDeliveryStoreErrors = storeErrors.With(slices.Concat(
 	apperror.Conflicts("native_delivery", deliveryConflictCodes),
 )...)
 
-// deliveryStoreError presents native and browser delivery failures.
 func deliveryStoreError(err error) error {
 	if !errors.Is(err, store.ErrInvalidState) && (errors.Is(err, model.ErrDeliveryInvalid) || errors.Is(err, model.ErrNativeDeliveryInvalid)) {
 		return apperror.Invalid("exam.attempt.invalid", "native_delivery").Wrap(err)
@@ -369,9 +365,9 @@ type NativeDeliveryAppendCommand struct {
 	IdempotencyKey string
 }
 
-// AppendNativeDelivery idempotently appends one native security batch to a
-// stream of the candidate's Attempt after checking it against the frozen
-// policy's desktop build. The batch carries its own participation generation.
+// AppendNativeDelivery idempotently appends one batch after checking it
+// against the frozen policy's desktop build. The batch carries its own
+// participation generation.
 func (s *Service) AppendNativeDelivery(
 	ctx context.Context,
 	inv invocation.Invocation,

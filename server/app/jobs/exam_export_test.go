@@ -11,27 +11,63 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
+	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type exportBuilderFake struct {
+// exportBuildStoreFake is the export Store behind the real Exports service
+// the build Job drives. Each build it begins finds the export already ready,
+// which is the one outcome that needs no archive content, or fails with err.
+type exportBuildStoreFake struct {
+	store.ExamExportStore
 	calls int
 	input store.ExamExportBuild
 	err   error
 }
 
-func (f *exportBuilderFake) BuildFromJob(_ context.Context, _ invocation.System, input store.ExamExportBuild) error {
+func (f *exportBuildStoreFake) BeginBuild(_ context.Context, input *store.ExamExportBuild) (*store.ExamExportSnapshot, error) {
 	f.calls++
-	f.input = input
-	return f.err
+	f.input = *input
+	if f.err != nil {
+		return nil, f.err
+	}
+	created := model.NowUTC().Add(-time.Hour)
+	return &store.ExamExportSnapshot{Export: &model.ExamExport{
+		ID: input.ExportID, Scope: model.RetentionHoldScope{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID()},
+		RequesterUserID: model.NewUserID(), Categories: []model.RetentionCategory{model.RetentionCategoryWork},
+		State: model.ExamExportReady, PolicyRevision: 1, CreatedAt: created,
+		ExpiresAt: created.Add(24 * time.Hour), SourceExpiresAt: created.Add(time.Hour + time.Minute), SubmissionCount: 1,
+		ArchiveSizeBytes: 42, ArchiveSHA256: strings.Repeat("a", 64), ReadyAt: model.OptionalTimeFrom(created.Add(time.Minute)),
+	}}, nil
+}
+
+type (
+	exportAuthoringStore  struct{ store.ExamAuthoringStore }
+	exportMembershipStore struct{ store.AcademicUnitMemberStore }
+	exportContentStub     struct{ exam.ExportContent }
+)
+
+// newBuildExports builds the production Exports over the store. A build Job
+// acts as the system, so no caller holds a grant.
+func newBuildExports(t *testing.T, persistence store.ExamExportStore) *exam.Exports {
+	t.Helper()
+	control := accesstest.New(t, accesstest.Options{})
+	exports, err := exam.NewExports(exam.ExportsDependencies{
+		Persistence: persistence, Access: exportAuthoringStore{}, Memberships: exportMembershipStore{},
+		Authorizer: control.Authorizer, Auditor: control.Auditor, Content: exportContentStub{},
+		Now: time.Now, NewID: model.NewExamExportID, NewJobID: model.NewJobID,
+	})
+	require.NoError(t, err)
+	return exports
 }
 
 func exportJobExecution(t *testing.T, command []byte, reserve func(context.Context, int, int) (bool, error)) job.Execution {
@@ -48,8 +84,8 @@ func exportJobExecution(t *testing.T, command []byte, reserve func(context.Conte
 func TestExamExportBuildJobIsStrictClaimBoundedAndSafe(t *testing.T) {
 	id := model.NewExamExportID()
 	valid, _ := json.Marshal(examExportBuildCommand{ExportID: id})
-	fake := &exportBuilderFake{}
-	handler := examExportBuildHandler{service: fake}
+	fake := &exportBuildStoreFake{}
+	handler := examExportBuildHandler{service: newBuildExports(t, fake)}
 	for _, data := range [][]byte{[]byte(`{}`), []byte(`{"export_id":"invalid"}`), []byte(`{"export_id":"` + id.String() + `","snapshot":"private"}`), []byte(`{"export_id":"` + id.String() + `","export_id":"` + id.String() + `"}`)} {
 		outcome := handler.Run(context.Background(), exportJobExecution(t, data, allowJobWorkReservation()))
 		require.Equal(t, job.OutcomePermanentFailure, outcome.Kind)

@@ -16,9 +16,10 @@ import (
 	"github.com/sudosylabs/proctor/server/platform"
 )
 
-// platformAuthenticationCache adapts platform.Cache to app.authenticationCache.
+// platformAuthenticationCache maps the platform cache's sentinels to
+// identity's.
 type platformAuthenticationCache struct {
-	cache borrowedCache
+	cache platform.Cache
 }
 
 func (c platformAuthenticationCache) Get(ctx context.Context, key string) ([]byte, error) {

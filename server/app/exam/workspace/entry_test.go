@@ -65,6 +65,6 @@ func TestServiceRejectsInvalidPathsBeforeAuthorizationOrStorage(t *testing.T) {
 		IdempotencyKey: "test-key",
 	})
 	require.Equal(t, "exam.starter_workspace.invalid", faultCode(err), "error/auth/store")
-	require.False(t, fixture.authorizer.called, "error/auth/store")
+	require.Empty(t, fixture.access.Audits.Decisions(), "error/auth/store")
 	require.Nil(t, fixture.persistence.mutation, "error/auth/store")
 }

@@ -31,6 +31,8 @@ export function ResetPasswordContent({
   token,
 }: ResetPasswordContentProps) {
   const minimumPasswordLength = usePasswordMinimumLength();
+  // The token lives only in this ref and is dropped after success or an
+  // unusable-link answer, so it cannot be resubmitted or rendered.
   const tokenRef = useRef(token);
   const [state, setState] = useState<ResetState>(
     token === undefined ? "invalid" : "ready",

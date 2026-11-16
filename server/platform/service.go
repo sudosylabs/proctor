@@ -5,17 +5,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package platform looks after the infrastructure one node shares: the
-// configuration store, logger, database, cache, cluster transport, mailer, file
-// store and external sign-in providers. The module root builds these and hands
-// them over with Accept. From then on Service starts the cluster transport and
-// tests the mail connection, answers the dependency check behind readiness,
-// reloads configuration, and closes each resource exactly once.
+// Package platform owns the lifecycle of the infrastructure one node shares:
+// configuration, logger, database, cache, cluster transport, mailer, file
+// store and external sign-in providers. The module root builds them and hands
+// them over with Accept; Service then closes each exactly once.
 //
-// Service is not a place for the application to look things up. No use case
-// receives it: the module root passes each one the narrow dependency it needs.
-// Start with service.go. infrastructure.go declares the Cache and Mailer
-// interfaces and adapts the packages/cache and packages/mail modules to them.
+// Service is not a service locator. No use case receives it.
 package platform
 
 import (
@@ -36,11 +31,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// OwnedResources contains infrastructure whose lifecycle transfers to
-// Platform when Accept is called. Accept closes every non-nil resource on any
-// unsuccessful outcome; callers must never close supplied resources after the
-// call. Construction may retain explicitly non-owning aliases, but those
-// aliases do not carry lifecycle authority.
+// OwnedResources is infrastructure whose lifecycle passes to Accept. Callers
+// must never close a supplied resource after the call, even when it fails;
+// any alias they keep is non-owning.
 type OwnedResources struct {
 	Configuration          *config.Store
 	Logger                 *logging.Logger
@@ -63,10 +56,9 @@ type Service struct {
 	shutdownErr     error
 }
 
-// Accept takes ownership of resources at call entry. On success, the returned
-// Service owns them and snapshot is the immutable configuration view used for
-// this construction attempt. On failure, Accept closes every supplied non-nil
-// resource and joins cleanup failures with the primary error.
+// Accept takes ownership of resources at call entry. snapshot is the
+// configuration the Service was built from. On failure Accept closes every
+// non-nil resource and joins cleanup failures with the primary error.
 func Accept(
 	ctx context.Context,
 	resources OwnedResources,
@@ -85,10 +77,7 @@ func Accept(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	// config.Store validates both persisted and effective configuration before
-	// making a snapshot observable. Acceptance therefore consumes that
-	// established invariant instead of adding a second, unreachable validation
-	// branch.
+	// config.Store never exposes an unvalidated snapshot.
 	snapshot = resources.Configuration.Get()
 	service, err := newService(ctx, resources, snapshot)
 	if err != nil {
@@ -212,11 +201,10 @@ func newService(
 	return service, nil
 }
 
-// closeOwnedResources is Platform's one disposal sequence, shared by a failed
-// Accept and Service.Close. The cluster leaves first, while persistence is
-// still open for lease withdrawal, within the caller's shutdown budget. The
-// logger flushes last under its own bound, so a spent shutdown budget never
-// discards the final shutdown records.
+// closeOwnedResources is shared by a failed Accept and Service.Close. The
+// cluster leaves first, while persistence is still open for lease withdrawal.
+// The logger flushes under its own bound, so a spent shutdown budget never
+// discards the final records.
 func closeOwnedResources(ctx context.Context, resources OwnedResources) error {
 	var clusterErr error
 	if resources.Cluster != nil {
@@ -329,12 +317,10 @@ func (s *Service) CheckDependencies(ctx context.Context) error {
 	return nil
 }
 
-// ReloadConfiguration re-reads the operator-owned configuration source and
-// applies its logging and external-provider changes to the running consumers.
-// An invalid source, or a change a consumer cannot apply, leaves the whole
-// running configuration in force and returns the failure. Other changed
-// settings keep their running values until restart and are reported in
-// RestartRequired.
+// ReloadConfiguration applies logging and external-provider changes from the
+// configuration source. A reload is all-or-nothing: an invalid source or a
+// change a consumer rejects leaves the running configuration in force. Other
+// changes wait for a restart and are listed in RestartRequired.
 func (s *Service) ReloadConfiguration(ctx context.Context) (config.ReloadResult, error) {
 	return s.resources.Configuration.Reload(ctx)
 }

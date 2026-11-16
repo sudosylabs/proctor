@@ -13,19 +13,19 @@ import (
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/logging"
+	"github.com/sudosylabs/proctor/server/websocket"
 )
 
-// productionResources is the single, visible and policy-free inventory of HTTP
-// resource modules, each built over the application service that owns its use
-// cases. Preserve this order: it is part of route-catalog review.
+// productionResources lists every resource of the production API. Keep the
+// order: route-catalog review reads it.
 func productionResources(
 	application *app.App,
-	health Health,
+	health *app.Health,
 	buildInfo BuildInfo,
 	plugins Plugins,
 	cookies route.Cookies,
 	webSocket WebSocketTransport,
-	binarySockets BinarySocketTransport,
+	binarySockets *websocket.Hub,
 	logger *logging.Logger,
 ) []route.Resource {
 	return []route.Resource{
@@ -48,7 +48,7 @@ func productionResources(
 		browserInvitationResource(application.Onboarding, cookies),
 		userProfileResource(application.Users, application.Attempts, application.Identity),
 		userSettingsResource(application.Users),
-		userAdministrationResource(application.Identity, application.Identity),
+		userAdministrationResource(application.Identity),
 		sessionResource(application.Identity, cookies),
 		sessionReauthenticationResource(application.Identity, cookies),
 		mfaResource(application.Identity),

@@ -62,7 +62,6 @@ func (s *Service) resolveAcademicAdministrationImportRow(
 	return s.resolveImportOperation(ctx, inv, current, operation, item, resource, row)
 }
 
-// resolveImportOperation resolves and authorizes one validated Academic Administration operation row.
 func (s *Service) resolveImportOperation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -124,7 +123,6 @@ func (s *Service) resolveImportOperation(
 	}
 }
 
-// loadImportUser loads the active User a row targets and records it on the row.
 func (s *Service) loadImportUser(ctx context.Context, id string, row *store.OnboardingImportRow) error {
 	target, userErr := s.users.Get(ctx, model.UserID(id))
 	if userErr != nil {
@@ -137,7 +135,7 @@ func (s *Service) loadImportUser(ctx context.Context, id string, row *store.Onbo
 	return nil
 }
 
-// resolveImportClassTransfer resolves a Class transfer row and authorizes both Classes.
+// resolveImportClassTransfer authorizes both the source and destination class.
 func (s *Service) resolveImportClassTransfer(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -173,7 +171,6 @@ func (s *Service) resolveImportClassTransfer(
 	return s.authorize(ctx, inv, model.ActionClassMembersManage, resource)
 }
 
-// resolveImportRoleBindingCreate resolves a Role Binding creation row and authorizes its delegation.
 func (s *Service) resolveImportRoleBindingCreate(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -202,7 +199,6 @@ func (s *Service) resolveImportRoleBindingCreate(
 	return s.authorizeActionDelegation(ctx, inv, role.Permissions, current.ScopeType, current.ScopeID)
 }
 
-// resolveImportRelationshipEnd resolves a row that ends an existing relationship and authorizes it.
 func (s *Service) resolveImportRelationshipEnd(
 	ctx context.Context,
 	inv invocation.Invocation,

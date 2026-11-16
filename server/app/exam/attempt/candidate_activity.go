@@ -20,25 +20,24 @@ import (
 
 // CandidateActivityQuery selects one page of the caller's own exam activity.
 // BeforeScheduledStart and BeforeSittingID are the keyset cursor of the last
-// Sitting already seen; zero values start at the newest scheduled start.
+// sitting seen; zero values start at the newest scheduled start.
 type CandidateActivityQuery struct {
 	BeforeScheduledStart time.Time
 	BeforeSittingID      model.ExamSittingID
 	Limit                int
 }
 
-// CandidateActivityPage is one page of the caller's own Sittings and Attempts,
-// stamped with authoritative server time. HasMore reports that a later page
-// exists.
+// CandidateActivityPage is stamped with authoritative server time; HasMore
+// reports that a later page exists.
 type CandidateActivityPage struct {
 	ServerTime time.Time
 	Items      []store.CandidateExamActivityItem
 	HasMore    bool
 }
 
-// ListCandidateExamActivity returns one page of the caller's own Sittings and
-// Attempts, newest scheduled start first. On a registered desktop the page
-// also reflects that desktop's Session and registration.
+// ListCandidateExamActivity returns newest scheduled start first. On a
+// registered desktop the page also reflects that desktop's session and
+// registration.
 func (s *Service) ListCandidateExamActivity(
 	ctx context.Context,
 	inv invocation.Invocation,

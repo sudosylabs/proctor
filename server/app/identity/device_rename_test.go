@@ -16,7 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
@@ -92,28 +92,36 @@ type deviceRenameFixture struct {
 	events        []string
 	sessions      *renameSessionStoreFake
 	registrations *renameDesktopRegistrationStoreFake
-	auditor       *mutationAttemptAuditorFake
+	access        *accesstest.Fixture
 	publisher     *realtimetest.Publisher
 	service       *Service
 }
 
 // newDeviceRenameFixture authenticated its Session a day ago, so nothing it
 // does can rely on recent authentication.
-func newDeviceRenameFixture() *deviceRenameFixture {
+func newDeviceRenameFixture(t *testing.T) *deviceRenameFixture {
 	now := time.Date(2026, 8, 12, 9, 30, 0, 0, time.UTC)
 	f := &deviceRenameFixture{now: now, principal: selfSessionPrincipal(now.Add(-24 * time.Hour))}
 	f.sessions = &renameSessionStoreFake{events: &f.events}
 	f.registrations = &renameDesktopRegistrationStoreFake{events: &f.events}
-	f.auditor = &mutationAttemptAuditorFake{events: &f.events, beginID: model.NewID()}
+	f.access = accessWith(t, &f.events, accesstest.Options{})
 	f.publisher = &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
 		f.events = append(f.events, string(call.Method)+" "+call.Event.Name)
 	}}
 	f.service = &Service{
-		sessions: f.sessions, desktopRegistrations: f.registrations, auditor: f.auditor,
+		sessions: f.sessions, desktopRegistrations: f.registrations, auditor: f.access.Auditor.MutationAudit(),
 		publisher: f.publisher, recentAuthenticationTTL: 5 * time.Minute,
 		now: func() time.Time { return now },
 	}
 	return f
+}
+
+// attempt is the one mutation attempt the real auditor recorded.
+func (f *deviceRenameFixture) attempt(t *testing.T) recordedAttempt {
+	t.Helper()
+	attempts := recordedAttempts(t, f.access)
+	require.Len(t, attempts, 1)
+	return attempts[0]
 }
 
 func (f *deviceRenameFixture) inv() invocation.Invocation {
@@ -122,7 +130,7 @@ func (f *deviceRenameFixture) inv() invocation.Invocation {
 
 func TestRenameSessionRenamesTheCallersOwnSessionUnderAudit(t *testing.T) {
 	t.Parallel()
-	f := newDeviceRenameFixture()
+	f := newDeviceRenameFixture(t)
 	f.sessions.session = &model.Session{ID: model.NewSessionID(), UserID: f.principal.UserID, ClientType: model.SessionClientCLI}
 
 	renamed, err := f.service.RenameSession(context.Background(), f.inv(), RenameSessionCommand{
@@ -132,23 +140,24 @@ func TestRenameSessionRenamesTheCallersOwnSessionUnderAudit(t *testing.T) {
 	require.Equal(t, "Build server", renamed.DeviceName)
 	// Contract (guardrail 8): the audit attempt begins before the durable
 	// rename, which completes it; the User's connections hear of it after.
-	require.Equal(t, []string{"get", "begin", "rename", "Publish current_user.sessions.changed"}, f.events)
+	require.Equal(t, []string{"get", "audit-begin:session.manage", "rename", "Publish current_user.sessions.changed"}, f.events)
 	sessionsChanged, err := realtime.NewCurrentUserSessionsChangedEvent(f.principal.UserID)
 	require.NoError(t, err)
 	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: sessionsChanged}}, f.publisher.Calls())
 	require.Equal(t, []store.SessionRename{{
 		SessionID: f.sessions.session.ID, UserID: f.principal.UserID, DeviceName: "Build server",
-		AuditEventID: model.AuditEventID(f.auditor.beginID), AuditAt: f.now,
+		AuditEventID: recordedAttempts(t, f.access)[0].ID, AuditAt: f.now,
 	}}, f.sessions.renames)
-	require.Equal(t, access.Mutation{
-		Invocation: f.inv(),
-		Action:     model.ActionSessionManage,
-		Resource:   model.Resource{Type: model.ResourceUser, ID: f.principal.UserID.String()},
-		Operation:  model.AuditOperationRenameOwnSession,
-		Value:      map[string]any{"session_id": f.sessions.session.ID.String()},
-		At:         f.now,
-	}, f.auditor.attempt)
-	event, ok := model.AuditSelfEventFor(string(f.auditor.attempt.Action), f.auditor.attempt.Operation, model.AuditStatusSuccess)
+	attempt := f.attempt(t)
+	require.Equal(t, f.principal.UserID, attempt.ActorID)
+	require.Equal(t, f.principal.SessionID, attempt.SessionID)
+	require.Equal(t, string(model.ActionSessionManage), attempt.Action)
+	require.Equal(t, model.Resource{Type: model.ResourceUser, ID: f.principal.UserID.String()}, attempt.Resource)
+	require.Equal(t, map[string]any{
+		"operation": model.AuditOperationRenameOwnSession,
+		"value":     map[string]any{"session_id": f.sessions.session.ID.String()},
+	}, attempt.parameters)
+	event, ok := model.AuditSelfEventFor(attempt.Action, attempt.parameters["operation"].(string), model.AuditStatusSuccess)
 	require.True(t, ok)
 	require.Equal(t, model.AuditSelfEventSessionRenamed, event)
 }
@@ -196,7 +205,7 @@ func TestRenameSessionRefusesBeforeAudit(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			f := newDeviceRenameFixture()
+			f := newDeviceRenameFixture(t)
 			if test.token {
 				f.principal.CredentialType, f.principal.SessionID = model.CredentialPersonalAccessToken, ""
 			}
@@ -237,22 +246,23 @@ func TestRenameSessionFailsItsAuditWhenTheStoreRefuses(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			f := newDeviceRenameFixture()
+			f := newDeviceRenameFixture(t)
 			f.sessions.session = &model.Session{ID: model.NewSessionID(), UserID: f.principal.UserID, ClientType: model.SessionClientWeb}
 			f.sessions.renameErr = test.err
 
 			_, err := f.service.RenameSession(context.Background(), f.inv(), RenameSessionCommand{SessionID: f.sessions.session.ID, DeviceName: "Laptop"})
 			require.True(t, apperror.Is(err, apperror.Code(test.code)), "error = %v", err)
-			require.Equal(t, []string{"get", "begin", "rename", "fail"}, f.events)
-			require.Equal(t, f.auditor.beginID, f.auditor.failID)
-			require.Equal(t, test.code, f.auditor.failCode)
+			require.Equal(t, []string{"get", "audit-begin:session.manage", "rename", "audit-fail"}, f.events)
+			attempt := f.attempt(t)
+			require.Equal(t, model.AuditStatusFail, attempt.Status)
+			require.Equal(t, test.code, attempt.ErrorCode)
 		})
 	}
 }
 
 func TestRenameDesktopRegistrationRenamesUnderAuditWithoutRecentAuthentication(t *testing.T) {
 	t.Parallel()
-	f := newDeviceRenameFixture()
+	f := newDeviceRenameFixture(t)
 	registrationID := model.NewDesktopRegistrationID()
 
 	renamed, err := f.service.RenameDesktopRegistration(context.Background(), f.inv(), RenameDesktopRegistrationCommand{
@@ -260,23 +270,24 @@ func TestRenameDesktopRegistrationRenamesUnderAuditWithoutRecentAuthentication(t
 	})
 	require.NoError(t, err)
 	require.Equal(t, "Library laptop", renamed.DisplayName)
-	require.Equal(t, []string{"begin", "rename", "Publish current_user.sessions.changed"}, f.events)
+	require.Equal(t, []string{"audit-begin:desktop_registration.rename", "rename", "Publish current_user.sessions.changed"}, f.events)
 	sessionsChanged, err := realtime.NewCurrentUserSessionsChangedEvent(f.principal.UserID)
 	require.NoError(t, err)
 	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: sessionsChanged}}, f.publisher.Calls())
 	require.Equal(t, []store.DesktopRegistrationRename{{
 		RegistrationID: registrationID, UserID: f.principal.UserID, DisplayName: "Library laptop",
-		AuditEventID: model.AuditEventID(f.auditor.beginID), AuditAt: f.now,
+		AuditEventID: recordedAttempts(t, f.access)[0].ID, AuditAt: f.now,
 	}}, f.registrations.renames)
-	require.Equal(t, access.Mutation{
-		Invocation: f.inv(),
-		Action:     model.ActionDesktopRegistrationRename,
-		Resource:   model.Resource{Type: model.ResourceUser, ID: f.principal.UserID.String()},
-		Operation:  model.AuditOperationRenameDesktopRegistration,
-		Value:      map[string]any{"registration_id": registrationID.String()},
-		At:         f.now,
-	}, f.auditor.attempt)
-	event, ok := model.AuditSelfEventFor(string(f.auditor.attempt.Action), f.auditor.attempt.Operation, model.AuditStatusSuccess)
+	attempt := f.attempt(t)
+	require.Equal(t, f.principal.UserID, attempt.ActorID)
+	require.Equal(t, f.principal.SessionID, attempt.SessionID)
+	require.Equal(t, string(model.ActionDesktopRegistrationRename), attempt.Action)
+	require.Equal(t, model.Resource{Type: model.ResourceUser, ID: f.principal.UserID.String()}, attempt.Resource)
+	require.Equal(t, map[string]any{
+		"operation": model.AuditOperationRenameDesktopRegistration,
+		"value":     map[string]any{"registration_id": registrationID.String()},
+	}, attempt.parameters)
+	event, ok := model.AuditSelfEventFor(attempt.Action, attempt.parameters["operation"].(string), model.AuditStatusSuccess)
 	require.True(t, ok)
 	require.Equal(t, model.AuditSelfEventDesktopRegistrationRenamed, event)
 }
@@ -309,19 +320,19 @@ func TestRenameDesktopRegistrationRefusals(t *testing.T) {
 			code: "request.invalid",
 		},
 		"a Personal Access Token":         {token: true, code: "authentication.session_required"},
-		"another User's registration":     {storeErr: store.NewErrNotFound("desktop_registration", ""), code: "resource.not_found", events: []string{"begin", "rename", "fail"}},
-		"a revoked registration":          {storeErr: store.NewErrConflict("desktop_registration", "desktop_registration_revoked", nil), code: "desktop_registration.revoked", events: []string{"begin", "rename", "fail"}},
-		"an unavailable Store":            {storeErr: errors.New("connection reset"), code: "desktop_registration.unavailable", events: []string{"begin", "rename", "fail"}},
-		"an unavailable audit (no write)": {code: "audit.unavailable", events: []string{"begin"}},
+		"another User's registration":     {storeErr: store.NewErrNotFound("desktop_registration", ""), code: "resource.not_found", events: []string{"audit-begin:desktop_registration.rename", "rename", "audit-fail"}},
+		"a revoked registration":          {storeErr: store.NewErrConflict("desktop_registration", "desktop_registration_revoked", nil), code: "desktop_registration.revoked", events: []string{"audit-begin:desktop_registration.rename", "rename", "audit-fail"}},
+		"an unavailable Store":            {storeErr: errors.New("connection reset"), code: "desktop_registration.unavailable", events: []string{"audit-begin:desktop_registration.rename", "rename", "audit-fail"}},
+		"an unavailable audit (no write)": {code: "audit.unavailable", events: []string{"audit-begin:desktop_registration.rename"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			f := newDeviceRenameFixture()
+			f := newDeviceRenameFixture(t)
 			if test.token {
 				f.principal.CredentialType, f.principal.SessionID = model.CredentialPersonalAccessToken, ""
 			}
 			if test.code == "audit.unavailable" {
-				f.auditor.beginErr = apperror.New("audit.unavailable")
+				f.access.Audits.FailAttempts(errors.New("audit store unavailable"))
 			}
 			f.registrations.renameErr = test.storeErr
 			command := RenameDesktopRegistrationCommand{RegistrationID: model.NewDesktopRegistrationID(), DisplayName: "Laptop"}
@@ -333,7 +344,9 @@ func TestRenameDesktopRegistrationRefusals(t *testing.T) {
 			require.True(t, apperror.Is(err, apperror.Code(test.code)), "error = %v", err)
 			require.Equal(t, test.events, f.events)
 			if test.storeErr != nil {
-				require.Equal(t, test.code, f.auditor.failCode)
+				attempt := f.attempt(t)
+				require.Equal(t, model.AuditStatusFail, attempt.Status)
+				require.Equal(t, test.code, attempt.ErrorCode)
 			}
 		})
 	}
@@ -343,7 +356,7 @@ func TestListSessionsNamesDesktopSessionsByTheirRegistration(t *testing.T) {
 	t.Parallel()
 	t.Run("a Desktop Session reads the caller's registrations once", func(t *testing.T) {
 		t.Parallel()
-		f := newDeviceRenameFixture()
+		f := newDeviceRenameFixture(t)
 		first, second := model.NewDesktopRegistrationID(), model.NewDesktopRegistrationID()
 		f.sessions.sessions = []*model.Session{
 			{ID: model.NewSessionID(), UserID: f.principal.UserID, ClientType: model.SessionClientDesktop, DesktopRegistrationID: first},
@@ -363,7 +376,7 @@ func TestListSessionsNamesDesktopSessionsByTheirRegistration(t *testing.T) {
 
 	t.Run("without a Desktop Session no registration is read", func(t *testing.T) {
 		t.Parallel()
-		f := newDeviceRenameFixture()
+		f := newDeviceRenameFixture(t)
 		f.sessions.sessions = []*model.Session{{ID: model.NewSessionID(), UserID: f.principal.UserID, ClientType: model.SessionClientWeb}}
 
 		listed, err := f.service.ListSessions(context.Background(), f.inv())

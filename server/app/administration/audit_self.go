@@ -18,10 +18,10 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// SelfAuditActorKind says who performed an event in a User's own history
-// without naming anyone but the User: the User themself, another person with
-// authority over the account, or work with no signed-in actor (Jobs,
-// offline recovery, and token links such as password reset).
+// SelfAuditActorKind says who performed an event in a user's own history
+// without naming anyone else: the user, another person with authority over
+// the account, or work with no signed-in actor (jobs, offline recovery, token
+// links such as password reset).
 type SelfAuditActorKind string
 
 // The actor kinds of self history.
@@ -31,12 +31,11 @@ const (
 	SelfAuditActorSystem        SelfAuditActorKind = "system"
 )
 
-// maximumSelfAuditEventFilters bounds the repeated event filter.
 const maximumSelfAuditEventFilters = 64
 
 // ListSelfAuditEventsQuery filters the caller's own history. Since is
-// inclusive and Until exclusive. Events and Status narrow the closed
-// catalogue; Relation selects subject or actor events, or both when empty.
+// inclusive and Until exclusive; Relation selects subject or actor events, or
+// both when empty.
 type ListSelfAuditEventsQuery struct {
 	Since    time.Time
 	Until    time.Time
@@ -45,23 +44,19 @@ type ListSelfAuditEventsQuery struct {
 	Relation store.AuditSelfRelation
 	// Ascending reads oldest first; the default is newest first.
 	Ascending bool
-	// BeforeCreatedAt and BeforeID are the previous page's last key at
-	// microsecond precision; the page continues past it in the read order.
+	// BeforeCreatedAt and BeforeID continue past the previous page's last
+	// event at microsecond precision.
 	BeforeCreatedAt time.Time
 	BeforeID        model.AuditEventID
 	Limit           int
 }
 
-// SelfAuditEvent is the self audit projection of one event: a catalogue
-// name, the outcome, and only the facts the caller may see about it. The
-// resource ID is present only when the resource is the caller, the
-// Institution, or an Academic Unit or Class the caller belongs or belonged
-// to. The network identity is present only for the caller's own actions.
-// ResourceName names that related Academic Unit or Class when it is not
-// archived, and Role names the Role a Role Binding change granted the caller
-// or ended for them. SubjectName names the User the caller acted on, only
-// while the caller can see that User through the User directory's
-// visibility; the actor of an event about the caller is never named.
+// SelfAuditEvent is one event as its subject may see it. The resource ID is
+// present only when the resource is the caller, the institution, or an
+// academic unit or class the caller belongs or belonged to; the network
+// identity only for the caller's own actions. SubjectName names a user the
+// caller acted on only while the directory still lets the caller see them.
+// The actor of an event about the caller is never named.
 type SelfAuditEvent struct {
 	ID         model.AuditEventID
 	CreatedAt  time.Time
@@ -80,19 +75,16 @@ type SelfAuditEvent struct {
 	SubjectName  string
 }
 
-// SelfAuditRun is a stretch of at least two consecutive items on one page
-// that share an actor kind, event, recorded operation, status, and relation,
-// so a client can show them as one line. Start indexes the page's items. A
-// run never reaches past the page, so the next page may continue it.
+// SelfAuditRun is two or more consecutive items on one page that a client can
+// show as one line. Start indexes the page's items. A run never reaches past
+// the page, so the next page may continue it.
 type SelfAuditRun struct {
 	Start  int
 	Length int
 }
 
-// SelfAuditPage is one page of the caller's history. The first page, read
-// without a keyset, also carries Total: every matching event across all
-// pages, stopped at store.MaximumAuditSelfCount, where TotalIsLowerBound is
-// set. Later pages leave Counted false and the client keeps the first total.
+// SelfAuditPage is one page of the caller's history. Only the first page,
+// read without a keyset, is counted, up to store.MaximumAuditSelfCount.
 type SelfAuditPage struct {
 	paging.Page[SelfAuditEvent]
 	Runs              []SelfAuditRun
@@ -101,10 +93,10 @@ type SelfAuditPage struct {
 	TotalIsLowerBound bool
 }
 
-// ListSelfAuditEvents returns the current Session User's own account
-// history. It is the caller's own record, like other /users/me reads, so it
-// records no authorization decision; Personal Access Tokens are refused
-// because the history includes credential and Session changes.
+// ListSelfAuditEvents returns the session user's own account history. Like
+// other /users/me reads it records no authorization decision. Personal
+// access tokens are refused because the history includes credential and
+// session changes.
 func (s *Service) ListSelfAuditEvents(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -206,8 +198,8 @@ func validSelfAuditQuery(query ListSelfAuditEventsQuery) bool {
 		(query.BeforeID.IsZero() || query.BeforeID.IsValid())
 }
 
-// selfAuditProjection applies the self audit projection rule to one entry.
-// It reports false for an entry the store should never have returned.
+// selfAuditProjection reports false for an entry the store should never have
+// returned.
 func selfAuditProjection(caller model.UserID, entry *store.AuditSelfEntry) (SelfAuditEvent, bool) {
 	if entry == nil {
 		return SelfAuditEvent{}, false
@@ -253,9 +245,8 @@ func selfAuditProjection(caller model.UserID, entry *store.AuditSelfEntry) (Self
 	return item, true
 }
 
-// selfAuditRole is the Role a Role Binding change bound to the caller, or
-// zero for any other event, including a change the caller made for someone
-// else.
+// selfAuditRole is the role a binding change bound to the caller, or zero for
+// any other event, including a change the caller made for someone else.
 func selfAuditRole(caller model.UserID, entry *store.AuditSelfEntry) model.RoleID {
 	if entry.SubjectUserID != caller {
 		return ""
@@ -263,10 +254,8 @@ func selfAuditRole(caller model.UserID, entry *store.AuditSelfEntry) model.RoleI
 	return entry.RoleID
 }
 
-// selfAuditRuns finds the runs among the page's items; entries are the
-// entries they were projected from, in the same order, with the probe row
-// past the page left out by the items' length. An event that does not
-// repeat never forms a run.
+// selfAuditRuns takes the entries the items were projected from, in the same
+// order; the probe row past the page is excluded by the items' length.
 func selfAuditRuns(items []SelfAuditEvent, entries []*store.AuditSelfEntry) []SelfAuditRun {
 	var runs []SelfAuditRun
 	for start := 0; start < len(items); {
@@ -282,10 +271,10 @@ func selfAuditRuns(items []SelfAuditEvent, entries []*store.AuditSelfEntry) []Se
 	return runs
 }
 
-// sameSelfAuditRun reports whether two items read as the same line: the
-// relation decides whether the line is about the caller or by them, and the
-// operation separates facts one event name covers, such as revoking one's
-// own Session or another User's.
+// sameSelfAuditRun compares relation and operation too: the relation decides
+// whether the line is about the caller or by them, and the operation
+// separates facts one event name covers, such as revoking one's own session
+// or another user's.
 func sameSelfAuditRun(left SelfAuditEvent, leftEntry *store.AuditSelfEntry, right SelfAuditEvent, rightEntry *store.AuditSelfEntry) bool {
 	return left.ActorKind == right.ActorKind &&
 		left.Event == right.Event &&
@@ -294,14 +283,10 @@ func sameSelfAuditRun(left SelfAuditEvent, leftEntry *store.AuditSelfEntry, righ
 		leftEntry.Operation == rightEntry.Operation
 }
 
-// nameSelfAuditEvents reads, in one call, the current names of the related
-// Academic Units and Classes the projection kept, of the Roles bound to the
-// caller, and of the Users the caller acted on. entries and roles hold each
-// projected entry's source and Role, the page's items first. The projection
-// has already applied the related-resource rule, so Academic Units, Classes
-// and Roles need no further visibility; a User is named only inside the
-// caller's current User visibility, as on the institution audit list, and
-// the person who acted on the caller is never named.
+// nameSelfAuditEvents needs no further visibility check for academic units,
+// classes and roles, because the projection already applied the
+// related-resource rule. A user is named only inside the caller's current
+// user visibility, and the person who acted on the caller is never named.
 func (s *Service) nameSelfAuditEvents(
 	ctx context.Context,
 	principal model.Principal,
@@ -359,8 +344,8 @@ func (s *Service) nameSelfAuditEvents(
 	return nil
 }
 
-// selfAuditSubject is the other User an event the caller performed was
-// about, or zero for an event about the caller or about no User.
+// selfAuditSubject is the other user an event the caller performed was
+// about, or zero for an event about the caller or about no user.
 func selfAuditSubject(item SelfAuditEvent, entry *store.AuditSelfEntry) model.UserID {
 	if item.Relation != store.AuditSelfRelationActor {
 		return ""

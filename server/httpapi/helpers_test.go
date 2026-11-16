@@ -47,10 +47,19 @@ func (a *testHTTPApplication) AuthenticateBearer(context.Context, string) (*mode
 	return a.principal, nil
 }
 
-type testHTTPHealth struct{}
+func (a *testHTTPApplication) AuthenticateDPoP(context.Context, string, string, string, string) (*model.Principal, error) {
+	return a.principal, nil
+}
 
-func (testHTTPHealth) Live() bool  { return true }
-func (testHTTPHealth) Ready() bool { return true }
+// readyHealth is the real node health with readiness published as
+// composition publishes it after startup, and no dependency probe.
+func readyHealth(t *testing.T, ready bool) *app.Health {
+	t.Helper()
+	health, err := app.NewHealth(app.HealthDependencies{})
+	require.NoError(t, err)
+	health.SetReady(ready)
+	return health
+}
 
 type testWebSocketTransport struct{}
 
@@ -62,7 +71,7 @@ func validHTTPSettings(t *testing.T) Settings {
 	t.Helper()
 	logger, _ := routetest.NewLogger(t)
 	return Settings{
-		Logger: logger, Localizer: routetest.NewLocalizer(t), Health: testHTTPHealth{},
+		Logger: logger, Localizer: routetest.NewLocalizer(t), Health: readyHealth(t, true),
 		BuildInfo: BuildInfo{Version: "test"}, PublicURL: "http://localhost:8065",
 		MaxBodyBytes: 1 << 20, RecentAuthenticationTTL: time.Minute, NodeID: "node-a",
 		WebSocket: testWebSocketTransport{},

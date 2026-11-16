@@ -14,62 +14,15 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
-	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ManagerAuthorizer is the manager authorization the Attempt use cases ask.
-// SittingManagerAuthorizer satisfies it and tests substitute a fake.
-type ManagerAuthorizer interface {
-	AuthorizeSittingView(context.Context, invocation.Invocation, model.ExamSittingID) error
-	AuthorizeSittingManage(context.Context, invocation.Invocation, model.ExamSittingID) (access.ManagerAuthorization, error)
-	AuthorizeSubmissionView(context.Context, invocation.Invocation, model.SubmissionID) error
-	AuthorizeBrowserActivityView(context.Context, invocation.Invocation, model.ExamSittingID) (access.BrowserActivityAuthorization, error)
-	AuthorizeScreenClipView(
-		context.Context, invocation.Invocation, model.ExamSittingID, model.ExamAttemptID,
-	) (ScreenClipViewAuthorization, error)
-}
-
-// Auditor is the part of *access.Auditor the Attempt use cases call. Begin
-// and Fail bracket an audited mutation, Complete closes an audited read, and
-// PrepareAtScope builds the event a Store operation inserts with its change,
-// after RecordAuthorizationDecision has recorded the decision.
-type Auditor interface {
-	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
-	PrepareAtScope(
-		context.Context,
-		invocation.Invocation,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		string,
-		map[string]any,
-	) (*model.AuditEvent, error)
-	RecordAuthorizationDecision(context.Context, invocation.Invocation, model.Action, model.Resource, model.RoleScopeType, string, bool) error
-	Fail(context.Context, model.AuditEventID, string) error
-	Complete(context.Context, model.AuditEventID, map[string]any) error
-}
-
-// SystemAuditor creates audit attempts for trusted core work that has no
-// Principal. Begin is actor-less, for periodic continuity enforcement: a
-// runtime scanner must never manufacture a User Principal merely to persist
-// this system decision. BeginOnBehalf names the User whose work it is, for an
-// execution environment writing the candidate's Workspace on their behalf.
-// access.SystemAuditAdapter satisfies it and tests substitute a fake.
-type SystemAuditor interface {
-	Begin(context.Context, model.Action, model.Resource, model.RoleScopeType, string, string, map[string]any) (model.AuditEventID, error)
-	BeginOnBehalf(
-		context.Context, model.UserID, model.Action, model.Resource, model.RoleScopeType, string, string, map[string]any,
-	) (model.AuditEventID, error)
-	Fail(context.Context, model.AuditEventID, string) error
-}
-
-// Content opens and stages the bytes behind Exam Resources, Starter
-// Workspace objects and Attempt Workspace objects. The Store decides which
-// object a candidate or manager may reach; this port only moves bytes.
+// Content opens and stages the bytes behind exam resources and starter and
+// attempt workspace objects. It never checks access: the store decides which
+// object a candidate or manager may reach.
 type Content interface {
 	OpenExamResource(context.Context, model.FileRevisionID, model.FileRenditionID) (io.ReadCloser, error)
 	OpenStarterWorkspaceObject(context.Context, model.StarterWorkspaceObjectID) (io.ReadCloser, error)
@@ -88,9 +41,9 @@ type Content interface {
 	OpenScreenClipChunk(context.Context, model.ScreenClipID, int, int64, int64) (io.ReadCloser, error)
 }
 
-// SubmissionMailPreparation contains only the safe identity needed to freeze
-// a candidate receipt. The preparer resolves recipient and published Exam
-// title without exposing them to the Attempt use cases.
+// SubmissionMailPreparation carries only the safe identity needed to freeze a
+// candidate receipt; the preparer resolves the recipient and exam title so the
+// attempt use cases never see them.
 type SubmissionMailPreparation struct {
 	CandidateUserID model.UserID
 	ExamID          model.ExamID
@@ -101,22 +54,16 @@ type SubmissionMailPreparation struct {
 	Provenance      model.ExamSubmissionProvenance
 }
 
-// PreparedSubmissionMail is a frozen receipt notice together with the
-// recipient User revision it was prepared against, which the Store operation
-// that seals the Submission receives as its fence.
+// PreparedSubmissionMail is a frozen receipt notice and the recipient's user
+// revision it was prepared against, which the sealing store operation uses as
+// its fence.
 type PreparedSubmissionMail struct {
 	Notice                    *store.PreparedMail
 	ExpectedRecipientRevision int64
 }
 
-// SubmissionMailPreparer prepares the candidate's Submission receipt.
-// SubmissionReceiptMail satisfies it and tests substitute a fake.
-type SubmissionMailPreparer interface {
-	PrepareSubmissionReceipt(context.Context, SubmissionMailPreparation) (*PreparedSubmissionMail, error)
-}
-
-// DesktopBuildResolution is the Desktop build resolved for a Principal and
-// the Desktop compatibility policy revision it was resolved under.
+// DesktopBuildResolution is the Desktop build resolved for a principal and the
+// compatibility policy revision it was resolved under.
 type DesktopBuildResolution struct {
 	Build                       model.DesktopBuildTuple
 	CompatibilityPolicyRevision int64
@@ -131,15 +78,14 @@ type NativeDeliveryBuildIdentity struct {
 	TargetTuple  string
 }
 
-// DesktopBuildResolver maps a Principal, or the build identity a native
+// DesktopBuildResolver maps a principal, or the build identity a native
 // delivery source declares, to a known Desktop build.
 type DesktopBuildResolver interface {
 	ResolveNativeDeliveryBuild(context.Context, NativeDeliveryBuildIdentity) (model.DesktopBuildTuple, error)
 	ResolveAttemptDesktopBuild(context.Context, model.Principal) (DesktopBuildResolution, error)
 }
 
-// Dependencies are the collaborators New validates once and distributes to
-// the Service.
+// Dependencies are the collaborators New validates once.
 type Dependencies struct {
 	Persistence         store.ExamAttemptStore
 	FocusLoss           store.ExamFocusLossStore
@@ -150,12 +96,11 @@ type Dependencies struct {
 	Workspace           store.ExamAttemptWorkspaceStore
 	Submissions         store.ExamSubmissionStore
 	Sittings            store.ExamSittingStore
-	Managers            ManagerAuthorizer
-	Auditor             Auditor
-	SystemAuditor       SystemAuditor
+	Managers            SittingManagerAuthorizer
+	Auditor             *access.Auditor
 	Publisher           realtime.Publisher
 	Content             Content
-	Mail                SubmissionMailPreparer
+	Mail                SubmissionReceiptMail
 	DesktopBuilds       DesktopBuildResolver
 	Now                 func() time.Time
 	NewAttemptID        func() model.ExamAttemptID
@@ -173,52 +118,39 @@ type Dependencies struct {
 	NewSubmission       func() model.SubmissionID
 	NewReceiptCode      func() model.SubmissionReceiptCode
 	// NewDomainEvent and NewJob propose the exam.attempt.submitted outbox row
-	// and its dispatch Job that a fresh voluntary, automatic or manager seal
-	// commits with the Submission.
+	// and its dispatch job, committed with every fresh seal.
 	NewDomainEvent func() model.DomainEventID
 	NewJob         func() model.JobID
-	Operational    OperationalRecorder
-	// EnvironmentWaker wakes the owner of an Attempt's execution environment
-	// after a candidate changes its Workspace. It is optional: without one,
-	// the owner's backstop finds the change.
+	Operational    operational.Recorder
+	// EnvironmentWaker is optional: without one, the environment owner's
+	// backstop finds a candidate's workspace change.
 	EnvironmentWaker EnvironmentWaker
-	// EnvironmentSettler brings an execution environment's last guest
-	// changes into the Workspace before a voluntary, manager or automatic
-	// seal. It is optional: without one, nothing is settled.
+	// EnvironmentSettler is optional: without one, nothing is settled before
+	// a seal.
 	EnvironmentSettler EnvironmentSettler
-	// Environments are the Attempt Environments a manager replaces. It is
-	// optional: without it, no Attempt has one.
+	// Environments is optional: without it, no attempt has an environment.
 	Environments store.AttemptEnvironmentStore
 }
 
-// EnvironmentSettler settles an Attempt's execution environment before its
-// seal: the owner harvests every change the guest made. Settle asks for a
-// settle and returns once it is done or its bounded budget is spent;
-// AwaitPendingSettle asks for none and waits, within what is left of its
-// budget, for the settle a closing Sitting already asked. An incomplete
-// settle is recorded as an execution gap, never returned as a refusal, so
-// the seal always goes ahead. An Attempt without an environment, or with
-// nothing pending, settles at once.
+// EnvironmentSettler harvests the guest's changes into an attempt's workspace
+// before its seal. Settle returns once the settle is done or its bounded budget
+// is spent; AwaitPendingSettle only waits, within what is left of the budget,
+// for a settle a closing sitting already asked for. An incomplete settle is
+// recorded as an execution gap, never returned as a refusal, so the seal always
+// goes ahead.
 type EnvironmentSettler interface {
 	Settle(ctx context.Context, attemptID model.ExamAttemptID)
 	AwaitPendingSettle(ctx context.Context, attemptID model.ExamAttemptID)
 }
 
-// EnvironmentWaker wakes the owner of an Attempt's execution environment,
+// EnvironmentWaker wakes the owner of an attempt's execution environment,
 // wherever it runs. It never blocks.
 type EnvironmentWaker interface {
 	Wake(attemptID model.ExamAttemptID)
 }
 
-// OperationalRecorder receives the outcome of each use case the module
-// observes. It is optional; a module built without one records nothing.
-type OperationalRecorder interface {
-	RecordOperational(subsystem, event string, err error)
-}
-
-// Service holds every Attempt use case, from admission to the sealed
-// Submission. liveControls and deliveryControls are the per-node admission
-// lanes that rate-limit control commands by User.
+// Service holds every attempt use case. liveControls and deliveryControls
+// rate-limit control commands by user, per node.
 type Service struct {
 	attempts          store.ExamAttemptStore
 	focusLoss         store.ExamFocusLossStore
@@ -229,19 +161,22 @@ type Service struct {
 	workspaces        store.ExamAttemptWorkspaceStore
 	submissions       store.ExamSubmissionStore
 
-	sittings      store.ExamSittingStore
-	managers      ManagerAuthorizer
-	auditor       Auditor
-	systemAuditor SystemAuditor
+	sittings store.ExamSittingStore
+	managers SittingManagerAuthorizer
+	auditor  access.MutationAuditAdapter
+	// systemAuditor audits trusted work that has no principal: continuity
+	// enforcement records no actor, and an environment writing a candidate's
+	// workspace names that candidate. Neither manufactures a user principal.
+	systemAuditor access.SystemAuditAdapter
 	publisher     realtime.Publisher
 	content       Content
-	mail          SubmissionMailPreparer
+	mail          SubmissionReceiptMail
 	desktopBuilds DesktopBuildResolver
 	now           func() time.Time
-	operational   OperationalRecorder
+	operational   operational.Recorder
 	environments  EnvironmentWaker
 	settler       EnvironmentSettler
-	// environmentStore holds the Attempt Environments; nil when none exist.
+	// environmentStore is nil when no attempt has an environment.
 	environmentStore store.AttemptEnvironmentStore
 
 	newAttemptID         func() model.ExamAttemptID
@@ -266,8 +201,8 @@ type Service struct {
 	workspaceBudget  *workspaceWriteBudget
 }
 
-// New builds the Service, or fails when a required collaborator is missing.
-// Operational is the only optional one.
+// New fails when a required collaborator is missing. Operational and the
+// three environment collaborators are optional.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Persistence == nil ||
 		deps.FocusLoss == nil ||
@@ -278,12 +213,14 @@ func New(deps Dependencies) (*Service, error) {
 		deps.Workspace == nil ||
 		deps.Submissions == nil ||
 		deps.Sittings == nil ||
-		deps.Managers == nil ||
+		deps.Managers.Sittings == nil ||
 		deps.Auditor == nil ||
-		deps.SystemAuditor == nil ||
 		deps.Publisher == nil ||
 		deps.Content == nil ||
-		deps.Mail == nil ||
+		deps.Mail.Composer == nil ||
+		deps.Mail.Users == nil ||
+		deps.Mail.Sittings == nil ||
+		deps.Mail.Revisions == nil ||
 		deps.DesktopBuilds == nil ||
 		deps.Now == nil ||
 		deps.NewAttemptID == nil ||
@@ -316,8 +253,8 @@ func New(deps Dependencies) (*Service, error) {
 		submissions:          deps.Submissions,
 		sittings:             deps.Sittings,
 		managers:             deps.Managers,
-		auditor:              deps.Auditor,
-		systemAuditor:        deps.SystemAuditor,
+		auditor:              deps.Auditor.MutationAudit(),
+		systemAuditor:        deps.Auditor.SystemAudit(),
 		publisher:            deps.Publisher,
 		content:              deps.Content,
 		mail:                 deps.Mail,

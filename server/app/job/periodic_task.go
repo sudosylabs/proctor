@@ -15,19 +15,17 @@ import (
 	"github.com/sudosylabs/proctor/server/logging"
 )
 
-// PeriodicTask defines a non-overlapping runtime maintenance loop owned by the
-// Engine lifecycle. Each node runs one loop immediately at startup and then at
-// Interval after the preceding pass completes.
+// PeriodicTask is a non-overlapping maintenance loop run by the engine. Each
+// node runs it at startup and then Interval after the previous pass ends.
 type PeriodicTask struct {
 	Name     string
 	Interval time.Duration
 	Runner   PeriodicRunner
 }
 
-// PeriodicRunner performs one bounded, idempotent runtime maintenance pass.
-// Unlike a durable Job, a pass has no persisted occurrence or execution
-// history. Cross-node convergence remains the responsibility of the named
-// application/Store operation invoked by the runner.
+// PeriodicRunner performs one bounded, idempotent maintenance pass. Unlike a
+// job, a pass has no stored history; cross-node convergence is up to the
+// store operation the runner calls.
 type PeriodicRunner interface {
 	Run(context.Context) error
 }
@@ -47,8 +45,8 @@ func clonePeriodicTasks(values []PeriodicTask) ([]PeriodicTask, error) {
 	return cloned, nil
 }
 
-func runPeriodicTask(ctx context.Context, task PeriodicTask, diagnostics *logging.Logger, clock Clock, recorder Recorder) {
-	if task.Name == "" || task.Interval <= 0 || task.Runner == nil || diagnostics == nil || clock == nil {
+func runPeriodicTask(ctx context.Context, task PeriodicTask, diagnostics *logging.Logger, recorder Recorder) {
+	if task.Name == "" || task.Interval <= 0 || task.Runner == nil || diagnostics == nil {
 		return
 	}
 
@@ -72,18 +70,18 @@ func runPeriodicTask(ctx context.Context, task PeriodicTask, diagnostics *loggin
 			return
 		}
 
-		timer := clock.NewTimer(task.Interval)
+		timer := time.NewTimer(task.Interval)
 		select {
 		case <-ctx.Done():
 			if !timer.Stop() {
 				select {
-				case <-timer.C():
+				case <-timer.C:
 				default:
 				}
 			}
 
 			return
-		case <-timer.C():
+		case <-timer.C:
 		}
 	}
 }

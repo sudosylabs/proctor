@@ -20,8 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// AttemptEvidenceExportProbe returns the integrity records an Examination
-// Export would capture for a sealed Submission. Building a whole export is
+// AttemptEvidenceExportProbe returns the integrity records an examination
+// export would capture for a sealed submission. Building a whole export is
 // another suite's concern, so the adapter supplies its own capture.
 type AttemptEvidenceExportProbe func(t *testing.T, ctx context.Context, submissionID model.SubmissionID,
 	attemptID model.ExamAttemptID) map[string][]json.RawMessage

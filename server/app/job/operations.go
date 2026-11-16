@@ -22,52 +22,35 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Operations holds the operator Job use cases: listing and inspecting Jobs
-// and their attempts, and canceling or retrying a Job. A nil Operations
-// answers that Jobs are unavailable.
+// Operations holds the operator job use cases. A nil Operations answers that
+// jobs are unavailable.
 type Operations struct {
 	deps OperationsDependencies
+	// audit fails the attempt of a cancel or retry that does not commit; the
+	// store completes a committed one.
+	audit access.MutationAuditAdapter
 }
 
-// OperationsDependencies are the collaborators of Operations;
-// NewOperations validates them once and Operations keeps them in deps.
+// OperationsDependencies are the collaborators of Operations, validated once
+// by NewOperations.
 type OperationsDependencies struct {
-	Jobs          operatorEngine
-	Authorization institutionAuthorizer
-	Audit         access.MutationAuditor
+	Jobs          *Engine
+	Authorization InstitutionAuthorization
+	Audit         *access.Auditor
 	Users         store.UserStore
 	ExamExports   store.ExamExportStore
 	Now           func() time.Time
 }
 
-type operatorEngine interface {
-	List(context.Context, ListQuery) (Page, error)
-	CountRecentFailures(context.Context, time.Duration, int) (int, error)
-	Get(context.Context, model.JobID) (View, error)
-	Attempts(context.Context, AttemptListQuery) (AttemptPage, error)
-	PrepareCancellation(context.Context, model.JobID) (ControlTarget, error)
-	PrepareRetry(context.Context, model.JobID) (ControlTarget, error)
-	Cancel(context.Context, ControlTarget, AuditReference) (View, error)
-	Retry(context.Context, ControlTarget, AuditReference) (View, error)
-}
-
-// institutionAuthorizer authorizes an Action on the installation's singleton
-// Institution and returns that Resource for the caller's audit. Production
-// passes InstitutionAuthorization; the tests substitute a fake.
-type institutionAuthorizer interface {
-	AuthorizeInstitution(context.Context, invocation.Invocation, model.Action) (model.Resource, error)
-}
-
-// InstitutionAuthorization authorizes a Job operator Action on the singleton
-// Institution. It is not access.Authorizer.AuthorizeInstitution because an
-// Institution that cannot be read is presented with the Job operator codes
-// here.
+// InstitutionAuthorization authorizes a job operator action on the
+// institution. It is not access.Authorizer.AuthorizeInstitution because an
+// unreadable institution is reported with the job operator codes here.
 type InstitutionAuthorization struct {
 	Authorizer   *access.Authorizer
 	Institutions store.InstitutionStore
 }
 
-// AuthorizeInstitution reads the Institution and authorizes action on it.
+// AuthorizeInstitution reads the institution and authorizes action on it.
 func (a InstitutionAuthorization) AuthorizeInstitution(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -86,13 +69,12 @@ func (a InstitutionAuthorization) AuthorizeInstitution(
 	return resource, nil
 }
 
-// NewOperations builds the operator Job service over the engine. It refuses
-// a missing collaborator.
+// NewOperations refuses a missing collaborator.
 func NewOperations(deps OperationsDependencies) (*Operations, error) {
 	if deps.Jobs == nil {
 		return nil, errors.New("job operations engine is required")
 	}
-	if deps.Authorization == nil {
+	if deps.Authorization.Authorizer == nil || deps.Authorization.Institutions == nil {
 		return nil, errors.New("job operations authorization is required")
 	}
 	if deps.Audit == nil {
@@ -107,10 +89,10 @@ func NewOperations(deps OperationsDependencies) (*Operations, error) {
 	if deps.Now == nil {
 		return nil, errors.New("job operations clock is required")
 	}
-	return &Operations{deps: deps}, nil
+	return &Operations{deps: deps, audit: deps.Audit.MutationAudit()}, nil
 }
 
-// ListJobs lists one page of operator-visible Jobs, with who started each and
+// ListJobs lists one page of operator-visible jobs, with who started each and
 // what it is about.
 func (s *Operations) ListJobs(ctx context.Context, inv invocation.Invocation, query ListQuery) (Page, error) {
 	if s == nil {
@@ -131,9 +113,8 @@ func (s *Operations) ListJobs(ctx context.Context, inv invocation.Invocation, qu
 	return page, nil
 }
 
-// CountRecentJobFailures counts the operator-visible Jobs that failed within
-// the span, authorized and audited exactly as ListJobs is, stopping at
-// maximum. The administration counts read it.
+// CountRecentJobFailures counts operator-visible jobs that failed within the
+// span, authorized and audited as ListJobs is, stopping at maximum.
 func (s *Operations) CountRecentJobFailures(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -155,7 +136,7 @@ func (s *Operations) CountRecentJobFailures(
 	return total, nil
 }
 
-// GetJob returns one operator-visible Job.
+// GetJob returns one operator-visible job.
 func (s *Operations) GetJob(ctx context.Context, inv invocation.Invocation, id model.JobID) (View, error) {
 	if s == nil {
 		return View{}, apperror.New("job.unavailable")
@@ -174,7 +155,7 @@ func (s *Operations) GetJob(ctx context.Context, inv invocation.Invocation, id m
 	return views[0], nil
 }
 
-// ListJobAttempts lists the execution attempts of one Job.
+// ListJobAttempts lists the execution attempts of one job.
 func (s *Operations) ListJobAttempts(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -195,7 +176,7 @@ func (s *Operations) ListJobAttempts(
 	return page, nil
 }
 
-// CancelJob cancels one Job whose type is cancelable, with audit.
+// CancelJob cancels a job of a cancelable type, with audit.
 func (s *Operations) CancelJob(ctx context.Context, inv invocation.Invocation, id model.JobID) (View, error) {
 	if s == nil {
 		return View{}, apperror.New("job.unavailable")
@@ -203,8 +184,8 @@ func (s *Operations) CancelJob(ctx context.Context, inv invocation.Invocation, i
 	return s.controlJob(ctx, inv, "cancel", id, s.deps.Jobs.PrepareCancellation, s.deps.Jobs.Cancel)
 }
 
-// RetryJob retries one Job whose type supports an explicit retry in its
-// current status, with audit.
+// RetryJob retries a job whose type allows an explicit retry from its current
+// status, with audit.
 func (s *Operations) RetryJob(ctx context.Context, inv invocation.Invocation, id model.JobID) (View, error) {
 	if s == nil {
 		return View{}, apperror.New("job.unavailable")
@@ -231,7 +212,7 @@ func (s *Operations) controlJob(
 	}
 
 	view := target.View()
-	auditID, err := s.deps.Audit.Begin(ctx, access.Mutation{
+	auditID, err := s.audit.Begin(ctx, access.Mutation{
 		Invocation: inv,
 		Action:     model.ActionJobManage,
 		Resource:   resource,
@@ -244,16 +225,15 @@ func (s *Operations) controlJob(
 
 	updated, err := apply(ctx, target, AuditReference{EventID: auditID, At: s.deps.Now()})
 	if err != nil {
-		_ = s.deps.Audit.Fail(ctx, auditID, "job.conflict")
+		_ = s.audit.Fail(ctx, auditID, "job.conflict")
 		return View{}, operationsStoreErrors.Translate(err)
 	}
 
 	return updated, nil
 }
 
-// presentJobs adds, in place, who started each Job and what it is about. Each
-// kind of fact is read once for the whole page. A reader of Jobs holds
-// institution-wide job.view, which covers both.
+// presentJobs reads each kind of fact once for the whole page. A reader of
+// jobs holds institution-wide job.view, which covers both.
 func (s *Operations) presentJobs(ctx context.Context, views []View) error {
 	userIDs := make([]model.UserID, 0, len(views))
 	subjectJobs := make(map[model.JobType][]model.JobID)
@@ -296,11 +276,9 @@ func (s *Operations) presentJobs(ctx context.Context, views []View) error {
 	return nil
 }
 
-// subjectReader reads the subject of each given Job of one type.
 type subjectReader func(context.Context, []model.JobID) (map[model.JobID]string, error)
 
-// subjectResolver is the closed set of Job types that say what they are about;
-// every other type has no subject.
+// subjectResolver returns nil for job types that have no subject.
 func (s *Operations) subjectResolver(jobType model.JobType) subjectReader {
 	switch jobType {
 	case model.JobTypeExamExportBuild:
@@ -310,8 +288,8 @@ func (s *Operations) subjectResolver(jobType model.JobType) subjectReader {
 	}
 }
 
-// examExportBuildSubjects names the Exam, by the title of the sealed revision
-// its Sitting runs, that each export build Job archives.
+// examExportBuildSubjects names each export build's exam by the title of the
+// sealed revision its sitting runs.
 func (s *Operations) examExportBuildSubjects(ctx context.Context, ids []model.JobID) (map[model.JobID]string, error) {
 	titles, err := s.deps.ExamExports.ListBuildTitles(ctx, ids)
 	if err != nil {

@@ -558,8 +558,8 @@ func requireTeacherAcademicUnitInvitationAuthority(
 }
 
 // lockInvitationInviterBeforeHierarchy follows the global administrator-
-// authentication fence and keeps Invitation acceptance aligned with the User
-// -> mail eligibility singleton -> Class/hierarchy order used by Sitting
+// authentication fence and keeps invitation acceptance aligned with the user
+// -> mail eligibility singleton -> class/hierarchy order used by sitting
 // reconciliation. Authority is rechecked against bindings after the hierarchy
 // is locked by the purpose-specific guard.
 func lockInvitationInviterBeforeHierarchy(ctx context.Context, tx *sqlxTxWrapper, inviterID model.UserID) error {
@@ -749,7 +749,7 @@ func insertInvitation(ctx context.Context, tx *sqlxTxWrapper, invitation *model.
 	return nil
 }
 
-// insertInvitationMail inserts one prepared Invitation mail. An encrypted
+// insertInvitationMail inserts one prepared invitation mail. An encrypted
 // payload takes the primary-key fence here, as insertRecoveryMail does.
 func insertInvitationMail(
 	ctx context.Context,
@@ -1128,8 +1128,8 @@ func terminalizeElapsedStudentClassInvitationConflict(
 	return suppressInvitationCredentialMail(ctx, tx, invitation.ID, model.MailDeliveryObsoleteCode, at)
 }
 
-// invitationTransitionAt returns the instant one PostgreSQL-timed Invitation
-// transition records. Callers decide validity at databaseNow first; Invitations
+// invitationTransitionAt returns the instant one PostgreSQL-timed invitation
+// transition records. Callers decide validity at databaseNow first; invitations
 // carry the issuing node's clock, and a transition never records an instant
 // before the creation or last modification it supersedes.
 func invitationTransitionAt(databaseNow time.Time, invitation *model.Invitation) time.Time {
@@ -1161,7 +1161,7 @@ func updateExpiredInvitation(ctx context.Context, tx *sqlxTxWrapper, invitation 
 }
 
 // ResolveOnboardingInvitationNoOp reports whether issuing the candidate would
-// change nothing, returning the equivalent pending Invitation when one exists.
+// change nothing, returning the equivalent pending invitation when one exists.
 func (s SQLInvitationStore) ResolveOnboardingInvitationNoOp(
 	ctx context.Context,
 	candidate *model.Invitation,
@@ -1188,7 +1188,7 @@ func (s SQLInvitationStore) ResolveOnboardingInvitationNoOp(
 	return result.Invitation, result.NoOp, nil
 }
 
-// IssueStudentClass creates a pending student Class Invitation and queues
+// IssueStudentClass creates a pending student class invitation and queues
 // its delivery.
 func (s SQLInvitationStore) IssueStudentClass(ctx context.Context, input *store.StudentClassInvitationIssue) (*model.Invitation, error) {
 	if err := validateStudentClassInvitationIssue(input); err != nil {
@@ -1338,7 +1338,7 @@ func issueStudentClassInvitation(
 	return invitation, nil
 }
 
-// IssueTeacherAcademicUnit creates a pending teacher Academic Unit Invitation
+// IssueTeacherAcademicUnit creates a pending teacher academic unit invitation
 // and queues its delivery.
 func (s SQLInvitationStore) IssueTeacherAcademicUnit(
 	ctx context.Context,
@@ -1498,8 +1498,8 @@ func issueTeacherAcademicUnitInvitation(
 	return invitation, nil
 }
 
-// IssueScopedRole creates a pending Academic Unit or Institution Role
-// Invitation and queues its delivery.
+// IssueScopedRole creates a pending academic unit or institution role
+// invitation and queues its delivery.
 func (s SQLInvitationStore) IssueScopedRole(ctx context.Context, input *store.ScopedRoleInvitationIssue) (*model.Invitation, error) {
 	if err := validateScopedRoleInvitationIssue(input); err != nil {
 		return nil, err

@@ -27,7 +27,7 @@ const (
 	stateStopped
 )
 
-// Transport is the in-process single-node cluster adapter.
+// Transport implements cluster.Transport for an installation with one node.
 type Transport struct {
 	nodeID   string
 	logger   cluster.Logger
@@ -36,7 +36,7 @@ type Transport struct {
 	handlers map[cluster.Event]cluster.Handler
 }
 
-// New constructs an inert local cluster transport. Call Start before send.
+// New returns a transport that refuses sends until Start.
 func New(nodeID string, logger cluster.Logger) (*Transport, error) {
 	if nodeID == "" {
 		return nil, errors.New("cluster node ID is required")
@@ -51,7 +51,7 @@ func New(nodeID string, logger cluster.Logger) (*Transport, error) {
 	}, nil
 }
 
-// NodeID returns this node's stable identity.
+// NodeID returns the node ID given to New.
 func (c *Transport) NodeID() string {
 	return c.nodeID
 }
@@ -76,7 +76,7 @@ func (c *Transport) Start(ctx context.Context) error {
 	}
 }
 
-// Stop permanently stops the transport. It is idempotent.
+// Stop is idempotent; a stopped transport cannot start again.
 func (c *Transport) Stop(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -90,7 +90,7 @@ func (c *Transport) Stop(ctx context.Context) error {
 	return nil
 }
 
-// Ping reports whether the transport is still usable.
+// Ping fails with cluster.ErrStopped once Stop has run.
 func (c *Transport) Ping(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -103,7 +103,7 @@ func (c *Transport) Ping(ctx context.Context) error {
 	return nil
 }
 
-// RegisterHandler registers the sole handler for an event on this node.
+// RegisterHandler fails with cluster.ErrHandlerExists if the event already has a handler.
 func (c *Transport) RegisterHandler(event cluster.Event, handler cluster.Handler) error {
 	if handler == nil {
 		return errors.New("cluster message handler is nil")
@@ -125,13 +125,13 @@ func (c *Transport) RegisterHandler(event cluster.Event, handler cluster.Handler
 	return nil
 }
 
-// Broadcast is peer-only. A single-node transport has no peers, so this is a
-// validated no-op that never re-enters local handlers.
+// Broadcast validates the message and delivers nothing: there are no peers,
+// and broadcasts never reach this node's own handlers.
 func (c *Transport) Broadcast(ctx context.Context, message *cluster.Message) error {
 	return c.validateSend(ctx, message)
 }
 
-// SendToNode delivers to this node when nodeID matches, otherwise fails.
+// SendToNode runs this node's handler; any other nodeID fails with cluster.ErrNodeUnavailable.
 func (c *Transport) SendToNode(
 	ctx context.Context,
 	nodeID string,

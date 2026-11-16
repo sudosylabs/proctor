@@ -9,8 +9,7 @@ package model
 
 import "time"
 
-// ExamSittingState identifies one durable lifecycle position of an Exam
-// Sitting.
+// ExamSittingState is one stored lifecycle position of a sitting.
 type ExamSittingState string
 
 const (
@@ -31,33 +30,33 @@ func (s ExamSittingState) IsValid() bool {
 	}
 }
 
-// AllowsCandidateAdmission is the lifecycle-only half of admission. Current
-// Class membership and Attempt/Participation policy remain separate checks.
+// AllowsCandidateAdmission is the lifecycle half of admission; class
+// membership and attempt and participation rules are checked separately.
 func (s ExamSittingState) AllowsCandidateAdmission() bool {
 	return s == ExamSittingOpen
 }
 
-// AllowsCandidateMutation gates workspace writes and submission
-// before the later Attempt- and Participation-specific checks are applied.
+// AllowsCandidateMutation gates workspace writes and submission, before the
+// attempt and participation checks.
 func (s ExamSittingState) AllowsCandidateMutation() bool {
 	return s == ExamSittingOpen
 }
 
-// AllowsProtectedPresentation retains read-only authored material while a live
-// Sitting is paused; terminal and closing states expose no live candidate view.
+// AllowsProtectedPresentation keeps read-only authored material visible while a
+// live sitting is paused; closing and final states show no live view.
 func (s ExamSittingState) AllowsProtectedPresentation() bool {
 	return s == ExamSittingOpen || s == ExamSittingPaused
 }
 
-// RequiresIntegrityMonitoring remains true through Pause even though mutable
-// candidate capabilities are blocked.
+// RequiresIntegrityMonitoring stays true while paused, even though candidate
+// writes are blocked.
 func (s ExamSittingState) RequiresIntegrityMonitoring() bool {
 	return s == ExamSittingOpen || s == ExamSittingPaused
 }
 
-// ExamSitting is one scheduled delivery of an immutable Exam Revision to one
-// exact Class. Cross-row Revision, Class-lineage, and Academic-Period interval
-// checks belong to the atomic Store operation.
+// ExamSitting is one scheduled delivery of an immutable revision to one exact
+// class. Checks across rows (revision, class lineage, academic period
+// interval) belong to the atomic store operation.
 type ExamSitting struct {
 	ID               ExamSittingID
 	ExamID           ExamID
@@ -77,9 +76,9 @@ type ExamSitting struct {
 	Revision         int64
 }
 
-// ExamSittingReasonCode is a bounded, candidate-safe lifecycle reason. Private
-// manager rationale belongs to dedicated private persistence/provenance and
-// must never enter ordinary audit fields.
+// ExamSittingReasonCode is a bounded, candidate-safe lifecycle reason. A
+// manager's private rationale is stored separately and must never enter
+// ordinary audit fields.
 type ExamSittingReasonCode string
 
 const (
@@ -113,8 +112,8 @@ func (r ExamSittingReasonCode) isClosing() bool {
 	return r == ExamSittingReasonManagerClosed || r == ExamSittingReasonScheduledEndReached
 }
 
-// NewExamSitting constructs a Scheduled Sitting. The application supplies
-// identity and time; ScheduledEndAt is the sole v1 delivery deadline.
+// NewExamSitting builds a scheduled sitting. ScheduledEndAt is the only
+// delivery deadline.
 func NewExamSitting(
 	id ExamSittingID,
 	examID ExamID,
@@ -141,9 +140,9 @@ func NewExamSitting(
 	return sitting, nil
 }
 
-// ApplySchedule atomically changes the complete pre-open delivery selection.
-// Once lifecycle processing has begun, schedule extension is owned by its
-// separate transition and this operation fails without mutation.
+// ApplySchedule replaces the whole pre-open schedule at once. Once lifecycle
+// processing has begun it fails without mutation; extending the end is
+// ExtendEnd's job.
 func (s *ExamSitting) ApplySchedule(
 	examRevisionID ExamRevisionID,
 	classID ClassID,
@@ -183,9 +182,9 @@ func (s *ExamSitting) ApplySchedule(
 	return true, nil
 }
 
-// Cancel records only a stable candidate-safe reason. Private manager rationale
-// belongs to dedicated private persistence/provenance and never enters this
-// public domain entity or ordinary audit fields.
+// Cancel records only a stable candidate-safe reason. A manager's private
+// rationale is stored separately and never enters this entity or ordinary
+// audit fields.
 func (s *ExamSitting) Cancel(reason ExamSittingReasonCode, at time.Time) error {
 	if s == nil {
 		return invalidModelError("ExamSitting.Cancel", "exam_sitting", "value", "is required", "")
@@ -213,8 +212,8 @@ func (s *ExamSitting) Cancel(reason ExamSittingReasonCode, at time.Time) error {
 	return nil
 }
 
-// Open starts delivery once. PostgreSQL owns the schedule-boundary and current
-// academic-structure decision; this method owns only the local transition.
+// Open starts delivery, once. PostgreSQL decides the schedule boundary and
+// the current academic structure; this method only makes the transition.
 func (s *ExamSitting) Open(at time.Time) error {
 	if s == nil {
 		return invalidModelError("ExamSitting.Open", "exam_sitting", "value", "is required", "")
@@ -230,8 +229,8 @@ func (s *ExamSitting) Open(at time.Time) error {
 	return s.applyLifecycleCandidate(candidate)
 }
 
-// Pause blocks mutable candidate capabilities without changing the fixed v1
-// deadline or discarding the first-open time.
+// Pause blocks candidate writes without moving the deadline or discarding the
+// first-open time.
 func (s *ExamSitting) Pause(at time.Time) error {
 	if s == nil {
 		return invalidModelError("ExamSitting.Pause", "exam_sitting", "value", "is required", "")
@@ -247,8 +246,8 @@ func (s *ExamSitting) Pause(at time.Time) error {
 	return s.applyLifecycleCandidate(candidate)
 }
 
-// Resume clears only the current pause marker. OpenedAt and ScheduledEndAt are
-// preserved; version 1 never extends the deadline by paused duration.
+// Resume clears only the pause marker. OpenedAt and ScheduledEndAt stay; the
+// deadline is never extended by the paused duration.
 func (s *ExamSitting) Resume(at time.Time) error {
 	if s == nil {
 		return invalidModelError("ExamSitting.Resume", "exam_sitting", "value", "is required", "")
@@ -264,8 +263,8 @@ func (s *ExamSitting) Resume(at time.Time) error {
 	return s.applyLifecycleCandidate(candidate)
 }
 
-// ExtendEnd advances the sole v1 delivery deadline for an Open or Paused
-// Sitting. Equality and shortening are rejected rather than treated as no-op.
+// ExtendEnd moves the deadline of an open or paused sitting later. An equal or
+// earlier end is an error, not a no-op.
 func (s *ExamSitting) ExtendEnd(endAt, at time.Time) error {
 	if s == nil {
 		return invalidModelError("ExamSitting.ExtendEnd", "exam_sitting", "value", "is required", "")
@@ -292,9 +291,9 @@ func (s *ExamSitting) ExtendEnd(endAt, at time.Time) error {
 	return s.applyLifecycleCandidate(candidate)
 }
 
-// RetargetRevision atomically advances one live Sitting to a newly sealed
-// Revision while preserving its lifecycle and fixed v1 deadline. Persistence
-// owns the same-Exam and live-correction lineage checks under aggregate locks.
+// RetargetRevision moves a live sitting to a newly sealed revision, keeping its
+// lifecycle and deadline. Persistence checks same-exam and live-correction
+// lineage under aggregate locks.
 func (s *ExamSitting) RetargetRevision(revisionID ExamRevisionID, at time.Time) error {
 	if s == nil {
 		return invalidModelError("ExamSitting.RetargetRevision", "exam_sitting", "value", "is required", "")
@@ -320,9 +319,8 @@ func (s *ExamSitting) RetargetRevision(revisionID ExamRevisionID, at time.Time) 
 	return s.applyLifecycleCandidate(candidate)
 }
 
-// EnterClosing denies new participation and mutable candidate work. The safe
-// terminal cause is retained through Closed; private manager rationale lives
-// only in dedicated persistence provenance.
+// EnterClosing refuses new participation and candidate writes. The safe cause
+// is kept through closed; a manager's private rationale is stored separately.
 func (s *ExamSitting) EnterClosing(reason ExamSittingReasonCode, at time.Time) error {
 	if s == nil {
 		return invalidModelError("ExamSitting.EnterClosing", "exam_sitting", "value", "is required", "")
@@ -343,7 +341,7 @@ func (s *ExamSitting) EnterClosing(reason ExamSittingReasonCode, at time.Time) e
 	return s.applyLifecycleCandidate(candidate)
 }
 
-// Close completes a Sitting that has already entered Closing.
+// Close completes a sitting that has already entered closing.
 func (s *ExamSitting) Close(at time.Time) error {
 	if s == nil {
 		return invalidModelError("ExamSitting.Close", "exam_sitting", "value", "is required", "")
@@ -375,9 +373,9 @@ func examSittingTransitionTime(notBefore, at time.Time) time.Time {
 	return at
 }
 
-// Validate checks complete rehydrated local Sitting state. Aggregate
-// relationships and Academic Period containment require persistence and are
-// deliberately outside this model.
+// Validate checks the sitting's own fields, for new and stored values alike.
+// Relationships and academic period containment need persistence and are not
+// checked here.
 func (s *ExamSitting) Validate() error {
 	const where = "ExamSitting.Validate"
 	if s == nil {

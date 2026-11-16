@@ -23,6 +23,8 @@ import { VerifyEmailPage } from "../features/verify-email/VerifyEmailPage";
 import type { MessageID } from "../i18n/messages";
 import { isHostedRoute, type HostedRoute } from "./routes";
 
+// Each credential keeps its own kind so a token captured for one purpose can
+// never be handed to another route's request; there is no general token field.
 export type HostedPageBootstrap =
   | { route: "/setup" }
   | { route: "/login"; notice?: "external_login_failed" }
@@ -206,6 +208,8 @@ const hostedRouteDescriptors = {
   },
 } satisfies HostedRouteDescriptorMap;
 
+// bootstrapHostedPage runs before React renders so fragment credentials leave
+// browser history first. Unknown paths get no bootstrap, not a fallback page.
 export function bootstrapHostedPage(
   location: BrowserLocation & { pathname: string },
   history: BrowserHistory,
@@ -217,6 +221,8 @@ export function bootstrapHostedPage(
   const policy = hostedRouteDescriptors[route].fragment;
 
   switch (policy.kind) {
+    // Only fixed local tasks are accepted; a return URL or sensitive action
+    // must never ride in through the query.
     case "reauthentication_task": {
       const url = new URL(location.href);
       const tasks = url.searchParams.getAll("task");

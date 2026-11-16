@@ -14,11 +14,9 @@ import (
 
 //go:generate go run ./internal/idgen -source id.go -output id_gen.go
 
-// Entity-specific identifier types share the opaque 26-character z-base-32
-// representation but are not freely assignable to each other. Zero values are
-// invalid; transport and persistence adapters perform textual conversion at
-// their boundaries. Their repetitive constructors, parsers, and codec methods
-// are generated from the explicit catalog in internal/idgen.
+// Each entity has its own ID type. They share one opaque 26-character
+// z-base-32 form but do not convert implicitly; the zero value is invalid.
+// The constructors, parsers and codecs are generated from internal/idgen.
 
 // InstitutionID identifies the singleton installation institution.
 type InstitutionID string
@@ -47,23 +45,24 @@ type ExamID string
 // ExamRevisionID identifies one immutable published examination revision.
 type ExamRevisionID string
 
-// ExamSittingID identifies one scheduled delivery of an Exam Revision to one Class.
+// ExamSittingID identifies one scheduled delivery of a revision to one class.
 type ExamSittingID string
 
-// ExamResourceID identifies one supporting file attached to an Exam Draft.
+// ExamResourceID identifies one supporting file attached to a draft.
 type ExamResourceID string
 
-// ExamCorrectionResourceStageID identifies one purpose-bound pending resource
-// upload for a single live Exam Sitting correction.
+// ExamCorrectionResourceStageID identifies one pending resource upload for a
+// single live correction.
 type ExamCorrectionResourceStageID string
 
-// ExamAttemptID identifies one candidate's stable work identity for a Sitting.
+// ExamAttemptID identifies one candidate's stable work identity for a sitting.
 type ExamAttemptID string
 
-// ExamAttemptWorkspaceID identifies the private Workspace owned by one Attempt.
+// ExamAttemptWorkspaceID identifies the private workspace of one attempt.
 type ExamAttemptWorkspaceID string
 
-// SubmissionID identifies the single immutable Submission sealed from one Attempt.
+// SubmissionID identifies the single immutable submission sealed from one
+// attempt.
 type SubmissionID string
 
 // RetentionHoldID identifies one manually released preservation hold.
@@ -81,14 +80,14 @@ type ExamExportID string
 // AttemptParticipationID identifies one bounded continuity-credential lease.
 type AttemptParticipationID string
 
-// AttemptConnectionID identifies one transport connection admitted to an Attempt Participation.
+// AttemptConnectionID identifies one transport connection admitted to a
+// participation.
 type AttemptConnectionID string
 
-// EnvironmentProfileID identifies one immutable environment profile: the
-// image, resources and limits an Attempt Environment is created with.
+// EnvironmentProfileID identifies one immutable environment profile.
 type EnvironmentProfileID string
 
-// FocusLossSignalID identifies one durably accepted Focus Loss claim and its outcome.
+// FocusLossSignalID identifies one accepted focus loss claim and its outcome.
 type FocusLossSignalID string
 
 // IntegrityEvidenceID identifies one retained integrity observation episode.
@@ -97,32 +96,34 @@ type IntegrityEvidenceID string
 // IntegrityFlagID identifies one manager-reviewable integrity concern.
 type IntegrityFlagID string
 
-// IntegrityReviewDecisionID identifies one current manager decision for an Integrity Flag.
+// IntegrityReviewDecisionID identifies a manager's current decision on a flag.
 type IntegrityReviewDecisionID string
 
-// SubmissionReviewID identifies the single integrity Review associated with one Submission.
+// SubmissionReviewID identifies the single integrity review of one submission.
 type SubmissionReviewID string
 
-// IntegrityDiscrepancyID identifies one bounded record received after integrity collection ended.
+// IntegrityDiscrepancyID identifies one record received after integrity
+// collection ended.
 type IntegrityDiscrepancyID string
 
-// AttemptSuspensionID identifies one reversible Attempt suspension episode.
+// AttemptSuspensionID identifies one reversible suspension episode.
 type AttemptSuspensionID string
 
 // ScreenClipID identifies one requested range of a candidate's recorded screen.
 type ScreenClipID string
 
-// AttemptWorkspaceEntryID identifies one logical path in an Attempt Workspace.
+// AttemptWorkspaceEntryID identifies one logical path in an attempt workspace.
 type AttemptWorkspaceEntryID string
 
-// AttemptWorkspaceObjectID identifies one immutable content selection in an Attempt Workspace.
+// AttemptWorkspaceObjectID identifies one immutable content object in an
+// attempt workspace.
 type AttemptWorkspaceObjectID string
 
-// StarterWorkspaceEntryID identifies one logical file or directory in an Exam
-// Draft's Starter Workspace.
+// StarterWorkspaceEntryID identifies one logical file or directory in a
+// draft's starter workspace.
 type StarterWorkspaceEntryID string
 
-// StarterWorkspaceObjectID identifies one staged or current Starter Workspace
+// StarterWorkspaceObjectID identifies one staged or current starter workspace
 // file object.
 type StarterWorkspaceObjectID string
 
@@ -132,7 +133,7 @@ type UserID string
 // SessionID identifies a server-side session.
 type SessionID string
 
-// DesktopRegistrationID identifies one User-and-Institution DPoP key registration.
+// DesktopRegistrationID identifies one user's DPoP key registration.
 type DesktopRegistrationID string
 
 // SessionCredentialID identifies a hashed access or refresh credential.
@@ -147,10 +148,10 @@ type RoleBindingID string
 // AffiliationID identifies a user's institutional affiliation.
 type AffiliationID string
 
-// AcademicUnitMemberID identifies organizational membership.
+// AcademicUnitMemberID identifies an academic unit membership.
 type AcademicUnitMemberID string
 
-// ClassMemberID identifies student class enrollment.
+// ClassMemberID identifies a student's class enrollment.
 type ClassMemberID string
 
 // ExternalIdentityID identifies a linked external-provider subject.
@@ -162,14 +163,15 @@ type PasswordCredentialID string
 // PersonalAccessTokenID identifies a personal access token.
 type PersonalAccessTokenID string
 
-// PersonalAccessTokenPreparationID identifies one prepared personal access
-// token mutation awaiting its terminal outcome.
+// PersonalAccessTokenPreparationID identifies one prepared token mutation
+// awaiting its outcome.
 type PersonalAccessTokenPreparationID string
 
 // UserTokenID identifies a purpose-specific user token.
 type UserTokenID string
 
-// InvitationID identifies a durable pre-User onboarding invitation.
+// InvitationID identifies an onboarding invitation, which exists before its
+// user does.
 type InvitationID string
 
 // MFACredentialID identifies an encrypted MFA credential.
@@ -208,11 +210,9 @@ type FileRenditionID string
 // UploadLeaseID identifies a bounded reservation for publishing a file revision.
 type UploadLeaseID string
 
-// AdministratorRecoveryRecordID identifies one durable administrator recovery
-// record.
+// AdministratorRecoveryRecordID identifies one administrator recovery record.
 type AdministratorRecoveryRecordID string
 
-// idLike is implemented by every entity-specific ID for shared validation.
 type idLike interface {
 	~string
 }
@@ -249,7 +249,7 @@ func unmarshalID[T idLike](target *T, data []byte, parse func(string) (T, error)
 	return nil
 }
 
-// Ensure typed IDs marshal as JSON strings, not objects.
+// Typed IDs marshal as JSON strings, not objects.
 var (
 	_ json.Marshaler   = InstitutionID("")
 	_ json.Unmarshaler = (*InstitutionID)(nil)

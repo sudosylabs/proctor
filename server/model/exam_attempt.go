@@ -34,8 +34,8 @@ func (s ExamAttemptState) IsUnresolved() bool {
 	return s == ExamAttemptReady || s == ExamAttemptActive || s == ExamAttemptSuspended
 }
 
-// ExamAttempt is one candidate's stable work identity for one Sitting. Its
-// admission Revision remains pinned for the complete Attempt lifetime.
+// ExamAttempt is one candidate's stable work identity for one sitting. The
+// revision it was admitted to stays pinned for its whole lifetime.
 type ExamAttempt struct {
 	ID                  ExamAttemptID
 	ExamID              ExamID
@@ -109,9 +109,8 @@ func (a *ExamAttempt) Validate() error {
 	return nil
 }
 
-// Suspend enters one blocking enforcement episode. Persistence is responsible
-// for committing the causal evidence, flag, Suspension, audit, and this state
-// transition atomically.
+// Suspend enters one blocking enforcement episode. Persistence must commit the
+// causal evidence, flag, suspension, audit and this transition atomically.
 func (a *ExamAttempt) Suspend(at time.Time) error {
 	if a == nil || a.State != ExamAttemptActive {
 		return invalidModelError("ExamAttempt.Suspend", "exam_attempt", "", "Exam Attempt cannot suspend", "")
@@ -127,9 +126,9 @@ func (a *ExamAttempt) Suspend(at time.Time) error {
 	return nil
 }
 
-// Reallow closes the blocking effect of the current Suspension and moves the
-// Attempt to ready. A later secure admission creates a new Participation and
-// is the only transition that can make the Attempt active again.
+// Reallow ends the blocking effect of the current suspension and moves the
+// attempt to ready. Only a later secure admission, with a new participation,
+// can make it active again.
 func (a *ExamAttempt) Reallow(at time.Time) error {
 	if a == nil || a.State != ExamAttemptSuspended {
 		return invalidModelError("ExamAttempt.Reallow", "exam_attempt", "", "Exam Attempt cannot be re-allowed", "")
@@ -145,8 +144,8 @@ func (a *ExamAttempt) Reallow(at time.Time) error {
 	return nil
 }
 
-// Activate admits a ready Attempt after all candidate, Sitting, Session,
-// registered-key, compatibility, and posture checks have succeeded.
+// Activate admits a ready attempt; call it only after the candidate, sitting,
+// session, registered key, compatibility and posture checks pass.
 func (a *ExamAttempt) Activate(at time.Time) error {
 	if a == nil || a.State != ExamAttemptReady {
 		return invalidModelError("ExamAttempt.Activate", "exam_attempt", "", "Exam Attempt cannot activate", "")
@@ -197,7 +196,7 @@ func (r AttemptParticipationEndReason) IsValid() bool {
 }
 
 // AttemptParticipation is one renewable continuity lease. Only its credential
-// hash is domain state; the raw credential is never persisted.
+// hash is stored; the raw credential never is.
 type AttemptParticipation struct {
 	ID                       AttemptParticipationID
 	AttemptID                ExamAttemptID
@@ -287,11 +286,10 @@ func (p *AttemptParticipation) IsExpiredAt(at time.Time) bool {
 	return p == nil || !TimeUTC(at).Before(p.LeaseExpiresAt)
 }
 
-// Renew applies one database-time Participation renewal. The caller supplies
-// PostgreSQL's decision time; local application clocks are never authoritative.
-// Repeating the currently accepted sequence is an idempotent no-op. An older
-// sequence, another generation, a non-active Participation, or the exclusive
-// expiry boundary is permanently fenced.
+// Renew applies one participation renewal at databaseNow, PostgreSQL's
+// decision time; application clocks are never trusted here. Repeating the
+// accepted sequence is a no-op. An older sequence, another generation, an
+// inactive participation or reaching the exclusive expiry fences it for good.
 func (p *AttemptParticipation) Renew(generation, sequence int64, databaseNow time.Time) (bool, error) {
 	if p == nil ||
 		p.State != AttemptParticipationActive ||
@@ -357,8 +355,7 @@ const (
 	AttemptConnectionCloseSittingClosed   AttemptConnectionCloseReason = "sitting_closed"
 )
 
-// IsValid reports whether reason is one of the closed Connection states owned
-// by the domain model.
+// IsValid reports whether r is one of the closed connection close reasons.
 func (r AttemptConnectionCloseReason) IsValid() bool {
 	switch r {
 	case AttemptConnectionCloseTransport,
@@ -375,7 +372,7 @@ func (r AttemptConnectionCloseReason) IsValid() bool {
 	}
 }
 
-// AttemptConnection is one concrete transport attached to a Participation.
+// AttemptConnection is one concrete transport attached to a participation.
 type AttemptConnection struct {
 	ID              AttemptConnectionID
 	AttemptID       ExamAttemptID
@@ -451,12 +448,12 @@ func (c *AttemptConnection) Close(reason AttemptConnectionCloseReason, at time.T
 }
 
 // IntegrityEvidence is neutral server-owned evidence for one policy flag.
-// Connection Loss evidence intentionally has no accusation, free-form text,
-// client time, credential, Session identity, or transport payload.
+// Connection loss evidence has no accusation, free text, client time,
+// credential, session identity or transport payload, on purpose.
 type IntegrityEvidence struct {
 	Browser *BrowserIntegrityEvidence
-	// Detail is a capability's own evidence: one bounded JSON object the
-	// core stores and presents but does not read. Core kinds carry none.
+	// Detail is a capability's own evidence: one bounded JSON object the core
+	// stores and shows but does not read. Core kinds carry none.
 	Detail               json.RawMessage
 	ID                   IntegrityEvidenceID
 	AttemptID            ExamAttemptID
@@ -574,15 +571,15 @@ type IntegrityFlagState string
 
 const IntegrityFlagOpen IntegrityFlagState = "open"
 
-// IntegrityFlag is an append-preserving indication for review, never a guilt
-// finding. Ticket 13 creates one open flag per Attempt/policy/generation.
+// IntegrityFlag marks something for review and is never a finding of guilt.
+// There is at most one open flag per attempt, policy and generation.
 type IntegrityFlag struct {
 	ID         IntegrityFlagID
 	AttemptID  ExamAttemptID
 	Generation int64
 	Kind       IntegrityPolicyKind
-	// NativeRuleID is the rule a native Flag is for: each rule that stops
-	// being met has its own Flag. It is empty for every other kind.
+	// NativeRuleID is the rule a native flag is for, since each rule that stops
+	// being met has its own flag. It is empty for every other kind.
 	NativeRuleID string
 	State        IntegrityFlagState
 	CreatedAt    time.Time
@@ -603,8 +600,7 @@ func NewIntegrityFlag(
 	return flag, nil
 }
 
-// NewNativeIntegrityFlag opens the Flag of one native rule on its
-// capability.
+// NewNativeIntegrityFlag opens the flag of one native rule on its capability.
 func NewNativeIntegrityFlag(
 	id IntegrityFlagID,
 	attemptID ExamAttemptID,
@@ -649,7 +645,7 @@ type AttemptSuspensionSource string
 
 const (
 	AttemptSuspensionSourcePolicy AttemptSuspensionSource = "policy"
-	// AttemptSuspensionSourceManual is an authorized Exam Manager's kick.
+	// AttemptSuspensionSourceManual is an authorized exam manager's kick.
 	AttemptSuspensionSourceManual AttemptSuspensionSource = "manual"
 )
 
@@ -677,16 +673,15 @@ func (r AttemptSuspensionCandidateReason) IsValid() bool {
 	return r.IsPolicy() || r == AttemptSuspensionCandidateReasonManagerSuspended
 }
 
-// IsPolicy reports whether the reason belongs to automatic policy enforcement.
+// IsPolicy reports whether the reason comes from automatic policy enforcement.
 func (r AttemptSuspensionCandidateReason) IsPolicy() bool {
 	return integrityPolicySuspends(r)
 }
 
-// AttemptSuspension is one append-preserving blocking episode. A policy
-// episode links its Integrity Flag; a manual episode links none and records
-// the suspending manager and their private reason. PrivateReason (re-allow)
-// and SuspensionPrivateReason are manager-only and must never enter ordinary
-// logs, audit data, or realtime.
+// AttemptSuspension is one append-only blocking episode. A policy episode links
+// its integrity flag; a manual one links none and records the manager and their
+// private reason. PrivateReason (re-allow) and SuspensionPrivateReason are
+// manager-only and must never reach ordinary logs, audit data or realtime.
 type AttemptSuspension struct {
 	ID                      AttemptSuspensionID
 	AttemptID               ExamAttemptID
@@ -731,8 +726,8 @@ func NewPolicyAttemptSuspension(
 	return suspension, nil
 }
 
-// NewManualAttemptSuspension records an Exam Manager's kick of the exact
-// active Participation generation. It links no Integrity Flag.
+// NewManualAttemptSuspension records an exam manager's kick of the exact active
+// participation generation. It links no integrity flag.
 func NewManualAttemptSuspension(
 	id AttemptSuspensionID,
 	attemptID ExamAttemptID,
@@ -851,9 +846,9 @@ const (
 	AttemptWorkspaceStorageAttempt AttemptWorkspaceObjectStorage = "attempt"
 )
 
-// ExamAttemptWorkspace is the stable private Workspace owned one-to-one by an
-// Attempt. Cursor fences the ordered mutation stream without making paths or
-// content objects into aggregate identities.
+// ExamAttemptWorkspace is the private workspace an attempt owns one-to-one.
+// Cursor orders its mutations; paths and content objects are not aggregate
+// identities.
 type ExamAttemptWorkspace struct {
 	ID        ExamAttemptWorkspaceID
 	AttemptID ExamAttemptID
@@ -885,9 +880,9 @@ func (w *ExamAttemptWorkspace) Validate() error {
 	return nil
 }
 
-// AttemptWorkspaceObject is attempt-owned immutable content metadata. Starter
-// origin references pinned starter bytes; Attempt origin references bytes
-// written by the candidate in a later copy-on-write mutation.
+// AttemptWorkspaceObject is immutable content metadata owned by the attempt.
+// Starter origin points at pinned starter bytes; attempt origin at bytes the
+// candidate wrote in a later copy-on-write mutation.
 type AttemptWorkspaceObject struct {
 	ID              AttemptWorkspaceObjectID
 	WorkspaceID     ExamAttemptWorkspaceID
@@ -910,8 +905,9 @@ func (o *AttemptWorkspaceObject) Validate() error {
 	return validateAttemptWorkspaceObject(o)
 }
 
-// AttemptWorkspaceEntry is attempt-owned logical metadata. AdmissionRevisionID
-// and SourceStarterEntryID preserve the exact bootstrap provenance.
+// AttemptWorkspaceEntry is the attempt's logical file metadata.
+// AdmissionRevisionID and SourceStarterEntryID keep its exact bootstrap
+// provenance.
 type AttemptWorkspaceEntry struct {
 	ID                   AttemptWorkspaceEntryID
 	WorkspaceID          ExamAttemptWorkspaceID

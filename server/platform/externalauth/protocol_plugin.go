@@ -13,10 +13,9 @@ import (
 	"github.com/sudosylabs/proctor/server/plugin"
 )
 
-// ProtocolPlugin is a built-in sign-in protocol plugin, such as CAS or OIDC:
-// on by default, it offers one identity provider type, Protocol, which
-// builds each configured provider of that type with Build from the
-// provider's own settings and secrets.
+// ProtocolPlugin is a built-in sign-in protocol plugin, such as CAS or OIDC.
+// It offers one identity provider type, Protocol, and builds each configured
+// provider of that type with Build.
 type ProtocolPlugin struct {
 	Protocol string
 	Name     string
@@ -41,7 +40,6 @@ func (p ProtocolPlugin) Activate(_ context.Context, host plugin.Host) error {
 // Deactivate has nothing to release.
 func (ProtocolPlugin) Deactivate(context.Context) error { return nil }
 
-// protocolType builds the configured providers of one protocol.
 type protocolType ProtocolPlugin
 
 func (t protocolType) Type() string { return t.Protocol }

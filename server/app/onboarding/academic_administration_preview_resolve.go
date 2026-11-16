@@ -22,26 +22,20 @@ import (
 
 // The skip reasons of a filter preview row. A skipped row is never executed.
 const (
-	// academicAdministrationPreviewSelf skips the caller's own account,
-	// whatever the operation.
-	academicAdministrationPreviewSelf = "academic_administration_preview.self"
-	// academicAdministrationPreviewSystemAdministrator skips a System
-	// Administrator from a disable or Session revocation.
+	academicAdministrationPreviewSelf                = "academic_administration_preview.self"
 	academicAdministrationPreviewSystemAdministrator = "academic_administration_preview.system_administrator"
-	// academicAdministrationPreviewEnrollmentConflict skips a Class
-	// enrollment of a User enrolled in another Class of the same Period,
-	// which an enrollment would silently turn into a transfer.
-	academicAdministrationPreviewEnrollmentConflict = "academic_administration_preview.enrollment_conflict"
-	// academicAdministrationPreviewStudentAffiliationRequired skips a Class
-	// enrollment of a User without a current student Affiliation.
+	// academicAdministrationPreviewEnrollmentConflict: the user is in another
+	// class of the same period, which an enrollment would silently turn into a
+	// transfer.
+	academicAdministrationPreviewEnrollmentConflict         = "academic_administration_preview.enrollment_conflict"
 	academicAdministrationPreviewStudentAffiliationRequired = "academic_administration_preview.student_affiliation_required"
-	// academicAdministrationPreviewAmbiguous skips an end when the User
-	// holds several current relationships it could end.
+	// academicAdministrationPreviewAmbiguous: the user holds several current
+	// relationships an end could apply to.
 	academicAdministrationPreviewAmbiguous = "academic_administration_preview.ambiguous"
 )
 
-// AcademicAdministrationPreviewSkipReasons is the closed catalogue of the
-// reasons a filter preview skips a row.
+// AcademicAdministrationPreviewSkipReasons is the closed set of reasons a
+// filter preview skips a row.
 func AcademicAdministrationPreviewSkipReasons() []string {
 	return []string{
 		academicAdministrationPreviewAmbiguous,
@@ -52,12 +46,9 @@ func AcademicAdministrationPreviewSkipReasons() []string {
 	}
 }
 
-// resolveAcademicAdministrationPreview resolves a filter preview: it
-// authorizes the frozen caller again, reads every User the directory
-// filter matches under that caller's visibility now, in username order,
-// and freezes one classified row per User. More than
-// AcademicAdministrationPreviewMaximumRows matching Users fails the preview,
-// so the caller narrows the filter rather than acting on a truncated list.
+// resolveAcademicAdministrationPreview fails the preview when more than
+// AcademicAdministrationPreviewMaximumRows users match, so the caller
+// narrows the filter rather than acting on a truncated list.
 func (s *Service) resolveAcademicAdministrationPreview(ctx context.Context, id model.OnboardingImportID) error {
 	current, err := s.imports.GetOnboardingImport(ctx, id)
 	if err != nil {
@@ -131,9 +122,8 @@ func (s *Service) resolveAcademicAdministrationPreview(ctx context.Context, id m
 	return err
 }
 
-// matchAcademicAdministrationPreviewUsers pages the User directory through
-// the frozen caller's own visibility, which the directory resolves on every
-// page, and stops one User past the preview bound.
+// matchAcademicAdministrationPreviewUsers stops one user past the preview
+// bound, which is how the caller detects overflow.
 func (s *Service) matchAcademicAdministrationPreviewUsers(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -158,9 +148,6 @@ func (s *Service) matchAcademicAdministrationPreviewUsers(
 	}
 }
 
-// academicAdministrationPreviewClassifier classifies the Users of one
-// filter preview at one instant into rows that will change, rows whose
-// change already holds, and rows it skips with a reason.
 type academicAdministrationPreviewClassifier struct {
 	service       *Service
 	current       *store.OnboardingImport
@@ -168,15 +155,11 @@ type academicAdministrationPreviewClassifier struct {
 	scopeRevision int64
 	roleRevision  int64
 	at            time.Time
-	// systemAdministratorRoleID is the built-in System Administrator Role,
-	// read only for a disable or Session revocation.
+	// systemAdministratorRoleID is read only for a disable or session revocation.
 	systemAdministratorRoleID model.RoleID
-	// period is the Academic Period of the Class a Class enrollment targets.
-	period model.AcademicPeriodID
-	// institutionUsers reports, for a Class enrollment, whether the caller
-	// holds Institution-wide user.view, and so already sees every User's
-	// Affiliations and Class memberships; classMembersVisible caches, per
-	// other Class, whether the caller may see that Class's members.
+	period                    model.AcademicPeriodID
+	// institutionUsers is whether the caller holds institution-wide
+	// user.view, and so already sees every user's affiliations and memberships.
 	institutionUsers    bool
 	classMembersVisible map[model.ClassID]bool
 }
@@ -222,7 +205,6 @@ func (s *Service) newAcademicAdministrationPreviewClassifier(
 	return classifier, nil
 }
 
-// systemAdministratorRoleID reads the built-in System Administrator Role.
 func (s *Service) systemAdministratorRoleID(ctx context.Context) (model.RoleID, error) {
 	role, err := s.roles.GetByName(ctx, model.SystemAdministratorRoleName)
 	if err != nil {
@@ -234,8 +216,6 @@ func (s *Service) systemAdministratorRoleID(ctx context.Context) (model.RoleID, 
 	return role.ID, nil
 }
 
-// isSystemAdministrator reports whether the User holds a current
-// Institution binding of the System Administrator Role at the instant.
 func (s *Service) isSystemAdministrator(ctx context.Context, roleID model.RoleID, userID model.UserID, at time.Time) (bool, error) {
 	bindings, err := s.roleBindings.ListActiveByUser(ctx, userID, at)
 	if err != nil {
@@ -249,7 +229,6 @@ func (s *Service) isSystemAdministrator(ctx context.Context, roleID model.RoleID
 	return false, nil
 }
 
-// row builds the frozen row of the rowNumber-th matched User.
 func (c *academicAdministrationPreviewClassifier) row(
 	ctx context.Context,
 	rowNumber int,
@@ -292,10 +271,8 @@ func (c *academicAdministrationPreviewClassifier) row(
 	return row, nil
 }
 
-// classify returns the row's skip reason or the no-change marker, empty
-// when the row will change, and the relationship an ending operation ends.
-// The caller's own account is always skipped, and a System Administrator is
-// skipped from a disable or Session revocation.
+// classify returns the skip reason or no-change marker (empty when the row
+// will change) and the relationship an ending operation ends.
 func (c *academicAdministrationPreviewClassifier) classify(
 	ctx context.Context,
 	operation AcademicAdministrationBatchOperation,
@@ -395,8 +372,6 @@ func (c *academicAdministrationPreviewClassifier) classify(
 	}
 }
 
-// userEnabledChange classifies enabling or disabling a User whose account
-// already is in that state as no change.
 func (c *academicAdministrationPreviewClassifier) userEnabledChange(ctx context.Context, userID model.UserID, enable bool) (string, string, error) {
 	current, err := c.service.users.Get(ctx, userID)
 	if err != nil {
@@ -405,14 +380,10 @@ func (c *academicAdministrationPreviewClassifier) userEnabledChange(ctx context.
 	return noChangeWhen(current.DisabledAt.Valid != enable), "", nil
 }
 
-// classEnrollment classifies a Class enrollment: no change for a current
-// member of the Class, and skipped for a User without a current student
-// Affiliation or enrolled in another Class of the same Period. A skip is
-// shown only to a caller who could already see its reason, so a preview
-// never tells a Class-scoped caller about a membership in a Class whose
-// members it may not see, or about an Affiliation outside its sight: such a
-// row will change, and its execution refuses the enrollment as an ordinary
-// batch item does.
+// classEnrollment skips a row only when the caller could already see the
+// reason, so a preview never leaks a membership or affiliation outside the
+// caller's sight. Such a row is shown as changing, and execution refuses it
+// as an ordinary batch item would.
 func (c *academicAdministrationPreviewClassifier) classEnrollment(
 	ctx context.Context,
 	userID model.UserID,
@@ -451,9 +422,7 @@ func (c *academicAdministrationPreviewClassifier) classEnrollment(
 	return academicAdministrationPreviewStudentAffiliationRequired, "", nil
 }
 
-// seesClassMembers reports whether the caller may already see who is
-// enrolled in the Class: Institution-wide user.view, or class.members.view
-// on the Class itself, evaluated once per Class without recording a decision.
+// seesClassMembers is evaluated once per class and records no decision.
 func (c *academicAdministrationPreviewClassifier) seesClassMembers(ctx context.Context, classID model.ClassID) (bool, error) {
 	if c.institutionUsers {
 		return true, nil
@@ -477,8 +446,6 @@ func noChangeWhen(holds bool) string {
 	return ""
 }
 
-// endingClassification ends the one current relationship, makes no change
-// when there is none, and skips a User holding several.
 func endingClassification(matching []string) (string, string, error) {
 	switch len(matching) {
 	case 0:
@@ -490,20 +457,17 @@ func endingClassification(matching []string) (string, string, error) {
 	}
 }
 
-// academicAdministrationFilterRowGuard holds what one page of a filter
-// preview's execution checks each row against: the frozen caller's User
-// directory visibility, resolved once per page, or the denial that leaves
-// the caller none.
+// academicAdministrationFilterRowGuard is the frozen caller's directory
+// visibility, resolved once per page of execution.
 type academicAdministrationFilterRowGuard struct {
 	visibility                store.UserVisibilityScope
 	denied                    bool
 	systemAdministratorRoleID model.RoleID
 }
 
-// newAcademicAdministrationFilterRowGuard resolves, and records as one
-// decision, the frozen caller's directory visibility for one page of rows.
-// A caller whose directory no longer admits the preview's filter is left no
-// visibility, so every remaining row fails with authorization.denied.
+// newAcademicAdministrationFilterRowGuard records one decision per page. A
+// caller who may no longer apply the filter gets no visibility, so every
+// remaining row fails with authorization.denied.
 func (s *Service) newAcademicAdministrationFilterRowGuard(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -538,13 +502,10 @@ func (s *Service) newAcademicAdministrationFilterRowGuard(
 	return guard, nil
 }
 
-// checkAcademicAdministrationFilterRow is the execution-time check of one
-// frozen filter preview row, before the row runs and its own transaction
-// authorizes it again in PostgreSQL. It returns the public code the row
-// fails with, or "" when the row may run: the User must still be one the
-// caller's directory shows, a disable or Session revocation never reaches a
-// User who became a System Administrator, and a Class enrollment never
-// turns into a transfer the preview did not show.
+// checkAcademicAdministrationFilterRow returns the code a row fails with, or
+// "" when it may run. It catches what changed since the preview froze: a user
+// no longer visible, a user who became a system administrator, or an
+// enrollment that would now be a transfer the preview did not show.
 func (s *Service) checkAcademicAdministrationFilterRow(
 	ctx context.Context,
 	current *store.OnboardingImport,
@@ -599,16 +560,13 @@ func (s *Service) checkAcademicAdministrationFilterRow(
 	return "", nil
 }
 
-// academicAdministrationFilterAuthorizationLost reports whether a resolution
-// failure means the frozen caller no longer holds what it asked with.
 func academicAdministrationFilterAuthorizationLost(err error) bool {
 	failure, ok := apperror.As(err)
 	if !ok {
 		return false
 	}
-	// The directory refuses with request.invalid a filter the caller's
-	// current visibility no longer admits, such as an activity filter after
-	// Institution-wide visibility was lost.
+	// The directory answers request.invalid for a filter the caller's
+	// current visibility no longer admits.
 	switch failure.Code() {
 	case "authorization.denied", "authentication.token_invalid", "request.invalid":
 		return true

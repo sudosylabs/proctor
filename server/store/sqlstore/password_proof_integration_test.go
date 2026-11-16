@@ -102,7 +102,7 @@ func TestPasswordProofResetSerializesWithSessionCreation(t *testing.T) {
 				defer cancel()
 				persistence, institution, user, _ := passwordProofFixture(t, ctx)
 				completion := passwordProofReset(t, ctx, persistence, institution, user)
-				create := func() (*model.Session, error) { return nil, nil }
+				var create func() (*model.Session, error)
 				if desktop {
 					_, code, state, verifier := issueDesktopAuthorizationForSQLTest(t, ctx, persistence, institution.ID, user.ID)
 					audit := saveDesktopAuthorizationAuditForSQLTest(t, ctx, persistence, institution.ID, user.ID, "exchange")
@@ -172,23 +172,23 @@ func TestPasswordProofResetFencesEachDesktopTransition(t *testing.T) {
 			binding, err := bindDesktopAuthorizationForSQLTest(ctx, persistence, handle, browserProof, state)
 			require.NoError(t, err)
 			authenticate := func() error {
-				_, err := persistence.BrowserAuthentication().AuthenticateDesktopAuthorization(ctx, &store.DesktopAuthorizationAuthentication{
+				_, authenticateErr := persistence.BrowserAuthentication().AuthenticateDesktopAuthorization(ctx, &store.DesktopAuthorizationAuthentication{
 					BindingHash: model.HashToken(binding), UserID: user.ID, AuthenticationMethod: "password",
 					AuthenticationStrength: model.AuthenticationSingleFactor, AuthenticatedAt: model.NowUTC(),
 					PasswordProof: store.PasswordCredentialProof{ID: password.ID, Revision: password.Revision},
 					Capabilities:  store.AccessDeploymentCapabilities{Providers: map[string]store.AccessProviderCapability{}},
 				})
-				return err
+				return authenticateErr
 			}
 			code := model.NewCredentialToken()
 			issueAudit := saveDesktopAuthorizationAuditForSQLTest(t, ctx, persistence, institution.ID, user.ID, "issue")
 			issue := func() error {
-				_, err := persistence.BrowserAuthentication().IssueCode(ctx, &store.DesktopAuthorizationCodeIssue{
+				_, issueErr := persistence.BrowserAuthentication().IssueCode(ctx, &store.DesktopAuthorizationCodeIssue{
 					BindingHash: model.HashToken(binding), StateHash: model.HashToken(state), CodeHash: model.HashToken(code), ExpectedUserID: user.ID,
 					CodeLifetime: time.Minute, Capabilities: store.AccessDeploymentCapabilities{Providers: map[string]store.AccessProviderCapability{}},
 					AuditEventID: issueAudit.ID, AuditAt: model.NowUTC(),
 				})
-				return err
+				return issueErr
 			}
 			if stage != "authenticate" {
 				err = authenticate()
@@ -278,8 +278,8 @@ func pausePasswordProofWrite(t *testing.T, ctx context.Context, persistence *SQL
 	locked := true
 	release := func() {
 		if locked {
-			_, err := controller.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, key)
-			assert.NoError(t, err)
+			_, unlockErr := controller.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, key)
+			assert.NoError(t, unlockErr)
 			locked = false
 		}
 	}
@@ -290,8 +290,8 @@ func pausePasswordProofWrite(t *testing.T, ctx context.Context, persistence *SQL
 	t.Cleanup(func() {
 		release()
 		_ = controller.Close()
-		_, err := persistence.GetMaster().Exec(context.Background(), `DROP TRIGGER IF EXISTS proctor_test_pause_password_proof ON `+table+`; DROP FUNCTION IF EXISTS proctor_test_pause_password_proof()`)
-		assert.NoError(t, err)
+		_, dropErr := persistence.GetMaster().Exec(context.Background(), `DROP TRIGGER IF EXISTS proctor_test_pause_password_proof ON `+table+`; DROP FUNCTION IF EXISTS proctor_test_pause_password_proof()`)
+		assert.NoError(t, dropErr)
 	})
 	_, err = persistence.GetMaster().Exec(ctx, `CREATE FUNCTION proctor_test_pause_password_proof() RETURNS trigger LANGUAGE plpgsql AS $$
 		BEGIN PERFORM pg_advisory_xact_lock(8154700260905); RETURN NEW; END $$;

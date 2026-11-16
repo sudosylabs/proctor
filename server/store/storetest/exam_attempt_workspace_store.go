@@ -21,7 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ExamAttemptWorkspaceSQLProbe exposes only fixture setup which public Store
+// ExamAttemptWorkspaceSQLProbe exposes only fixture setup which public store
 // operations deliberately cannot perform, plus an independently constructed
 // adapter for multi-node concurrency characterization.
 type ExamAttemptWorkspaceSQLProbe struct {
@@ -34,7 +34,7 @@ type ExamAttemptWorkspaceSQLProbe struct {
 	ConcurrentPeer               store.ExamAttemptWorkspaceStore
 }
 
-// TestExamAttemptWorkspaceStore verifies the public acknowledged Workspace
+// TestExamAttemptWorkspaceStore verifies the public acknowledged workspace
 // contract against a concrete adapter and, when supplied, an independent peer.
 func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store.ExamAttemptWorkspaceStore, probes ...ExamAttemptWorkspaceSQLProbe) {
 	t.Helper()
@@ -44,8 +44,8 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 	admittedCapacity.WorkspaceMaximumFileBytes = 8 << 20
 	admittedCapacity.WorkspaceMaximumTotalBytes = 5 * admittedCapacity.WorkspaceMaximumFileBytes
 	fixture := newExamAttemptFixtureWithCapacity(t, ctx, ss, nil, nil, admittedCapacity)
-	// Admission and later Workspace growth use the policy frozen into the
-	// published Revision, not a subsequently lowered Institution policy.
+	// Admission and later workspace growth use the policy frozen into the
+	// published revision, not a subsequently lowered institution policy.
 	institution, err := ss.Institution().GetSingleton(ctx)
 	require.NoError(t, err)
 	lowered := model.DefaultExamCapacityPolicy()
@@ -72,7 +72,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 		CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID,
 		DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint,
 		ConnectionID: connected.Connection.ID, ContinuityCredentialHash: credentialHash}
-	// This scenario outlasts one initial Participation lease on a loaded
+	// This scenario outlasts one initial participation lease on a loaded
 	// database, so the fixture renews it between phases as a live client would.
 	renewal := &store.ExamAttemptParticipationRenewal{DesktopCompatibilityPolicyRevision: 1, AttemptID: connected.Attempt.ID,
 		ParticipationID: connected.Participation.ID, ConnectionID: connected.Connection.ID, CandidateUserID: fixture.candidate.ID,
@@ -1183,7 +1183,7 @@ func stageAttemptWorkspaceObjects(t *testing.T, ctx context.Context, workspace s
 }
 
 // newAttemptWorkspaceBatch wraps mutations in a batch with a fresh audit
-// attempt for the fixture's Sitting.
+// attempt for the fixture's sitting.
 func newAttemptWorkspaceBatch(t *testing.T, ctx context.Context, ss store.Store, fixture examAttemptFixture,
 	access store.ExamAttemptWorkspaceWriteAccess, mutations ...store.ExamAttemptWorkspaceMutation,
 ) *store.ExamAttemptWorkspaceBatch {
@@ -1197,7 +1197,7 @@ func attemptWorkspaceBatchCommand(userID model.UserID, label string) *store.Comm
 }
 
 // createAttemptWorkspaceTestFile stages one object and creates a file from
-// it in a one-mutation batch, for suites that need Workspace content.
+// it in a one-mutation batch, for suites that need workspace content.
 func createAttemptWorkspaceTestFile(t *testing.T, ctx context.Context, ss store.Store, fixture examAttemptFixture,
 	access store.ExamAttemptWorkspaceWriteAccess, path string, content model.AttemptWorkspaceContent, label string,
 ) (store.ExamAttemptWorkspaceReadyObject, *store.ExamAttemptWorkspaceBatchResult) {

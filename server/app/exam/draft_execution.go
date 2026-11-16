@@ -19,7 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ConfigureDraftExecutionCommand replaces the Draft's execution policy.
+// ConfigureDraftExecutionCommand is the input of ConfigureExamDraftExecution.
 type ConfigureDraftExecutionCommand struct {
 	ExamID                model.ExamID
 	ExpectedDraftRevision int64
@@ -27,11 +27,10 @@ type ConfigureDraftExecutionCommand struct {
 	IdempotencyKey        string
 }
 
-// ConfigureExamDraftExecution replaces only the Draft's execution policy.
-// An enabled policy must name an environment profile that exists, is not
-// retired and allows the policy's terminals; the Store decides that under
-// the same lock that holds off a retirement. Publication checks it again,
-// together with whether the installation allows execution.
+// ConfigureExamDraftExecution replaces only the draft's execution policy.
+// An enabled policy must name an existing, unretired profile that allows its
+// terminals; the store checks that under the lock that holds off retirement.
+// Publication checks it again, with whether the installation allows execution.
 func (a *Authoring) ConfigureExamDraftExecution(
 	ctx context.Context,
 	inv invocation.Invocation,

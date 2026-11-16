@@ -23,12 +23,14 @@ import (
 
 const maximumDefaultProfilePictureReconciliationBatch = 100
 
-// DefaultProfilePictureReconciliationCommand is the immutable command of the default profile picture reconciliation Job.
+// DefaultProfilePictureReconciliationCommand is the immutable command of the
+// reconciliation job.
 type DefaultProfilePictureReconciliationCommand struct {
 	BatchSize int `json:"batch_size"`
 }
 
-// DefaultProfilePictureReconciliationCheckpoint is the resumable checkpoint of the default profile picture reconciliation Job.
+// DefaultProfilePictureReconciliationCheckpoint is the resumable checkpoint
+// of the reconciliation job.
 type DefaultProfilePictureReconciliationCheckpoint struct {
 	AfterUsername string       `json:"after_username,omitempty"`
 	AfterUserID   model.UserID `json:"after_user_id,omitempty"`
@@ -36,13 +38,15 @@ type DefaultProfilePictureReconciliationCheckpoint struct {
 	Proposed      int64        `json:"proposed"`
 }
 
-// DefaultProfilePictureReconciliationResult is the safe result of the default profile picture reconciliation Job.
+// DefaultProfilePictureReconciliationResult is the result of the
+// reconciliation job.
 type DefaultProfilePictureReconciliationResult struct {
 	Processed int64 `json:"processed"`
 	Proposed  int64 `json:"proposed"`
 }
 
-// EncodeDefaultProfilePictureReconciliationCommand validates and encodes a default profile picture reconciliation Job command.
+// EncodeDefaultProfilePictureReconciliationCommand validates and encodes a
+// command.
 func EncodeDefaultProfilePictureReconciliationCommand(value DefaultProfilePictureReconciliationCommand) (json.RawMessage, error) {
 	if value.BatchSize < 1 || value.BatchSize > maximumDefaultProfilePictureReconciliationBatch {
 		return nil, errors.New("default profile-picture reconciliation batch size is invalid")
@@ -50,7 +54,8 @@ func EncodeDefaultProfilePictureReconciliationCommand(value DefaultProfilePictur
 	return json.Marshal(value)
 }
 
-// DecodeDefaultProfilePictureReconciliationCommand strictly decodes and validates a default profile picture reconciliation Job command.
+// DecodeDefaultProfilePictureReconciliationCommand decodes and validates a
+// command strictly.
 func DecodeDefaultProfilePictureReconciliationCommand(document json.RawMessage) (DefaultProfilePictureReconciliationCommand, error) {
 	var value DefaultProfilePictureReconciliationCommand
 	if err := decodeStrictJobDocument(document, &value); err != nil {
@@ -62,7 +67,8 @@ func DecodeDefaultProfilePictureReconciliationCommand(document json.RawMessage) 
 	return value, nil
 }
 
-// EncodeDefaultProfilePictureReconciliationCheckpoint validates and encodes a default profile picture reconciliation Job checkpoint.
+// EncodeDefaultProfilePictureReconciliationCheckpoint validates and encodes a
+// checkpoint.
 func EncodeDefaultProfilePictureReconciliationCheckpoint(value DefaultProfilePictureReconciliationCheckpoint) (json.RawMessage, error) {
 	if err := validateDefaultProfilePictureReconciliationCheckpoint(value); err != nil {
 		return nil, err
@@ -70,7 +76,8 @@ func EncodeDefaultProfilePictureReconciliationCheckpoint(value DefaultProfilePic
 	return json.Marshal(value)
 }
 
-// DecodeDefaultProfilePictureReconciliationCheckpoint strictly decodes and validates a default profile picture reconciliation Job checkpoint.
+// DecodeDefaultProfilePictureReconciliationCheckpoint decodes and validates a
+// checkpoint strictly.
 func DecodeDefaultProfilePictureReconciliationCheckpoint(document json.RawMessage) (DefaultProfilePictureReconciliationCheckpoint, error) {
 	var value DefaultProfilePictureReconciliationCheckpoint
 	if err := decodeStrictJobDocument(document, &value); err != nil {
@@ -107,15 +114,9 @@ func decodeStrictJobDocument(document json.RawMessage, target any) error {
 	return nil
 }
 
-// ProfilePictureDefaultJobs proposes default profile picture generation for
-// one User; the reconciliation Job calls it for each User that lacks one.
-type ProfilePictureDefaultJobs interface {
-	ProposeDefaultProfilePicture(context.Context, model.UserID, time.Time) error
-}
-
 type defaultProfilePictureReconciliationHandler struct {
 	users    store.UserStore
-	defaults ProfilePictureDefaultJobs
+	defaults *DefaultProfilePictureJobs
 	now      func() time.Time
 }
 
@@ -240,11 +241,11 @@ func defaultProfilePictureReconciliationDescriptor(handler job.Handler) job.Desc
 	return descriptor
 }
 
-// NewDefaultProfilePictureReconciliation registers the sweep that proposes
-// default profile pictures for Users that lack one, proposed daily.
+// NewDefaultProfilePictureReconciliation registers the daily sweep that
+// proposes default profile pictures for users that lack one.
 func NewDefaultProfilePictureReconciliation(
 	users store.UserStore,
-	defaults ProfilePictureDefaultJobs,
+	defaults *DefaultProfilePictureJobs,
 	jobs store.JobStore,
 	now func() time.Time,
 ) job.Registration {

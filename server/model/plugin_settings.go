@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-// PluginSettingsMaxBytes bounds one plugin's settings document.
+// PluginSettingsMaxBytes bounds one plugin's settings document, in bytes.
 const PluginSettingsMaxBytes = 64 << 10
 
 var (
@@ -45,9 +45,8 @@ func (id PluginID) IsValid() bool {
 func (id PluginID) String() string { return string(id) }
 
 // PluginSettings is what an administrator chose for one plugin: whether it
-// runs and its settings document. A plugin without saved settings uses its
-// built-in defaults. Secrets are never part of it; they stay in the
-// installation's configuration file.
+// runs, and its settings document. A plugin with no saved settings uses its
+// defaults. Secrets never belong here; they stay in the configuration file.
 type PluginSettings struct {
 	PluginID PluginID
 	Revision int64
@@ -59,16 +58,15 @@ type PluginSettings struct {
 	UpdatedAt time.Time
 }
 
-// PluginSettingsChange is the complete replaceable part of PluginSettings.
+// PluginSettingsChange is the whole replaceable part of PluginSettings.
 type PluginSettingsChange struct {
 	Enabled  bool
 	Settings json.RawMessage
 }
 
 // NormalizePluginSettingsDocument returns document in the normalized form
-// PluginSettings stores, or an error when it is not a JSON object within
-// PluginSettingsMaxBytes. Normalizing makes equal documents compare and
-// fingerprint equal however they were written.
+// PluginSettings stores, so equal documents compare and fingerprint equal. It
+// fails unless document is a JSON object within PluginSettingsMaxBytes.
 func NormalizePluginSettingsDocument(document json.RawMessage) (json.RawMessage, error) {
 	if len(document) == 0 || len(document) > PluginSettingsMaxBytes {
 		return nil, errPluginSettingsInvalid
@@ -116,7 +114,7 @@ func NewPluginSettings(id PluginID, change PluginSettingsChange, at time.Time) (
 	return settings, settings.Validate()
 }
 
-// Validate checks persisted settings without normalizing malformed data.
+// Validate checks stored settings without normalizing malformed data.
 func (s *PluginSettings) Validate() error {
 	if s == nil ||
 		!s.PluginID.IsValid() ||
@@ -129,7 +127,7 @@ func (s *PluginSettings) Validate() error {
 	return s.Change().Validate()
 }
 
-// Change returns a defensive copy of the replaceable part.
+// Change returns a copy of the replaceable part that shares nothing with s.
 func (s *PluginSettings) Change() PluginSettingsChange {
 	if s == nil {
 		return PluginSettingsChange{}
@@ -137,8 +135,8 @@ func (s *PluginSettings) Change() PluginSettingsChange {
 	return PluginSettingsChange{Enabled: s.Enabled, Settings: bytes.Clone(s.Settings)}
 }
 
-// Replace applies a complete optimistic replacement. An exact no-op keeps
-// the current revision.
+// Replace applies a complete replacement fenced on expectedRevision. An exact
+// no-op keeps the current revision.
 func (s *PluginSettings) Replace(expectedRevision int64, change PluginSettingsChange, at time.Time) error {
 	if s == nil || s.Validate() != nil || change.Validate() != nil || at.IsZero() {
 		return errPluginSettingsInvalid
@@ -160,7 +158,7 @@ func (s *PluginSettings) Replace(expectedRevision int64, change PluginSettingsCh
 	return s.Validate()
 }
 
-// Clone returns a defensive copy.
+// Clone returns a copy that shares nothing with s.
 func (s *PluginSettings) Clone() *PluginSettings {
 	if s == nil {
 		return nil

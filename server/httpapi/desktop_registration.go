@@ -8,11 +8,9 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -31,29 +29,17 @@ type desktopRegistrationResponse struct {
 	Current          bool   `json:"current"`
 }
 
-// renameDesktopRegistrationRequest names one of the caller's Desktop
-// Registrations.
+// renameDesktopRegistrationRequest names one of the caller's desktop
+// registrations.
 type renameDesktopRegistrationRequest struct {
 	DisplayName string `json:"display_name"`
 }
 
 type desktopRegistrationHandlers struct {
-	app DesktopRegistrations
+	app *identity.Service
 }
 
-// DesktopRegistrations is the application port its handlers call; it lists,
-// renames, and revokes the caller's own Desktop Registrations.
-type DesktopRegistrations interface {
-	ListDesktopRegistrations(context.Context, invocation.Invocation) ([]*model.DesktopRegistration, error)
-	RenameDesktopRegistration(
-		context.Context,
-		invocation.Invocation,
-		identity.RenameDesktopRegistrationCommand,
-	) (*model.DesktopRegistration, error)
-	RevokeDesktopRegistration(context.Context, invocation.Invocation, model.DesktopRegistrationID) error
-}
-
-func desktopRegistrationResource(app DesktopRegistrations) route.Resource {
+func desktopRegistrationResource(app *identity.Service) route.Resource {
 	h := desktopRegistrationHandlers{app: app}
 	collection := "/users/me/desktop-registrations"
 	item := "/users/me/desktop-registrations/{desktop_registration_id}"
@@ -128,8 +114,8 @@ func (h desktopRegistrationHandlers) list(request route.Request) (route.Result, 
 	return route.JSON(http.StatusOK, response).WithHeaders(privateNoStoreHeaders()), nil
 }
 
-// rename needs only an interactive Session, unlike revoke: a name changes no
-// key, Session, or credential, and it is visible only in the User's own lists.
+// rename needs only an interactive session, unlike revoke: a name changes no
+// key, session, or credential, and only the user's own lists show it.
 func (h desktopRegistrationHandlers) rename(request route.Request) (route.Result, error) {
 	registrationID, err := route.PathID[model.DesktopRegistrationID](request, "desktop_registration_id")
 	if err != nil {

@@ -13,15 +13,12 @@ import (
 	"github.com/sudosylabs/proctor/server/app/mail"
 )
 
-// DeploymentCapabilities projects only safe process capabilities from the
-// live provider registry and mail transport, as the AccessPolicyCapabilitySource
-// composition gives the identity and administration areas. Secrets never
-// enter policy code.
+// DeploymentCapabilities exposes what the live provider registry and mail
+// transport can do, never their secrets, so policy code can read it safely.
 type DeploymentCapabilities struct {
 	Providers ExternalProviderSource
 	Mail      mail.Sender
-	// Health is the mail health the delivery Jobs and maintenance monitor
-	// maintain, a *mail.Health in production.
+	// Health is a *mail.Health in production.
 	Health     interface{ Code() string }
 	MFAEnabled bool
 }

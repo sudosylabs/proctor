@@ -89,9 +89,9 @@ func TestExternalReauthenticationRechecksExactIdentityAndLiveBoundSession(t *tes
 			audit, _ := mfaSQLSecurityNoticeFixture(t, ctx, s, user, model.MailTemplateIdentityMFAEnabled, model.NowUTC())
 			auditID := audit.ID.String()
 			stateHash, bindingHash := model.HashToken(model.NewCredentialToken()), model.HashToken(model.NewCredentialToken())
-			state, err := s.ExternalLoginState().Save(ctx, &store.ExternalLoginStateCreation{State: &model.ExternalLoginState{Provider: "campus", Purpose: model.ExternalAuthenticationPurposeReauthenticate, TargetUserID: user.ID, SessionID: session.ID, SessionCredentialID: savedCredentials[0].ID, ExternalIdentityID: identity.ID, AuditEventID: auditID, StateHash: stateHash, BindingHash: bindingHash, ReturnTo: "/account/security", ClientType: model.SessionClientWeb}, Lifetime: time.Minute})
+			_, err = s.ExternalLoginState().Save(ctx, &store.ExternalLoginStateCreation{State: &model.ExternalLoginState{Provider: "campus", Purpose: model.ExternalAuthenticationPurposeReauthenticate, TargetUserID: user.ID, SessionID: session.ID, SessionCredentialID: savedCredentials[0].ID, ExternalIdentityID: identity.ID, AuditEventID: auditID, StateHash: stateHash, BindingHash: bindingHash, ReturnTo: "/account/security", ClientType: model.SessionClientWeb}, Lifetime: time.Minute})
 			require.NoError(t, err)
-			state, err = s.ExternalLoginState().Consume(ctx, &store.ExternalLoginStateConsumption{Provider: "campus", StateHash: stateHash, BindingHash: bindingHash})
+			state, err := s.ExternalLoginState().Consume(ctx, &store.ExternalLoginStateConsumption{Provider: "campus", StateHash: stateHash, BindingHash: bindingHash})
 			require.NoError(t, err)
 			input := &store.SessionExternalReauthentication{StateID: state.ID, ProviderID: "campus", Subject: identity.Subject, AuthenticatedAt: model.NowUTC()}
 			switch name {

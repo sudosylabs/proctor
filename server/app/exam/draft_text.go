@@ -28,9 +28,9 @@ type EditDraftTextCommand struct {
 	IdempotencyKey        string
 }
 
-// EditExamDraftText idempotently changes the Exam Draft's title, Exam
-// Instructions, or both, fenced by ExpectedDraftRevision. A nil field is left
-// unchanged, but at least one must be set.
+// EditExamDraftText idempotently changes the draft's title, instructions or
+// both, fenced by ExpectedDraftRevision. A nil field is left unchanged, but at
+// least one must be set.
 func (a *Authoring) EditExamDraftText(
 	ctx context.Context,
 	inv invocation.Invocation,

@@ -45,8 +45,8 @@ type ReplaceContentCommand struct {
 	IdempotencyKey        string
 }
 
-// CreateExamResource idempotently uploads, verifies, and adds an Exam
-// Resource to the Exam Draft, fenced by ExpectedDraftRevision.
+// CreateExamResource stores the upload, rejects it if its SHA-256 differs from
+// ExpectedSHA256, and adds it to the draft, fenced by ExpectedDraftRevision.
 func (s *Service) CreateExamResource(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -151,8 +151,8 @@ func (s *Service) CreateExamResource(
 	return s.finalizeUpload(ctx, inv, authorization, resource, leaseID, &rendition, command.ExpectedDraftRevision, commandIdempotency, "add")
 }
 
-// ReplaceExamResourceContent idempotently uploads and selects new content for
-// an existing Exam Resource, fenced by ExpectedDraftRevision.
+// ReplaceExamResourceContent selects a new upload for an existing resource
+// under the same checks and fence as CreateExamResource.
 func (s *Service) ReplaceExamResourceContent(
 	ctx context.Context,
 	inv invocation.Invocation,

@@ -321,7 +321,7 @@ func (row personalAccessTokenPreparationRow) auditEvent(
 		ID:        row.ID,
 		CreatedAt: row.CreatedAt,
 		UpdatedAt: row.CreatedAt,
-		// A token mutation always concerns the preparing User's own account.
+		// A token mutation always concerns the preparing user's own account.
 		ActorID:      row.ActorID,
 		SessionID:    row.SessionID,
 		SubjectID:    nullableAuditString(row.UserID),

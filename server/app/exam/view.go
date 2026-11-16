@@ -16,9 +16,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// View is an Exam with its Draft and the summary facts an author sees beside
-// it: who owns it, how many managers and Resources it has, and whether a
-// Starter Workspace exists.
+// View is an exam with its draft and the summary facts an author sees beside
+// it.
 type View struct {
 	Exam                model.Exam
 	Draft               model.ExamDraft
@@ -29,8 +28,8 @@ type View struct {
 	HasStarterWorkspace bool
 }
 
-// GetExam returns an Exam and its Exam Draft to a caller authorized to view
-// it, directly or through an override.
+// GetExam returns an exam and its draft to a caller who may view it, directly
+// or through an override.
 func (a *Authoring) GetExam(ctx context.Context, inv invocation.Invocation, id model.ExamID) (_ View, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	principal := inv.Principal()
@@ -72,9 +71,9 @@ func (a *Authoring) GetExam(ctx context.Context, inv invocation.Invocation, id m
 	return projectView(snapshot), nil
 }
 
-// AuthorizeExamView performs the same current relationship and role decision used
-// by Get without loading authored Draft content. Realtime subscriptions use it
-// so a scoped role alone cannot reveal Exam events to a non-manager.
+// AuthorizeExamView makes GetExam's decision without loading the draft.
+// Realtime subscriptions use it so a scoped role alone cannot reveal exam
+// events to a non-manager.
 func (a *Authoring) AuthorizeExamView(ctx context.Context, inv invocation.Invocation, examID model.ExamID) error {
 	principal := inv.Principal()
 	if principal.Validate() != nil || !examID.IsValid() {

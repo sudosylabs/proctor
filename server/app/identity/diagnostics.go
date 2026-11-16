@@ -26,9 +26,3 @@ func (s *Service) warn(ctx context.Context, message string, err error) {
 	}
 	s.diagnostics.WarnContext(ctx, message, logging.Err(err))
 }
-
-func recordOperational(recorder OperationalRecorder, subsystem, event string, err error) {
-	if recorder != nil {
-		recorder.RecordOperational(subsystem, event, err)
-	}
-}

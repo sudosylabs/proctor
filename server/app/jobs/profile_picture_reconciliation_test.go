@@ -10,6 +10,7 @@ package jobs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -41,11 +42,20 @@ func (f *reconciliationUserListerFake) List(_ context.Context, options store.Use
 	return append([]*model.User(nil), f.users[start:end]...), nil
 }
 
-type reconciliationDefaultJobsFake struct{ users []model.UserID }
+// reconciliationJobsFake is the Job Store behind the real default profile
+// picture proposer; users lists whom each enqueued generation Job is for.
+type reconciliationJobsFake struct {
+	store.JobStore
+	users []model.UserID
+}
 
-func (f *reconciliationDefaultJobsFake) ProposeDefaultProfilePicture(_ context.Context, userID model.UserID, _ time.Time) error {
-	f.users = append(f.users, userID)
-	return nil
+func (f *reconciliationJobsFake) Enqueue(_ context.Context, input *store.JobEnqueue) (*model.Job, bool, error) {
+	command, err := model.DecodeDefaultProfilePictureCommand(input.Job.Command)
+	if err != nil || input.Job.Type != model.JobTypeProfilePictureGenerateDefault {
+		return nil, false, errors.New("unexpected Job enqueued")
+	}
+	f.users = append(f.users, command.UserID)
+	return input.Job, true, nil
 }
 
 func TestDefaultProfilePictureReconciliationUsesBoundedPagesAndSafeCheckpoints(t *testing.T) {
@@ -54,8 +64,8 @@ func TestDefaultProfilePictureReconciliationUsesBoundedPagesAndSafeCheckpoints(t
 	at := time.Date(2026, time.August, 10, 8, 0, 0, 0, time.UTC)
 	users := []*model.User{reconciliationUser(t, "alpha", at), reconciliationUser(t, "beta", at), reconciliationUser(t, "gamma", at)}
 	lister := &reconciliationUserListerFake{users: users}
-	defaults := &reconciliationDefaultJobsFake{}
-	handler := defaultProfilePictureReconciliationHandler{users: lister, defaults: defaults, now: func() time.Time { return at }}
+	defaults := &reconciliationJobsFake{}
+	handler := defaultProfilePictureReconciliationHandler{users: lister, defaults: NewDefaultProfilePictureJobs(DefaultProfilePictureJobsDependencies{Jobs: defaults}), now: func() time.Time { return at }}
 	command, err := EncodeDefaultProfilePictureReconciliationCommand(DefaultProfilePictureReconciliationCommand{BatchSize: 2})
 	require.NoError(t, err)
 	record, err := model.NewJob(model.NewJobID(), model.JobTypeProfilePictureReconcile, command, "reconcile:2026-08-10", at, at, 5)
@@ -91,8 +101,8 @@ func TestDefaultProfilePictureReconciliationDoesNotExceedCommittedBatchOnRetry(t
 	at := time.Date(2026, time.August, 10, 8, 0, 0, 0, time.UTC)
 	users := []*model.User{reconciliationUser(t, "alpha", at), reconciliationUser(t, "beta", at), reconciliationUser(t, "gamma", at)}
 	lister := &reconciliationUserListerFake{users: users}
-	defaults := &reconciliationDefaultJobsFake{}
-	handler := defaultProfilePictureReconciliationHandler{users: lister, defaults: defaults, now: func() time.Time { return at }}
+	defaults := &reconciliationJobsFake{}
+	handler := defaultProfilePictureReconciliationHandler{users: lister, defaults: NewDefaultProfilePictureJobs(DefaultProfilePictureJobsDependencies{Jobs: defaults}), now: func() time.Time { return at }}
 	command, err := EncodeDefaultProfilePictureReconciliationCommand(DefaultProfilePictureReconciliationCommand{BatchSize: 2})
 	require.NoError(t, err)
 	checkpoint, err := EncodeDefaultProfilePictureReconciliationCheckpoint(DefaultProfilePictureReconciliationCheckpoint{AfterUsername: users[1].Username, AfterUserID: users[1].ID, Processed: 2})
@@ -114,11 +124,11 @@ func TestDefaultProfilePictureReconciliationDoesNotRepeatReservedWorkAfterCrash(
 	t.Parallel()
 	at := time.Date(2026, time.August, 10, 8, 0, 0, 0, time.UTC)
 	lister := &reconciliationUserListerFake{users: []*model.User{reconciliationUser(t, "alpha", at)}}
-	defaults := &reconciliationDefaultJobsFake{}
+	defaults := &reconciliationJobsFake{}
 	record, err := model.NewJob(model.NewJobID(), model.JobTypeProfilePictureReconcile, json.RawMessage(`{"batch_size":1}`), "daily", at, at, 5)
 	require.NoError(t, err)
 	record.WorkReserved = 1
-	outcome := (defaultProfilePictureReconciliationHandler{users: lister, defaults: defaults, now: func() time.Time { return at }}).Run(context.Background(), testJobExecution(record, allowJobWorkReservation(), nil))
+	outcome := (defaultProfilePictureReconciliationHandler{users: lister, defaults: NewDefaultProfilePictureJobs(DefaultProfilePictureJobsDependencies{Jobs: defaults}), now: func() time.Time { return at }}).Run(context.Background(), testJobExecution(record, allowJobWorkReservation(), nil))
 	require.Equal(t, job.OutcomeSucceeded, outcome.Kind, "outcome=%#v calls=%#v proposed", outcome, lister.calls)
 	require.Empty(t, lister.calls, "outcome=%#v calls=%#v proposed", outcome, lister.calls)
 	require.Empty(t, defaults.users, "outcome=%#v calls=%#v proposed", outcome, lister.calls)

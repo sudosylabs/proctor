@@ -13,17 +13,14 @@ import (
 	"time"
 )
 
-// Time helpers normalize domain and application instants to UTC microseconds,
-// the precision preserved by durable persistence. Discard sub-microsecond
-// precision before comparisons or writes so a database round trip cannot move
-// an instant forward and invalidate a transition or concurrency check.
-// Store contracts carry time.Time (or OptionalTime) instants, never Unix
-// milliseconds, and every wire timestamp uses FormatRFC3339 and
-// ParseRFC3339. Millisecond conversions remain only for application commands
-// and model documents that still carry Unix milliseconds.
+// Domain instants are UTC at microsecond precision, what persistence keeps.
+// Truncate before comparing or writing so a database round trip cannot move
+// an instant and break a transition or concurrency check. Store contracts
+// carry time.Time or OptionalTime, never Unix milliseconds, and every wire
+// timestamp goes through FormatRFC3339 and ParseRFC3339.
 
-// TimeUTC returns value in UTC, truncated to microsecond precision. A zero time
-// remains zero. Truncation never extends a deadline into the future.
+// TimeUTC returns value in UTC, truncated to microseconds; zero stays zero.
+// Truncation never moves a deadline later.
 func TimeUTC(value time.Time) time.Time {
 	if value.IsZero() {
 		return time.Time{}
@@ -31,15 +28,15 @@ func TimeUTC(value time.Time) time.Time {
 	return value.UTC().Truncate(time.Microsecond)
 }
 
-// FormatRFC3339 returns value in the canonical wire timestamp form: an RFC 3339
-// UTC string at microsecond precision with trailing fractional zeros removed
-// (time.RFC3339Nano after TimeUTC). Every HTTP and realtime timestamp uses it.
+// FormatRFC3339 returns the canonical wire form: RFC 3339 UTC at microsecond
+// precision without trailing fractional zeros. Every HTTP and realtime
+// timestamp uses it.
 func FormatRFC3339(value time.Time) string {
 	return TimeUTC(value).Format(time.RFC3339Nano)
 }
 
-// ParseRFC3339 parses a wire timestamp. It accepts any RFC 3339 offset and
-// fractional precision and returns the instant in UTC at domain precision.
+// ParseRFC3339 parses a wire timestamp with any RFC 3339 offset and fractional
+// precision, returning it in UTC at domain precision.
 func ParseRFC3339(raw string) (time.Time, error) {
 	parsed, err := time.Parse(time.RFC3339Nano, raw)
 	if err != nil {
@@ -48,16 +45,14 @@ func ParseRFC3339(raw string) (time.Time, error) {
 	return TimeUTC(parsed), nil
 }
 
-// NowUTC returns the current instant in UTC at domain precision. Prefer injecting
-// clocks into application services; this helper exists for pure domain tests and
-// adapters.
+// NowUTC returns the current instant at domain precision. Application services
+// should take an injected clock instead.
 func NowUTC() time.Time {
 	return TimeUTC(time.Now())
 }
 
-// MillisFromTime converts a time to Unix milliseconds for an application
-// command or model document that still carries milliseconds. A zero time maps
-// to 0.
+// MillisFromTime converts a time to Unix milliseconds for a command or
+// document that still carries them; zero maps to 0.
 func MillisFromTime(value time.Time) int64 {
 	if value.IsZero() {
 		return 0
@@ -65,8 +60,8 @@ func MillisFromTime(value time.Time) int64 {
 	return value.UTC().UnixMilli()
 }
 
-// TimeFromMillis converts a Unix-millisecond command or document value to UTC.
-// A non-positive value maps to the zero time.
+// TimeFromMillis converts Unix milliseconds to UTC; a non-positive value maps
+// to the zero time.
 func TimeFromMillis(millis int64) time.Time {
 	if millis <= 0 {
 		return time.Time{}
@@ -74,10 +69,9 @@ func TimeFromMillis(millis int64) time.Time {
 	return time.UnixMilli(millis).UTC()
 }
 
-// OptionalTime is an explicit optional UTC microsecond instant for
-// meaning-specific lifecycle fields such as archived_at. Valid is false for the
-// absent state; a zero Time with Valid true is still a valid (if unusual)
-// recorded instant.
+// OptionalTime is an optional UTC instant for fields such as archived_at.
+// Valid false means absent; a zero Time with Valid true is still a recorded
+// instant.
 type OptionalTime struct {
 	Time  time.Time
 	Valid bool
@@ -86,15 +80,14 @@ type OptionalTime struct {
 // IsSet reports whether the optional instant is present.
 func (o OptionalTime) IsSet() bool { return o.Valid }
 
-// OptionalTimeFrom wraps a concrete time as present. Zero times are still
-// treated as present when callers need to distinguish from omission; prefer
-// OptionalTime{} for absence.
+// OptionalTimeFrom marks value present, even a zero time; use OptionalTime{}
+// for absence.
 func OptionalTimeFrom(value time.Time) OptionalTime {
 	return OptionalTime{Time: TimeUTC(value), Valid: true}
 }
 
-// OptionalTimeFromMillis maps a Unix-millisecond command or document value.
-// Non-positive milliseconds become the absent optional value.
+// OptionalTimeFromMillis maps Unix milliseconds; a non-positive value is
+// absent.
 func OptionalTimeFromMillis(millis int64) OptionalTime {
 	if millis <= 0 {
 		return OptionalTime{}
@@ -102,8 +95,7 @@ func OptionalTimeFromMillis(millis int64) OptionalTime {
 	return OptionalTime{Time: time.UnixMilli(millis).UTC(), Valid: true}
 }
 
-// Millis returns the Unix-millisecond form an application command or model
-// document still carries. Absent values return 0.
+// Millis returns Unix milliseconds, or 0 when absent.
 func (o OptionalTime) Millis() int64 {
 	if !o.Valid {
 		return 0
@@ -111,7 +103,7 @@ func (o OptionalTime) Millis() int64 {
 	return o.Time.UTC().UnixMilli()
 }
 
-// UTC returns the optional instant normalized to UTC microsecond precision.
+// UTC returns the instant in UTC at microsecond precision, keeping absence.
 func (o OptionalTime) UTC() OptionalTime {
 	if !o.Valid {
 		return OptionalTime{}
@@ -124,7 +116,7 @@ func (o OptionalTime) IsZero() bool {
 	return !o.Valid || o.Time.IsZero()
 }
 
-// Ptr returns a *time.Time for SQL/DTO nullability helpers. Absent values yield nil.
+// Ptr returns the instant for nullable SQL or DTO fields, or nil when absent.
 func (o OptionalTime) Ptr() *time.Time {
 	if !o.Valid {
 		return nil
@@ -133,7 +125,7 @@ func (o OptionalTime) Ptr() *time.Time {
 	return &value
 }
 
-// OptionalTimeFromPtr maps a nullable pointer. Nil becomes absent.
+// OptionalTimeFromPtr maps a nullable pointer; nil is absent.
 func OptionalTimeFromPtr(value *time.Time) OptionalTime {
 	if value == nil {
 		return OptionalTime{}
@@ -162,7 +154,6 @@ func (o *OptionalTime) UnmarshalJSON(data []byte) error {
 
 	var raw string
 	if err := json.Unmarshal(data, &raw); err != nil {
-		// Also accept bare RFC 3339 without going through string if needed.
 		var instant time.Time
 		if err2 := json.Unmarshal(data, &instant); err2 != nil {
 			return invalidModelError("OptionalTime.UnmarshalJSON", "optional_time", "", "invalid optional time", "").wrap(err)

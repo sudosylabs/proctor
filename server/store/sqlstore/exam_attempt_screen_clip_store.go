@@ -182,7 +182,7 @@ func (o screenClipOutcome) result() (*store.ExamAttemptScreenClipResult, error) 
 	}, nil
 }
 
-// RequestScreenClip saves an Exam Manager's request.
+// RequestScreenClip saves an exam manager's request.
 func (s *SQLExamAttemptStore) RequestScreenClip(
 	ctx context.Context,
 	input *store.ExamAttemptScreenClipRequest,
@@ -322,10 +322,10 @@ func requestScreenClip(
 }
 
 // requestIncidentScreenClip asks Desktop for the minute either side of the
-// moment a Flag opened, when the Attempt's policy records the screen. Focus
-// Loss, Connection Loss and native Flags qualify; at most
-// model.ScreenClipIncidentRequestLimit are asked for per Attempt, and any
-// further Flag goes without one.
+// moment a flag opened, when the attempt's policy records the screen. Focus
+// Loss, connection loss and native flags qualify; at most
+// model.ScreenClipIncidentRequestLimit are asked for per attempt, and any
+// further flag goes without one.
 func requestIncidentScreenClip(ctx context.Context, tx *sqlxTxWrapper, flag *model.IntegrityFlag) (bool, error) {
 	if flag.Kind == model.IntegrityPolicyBrowserNavigation {
 		return false, nil
@@ -438,8 +438,8 @@ func (s *SQLExamAttemptStore) DeliverScreenClip(
 	})
 }
 
-// lockLiveScreenClip locks a clip of the Attempt the live Connection serves,
-// and returns the Participation that Connection belongs to.
+// lockLiveScreenClip locks a clip of the attempt the live connection serves,
+// and returns the participation that connection belongs to.
 func lockLiveScreenClip(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -480,8 +480,8 @@ func lockLiveScreenClip(
 }
 
 // lockClosedScreenClip locks a clip whose upload continues after the
-// Participation that took it closed. The candidate's registered Desktop
-// Session must be the one that held that Participation, and its upload
+// participation that took it closed. The candidate's registered desktop
+// session must be the one that held that participation, and its upload
 // deadline must not have passed.
 func lockClosedScreenClip(
 	ctx context.Context,
@@ -514,7 +514,7 @@ func lockClosedScreenClip(
 		return nil, "", store.NewErrNotFound("screen_clip", clipID.String())
 	}
 	if !owner.UploadExpires.Valid {
-		// The Participation is still live, so the upload needs its credential.
+		// The participation is still live, so the upload needs its credential.
 		return nil, "", store.NewErrInvalidInput("exam_attempt", "candidate_access", nil)
 	}
 
@@ -543,7 +543,7 @@ func lockClosedScreenClip(
 	return clip, participationID, nil
 }
 
-// failExpiredScreenClipUploads fails the clips a Participation took and did
+// failExpiredScreenClipUploads fails the clips a participation took and did
 // not finish uploading before its upload deadline. The delivery expiry pass
 // calls it when that deadline passes.
 func failExpiredScreenClipUploads(ctx context.Context, tx *sqlxTxWrapper, participation model.AttemptParticipationID, now time.Time) error {
@@ -569,7 +569,7 @@ func failExpiredScreenClipUploads(ctx context.Context, tx *sqlxTxWrapper, partic
 	return nil
 }
 
-// screenRecordingEnabledSQL reads whether an Attempt's admitted Revision
+// screenRecordingEnabledSQL reads whether an attempt's admitted Revision
 // records the screen, from exam_revisions r.
 const screenRecordingEnabledSQL = `COALESCE((r.policy_document #>> '{native,screen_recording,enabled}')::boolean, false)`
 
@@ -772,7 +772,7 @@ func (s *SQLExamAttemptStore) CompleteScreenClipUpload(
 	})
 }
 
-// ListAttemptScreenClips returns every clip requested for an Attempt.
+// ListAttemptScreenClips returns every clip requested for an attempt.
 func (s *SQLExamAttemptStore) ListAttemptScreenClips(
 	ctx context.Context,
 	attempt store.ExamAttemptClips,
@@ -802,7 +802,7 @@ func (s *SQLExamAttemptStore) ListAttemptScreenClips(
 	return clips, nil
 }
 
-// GetAttemptScreenClip returns one clip of an Attempt.
+// GetAttemptScreenClip returns one clip of an attempt.
 func (s *SQLExamAttemptStore) GetAttemptScreenClip(
 	ctx context.Context,
 	attempt store.ExamAttemptClips,

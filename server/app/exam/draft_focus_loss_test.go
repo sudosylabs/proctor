@@ -34,15 +34,16 @@ func TestConfigureDraftFocusLossOwnsAuthorizationAuditPersistenceAndSafeEffect(t
 	require.Equal(t, focus, view.Draft.Policy.FocusLoss)
 	require.Equal(t, model.IntegrityOutcomeFlagAndSuspend, view.Draft.Policy.ConnectionLoss.Outcome)
 	require.Equal(t, int64(2), view.Draft.Revision)
-	require.Equal(t, model.ActionExamManage, fixture.authorizer.action, "authorization/update")
+	require.Equal(t, []string{decided(model.ActionExamManage, fixture.examResource(), model.AuditStatusSuccess)}, fixture.decisions(), "authorization/update")
 	require.NotNil(t, fixture.persistence.focusLossUpdate, "authorization/update")
 	require.Equal(t, focus, fixture.persistence.focusLossUpdate.FocusLoss, "authorization/update")
 	require.NotNil(t, fixture.persistence.idempotency, "authorization/update")
 	require.Equal(t, "exam.draft.focus_loss.configure", fixture.persistence.idempotency.Operation, "authorization/update")
-	require.Len(t, fixture.auditor.value, 3, "unsafe audit/effect")
-	require.Equal(t, fixture.examID.String(), fixture.auditor.value["exam_id"], "unsafe audit/effect")
-	require.Equal(t, int64(1), fixture.auditor.value["expected_draft_revision"], "unsafe audit/effect")
-	require.Equal(t, int64(2), fixture.auditor.value["draft_revision"], "unsafe audit/effect")
+	value := fixture.attemptValue(t)
+	require.Len(t, value, 3, "unsafe audit/effect")
+	require.Equal(t, fixture.examID.String(), value["exam_id"], "unsafe audit/effect")
+	require.Equal(t, int64(1), value["expected_draft_revision"], "unsafe audit/effect")
+	require.Equal(t, int64(2), value["draft_revision"], "unsafe audit/effect")
 	// Contract: the committed edit publishes exactly one Draft update, at the
 	// committed revision.
 	require.Equal(t, []realtimetest.Call{draftUpdated(t, fixture.examID, 2)}, fixture.publisher.Calls())
@@ -50,7 +51,7 @@ func TestConfigureDraftFocusLossOwnsAuthorizationAuditPersistenceAndSafeEffect(t
 		fmt.Sprintf(`{"exam_id":%q,"expected_draft_revision":1,"enabled":false,"minimum_duration_milliseconds":500,"incident_count":100,"window_milliseconds":14400000,"outcome":"flag_and_suspend"}`, fixture.examID))
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
-	require.Equal(t, []string{"store.access", "membership", "authorize", "store.get", "audit.begin", "store.update_focus_loss", "effect.updated"}, *fixture.order)
+	require.Equal(t, []string{"store.access", "membership", "grants", "decision:exam.manage:success", "store.get", "audit-begin:exam.manage", "store.update_focus_loss", "effect.updated"}, *fixture.order)
 }
 
 func TestConfigureDraftFocusLossNoChangeSkipsAuditPersistenceAndEffect(t *testing.T) {
@@ -65,7 +66,7 @@ func TestConfigureDraftFocusLossNoChangeSkipsAuditPersistenceAndEffect(t *testin
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.draft.no_changes", fault.Code())
 	// A no-op edit is authorized but never audited, persisted, or published.
-	require.Nil(t, fixture.auditor.value, "no-op edit was audited")
+	require.Empty(t, fixture.access.Audits.Attempts(), "no-op edit was audited")
 	require.Nil(t, fixture.persistence.focusLossUpdate, "no-op edit was persisted")
 	require.Empty(t, fixture.publisher.Calls(), "no-op edit was published")
 }
@@ -93,7 +94,7 @@ func TestConfigureDraftFocusLossArchivedNoOpAndStaleEditsReachAuditedStoreGuard(
 			require.ErrorAs(t, err, &fault)
 			require.Equal(t, test.want, fault.Code())
 			require.NotNil(t, fixture.persistence.focusLossUpdate, "guard effects: update")
-			require.Equal(t, test.want, fixture.auditor.failedCode, "guard effects: update")
+			require.Equal(t, test.want, fixture.failedCode(t), "guard effects: update")
 			require.Empty(t, fixture.publisher.Calls(), "guard effects: update")
 		})
 	}

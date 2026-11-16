@@ -31,9 +31,9 @@ type InstitutionNameCacheDependencies struct {
 	Now          func() time.Time
 }
 
-// InstitutionNameCache supplies the institution display name to mail copy. The
-// read happens outside the lock so one slow read never queues every message;
-// a failure keeps the last known name, and with none copy names "your
+// InstitutionNameCache supplies the institution display name to mail copy.
+// The read happens outside the lock so one slow read never queues every
+// message; a failure keeps the last known name, and with none copy says "your
 // institution".
 type InstitutionNameCache struct {
 	institutions store.InstitutionStore
@@ -45,12 +45,12 @@ type InstitutionNameCache struct {
 }
 
 // NewInstitutionNameCache builds an empty cache; the first Name reads the
-// Institution.
+// institution.
 func NewInstitutionNameCache(deps InstitutionNameCacheDependencies) *InstitutionNameCache {
 	return &InstitutionNameCache{institutions: deps.Institutions, now: deps.Now}
 }
 
-// Name returns the institution display name, reading it again once the cached
+// Name returns the institution display name, rereading it once the cached
 // name is a minute old.
 func (c *InstitutionNameCache) Name() string {
 	if c == nil || c.institutions == nil {

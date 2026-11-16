@@ -10,13 +10,13 @@ package mail
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
@@ -134,50 +134,39 @@ func (s mailUserStoreFake) Get(context.Context, model.UserID) (*model.User, erro
 	return &copy, nil
 }
 
-type mailAuthorizerFake struct {
-	actions []model.Action
-	err     error
-	// users answers GrantedUserVisibility; visibilityReads counts the calls.
-	users           store.UserVisibilityScope
-	visibilityReads int
+type mailInstitutionStoreFake struct {
+	store.InstitutionStore
+	institution *model.Institution
 }
 
-func (a *mailAuthorizerFake) GrantedUserVisibility(context.Context, model.Principal) (store.UserVisibilityScope, error) {
-	a.visibilityReads++
-	return a.users, nil
+func (s mailInstitutionStoreFake) GetSingleton(context.Context) (*model.Institution, error) {
+	return s.institution, nil
 }
 
-func (a *mailAuthorizerFake) AuthorizeInstitution(_ context.Context, _ invocation.Invocation, action model.Action) (model.Resource, error) {
-	a.actions = append(a.actions, action)
-	if a.err != nil {
-		return model.Resource{}, a.err
+// mailAccess builds the real authorizer and auditor with the operator mail
+// actions granted Institution-wide to userID, plus any extra grants, and
+// the Institution authorization the mail service holds. A zero at decides
+// on the wall clock.
+func mailAccess(t testing.TB, userID model.UserID, at time.Time, extra ...accesstest.Grant) (*accesstest.Fixture, InstitutionAuthorization) {
+	t.Helper()
+	options := accesstest.Options{Grants: append([]accesstest.Grant{{
+		UserID: userID, Actions: []model.Action{model.ActionMailView, model.ActionMailManage, model.ActionMailRekey},
+	}}, extra...)}
+	if !at.IsZero() {
+		options.Now = func() time.Time { return at }
 	}
-	return model.Resource{Type: model.ResourceInstitution, ID: model.NewInstitutionID().String()}, nil
+	fixture := accesstest.New(t, options)
+	return fixture, InstitutionAuthorization{Authorizer: fixture.Authorizer, Institutions: mailInstitutionStoreFake{institution: fixture.Institution}}
 }
 
-type mailAuditFake struct {
-	calls      int
-	beginCalls int
-	failCalls  int
-}
-
-func (a *mailAuditFake) PrepareTest(_ context.Context, inv invocation.Invocation, resource model.Resource, id model.MailDeliveryID) (*model.AuditEvent, error) {
-	a.calls++
-	principal := inv.Principal()
-	return &model.AuditEvent{ActorID: principal.UserID, SessionID: principal.SessionID, Action: string(model.ActionMailManage), Resource: model.Resource{Type: model.ResourceMailDelivery, ID: id.String()}, ScopeType: model.RoleScopeInstitution, ScopeID: resource.ID, Status: model.AuditStatusSuccess, NodeID: "test", ClientType: string(principal.ClientType), AuthMethod: principal.AuthenticationMethod}, nil
-}
-
-func (a *mailAuditFake) PrepareControl(_ context.Context, _ invocation.Invocation, institution model.Resource, delivery *model.MailDelivery, operation string) (model.AuditEventID, error) {
-	a.beginCalls++
-	if institution.Type != model.ResourceInstitution || delivery == nil || (operation != "cancel" && operation != "retry") {
-		return "", errors.New("unsafe mail audit")
+// mailDecisions lists the recorded authorization decisions as
+// "<action>:<status>", in order.
+func mailDecisions(fixture *accesstest.Fixture) []string {
+	var decisions []string
+	for _, decision := range fixture.Audits.Decisions() {
+		decisions = append(decisions, decision.Action+":"+string(decision.Status))
 	}
-	return model.NewAuditEventID(), nil
-}
-
-func (a *mailAuditFake) Fail(context.Context, model.AuditEventID, string) error {
-	a.failCalls++
-	return nil
+	return decisions
 }
 
 func TestMailServicePreparesOnlyControlledSelfRecipientAndAtomicIntent(t *testing.T) {
@@ -185,9 +174,8 @@ func TestMailServicePreparesOnlyControlledSelfRecipientAndAtomicIntent(t *testin
 	principal := mailTestPrincipal(at)
 	persistence := &mailStoreFake{}
 	sender := &mailSenderFake{enabled: true, from: Address{Name: "Proctor", Address: "no-reply@institution.test"}}
-	authorizer, auditor := &mailAuthorizerFake{}, &mailAuditFake{}
-	content := FrozenContent{Subject: "Fixed test", Text: "fixed text", HTML: "<p>fixed html</p>"}
-	service, err := NewOperations(OperationsDependencies{Mail: persistence, Users: mailUserStoreFake{user: mailTestUser(principal, at)}, Authorization: authorizer, Audit: auditor, Attempts: &testLimiterFake{}, Renderer: mailRendererFake{content}, Sender: sender, Metrics: nopDeliveryRecorder{}, Sealer: mailTestSealer(t), RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
+	fixture, authorization := mailAccess(t, principal.UserID, time.Time{})
+	service, err := NewOperations(OperationsDependencies{Mail: persistence, Users: mailUserStoreFake{user: mailTestUser(principal, at)}, Authorization: authorization, Audit: fixture.Auditor, Attempts: &testLimiterFake{}, Renderer: mailTestRenderer(t), Sender: sender, Metrics: nopDeliveryRecorder{}, Sealer: mailTestSealer(t), RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	woke := 0
 	service.wake = func() { woke++ }
@@ -197,11 +185,21 @@ func TestMailServicePreparesOnlyControlledSelfRecipientAndAtomicIntent(t *testin
 	require.Equal(t, principal.UserID, persistence.enqueue.Delivery.TargetUserID, "atomic intent")
 	require.Equal(t, principal.UserID, persistence.enqueue.Occurrence.ActorUserID, "atomic intent")
 	require.Equal(t, model.JobTypeMailDeliver, persistence.enqueue.Job.Type, "atomic intent")
-	require.Equal(t, 1, auditor.calls, "atomic intent")
+	audit := persistence.enqueue.AuditEvent
+	require.NotNil(t, audit, "the audit event is committed with the intent")
+	require.Equal(t, principal.UserID, audit.ActorID, "atomic intent audit")
+	require.Equal(t, string(model.ActionMailManage), audit.Action, "atomic intent audit")
+	require.Equal(t, model.Resource{Type: model.ResourceMailDelivery, ID: persistence.enqueue.Delivery.ID.String()}, audit.Resource, "atomic intent audit")
+	require.Equal(t, model.RoleScopeInstitution, audit.ScopeType, "atomic intent audit")
+	require.Equal(t, fixture.Institution.ID.String(), audit.ScopeID, "atomic intent audit")
+	require.Equal(t, []string{"mail.manage:success"}, mailDecisions(fixture))
 	require.Equal(t, 1, woke, "atomic intent")
 	serialized, _ := json.Marshal(persistence.enqueue)
 	require.NotContains(t, string(serialized), "operator@example.test")
-	require.NotContains(t, string(serialized), "fixed text")
+	opened, err := OpenDelivery(mailTestSealer(t), persistence.enqueue.Delivery)
+	require.NoError(t, err)
+	require.NotContains(t, string(serialized), opened.Subject, "the rendered subject is sealed")
+	require.NotContains(t, string(serialized), opened.Text, "the rendered body is sealed")
 	require.Equal(t, "o***@example.test", view.MaskedRecipient)
 	require.Equal(t, model.MailDeliveryQueued, view.State)
 	require.Equal(t, persistence.enqueue.Delivery.MessageID, view.MessageID)
@@ -211,14 +209,13 @@ func TestMailMetricsRequiresMailViewAuthorization(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
 	principal := mailTestPrincipal(at)
-	authorizer := &mailAuthorizerFake{}
+	fixture, authorization := mailAccess(t, principal.UserID, time.Time{})
 	metrics := &recordingMailMetrics{health: []HealthMetric{{Code: HealthHealthy}}}
-	service, err := NewOperations(OperationsDependencies{Mail: &mailStoreFake{}, Users: mailUserStoreFake{user: mailTestUser(principal, at)}, Authorization: authorizer, Audit: &mailAuditFake{}, Attempts: &testLimiterFake{}, Renderer: mailRendererFake{}, Sender: &mailSenderFake{}, Metrics: metrics, Sealer: nil, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
+	service, err := NewOperations(OperationsDependencies{Mail: &mailStoreFake{}, Users: mailUserStoreFake{user: mailTestUser(principal, at)}, Authorization: authorization, Audit: fixture.Auditor, Attempts: &testLimiterFake{}, Renderer: mailTestRenderer(t), Sender: &mailSenderFake{}, Metrics: metrics, Sealer: nil, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	_, err = service.GetMailMetrics(context.Background(), invocation.New(principal, model.RequestMetadata{}))
 	require.NoError(t, err)
-	require.Len(t, authorizer.actions, 1)
-	require.Equal(t, model.ActionMailView, authorizer.actions[0])
+	require.Equal(t, []string{"mail.view:success"}, mailDecisions(fixture))
 }
 
 func TestMailServiceRejectsPATUnverifiedAndRateLimitedBeforePersistence(t *testing.T) {
@@ -227,8 +224,8 @@ func TestMailServiceRejectsPATUnverifiedAndRateLimitedBeforePersistence(t *testi
 	user := mailTestUser(principal, at)
 	persistence := &mailStoreFake{}
 	sender := &mailSenderFake{enabled: true, from: Address{Address: "no-reply@example.test"}}
-	content := FrozenContent{Subject: "test", Text: "test"}
-	service, err := NewOperations(OperationsDependencies{Mail: persistence, Users: mailUserStoreFake{user: user}, Authorization: &mailAuthorizerFake{}, Audit: &mailAuditFake{}, Attempts: &testLimiterFake{}, Renderer: mailRendererFake{content}, Sender: sender, Metrics: nopDeliveryRecorder{}, Sealer: mailTestSealer(t), RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
+	fixture, authorization := mailAccess(t, principal.UserID, time.Time{})
+	service, err := NewOperations(OperationsDependencies{Mail: persistence, Users: mailUserStoreFake{user: user}, Authorization: authorization, Audit: fixture.Auditor, Attempts: &testLimiterFake{}, Renderer: mailTestRenderer(t), Sender: sender, Metrics: nopDeliveryRecorder{}, Sealer: mailTestSealer(t), RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	pat := principal
 	pat.SessionID = ""
@@ -261,14 +258,14 @@ func TestMailOperatorReadsAuthorizeBeforeInspectionAndReturnOnlySafeViews(t *tes
 	principal := mailTestPrincipal(at)
 	delivery := queuedMailDeliveryFixtureForApp(at)
 	persistence := &mailStoreFake{delivery: delivery}
-	authorizer := &mailAuthorizerFake{}
-	service, err := NewOperations(OperationsDependencies{Mail: persistence, Users: mailUserStoreFake{user: mailTestUser(principal, at)}, Authorization: authorizer, Audit: &mailAuditFake{}, Attempts: &testLimiterFake{}, Renderer: mailRendererFake{}, Sender: &mailSenderFake{}, Metrics: nopDeliveryRecorder{}, Sealer: nil, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
+	fixture, authorization := mailAccess(t, principal.UserID, time.Time{})
+	service, err := NewOperations(OperationsDependencies{Mail: persistence, Users: mailUserStoreFake{user: mailTestUser(principal, at)}, Authorization: authorization, Audit: fixture.Auditor, Attempts: &testLimiterFake{}, Renderer: mailTestRenderer(t), Sender: &mailSenderFake{}, Metrics: nopDeliveryRecorder{}, Sealer: nil, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	page, appErr := service.ListMailDeliveries(context.Background(), invocation.New(principal, model.RequestMetadata{}), ListDeliveriesQuery{States: []model.MailDeliveryState{model.MailDeliveryQueued}, Limit: 20})
-	require.NoError(t, appErr, "List() page=%#v err=%v lists=%d actions=%v", page, appErr, persistence.lists, authorizer.actions)
-	require.Len(t, page.Items, 1, "List() page=%#v err=%v lists=%d actions=%v", page, appErr, persistence.lists, authorizer.actions)
-	require.Equal(t, 1, persistence.lists, "List() page=%#v err=%v lists=%d actions=%v", page, appErr, persistence.lists, authorizer.actions)
-	require.Equal(t, model.ActionMailView, authorizer.actions[0], "List() page=%#v err=%v lists=%d actions=%v", page, appErr, persistence.lists, authorizer.actions)
+	require.NoError(t, appErr, "List() page=%#v err=%v lists=%d decisions=%v", page, appErr, persistence.lists, mailDecisions(fixture))
+	require.Len(t, page.Items, 1, "List() page=%#v err=%v lists=%d decisions=%v", page, appErr, persistence.lists, mailDecisions(fixture))
+	require.Equal(t, 1, persistence.lists, "List() page=%#v err=%v lists=%d decisions=%v", page, appErr, persistence.lists, mailDecisions(fixture))
+	require.Equal(t, []string{"mail.view:success"}, mailDecisions(fixture), "List() page=%#v err=%v lists=%d", page, appErr, persistence.lists)
 	require.Equal(t, 21, persistence.listLimit, "the read probes one past the page")
 	require.False(t, page.HasMore)
 	full, appErr := service.ListMailDeliveries(context.Background(), invocation.New(principal, model.RequestMetadata{}), ListDeliveriesQuery{Limit: 1})
@@ -281,8 +278,9 @@ func TestMailOperatorReadsAuthorizeBeforeInspectionAndReturnOnlySafeViews(t *tes
 	require.Len(t, more.Items, 1)
 	require.True(t, more.HasMore)
 	persistence.listCopies = 0
-	authorizer.err = apperror.New("authorization.denied")
-	_, appErr = service.GetMailDelivery(context.Background(), invocation.New(principal, model.RequestMetadata{}), delivery.ID)
+	// A caller without mail.view is refused before any delivery is read.
+	outsider := mailTestPrincipal(at)
+	_, appErr = service.GetMailDelivery(context.Background(), invocation.New(outsider, model.RequestMetadata{}), delivery.ID)
 	require.True(t, apperror.Is(appErr, "authorization.denied"), "denied Get() err=%v gets", appErr)
 	require.Equal(t, 0, persistence.gets, "denied Get() err=%v gets", appErr)
 	encoded, _ := json.Marshal(page)
@@ -296,8 +294,8 @@ func TestMailOperatorMutationsRequireRecentSessionAndAuditSameDelivery(t *testin
 	principal := mailTestPrincipal(at)
 	delivery := queuedMailDeliveryFixtureForApp(at.Add(-time.Minute))
 	persistence := &mailStoreFake{delivery: delivery}
-	auditor := &mailAuditFake{}
-	service, err := NewOperations(OperationsDependencies{Mail: persistence, Users: mailUserStoreFake{user: mailTestUser(principal, at)}, Authorization: &mailAuthorizerFake{}, Audit: auditor, Attempts: &testLimiterFake{}, Renderer: mailRendererFake{}, Sender: &mailSenderFake{}, Metrics: nopDeliveryRecorder{}, Sealer: nil, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
+	fixture, authorization := mailAccess(t, principal.UserID, time.Time{})
+	service, err := NewOperations(OperationsDependencies{Mail: persistence, Users: mailUserStoreFake{user: mailTestUser(principal, at)}, Authorization: authorization, Audit: fixture.Auditor, Attempts: &testLimiterFake{}, Renderer: mailTestRenderer(t), Sender: &mailSenderFake{}, Metrics: nopDeliveryRecorder{}, Sealer: nil, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	pat := principal
 	pat.SessionID = ""
@@ -316,7 +314,11 @@ func TestMailOperatorMutationsRequireRecentSessionAndAuditSameDelivery(t *testin
 	require.NoError(t, appErr, "Cancel() view=%#v err=%v mutates=%d audit", view, appErr, persistence.mutates)
 	require.Equal(t, model.MailDeliveryCanceled, view.State, "Cancel() view=%#v err=%v mutates=%d audit", view, appErr, persistence.mutates)
 	require.Equal(t, 1, persistence.mutates, "Cancel() view=%#v err=%v mutates=%d audit", view, appErr, persistence.mutates)
-	require.Equal(t, 1, auditor.beginCalls, "Cancel() view=%#v err=%v mutates=%d audit", view, appErr, persistence.mutates)
+	attempts := fixture.Audits.Attempts()
+	require.Len(t, attempts, 1, "Cancel() view=%#v err=%v mutates=%d audit", view, appErr, persistence.mutates)
+	require.Equal(t, model.Resource{Type: model.ResourceMailDelivery, ID: delivery.ID.String()}, attempts[0].Resource, "the audit names the canceled delivery")
+	require.Equal(t, fixture.Institution.ID.String(), attempts[0].ScopeID, "the audit is scoped to the Institution")
+	require.Equal(t, principal.UserID, attempts[0].ActorID)
 }
 
 func queuedMailDeliveryFixtureForApp(at time.Time) *model.MailDelivery {
@@ -326,8 +328,8 @@ func queuedMailDeliveryFixtureForApp(at time.Time) *model.MailDelivery {
 func TestMailServiceRejectsEnabledDeliveryWithoutSecretSealer(t *testing.T) {
 	at := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
 	principal := mailTestPrincipal(at)
-	content := FrozenContent{Subject: "test", Text: "test"}
-	_, err := NewOperations(OperationsDependencies{Mail: &mailStoreFake{}, Users: mailUserStoreFake{user: mailTestUser(principal, at)}, Authorization: &mailAuthorizerFake{}, Audit: &mailAuditFake{}, Attempts: &testLimiterFake{}, Renderer: mailRendererFake{content}, Sender: &mailSenderFake{enabled: true, from: Address{Address: "no-reply@example.test"}}, Metrics: nopDeliveryRecorder{}, Sealer: nil, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
+	fixture, authorization := mailAccess(t, principal.UserID, time.Time{})
+	_, err := NewOperations(OperationsDependencies{Mail: &mailStoreFake{}, Users: mailUserStoreFake{user: mailTestUser(principal, at)}, Authorization: authorization, Audit: fixture.Auditor, Attempts: &testLimiterFake{}, Renderer: mailTestRenderer(t), Sender: &mailSenderFake{enabled: true, from: Address{Address: "no-reply@example.test"}}, Metrics: nopDeliveryRecorder{}, Sealer: nil, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "enabled mail requires secret sealing")
 }
@@ -336,9 +338,10 @@ func TestMailDeliveryListCountsTheFirstPageThroughTheListedOptions(t *testing.T)
 	t.Parallel()
 	delivery := &model.MailDelivery{ID: model.NewMailDeliveryID(), CreatedAt: model.TimeFromMillis(100)}
 	persistence := &mailStoreFake{delivery: delivery, countTotal: 3}
-	authorizer := &mailAuthorizerFake{}
-	service := &Operations{deps: OperationsDependencies{Mail: persistence, Authorization: authorizer}}
-	caller := invocation.New(mailTestPrincipal(time.Now()), model.RequestMetadata{})
+	principal := mailTestPrincipal(time.Now())
+	fixture, authorization := mailAccess(t, principal.UserID, time.Time{})
+	service := &Operations{deps: OperationsDependencies{Mail: persistence, Authorization: authorization}}
+	caller := invocation.New(principal, model.RequestMetadata{})
 	query := ListDeliveriesQuery{States: []model.MailDeliveryState{model.MailDeliveryFailed}, Limit: 10}
 	first, err := service.ListMailDeliveries(context.Background(), caller, query)
 	require.NoError(t, err)
@@ -356,7 +359,7 @@ func TestMailDeliveryListCountsTheFirstPageThroughTheListedOptions(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, 3, failed)
 	require.Equal(t, store.MailDeliveryListOptions{States: []model.MailDeliveryState{model.MailDeliveryFailed}}, persistence.countOptions)
-	require.Equal(t, []model.Action{model.ActionMailView, model.ActionMailView, model.ActionMailView}, authorizer.actions,
+	require.Equal(t, []string{"mail.view:success", "mail.view:success", "mail.view:success"}, mailDecisions(fixture),
 		"every read, the summary included, authorizes mail.view")
 }
 
@@ -379,9 +382,10 @@ func (f *testLimiterFake) AccountMailTest(_ context.Context, userID model.UserID
 func TestMailDeliveryListFiltersByRecipientUser(t *testing.T) {
 	t.Parallel()
 	persistence := &mailStoreFake{}
-	authorizer := &mailAuthorizerFake{}
-	service := &Operations{deps: OperationsDependencies{Mail: persistence, Authorization: authorizer}}
-	caller := invocation.New(mailTestPrincipal(time.Now()), model.RequestMetadata{})
+	principal := mailTestPrincipal(time.Now())
+	fixture, authorization := mailAccess(t, principal.UserID, time.Time{})
+	service := &Operations{deps: OperationsDependencies{Mail: persistence, Authorization: authorization}}
+	caller := invocation.New(principal, model.RequestMetadata{})
 	recipient := model.NewUserID()
 	_, err := service.ListMailDeliveries(context.Background(), caller, ListDeliveriesQuery{RecipientUserID: recipient, Limit: 10})
 	require.NoError(t, err)
@@ -391,7 +395,7 @@ func TestMailDeliveryListFiltersByRecipientUser(t *testing.T) {
 	_, err = service.ListMailDeliveries(context.Background(), caller, ListDeliveriesQuery{RecipientUserID: "not-an-id", Limit: 10})
 	require.True(t, apperror.Is(err, "mail.query.invalid"), "error = %v", err)
 	require.Zero(t, persistence.lists, "a refused filter reads nothing")
-	require.Equal(t, []model.Action{model.ActionMailView, model.ActionMailView}, authorizer.actions)
+	require.Equal(t, []string{"mail.view:success", "mail.view:success"}, mailDecisions(fixture))
 }
 
 // mailDeliveryPageFake lists a fixed page of deliveries.
@@ -436,21 +440,26 @@ func TestMailDeliveryReadsNameOnlyRecipientsTheViewerCanSee(t *testing.T) {
 	}
 	toVisible, toHidden, toVisibleAgain, invitation := delivery(visibleUser), delivery(hiddenUser), delivery(visibleUser), delivery("")
 	persistence := &mailDeliveryPageFake{deliveries: []*model.MailDelivery{toVisible, toHidden, toVisibleAgain, invitation}}
-	scoped := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: at}
+	// The viewer holds user.view in one Academic Unit, so its User
+	// visibility is scoped to that unit.
+	viewer := mailTestPrincipal(at)
+	unitID := model.NewAcademicUnitID()
+	fixture, authorization := mailAccess(t, viewer.UserID, at, accesstest.Grant{
+		UserID: viewer.UserID, Actions: []model.Action{model.ActionUserView}, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(),
+	})
+	scoped := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{unitID}, ActiveAt: model.TimeUTC(at)}
 	reads := []mailNameRead{}
 	// The store names only inside the visibility it is given; this scoped
 	// viewer cannot see hiddenUser.
 	users := mailUserStoreFake{visible: map[model.UserID]string{visibleUser: "Bo Student"}, names: &reads}
-	authorizer := &mailAuthorizerFake{users: scoped}
-	service := &Operations{deps: OperationsDependencies{Mail: persistence, Users: users, Authorization: authorizer}}
-	caller := invocation.New(mailTestPrincipal(at), model.RequestMetadata{})
+	service := &Operations{deps: OperationsDependencies{Mail: persistence, Users: users, Authorization: authorization}}
+	caller := invocation.New(viewer, model.RequestMetadata{})
 
 	page, err := service.ListMailDeliveries(context.Background(), caller, ListDeliveriesQuery{Limit: 10})
 	require.NoError(t, err)
 	require.Equal(t, []mailNameRead{{ids: []model.UserID{visibleUser, hiddenUser}, visibility: scoped}}, reads,
 		"one read for the page, each recipient once, inside the viewer's visibility")
-	require.Equal(t, 1, authorizer.visibilityReads)
-	require.Equal(t, []model.Action{model.ActionMailView}, authorizer.actions, "naming records no further decision")
+	require.Equal(t, []string{"mail.view:success"}, mailDecisions(fixture), "naming records no further decision")
 	names := make([]string, 0, len(page.Items))
 	for _, item := range page.Items {
 		names = append(names, item.RecipientDisplayName)
@@ -473,9 +482,14 @@ func TestMailDeliveryReadsNameOnlyRecipientsTheViewerCanSee(t *testing.T) {
 	require.Empty(t, view.RecipientDisplayName)
 	require.Empty(t, reads, "an Invitation delivery has no User to name")
 
-	wide := store.UserVisibilityScope{InstitutionWide: true}
+	// A viewer holding user.view Institution-wide sees every User.
+	wideViewer := mailTestPrincipal(at)
+	_, service.deps.Authorization = mailAccess(t, wideViewer.UserID, at, accesstest.Grant{
+		UserID: wideViewer.UserID, Actions: []model.Action{model.ActionUserView},
+	})
+	caller = invocation.New(wideViewer, model.RequestMetadata{})
+	wide := store.UserVisibilityScope{InstitutionWide: true, ActiveAt: model.TimeUTC(at)}
 	users.visible[hiddenUser] = "Cy Teacher"
-	service.deps.Authorization = &mailAuthorizerFake{users: wide}
 	page, err = service.ListMailDeliveries(context.Background(), caller, ListDeliveriesQuery{Limit: 10})
 	require.NoError(t, err)
 	require.Equal(t, []mailNameRead{{ids: []model.UserID{visibleUser, hiddenUser}, visibility: wide}}, reads)

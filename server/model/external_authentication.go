@@ -34,8 +34,8 @@ const (
 	ExternalAuthenticationPurposeInvitationAdmission  ExternalAuthenticationPurpose = "invitation_admission"
 	ExternalAuthenticationPurposeDesktopAuthorization ExternalAuthenticationPurpose = "desktop_authorization"
 	// ExternalAuthenticationPurposeDesktopReauthentication proves fresh
-	// provider authentication for one Desktop reauthentication transaction.
-	// It never creates a Session or provisions a User.
+	// provider authentication for one desktop reauthentication. It never
+	// creates a session or provisions a user.
 	ExternalAuthenticationPurposeDesktopReauthentication ExternalAuthenticationPurpose = "desktop_reauthentication"
 )
 
@@ -54,25 +54,25 @@ var ErrInvalidExternalAuthenticationCallback = errors.New(
 )
 
 // ExternalAuthenticationProvider is the safe public description of one
-// operator-configured identity provider. Protocol endpoints and claim mapping
-// remain deployment configuration and are never exposed here.
+// configured identity provider. Endpoints and claim mapping stay in
+// deployment configuration and are never exposed here.
 type ExternalAuthenticationProvider struct {
 	ID          string
 	DisplayName string
 	Type        string
 }
 
-// ExternalAuthenticationStart carries the provider redirect plus the raw
-// browser-binding value that the HTTP boundary places in an HttpOnly cookie.
-// The binding is never serialized or persisted in recoverable form.
+// ExternalAuthenticationStart carries the provider redirect and the raw
+// browser-binding value the HTTP layer puts in an HttpOnly cookie. The binding
+// is never serialized or stored in recoverable form.
 type ExternalAuthenticationStart struct {
 	RedirectURL string
 	Binding     string `json:"-"`
 	ExpiresAt   int64
 }
 
-// ExternalAuthenticationCompletion is returned internally after a successful
-// provider callback. Tokens follow the ordinary one-time session contract.
+// ExternalAuthenticationCompletion is the internal result of a successful
+// provider callback; its tokens follow the usual one-time session rules.
 type ExternalAuthenticationCompletion struct {
 	Restart  *ExternalAuthenticationStart
 	User     *User
@@ -81,9 +81,9 @@ type ExternalAuthenticationCompletion struct {
 	ReturnTo string
 }
 
-// ExternalAuthenticationAssertion is the protocol-neutral result produced by
-// a trusted provider adapter. Subject is opaque and must only be persisted in
-// ExternalIdentity; it must never be returned, logged, or audited.
+// ExternalAuthenticationAssertion is the protocol-neutral result of a trusted
+// provider adapter. Subject is opaque, stored only in ExternalIdentity, and
+// never returned, logged or audited.
 type ExternalAuthenticationAssertion struct {
 	ProviderID             string
 	Subject                string
@@ -99,10 +99,9 @@ type ExternalAuthenticationAssertion struct {
 	AuthenticatedAt        int64
 }
 
-// ExternalAuthenticationCallback is a bounded, transport-neutral view of the
-// values returned by an identity provider. Protocol adapters, not the API or
-// application orchestration, own the meaning of ticket, code, error, and
-// future protocol-specific fields.
+// ExternalAuthenticationCallback is a bounded, transport-neutral view of what
+// an identity provider returned. Only the protocol adapters interpret ticket,
+// code, error and any protocol-specific fields.
 type ExternalAuthenticationCallback struct {
 	Values map[string][]string
 }
@@ -140,11 +139,10 @@ func (c ExternalAuthenticationCallback) OptionalSingleValue(
 	return values[0], nil
 }
 
-// ExternalLoginState binds one provider redirect to the browser that initiated
-// it. Only token hashes are durable. State is consumed exactly once before the
-// one-time provider credential is validated, closing concurrent replay races.
-//
-// StateHash and BindingHash are deliberately excluded from JSON.
+// ExternalLoginState binds one provider redirect to the browser that started
+// it. Only token hashes are stored, and they are never in JSON. The state is
+// consumed exactly once before the provider's one-time credential is checked,
+// which closes concurrent replay races.
 type ExternalLoginState struct {
 	ID                                 ExternalLoginStateID
 	CreatedAt                          time.Time
@@ -168,7 +166,8 @@ type ExternalLoginState struct {
 	ConsumedAt                         OptionalTime
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
+// PrepareCreate stamps the ID and creation time, normalizes the provider and
+// inputs, and defaults the purpose to login; it does nothing on nil.
 func (s *ExternalLoginState) PrepareCreate(id ExternalLoginStateID, at time.Time) {
 	if s == nil {
 		return
@@ -187,7 +186,7 @@ func (s *ExternalLoginState) PrepareCreate(id ExternalLoginStateID, at time.Time
 	s.ExpiresAt = TimeUTC(s.ExpiresAt)
 }
 
-// Validate checks rehydrated external-login-state state.
+// Validate checks the state's fields, for new and stored values alike.
 func (s *ExternalLoginState) Validate() error {
 	const where = "ExternalLoginState.Validate"
 	if s == nil {
@@ -286,7 +285,6 @@ func (s *ExternalLoginState) Validate() error {
 	return nil
 }
 
-// validatePurposeTarget checks the target, recovery and reauthentication fields required by the purpose.
 func (s *ExternalLoginState) validatePurposeTarget(details string) error {
 	const where = "ExternalLoginState.Validate"
 	if !s.Purpose.IsValid() ||
@@ -331,8 +329,7 @@ func (s *ExternalLoginState) validatePurposeTarget(details string) error {
 	return nil
 }
 
-// Auditable returns a deliberately safe audit projection. Hashes are never
-// included.
+// Auditable returns the fields safe to audit; hashes are never included.
 func (s *ExternalLoginState) Auditable() map[string]any {
 	if s == nil {
 		return map[string]any{}
@@ -351,8 +348,8 @@ func (s *ExternalLoginState) Auditable() map[string]any {
 	}
 }
 
-// IsSafeRelativeURL accepts a local absolute-path reference without authority,
-// backslashes, fragments, or control characters.
+// IsSafeRelativeURL accepts a local absolute-path reference with no authority,
+// backslash, fragment or control character, so it cannot redirect off-site.
 func IsSafeRelativeURL(value string) bool {
 	if value == "" ||
 		len(value) > ExternalLoginReturnToMaxLength ||

@@ -27,7 +27,7 @@ import (
 )
 
 // SQLSessionStore implements store.SessionStore on sessions; revocation also
-// retires the Session's credentials.
+// retires the session's credentials.
 type SQLSessionStore struct {
 	*SQLStore
 	sessionsQuery sq.SelectBuilder
@@ -112,9 +112,9 @@ func newSQLSessionStore(sqlStore *SQLStore) store.SessionStore {
 	return s
 }
 
-// Save issues the prepared Session and its initial credentials after
-// rechecking the authentication method, proof, recovery state and per-User
-// Session limit, and completes the issuance audit.
+// Save issues the prepared session and its initial credentials after
+// rechecking the authentication method, proof, recovery state and per-user
+// session limit, and completes the issuance audit.
 func (s SQLSessionStore) Save(
 	ctx context.Context,
 	input *store.SessionCreation,
@@ -163,7 +163,6 @@ func (s SQLSessionStore) Save(
 	return result.session, result.credentials, nil
 }
 
-// saveSession issues the prepared Session and credentials inside the save transaction.
 func saveSession(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -188,7 +187,7 @@ func saveSession(
 	return &sessionSaveTransactionResult{session: candidate, credentials: prepared}, nil
 }
 
-// requireSessionIssuance rechecks the authentication method, recovery, password proof, Attempt lock and external identity under the Session lock.
+// requireSessionIssuance rechecks the authentication method, recovery, password proof, attempt lock and external identity under the session lock.
 func requireSessionIssuance(ctx context.Context, tx *sqlxTxWrapper, input *store.SessionCreation, candidate *model.Session) error {
 	if err := requireCurrentAuthenticationMethod(
 		ctx, tx, candidate.AuthenticationMethod, candidate.AuthenticationProviderID,
@@ -216,7 +215,7 @@ func requireSessionIssuance(ctx context.Context, tx *sqlxTxWrapper, input *store
 	return requireExactExternalIdentity(ctx, tx, candidate.UserID, candidate.AuthenticationProviderID, candidate.ExternalIdentityID)
 }
 
-// insertIssuedSession enforces the per-User Session limit, inserts the Session and credentials and records the login.
+// insertIssuedSession enforces the per-user session limit, inserts the session and credentials and records the login.
 func insertIssuedSession(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -351,7 +350,7 @@ func insertSession(ctx context.Context, executor sqlxExecutor, session *model.Se
 	return nil
 }
 
-// Get returns the unarchived Session with id, revoked or expired or not, or a
+// Get returns the unarchived session with id, revoked or expired or not, or a
 // not-found error.
 func (s SQLSessionStore) Get(ctx context.Context, id model.SessionID) (*model.Session, error) {
 	var row sessionRow
@@ -365,7 +364,7 @@ func (s SQLSessionStore) Get(ctx context.Context, id model.SessionID) (*model.Se
 	return row.model()
 }
 
-// ListByUser returns one page of the unarchived Sessions of the query's User,
+// ListByUser returns one page of the unarchived sessions of the query's user,
 // newest first.
 func (s SQLSessionStore) ListByUser(ctx context.Context, page *store.SessionPageQuery) ([]*model.Session, error) {
 	if page == nil ||
@@ -415,7 +414,7 @@ func (s SQLSessionStore) ListByUser(ctx context.Context, page *store.SessionPage
 	return sessions, nil
 }
 
-// ListActiveByUser returns the User's unrevoked Sessions that are neither
+// ListActiveByUser returns the user's unrevoked sessions that are neither
 // idle-expired nor expired at now, most recently active first.
 func (s SQLSessionStore) ListActiveByUser(ctx context.Context, userID model.UserID, now time.Time) ([]*model.Session, error) {
 	at := model.TimeUTC(now)
@@ -447,10 +446,10 @@ func (s SQLSessionStore) ListActiveByUser(ctx context.Context, userID model.User
 	return sessions, nil
 }
 
-// UpdateActivity records activity on a live Session and moves its idle expiry
+// UpdateActivity records activity on a live session and moves its idle expiry
 // to idleExpiresAt, capped at the absolute expiry. The same statement advances
-// the Session's User's last activity, never backwards; the User's sign-in time
-// is untouched. An absent, revoked, or already expired Session yields a
+// the session's user's last activity, never backwards; the user's sign-in time
+// is untouched. An absent, revoked, or already expired session yields a
 // not-found error.
 func (s SQLSessionStore) UpdateActivity(ctx context.Context, input *store.SessionActivityUpdate) error {
 	id := input.ID
@@ -496,7 +495,7 @@ func (s SQLSessionStore) UpdateActivity(ctx context.Context, input *store.Sessio
 	return nil
 }
 
-// Withdraw revokes one Session of the User for a system withdrawal reason and
+// Withdraw revokes one session of the user for a system withdrawal reason and
 // returns the hashes of its revoked credentials.
 func (s SQLSessionStore) Withdraw(ctx context.Context, input *store.SessionWithdrawal) ([]string, error) {
 	id := input.ID
@@ -514,9 +513,9 @@ func (s SQLSessionStore) Withdraw(ctx context.Context, input *store.SessionWithd
 	})
 }
 
-// EnforceExpiry revokes the User's unrevoked Session as expired when it has
+// EnforceExpiry revokes the user's unrevoked session as expired when it has
 // expired at at, returning its revoked credential hashes with Expired set. An
-// unexpired Session is returned unchanged.
+// unexpired session is returned unchanged.
 func (s SQLSessionStore) EnforceExpiry(
 	ctx context.Context,
 	input *store.SessionExpiryEnforcement,
@@ -584,10 +583,10 @@ func (s SQLSessionStore) EnforceExpiry(
 	})
 }
 
-// Revoke revokes the User's Session in an audited transaction and returns it
-// with its revoked credential hashes. Revocation by someone other than the User
-// also enqueues the security Notice mail; logging out of an already-revoked
-// Session is an audited no-op with an empty result.
+// Revoke revokes the user's session in an audited transaction and returns it
+// with its revoked credential hashes. Revocation by someone other than the user
+// also enqueues the security notice mail; logging out of an already-revoked
+// session is an audited no-op with an empty result.
 func (s SQLSessionStore) Revoke(
 	ctx context.Context,
 	input *store.SessionRevocation,
@@ -707,7 +706,7 @@ func (s SQLSessionStore) Revoke(
 			session.UpdatedAt = revokedAt
 		}
 
-		// Revocation SQL clamps the instant to the Session's creation.
+		// Revocation SQL clamps the instant to the session's creation.
 		session.RevokedAt = model.OptionalTimeFrom(latestTime(session.CreatedAt, revokedAt))
 		session.RevocationReason = reason
 		if !selfRevocation {
@@ -731,8 +730,8 @@ func (s SQLSessionStore) Revoke(
 	})
 }
 
-// RevokeAllForUser revokes every Session of the User, enqueues the
-// administrative Notice mail when Sessions were revoked, and completes the
+// RevokeAllForUser revokes every session of the user, enqueues the
+// administrative notice mail when sessions were revoked, and completes the
 // audit; under input.Command it is an idempotent mutation.
 func (s SQLSessionStore) RevokeAllForUser(
 	ctx context.Context,
@@ -764,7 +763,6 @@ type userSessionsRevocationPlan struct {
 	payloadKeyID   string
 }
 
-// planUserSessionsRevocation validates a revoke-all request and its prepared Notice mail.
 func planUserSessionsRevocation(input *store.UserSessionsRevocation) (userSessionsRevocationPlan, error) {
 	if input == nil ||
 		!input.UserID.IsValid() ||
@@ -812,7 +810,6 @@ func planUserSessionsRevocation(input *store.UserSessionsRevocation) (userSessio
 	return plan, nil
 }
 
-// revokeUserSessions revokes every Session of the User, queues any Notice and completes the audit inside the transaction.
 func revokeUserSessions(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -881,7 +878,6 @@ func revokeUserSessions(
 	}, nil
 }
 
-// revokeAllForUserIdempotently runs the revoke-all mutation under its command idempotency key.
 func (s SQLSessionStore) revokeAllForUserIdempotently(
 	ctx context.Context,
 	input *store.UserSessionsRevocation,
@@ -1038,7 +1034,7 @@ func revokeAllUserSessionsAt(
 	return revokeUserSessionsExceptAt(ctx, executor, userID, "", at, reason)
 }
 
-// revokeUserSessionsExceptAt revokes every live Session of the User except
+// revokeUserSessionsExceptAt revokes every live session of the user except
 // keep (none when keep is empty) and their live credentials at at.
 func revokeUserSessionsExceptAt(
 	ctx context.Context,
@@ -1171,8 +1167,8 @@ func revokedSessionModelsAt(
 	return sessions, nil
 }
 
-// requireLiveUserSession confirms under the per-User Session lock that id is
-// an unrevoked, unexpired Session of the User at the UTC instant at.
+// requireLiveUserSession confirms under the per-user session lock that id is
+// an unrevoked, unexpired session of the user at the UTC instant at.
 func requireLiveUserSession(ctx context.Context, executor sqlxExecutor, userID model.UserID, id model.SessionID, at time.Time) error {
 	at = model.TimeUTC(at)
 	var matched string
@@ -1194,6 +1190,10 @@ func requireLiveUserSession(ctx context.Context, executor sqlxExecutor, userID m
 	return nil
 }
 
+// lockUserSessions takes the per-user lock that every session issuer and
+// attempt activation share. Any path that can create a session must take it
+// and recheck for an active attempt inside the same transaction, or a session
+// could be issued after the attempt started.
 func lockUserSessions(
 	ctx context.Context,
 	executor sqlxExecutor,

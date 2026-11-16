@@ -433,9 +433,9 @@ func replayIdempotentMutation[T any](
 
 // outcomeDocument marks a persisted command outcome: the document an
 // idempotent replay decodes from command_outcomes.outcome. Only sqlstore types
-// can implement it, and every field of one carries an explicit json name, so
-// renaming a Go field cannot silently change what a stored replay means
-// (architecture TestPersistedOutcomesAreTaggedDocuments).
+// can implement it. Give every field an explicit json name: a stored replay
+// outlives the Go field names, and a rename must not change what it decodes
+// to.
 type outcomeDocument interface{ outcomeDocument() }
 
 // encodeOutcome is the one encoder of persisted command outcomes. The column

@@ -19,8 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// DomainEventDispatchResult is the safe result of a domain-event dispatch
-// Job. Delivered is false when the event was already delivered and retired.
+// DomainEventDispatchResult is the result of a domain-event dispatch job.
+// Delivered is false when the event was already delivered and retired.
 type DomainEventDispatchResult struct {
 	Delivered bool `json:"delivered"`
 }
@@ -30,11 +30,10 @@ type domainEventDispatchHandler struct {
 	dispatcher *events.Dispatcher
 }
 
-// Run loads the outbox row named by the Job and offers it to every plugin
-// subscription that has not accepted it yet. When some fail, it records the
-// ones that accepted in the Job's checkpoint and retries; once every
-// subscription has accepted, it deletes the row. The row lives until then,
-// so a crash offers the event again, which the plugin contract allows.
+// Run deletes the outbox row only once every subscription has accepted, so
+// a crash offers the event again, which the subscription contract allows.
+// When some fail, the ones that accepted are checkpointed and the job
+// retries.
 func (h domainEventDispatchHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
 	if execution.Job == nil {
 		return job.PermanentFailure("job.command.invalid", errors.New("domain event dispatch job is missing"))
@@ -99,7 +98,7 @@ func domainEventDispatchDescriptor(handler job.Handler) job.Descriptor {
 }
 
 // NewDomainEventDispatch registers the delivery of outbox domain events to
-// the dispatcher's plugin handlers.
+// the dispatcher's handlers.
 func NewDomainEventDispatch(outbox store.DomainEventStore, dispatcher *events.Dispatcher) job.Registration {
 	return job.Registration{Descriptor: domainEventDispatchDescriptor(domainEventDispatchHandler{outbox: outbox, dispatcher: dispatcher})}
 }

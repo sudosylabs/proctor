@@ -13,11 +13,10 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// academicSubtreeCTE returns the recursive common table expression name,
-// holding the id of every unarchived listed root and of every unarchived
-// Academic Unit beneath one through unarchived parents, and the argument its
-// one placeholder binds. The statement that defines it starts WITH RECURSIVE;
-// name is a fixed identifier chosen by the caller, never input.
+// academicSubtreeCTE returns a WITH RECURSIVE body naming every unarchived
+// root and every unarchived unit beneath one through unarchived parents, and
+// the argument for its one placeholder. name is a fixed identifier chosen by
+// the caller, never input.
 func academicSubtreeCTE(name string, roots []model.AcademicUnitID) (string, any) {
 	return name + ` AS (
 		SELECT id FROM academic_units WHERE id = ANY(?) AND archived_at IS NULL

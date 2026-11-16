@@ -15,8 +15,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// publicFailures presents every Exam Resource use-case failure: unexpected errors
-// become exam.resource.unavailable, and protected targets conceal denial and absence.
+// publicFailures turns unexpected errors into exam.resource.unavailable and
+// reports denial and absence alike as resource.not_found.
 var publicFailures = apperror.Concealment{
 	Unavailable: "exam.resource.unavailable",
 	Concealed:   []apperror.Code{"exam.resource.not_found"},
@@ -39,18 +39,12 @@ var storeErrors = apperror.StoreTable{
 	Unavailable:  "exam.resource.unavailable",
 }
 
-type invalidContentError interface {
-	InvalidExamResourceContent()
-}
-
-type workCapacityError interface{ WorkCapacityExceeded() }
-
 func mapContentError(err error) error {
-	var capacity workCapacityError
+	var capacity apperror.WorkCapacityExceeded
 	if errors.As(err, &capacity) {
 		return apperror.New("service.busy").Wrap(err)
 	}
-	var invalidContent invalidContentError
+	var invalidContent apperror.InvalidExamResourceContent
 	if errors.As(err, &invalidContent) {
 		return apperror.New("exam.resource.content_invalid").Wrap(err)
 	}

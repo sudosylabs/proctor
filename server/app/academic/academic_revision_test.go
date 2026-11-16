@@ -16,8 +16,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -57,12 +57,13 @@ func TestAcademicClientRevisionPreconditions(t *testing.T) {
 					}
 					if code != "" {
 						require.True(t, apperror.Is(err, code), "error = %v, want %s", err, code)
+						decided := false
 						for _, event := range events {
 							require.False(t, strings.HasPrefix(event, "store-"))
-							require.NotEqual(t, "audit-begin", event)
+							require.False(t, strings.HasPrefix(event, "audit-begin"))
+							decided = decided || strings.HasPrefix(event, "decision:")
 						}
-						require.NotEmpty(t, events)
-						require.True(t, strings.HasPrefix(events[0], "authorize"))
+						require.True(t, decided, "the caller is authorized before the revision is checked: %v", events)
 					} else {
 						require.NoError(t, err)
 						want := int64(8)
@@ -79,23 +80,24 @@ func TestAcademicClientRevisionPreconditions(t *testing.T) {
 
 func academicRevisionFixture(t *testing.T, kind string, events *[]string, denied bool) (func(*int64) error, func(*int64) error, func(string) int64) {
 	t.Helper()
-	ctx, call := context.Background(), invocation.Invocation{}
+	ctx := context.Background()
+	principal, call := newCaller()
 	now := func() time.Time { return model.TimeFromMillis(500) }
 	at := model.TimeFromMillis(100)
-	var deniedErr error
-	if denied {
-		deniedErr = apperror.New("authorization.denied")
+	// A denied caller holds only the view action of the same kind, at the same
+	// scope, so the resource still resolves and the decision is a refusal.
+	granted := func(manage, view model.Action) model.Action {
+		if denied {
+			return view
+		}
+		return manage
 	}
-	authorization := &programmeAuthorizerFake{events: events, err: deniedErr}
-	audit := &institutionAuditorFake{events: events, beginID: model.NewID()}
 	switch kind {
 	case "academic_unit":
 		current := &model.AcademicUnit{ID: model.NewAcademicUnitID(), CreatedAt: at, UpdatedAt: at, Revision: 7, Name: "academic", DisplayName: "Academic", InstitutionID: model.NewInstitutionID()}
+		access := academicUnitAccess(t, events, nil, unitGrant(principal.UserID, current.ID, granted(model.ActionAcademicUnitManage, model.ActionAcademicUnitView)))
 		persistence := &academicUnitMutationStore{events: events, current: current, updated: current, archived: current}
-		service := mustNew(Dependencies{Store: &catalogFake{academicUnit: persistence}, Authorizer: academicUnitAuthorizerStub{authorize: func(context.Context, invocation.Invocation, model.Action, model.Resource) error {
-			*events = append(*events, "authorize")
-			return deniedErr
-		}}, Auditor: &academicUnitCommandAuditor{events: events, beginID: model.NewID()}, Now: now, NewID: model.NewID, Publisher: academicUnitPublisherIn(events)})
+		service := mustNew(Dependencies{Store: &catalogFake{academicUnit: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: now, NewID: model.NewID, Publisher: academicUnitPublisherIn(events)})
 		return func(expected *int64) error {
 				_, err := service.UpdateAcademicUnit(ctx, call, UpdateAcademicUnitCommand{ID: current.ID, ExpectedRevision: expected})
 				return err
@@ -112,7 +114,11 @@ func academicRevisionFixture(t *testing.T, kind string, events *[]string, denied
 	case "programme":
 		current := &model.Programme{ID: model.NewProgrammeID(), CreatedAt: at, UpdatedAt: at, Revision: 7, Name: "academic", DisplayName: "Academic", AcademicUnitID: model.NewAcademicUnitID()}
 		persistence := &programmeStoreFake{events: events, current: current}
-		service := mustNew(Dependencies{Store: &catalogFake{programme: persistence}, Authorizer: authorization, Auditor: audit, Now: now, NewID: model.NewID})
+		access := accessWith(t, events, accesstest.Options{
+			Grants:     []accesstest.Grant{unitGrant(principal.UserID, current.AcademicUnitID, granted(model.ActionProgrammeManage, model.ActionProgrammeView))},
+			Programmes: persistence,
+		})
+		service := mustNew(Dependencies{Store: &catalogFake{programme: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: now, NewID: model.NewID})
 		return func(expected *int64) error {
 				_, err := service.UpdateProgramme(ctx, call, UpdateProgrammeCommand{ID: current.ID, ExpectedRevision: expected})
 				return err
@@ -127,9 +133,15 @@ func academicRevisionFixture(t *testing.T, kind string, events *[]string, denied
 				return persistence.updateInput.Programme.Revision
 			}
 	case "programme_level":
-		current := &model.ProgrammeLevel{ID: model.NewProgrammeLevelID(), CreatedAt: at, UpdatedAt: at, Revision: 7, Name: "academic", DisplayName: "Academic", ProgrammeID: model.NewProgrammeID()}
+		programme := &model.Programme{ID: model.NewProgrammeID(), AcademicUnitID: model.NewAcademicUnitID()}
+		current := &model.ProgrammeLevel{ID: model.NewProgrammeLevelID(), CreatedAt: at, UpdatedAt: at, Revision: 7, Name: "academic", DisplayName: "Academic", ProgrammeID: programme.ID}
 		persistence := &programmeLevelStoreFake{events: events, current: current}
-		service := mustNew(Dependencies{Store: &catalogFake{programmeLevel: persistence}, Authorizer: authorization, Auditor: audit, Now: now, NewID: model.NewID})
+		access := accessWith(t, events, accesstest.Options{
+			Grants:          []accesstest.Grant{unitGrant(principal.UserID, programme.AcademicUnitID, granted(model.ActionProgrammeLevelManage, model.ActionProgrammeLevelView))},
+			Programmes:      programmesOf(programme),
+			ProgrammeLevels: persistence,
+		})
+		service := mustNew(Dependencies{Store: &catalogFake{programmeLevel: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: now, NewID: model.NewID})
 		return func(expected *int64) error {
 				_, err := service.UpdateProgrammeLevel(ctx, call, UpdateProgrammeLevelCommand{ID: current.ID, ExpectedRevision: expected})
 				return err
@@ -146,7 +158,8 @@ func academicRevisionFixture(t *testing.T, kind string, events *[]string, denied
 	case "academic_period":
 		current := &model.AcademicPeriod{ID: model.NewAcademicPeriodID(), CreatedAt: at, UpdatedAt: at, Revision: 7, Name: "academic", DisplayName: "Academic", Owner: model.NewInstitutionAcademicPeriodOwner(model.NewInstitutionID()), StartsAt: at, EndsAt: at.Add(time.Hour)}
 		persistence := &academicPeriodStoreFake{events: events, current: current}
-		service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: persistence}, Authorizer: &academicPeriodAuthorizerFake{events: events, err: deniedErr}, Auditor: audit, Now: now, NewID: model.NewID})
+		access := academicPeriodAccess(t, events, persistence, nil, institutionGrant(principal.UserID, granted(model.ActionAcademicPeriodManage, model.ActionAcademicPeriodView)))
+		service := mustNew(Dependencies{Store: &catalogFake{academicPeriod: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: now, NewID: model.NewID})
 		return func(expected *int64) error {
 				_, err := service.UpdateAcademicPeriod(ctx, call, UpdateAcademicPeriodCommand{ID: current.ID, ExpectedRevision: expected})
 				return err
@@ -161,9 +174,11 @@ func academicRevisionFixture(t *testing.T, kind string, events *[]string, denied
 				return persistence.updateInput.Period.Revision
 			}
 	case "class":
-		current := &model.Class{ID: model.NewClassID(), CreatedAt: at, UpdatedAt: at, Revision: 7, Name: "academic", DisplayName: "Academic", ProgrammeLevelID: model.NewProgrammeLevelID(), AcademicPeriodID: model.NewAcademicPeriodID()}
-		persistence := &classStoreFake{events: events, current: current, unitID: model.NewID()}
-		service := mustNew(Dependencies{Store: &catalogFake{class: persistence}, Authorizer: authorization, Auditor: audit, Now: now, NewID: model.NewID})
+		world := newClassWorld(1)
+		current := &model.Class{ID: model.NewClassID(), CreatedAt: at, UpdatedAt: at, Revision: 7, Name: "academic", DisplayName: "Academic", ProgrammeLevelID: world.levels[0].ID, AcademicPeriodID: world.period.ID}
+		persistence := &classStoreFake{events: events, current: current, unitID: world.unitID.String()}
+		access := world.access(t, events, persistence, unitGrant(principal.UserID, world.unitID, granted(model.ActionClassManage, model.ActionClassView)))
+		service := mustNew(Dependencies{Store: &catalogFake{class: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: now, NewID: model.NewID})
 		return func(expected *int64) error {
 				_, err := service.UpdateClass(ctx, call, UpdateClassCommand{ID: current.ID, ExpectedRevision: expected})
 				return err

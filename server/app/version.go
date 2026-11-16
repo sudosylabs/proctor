@@ -19,16 +19,17 @@ var (
 	BuildTime = "unknown"
 )
 
-// BuildInfo identifies the running binary: its release, source commit, build time and Go toolchain.
+// BuildInfo identifies the running binary: its release, source commit, build
+// time and Go toolchain. `proctor version` prints it as JSON, so its field
+// names are part of the CLI contract.
 type BuildInfo struct {
-	Version   string
-	Commit    string
-	BuildTime string
-	GoVersion string
+	Version   string `json:"version"`
+	Commit    string `json:"commit"`
+	BuildTime string `json:"build_time"`
+	GoVersion string `json:"go_version"`
 }
 
-// CurrentBuildInfo reads the link-time build variables and the Go runtime
-// version.
+// CurrentBuildInfo reads the link-time variables and the Go runtime version.
 func CurrentBuildInfo() BuildInfo {
 	return BuildInfo{
 		Version:   Version,

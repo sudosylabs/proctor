@@ -16,12 +16,10 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// The use cases in this file serve the owner of an Attempt's execution
-// environment, which calls them as an invocation.System naming its runtime
-// task; there is no principal and no HTTP request. The owner acts only under
-// its current runtime lease and environment incarnation, until the Attempt
-// has a Submission, and what it writes is the candidate's own work: journal
-// author environment, outcome and audit under the candidate.
+// An environment owner calls the use cases in this file as an
+// invocation.System with no principal. It acts only under its current lease and incarnation and only until the
+// attempt has a submission; what it writes is audited as the candidate's own
+// work.
 
 func validEnvironmentCaller(system invocation.System) error {
 	if !system.Valid() {
@@ -30,11 +28,9 @@ func validEnvironmentCaller(system invocation.System) error {
 	return nil
 }
 
-// EnvironmentOwner names the owner an environment acts through: the
-// runtime lease fence it holds and the environment incarnation it acts for.
-// The Store requires both to be current. Tag, when set, names the started
-// process whose changes a batch carries: the journal's author is then the
-// incarnation and that tag.
+// EnvironmentOwner is the lease fence and incarnation an environment acts
+// through; the store requires both to be current. Tag, when set, names the
+// started process whose changes a batch carries, and joins the journal author.
 type EnvironmentOwner struct {
 	AttemptID   model.ExamAttemptID
 	Incarnation int64
@@ -51,12 +47,11 @@ func (o EnvironmentOwner) access() (store.ExamAttemptWorkspaceEnvironmentAccess,
 	return access, nil
 }
 
-// EnvironmentWorkspaceBatchCommand is a batch an execution environment
-// harvested from its guest, written on the candidate's behalf.
+// EnvironmentWorkspaceBatchCommand is a batch harvested from the guest,
+// written on the candidate's behalf.
 type EnvironmentWorkspaceBatchCommand struct {
 	Owner EnvironmentOwner
-	// Resources are the environment's profile resources, which size its
-	// write budget.
+	// Resources size the write budget.
 	Resources               model.EnvironmentResources
 	Mutations               []WorkspaceBatchMutation
 	ExpectedWorkspaceCursor *int64
@@ -64,13 +59,9 @@ type EnvironmentWorkspaceBatchCommand struct {
 	IdempotencyKey          string
 }
 
-// ApplyEnvironmentWorkspaceBatch writes harvested changes into the Attempt
-// Workspace on the candidate's behalf. It is the editor's batch with another
-// writer: the same validation, budget, staging, all-or-nothing apply and
-// realtime hint. The Store proves the writer by its owner's lease and
-// incarnation instead of Session, key, Connection and credential, and
-// records author environment. The outcome is keyed under the candidate, and
-// audit names the candidate as actor with the author and lease fence.
+// ApplyEnvironmentWorkspaceBatch is the editor's batch with another writer:
+// the store proves the writer by lease and incarnation instead of session and
+// connection, and the audit names the candidate as actor.
 func (s *Service) ApplyEnvironmentWorkspaceBatch(
 	ctx context.Context,
 	system invocation.System,
@@ -92,7 +83,6 @@ func (s *Service) ApplyEnvironmentWorkspaceBatch(
 		access:    environmentAccess,
 		resources: command.Resources,
 		beginAudit: func(ctx context.Context, target *store.ExamAttemptWorkspaceMutationTarget, value map[string]any) (model.AuditEventID, error) {
-			// The audit leads back to the system work that wrote.
 			if system.Task != "" {
 				value["system_task"] = system.Task
 			} else {
@@ -117,9 +107,8 @@ func (s *Service) ApplyEnvironmentWorkspaceBatch(
 	})
 }
 
-// EnvironmentWorkspaceQuery selects one manifest page for an environment
-// projecting the Attempt Workspace into its guest. ExpectedCursor -1 starts
-// at the current cursor.
+// EnvironmentWorkspaceQuery selects one manifest page; ExpectedCursor -1
+// starts at the current cursor.
 type EnvironmentWorkspaceQuery struct {
 	Owner          EnvironmentOwner
 	ExpectedCursor int64
@@ -127,8 +116,8 @@ type EnvironmentWorkspaceQuery struct {
 	Limit          int
 }
 
-// ListEnvironmentWorkspace returns one page of the Attempt Workspace
-// manifest to the environment's owner.
+// ListEnvironmentWorkspace returns one page of the workspace manifest to the
+// environment's owner.
 func (s *Service) ListEnvironmentWorkspace(
 	ctx context.Context,
 	system invocation.System,
@@ -145,16 +134,14 @@ func (s *Service) ListEnvironmentWorkspace(
 	return s.listWorkspace(ctx, environmentAccess, query.ExpectedCursor, query.AfterEntryID, query.Limit)
 }
 
-// EnvironmentWorkspaceJournalQuery selects journal entries after a cursor
-// for the environment's owner.
+// EnvironmentWorkspaceJournalQuery selects journal entries after AfterCursor.
 type EnvironmentWorkspaceJournalQuery struct {
 	Owner       EnvironmentOwner
 	AfterCursor int64
 	Limit       int
 }
 
-// ListEnvironmentWorkspaceJournal returns the journal entries after
-// AfterCursor to the environment's owner, each with its author, so the
+// ListEnvironmentWorkspaceJournal includes each entry's author so the
 // environment can tell the editor's changes from its own.
 func (s *Service) ListEnvironmentWorkspaceJournal(
 	ctx context.Context,
@@ -172,15 +159,14 @@ func (s *Service) ListEnvironmentWorkspaceJournal(
 	return s.listWorkspaceJournal(ctx, environmentAccess, query.AfterCursor, query.Limit)
 }
 
-// EnvironmentWorkspaceFileQuery names one Workspace file for the
-// environment's owner.
+// EnvironmentWorkspaceFileQuery names one workspace file.
 type EnvironmentWorkspaceFileQuery struct {
 	Owner   EnvironmentOwner
 	EntryID model.AttemptWorkspaceEntryID
 }
 
-// OpenEnvironmentWorkspaceFile opens the current content of one Workspace
-// file for the environment's owner.
+// OpenEnvironmentWorkspaceFile opens a file's current content for the
+// environment's owner.
 func (s *Service) OpenEnvironmentWorkspaceFile(
 	ctx context.Context,
 	system invocation.System,

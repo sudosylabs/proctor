@@ -21,9 +21,8 @@ const (
 	maxDiscoveryServerVersionBytes    = 128
 )
 
-// DiscoveryNode is the transport-neutral bootstrap advertisement used before
-// Memberlist membership is established. Persistence adapters map this record
-// into PostgreSQL; it never carries application event payloads.
+// DiscoveryNode is a node's bootstrap advertisement, read by peers before
+// memberlist membership exists.
 type DiscoveryNode struct {
 	NodeID           string
 	AdvertiseAddress string
@@ -34,7 +33,7 @@ type DiscoveryNode struct {
 	UpdatedAt        time.Time
 }
 
-// Validate checks local discovery invariants without I/O.
+// Validate checks field formats, the protocol range and the lifetime, without I/O.
 func (n DiscoveryNode) Validate() error {
 	nodeID := strings.TrimSpace(n.NodeID)
 	if nodeID == "" || len(nodeID) > maxDiscoveryNodeIDBytes || !validDiscoveryNodeID(nodeID) {
@@ -61,13 +60,12 @@ func (n DiscoveryNode) Validate() error {
 	return nil
 }
 
-// IsLive reports whether the advertisement is still valid at now.
+// IsLive reports whether the advertisement has not expired at now; a zero now is never live.
 func (n DiscoveryNode) IsLive(now time.Time) bool {
 	return !now.IsZero() && n.ExpiresAt.After(now)
 }
 
-// DiscoveryStore persists short-lived bootstrap advertisements. Concrete
-// adapters live at the composition boundary; Memberlist never imports SQL.
+// DiscoveryStore persists advertisements; it is a port so memberlist never imports SQL.
 type DiscoveryStore interface {
 	Upsert(context.Context, DiscoveryNode) error
 	ListLive(context.Context, time.Time) ([]DiscoveryNode, error)

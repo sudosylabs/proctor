@@ -21,9 +21,8 @@ type Database struct {
 	ConnectionMaxIdleTime Duration `json:"ConnectionMaxIdleTime"`
 	QueryTimeout          Duration `json:"QueryTimeout"`
 	MigrationTimeout      Duration `json:"MigrationTimeout"`
-	// SlowOperationThreshold, when positive, logs every store operation that
-	// takes at least this long, by operation name and duration only. Zero
-	// disables the slow-operation log.
+	// SlowOperationThreshold logs store operations at least this slow, by name
+	// and duration only. Zero disables the log.
 	SlowOperationThreshold Duration `json:"SlowOperationThreshold"`
 }
 

@@ -17,7 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ListBrowserActivity returns one page of the Attempt's Browser Activity events
+// ListBrowserActivity returns one page of the attempt's browser activity events
 // ordered by receipt time, source, and sequence, continuing after the optional
 // keyset cursor. Limit must be 1..201, and the cursor fields must be set
 // together.

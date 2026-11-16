@@ -9,6 +9,7 @@ package sitting
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -31,13 +32,23 @@ func TestSystemAdvancePublishesOnlyChangedOutcomeAndUsesSystemAudit(t *testing.T
 
 	got, err := fixture.service.AdvanceDue(context.Background(), system, fixture.sittingID)
 	require.NoError(t, err)
-	require.NotNil(t, got.Value, "AdvanceDue() = %#v, audit=%#v, input", got, fixture.systemAudit)
-	require.Equal(t, model.ExamSittingOpen, got.Value.Sitting.State, "AdvanceDue() = %#v, audit=%#v, input", got, fixture.systemAudit)
-	require.Equal(t, system, fixture.systemAudit.system, "AdvanceDue() = %#v, audit=%#v, input", got, fixture.systemAudit)
-	require.Equal(t, model.ActionExamSittingManage, fixture.systemAudit.action, "AdvanceDue() = %#v, audit=%#v, input", got, fixture.systemAudit)
-	require.Equal(t, model.RoleScopeAcademicUnit, fixture.systemAudit.scopeType, "AdvanceDue() = %#v, audit=%#v, input", got, fixture.systemAudit)
-	require.Equal(t, fixture.unitID.String(), fixture.systemAudit.scopeID, "AdvanceDue() = %#v, audit=%#v, input", got, fixture.systemAudit)
-	require.NotNil(t, fixture.persistence.advance, "AdvanceDue() = %#v, audit=%#v, input", got, fixture.systemAudit)
+	require.NotNil(t, got.Value, "AdvanceDue()")
+	require.Equal(t, model.ExamSittingOpen, got.Value.Sitting.State, "AdvanceDue()")
+	// The attempt is a system one: no User acts, and the recorded value names
+	// the Job execution that did the work.
+	attempt := fixture.attempt(t)
+	require.Empty(t, attempt.event.ActorID, "system audit actor")
+	require.Equal(t, string(model.ActionExamSittingManage), attempt.event.Action, "system audit")
+	require.Equal(t, model.RoleScopeAcademicUnit, attempt.event.ScopeType, "system audit")
+	require.Equal(t, fixture.unitID.String(), attempt.event.ScopeID, "system audit")
+	var named struct {
+		JobID        string `json:"job_id"`
+		JobAttemptID string `json:"job_attempt_id"`
+	}
+	require.NoError(t, json.Unmarshal(attempt.value, &named))
+	require.Equal(t, system.JobID.String(), named.JobID, "system audit Job")
+	require.Equal(t, system.AttemptID.String(), named.JobAttemptID, "system audit Job")
+	require.NotNil(t, fixture.persistence.advance, "AdvanceDue() input")
 	// Contract: the changed outcome publishes the opening to managers, then to
 	// candidates, then invalidates the Sitting board.
 	openedCalls := lifecycleCalls(t, opened, store.ExamSittingTransitionOpened)

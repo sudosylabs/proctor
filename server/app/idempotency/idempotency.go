@@ -5,15 +5,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package idempotency makes a command safe to retry. Require and Prepare turn
-// the caller, the operation name, the client's Idempotency-Key and the
-// command's meaning into a store.CommandIdempotency, which the use case passes
-// to its Store operation; the Store saves the outcome with the change and
-// returns it again when the same command is repeated.
+// Package idempotency builds the store.CommandIdempotency that lets a
+// command be retried: the store saves the outcome with the change and returns
+// it again for the same command.
 //
-// Require is for commands that must carry a key, Prepare for commands where
-// the key is optional. Each use case chooses which one applies and what counts
-// as the command's meaning.
+// A replay still runs authentication, authorization and audit; only the
+// mutation and its post-commit effects are skipped. Keys, fingerprints and
+// stored outcomes never reach public fields or ordinary telemetry.
 package idempotency
 
 import (
@@ -36,8 +34,8 @@ const (
 	Wait = 2 * time.Second
 )
 
-// Require prepares the durable identity of a command whose owner demands an
-// idempotency key; an empty key is rejected with idempotency.key_required.
+// Require is for commands that must carry a key; an empty key is
+// idempotency.key_required.
 func Require(call invocation.Invocation, operation, key string, semantic any) (*store.CommandIdempotency, error) {
 	if key == "" {
 		return nil, apperror.New("idempotency.key_required")
@@ -45,10 +43,9 @@ func Require(call invocation.Invocation, operation, key string, semantic any) (*
 	return Prepare(call, operation, key, semantic)
 }
 
-// Prepare prepares the durable identity of a command whose key is optional;
-// an empty key yields no identity. An invalid acting user is
-// idempotency.key_invalid and an unencodable semantic document is
-// request.invalid.
+// Prepare is for commands whose key is optional; an empty key yields nil. An
+// invalid acting user is idempotency.key_invalid and an unencodable semantic
+// document is request.invalid.
 func Prepare(call invocation.Invocation, operation, key string, semantic any) (*store.CommandIdempotency, error) {
 	if key == "" {
 		return nil, nil
@@ -64,12 +61,11 @@ func Prepare(call invocation.Invocation, operation, key string, semantic any) (*
 	return identity(userID, operation, key, canonical), nil
 }
 
-// RequireFor is Require for a command keyed under a named User rather than
-// the caller's Principal. Its use is trusted core work done on a User's
-// behalf without a request of theirs, such as an execution environment
-// writing the candidate's Workspace, whose outcome belongs to that User as
-// their own command's would. An empty key is idempotency.key_required and an
-// invalid User is idempotency.key_invalid.
+// RequireFor is Require keyed under userID rather than the caller. It is for
+// trusted core work done on a user's behalf, such as an execution environment
+// writing the candidate's workspace, whose outcome belongs to that user. An
+// empty key is idempotency.key_required and an invalid user is
+// idempotency.key_invalid.
 func RequireFor(userID model.UserID, operation, key string, semantic any) (*store.CommandIdempotency, error) {
 	if key == "" {
 		return nil, apperror.New("idempotency.key_required")

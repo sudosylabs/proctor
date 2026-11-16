@@ -386,7 +386,7 @@ func testMailOperatorStore(t *testing.T, ctx context.Context, ss store.Store, us
 	require.NoError(t, err)
 	require.Equal(t, model.JobStatusQueued, retriedJob.Status)
 
-	// A delivery whose Job ran out of attempts while it was still Sending is
+	// A delivery whose job ran out of attempts while it was still Sending is
 	// not stranded: the operator retry requeues both.
 	orphanTarget, err := ss.Mail().EnqueueTest(ctx, mailTestEnqueueFixture(t, user, institution, at.Add(3*time.Second)))
 	require.NoError(t, err)
@@ -417,9 +417,9 @@ func testMailOperatorStore(t *testing.T, ctx context.Context, ss store.Store, us
 	require.Equal(t, model.JobStatusQueued, recoveredJob.Status)
 }
 
-// testMailDeliveryRecipientFilter proves the recipient User filter: it
-// keeps exactly that User's deliveries, combines with the other filters,
-// counts what it lists, and refuses a non-canonical User. The deliveries are
+// testMailDeliveryRecipientFilter proves the recipient user filter: it
+// keeps exactly that user's deliveries, combines with the other filters,
+// counts what it lists, and refuses a non-canonical user. The deliveries are
 // canceled afterwards so no later queue scan meets them.
 func testMailDeliveryRecipientFilter(t *testing.T, ctx context.Context, ss store.Store, user *model.User, institution *model.Institution) {
 	other := saveUser(t, ctx, ss)

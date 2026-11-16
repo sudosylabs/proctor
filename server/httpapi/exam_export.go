@@ -8,33 +8,23 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"slices"
 
 	"github.com/sudosylabs/proctor/server/app/exam"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// ExamExportsApplication is the application port its handlers call; it
-// requests an Exam export and reads or downloads it.
-type ExamExportsApplication interface {
-	CreateExamExport(context.Context, invocation.Invocation, exam.CreateExportCommand) (*model.ExamExport, error)
-	GetExamExport(context.Context, invocation.Invocation, exam.ExportQuery) (*model.ExamExport, error)
-	OpenExamExport(context.Context, invocation.Invocation, exam.ExportQuery) (*exam.ExportDownload, error)
-}
-
-// examExportsHandlers serves the Exam export routes of one scope: a whole
-// Sitting, or one Submission when submission is set.
+// examExportsHandlers serves the export routes of one scope: a whole
+// sitting, or one submission when submission is set.
 type examExportsHandlers struct {
-	app        ExamExportsApplication
+	app        *exam.Exports
 	submission bool
 }
 
-func examExportsResource(app ExamExportsApplication) route.Resource {
+func examExportsResource(app *exam.Exports) route.Resource {
 	var routes []route.Endpoint
 	for _, submission := range []bool{false, true} {
 		h := examExportsHandlers{app: app, submission: submission}
@@ -279,6 +269,8 @@ func (h examExportsHandlers) open(request route.Request) (route.ProtocolResult, 
 
 	headers := privateNoStoreHeaders()
 	headers.Set("Content-Type", "application/zip")
+	// The name carries only the export ID, so no exam or candidate name ends
+	// up in a browser's download history.
 	headers.Set("Content-Disposition", `attachment; filename="exam-export-`+query.ExportID.String()+`.zip"`)
 	headers.Set("ETag", `"`+opened.Export.ArchiveSHA256+`"`)
 	return route.BinaryDownload(opened.Body, opened.Export.ArchiveSizeBytes).WithHeaders(headers), nil

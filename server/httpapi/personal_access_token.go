@@ -13,11 +13,9 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -138,10 +136,10 @@ func personalAccessTokenGrantableScopesResponseFromApp(
 }
 
 type personalAccessTokenHandlers struct {
-	app PersonalAccessTokens
+	app *identity.Service
 }
 
-func personalAccessTokenResource(app PersonalAccessTokens) route.Resource {
+func personalAccessTokenResource(app *identity.Service) route.Resource {
 	h := personalAccessTokenHandlers{app: app}
 	collection := "/users/me/tokens"
 	item := "/users/me/tokens/{personal_access_token_id}"
@@ -347,31 +345,4 @@ func (h personalAccessTokenHandlers) revoke(request route.Request) (route.Result
 
 func noStoreHeaders() http.Header {
 	return http.Header{"Cache-Control": []string{"no-store"}}
-}
-
-// PersonalAccessTokens is the application port its handlers call; it creates, lists, revokes and disables personal access tokens.
-type PersonalAccessTokens interface {
-	CreatePersonalAccessToken(
-		context.Context,
-		invocation.Invocation,
-		identity.CreatePersonalAccessTokenCommand,
-	) (*model.PersonalAccessTokenCreation, error)
-	ListPersonalAccessTokens(
-		context.Context,
-		invocation.Invocation,
-	) ([]*model.PersonalAccessToken, error)
-	ListGrantablePersonalAccessTokenScopes(
-		context.Context,
-		invocation.Invocation,
-	) (*identity.PersonalAccessTokenGrantableScopes, error)
-	RevokePersonalAccessToken(
-		context.Context,
-		invocation.Invocation,
-		model.PersonalAccessTokenID,
-	) (*model.PersonalAccessToken, error)
-	SetPersonalAccessTokenDisabled(
-		context.Context,
-		invocation.Invocation,
-		identity.SetPersonalAccessTokenDisabledCommand,
-	) (*model.PersonalAccessToken, error)
 }

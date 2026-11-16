@@ -5,9 +5,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package webui serves the immutable browser application packaged with one
-// Proctor server build. It owns hosted-route fallback, cache policy, and the
-// browser security response contract without depending on application state.
+// Package webui serves the browser application embedded in this server
+// build: hosted-route fallback, cache policy and browser security headers. It
+// depends on no application state.
 package webui
 
 import (
@@ -43,10 +43,9 @@ var hostedRoutes = mustHostedRoutes(hostedRoutesJSON)
 // to.
 const LoginPath = "/login"
 
-// HandlesPath reports whether path belongs to the packaged browser module.
-// Root transport uses this exact ownership predicate so unknown server paths
-// retain the API's Problem Details response instead of becoming an SPA fallback.
-// The installation root belongs to the browser module only to redirect.
+// HandlesPath reports whether path belongs to the browser application, so an
+// unknown server path keeps the API's Problem Details instead of falling back
+// to the SPA. The root belongs to it only to redirect.
 func HandlesPath(requestPath string) bool {
 	if requestPath == "/" {
 		return true
@@ -87,10 +86,9 @@ type handler struct {
 	methodNotAllowed http.Handler
 }
 
-// New validates and constructs the complete immutable webapp handler. Files
-// must expose index.html, webapp-build.json, and any referenced assets at their
-// distribution-root paths. Build version and commit must exactly match the Go
-// server build; mismatch is a startup error rather than a mixed release.
+// New fails unless files hold index.html, webapp-build.json and the assets
+// they reference at the root, and the build version and commit match this
+// server's, so a mixed release fails at startup.
 func New(files fs.FS, options Options) (http.Handler, error) {
 	if files == nil {
 		return nil, errors.New("webapp files are required")

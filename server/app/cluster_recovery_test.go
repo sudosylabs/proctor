@@ -149,7 +149,7 @@ func TestDuplicateRealtimePeerPublicationDoesNotRebroadcast(t *testing.T) {
 	payload := cluster.broadcasts[0].data
 
 	// Duplicate peer deliveries (Memberlist non-guarantee).
-	peerHandler := cluster.handlers["websocket.publish"]
+	peerHandler := cluster.handler("websocket.publish")
 	require.NotNil(t, peerHandler, "ordinary publication peer handler was not registered")
 	require.NoError(t, peerHandler(context.Background(), payload))
 	require.NoError(t, peerHandler(context.Background(), payload))

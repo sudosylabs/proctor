@@ -15,13 +15,13 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// RekeyCommand is the immutable command of the mail rekey Job.
+// RekeyCommand is the immutable command of the mail rekey job.
 type RekeyCommand struct {
 	PrimaryKeyID  string `json:"primary_key_id"`
 	RetiringKeyID string `json:"retiring_key_id"`
 }
 
-// RekeyCheckpoint is the resumable checkpoint of the mail rekey Job.
+// RekeyCheckpoint is the resumable checkpoint of the mail rekey job.
 type RekeyCheckpoint struct {
 	AfterKind   store.MailRekeyTargetKind `json:"after_kind,omitempty"`
 	AfterID     string                    `json:"after_id,omitempty"`
@@ -29,7 +29,7 @@ type RekeyCheckpoint struct {
 	Reencrypted int64                     `json:"reencrypted"`
 }
 
-// RekeyResult is the safe result of the mail rekey Job.
+// RekeyResult is the operator-safe result of the mail rekey job.
 type RekeyResult struct {
 	PrimaryKeyID         string `json:"primary_key_id"`
 	RetiringKeyID        string `json:"retiring_key_id"`
@@ -40,23 +40,22 @@ type RekeyResult struct {
 	RetirementSafe       bool   `json:"retirement_safe"`
 }
 
-// DecodeRekeyCommand strictly decodes and validates a mail rekey Job command.
+// DecodeRekeyCommand decodes a rekey job command strictly.
 func DecodeRekeyCommand(document json.RawMessage) (RekeyCommand, error) {
 	var value RekeyCommand
 	err := model.DecodeStrictJobDocument(document, &value)
 	return value, err
 }
 
-// DecodeRekeyResult strictly decodes and validates a mail rekey Job result.
+// DecodeRekeyResult decodes a rekey job result strictly.
 func DecodeRekeyResult(document json.RawMessage) (RekeyResult, error) {
 	var value RekeyResult
 	err := model.DecodeStrictJobDocument(document, &value)
 	return value, err
 }
 
-// DecodeRekeyCheckpoint strictly decodes and validates a mail rekey Job
-// checkpoint. An empty document is the checkpoint of a Job that has not
-// started.
+// DecodeRekeyCheckpoint decodes and validates a checkpoint strictly. An empty
+// document is the checkpoint of a job that has not started.
 func DecodeRekeyCheckpoint(document json.RawMessage) (RekeyCheckpoint, error) {
 	var checkpoint RekeyCheckpoint
 	if len(document) == 0 {
@@ -76,8 +75,8 @@ func DecodeRekeyCheckpoint(document json.RawMessage) (RekeyCheckpoint, error) {
 	return checkpoint, nil
 }
 
-// ValidRekeyTargetKind reports whether kind names a payload the mail rekey
-// Job re-encrypts.
+// ValidRekeyTargetKind reports whether kind names a payload the rekey job
+// re-encrypts.
 func ValidRekeyTargetKind(kind store.MailRekeyTargetKind) bool {
 	return kind == store.MailRekeyTargetDelivery || kind == store.MailRekeyTargetFanoutBundle
 }

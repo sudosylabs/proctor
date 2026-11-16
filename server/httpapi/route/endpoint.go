@@ -11,18 +11,13 @@ import (
 	"slices"
 )
 
-// Endpoint declares one route. A resource writes it as a struct literal with
-// named fields, so a route reads without knowing any helper.
-//
-// Every endpoint sets Method, Path and Auth, and exactly one of Handle,
-// Protocol and Upgrade. New validates the declaration, parses Path, and adds
-// the kernel error codes that Auth and Method imply.
+// Endpoint declares one route. It sets Method, Path and Auth, and exactly one
+// of Handle, Protocol and Upgrade.
 type Endpoint struct {
-	// Method is the HTTP method, in upper case.
 	Method string
-	// Path is the URL template relative to the API root, such as
-	// "/programme-levels/{programme_level_id}/classes". path.go
-	// describes the template syntax.
+	// Path is relative to the API root, such as
+	// "/programme-levels/{programme_level_id}/classes"; see path for the
+	// syntax.
 	Path string
 	// RootMounted mounts Path at the server root instead of under the API
 	// prefix. Only the health probes set it.
@@ -35,32 +30,26 @@ type Endpoint struct {
 	Idempotency IdempotencyRequirement
 	// MaxBodyBytes bounds the request body. Zero means the API default.
 	MaxBodyBytes int64
-	// Errors are the codes the operation itself can return. The kernel codes
-	// that Auth and Method imply are added at compile time and are not
-	// listed here.
+	// Errors are the codes the operation itself can return. Kernel codes are
+	// added at compile time and must not be listed.
 	Errors []string
 
-	// Handle is an ordinary operation with a typed JSON or empty result.
 	Handle Operation
-	// Protocol is the reviewed escape hatch for a named HTTP protocol whose
-	// success response the ordinary result vocabulary cannot represent, such
-	// as an external-provider redirect or a bounded binary transfer.
-	// Authentication and safe error policy remain kernel-owned.
+	// Protocol is the escape hatch for a success Result cannot represent,
+	// such as a redirect or a bounded binary transfer. Authentication and
+	// error presentation stay with the kernel.
 	Protocol ProtocolOperation
-	// Upgrade is the sole raw response exception. A successful HTTP upgrade
-	// must transfer the response connection to the sibling transport, so this
-	// operation alone receives ResponseWriter. Only the reserved WebSocket
-	// route may set it.
-	Upgrade UpgradeOperation
-	// ProtocolName is the kebab-case name of a Protocol or Upgrade endpoint.
+	// Upgrade alone receives the ResponseWriter, because a successful upgrade
+	// hands the connection to another transport. Only the reserved WebSocket
+	// and binary socket routes may set it.
+	Upgrade      UpgradeOperation
 	ProtocolName string
 	// ProtocolKind is the kind of a Protocol endpoint, and
 	// ProtocolUpgrade for an Upgrade endpoint.
 	ProtocolKind ProtocolKind
 }
 
-// routePath parses the endpoint's path template. A malformed template is
-// reported when the path is compiled.
+// routePath defers a malformed template's error to compilation.
 func (e Endpoint) routePath() routePath {
 	if e.RootMounted {
 		return rootPath(e.Path)
@@ -68,24 +57,19 @@ func (e Endpoint) routePath() routePath {
 	return path(e.Path)
 }
 
-// CompilePath compiles the endpoint's Path under apiPrefix. It returns the
-// router template, in which every parameter carries the pattern of its kind,
-// and the route shape, in which every parameter is reduced to its kind so two
-// endpoints that would match the same requests compare equal. A malformed Path
-// is the error.
+// CompilePath returns the router template, where each parameter carries its
+// kind's pattern, and the route shape, where each parameter is reduced to its
+// kind so two endpoints matching the same requests compare equal.
 func (e Endpoint) CompilePath(apiPrefix string) (template, shape string, err error) {
 	return e.routePath().compile(apiPrefix)
 }
 
-// errorCodes returns the endpoint's complete public error list.
 func (e Endpoint) errorCodes() []string {
 	return routeErrorCodes(e.Auth, e.Method, e.Errors)
 }
 
-// routeErrorCodes returns a route's complete public error list: the codes
-// its endpoint declares, in order, then the kernel codes its authentication
-// requirement and method imply that are not already present. Endpoints
-// therefore declare only the codes their operation adds.
+// routeErrorCodes appends the kernel codes the auth requirement and method
+// imply, so an endpoint declares only the codes its operation adds.
 func routeErrorCodes(auth AuthRequirement, method string, errorCodes []string) []string {
 	result := append([]string(nil), errorCodes...)
 	for _, code := range KernelErrorCodes(auth, method) {
@@ -143,15 +127,14 @@ func KernelErrorCodes(auth AuthRequirement, method string) []string {
 	}
 }
 
-// Resource is a named group of endpoints, usually one API area. The name must
-// be unique in a catalog and appears only in compile errors.
+// Resource is a named group of endpoints. The name must be unique in a catalog
+// and appears only in compile errors.
 type Resource struct {
 	Name      string
 	Endpoints []Endpoint
 }
 
-// NewResource returns a Resource over a copy of the endpoints, in the order
-// given.
+// NewResource copies the endpoints, keeping their order.
 func NewResource(name string, routes ...Endpoint) Resource {
 	return Resource{Name: name, Endpoints: append([]Endpoint(nil), routes...)}
 }

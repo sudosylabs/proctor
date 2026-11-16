@@ -19,9 +19,9 @@ const (
 	OnboardingImportInstitution            OnboardingImportMode = "institution"
 	OnboardingImportAcademicAdministration OnboardingImportMode = "academic_administration"
 	OnboardingImportStudentProgression     OnboardingImportMode = "student_progression"
-	// OnboardingImportAcademicAdministrationFilter is an existing-User
-	// academic administration batch whose rows are the Users a directory
-	// filter matched when its preview resolved, rather than CSV rows.
+	// OnboardingImportAcademicAdministrationFilter is a batch for existing
+	// users whose rows are the users a directory filter matched when its
+	// preview resolved, not CSV rows.
 	OnboardingImportAcademicAdministrationFilter OnboardingImportMode = "academic_administration_filter"
 
 	OnboardingImportUploading           OnboardingImportState = "uploading"

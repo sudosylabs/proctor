@@ -525,9 +525,9 @@ func recordFocusLoss(t *testing.T, ctx context.Context, ss store.Store, fixture 
 }
 
 // requireFocusLossEnforcementLinks asserts the identity and link facts of a
-// Focus Loss outcome that the application does not re-check: each record the
-// outcome carries is valid, belongs to the reporting Attempt, Participation,
-// generation and Connection, and a suspension links the outcome's Flag.
+// focus loss outcome that the application does not re-check: each record the
+// outcome carries is valid, belongs to the reporting attempt, participation,
+// generation and connection, and a suspension links the outcome's flag.
 func requireFocusLossEnforcementLinks(t *testing.T, result *store.ExamAttemptFocusLossResult, access store.ExamAttemptFocusLossAccess) {
 	t.Helper()
 	if result.Overflow != nil {

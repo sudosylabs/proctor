@@ -5,11 +5,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package commands owns the proctor host-operator command tree. Commands parse
-// and present operator input. The module-root server package retains
-// infrastructure selection and lifecycle ownership for anything that builds a
-// node; package operator runs the offline commands that only read or migrate
-// an installation.
+// Package commands is the proctor command tree. Commands only parse input and
+// print results: package server builds and runs a node, and package operator
+// does the offline reads and migrations.
 package commands
 
 import (
@@ -22,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/operator"
 )
 
@@ -79,14 +78,13 @@ func productionExecutors() executors {
 		migrateDown:           operator.MigrateDown,
 		recoverAdministrator:  server.RecoverAdministratorAccess,
 		resetAdministratorMFA: server.ResetAdministratorMFA,
-		currentBuildInfo:      server.CurrentBuildInfo,
+		currentBuildInfo:      app.CurrentBuildInfo,
 		effectiveUID:          os.Geteuid,
 	}
 }
 
-// Run constructs a fresh command tree, executes args, writes any terminal
-// failure once, and returns 0 for success, 2 for usage failures, or 1 for
-// operational failures.
+// Run executes one proctor command and returns its exit status: 0 on success,
+// 2 for a usage error, 1 for any other failure.
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return runWithText(ctx, args, stdin, stdout, stderr, productionExecutors(), productionCommandText())
 }

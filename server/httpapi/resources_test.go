@@ -9,63 +9,20 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/onboarding"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-type recordingOnboardingImportApplication struct {
-	getID     string
-	listQuery *onboarding.ListOnboardingImportsQuery
-	listPage  paging.Page[onboarding.OnboardingImportView]
-	listErr   error
-
-	uploadCommand *onboarding.UploadOnboardingImportCommand
-	uploadView    onboarding.OnboardingImportView
-}
-
-func (c *recordingOnboardingImportApplication) ListOnboardingImports(_ context.Context, _ invocation.Invocation, query onboarding.ListOnboardingImportsQuery) (paging.Page[onboarding.OnboardingImportView], error) {
-	c.listQuery = &query
-	return c.listPage, c.listErr
-}
-
-func (c *recordingOnboardingImportApplication) UploadOnboardingImport(_ context.Context, _ invocation.Invocation, command onboarding.UploadOnboardingImportCommand) (onboarding.OnboardingImportView, error) {
-	if command.Body != nil {
-		_, _ = io.Copy(io.Discard, command.Body)
-	}
-	c.uploadCommand = &command
-	return c.uploadView, nil
-}
-
-func (c *recordingOnboardingImportApplication) GetOnboardingImport(_ context.Context, _ invocation.Invocation, id model.OnboardingImportID) (onboarding.OnboardingImportView, []onboarding.OnboardingImportRowView, error) {
-	c.getID = id.String()
-	return onboarding.OnboardingImportView{}, nil, nil
-}
-
-func (*recordingOnboardingImportApplication) CommitOnboardingImport(context.Context, invocation.Invocation, onboarding.CommitOnboardingImportCommand) (onboarding.OnboardingImportView, error) {
-	return onboarding.OnboardingImportView{}, nil
-}
-
-func (*recordingOnboardingImportApplication) CancelOnboardingImport(context.Context, invocation.Invocation, model.OnboardingImportID) (onboarding.OnboardingImportView, error) {
-	return onboarding.OnboardingImportView{}, nil
-}
-
-func (*recordingOnboardingImportApplication) OnboardingImportReport(context.Context, invocation.Invocation, model.OnboardingImportID, io.Writer) error {
-	return nil
-}
 
 func TestNewRequiresCompleteApplication(t *testing.T) {
 	t.Parallel()
@@ -141,107 +98,98 @@ func TestNewAuthenticatesThroughApplicationIdentity(t *testing.T) {
 }
 
 func TestNewInvokesEveryExplicitFormerFallbackCapability(t *testing.T) {
-	principal := model.Principal{
-		UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
-		AuthenticatedAt: time.Now().UTC(), MFACompletedAt: model.OptionalTimeFrom(time.Now().UTC()), ClientType: model.SessionClientWeb,
-	}
-
 	cookies, err := route.NewCookies(validHTTPSettings(t).PublicURL)
 	require.NoError(t, err)
 
 	tests := []struct {
-		name      string
-		configure func() (route.Resource, func(*testing.T))
-		request   func() *http.Request
+		name string
+		// configure seeds the fixture, returns the resource under test, the
+		// request it serves and what the request must have reached.
+		configure func(*testing.T, *onboardingFixture) (route.Resource, *http.Request, func(*testing.T, *httptest.ResponseRecorder))
 	}{
 		{
 			name: "access policy",
-			configure: func() (route.Resource, func(*testing.T)) {
-				fake := &replayingAccessPolicyHTTPApplication{}
-				return accessPolicyResource(fake), func(t *testing.T) {
-					require.Equal(t, 1, fake.discoveries, "DiscoverAccess calls")
+			configure: func(t *testing.T, f *onboardingFixture) (route.Resource, *http.Request, func(*testing.T, *httptest.ResponseRecorder)) {
+				request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/discovery", nil)
+				return accessPolicyResource(f.administration), request, func(t *testing.T, response *httptest.ResponseRecorder) {
+					require.Equal(t, 1, f.accessPolicy.readCount(), "discovery reads the current Access Policy once")
+					require.Contains(t, response.Body.String(), f.access.Institution.ID.String(), "discovery names the installation")
 				}
-			},
-			request: func() *http.Request {
-				return httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/discovery", nil)
 			},
 		},
 		{
 			name: "invitations",
-			configure: func() (route.Resource, func(*testing.T)) {
-				fake := &invitationHTTPApplication{}
-				return invitationResource(fake), func(t *testing.T) {
-					require.NotEqual(t, 0, fake.list.Limit, "ListInvitations was not invoked")
+			configure: func(t *testing.T, f *onboardingFixture) (route.Resource, *http.Request, func(*testing.T, *httptest.ResponseRecorder)) {
+				return invitationResource(f.service), authenticatedCatalogRequest(http.MethodGet, "/api/v1/invitations"), func(t *testing.T, _ *httptest.ResponseRecorder) {
+					require.Equal(t, 50, f.invitations.lastList(t).Limit, "the Invitation list reached the Store")
 				}
 			},
-			request: func() *http.Request { return authenticatedCatalogRequest(http.MethodGet, "/api/v1/invitations") },
 		},
 		{
 			name: "browser invitations",
-			configure: func() (route.Resource, func(*testing.T)) {
-				fake := &browserInvitationHTTPApplication{}
-				return browserInvitationResource(fake, cookies), func(t *testing.T) {
-					require.NotEmpty(t, fake.start.Claim, "StartBrowserInvitation was not invoked")
-				}
-			},
-			request: func() *http.Request {
-				request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/browser/invitations", strings.NewReader(`{"claim":"`+model.NewCredentialToken()+`"}`))
+			configure: func(t *testing.T, f *onboardingFixture) (route.Resource, *http.Request, func(*testing.T, *httptest.ResponseRecorder)) {
+				invitation, claim := f.pendingStudentInvitation(t, f.addClass("Biology 101"), "student@example.edu")
+				request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/browser/invitations", strings.NewReader(`{"claim":"`+claim+`"}`))
 				request.Header.Set("Content-Type", "application/json")
-				return request
+				return browserInvitationResource(f.service, cookies), request, func(t *testing.T, _ *httptest.ResponseRecorder) {
+					require.Len(t, f.browser.creations, 1, "the browser handoff reached the Store")
+					require.Equal(t, invitation.ClaimHash, f.browser.creations[0].InvitationClaimHash)
+				}
 			},
 		},
 		{
 			name: "onboarding imports",
-			configure: func() (route.Resource, func(*testing.T)) {
-				fake := &recordingOnboardingImportApplication{}
-				return onboardingImportResource(fake), func(t *testing.T) {
-					require.NotEmpty(t, fake.getID, "GetOnboardingImport was not invoked")
+			configure: func(t *testing.T, f *onboardingFixture) (route.Resource, *http.Request, func(*testing.T, *httptest.ResponseRecorder)) {
+				value := f.storedImport(model.OnboardingImportInstitution, model.OnboardingImportPreviewReady, model.RoleScopeInstitution, f.access.Institution.ID.String())
+				request := authenticatedCatalogRequest(http.MethodGet, "/api/v1/onboarding-imports/"+value.ID.String())
+				return onboardingImportResource(f.service), request, func(t *testing.T, _ *httptest.ResponseRecorder) {
+					require.Equal(t, []model.OnboardingImportID{value.ID}, f.imports.reads, "the import read reached the Store")
 				}
-			},
-			request: func() *http.Request {
-				return authenticatedCatalogRequest(http.MethodGet, "/api/v1/onboarding-imports/"+model.NewOnboardingImportID().String())
 			},
 		},
 		{
 			name: "student progressions",
-			configure: func() (route.Resource, func(*testing.T)) {
-				fake := &studentProgressionApplicationFake{}
-				return studentProgressionResource(fake), func(t *testing.T) {
-					require.NotEmpty(t, fake.getID, "GetStudentProgression was not invoked")
+			configure: func(t *testing.T, f *onboardingFixture) (route.Resource, *http.Request, func(*testing.T, *httptest.ResponseRecorder)) {
+				value := f.storedProgression(f.addClass("Year 1 Blue"), f.addClass("Year 2 Blue"))
+				request := authenticatedCatalogRequest(http.MethodGet, "/api/v1/student-progressions/"+value.ID.String())
+				return studentProgressionResource(f.service), request, func(t *testing.T, _ *httptest.ResponseRecorder) {
+					require.Equal(t, []model.OnboardingImportID{value.ID}, f.imports.reads, "the progression read reached the Store")
 				}
-			},
-			request: func() *http.Request {
-				return authenticatedCatalogRequest(http.MethodGet, "/api/v1/student-progressions/"+model.NewOnboardingImportID().String())
 			},
 		},
 		{
 			name: "academic administration batches",
-			configure: func() (route.Resource, func(*testing.T)) {
-				fake := &academicAdministrationBatchHTTPApplication{}
-				return academicAdministrationBatchResource(fake), func(t *testing.T) {
-					require.Equal(t, "catalog-explicit-batch", fake.command.IdempotencyKey)
-				}
-			},
-			request: func() *http.Request {
+			configure: func(t *testing.T, f *onboardingFixture) (route.Resource, *http.Request, func(*testing.T, *httptest.ResponseRecorder)) {
+				// A batch needs at least one row; this one ends a membership.
+				class := f.addClass("Biology 101")
+				member := &model.ClassMember{ID: model.NewClassMemberID(), ClassID: class.ID, AcademicPeriodID: class.AcademicPeriodID,
+					UserID: f.addUser("student").ID, StartsAt: f.period.StartsAt, Revision: 1}
+				f.classMembers.add(member)
 				request := authenticatedCatalogRequest(http.MethodPost, "/api/v1/academic-administration-batches")
-				request.Body = io.NopCloser(strings.NewReader(`{"operation":"class.end","scope_type":"class","scope_id":"` + model.NewClassID().String() + `","items":[]}`))
+				request.Body = io.NopCloser(strings.NewReader(`{"operation":"class.end","scope_type":"class","scope_id":"` + class.ID.String() +
+					`","items":[{"key":"row-1","relationship_id":"` + member.ID.String() + `"}]}`))
 				request.Header.Set("Content-Type", "application/json")
 				request.Header.Set("Idempotency-Key", "catalog-explicit-batch")
-				return request
+				return academicAdministrationBatchResource(f.service), request, func(t *testing.T, response *httptest.ResponseRecorder) {
+					require.Len(t, f.classMembers.ends, 1, "the batch row reached the Store: %s", response.Body.String())
+					require.Equal(t, member.ID, f.classMembers.ends[0].ID)
+					require.Equal(t, sha256.Sum256([]byte("22:catalog-explicit-batch:row-1")), f.classMembers.ends[0].Command.KeyDigest,
+						"the row is keyed under the batch's Idempotency-Key")
+				}
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			resource, assertCall := test.configure()
-			httpAPI := newResourceAPI(t, principal, resource)
+			fixture := newOnboardingFixture(t)
+			resource, request, assertReached := test.configure(t, fixture)
+			httpAPI := newResourceAPI(t, fixture.principal(model.AuthenticationMultiFactor), resource)
 			response := httptest.NewRecorder()
-			httpAPI.ServeHTTP(response, test.request())
+			httpAPI.ServeHTTP(response, request)
 			require.GreaterOrEqual(t, response.Code, http.StatusOK, "route response = %d: %s", response.Code, response.Body.String())
 			require.Less(t, response.Code, http.StatusMultipleChoices, "route response = %d: %s", response.Code, response.Body.String())
-			assertCall(t)
+			assertReached(t, response)
 		})
 	}
 }

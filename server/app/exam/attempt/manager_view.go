@@ -19,9 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// GetExamAttempt returns a managed view of one Attempt. It authorizes Sitting
-// view on the exact Sitting before reading the Attempt so a caller cannot
-// distinguish existing, mismatched, or missing Attempts.
+// GetExamAttempt returns a managed view of one attempt.
 func (s *Service) GetExamAttempt(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -33,9 +31,8 @@ func (s *Service) GetExamAttempt(
 	if !examID.IsValid() || !sittingID.IsValid() || !attemptID.IsValid() {
 		return store.ExamAttemptManagerSnapshot{}, apperror.Invalid("exam.attempt.invalid", "attempt")
 	}
-	// Authorization precedes every Attempt read so a caller without Sitting
-	// view authority cannot distinguish existing, mismatched, or missing
-	// Attempts; the authorizer records that decision.
+	// Authorize before any attempt read so a caller without view authority
+	// cannot tell existing, mismatched and missing attempts apart.
 	if err := s.managers.AuthorizeSittingView(ctx, inv, sittingID); err != nil {
 		return store.ExamAttemptManagerSnapshot{}, err
 	}
@@ -95,9 +92,9 @@ func (s *Service) GetExamAttempt(
 	return *clone, nil
 }
 
-// ListManagedAttemptsQuery selects one page of Attempts in a Sitting,
-// optionally filtered by state. BeforeCreatedAt and BeforeAttemptID are the
-// keyset cursor of the last Attempt already seen.
+// ListManagedAttemptsQuery selects one page of a sitting's attempts.
+// BeforeCreatedAt and BeforeAttemptID are the keyset cursor of the last
+// attempt seen.
 type ListManagedAttemptsQuery struct {
 	ExamID          model.ExamID
 	SittingID       model.ExamSittingID
@@ -107,15 +104,15 @@ type ListManagedAttemptsQuery struct {
 	Limit           int
 }
 
-// ManagedAttemptPage is one page of managed Attempt snapshots; HasMore reports
-// that a later page exists.
+// ManagedAttemptPage is one page of snapshots; HasMore reports that a later
+// page exists.
 type ManagedAttemptPage struct {
 	Items   []store.ExamAttemptManagerSnapshot
 	HasMore bool
 }
 
-// SittingCandidateStatusesQuery selects one page of per-candidate Attempt
-// statuses for a Sitting, starting after AfterCandidateUserID.
+// SittingCandidateStatusesQuery selects one page of per-candidate statuses
+// after AfterCandidateUserID.
 type SittingCandidateStatusesQuery struct {
 	ExamID               model.ExamID
 	SittingID            model.ExamSittingID
@@ -123,16 +120,15 @@ type SittingCandidateStatusesQuery struct {
 	Limit                int
 }
 
-// SittingCandidateStatusesPage is one page of per-candidate Attempt statuses
-// for a Sitting; HasMore reports that a later page exists.
+// SittingCandidateStatusesPage is one page of per-candidate statuses; HasMore
+// reports that a later page exists.
 type SittingCandidateStatusesPage struct {
 	store.SittingCandidateStatusPage
 	HasMore bool
 }
 
-// ListSittingCandidateStatuses returns one page of per-candidate Attempt
-// statuses for a Sitting, excluding the caller. It requires Sitting view;
-// whether the caller also holds Sitting management decides if re-allow is
+// ListSittingCandidateStatuses excludes the caller. It requires sitting view;
+// whether the caller also holds sitting management decides if re-allow is
 // offered.
 func (s *Service) ListSittingCandidateStatuses(
 	ctx context.Context,
@@ -192,9 +188,8 @@ func (s *Service) ListSittingCandidateStatuses(
 	return page, nil
 }
 
-// ListExamAttempts returns one page of Attempts in a Sitting for a caller
-// with Sitting view, optionally filtered by state and excluding the caller's
-// own Attempt.
+// ListExamAttempts requires sitting view and excludes the caller's own
+// attempt.
 func (s *Service) ListExamAttempts(
 	ctx context.Context,
 	inv invocation.Invocation,

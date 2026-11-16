@@ -23,8 +23,8 @@ var (
 	ErrNativeCoverageUnsupported = errors.New("native coverage is unsupported")
 )
 
-// SecurityPolicyScope binds either one admission transaction or one Attempt.
-// The exact union forbids an admission identity surviving scope rebinding.
+// SecurityPolicyScope binds either one admission transaction or one attempt,
+// never both, so an admission identity cannot survive rebinding.
 type SecurityPolicyScope struct {
 	Kind             string        `json:"kind"`
 	AdmissionScopeID string        `json:"admission_scope_id,omitempty"`
@@ -40,8 +40,8 @@ func (s SecurityPolicyScope) Validate() error {
 	return ErrSecurityPolicyInvalid
 }
 
-// EffectiveExamSecurityPolicy records frozen semantics and provenance. It has
-// no expiry: only the separately persisted Participation lease grants authority.
+// EffectiveExamSecurityPolicy records frozen meaning and provenance. It has no
+// expiry: only the separately stored participation lease grants authority.
 type EffectiveExamSecurityPolicy struct {
 	issuedAtSpelling   string
 	activeFromSpelling string
@@ -67,11 +67,11 @@ type EffectiveExamSecurityPolicy struct {
 	VisibilityClassID     string               `json:"visibility_class_id"`
 	RetentionClassID      string               `json:"retention_class_id"`
 	Capabilities          []NativeFamilyPolicy `json:"capabilities"`
-	// ScreenRecording tells Desktop whether to run its screen evidence
-	// recorder for this Exam.
+	// ScreenRecording tells the desktop whether to run its screen evidence
+	// recorder for this exam.
 	ScreenRecording NativeScreenRecordingPolicy `json:"screen_recording"`
-	// Activations and Rules are the compiled native policy Desktop evaluates
-	// on the device, and the server evaluates again on the same facts.
+	// Activations and Rules are the compiled native policy the desktop
+	// evaluates on the device and the server evaluates again on the same facts.
 	Activations []NativeActivation `json:"activations"`
 	Rules       []NativeRule       `json:"rules"`
 }
@@ -108,8 +108,9 @@ type NativePolicyResolution struct {
 	Build          DesktopBuildTuple
 }
 
-// ResolveNativePolicy permits no Institution allowlist without its authenticated
-// catalog owner. A structurally valid identifier is not proof of such a catalog.
+// ResolveNativePolicy compiles the exam's selections against the build's
+// verified release. No institution allowlist is accepted without its
+// authenticated catalog owner; a well-formed ID is not proof of a catalog.
 func ResolveNativePolicy(input NativePolicyResolution) (ResolvedNativePolicy, error) {
 	if _, err := EncodeExamPolicySet(input.Selections); err != nil {
 		return ResolvedNativePolicy{}, err
@@ -162,8 +163,9 @@ func ResolveNativePolicy(input NativePolicyResolution) (ResolvedNativePolicy, er
 	return resolvePolicyCoverage(policy, agreement)
 }
 
-// Validate checks the frozen projection against its policy and release agreement.
-// Source selection and requirements are derived meaning, not independent claims.
+// Validate checks the frozen projection against its policy and release
+// agreement. Source selection and requirements are derived, not independent
+// claims.
 func (r ResolvedNativePolicy) Validate(agreement *DesktopNativeAgreement, at time.Time) error {
 	if agreement == nil || r.Policy.Validate(at) != nil {
 		return ErrSecurityPolicyInvalid
@@ -183,10 +185,10 @@ func (r ResolvedNativePolicy) Validate(agreement *DesktopNativeAgreement, at tim
 	return nil
 }
 
-// resolvePolicyCoverage checks a policy against the release: it must be the
-// release's registry, certification list and target, and every enforced
-// family must be certified to enforce on that target. An uncertified family
-// can still be observed. The baseline is the release's own and always runs.
+// resolvePolicyCoverage checks the policy is for the release's registry,
+// certification list and target, and that every enforced family is certified
+// to enforce there. An uncertified family can still observe. The baseline is
+// the release's own and always runs.
 func resolvePolicyCoverage(policy EffectiveExamSecurityPolicy, agreement *DesktopNativeAgreement) (ResolvedNativePolicy, error) {
 	matrix := agreement.Matrix()
 	if policy.RegistryDigest != agreement.RegistryDigest() ||
@@ -337,8 +339,9 @@ func validateSecurityBindings(bindings []SecurityCatalogBinding) error {
 	return nil
 }
 
-// RebindAttempt changes only scope and the full digest. Content identity and
-// provenance survive first Connect; no renewable deadline is embedded here.
+// RebindAttempt moves an admission-scoped policy to the attempt, changing only
+// the scope and the full digest. Content identity and provenance survive the
+// first connect.
 func (p EffectiveExamSecurityPolicy) RebindAttempt(id ExamAttemptID, at time.Time) (EffectiveExamSecurityPolicy, error) {
 	if p.Validate(at) != nil || p.Scope.Kind != "admission" || !id.IsValid() {
 		return EffectiveExamSecurityPolicy{}, ErrSecurityPolicyInvalid
@@ -395,12 +398,12 @@ func (p *EffectiveExamSecurityPolicy) UnmarshalJSON(raw []byte) error {
 	return nil
 }
 
-// ReadinessDigest identifies what the readiness overview shows and Desktop
-// enforces: the activations and rules, the family selections, the recorder
-// switch, and the registry, matrix and catalogs they rest on. Unlike the
-// content digest it leaves out the policy's own identity, which each
-// resolution mints anew, so the overview read and the preflight Start
-// prepares agree exactly when nothing that matters changed.
+// ReadinessDigest identifies what the readiness overview shows and the desktop
+// enforces: activations, rules, family selections, the recorder switch, and
+// the registry, matrix and catalogs behind them. Unlike the content digest it
+// leaves out the policy's own ID, which each resolution mints anew, so the
+// overview and the preflight that start prepares agree exactly when nothing
+// that matters changed.
 func (r ResolvedNativePolicy) ReadinessDigest() (string, error) {
 	document, err := encodeCanonicalExamDocument(struct {
 		Activations            []NativeActivation          `json:"activations"`

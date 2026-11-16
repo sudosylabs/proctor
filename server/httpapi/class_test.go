@@ -8,7 +8,6 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -18,87 +17,66 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
-
-type classHTTPApplication struct {
-	updateCommand  academic.UpdateClassCommand
-	archiveCommand academic.ArchiveClassCommand
-	result         *model.Class
-	list           []*model.Class
-	createCommand  academic.CreateClassCommand
-	searchErr      error
-	listQuery      academic.ListClassesQuery
-	searchQuery    academic.SearchClassesQuery
-	studentCounts  map[model.ClassID]int
-}
 
 func TestClassResourceRunsThroughRoutingKernelWithNarrowDependencies(t *testing.T) {
 	t.Parallel()
 
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{
-		UserID:                 model.NewUserID(),
-		SessionID:              model.NewSessionID(),
-		CredentialID:           model.PrincipalCredentialID(model.NewID()),
-		CredentialType:         model.CredentialSessionAccess,
-		AuthenticationMethod:   "password",
-		AuthenticationStrength: model.AuthenticationSingleFactor,
-		ClientType:             model.SessionClientCLI,
-		AuthenticatedAt:        time.Now(),
-	}
-	class := &model.Class{
-		ID:               model.ClassID(model.NewID()),
-		ProgrammeLevelID: model.ProgrammeLevelID(model.NewID()),
-		AcademicPeriodID: model.AcademicPeriodID(model.NewID()),
-		Name:             "class-a",
-		DisplayName:      "Class A",
-	}
-	classes := &classHTTPApplication{result: class}
+	principal := academicCaller()
+	world := newAcademicWorld()
+	fixture := newAcademicFixture(t, academicOptions{
+		Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, world.unit.ID, model.ActionClassManage)},
+		Units:  world.units(),
+	})
+	fixture.hold(world)
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
 		routetest.Authenticator{Principal: principal},
-		classResource(classes),
+		classResource(fixture.service),
 	)
 
 	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost,
-		"/api/v1/programme-levels/"+class.ProgrammeLevelID.String()+"/classes",
-		strings.NewReader(`{"academic_period_id":"`+class.AcademicPeriodID.String()+`","name":"class-a","display_name":"Class A"}`),
+		"/api/v1/programme-levels/"+world.level.ID.String()+"/classes",
+		strings.NewReader(`{"academic_period_id":"`+world.period.ID.String()+`","name":"class-a","display_name":"Class A"}`),
 	)
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusCreated, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	require.Equal(t, class.ProgrammeLevelID, classes.createCommand.ProgrammeLevelID)
-	require.Equal(t, class.AcademicPeriodID, classes.createCommand.AcademicPeriodID)
+	require.Len(t, fixture.classes.created, 1, "the create reached the Class Store")
+	created := fixture.classes.created[0].Class
+	require.Equal(t, world.level.ID, created.ProgrammeLevelID)
+	require.Equal(t, world.period.ID, created.AcademicPeriodID)
 	var body classResponse
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
-	require.Equal(t, class.ID.String(), body.ID)
+	require.Equal(t, created.ID.String(), body.ID)
 
 	invalid := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost,
-		"/api/v1/programme-levels/"+class.ProgrammeLevelID.String()+"/classes",
-		strings.NewReader(`{"academic_period_id":"`+class.AcademicPeriodID.String()+`","name":"class-a","display_name":"Class A","unknown":true}`),
+		"/api/v1/programme-levels/"+world.level.ID.String()+"/classes",
+		strings.NewReader(`{"academic_period_id":"`+world.period.ID.String()+`","name":"class-a","display_name":"Class A","unknown":true}`),
 	)
 	invalid.Header.Set("Authorization", "Bearer credential")
 	invalid.Header.Set("Content-Type", "application/json")
 	invalidResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(invalidResponse, invalid)
 	require.Equal(t, http.StatusBadRequest, invalidResponse.Code, "invalid status = %d: %s", invalidResponse.Code, invalidResponse.Body.String())
+	require.Len(t, fixture.classes.created, 1, "a rejected create reached the Class Store")
 
 	archive := httptest.NewRequestWithContext(t.Context(),
 		http.MethodDelete,
-		"/api/v1/classes/"+class.ID.String(),
+		"/api/v1/classes/"+world.class.ID.String(),
 		nil,
 	)
 	archive.Header.Set("Authorization", "Bearer credential")
@@ -107,32 +85,30 @@ func TestClassResourceRunsThroughRoutingKernelWithNarrowDependencies(t *testing.
 	require.Equal(t, http.StatusNoContent, archiveResponse.Code, "archive status/cache/body = %d/%q/%q", archiveResponse.Code, archiveResponse.Header().Get("Cache-Control"), archiveResponse.Body.String())
 	require.Equal(t, "no-store", archiveResponse.Header().Get("Cache-Control"), "archive status/cache/body = %d/%q/%q", archiveResponse.Code, archiveResponse.Header().Get("Cache-Control"), archiveResponse.Body.String())
 	require.Equal(t, 0, archiveResponse.Body.Len(), "archive status/cache/body = %d/%q/%q", archiveResponse.Code, archiveResponse.Header().Get("Cache-Control"), archiveResponse.Body.String())
+	require.Len(t, fixture.classes.archives, 1, "the archive reached the Class Store")
+	require.Equal(t, world.class.ID, fixture.classes.archives[0].ID)
 }
 
 func TestClassResourceFailsClosedForUndeclaredApplicationError(t *testing.T) {
 	t.Parallel()
 
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{
-		UserID:                 model.NewUserID(),
-		SessionID:              model.NewSessionID(),
-		CredentialID:           model.PrincipalCredentialID(model.NewID()),
-		CredentialType:         model.CredentialSessionAccess,
-		AuthenticationMethod:   "password",
-		AuthenticationStrength: model.AuthenticationSingleFactor,
-		ClientType:             model.SessionClientCLI,
-		AuthenticatedAt:        time.Now(),
-	}
+	principal := academicCaller()
+	unitID := model.NewAcademicUnitID()
+	fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, unitID, model.ActionClassView)}})
+	// The Store refuses the search as invalid input, which the service
+	// presents as class.invalid: a code the search route does not declare.
+	fixture.classes.search.err = store.NewErrInvalidInput("class", "name", "")
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
 		routetest.Authenticator{Principal: principal},
-		classResource(&classHTTPApplication{searchErr: apperror.New("class.invalid")}),
+		classResource(fixture.service),
 	)
 
 	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
-		"/api/v1/academic-units/"+model.NewID()+"/classes",
+		"/api/v1/academic-units/"+unitID.String()+"/classes",
 		nil,
 	)
 	request.Header.Set("Authorization", "Bearer credential")
@@ -142,17 +118,19 @@ func TestClassResourceFailsClosedForUndeclaredApplicationError(t *testing.T) {
 	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, "server.internal", problem.Code, "problem code")
+	require.Len(t, fixture.classes.search.listOptions, 1, "the search reached the Class Store")
 }
 
 func TestClassResourceFailsClosedForUndeclaredAuthenticationError(t *testing.T) {
 	t.Parallel()
 
 	logger, _ := routetest.NewLogger(t)
+	fixture := newAcademicFixture(t, academicOptions{})
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
 		routetest.Authenticator{Err: apperror.New("user.conflict")},
-		classResource(&classHTTPApplication{}),
+		classResource(fixture.service),
 	)
 	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
@@ -166,6 +144,7 @@ func TestClassResourceFailsClosedForUndeclaredAuthenticationError(t *testing.T) 
 	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, "server.internal", problem.Code, "problem code")
+	require.Empty(t, fixture.access.Audits.Decisions(), "an unauthenticated request reached the service")
 }
 
 func newFocusedResourceAPI(
@@ -186,38 +165,16 @@ func newFocusedResourceAPI(
 	return httpAPI
 }
 
-func (a *classHTTPApplication) GetClass(context.Context, invocation.Invocation, model.ClassID) (*model.Class, error) {
-	return a.result, nil
-}
-func (a *classHTTPApplication) ListClasses(_ context.Context, _ invocation.Invocation, query academic.ListClassesQuery) (academic.ClassPage, error) {
-	a.listQuery = query
-	return a.classPage(query.NameQuery), nil
-}
-func (a *classHTTPApplication) SearchClasses(_ context.Context, _ invocation.Invocation, query academic.SearchClassesQuery) (academic.ClassPage, error) {
-	a.searchQuery = query
-	return a.classPage(query.NameQuery), a.searchErr
-}
-
-// classPage answers the fake's Classes, counting the first page as the
-// application does.
-func (a *classHTTPApplication) classPage(query paging.NameQuery) academic.ClassPage {
-	page := academic.ClassPage{StudentCounts: a.studentCounts}
-	page.Items = a.list
-	if query.AfterID == "" {
-		page.Total = paging.CountWhole(len(a.list))
-	}
-	return page
-}
-
 func TestClassSearchMapsMissingAcademicUnit(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	classes := &classHTTPApplication{searchErr: apperror.New("resource.not_found").WithField("resource", "academic_unit")}
-	transport := &academicUnitHTTPApplication{principal: principal}
+	principal := academicCaller()
+	// The caller may view every Class; the unit it names does not exist.
+	fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{institutionWide(principal.UserID, model.ActionClassView)}})
 	settings := validHTTPSettings(t)
 	settings.Logger = logger
-	httpAPI, err := newAPI(settings, transport, academicUnitResource(transport), institutionResource(transport), classResource(classes))
+	httpAPI, err := newAPI(settings, routetest.Authenticator{Principal: principal},
+		academicUnitResource(fixture.service), institutionResource(fixture.service), classResource(fixture.service))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+model.NewID()+"/classes", nil)
@@ -225,44 +182,39 @@ func TestClassSearchMapsMissingAcademicUnit(t *testing.T) {
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusNotFound, response.Code, "status = %d: %s", response.Code, response.Body.String())
-}
-func (a *classHTTPApplication) CreateClass(_ context.Context, _ invocation.Invocation, command academic.CreateClassCommand) (*model.Class, error) {
-	a.createCommand = command
-	return a.result, nil
-}
-func (a *classHTTPApplication) UpdateClass(_ context.Context, _ invocation.Invocation, command academic.UpdateClassCommand) (*model.Class, error) {
-	a.updateCommand = command
-	return a.result, nil
-}
-func (a *classHTTPApplication) ArchiveClass(_ context.Context, _ invocation.Invocation, command academic.ArchiveClassCommand) error {
-	a.archiveCommand = command
-	return nil
+	require.Empty(t, fixture.classes.search.listOptions, "a search of a missing unit reached the Class Store")
 }
 
 func TestClassHTTPMapsBothParentsFromRouteAndBody(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	class := &model.Class{ID: model.ClassID(model.NewID()), ProgrammeLevelID: model.ProgrammeLevelID(model.NewID()), AcademicPeriodID: model.AcademicPeriodID(model.NewID()), Name: "class-a", DisplayName: "Class A"}
-	classes := &classHTTPApplication{result: class}
-	transport := &academicUnitHTTPApplication{principal: principal}
+	principal := academicCaller()
+	world := newAcademicWorld()
+	fixture := newAcademicFixture(t, academicOptions{
+		Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, world.unit.ID, model.ActionClassManage)},
+		Units:  world.units(),
+	})
+	fixture.hold(world)
 	settings := validHTTPSettings(t)
 	settings.Logger = logger
-	httpAPI, err := newAPI(settings, transport, academicUnitResource(transport), institutionResource(transport), classResource(classes))
+	httpAPI, err := newAPI(settings, routetest.Authenticator{Principal: principal},
+		academicUnitResource(fixture.service), institutionResource(fixture.service), classResource(fixture.service))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/programme-levels/"+class.ProgrammeLevelID.String()+"/classes", strings.NewReader(`{"academic_period_id":"`+class.AcademicPeriodID.String()+`","name":"class-a","display_name":"Class A"}`))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/programme-levels/"+world.level.ID.String()+"/classes", strings.NewReader(`{"academic_period_id":"`+world.period.ID.String()+`","name":"class-a","display_name":"Class A"}`))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusCreated, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	require.Equal(t, class.ProgrammeLevelID, classes.createCommand.ProgrammeLevelID)
-	require.Equal(t, class.AcademicPeriodID, classes.createCommand.AcademicPeriodID)
+	require.Len(t, fixture.classes.created, 1, "the create reached the Class Store")
+	created := fixture.classes.created[0].Class
+	require.Equal(t, world.level.ID, created.ProgrammeLevelID)
+	require.Equal(t, world.period.ID, created.AcademicPeriodID)
 	var body classResponse
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
-	require.Equal(t, class.ID.String(), body.ID)
-	require.Equal(t, class.AcademicPeriodID.String(), body.AcademicPeriodID)
+	require.Equal(t, created.ID.String(), body.ID)
+	require.Equal(t, world.period.ID.String(), body.AcademicPeriodID)
 }
 
 func TestClassPatchOptionalWireStates(t *testing.T) {

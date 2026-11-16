@@ -22,11 +22,11 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-func testRenderer() (*templateRenderer, error) {
+func testRenderer() (*TemplateRenderer, error) {
 	return testRendererWithPolicy(RendererPolicy{})
 }
 
-func testRendererWithPolicy(policy RendererPolicy) (*templateRenderer, error) {
+func testRendererWithPolicy(policy RendererPolicy) (*TemplateRenderer, error) {
 	localizer, err := localization.New(os.DirFS("../../i18n"), localization.EnglishLocale)
 	if err != nil {
 		return nil, err

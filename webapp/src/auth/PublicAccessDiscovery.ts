@@ -48,6 +48,8 @@ export const requestPublicAccessDiscovery =
  * route that only needs the same initial document. A settled `unavailable`
  * result is not retained, so the next load (for example a route retry)
  * performs a fresh request and republishes its result to subscribers.
+ * Routes that must observe current policy, such as registration, Desktop
+ * authorization and Invitation acceptance, request discovery directly.
  */
 export interface SharedPublicAccessDiscovery {
   current(): PublicAccessDiscoveryResult | undefined;
@@ -102,6 +104,8 @@ export const sharedPublicAccessDiscovery = createSharedPublicAccessDiscovery(
   requestPublicAccessDiscovery,
 );
 
+// A document whose canonical origin differs from the serving origin is never
+// presented, so another deployment's discovery cannot steer this page.
 export function resolvePublicAccessDiscovery(
   value: unknown,
   servingOrigin: string,

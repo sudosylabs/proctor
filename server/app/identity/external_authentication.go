@@ -43,9 +43,8 @@ type BeginDesktopExternalAuthenticationCommand struct {
 	Source     string
 }
 
-// BeginDesktopExternalAuthentication starts provider sign-in for the Desktop
-// authorization bound to the browser; the callback hands the proof to that
-// authorization.
+// BeginDesktopExternalAuthentication starts provider sign-in for the desktop
+// authorization bound to the browser.
 func (s *Service) BeginDesktopExternalAuthentication(
 	ctx context.Context,
 	_ invocation.Invocation,
@@ -74,7 +73,7 @@ func (s *Service) BeginDesktopExternalAuthentication(
 }
 
 // BeginDesktopReauthenticationExternalAuthenticationCommand starts fresh
-// provider proof for the Desktop reauthentication bound to the browser.
+// provider proof for the desktop reauthentication bound to the browser.
 type BeginDesktopReauthenticationExternalAuthenticationCommand struct {
 	ProviderID string
 	Binding    string
@@ -82,9 +81,8 @@ type BeginDesktopReauthenticationExternalAuthenticationCommand struct {
 	Source     string
 }
 
-// BeginDesktopReauthenticationExternalAuthentication redirects to the Desktop
-// Session's own provider with a fresh-authentication challenge. The provider
-// callback returns to the hosted reauthentication page.
+// BeginDesktopReauthenticationExternalAuthentication redirects to the desktop
+// session's own provider with a fresh-authentication challenge.
 func (s *Service) BeginDesktopReauthenticationExternalAuthentication(
 	ctx context.Context,
 	_ invocation.Invocation,
@@ -113,7 +111,7 @@ func (s *Service) BeginDesktopReauthenticationExternalAuthentication(
 }
 
 // BeginExternalAuthentication starts a browser sign-in with a provider,
-// admitting through an Invitation when the command carries its claim.
+// admitting through an invitation when the command carries its claim.
 func (s *Service) BeginExternalAuthentication(
 	ctx context.Context,
 	_ invocation.Invocation,
@@ -247,7 +245,6 @@ func (s *Service) beginForPurpose(
 	}, nil
 }
 
-// beginProviderChallenge asks the provider for the redirect challenge bound to the fresh state and binding tokens.
 func (s *Service) beginProviderChallenge(
 	ctx context.Context,
 	provider ExternalIdentityProvider,
@@ -284,7 +281,6 @@ func (s *Service) beginProviderChallenge(
 	return challenge, nil
 }
 
-// saveExternalLoginState binds any reauthenticated Session to the login state and persists it with its deadline.
 func (s *Service) saveExternalLoginState(
 	ctx context.Context, state *model.ExternalLoginState, reauthentication *model.Principal, invitationClaimHash string,
 ) (*model.ExternalLoginState, error) {

@@ -20,16 +20,11 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// SearchUsersQuery reads the User directory. Affiliations keeps Users holding
-// a current Affiliation of any listed kind and AcademicUnitID keeps current
-// members of that Academic Unit or its descendants; both narrow, never widen,
-// the caller's visibility.
-//
-// Order and Descending choose the page order (username ascending when Order
-// is empty); the continuation fields carry the previous page's last key in
-// that order, as store.UserListOptions describes. The last_active order reads
-// account activity, so only a caller whose projection shows it (Institution-
-// wide user.view) may sort by it.
+// SearchUsersQuery filters the user directory. Affiliations and
+// AcademicUnitID (which includes descendants) narrow, never widen, the
+// caller's visibility. An empty Order sorts by username; the After fields
+// carry the previous page's last key, as store.UserListOptions describes.
+// Only institution-wide user.view may sort or filter by last activity.
 type SearchUsersQuery struct {
 	Query               string
 	Order               store.UserOrder
@@ -49,8 +44,8 @@ type SearchUsersQuery struct {
 	LastActiveBefore    time.Time
 }
 
-// AccountState narrows the User directory to active or to disabled accounts;
-// the zero value applies no state filter of its own.
+// AccountState narrows the directory to active or disabled accounts; the zero
+// value applies no state filter of its own.
 type AccountState string
 
 // The account states the directory filters on.
@@ -75,8 +70,8 @@ type UpdateUserProfileCommand struct {
 	Timezone    *string
 }
 
-// CurrentUserContextView is the bounded navigation projection of the signed-in
-// User: the product areas and management scopes the account reaches.
+// CurrentUserContextView is the navigation projection of the signed-in user;
+// ManagementScopes is bounded and ManagementScopesHasMore reports the rest.
 type CurrentUserContextView struct {
 	UserID                       model.UserID
 	Username                     string
@@ -93,8 +88,7 @@ type CurrentUserContextView struct {
 	CurrentDesktopRegistrationID model.DesktopRegistrationID
 }
 
-// GetCurrentUserContext returns the navigation projection of the Session's
-// User. Only a Session credential may read it.
+// GetCurrentUserContext refuses any credential other than a session.
 func (s *Service) GetCurrentUserContext(ctx context.Context, inv invocation.Invocation) (*CurrentUserContextView, error) {
 	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
@@ -131,27 +125,23 @@ func (s *Service) GetCurrentUserContext(ctx context.Context, inv invocation.Invo
 	return view, nil
 }
 
-// User directory summaries show at most this many entries of each kind.
+// Directory summaries show at most this many entries of each kind.
 const (
 	userDirectorySummaryAffiliations  = 3
 	userDirectorySummaryAcademicUnits = 2
 	userDirectorySummaryRoles         = 3
 )
 
-// UserDirectoryEntry is one User directory row: the profile the caller may
-// read and its bounded summary. Memberships holds the User's current
-// Affiliations and the current Academic Units the caller's visibility reaches.
-// Roles holds the current Role Bindings inside the caller's role_binding.view
-// scopes and is nil when the caller holds role_binding.view nowhere.
+// UserDirectoryEntry is one directory row. Memberships holds only academic
+// units the caller's visibility reaches. Roles is nil when the caller holds
+// role_binding.view nowhere.
 type UserDirectoryEntry struct {
 	User        *model.User
 	Memberships store.UserDirectorySummary
 	Roles       *store.UserRoleBindingSummary
 }
 
-// SearchUsers reads one page of the User directory with each User's summary.
-// The first page, read without a keyset, also counts every User the filters
-// match within the same visibility.
+// SearchUsers counts the total only on the first page, read without a keyset.
 func (s *Service) SearchUsers(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -180,10 +170,8 @@ func (s *Service) SearchUsers(
 	return paging.Counted[UserDirectoryEntry]{Page: paging.Page[UserDirectoryEntry]{Items: entries, HasMore: page.HasMore}, Total: total}, nil
 }
 
-// summarizeUsers attaches each listed User's summary, read in one batch per
-// half at the visibility's own instant so the summary and the page agree on
-// what is current. Role Bindings are read only within the caller's
-// role_binding.view scopes, resolved once for the page.
+// summarizeUsers reads at the visibility's own instant so the summary and the
+// page agree on what is current.
 func (s *Service) summarizeUsers(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -256,7 +244,7 @@ func (s *Service) summarizeUsers(
 	return entries, nil
 }
 
-// SearchUserPage is the uncounted directory read that global search composes.
+// SearchUserPage is the uncounted read that global search composes.
 func (s *Service) SearchUserPage(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -266,9 +254,8 @@ func (s *Service) SearchUserPage(
 	return page, err
 }
 
-// listUsers authorizes and reads one directory page, returning the Store
-// options it read with so a count runs through the same filters and
-// visibility.
+// listUsers returns the store options it read with so a count runs through the
+// same filters and visibility.
 func (s *Service) listUsers(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -310,12 +297,14 @@ func (s *Service) listUsers(
 	if !order.IsValid() || (order == store.UserOrderLastActive && !visibility.InstitutionWide) {
 		return paging.Page[*model.User]{}, store.UserListOptions{}, apperror.Invalid("request.invalid", "sort")
 	}
-	// Account activity is shown only to Institution-wide user.view, so a
+	// Account activity is shown only to institution-wide user.view, so a
 	// scoped viewer can neither filter on it nor infer it.
 	if activityField != "" && !visibility.InstitutionWide {
 		return paging.Page[*model.User]{}, store.UserListOptions{}, apperror.Invalid("request.invalid", activityField)
 	}
 
+	// A scoped viewer cannot see disablement, so it neither reaches disabled
+	// users nor learns of them from an error.
 	includeDisabled := query.IncludeDisabled && visibility.InstitutionWide
 	if visibility.ActiveAt.IsZero() && (len(affiliations) > 0 || query.AcademicUnitID != "" || len(roleIDs) > 0) {
 		visibility.ActiveAt = model.TimeUTC(s.now())
@@ -358,8 +347,8 @@ func (s *Service) listUsers(
 	return page, options, nil
 }
 
-// GetUserProfile reads one User profile; a scoped grant reads the limited
-// projection without the mailbox and account metadata.
+// GetUserProfile gives a scoped grant the limited projection, without the
+// email address and account metadata.
 func (s *Service) GetUserProfile(ctx context.Context, inv invocation.Invocation, id model.UserID) (*model.User, error) {
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
@@ -379,8 +368,6 @@ func (s *Service) GetUserProfile(ctx context.Context, inv invocation.Invocation,
 	return scopedUserProjection(user), nil
 }
 
-// userDirectoryAffiliations validates the requested Affiliation kinds and
-// drops repeats, so the filter is a set of known kinds.
 func userDirectoryAffiliations(kinds []model.AffiliationKind) ([]model.AffiliationKind, error) {
 	var result []model.AffiliationKind
 	for _, kind := range kinds {
@@ -394,8 +381,6 @@ func userDirectoryAffiliations(kinds []model.AffiliationKind) ([]model.Affiliati
 	return result, nil
 }
 
-// userDirectoryRoleIDs validates the requested Roles and drops repeats, so
-// the filter is a set of at most store.MaximumUserListRoles canonical IDs.
 func userDirectoryRoleIDs(ids []model.RoleID) ([]model.RoleID, error) {
 	var result []model.RoleID
 	for _, id := range ids {
@@ -412,10 +397,8 @@ func userDirectoryRoleIDs(ids []model.RoleID) ([]model.RoleID, error) {
 	return result, nil
 }
 
-// userDirectoryActivityField names the first last-activity filter the query
-// sets, or "" when it sets none, and refuses an incoherent combination:
-// never_signed_in beside a bound, or an after bound not before the before
-// bound.
+// userDirectoryActivityField names the first activity filter set, or "", and
+// refuses never_signed_in beside a bound or an empty range.
 func userDirectoryActivityField(query SearchUsersQuery) (string, error) {
 	after, before := query.LastActiveAfter, query.LastActiveBefore
 	switch {
@@ -433,11 +416,9 @@ func userDirectoryActivityField(query SearchUsersQuery) (string, error) {
 	return "", nil
 }
 
-// userDirectoryRoleScope admits the Role filter and returns the
-// role_binding.view scope its bindings are matched within. A Role is seen
-// through Institution-wide role.view, so without it, or for a Role that does
-// not exist or is archived, every requested Role is refused alike as
-// request.invalid on role_id, never revealing which Roles exist.
+// userDirectoryRoleScope refuses without role.view, or for a missing or
+// archived role, with the same request.invalid on role_id, so the filter
+// never reveals which roles exist.
 func (s *Service) userDirectoryRoleScope(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -472,9 +453,9 @@ func scopedUserDirectoryProjection(users []*model.User) []*model.User {
 	return result
 }
 
-// scopedUserProjection retains only the public directory identity required to
-// identify a person in academic administration. Account/security state and
-// client-local presentation preferences remain institution/self-only.
+// scopedUserProjection keeps only what academic administration needs to
+// identify a person; account, security and presentation fields stay
+// institution- or self-only.
 func scopedUserProjection(user *model.User) *model.User {
 	if user == nil {
 		return nil
@@ -493,8 +474,8 @@ func scopedUserProjection(user *model.User) *model.User {
 	return &projected
 }
 
-// UpdateUserProfile changes a User's profile fields after authorizing the
-// caller to manage that User, and audits the change.
+// UpdateUserProfile requires user.manage on the target user and audits the
+// change.
 func (s *Service) UpdateUserProfile(
 	ctx context.Context,
 	inv invocation.Invocation,

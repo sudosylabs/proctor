@@ -24,11 +24,11 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// DesktopCompatibilityState is the closed public result of checking one
-// declared Desktop build against this server and Institution policy.
+// DesktopCompatibilityState is the closed set of results of checking a
+// declared desktop build against this server and the institution policy.
 type DesktopCompatibilityState string
 
-// The compatibility states. UpdateRequired means the Desktop is too old,
+// The compatibility states. UpdateRequired means the desktop app is too old,
 // ServerIncompatible that it is newer than this server supports, and
 // UnsupportedTarget that no build exists for its platform and architecture.
 const (
@@ -38,8 +38,7 @@ const (
 	DesktopCompatibilityUnsupportedTarget  DesktopCompatibilityState = "unsupported_target"
 )
 
-// DesktopCompatibilityQuery is untrusted release metadata supplied to ping,
-// Desktop Session creation, and Attempt entry or re-entry.
+// DesktopCompatibilityQuery is untrusted, client-declared build metadata.
 type DesktopCompatibilityQuery struct {
 	DesktopRelease   string
 	DesktopBuildID   string
@@ -48,8 +47,8 @@ type DesktopCompatibilityQuery struct {
 	RealtimeProtocol int
 }
 
-// DesktopCompatibilityResult is safe public compatibility metadata. Catalog
-// fingerprints and capability-matrix identities remain server-internal.
+// DesktopCompatibilityResult is safe to return to clients, except
+// PolicyRevision.
 type DesktopCompatibilityResult struct {
 	Availability            model.DesktopAvailability
 	RetryAt                 model.OptionalTime
@@ -60,8 +59,8 @@ type DesktopCompatibilityResult struct {
 	MinimumRealtimeProtocol int
 	MaximumRealtimeProtocol int
 	AdministratorMessage    string
-	// PolicyRevision is an internal admission fence. Public transports must not
-	// expose it; mutation boundaries carry it back to authoritative storage.
+	// PolicyRevision is an internal admission fence carried back to the store;
+	// transports must not expose it.
 	PolicyRevision int64
 }
 
@@ -69,8 +68,8 @@ type desktopBuildCatalog struct {
 	entries []model.DesktopBuildTuple
 }
 
-// ReplaceDesktopCompatibilityPolicyCommand completely replaces the
-// Institution policy behind optimistic revision and idempotency fences.
+// ReplaceDesktopCompatibilityPolicyCommand replaces the whole policy;
+// ExpectedRevision and IdempotencyKey are both required.
 type ReplaceDesktopCompatibilityPolicyCommand struct {
 	ExpectedRevision int64
 	Settings         model.DesktopCompatibilityPolicySettings
@@ -108,14 +107,12 @@ func newDesktopBuildCatalog(entries []model.DesktopBuildTuple) (*desktopBuildCat
 	return &desktopBuildCatalog{entries: cloned}, nil
 }
 
-// requireDesktopCompatibility refuses a Service whose Desktop compatibility
-// collaborators are incomplete and builds the immutable Desktop build catalog.
-// New calls it first, before any sign-in collaborator is set up.
+// requireDesktopCompatibility also builds the immutable build catalog, so New
+// calls it before anything that evaluates builds.
 func (s *Service) requireDesktopCompatibility(builds []model.DesktopBuildTuple) error {
 	if s.desktopCompatibilityPolicies == nil ||
 		s.institutions == nil ||
 		s.authorizer == nil ||
-		s.auditor == nil ||
 		s.recentAuthenticationTTL <= 0 ||
 		s.now == nil {
 		return errors.New("desktop compatibility service dependencies are invalid")
@@ -130,8 +127,8 @@ func (s *Service) requireDesktopCompatibility(builds []model.DesktopBuildTuple) 
 	return nil
 }
 
-// EvaluateDesktopCompatibility checks untrusted build declarations against
-// the current authoritative Institution policy and immutable server catalog.
+// EvaluateDesktopCompatibility checks an untrusted build declaration against
+// the current institution policy and the server's build catalog.
 func (s *Service) EvaluateDesktopCompatibility(
 	ctx context.Context,
 	_ invocation.Invocation,
@@ -182,10 +179,9 @@ func (s *Service) evaluateDesktopBuild(
 	return result, nil
 }
 
-// ResolveAttemptDesktopBuild returns the one catalog tuple whose immutable
-// selectors established the authenticated Desktop Session. Institution policy
-// may narrow the embedded catalog, so Attempt entry rechecks it at the time of
-// admission without trusting request-body build metadata.
+// ResolveAttemptDesktopBuild returns the catalog build the desktop session was
+// established with, taken from the principal rather than the request body.
+// Policy may have narrowed the catalog since, so it is rechecked at entry.
 func (s *Service) ResolveAttemptDesktopBuild(
 	ctx context.Context,
 	principal model.Principal,
@@ -221,7 +217,7 @@ func (s *Service) ResolveAttemptDesktopBuild(
 	return attempt.DesktopBuildResolution{}, errors.New("Desktop build is missing from the verified catalog")
 }
 
-// GetDesktopCompatibilityPolicy returns the current administrative policy.
+// GetDesktopCompatibilityPolicy returns a copy of the current policy.
 func (s *Service) GetDesktopCompatibilityPolicy(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -236,7 +232,8 @@ func (s *Service) GetDesktopCompatibilityPolicy(
 	return policy.Clone(), nil
 }
 
-// ReplaceDesktopCompatibilityPolicy replaces the current policy.
+// ReplaceDesktopCompatibilityPolicy replaces the current policy; it requires
+// strong recent authentication and fails on a stale revision.
 func (s *Service) ReplaceDesktopCompatibilityPolicy(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -484,10 +481,9 @@ func desktopCompatibilityBounds(
 	}
 }
 
-// ResolveNativeDeliveryBuild preserves the immutable interpretation catalog of
-// a retained stream even after its owning key authenticates a newer Desktop.
-// It grants no live admission; source ownership is checked by the use case and
-// atomically again by the delivery Store.
+// ResolveNativeDeliveryBuild finds the build a retained stream was recorded
+// with, even after its key authenticates a newer desktop app. It grants no
+// live admission; the caller and the store check ownership.
 func (s *Service) ResolveNativeDeliveryBuild(
 	_ context.Context,
 	identity attempt.NativeDeliveryBuildIdentity,

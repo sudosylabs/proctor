@@ -6,9 +6,9 @@
 // ---------------------------------------------------------------------------------------------
 
 // Package canonicaljson implements the bounded, integer-only JSON encoding used
-// for Desktop agreement documents. It owns bytes, not document schemas, digest
-// exclusions, authenticity, or authorization. It depends only on the standard
-// library and reports errors without copying document content into diagnostics.
+// for Desktop agreement documents. It owns bytes only; schemas, digests and
+// authenticity belong to the document owners. Errors never copy document
+// content.
 package canonicaljson
 
 import (
@@ -33,12 +33,11 @@ var (
 	ErrLimit   = errors.New("canonical JSON document exceeds its limit")
 )
 
-// Canonicalize accepts one JSON value within maxBytes and emits recursively
-// sorted ASCII object keys, preserved array order, decimal safe integers, and
-// JSON.stringify string escaping. Duplicate keys, non-scalar strings, invalid
-// UTF-8, fractional/exponent numbers, and excessive nesting fail before decoding
-// can erase their original representation. Document owners enforce closed fields,
-// required values, and narrower bounds such as positive or nonnegative integers.
+// Canonicalize accepts one JSON value within maxBytes and emits sorted ASCII
+// keys, decimal safe integers and JSON.stringify string escaping. Duplicate
+// keys, lone surrogates, invalid UTF-8, fractions, exponents and deep nesting
+// are rejected before decoding can hide their original spelling. Callers
+// enforce closed fields and narrower bounds.
 func Canonicalize(document []byte, maxBytes int) ([]byte, error) {
 	if maxBytes <= 0 || len(document) > maxBytes {
 		return nil, ErrLimit
@@ -197,9 +196,8 @@ func appendString(encoded []byte, value string) []byte {
 	return append(encoded, '"')
 }
 
-// encoding/json substitutes U+FFFD for unpaired surrogate escapes. Validate
-// their original spelling before asking the standard decoder for string values.
-// Grammar, quote termination, and all other escapes remain decoder-owned.
+// validStringEscapes rejects unpaired surrogate escapes, which encoding/json
+// would silently replace with U+FFFD. Everything else is left to the decoder.
 func validStringEscapes(document []byte) bool {
 	inside := false
 	for index := 0; index < len(document); index++ {

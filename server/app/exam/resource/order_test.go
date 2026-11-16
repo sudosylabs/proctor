@@ -32,7 +32,7 @@ func TestApparentReorderNoOpWithArchivedExamReachesAuditedStoreGuard(t *testing.
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.archived", fault.Code())
-	require.True(t, f.auditor.began)
+	require.True(t, f.auditBegan())
 	require.Equal(t, 1, f.persistence.reorderCalls)
 }
 

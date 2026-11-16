@@ -63,8 +63,7 @@ func (d *delegate) NotifyMsg(message []byte) {
 		return
 	}
 
-	// Best-effort dispatch: handler failures are logged and not retried by the
-	// transport.
+	// Handler failures are logged, never retried.
 	err := d.transport.dispatchLocal(context.Background(), envelope.Message.Clone())
 	result := "success"
 	if err != nil {

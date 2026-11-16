@@ -19,8 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// AttemptWorkspaceInvalidContentError identifies caller-controlled content
-// that failed bounded validation without exposing backend failure details.
+// AttemptWorkspaceInvalidContentError marks caller content that failed
+// validation; it carries no backend failure detail.
 type AttemptWorkspaceInvalidContentError struct{ cause error }
 
 func (err *AttemptWorkspaceInvalidContentError) Error() string {
@@ -37,14 +37,11 @@ func invalidAttemptWorkspaceContent(cause error) error {
 	return &AttemptWorkspaceInvalidContentError{cause: cause}
 }
 
-// StageAttemptWorkspaceObject streams one bounded private file of exactly
-// declaredSize bytes to a new exact opaque identity while hashing it. The
-// bytes never touch a local spool: candidate answers reach only the VFS. A
-// body whose length differs from declaredSize fails the write or is removed
-// before an error is returned. The object is not authoritative or
-// discoverable; PostgreSQL publication remains a separate fenced mutation,
-// and a caller that rejects the returned digest reclaims the reserved
-// identity.
+// StageAttemptWorkspaceObject streams exactly declaredSize bytes to a new
+// object and returns their digest. The bytes never touch a local spool, so
+// candidate answers reach only VFS; a length mismatch fails the write or
+// removes the object. It stays invisible until the caller's fenced PostgreSQL
+// publish, and a caller that rejects the digest must reclaim it.
 func (c *Content) StageAttemptWorkspaceObject(
 	ctx context.Context,
 	objectID model.AttemptWorkspaceObjectID,
@@ -167,8 +164,8 @@ func (c *Content) openMatchingAttemptWorkspaceObject(
 	return read == size && fmt.Sprintf("%x", digest.Sum(nil)) == checksum, nil
 }
 
-// OpenAttemptWorkspaceObject opens only an exact opaque object selected by
-// authorized PostgreSQL metadata.
+// OpenAttemptWorkspaceObject opens the object named by authorized stored
+// metadata; it checks no access itself.
 func (c *Content) OpenAttemptWorkspaceObject(ctx context.Context,
 	objectID model.AttemptWorkspaceObjectID,
 ) (io.ReadCloser, error) {
@@ -182,8 +179,8 @@ func (c *Content) OpenAttemptWorkspaceObject(ctx context.Context,
 	return file.Body, nil
 }
 
-// RemoveAttemptWorkspaceObject idempotently removes one exact opaque object
-// after persistence has durably claimed it for cleanup.
+// RemoveAttemptWorkspaceObject removes an object the caller has durably
+// claimed for cleanup. A missing object is not an error.
 func (c *Content) RemoveAttemptWorkspaceObject(ctx context.Context,
 	objectID model.AttemptWorkspaceObjectID,
 ) error {
@@ -197,10 +194,9 @@ func (c *Content) RemoveAttemptWorkspaceObject(ctx context.Context,
 	return sanitize("remove Attempt Workspace object", err)
 }
 
-// PurgeRetiredAttemptWorkspaceObject removes the exact immutable key, then
-// observes its absence independently. A backend acknowledgement alone cannot
-// be reported as verified purge. This says nothing about already-open streams,
-// media erasure, backup copies, or historical object versions.
+// PurgeRetiredAttemptWorkspaceObject removes the object and then checks it is
+// gone, since a backend acknowledgement alone is not a verified purge. It says
+// nothing about open streams, media erasure, backups or old object versions.
 func (c *Content) PurgeRetiredAttemptWorkspaceObject(ctx context.Context, objectID model.AttemptWorkspaceObjectID) error {
 	if err := c.RemoveAttemptWorkspaceObject(ctx, objectID); err != nil {
 		return err

@@ -24,6 +24,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       disabled = false,
       isLoading = false,
       loadingLabel,
+      // A submit owner must ask for "submit"; a stray button inside a form
+      // must never submit it.
       type = "button",
       variant = "primary",
       ...props
@@ -40,6 +42,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || isLoading}
         type={type}
       >
+        {/* The content stays in layout while loading so the button never
+            changes size, and the owning feature keeps the only live region. */}
         <span className={styles.content} aria-hidden={isLoading || undefined}>
           {children}
         </span>

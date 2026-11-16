@@ -25,9 +25,8 @@ const (
 	SessionAuthenticationMaxLength = 64
 )
 
-// SessionRevocationReason is durable machine state. Values are intentionally
-// presentation-free and closed; HTTP and other user-facing edges translate
-// them when rendering a session.
+// SessionRevocationReason is closed, presentation-free machine state; the
+// HTTP layer and other user-facing edges translate it.
 type SessionRevocationReason string
 
 const (
@@ -83,10 +82,9 @@ func (r SessionRevocationReason) IsValid() bool {
 	}
 }
 
-// IsSystemWithdrawal reports whether reason names an unaudited system
-// withdrawal of a Session the system itself just issued or refreshed: Desktop
-// authorization could not finish, or the User became inactive. Every other
-// revocation is an audited mutation.
+// IsSystemWithdrawal reports whether reason is an unaudited withdrawal of a
+// session the system just issued or refreshed: desktop authorization could not
+// finish, or the user became inactive. Every other revocation is audited.
 func (r SessionRevocationReason) IsSystemWithdrawal() bool {
 	switch r {
 	case SessionRevocationDesktopAuthorizationFailed,
@@ -97,7 +95,7 @@ func (r SessionRevocationReason) IsSystemWithdrawal() bool {
 	}
 }
 
-// AllSessionRevocationReasons returns the closed vocabulary in lexical order.
+// AllSessionRevocationReasons returns every reason in lexical order.
 func AllSessionRevocationReasons() []SessionRevocationReason {
 	return []SessionRevocationReason{
 		SessionRevocationAccessPolicyChanged,
@@ -140,15 +138,10 @@ const (
 )
 
 // Session is one revocable authenticated login. It stores authentication
-// assurance and safe client metadata but never bearer credentials, role
-// bindings, or permission snapshots. SessionCredential owns the hashed access
-// and refresh credentials for this session.
-//
-// Domain time is UTC time.Time. Optional lifecycle instants use OptionalTime.
-// Soft archive uses the explicit optional ArchivedAt instant.
-// AuthenticationProviderID and ExternalIdentityID retain the exact immutable
-// provider path that established an external Session. Both are empty for a
-// local Session. AuthenticationMethod describes the local method or protocol.
+// assurance and safe client metadata, never bearer credentials, role bindings
+// or permission snapshots; SessionCredential holds the hashed credentials.
+// AuthenticationProviderID and ExternalIdentityID record the provider path of
+// an external session and are empty for a local one.
 type Session struct {
 	ID                       SessionID
 	CreatedAt                time.Time
@@ -157,9 +150,9 @@ type Session struct {
 	UserID                   UserID
 	AuthenticationGeneration int64
 	MFARecoveryRequired      bool
-	// MFAEnrollmentRequired restricts a single-factor Web Session of a User
-	// the Access Policy requires to use two-step verification: it may only
-	// set up a second factor, complete a challenge, or sign out.
+	// MFAEnrollmentRequired restricts a single-factor web session of a user
+	// the access policy requires to use two-step verification: it may only set
+	// up a second factor, complete a challenge or sign out.
 	MFAEnrollmentRequired    bool
 	ClientType               SessionClientType
 	DesktopRegistrationID    DesktopRegistrationID
@@ -185,7 +178,9 @@ type Session struct {
 	RevocationReason         SessionRevocationReason
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
+// PrepareCreate stamps the ID and creation time, defaults AuthenticatedAt and
+// LastActivityAt to it, and normalizes times and metadata; it does nothing on
+// nil.
 func (s *Session) PrepareCreate(id SessionID, at time.Time) {
 	if s == nil {
 		return
@@ -227,8 +222,8 @@ func (s *Session) PrepareCreate(id SessionID, at time.Time) {
 	s.RevocationReason = SessionRevocationReason(SanitizeUnicode(string(s.RevocationReason)))
 }
 
-// PrepareUpdate applies the application-selected transition time and normalizes
-// mutable metadata fields.
+// PrepareUpdate stamps the update time and normalizes the metadata; sessions
+// have no revision.
 func (s *Session) PrepareUpdate(at time.Time) {
 	if s == nil {
 		return
@@ -241,7 +236,7 @@ func (s *Session) PrepareUpdate(at time.Time) {
 	s.RevocationReason = SessionRevocationReason(SanitizeUnicode(string(s.RevocationReason)))
 }
 
-// Validate checks rehydrated session state.
+// Validate checks the session's fields, for new and stored values alike.
 func (s *Session) Validate() error {
 	const where = "Session.Validate"
 	if s == nil {
@@ -304,7 +299,6 @@ func (s *Session) Validate() error {
 	return s.validateLifecycle(details)
 }
 
-// validateAuthentication checks the recorded authentication method, identity and strength.
 func (s *Session) validateAuthentication(details string) error {
 	const where = "Session.Validate"
 	if len(s.AuthenticationMethod) == 0 ||
@@ -359,7 +353,6 @@ func (s *Session) validateAuthentication(details string) error {
 	return nil
 }
 
-// validateLifecycle checks activity, expiry, archive and revocation state.
 func (s *Session) validateLifecycle(details string) error {
 	const where = "Session.Validate"
 	if s.LastActivityAt.Before(s.CreatedAt) {
@@ -443,7 +436,7 @@ func (s *Session) IsExpiredAt(now time.Time) bool {
 		!now.Before(s.ExpiresAt)
 }
 
-// Auditable returns a deliberately safe audit projection.
+// Auditable returns the fields that are safe to record in the audit log.
 func (s *Session) Auditable() map[string]any {
 	if s == nil {
 		return map[string]any{}

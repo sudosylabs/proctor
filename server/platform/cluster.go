@@ -15,8 +15,7 @@ import (
 // contract. Composition selects the concrete adapter (local or memberlist).
 type Cluster = cluster.Transport
 
-// Re-export sentinel errors so existing platform tests and callers can still
-// use platform.ErrCluster* names during the migration.
+// The cluster sentinel errors under platform names.
 var (
 	ErrClusterStopped         = cluster.ErrStopped
 	ErrClusterNotStarted      = cluster.ErrNotStarted

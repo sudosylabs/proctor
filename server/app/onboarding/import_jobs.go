@@ -17,8 +17,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// onboardingImportJobs translates the onboarding import Job entry points into
-// the port the concrete onboarding import Jobs call.
 type onboardingImportJobs struct{ service *Service }
 
 func (a onboardingImportJobs) PreviewProgression(ctx context.Context, id model.OnboardingImportID) (string, error) {

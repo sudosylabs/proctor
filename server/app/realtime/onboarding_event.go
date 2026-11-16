@@ -27,12 +27,9 @@ type invitationChangedData struct {
 	State         model.InvitationState `json:"state"`
 }
 
-// NewOnboardingImportChangedEvent tells the connections subscribed to
-// onboarding_batch.view on scope that an onboarding import entered state.
-// scope is the Institution, Academic Unit or Class the import is scoped to,
-// or one that encloses it: the area publishes one event for each, so a
-// subscriber at any scope that can view the import hears of it. Rows, counts
-// and file names never travel.
+// NewOnboardingImportChangedEvent is published once for the import's scope
+// and once for each enclosing scope, so a viewer at any of them hears of it.
+// Rows, counts and file names never travel.
 func NewOnboardingImportChangedEvent(
 	importID model.OnboardingImportID,
 	state model.OnboardingImportState,
@@ -60,10 +57,8 @@ func NewOnboardingImportChangedEvent(
 	}, nil
 }
 
-// NewCreatorOnboardingImportChangedEvent tells only the User who created an
-// onboarding import that it entered state. Imports that only their creator may
-// read, such as filter previews, are announced this way so that other viewers
-// at the scope never learn that they exist.
+// NewCreatorOnboardingImportChangedEvent goes to the creator alone, for
+// imports only they may read, so other viewers never learn they exist.
 func NewCreatorOnboardingImportChangedEvent(
 	creatorID model.UserID,
 	importID model.OnboardingImportID,
@@ -81,9 +76,8 @@ func NewCreatorOnboardingImportChangedEvent(
 	return Event{Name: creatorOnboardingImportChangedMessage.name, UserID: creatorID, Data: data}, nil
 }
 
-// NewInvitationChangedEvent tells the User who issued an Invitation that it
-// reached state, such as accepted. Only the inviter's own connections receive
-// it; the accepting User and their account never travel.
+// NewInvitationChangedEvent goes to the inviter alone; the accepting user and
+// their account never travel.
 func NewInvitationChangedEvent(
 	inviterID model.UserID,
 	invitationID model.InvitationID,

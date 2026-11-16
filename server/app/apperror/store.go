@@ -14,7 +14,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// StoreKind names one typed Store failure that a StoreRule can match.
+// StoreKind selects which typed store error a StoreRule matches.
 type StoreKind uint8
 
 const (
@@ -43,18 +43,14 @@ type StoreRule struct {
 	Code       Code
 }
 
-// StoreTable is the declarative presentation of typed Store failures for one
-// use-case family. Translate is the only Store-error translator: application
-// code declares a table instead of writing a translation function.
+// StoreTable presents typed store failures for one use-case family, so
+// application code declares a table instead of writing a translator.
 //
-// Translate passes an existing *Error through unchanged and presents
-// idempotency conflicts and in-progress commands with the shared
-// idempotency codes. It then checks, in order: Rules in declaration order;
-// Constraints for a *store.ErrConflict constraint name; and the per-kind
-// NotFound, Conflict, Reference, and Invalid codes. Anything else, and any
-// kind whose code is empty, becomes Unavailable. Fields are attached to every
-// failure the table produces, and InvalidField is the safe "field" value of
-// an Invalid failure.
+// Translate passes an *Error through and maps idempotency errors to the shared
+// idempotency codes. It then tries Rules in order, Constraints by conflict
+// constraint name, then the per-kind codes. Anything else, and any kind whose
+// code is empty, becomes Unavailable. Fields go on every failure the table
+// produces; InvalidField is the "field" value of an Invalid failure.
 type StoreTable struct {
 	Rules        []StoreRule
 	Constraints  map[string]Code
@@ -67,9 +63,8 @@ type StoreTable struct {
 	Fields       map[string]string
 }
 
-// Translate presents err through the table. Callers translate only after the
-// Store reported failure or returned no required result, so a nil err is
-// presented as Unavailable.
+// Translate presents a nil err as Unavailable: callers translate only after
+// the store failed or returned no required result.
 func (t StoreTable) Translate(err error) error {
 	if err == nil {
 		return New(t.Unavailable).WithFields(t.Fields)
@@ -127,8 +122,7 @@ func (t StoreTable) or(code Code) Code {
 	return code
 }
 
-// With returns a copy of the table whose additional rules are checked before
-// the table's own rules.
+// With returns a copy whose rules are checked before the table's own.
 func (t StoreTable) With(rules ...StoreRule) StoreTable {
 	t.Rules = append(append([]StoreRule(nil), rules...), t.Rules...)
 	return t
@@ -160,9 +154,9 @@ func (r StoreRule) selects(entity, constraint string) bool {
 		(r.Constraint == "" || r.Constraint == constraint)
 }
 
-// Conflicts declares one StoreConflict rule per constraint name of one Store
-// entity, for constraint names that are only meaningful on that entity.
-// Rules are returned in constraint order so the table stays deterministic.
+// Conflicts builds one StoreConflict rule per constraint of entity, for names
+// only meaningful on that entity. Rules are sorted by constraint so the table
+// is deterministic.
 func Conflicts(entity string, codes map[string]Code) []StoreRule {
 	constraints := make([]string, 0, len(codes))
 	for constraint := range codes {
@@ -176,12 +170,10 @@ func Conflicts(entity string, codes map[string]Code) []StoreRule {
 	return rules
 }
 
-// AdministrationStoreTable is the shared presentation for academic and
-// account administration resources: absence is the generic concealed
-// resource.not_found, uniqueness and state conflicts are conflict unless a
-// constraint names a more specific code, rejected values and references are
-// invalid, and anything else is administration.unavailable. Every failure
-// names the resource.
+// AdministrationStoreTable is the table for academic and account
+// administration: absence is the concealed resource.not_found, references
+// and rejected values are invalid, anything else is administration.unavailable,
+// and every failure names the resource.
 func AdministrationStoreTable(resource string, conflict, invalid Code, constraints map[string]Code) StoreTable {
 	return StoreTable{
 		Constraints: constraints,

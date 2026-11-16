@@ -8,34 +8,14 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 	"sort"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-// AccessPolicyApplication is the application port its handlers call; it reads,
-// preflights and replaces the Access Policy and answers public access
-// discovery.
-type AccessPolicyApplication interface {
-	GetAccessPolicy(context.Context, invocation.Invocation) (administration.AccessPolicyView, error)
-	PreflightAccessPolicy(
-		context.Context,
-		invocation.Invocation,
-		administration.PreflightAccessPolicyCommand,
-	) (administration.AccessPolicyPreflightResult, error)
-	ReplaceAccessPolicy(
-		context.Context,
-		invocation.Invocation,
-		administration.ReplaceAccessPolicyCommand,
-	) (administration.AccessPolicyView, error)
-	DiscoverAccess(context.Context, invocation.Invocation) (administration.PublicAccessDiscovery, error)
-}
 
 type accessPolicySettingsRequest struct {
 	ExpectedRevision                 int64                                                  `json:"expected_revision"`
@@ -112,6 +92,11 @@ type desktopAuthorizationCompatibilityResponse struct {
 	MinimumVersion int    `json:"minimum_version"`
 	MaximumVersion int    `json:"maximum_version"`
 }
+
+// publicAccessDiscoveryResponse is served to anyone, so it must never grow
+// provider admission rules, invitation credential policy, mail capability,
+// secrets, redirect URIs or recipient data. The support address is an
+// operator contact, not a signal that mail works.
 type publicAccessDiscoveryResponse struct {
 	DiscoveryVersion     int                                       `json:"discovery_version"`
 	CanonicalOrigin      string                                    `json:"canonical_origin"`
@@ -123,14 +108,14 @@ type publicAccessDiscoveryResponse struct {
 	Providers            []externalAuthenticationProviderResponse  `json:"providers"`
 	DesktopAuthorization desktopAuthorizationCompatibilityResponse `json:"desktop_authorization"`
 	// SupportAddress and PasswordMinimumLength are operator-configured
-	// presentation facts for hosted pages.
+	// presentation facts for hosted pages, present even before bootstrap.
 	SupportAddress        string `json:"support_address,omitempty"`
 	PasswordMinimumLength int    `json:"password_minimum_length"`
 }
 
-type accessPolicyHandlers struct{ app AccessPolicyApplication }
+type accessPolicyHandlers struct{ app *administration.Service }
 
-func accessPolicyResource(app AccessPolicyApplication) route.Resource {
+func accessPolicyResource(app *administration.Service) route.Resource {
 	h := accessPolicyHandlers{app: app}
 	replace := route.Endpoint{
 		Method:      http.MethodPut,
@@ -312,7 +297,7 @@ func requiredAccessPolicySettings(body accessPolicySettingsRequest) (model.Acces
 		return model.AccessPolicySettings{}, false, err
 	}
 
-	// A Session length is required but may be null, which keeps the
+	// A session length is required but may be null, which keeps the
 	// deployment default; a length below one minute is malformed.
 	requiredMinutes := func(field string, value route.Optional[int]) (int, error) {
 		if !value.IsSet() {
@@ -415,7 +400,7 @@ func accessPolicyResponseFromView(view administration.AccessPolicyView) accessPo
 	return response
 }
 
-// optionalMinutes presents an unset Session length as null.
+// optionalMinutes presents an unset session length as null.
 func optionalMinutes(minutes int) *int {
 	if minutes <= 0 {
 		return nil

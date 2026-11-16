@@ -8,30 +8,23 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app/exam"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ExamRevisionApplication is the application port its handlers call; it
-// publishes Exam Revisions and reads their summaries, never authored content.
-type ExamRevisionApplication interface {
-	PublishExamRevision(context.Context, invocation.Invocation, exam.PublishRevisionCommand) (store.ExamRevisionSummary, error)
-	GetExamRevision(context.Context, invocation.Invocation, model.ExamID, model.ExamRevisionID) (store.ExamRevisionSummary, error)
-	ListExamRevisions(context.Context, invocation.Invocation, exam.ListRevisionsQuery) (exam.RevisionPage, error)
-}
-
 type publishExamRevisionRequest struct {
 	ExpectedDraftRevision int64 `json:"expected_revision"`
 }
 
+// examRevisionResponse carries publication metadata only. Instructions,
+// canonical policy bytes, resource metadata, starter workspace paths and
+// content or object identities must never be added here.
 type examRevisionResponse struct {
 	ID                         string                     `json:"id"`
 	ExamID                     string                     `json:"exam_id"`
@@ -62,9 +55,9 @@ type examRevisionCursor struct {
 	RevisionID string `json:"revision_id"`
 }
 
-type examRevisionHandlers struct{ app ExamRevisionApplication }
+type examRevisionHandlers struct{ app *exam.Publication }
 
-func examRevisionResource(app ExamRevisionApplication) route.Resource {
+func examRevisionResource(app *exam.Publication) route.Resource {
 	h := examRevisionHandlers{app: app}
 	collection := "/exams/{exam_id}/revisions"
 	member := "/exams/{exam_id}/revisions/{exam_revision_id}"

@@ -74,7 +74,7 @@ func (h sittingMailExpansionHandler) Run(ctx context.Context, execution job.Exec
 				commit.Delivery, commit.DeliveryJob, err = h.mail.PrepareRecipient(fanout, recipient.User, recipient.TemplateKey, bundle)
 				if errors.Is(err, mail.ErrSittingMailRecipientInvalid) {
 					// One unaddressable account must not stop mail to every
-					// later recipient; it is counted in the Job result.
+					// later recipient; it is counted in the job result.
 					checkpoint.Undeliverable++
 					continue
 				}
@@ -167,8 +167,8 @@ func sittingMailExpansionDescriptor(handler sittingMailExpansionHandler) job.Des
 	return descriptor
 }
 
-// NewSittingMailExpansion registers the expansion of a Sitting's
-// mail fan-out into individual deliveries.
+// NewSittingMailExpansion registers the expansion of a sitting's mail
+// fan-out into individual deliveries.
 func NewSittingMailExpansion(sittings store.ExamSittingStore, composer *mail.SittingComposer) job.Registration {
 	return job.Registration{Descriptor: sittingMailExpansionDescriptor(sittingMailExpansionHandler{sittings: sittings, mail: composer})}
 }

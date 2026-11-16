@@ -23,7 +23,7 @@ import (
 )
 
 // SQLDesktopRegistrationStore implements store.DesktopRegistrationStore.
-// Revoking a registration also revokes its Sessions and their credentials in
+// Revoking a registration also revokes its sessions and their credentials in
 // the same transaction.
 type SQLDesktopRegistrationStore struct {
 	*SQLStore
@@ -76,7 +76,7 @@ func newSQLDesktopRegistrationStore(sqlStore *SQLStore) store.DesktopRegistratio
 	return value
 }
 
-// Get returns the Desktop Registration with id, revoked or not, or a not-found
+// Get returns the desktop registration with id, revoked or not, or a not-found
 // error.
 func (s SQLDesktopRegistrationStore) Get(ctx context.Context, id model.DesktopRegistrationID) (*model.DesktopRegistration, error) {
 	var row desktopRegistrationRow
@@ -86,7 +86,7 @@ func (s SQLDesktopRegistrationStore) Get(ctx context.Context, id model.DesktopRe
 	return row.model()
 }
 
-// ListByUser returns every Desktop Registration of userID, revoked or not, most
+// ListByUser returns every desktop registration of userID, revoked or not, most
 // recently used first.
 func (s SQLDesktopRegistrationStore) ListByUser(ctx context.Context, userID model.UserID) ([]*model.DesktopRegistration, error) {
 	if !userID.IsValid() {
@@ -129,7 +129,7 @@ func getOrCreateDesktopRegistration(
 			return nil, store.NewErrConflict("desktop_registration", "desktop_registration_revoked", nil)
 		}
 
-		// A name the User chose outlives the device name the Desktop reports.
+		// A name the user chose outlives the device name the Desktop reports.
 		if !registration.RenamedAt.Valid {
 			registration.DisplayName = transaction.DeviceName
 		}
@@ -220,8 +220,8 @@ func getOrCreateDesktopRegistration(
 	return candidate, nil
 }
 
-// Rename sets the display name of the User's active Desktop Registration,
-// records when the User chose it, and completes the audit event.
+// Rename sets the display name of the user's active desktop registration,
+// records when the user chose it, and completes the audit event.
 func (s SQLDesktopRegistrationStore) Rename(
 	ctx context.Context,
 	input *store.DesktopRegistrationRename,
@@ -293,7 +293,7 @@ func (s SQLDesktopRegistrationStore) Rename(
 	})
 }
 
-// Revoke revokes the User's Desktop Registration together with its Sessions and
+// Revoke revokes the user's desktop registration together with its sessions and
 // their credentials, and completes the audit event. Revoking an already-revoked
 // registration changes nothing and sets AlreadyRevoked.
 func (s SQLDesktopRegistrationStore) Revoke(

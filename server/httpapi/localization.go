@@ -27,9 +27,9 @@ func LocalizationDefinitions() []localization.Definition {
 	return append(route.LocalizationDefinitions(), resourceLocalizationDefinitions()...)
 }
 
-// resourceLocalizationDefinitions are the messages resources present: Session
-// revocation reasons, Personal Access Token scope titles and descriptions, the
-// System Administrator Role, and audit summaries.
+// resourceLocalizationDefinitions are the messages resources present: session
+// revocation reasons, personal access token scope titles and descriptions, the
+// system administrator role, and audit summaries.
 func resourceLocalizationDefinitions() []localization.Definition {
 	definitions := make([]localization.Definition, 0, len(model.AllSessionRevocationReasons())+
 		len(model.PersonalAccessTokenActions())*2+2)
@@ -56,14 +56,14 @@ func sessionRevocationLocalizationID(reason model.SessionRevocationReason) strin
 	return "session.revocation." + string(reason)
 }
 
-// accessActionTitleLocalizationID names the short human title of an Action
-// offered as a Personal Access Token scope.
+// accessActionTitleLocalizationID names the short title of an action offered
+// as a personal access token scope.
 func accessActionTitleLocalizationID(action model.Action) string {
 	return "access.action." + string(action) + ".title"
 }
 
 // accessActionDescriptionLocalizationID names the one-sentence explanation of
-// an Action offered as a Personal Access Token scope.
+// an action offered as a personal access token scope.
 func accessActionDescriptionLocalizationID(action model.Action) string {
 	return "access.action." + string(action) + ".description"
 }

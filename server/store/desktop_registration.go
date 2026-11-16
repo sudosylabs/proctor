@@ -29,10 +29,9 @@ type DesktopRegistrationRevocationResult struct {
 	AlreadyRevoked bool
 }
 
-// DesktopRegistrationRename is the complete durable input for renaming one of
-// a User's Desktop Registrations under an already-persisted audit attempt.
-// DisplayName is the normalized name the User chose
-// (model.NormalizeDesktopRegistrationDisplayName).
+// DesktopRegistrationRename renames one of the user's registrations.
+// DisplayName must already be normalized with
+// model.NormalizeDesktopRegistrationDisplayName.
 type DesktopRegistrationRename struct {
 	RegistrationID model.DesktopRegistrationID
 	UserID         model.UserID
@@ -41,18 +40,16 @@ type DesktopRegistrationRename struct {
 	AuditAt        time.Time
 }
 
-// DesktopRegistrationStore owns safe self-listing, the User's rename, and the
-// atomic irreversible key, Session, and token-family revocation transition.
+// DesktopRegistrationStore lists and renames a user's registrations. Revoke is
+// irreversible and revokes the key, its sessions and token families atomically.
 type DesktopRegistrationStore interface {
 	Get(context.Context, model.DesktopRegistrationID) (*model.DesktopRegistration, error)
 	ListByUser(context.Context, model.UserID) ([]*model.DesktopRegistration, error)
-	// Rename sets the display name of the User's active Desktop Registration,
-	// marks it as chosen by the User so a later Desktop sign-in with the same
-	// key keeps it, and completes the audit attempt as success in the same
-	// transaction. A registration that is missing or belongs to another User
-	// is ErrNotFound; a revoked one is ErrConflict and stays unchanged. The
-	// registration row lock serializes a rename with revocation and with a
-	// concurrent Desktop sign-in refreshing the same registration.
+	// Rename marks the name as user-chosen, so a later sign-in with the same
+	// key keeps it, and completes the audit in the same transaction. A missing
+	// or another user's registration is ErrNotFound; a revoked one is
+	// ErrConflict. The row lock serializes a rename with revocation and with a
+	// concurrent sign-in refreshing the registration.
 	Rename(context.Context, *DesktopRegistrationRename) (*model.DesktopRegistration, error)
 	Revoke(context.Context, *DesktopRegistrationRevocation) (*DesktopRegistrationRevocationResult, error)
 }

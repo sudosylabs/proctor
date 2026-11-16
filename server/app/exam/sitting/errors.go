@@ -12,11 +12,12 @@ import (
 	"errors"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// publicFailures presents every Sitting use-case failure: unexpected errors
-// become exam.sitting.unavailable, and protected targets conceal denial and absence.
+// publicFailures turns unexpected errors into exam.sitting.unavailable, and
+// reports denial as not_found so callers can't probe for sittings.
 var publicFailures = apperror.Concealment{
 	Unavailable: "exam.sitting.unavailable",
 	Concealed:   []apperror.Code{"exam.sitting.not_found"},
@@ -63,6 +64,6 @@ func jobFactoryUnavailable(message string, cause error) error {
 
 func (s *Service) recordOperational(event string, err error) {
 	if s.operational != nil {
-		s.operational.RecordOperational("exam_sitting", event, err)
+		operational.Record(s.operational, "exam_sitting", event, err)
 	}
 }

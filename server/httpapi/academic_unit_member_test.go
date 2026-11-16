@@ -8,31 +8,19 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-type academicUnitMemberHTTPApplication struct {
-	pageQuery     academic.ListAcademicUnitMembersPageQuery
-	pageResult    *academic.AcademicUnitMemberPage
-	result        *model.AcademicUnitMember
-	createCommand academic.CreateAcademicUnitMemberCommand
-	endCommand    academic.EndAcademicUnitMemberCommand
-}
 
 func TestAcademicUnitMemberHistoryQueryIncludesEndedMemberships(t *testing.T) {
 	t.Parallel()
@@ -62,59 +50,72 @@ func TestAcademicUnitMemberFalseHistoryQueryUsesActiveAt(t *testing.T) {
 	require.Equal(t, int64(123), *query.ActiveAt, "active at")
 }
 
-func (a *academicUnitMemberHTTPApplication) CreateAcademicUnitMember(_ context.Context, _ invocation.Invocation, command academic.CreateAcademicUnitMemberCommand) (*model.AcademicUnitMember, error) {
-	a.createCommand = command
-	return a.result, nil
-}
-func (a *academicUnitMemberHTTPApplication) EndAcademicUnitMember(_ context.Context, _ invocation.Invocation, command academic.EndAcademicUnitMemberCommand) (*model.AcademicUnitMember, error) {
-	a.endCommand = command
-	return a.result, nil
-}
-
 func TestAcademicUnitMemberResourceRunsThroughRoutingKernel(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	unitID, userID := model.NewID(), model.NewID()
-	member := &model.AcademicUnitMember{ID: model.NewAcademicUnitMemberID(), AcademicUnitID: model.AcademicUnitID(unitID), UserID: model.UserID(userID), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), StartsAt: model.TimeFromMillis(100)}
-	members := &academicUnitMemberHTTPApplication{result: member}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(members))
+	principal := academicCaller()
+	unitID := model.NewAcademicUnitID()
+	member := academicUser("amina", "Amina Diallo", "amina@example.edu")
+	fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{
+		inAcademicUnit(principal.UserID, unitID, model.ActionAcademicUnitMembersManage, model.ActionAcademicUnitMembersView),
+	}})
+	fixture.users.add(member)
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(fixture.service))
 
-	create := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/academic-units/"+unitID+"/members", strings.NewReader(`{"user_id":"`+userID+`","start_at":"1970-01-01T00:00:00.1Z"}`))
+	create := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/academic-units/"+unitID.String()+"/members", strings.NewReader(`{"user_id":"`+member.ID.String()+`","start_at":"1970-01-01T00:00:00.1Z"}`))
 	create.Header.Set("Authorization", "Bearer credential")
 	create.Header.Set("Content-Type", "application/json")
 	created := httptest.NewRecorder()
 	httpAPI.ServeHTTP(created, create)
 	require.Equal(t, http.StatusCreated, created.Code, "create status = %d: %s", created.Code, created.Body.String())
-	require.Equal(t, model.AcademicUnitID(unitID), members.createCommand.AcademicUnitID)
-	require.Equal(t, model.UserID(userID), members.createCommand.UserID)
+	require.Len(t, fixture.unitMembers.created, 1, "the create reached the membership Store")
+	stored := fixture.unitMembers.created[0]
+	require.Equal(t, unitID, stored.Member.AcademicUnitID)
+	require.Equal(t, member.ID, stored.Member.UserID)
+	require.Equal(t, model.TimeFromMillis(100), stored.Member.StartsAt)
+	require.NotNil(t, stored.Notice, "the assignment notice is stored with the membership")
+	require.Equal(t, 1, fixture.renders.Count(), "one notice was rendered")
+	require.Equal(t, model.MailTemplateAcademicUnitAssigned, stored.Notice.Delivery.TemplateKey)
 	var body map[string]any
 	require.NoError(t, json.Unmarshal(created.Body.Bytes(), &body))
 	_, exposed := body["revision"]
 	require.False(t, exposed, "persistence revision leaked into DTO: %#v", body)
 
-	list := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+unitID+"/members?history=true", nil)
+	list := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+unitID.String()+"/members?history=true", nil)
 	list.Header.Set("Authorization", "Bearer credential")
 	listed := httptest.NewRecorder()
 	httpAPI.ServeHTTP(listed, list)
-	require.Equal(t, http.StatusOK, listed.Code, "list status/query = %d/%#v: %s", listed.Code, members.pageQuery, listed.Body.String())
-	require.Equal(t, model.AcademicUnitID(unitID), members.pageQuery.AcademicUnitID)
-	require.NotNil(t, members.pageQuery.History)
-	require.True(t, *members.pageQuery.History, "history listing")
+	require.Equal(t, http.StatusOK, listed.Code, "list status = %d: %s", listed.Code, listed.Body.String())
+	page := fixture.unitMembers.lastPage(t)
+	require.Equal(t, unitID, page.AcademicUnitID)
+	require.True(t, page.ActiveAt.Equal(model.TimeFromMillis(0)), "a history listing reads every retained membership: %#v", page)
 	require.JSONEq(t, `{"items":[],"total":0,"total_is_lower_bound":false}`, listed.Body.String(), "empty first page with its total")
 }
 
 func TestAcademicUnitMemberListNamesMembersAndTheirRolesHere(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	unitID, userID, roleID := model.NewAcademicUnitID(), model.NewUserID(), model.NewRoleID()
-	member := &model.AcademicUnitMember{ID: model.NewAcademicUnitMemberID(), AcademicUnitID: unitID, UserID: userID, CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), StartsAt: model.TimeFromMillis(100)}
-	identity := store.UserIdentity{ID: userID, Username: "amina", DisplayName: "Amina Diallo"}
-	members := &academicUnitMemberHTTPApplication{}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(members))
-	list := func() map[string]json.RawMessage {
+	unitID, roleID := model.NewAcademicUnitID(), model.NewRoleID()
+	user := academicUser("amina", "Amina Diallo", "amina@example.edu")
+	member := &model.AcademicUnitMember{ID: model.NewAcademicUnitMemberID(), AcademicUnitID: unitID, UserID: user.ID, CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), StartsAt: model.TimeFromMillis(100)}
+	// list lists the unit's members as a caller holding academic_unit.members.view
+	// and, when described is set, Institution-wide user.view and
+	// role_binding.view on the unit.
+	list := func(described bool) (map[string]json.RawMessage, *academicFixture) {
 		t.Helper()
+		principal := academicCaller()
+		grants := []accesstest.Grant{inAcademicUnit(principal.UserID, unitID, model.ActionAcademicUnitMembersView)}
+		if described {
+			grants = append(grants, institutionWide(principal.UserID, model.ActionUserView),
+				inAcademicUnit(principal.UserID, unitID, model.ActionRoleBindingView))
+		}
+		fixture := newAcademicFixture(t, academicOptions{Grants: grants})
+		fixture.users.add(user)
+		fixture.unitMembers.page = store.AcademicUnitMemberPage{Members: []*model.AcademicUnitMember{member}}
+		fixture.bindings.summaries = []store.UserRoleBindingSummary{{UserID: user.ID, More: 2, Bindings: []store.RoleBindingSummary{{
+			RoleID: roleID, DisplayName: "Reviewer", ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(),
+		}}}}
+		httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(fixture.service))
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+unitID.String()+"/members", nil)
 		request.Header.Set("Authorization", "Bearer credential")
 		response := httptest.NewRecorder()
@@ -125,63 +126,44 @@ func TestAcademicUnitMemberListNamesMembersAndTheirRolesHere(t *testing.T) {
 		}
 		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 		require.Len(t, body.Items, 1)
-		return body.Items[0]
+		return body.Items[0], fixture
 	}
 
-	members.pageResult = &academic.AcademicUnitMemberPage{Members: []*model.AcademicUnitMember{member}, Users: map[model.UserID]store.UserIdentity{userID: identity}}
-	item := list()
+	item, fixture := list(false)
 	require.JSONEq(t, `{"display_name":"Amina Diallo","username":"amina"}`, string(item["user"]), "no email without Institution-wide user.view")
 	_, rolesShown := item["roles_here"]
 	require.False(t, rolesShown, "no roles_here without role_binding.view on the unit")
 	_, moreShown := item["roles_here_more"]
 	require.False(t, moreShown, "no roles_here_more without role_binding.view on the unit")
+	require.Empty(t, fixture.bindings.options, "the Role Bindings are not read without role_binding.view")
 
-	identity.Email = "amina@example.edu"
-	members.pageResult = &academic.AcademicUnitMemberPage{
-		Members: []*model.AcademicUnitMember{member}, Users: map[model.UserID]store.UserIdentity{userID: identity},
-		RolesHere: map[model.UserID]store.UserRoleBindingSummary{userID: {UserID: userID, More: 2, Bindings: []store.RoleBindingSummary{{
-			RoleID: roleID, DisplayName: "Reviewer", ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(),
-		}}}},
-	}
-	item = list()
+	item, fixture = list(true)
 	require.JSONEq(t, `{"display_name":"Amina Diallo","username":"amina","email":"amina@example.edu"}`, string(item["user"]))
 	require.JSONEq(t, `[{"role_id":"`+roleID.String()+`","display_name":"Reviewer"}]`, string(item["roles_here"]))
 	require.JSONEq(t, `2`, string(item["roles_here_more"]))
+	require.Len(t, fixture.bindings.options, 1)
+	require.Equal(t, unitID.String(), fixture.bindings.options[0].ScopeID, "only bindings scoped to the unit")
 }
 
 func TestAcademicUnitMemberResourceRejectsInvalidQueryAndMissingPrincipal(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(&academicUnitMemberHTTPApplication{}))
+	principal := academicCaller()
+	unitID := model.NewAcademicUnitID()
+	fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, unitID, model.ActionAcademicUnitMembersView)}})
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(fixture.service))
 
-	invalid := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+model.NewID()+"/members?history=invalid", nil)
+	invalid := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+unitID.String()+"/members?history=invalid", nil)
 	invalid.Header.Set("Authorization", "Bearer credential")
 	invalidResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(invalidResponse, invalid)
 	require.Equal(t, http.StatusBadRequest, invalidResponse.Code, "invalid query status = %d: %s", invalidResponse.Code, invalidResponse.Body.String())
 
-	unauthenticated := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+model.NewID()+"/members", nil)
+	unauthenticated := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+unitID.String()+"/members", nil)
 	unauthenticatedResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(unauthenticatedResponse, unauthenticated)
 	require.Equal(t, http.StatusUnauthorized, unauthenticatedResponse.Code, "unauthenticated status = %d: %s", unauthenticatedResponse.Code, unauthenticatedResponse.Body.String())
-}
-
-func (a *academicUnitMemberHTTPApplication) ListAcademicUnitMembersPage(_ context.Context, _ invocation.Invocation, query academic.ListAcademicUnitMembersPageQuery) (*academic.AcademicUnitMemberPage, error) {
-	a.pageQuery = query
-	if a.pageResult != nil {
-		if query.AfterID.IsZero() && !a.pageResult.Counted {
-			counted := *a.pageResult
-			counted.Total = paging.CountWhole(len(counted.Members))
-			return &counted, nil
-		}
-		return a.pageResult, nil
-	}
-	page := &academic.AcademicUnitMemberPage{}
-	if query.AfterID.IsZero() {
-		page.Total = paging.CountWhole(0)
-	}
-	return page, nil
+	require.Empty(t, fixture.unitMembers.pageOptions, "a rejected request reached the membership Store")
 }
 
 func TestAcademicUnitMemberOpenAPIDocument(t *testing.T) {

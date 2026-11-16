@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/operational"
 )
 
 func TestPublicFailuresConcealDenialAndAbsence(t *testing.T) {
@@ -36,13 +37,10 @@ func TestPublicFailuresConcealDenialAndAbsence(t *testing.T) {
 	require.ErrorIs(t, err, dependency, "Conceal(dependency) = %v, want wrapped %s", err, want.Unavailable)
 }
 
-type operationalRecorderFake struct {
-	subsystem, event string
-	err              error
-}
+type operationalRecorderFake struct{ events []operational.Event }
 
-func (f *operationalRecorderFake) RecordOperational(subsystem, event string, err error) {
-	f.subsystem, f.event, f.err = subsystem, event, err
+func (f *operationalRecorderFake) RecordOperationalEvent(event operational.Event) {
+	f.events = append(f.events, event)
 }
 
 func TestObservedUseCaseRecordsItsConcealedOutcome(t *testing.T) {
@@ -50,13 +48,14 @@ func TestObservedUseCaseRecordsItsConcealedOutcome(t *testing.T) {
 	f := newFixture(t)
 	recorder := &operationalRecorderFake{}
 	f.service.operational = recorder
-	f.authorizer.err = apperror.New("authorization.denied")
-	_, err := f.service.PauseExamSitting(t.Context(), f.inv, ManagerTransitionCommand{
+	_, err := f.service.PauseExamSitting(t.Context(), f.stranger, ManagerTransitionCommand{
 		ExamID: f.examID, SittingID: f.sittingID, ExpectedRevision: 1,
 		PrivateReason: "Candidate requested clarification", IdempotencyKey: "test-key",
 	})
 	require.True(t, apperror.Is(err, "resource.not_found"), "PauseExamSitting error = %v, want concealed resource.not_found", err)
-	require.Equal(t, "exam_sitting", recorder.subsystem, "recorded %s/%s %v, want exam_sitting/pause with the concealed failure", recorder.subsystem, recorder.event, recorder.err)
-	require.Equal(t, "pause", recorder.event, "recorded %s/%s %v, want exam_sitting/pause with the concealed failure", recorder.subsystem, recorder.event, recorder.err)
-	require.True(t, apperror.Is(recorder.err, "resource.not_found"), "recorded %s/%s %v, want exam_sitting/pause with the concealed failure", recorder.subsystem, recorder.event, recorder.err)
+	require.Len(t, recorder.events, 1, "recorded events")
+	recorded := recorder.events[0]
+	require.Equal(t, "exam_sitting", recorded.Subsystem(), "recorded subsystem")
+	require.Equal(t, "pause", recorded.Event(), "recorded event")
+	require.Equal(t, "not_found", recorded.Outcome(), "recorded outcome, want the concealed resource.not_found")
 }

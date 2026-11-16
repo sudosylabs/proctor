@@ -23,14 +23,14 @@ const (
 	JobListDefaultLimit = 50
 	// JobListMaximumLimit bounds one ListJobs page.
 	JobListMaximumLimit = 200
-	// JobAttemptDisplayLimit bounds the most recent Attempts ShowJob returns.
+	// JobAttemptDisplayLimit bounds the most recent attempts ShowJob returns.
 	JobAttemptDisplayLimit = 20
 )
 
-// ErrJobNotFound reports that no Job has the requested ID.
+// ErrJobNotFound reports that no job has the requested ID.
 var ErrJobNotFound = errors.New("job not found")
 
-// JobQuery filters a host Job listing. Empty Types or States match every
+// JobQuery filters a host job listing. Empty Types or States match every
 // value; Limit zero means JobListDefaultLimit.
 type JobQuery struct {
 	Types  []string
@@ -38,14 +38,14 @@ type JobQuery struct {
 	Limit  int
 }
 
-// JobList is one bounded page of Jobs, newest first. Its JSON field names are
+// JobList is one bounded page of jobs, newest first. Its JSON field names are
 // part of the public CLI contract.
 type JobList struct {
 	Jobs    []JobSummary `json:"jobs"`
 	HasMore bool         `json:"has_more"`
 }
 
-// JobSummary is the safe host projection of a Job. It deliberately omits the
+// JobSummary is the safe host projection of a job. It deliberately omits the
 // command, checkpoint, result, and deduplication key, which can carry user
 // identifiers or content.
 type JobSummary struct {
@@ -63,21 +63,21 @@ type JobSummary struct {
 	Progress        *JobProgress `json:"progress,omitempty"`
 }
 
-// JobProgress is a Job's bounded progress report.
+// JobProgress is a job's bounded progress report.
 type JobProgress struct {
 	Current int64  `json:"current"`
 	Total   int64  `json:"total"`
 	Stage   string `json:"stage"`
 }
 
-// JobDetail is one Job with its most recent Attempts, newest first.
+// JobDetail is one job with its most recent attempts, newest first.
 type JobDetail struct {
 	JobSummary
 	Attempts     []JobAttemptSummary `json:"attempts"`
 	MoreAttempts bool                `json:"more_attempts"`
 }
 
-// JobAttemptSummary is the safe host projection of a Job Attempt. It omits
+// JobAttemptSummary is the safe host projection of a job attempt. It omits
 // the claim token.
 type JobAttemptSummary struct {
 	Number         int        `json:"number"`
@@ -90,7 +90,7 @@ type JobAttemptSummary struct {
 	ErrorCode      string     `json:"error_code,omitempty"`
 }
 
-// JobTypes returns every Job type a JobQuery accepts.
+// JobTypes returns every job type a JobQuery accepts.
 func JobTypes() []string {
 	types := model.JobTypes()
 	result := make([]string, 0, len(types))
@@ -100,7 +100,7 @@ func JobTypes() []string {
 	return result
 }
 
-// JobStates returns every Job state a JobQuery accepts, in lifecycle order.
+// JobStates returns every job state a JobQuery accepts, in lifecycle order.
 func JobStates() []string {
 	statuses := model.JobStatuses()
 	result := make([]string, 0, len(statuses))
@@ -110,7 +110,7 @@ func JobStates() []string {
 	return result
 }
 
-// ListJobs lists Jobs of every type, operator-visible or internal, newest
+// ListJobs lists jobs of every type, operator-visible or internal, newest
 // first, through a read-only database session. It never migrates, takes a
 // lock, or writes.
 func ListJobs(ctx context.Context, configPath string, query JobQuery) (_ JobList, resultErr error) {
@@ -137,7 +137,7 @@ func ListJobs(ctx context.Context, configPath string, query JobQuery) (_ JobList
 	return list, nil
 }
 
-// ShowJob returns one Job and its most recent Attempts through a read-only
+// ShowJob returns one job and its most recent attempts through a read-only
 // database session. It returns ErrJobNotFound for an unknown ID.
 func ShowJob(ctx context.Context, configPath, id string) (_ JobDetail, resultErr error) {
 	jobID := model.JobID(id)
@@ -216,7 +216,7 @@ func jobListOptions(query JobQuery) (store.JobListOptions, error) {
 }
 
 // openJobDatabase opens a read-only store and refuses a database that has no
-// schema yet, which has no Jobs table to read.
+// schema yet, which has no jobs table to read.
 func openJobDatabase(ctx context.Context, configPath string) (*sqlstore.SQLStore, func() error, error) {
 	database, closeDatabase, err := openReadOnlyDatabase(ctx, configPath)
 	if err != nil {

@@ -12,33 +12,46 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/exam"
+	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// RealtimeAdmission admits long-lived WebSocket clients. It
-// revalidates a Session principal before the transport keeps trusting it and
-// authorizes each subscription against current resource state, concealing
-// Exams and Sittings the caller may not see.
+// RealtimeAdmission admits long-lived WebSocket clients. It lives in app
+// rather than app/realtime because it needs identity and exam services that
+// realtime cannot import without a cycle. Subscriptions are authorized
+// against current state, concealing exams and sittings the caller may not
+// see.
 type RealtimeAdmission struct {
 	principals    *identity.Service
-	exams         realtimeExamViewAuthorizer
-	sittings      realtimeSittingViewAuthorizer
+	exams         *exam.Authoring
+	sittings      *sitting.Service
 	authorization *access.Authorizer
-	operational   OperationalRecorder
+	operational   operational.Recorder
 }
 
-// realtimeExamViewAuthorizer is the Exam relationship gate a subscription
-// uses; its tests substitute a fake.
-type realtimeExamViewAuthorizer interface {
-	AuthorizeExamView(context.Context, invocation.Invocation, model.ExamID) error
+// RealtimeAdmissionDependencies may leave Exams and Sittings nil when the
+// caller never subscribes to those resources.
+type RealtimeAdmissionDependencies struct {
+	Principals  *identity.Service
+	Exams       *exam.Authoring
+	Sittings    *sitting.Service
+	Authorizer  *access.Authorizer
+	Operational operational.Recorder
 }
 
-// realtimeSittingViewAuthorizer is the Sitting relationship gate a
-// subscription uses; its tests substitute a fake.
-type realtimeSittingViewAuthorizer interface {
-	AuthorizeSittingView(context.Context, invocation.Invocation, model.ExamSittingID) error
+// NewRealtimeAdmission returns the admission over deps.
+func NewRealtimeAdmission(deps RealtimeAdmissionDependencies) *RealtimeAdmission {
+	return &RealtimeAdmission{
+		principals:    deps.Principals,
+		exams:         deps.Exams,
+		sittings:      deps.Sittings,
+		authorization: deps.Authorizer,
+		operational:   deps.Operational,
+	}
 }
 
 var (
@@ -52,16 +65,15 @@ var (
 	}
 )
 
-// AuthorizeWebSocketSubscription authorizes one subscription Action on its
-// Resource. Exams and Sittings use their relationship gates; every other
-// Resource takes the audited Access Control decision.
+// AuthorizeWebSocketSubscription uses the relationship gates for exams and
+// sittings and the audited access decision for every other resource.
 func (s *RealtimeAdmission) AuthorizeWebSocketSubscription(
 	ctx context.Context,
 	inv invocation.Invocation,
 	action model.Action,
 	resource model.Resource,
 ) (resultErr error) {
-	defer func() { recordOperational(s.operational, "realtime", "subscription_authorize", resultErr) }()
+	defer func() { operational.Record(s.operational, "realtime", "subscription_authorize", resultErr) }()
 	definition, ok := model.DefinitionForAction(action)
 	if !ok || resource.Validate() != nil || !definition.AcceptsResource(resource.Type) {
 		return invalidRealtimeRequest("subscription")
@@ -81,15 +93,15 @@ func (s *RealtimeAdmission) AuthorizeWebSocketSubscription(
 		return realtimeSittingFailures.Conceal(s.sittings.AuthorizeSittingView(ctx, inv, sittingID))
 	}
 	err := s.authorization.Authorize(ctx, inv, action, resource)
-	recordOperational(s.operational, "authorization", "decision", err)
+	operational.Record(s.operational, "authorization", "decision", err)
 	return err
 }
 
-// ValidateWebSocketPrincipal revalidates the authoritative Session and User
-// state behind a long-lived connection's principal.
+// ValidateWebSocketPrincipal rechecks the session and user behind a
+// long-lived connection's principal.
 func (s *RealtimeAdmission) ValidateWebSocketPrincipal(ctx context.Context, principal model.Principal) error {
 	err := s.principals.ValidatePrincipal(ctx, principal)
-	recordOperational(s.operational, "realtime", "principal_validate", err)
+	operational.Record(s.operational, "realtime", "principal_validate", err)
 	return err
 }
 

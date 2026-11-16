@@ -27,8 +27,8 @@ type MailSMTP struct {
 	MaxRecipients   int      `json:"MaxRecipients"`
 }
 
-// SecretSealing configures a primary AES-256 encryption key and the bounded
-// fallback ring used to read values written before rotation.
+// SecretSealing holds the AES-256 key that seals new values and the bounded
+// ring of older keys that still read values sealed before rotation.
 type SecretSealing struct {
 	EncryptionKey  string   `json:"EncryptionKey"`
 	DecryptionKeys []string `json:"DecryptionKeys"`
@@ -41,8 +41,8 @@ type Mail struct {
 	FromName    string `json:"FromName"`
 	// SupportAddress is shown in every message footer when set.
 	SupportAddress string `json:"SupportAddress"`
-	// DisplayTimezone is the IANA zone used for message times when a
-	// recipient has not chosen their own time zone.
+	// DisplayTimezone is the IANA zone for message times when the recipient
+	// has not chosen one.
 	DisplayTimezone string        `json:"DisplayTimezone"`
 	SMTP            MailSMTP      `json:"SMTP"`
 	SecretSealing   SecretSealing `json:"SecretSealing"`

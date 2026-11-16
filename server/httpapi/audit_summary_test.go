@@ -286,18 +286,17 @@ func TestAuditResourceWritesSummariesFromThePageNames(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
 	principal := operatorTestPrincipal()
 	actor, subject, classID := model.NewUserID(), model.NewUserID(), model.NewClassID()
-	audits := &focusedAuditApplication{
-		events: []*model.AuditEvent{{
-			ID: model.NewAuditEventID(), CreatedAt: model.TimeFromMillis(100), ActorID: actor, SubjectUserID: subject,
-			Action: string(model.ActionClassMembersManage), Resource: model.Resource{Type: model.ResourceClass, ID: classID.String()},
-			Status: model.AuditStatusSuccess, Parameters: []byte(`{"operation":"enroll","value":{}}`),
-		}},
-		names: store.AuditNames{
-			Users:   map[model.UserID]string{actor: "Ada Admin"},
-			Classes: map[model.ClassID]string{classID: "Year 1 Mathematics A"},
-		},
+	fixture := newAdministrationFixture(t, institutionWide(principal.UserID, model.ActionAuditView))
+	fixture.audits.events = []*model.AuditEvent{{
+		ID: model.NewAuditEventID(), CreatedAt: model.TimeFromMillis(100), ActorID: actor, SubjectUserID: subject,
+		Action: string(model.ActionClassMembersManage), Resource: model.Resource{Type: model.ResourceClass, ID: classID.String()},
+		Status: model.AuditStatusSuccess, Parameters: []byte(`{"operation":"enroll","value":{}}`),
+	}}
+	fixture.audits.names = store.AuditNames{
+		Users:   map[model.UserID]string{actor: "Ada Admin"},
+		Classes: map[model.ClassID]string{classID: "Year 1 Mathematics A"},
 	}
-	httpAPI := newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: principal}, auditResource(audits))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, auditResource(fixture.service))
 
 	response := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/audits", "", true)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
@@ -307,4 +306,7 @@ func TestAuditResourceWritesSummariesFromThePageNames(t *testing.T) {
 	require.Equal(t, "Ada Admin enrolled a user in Year 1 Mathematics A", page.Items[0].Summary,
 		"a subject the caller cannot see stays generic")
 	require.Equal(t, string(model.ActionClassMembersManage), page.Items[0].Action, "the codes stay beside the summary")
+	require.Len(t, fixture.audits.nameReads, 1, "the page's names were read once")
+	require.ElementsMatch(t, []model.UserID{actor, subject}, fixture.audits.nameReads[0].UserIDs)
+	require.Equal(t, []model.ClassID{classID}, fixture.audits.nameReads[0].ClassIDs)
 }

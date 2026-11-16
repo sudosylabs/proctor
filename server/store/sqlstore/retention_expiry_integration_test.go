@@ -148,10 +148,10 @@ func TestRetentionExpiryCompletedHistoryDoesNotPinAuditForever(t *testing.T) {
 	_, err = s.GetMaster().Exec(ctx, `UPDATE retention_holds SET created_at=clock_timestamp()-interval '100 days',released_at=clock_timestamp()-interval '99 days' WHERE id=?`, hold.ID)
 	require.NoError(t, err)
 	reconcile := func(id string, expected store.RetentionExpiryResult) {
-		a, err := s.Audit().Save(ctx, &model.AuditEvent{Action: string(model.ActionRetentionCleanupManage), Resource: model.Resource{Type: model.ResourceInstitution, ID: policy.InstitutionID.String()}, ScopeType: model.RoleScopeInstitution, ScopeID: policy.InstitutionID.String(), Status: model.AuditStatusAttempt, NodeID: "expiry-history-test"})
-		require.NoError(t, err)
-		r, err := s.Retention().ReconcileExpiry(ctx, &store.RetentionExpiryReconciliation{Kind: model.RetentionExpiryAudit, RecordID: id, AuditEventID: a.ID, AuditAt: model.NowUTC()})
-		require.NoError(t, err, "history expiry")
+		a, auditErr := s.Audit().Save(ctx, &model.AuditEvent{Action: string(model.ActionRetentionCleanupManage), Resource: model.Resource{Type: model.ResourceInstitution, ID: policy.InstitutionID.String()}, ScopeType: model.RoleScopeInstitution, ScopeID: policy.InstitutionID.String(), Status: model.AuditStatusAttempt, NodeID: "expiry-history-test"})
+		require.NoError(t, auditErr)
+		r, reconcileErr := s.Retention().ReconcileExpiry(ctx, &store.RetentionExpiryReconciliation{Kind: model.RetentionExpiryAudit, RecordID: id, AuditEventID: a.ID, AuditAt: model.NowUTC()})
+		require.NoError(t, reconcileErr, "history expiry")
 		require.NotNil(t, r, "history expiry")
 		require.Equal(t, expected, *r, "history expiry")
 	}

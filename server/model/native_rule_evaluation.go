@@ -11,7 +11,7 @@ import (
 	"slices"
 )
 
-// NativeRuleStatus is a rule's three-valued result.
+// NativeRuleStatus is a rule's three-valued result: met, not met or unknown.
 type NativeRuleStatus string
 
 const (
@@ -77,9 +77,9 @@ func (h NativeFactHealth) IsValid() bool {
 		NativeHealthFailed, NativeHealthStopped}, h)
 }
 
-// NativeFactCertainty is how sure a capability's state is, covering its
-// coverage too. Only a complete state can meet or fail a rule; anything less
-// is unknown.
+// NativeFactCertainty is how sure a capability's state is, coverage
+// included. Only a complete state can meet or fail a rule; anything less is
+// unknown.
 type NativeFactCertainty string
 
 const (
@@ -94,10 +94,9 @@ func (c NativeFactCertainty) IsValid() bool {
 }
 
 // NativeRuleMatch is what Desktop's on-device application matching found for
-// one rule. Matched means the rule's application condition is violated: a
-// blocked application is running, or an application outside the allowed
-// list is. CatalogAppIDs names the blocked catalog applications present; it
-// is always empty for an allowlist.
+// one rule. Matched means the condition is violated: a blocked application, or
+// one outside the allowed list, is running. CatalogAppIDs names the blocked
+// catalog applications present and is always empty for an allowlist.
 type NativeRuleMatch struct {
 	Matched       bool
 	CatalogAppIDs []string
@@ -110,10 +109,9 @@ type NativeApplicationFacts struct {
 	Matches  map[string]NativeRuleMatch
 }
 
-// NativeCapabilityFacts is what the evaluator knows about one capability:
-// its latest state and the envelope around it. The envelope (health,
-// permission, certainty, gaps) decides whether a rule can be known; rules
-// never compare it.
+// NativeCapabilityFacts is what the evaluator knows about one capability: its
+// latest state and envelope. The envelope (health, permission, certainty,
+// gaps) decides whether a rule can be known; rules never compare it.
 type NativeCapabilityFacts struct {
 	Permission NativeFactPermission
 	Health     NativeFactHealth
@@ -138,10 +136,9 @@ func nativeUnknown(cause NativeUnknownCause) NativeRuleResult {
 	return NativeRuleResult{Status: NativeRuleUnknown, Cause: cause}
 }
 
-// EvaluateNativeRule evaluates a rule against the latest facts of its
-// capability, with Kleene three-valued logic. It is the server's half of the
-// rule semantics Desktop publishes with its conformance vectors, and must
-// reach the same result on every conformance vector.
+// EvaluateNativeRule evaluates a rule against its capability's latest facts in
+// Kleene three-valued logic. It is the server's half of the semantics Desktop
+// publishes and must agree with Desktop on every conformance vector.
 func EvaluateNativeRule(rule NativeRule, facts *NativeCapabilityFacts) NativeRuleResult {
 	if facts == nil {
 		return nativeUnknown(NativeUnknownUnavailable)
@@ -149,11 +146,10 @@ func EvaluateNativeRule(rule NativeRule, facts *NativeCapabilityFacts) NativeRul
 	return rule.Requirement.evaluate(rule.RuleID, facts)
 }
 
-// envelopeUnknown is why the capability's envelope keeps any of its facts
-// from being known, checked after the fact itself is found to be present.
-// The order is Desktop's: a gap (events lost or an interruption, with no
-// fresh state since), then unhealthy, then permission, then partial. A
-// degraded capability is running; its certainty decides.
+// envelopeUnknown says why the envelope keeps the facts from being known,
+// checked once the fact itself is present. The order is Desktop's: a gap
+// with no fresh state since, then unhealthy, then permission, then partial.
+// A degraded capability is running, so its certainty decides.
 func (f *NativeCapabilityFacts) envelopeUnknown() (NativeRuleResult, bool) {
 	switch {
 	case f.InGap:

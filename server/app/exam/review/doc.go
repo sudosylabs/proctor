@@ -5,18 +5,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package review holds what happens after a Submission: managers inspect its
-// Integrity flags, evidence and late discrepancies, record decisions and
-// draft remarks, finalize the Review, and release the result to the student.
-// Decisions are fenced by the Review's revision, and a finalized Review does
-// not change. The student sees only the released result.
-//
-// Collecting Integrity evidence and sealing Submissions belong to attempt.
-// The package does not grade, speak HTTP, or run SQL. A committed Review
-// change is announced by the events built in effects.go. It imports only
-// model, store, app/access, app/apperror, app/invocation, app/idempotency,
-// app/realtime, app/mail and app/exam/safemarkdown; it reaches the Sitting
-// area through the SittingAuthorizer port. Start with Service in review.go;
-// manager_authorization.go holds who may view, review and release a
-// Submission, and result_release_mail.go prepares the release notice.
+// Package review holds what happens after a submission is sealed: managers
+// inspect its integrity flags and evidence, record decisions and draft
+// remarks, finalize the review and release the result. Every write is fenced
+// by the review's revision. The candidate who made a submission never reviews
+// it, and sees nothing until the result is released. Collecting evidence and
+// sealing submissions belong to attempt; the package does not grade.
 package review

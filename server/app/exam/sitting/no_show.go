@@ -24,8 +24,7 @@ type NoShowPage struct {
 	HasMore bool
 }
 
-// ListNoShowsQuery pages the enrolled candidates of one Sitting who never
-// started an Attempt.
+// ListNoShowsQuery pages a sitting's no-shows by candidate user ID.
 type ListNoShowsQuery struct {
 	ExamID               model.ExamID
 	SittingID            model.ExamSittingID
@@ -33,9 +32,9 @@ type ListNoShowsQuery struct {
 	Limit                int
 }
 
-// ListExamSittingNoShows returns one page of a Closing or Closed Sitting's
-// enrolled candidates who never started an Attempt, to a caller authorized to
-// view the Sitting.
+// ListExamSittingNoShows returns enrolled candidates who never started an
+// attempt. The sitting must be closing or closed, and the caller allowed to
+// view it.
 func (s *Service) ListExamSittingNoShows(
 	ctx context.Context,
 	inv invocation.Invocation,

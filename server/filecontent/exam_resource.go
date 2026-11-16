@@ -46,10 +46,8 @@ const (
 
 var disablePDFCPUConfigDir sync.Once
 
-// StoreExamResource validates one complete bounded body and writes the exact
-// authored bytes under an opaque immutable rendition identity. The returned
-// metadata is safe to pass to the named SQL finalization operation; the VFS
-// key remains private to File Content.
+// StoreExamResource validates body and stores the authored bytes unchanged
+// under a new rendition ID. The VFS key never leaves this package.
 func (c *Content) StoreExamResource(
 	ctx context.Context,
 	revisionID model.FileRevisionID,
@@ -61,10 +59,9 @@ func (c *Content) StoreExamResource(
 	return c.StoreExamResourceRendition(ctx, revisionID, model.NewFileRenditionID(), mediaType, body, declaredSize, at)
 }
 
-// StoreExamResourceRendition validates and writes exact authored bytes at a
-// caller-preallocated opaque identity. Preallocation lets an idempotent Stage
-// command resume after an unknown VFS or database commit outcome without
-// discovering object keys or allocating a second rendition.
+// StoreExamResourceRendition is StoreExamResource at a rendition ID the caller
+// chose earlier, so a retried stage after an unknown write or commit outcome
+// reuses the same object instead of allocating a second one.
 func (c *Content) StoreExamResourceRendition(
 	ctx context.Context,
 	revisionID model.FileRevisionID,
@@ -95,8 +92,7 @@ func (c *Content) StoreExamResourceRendition(
 		return model.FileRendition{}, err
 	}
 
-	// Validation needs random access, so the body is spooled to an
-	// already-unlinked private file that a crash cannot leave behind.
+	// Validation needs random access; the unlinked spool cannot outlive a crash.
 	spool, releaseSpool, err := createUnlinkedSpool("proctor-exam-resource-*")
 	if err != nil {
 		return model.FileRendition{}, sanitize("create exam resource spool", err)
@@ -205,8 +201,8 @@ func (c *Content) openMatchingExamResource(
 	return read == size && fmt.Sprintf("%x", digest.Sum(nil)) == checksum, nil
 }
 
-// OpenExamResource opens only the exact rendition selected by authoritative
-// Exam Resource metadata. It performs no discovery and exposes no object key.
+// OpenExamResource opens the rendition named by the resource's stored
+// metadata. It never lists keys or exposes one.
 func (c *Content) OpenExamResource(
 	ctx context.Context,
 	revisionID model.FileRevisionID,

@@ -8,95 +8,57 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type academicPeriodHTTPApplication struct {
-	updateCommand  academic.UpdateAcademicPeriodCommand
-	archiveCommand academic.ArchiveAcademicPeriodCommand
-	result         *model.AcademicPeriod
-	list           []*model.AcademicPeriod
-	createCommand  academic.CreateAcademicPeriodCommand
-}
-
-func (a *academicPeriodHTTPApplication) GetAcademicPeriod(context.Context, invocation.Invocation, model.AcademicPeriodID) (*model.AcademicPeriod, error) {
-	return a.result, nil
-}
-func (a *academicPeriodHTTPApplication) ListAcademicPeriods(context.Context, invocation.Invocation, academic.ListAcademicPeriodsQuery) (paging.Page[*model.AcademicPeriod], error) {
-	return paging.Page[*model.AcademicPeriod]{Items: a.list}, nil
-}
-func (a *academicPeriodHTTPApplication) CreateAcademicPeriod(_ context.Context, _ invocation.Invocation, command academic.CreateAcademicPeriodCommand) (*model.AcademicPeriod, error) {
-	a.createCommand = command
-	return a.result, nil
-}
-func (a *academicPeriodHTTPApplication) UpdateAcademicPeriod(_ context.Context, _ invocation.Invocation, command academic.UpdateAcademicPeriodCommand) (*model.AcademicPeriod, error) {
-	a.updateCommand = command
-	return a.result, nil
-}
-func (a *academicPeriodHTTPApplication) ArchiveAcademicPeriod(_ context.Context, _ invocation.Invocation, command academic.ArchiveAcademicPeriodCommand) error {
-	a.archiveCommand = command
-	return nil
-}
-
 func TestAcademicPeriodHTTPMapsDTOAndNormalizesRFC3339Bounds(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	period := &model.AcademicPeriod{ID: model.AcademicPeriodID(model.NewID()), Owner: model.NewAcademicUnitAcademicPeriodOwner(model.NewAcademicUnitID()), Name: "2026-2027", DisplayName: "2026-2027", StartsAt: model.TimeFromMillis(100), EndsAt: model.TimeFromMillis(200)}
-	periods := &academicPeriodHTTPApplication{result: period}
+	principal := academicCaller()
+	owner := model.NewAcademicUnitAcademicPeriodOwner(model.NewAcademicUnitID())
+	fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, owner.AcademicUnitID, model.ActionAcademicPeriodManage)}})
 	httpAPI := newFocusedResourceAPI(
-		t, logger, routetest.Authenticator{Principal: principal}, academicPeriodResource(periods),
+		t, logger, routetest.Authenticator{Principal: principal}, academicPeriodResource(fixture.service),
 	)
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/academic-periods", strings.NewReader(`{"owner_type":"academic_unit","owner_id":"`+period.Owner.ID()+`","name":"2026-2027","display_name":"2026-2027","start_at":"1970-01-01T00:00:00.1Z","end_at":"1970-01-01T01:00:00.2+01:00"}`))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/academic-periods", strings.NewReader(`{"owner_type":"academic_unit","owner_id":"`+owner.ID()+`","name":"2026-2027","display_name":"2026-2027","start_at":"1970-01-01T00:00:00.1Z","end_at":"1970-01-01T01:00:00.2+01:00"}`))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusCreated, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	require.Equal(t, string(model.ResourceAcademicUnit), periods.createCommand.OwnerType)
-	require.Equal(t, period.Owner.ID(), periods.createCommand.OwnerID)
-	require.Equal(t, period.Name, periods.createCommand.Name)
-	require.Equal(t, model.MillisFromTime(period.StartsAt), periods.createCommand.StartAt)
-	require.Equal(t, model.MillisFromTime(period.EndsAt), periods.createCommand.EndAt)
+	require.Len(t, fixture.periods.created, 1, "the create reached the Academic Period Store")
+	created := fixture.periods.created[0].Period
+	require.Equal(t, owner, created.Owner)
+	require.Equal(t, "2026-2027", created.Name)
+	require.True(t, model.TimeFromMillis(100).Equal(created.StartsAt), "start = %v", created.StartsAt)
+	require.True(t, model.TimeFromMillis(200).Equal(created.EndsAt), "end = %v", created.EndsAt)
 	var body academicPeriodResponse
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
-	require.Equal(t, period.ID.String(), body.ID)
+	require.Equal(t, created.ID.String(), body.ID)
 	require.Equal(t, string(model.ResourceAcademicUnit), body.OwnerType)
-	require.Equal(t, period.Owner.ID(), body.OwnerID)
+	require.Equal(t, owner.ID(), body.OwnerID)
 }
 
 func TestAcademicPeriodResourceRejectsInvalidQueryLimit(t *testing.T) {
 	t.Parallel()
 
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{
-		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
-		CredentialID:           model.PrincipalCredentialID(model.NewID()),
-		CredentialType:         model.CredentialSessionAccess,
-		AuthenticationMethod:   "password",
-		AuthenticationStrength: model.AuthenticationSingleFactor,
-		ClientType:             model.SessionClientCLI,
-		AuthenticatedAt:        time.Now(),
-	}
-	periods := &academicPeriodHTTPApplication{}
+	principal := academicCaller()
+	fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{institutionWide(principal.UserID, model.ActionAcademicPeriodView)}})
 	httpAPI := newFocusedResourceAPI(
-		t, logger, routetest.Authenticator{Principal: principal}, academicPeriodResource(periods),
+		t, logger, routetest.Authenticator{Principal: principal}, academicPeriodResource(fixture.service),
 	)
 	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet, "/api/v1/academic-periods?limit=0", nil,
@@ -108,6 +70,7 @@ func TestAcademicPeriodResourceRejectsInvalidQueryLimit(t *testing.T) {
 	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, "request.invalid", problem.Code, "problem code")
+	require.Zero(t, fixture.periods.lists, "an invalid limit reached the Academic Period Store")
 }
 
 func TestAcademicPeriodPatchOptionalWireStates(t *testing.T) {

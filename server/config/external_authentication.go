@@ -19,26 +19,19 @@ import (
 	"github.com/sudosylabs/proctor/server/plugin"
 )
 
-// maxProviderDocumentBytes bounds one provider's Settings or Secrets document.
 const maxProviderDocumentBytes = 64 << 10
 
-// ExternalAuthenticationProvider is one configured sign-in provider. Proctor
-// owns its identity, whether it is on and whether it may create accounts.
-// Type names the sign-in plugin that builds it, and everything about the
-// protocol, its claim mapping included, is that plugin's own: Settings and
-// Secrets are documents only the plugin decodes and validates.
+// ExternalAuthenticationProvider is one sign-in provider. Proctor owns its ID,
+// whether it is enabled and whether it may create accounts; Settings and
+// Secrets belong to the sign-in plugin named by Type, which alone decodes them.
 type ExternalAuthenticationProvider struct {
-	ID            string `json:"ID"`
-	Type          string `json:"Type"`
-	DisplayName   string `json:"DisplayName"`
-	Enabled       bool   `json:"Enabled"`
-	AutoProvision bool   `json:"AutoProvision"`
-	// Settings is the protocol's settings document, such as an OIDC
-	// issuer and claim mapping.
-	Settings json.RawMessage `json:"Settings"`
-	// Secrets is the protocol's document of secret values, such as an
-	// OIDC client secret. It is always redacted when the configuration is
-	// shown.
+	ID            string          `json:"ID"`
+	Type          string          `json:"Type"`
+	DisplayName   string          `json:"DisplayName"`
+	Enabled       bool            `json:"Enabled"`
+	AutoProvision bool            `json:"AutoProvision"`
+	Settings      json.RawMessage `json:"Settings"`
+	// Secrets is always redacted when the configuration is shown.
 	Secrets json.RawMessage `json:"Secrets"`
 }
 
@@ -57,10 +50,8 @@ type ExternalAuthentication struct {
 	Providers     []ExternalAuthenticationProvider `json:"Providers"`
 }
 
-// validateExternalAuthentication checks what Proctor owns of each provider
-// and bounds its protocol documents. Whether Type names a sign-in plugin,
-// and whether the documents suit it, is checked when the plugin builds the
-// provider.
+// Whether Type names a real sign-in plugin, and whether the documents suit it,
+// is checked when the plugin builds the provider, not here.
 func validateExternalAuthentication(
 	external ExternalAuthentication,
 	add func(string, string),

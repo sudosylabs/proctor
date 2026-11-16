@@ -22,7 +22,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// IssueStudentClassInvitation invites a Student into a Class and mails the claim.
+// IssueStudentClassInvitation invites a student into a class and mails the
+// claim.
 func (s *Service) IssueStudentClassInvitation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -185,7 +186,6 @@ func (s *Service) IssueStudentClassInvitation(
 	return issuedInvitationView(created), nil
 }
 
-// newStudentClassInvitationValue builds the Student Class Invitation for the command with the given claim hash.
 func newStudentClassInvitationValue(
 	inv invocation.Invocation,
 	command IssueStudentClassInvitationCommand,
@@ -224,7 +224,8 @@ func newStudentClassInvitationValue(
 	return value, nil
 }
 
-// storeStudentClassInvitation records the audited Student Class Invitation issue, idempotently when a key is present.
+// storeStudentClassInvitation is idempotent only when the command carries a
+// key.
 func (s *Service) storeStudentClassInvitation(
 	ctx context.Context,
 	commandIdempotency *store.CommandIdempotency,

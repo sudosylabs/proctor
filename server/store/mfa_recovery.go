@@ -17,13 +17,13 @@ import (
 var ErrAuthenticationGenerationChanged = errors.New("authentication generation changed")
 var ErrMFAReenrollmentRequired = errors.New("MFA reenrollment required")
 
-// ErrMFAEnrollmentRequired refuses a single-factor proof that cannot become a
-// restricted Web Session because the Access Policy requires its User to use
-// two-step verification.
+// ErrMFAEnrollmentRequired refuses a single-factor proof when the access
+// policy requires the user to use two-step verification and no restricted web
+// session can be issued instead.
 var ErrMFAEnrollmentRequired = errors.New("MFA enrollment required by access policy")
 
-// MFAPendingEnrollment supersedes pending setup only for the exact live
-// Session and generation. Setup and its required audit commit together.
+// MFAPendingEnrollment replaces a pending setup only for the same live
+// session and authentication generation.
 type MFAPendingEnrollment struct {
 	Principal               model.Principal
 	Credential              *model.MFACredential
@@ -32,8 +32,8 @@ type MFAPendingEnrollment struct {
 	AuditEventID            model.AuditEventID
 }
 
-// MFAChallenge consumes one factor and upgrades only the exact Session in the
-// same commit as required audit. It cannot clear an assisted-reset restriction.
+// MFAChallenge consumes one factor and upgrades only that session. It cannot
+// clear an assisted-reset restriction.
 type MFAChallenge struct {
 	Principal        model.Principal
 	CredentialID     model.MFACredentialID
@@ -43,12 +43,13 @@ type MFAChallenge struct {
 	AuditEventID     model.AuditEventID
 }
 
-// MFAAssistedReset is a protected, non-self administrative reset. The named
-// operation rechecks current authority, live strong/recent credential and
-// active target under the same fences as issuance, MFA and authority changes.
-// Credential retirement, generation advance, mandatory reenrollment, every
-// target Session/PAT/unfinished access-grant revocation and audit+notice are one
-// commit. A repeated reset advances the generation again; it is not a replay.
+// MFAAssistedReset is an administrator's reset of another user's MFA. The
+// store rechecks authority, the administrator's strong recent credential and
+// the active target under the same fences as issuance and authority changes.
+// Retiring the credential, advancing the generation, requiring reenrollment,
+// revoking every session, token and unfinished grant of the target, and the
+// audit and notice commit together. A repeated reset is not a replay: it
+// advances the generation again.
 type MFAAssistedReset struct {
 	Principal               model.Principal
 	UserID                  model.UserID

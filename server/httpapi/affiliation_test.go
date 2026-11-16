@@ -8,63 +8,39 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
-
-type affiliationHTTPApplication struct {
-	result        *model.Affiliation
-	values        []*model.Affiliation
-	createCommand academic.CreateAffiliationCommand
-	endCommand    academic.EndAffiliationCommand
-	listErr       error
-}
-
-func (a *affiliationHTTPApplication) ListAffiliations(context.Context, invocation.Invocation, model.UserID) ([]*model.Affiliation, error) {
-	return a.values, a.listErr
-}
-func (a *affiliationHTTPApplication) CreateAffiliation(_ context.Context, _ invocation.Invocation, command academic.CreateAffiliationCommand) (*model.Affiliation, error) {
-	a.createCommand = command
-	return a.result, nil
-}
-func (a *affiliationHTTPApplication) EndAffiliation(_ context.Context, _ invocation.Invocation, command academic.EndAffiliationCommand) (*model.Affiliation, error) {
-	a.endCommand = command
-	return a.result, nil
-}
 
 func TestAffiliationHTTPUsesDTOAndRouteOwnedUser(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	userID := model.NewID()
-	created := &model.Affiliation{
-		ID: model.NewAffiliationID(), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100),
-		Revision: 1, UserID: model.UserID(userID), Kind: model.AffiliationTeacher, StartsAt: model.TimeFromMillis(100),
-	}
-	affiliations := &affiliationHTTPApplication{result: created}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, affiliationResource(affiliations))
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/users/"+userID+"/affiliations", strings.NewReader(`{"kind":"teacher","start_at":"1970-01-01T00:00:00.1Z"}`))
+	principal := academicCaller()
+	user := academicUser("amina", "Amina Diallo", "amina@example.edu")
+	fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{institutionWide(principal.UserID, model.ActionUserManage)}})
+	fixture.users.add(user)
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, affiliationResource(fixture.service))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/users/"+user.ID.String()+"/affiliations", strings.NewReader(`{"kind":"teacher","start_at":"1970-01-01T00:00:00.1Z"}`))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusCreated, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	require.Equal(t, model.UserID(userID), affiliations.createCommand.UserID)
-	require.Equal(t, model.AffiliationTeacher, affiliations.createCommand.Kind)
+	require.Len(t, fixture.affiliations.created, 1, "the create reached the Affiliation Store")
+	created := fixture.affiliations.created[0].Affiliation
+	require.Equal(t, user.ID, created.UserID)
+	require.Equal(t, model.AffiliationTeacher, created.Kind)
 	var body map[string]any
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	_, exposed := body["revision"]
@@ -74,10 +50,14 @@ func TestAffiliationHTTPUsesDTOAndRouteOwnedUser(t *testing.T) {
 func TestAffiliationResourceSerializesAllowedAuthorizationFailure(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, affiliationResource(&affiliationHTTPApplication{listErr: apperror.New("authorization.denied")}))
+	principal := academicCaller()
+	// The caller holds no grant and lists another User's Affiliations.
+	other := academicUser("amina", "Amina Diallo", "amina@example.edu")
+	fixture := newAcademicFixture(t, academicOptions{})
+	fixture.users.add(other)
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, affiliationResource(fixture.service))
 
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/"+model.NewID()+"/affiliations", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/"+other.ID.String()+"/affiliations", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -85,15 +65,22 @@ func TestAffiliationResourceSerializesAllowedAuthorizationFailure(t *testing.T) 
 	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, "authorization.denied", problem.Code, "problem = %#v body=%s", problem, response.Body.String())
+	require.Empty(t, fixture.affiliations.lists, "a denied listing reached the Affiliation Store")
 }
 
 func TestAffiliationResourceFailsClosedForUndeclaredError(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, affiliationResource(&affiliationHTTPApplication{listErr: apperror.New("user.conflict")}))
+	principal := academicCaller()
+	other := academicUser("amina", "Amina Diallo", "amina@example.edu")
+	fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{institutionWide(principal.UserID, model.ActionUserView)}})
+	fixture.users.add(other)
+	// A Store conflict is presented as affiliation.conflict, which the listing
+	// route does not declare.
+	fixture.affiliations.listErr = store.NewErrConflict("affiliation", "affiliation_pkey", nil)
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, affiliationResource(fixture.service))
 
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/"+model.NewID()+"/affiliations", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/"+other.ID.String()+"/affiliations", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -101,13 +88,15 @@ func TestAffiliationResourceFailsClosedForUndeclaredError(t *testing.T) {
 	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, "server.internal", problem.Code)
+	require.Equal(t, []model.UserID{other.ID}, fixture.affiliations.lists, "the listing reached the Affiliation Store")
 }
 
 func TestAffiliationResourceRejectsInvalidBodyAndIdentifier(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, affiliationResource(&affiliationHTTPApplication{}))
+	principal := academicCaller()
+	fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{institutionWide(principal.UserID, model.ActionUserView, model.ActionUserManage)}})
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, affiliationResource(fixture.service))
 
 	invalidBody := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/users/"+model.NewID()+"/affiliations", strings.NewReader(`{"kind":"teacher","unknown":true}`))
 	invalidBody.Header.Set("Authorization", "Bearer credential")
@@ -121,6 +110,8 @@ func TestAffiliationResourceRejectsInvalidBodyAndIdentifier(t *testing.T) {
 	idResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(idResponse, invalidID)
 	require.Equal(t, http.StatusNotFound, idResponse.Code, "identifier status = %d: %s", idResponse.Code, idResponse.Body.String())
+	require.Empty(t, fixture.affiliations.created, "a rejected create reached the Affiliation Store")
+	require.Empty(t, fixture.affiliations.lists, "a rejected listing reached the Affiliation Store")
 }
 
 func TestAffiliationOpenAPIDocument(t *testing.T) {

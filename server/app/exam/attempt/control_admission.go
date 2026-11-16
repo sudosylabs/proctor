@@ -19,30 +19,26 @@ import (
 
 const (
 	controlWorkers = 32
-	// controlUsers bounds the User allowances one lane retains. When the
-	// table is full, the least recently admitted User's allowance is evicted:
-	// an evicted User restarts at a full burst, so eviction can only favor an
-	// idle User, never a caller hot enough to stay tracked.
+	// controlUsers bounds the allowances one lane retains. The least recently
+	// admitted user is evicted and restarts at a full burst, so eviction can
+	// only favor an idle user, never a caller hot enough to stay tracked.
 	controlUsers = 4096
 
-	// Live Participation renewal and security-coverage updates queue for a
-	// worker instead of being refused: a refused renewal is indistinguishable
-	// from a lost client, and enough consecutive refusals expire the lease,
-	// producing Connection Loss evidence and a suspension for a well-behaved
-	// candidate. The queue stays bounded in length and in wait time; a wait
-	// longer than one renewal interval is superseded by the next renewal.
+	// Live renewal and security-coverage updates queue instead of being
+	// refused: a refused renewal looks like a lost client, and enough of them
+	// expire the lease and suspend a well-behaved candidate. A wait longer
+	// than one renewal interval is superseded by the next renewal.
 	liveControlWaiters = 4096
 	liveControlWait    = model.AttemptParticipationRenewalInterval
 )
 
-// controlLane is the fixed shape of one per-node admission lane.
 type controlLane struct {
 	workers int
 	// waiters bounds requests queued for a busy worker; zero refuses at once.
 	waiters int
 	wait    time.Duration
-	// interval is the sustained cost of one request: a User's allowance
-	// refills one request per interval, up to burst requests.
+	// interval is the sustained cost of one request: an allowance refills one
+	// request per interval, up to burst requests.
 	interval time.Duration
 	burst    int64
 }
@@ -51,10 +47,10 @@ var (
 	// deliveryControlLane admits recovery and status work at 20 requests per
 	// second with a burst of 40, refusing at once when its workers are busy.
 	deliveryControlLane = controlLane{workers: controlWorkers, interval: 50 * time.Millisecond, burst: 40}
-	// liveControlLane sustains two requests per renewal interval (twice the
-	// cadence: one renewal plus one security-coverage update or exact retry)
-	// with a burst of three intervals, so a few callers cannot hold its
-	// workers or queue while an honest candidate never reaches the bound.
+	// liveControlLane sustains two requests per renewal interval (one renewal
+	// plus one security-coverage update or exact retry) with a burst of three
+	// intervals, so a few callers cannot hold its workers while an honest
+	// candidate never reaches the bound.
 	liveControlLane = controlLane{
 		workers:  controlWorkers,
 		waiters:  liveControlWaiters,
@@ -64,7 +60,7 @@ var (
 	}
 )
 
-// controlAllowance is one User's refill credit, in milliseconds of lane
+// controlAllowance is one user's refill credit, in milliseconds of lane
 // interval; one request costs one interval.
 type controlAllowance struct {
 	user   model.UserID
@@ -72,11 +68,9 @@ type controlAllowance struct {
 	at     time.Time
 }
 
-// Each node bounds live renewal/security work separately from recovery/status
-// work. Neither allowance is shared with detail intake or grants authority.
-// Every bound here is per process: N nodes admit N times the concurrency, and
-// each User's allowance is tracked independently on every node they reach.
-// The zero value is the delivery (recovery/status) lane.
+// controlAdmission bounds are per process: N nodes admit N times the
+// concurrency, and a user's allowance is tracked separately on every node.
+// Admission never grants authority. The zero value is the delivery lane.
 type controlAdmission struct {
 	lane    controlLane
 	mu      sync.Mutex
@@ -152,8 +146,7 @@ func (a *controlAdmission) enter(ctx context.Context, user model.UserID, now tim
 	return releaseControl(slots), nil
 }
 
-// shape returns the configured lane, or the delivery lane for the zero
-// value. The caller holds mu.
+// shape requires the caller to hold mu.
 func (a *controlAdmission) shape() controlLane {
 	if a.lane.workers < 1 {
 		return deliveryControlLane
@@ -166,9 +159,7 @@ func releaseControl(slots chan struct{}) func() {
 	return func() { once.Do(func() { <-slots }) }
 }
 
-// spend consumes one request from the User's allowance, tracking a new User
-// by evicting the least recently admitted one when the table is full. The
-// caller holds mu.
+// spend requires the caller to hold mu.
 func (a *controlAdmission) spend(user model.UserID, now time.Time, lane controlLane) bool {
 	cost := lane.interval.Milliseconds()
 	capacity := lane.burst * cost
@@ -199,8 +190,8 @@ func (a *controlAdmission) spend(user model.UserID, now time.Time, lane controlL
 	return true
 }
 
-// refund returns a request that never reached a worker, so queue timeout or
-// cancellation does not cost the User allowance. The caller holds mu.
+// refund returns a request that never reached a worker, so a queue timeout or
+// cancellation costs nothing. The caller holds mu.
 func (a *controlAdmission) refund(user model.UserID, lane controlLane) {
 	if element, exists := a.users[user]; exists {
 		value := element.Value.(*controlAllowance)

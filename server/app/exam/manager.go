@@ -28,23 +28,23 @@ type ListManagersQuery struct {
 	Limit           int
 }
 
-// ManagerSummary is the bounded application projection for one management
-// relationship. User profile data is deliberately outside this seam.
+// ManagerSummary is one manager relationship. It deliberately carries no user
+// profile data.
 type ManagerSummary struct {
 	Manager   model.ExamManager
 	IsCreator bool
 	IsOwner   bool
 }
 
-// ManagerPage is one page of an Exam's Exam Managers; HasMore reports that
-// another page follows the last item.
+// ManagerPage is one page of an exam's managers; HasMore reports that another
+// page follows the last item.
 type ManagerPage struct {
 	Items   []ManagerSummary
 	HasMore bool
 }
 
-// ManagerChangeCommand names the user whose relationship to one Exam changes:
-// added as an Exam Manager, removed as one, or made its owner.
+// ManagerChangeCommand names the user added as a manager, removed as one, or
+// made owner.
 type ManagerChangeCommand struct {
 	ExamID               model.ExamID
 	UserID               model.UserID
@@ -52,8 +52,8 @@ type ManagerChangeCommand struct {
 	IdempotencyKey       string
 }
 
-// ListExamManagers returns one page of an Exam's Exam Managers to a caller
-// authorized to manage the Exam.
+// ListExamManagers returns one page of an exam's managers; the caller needs
+// manage permission on the exam.
 func (a *Authoring) ListExamManagers(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -95,8 +95,8 @@ func (a *Authoring) ListExamManagers(
 	return page, nil
 }
 
-// AddExamManager idempotently grants Exam Manager membership to an eligible
-// user, fenced by ExpectedExamRevision, and notifies that user by mail.
+// AddExamManager idempotently makes an eligible user a manager, fenced by
+// ExpectedExamRevision, and mails them.
 func (a *Authoring) AddExamManager(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -106,8 +106,8 @@ func (a *Authoring) AddExamManager(
 	return a.changeManager(ctx, inv, command, managerAddition, a.exams.AddManager)
 }
 
-// RemoveExamManager idempotently revokes a user's Exam Manager membership,
-// fenced by ExpectedExamRevision, and notifies that user by mail.
+// RemoveExamManager idempotently removes a manager, fenced by
+// ExpectedExamRevision, and mails them.
 func (a *Authoring) RemoveExamManager(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -117,7 +117,7 @@ func (a *Authoring) RemoveExamManager(
 	return a.changeManager(ctx, inv, command, managerRemoval, a.exams.RemoveManager)
 }
 
-// TransferExamOwnership idempotently makes an eligible user the Exam's owner,
+// TransferExamOwnership idempotently makes an eligible user the exam's owner,
 // fenced by ExpectedExamRevision.
 func (a *Authoring) TransferExamOwnership(
 	ctx context.Context,
@@ -130,8 +130,6 @@ func (a *Authoring) TransferExamOwnership(
 
 type managerMutation func(context.Context, *store.ExamManagerMutation, *store.CommandIdempotency) (*store.ExamManagerCommandResult, error)
 
-// managerEffect announces one committed Exam Manager transition: the Exam,
-// the User it concerns, the Exam revision and the instant of the change.
 type managerEffect func(*Authoring, context.Context, model.ExamID, model.UserID, int64, time.Time) error
 
 type managerTransition struct {
@@ -236,8 +234,6 @@ func (a *Authoring) changeManager(
 		return store.ExamManagerCommandResult{}, err
 	}
 
-	// Mail and mutation records retain their existing millisecond contract;
-	// current membership decisions above use the full domain precision.
 	at := model.TimeUTC(decisionAt)
 	notices, err := a.prepareManagerNotices(ctx, examAccess.Exam.OwnerUserID, command.UserID, snapshot.Draft.Title, at, transition)
 	if err != nil {

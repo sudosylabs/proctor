@@ -26,8 +26,8 @@ const (
 )
 
 // WorkspaceContentVersion is an opaque comparison token for one acknowledged
-// Starter or Attempt Workspace file content state. It is deliberately not an
-// entity identifier and must not be used as a persistence relationship.
+// state of a starter or attempt workspace file. It is not an entity ID and
+// must not be used as a relationship.
 type WorkspaceContentVersion string
 
 var workspaceContentVersionPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{26}$`)
@@ -49,7 +49,7 @@ func (v WorkspaceContentVersion) IsValid() bool {
 
 func (v WorkspaceContentVersion) String() string { return string(v) }
 
-// FileIndexingPolicy controls which server-maintained search material may be derived.
+// FileIndexingPolicy controls which search material the server may derive.
 type FileIndexingPolicy string
 
 const (
@@ -68,7 +68,7 @@ const (
 	FileAvailabilityRejected    FileAvailability = "rejected"
 )
 
-// FileIndexingState records processing independently from publication.
+// FileIndexingState tracks processing separately from availability.
 type FileIndexingState string
 
 const (
@@ -78,7 +78,8 @@ const (
 	FileIndexingFailed      FileIndexingState = "failed"
 )
 
-// FileEntry is the stable identity referenced by an owning domain model.
+// FileEntry is the stable file identity an owning model refers to; content
+// lives in its FileRevisions and CurrentRevisionID may be zero.
 type FileEntry struct {
 	ID                FileEntryID
 	CreatedAt         time.Time
@@ -127,7 +128,7 @@ func validFilePurpose(value FilePurpose) bool {
 		value == FilePurposeExamResource
 }
 
-// FileRevision is an immutable content generation below a FileEntry.
+// FileRevision is one immutable content generation of a FileEntry.
 type FileRevision struct {
 	ID            FileRevisionID
 	FileEntryID   FileEntryID
@@ -178,7 +179,8 @@ func (f *FileRevision) Validate() error {
 	return nil
 }
 
-// MakeAvailable returns a published copy after every supplied rendition validates.
+// MakeAvailable returns a published copy of a pending revision once every
+// rendition validates; it does not modify f.
 func (f *FileRevision) MakeAvailable(renditions []FileRendition) (*FileRevision, error) {
 	if f == nil || f.Availability != FileAvailabilityPending || len(renditions) == 0 {
 		return nil, invalidModelError(
@@ -261,7 +263,7 @@ func (f *FileRendition) Validate() error {
 	return nil
 }
 
-// UploadLease is a renewable, bounded reservation used while bytes are staged.
+// UploadLease is a renewable, bounded reservation held while bytes are staged.
 type UploadLease struct {
 	ID              UploadLeaseID
 	FileRevisionID  FileRevisionID

@@ -32,12 +32,11 @@ func TestExamExportsRequireDedicatedAndEveryOrdinaryReadPermission(t *testing.T)
 		{name: "missing browser read", manager: true, member: true, browser: true, deny: model.ActionExamAttemptBrowserActivityView},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			f, service, s, auth, _ := newExportFixture(t)
+			f, service, s, _ := newExportFixture(t, examActionsWithout(test.deny)...)
 			f.persistence.actorIsManager = test.manager
 			if test.member {
 				f.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: f.unitID, UserID: f.userID}}
 			}
-			auth.deny = test.deny
 			scope := s.value.Scope
 			if test.sitting {
 				scope.SubmissionID = ""
@@ -63,30 +62,33 @@ func TestExamExportsRequireDedicatedAndEveryOrdinaryReadPermission(t *testing.T)
 				want = model.ActionExamRecordsExport
 				read = model.ActionSubmissionView
 			}
-			require.Equal(t, want, s.create.Action, "authorization=%v creation=%#v", auth.actions, s.create)
-			require.Contains(t, auth.actions, read, "authorization=%v creation=%#v", auth.actions, s.create)
-			require.True(t, slices.Equal(s.create.SubmissionIDs, []model.SubmissionID{s.selected[0].SubmissionID}), "authorization=%v creation=%#v", auth.actions, s.create)
+			submission := model.Resource{Type: model.ResourceSubmission, ID: s.selected[0].SubmissionID.String()}
+			require.Equal(t, want, s.create.Action, "authorization=%v creation=%#v", f.decisions(), s.create)
+			require.Contains(t, f.decisions(), decided(read, submission, model.AuditStatusSuccess), "authorization=%v creation=%#v", f.decisions(), s.create)
+			require.True(t, slices.Equal(s.create.SubmissionIDs, []model.SubmissionID{s.selected[0].SubmissionID}), "authorization=%v creation=%#v", f.decisions(), s.create)
 		})
 	}
 }
 
 func TestExamExportsSelfAccessAndMissingAuditFailClosed(t *testing.T) {
-	f, service, s, auth, _ := newExportFixture(t)
+	f, service, s, _ := newExportFixture(t)
 	s.selected[0].CandidateUserID = f.userID
 	command := CreateExportCommand{Scope: s.value.Scope, Categories: s.value.Categories, IdempotencyKey: "export-key"}
 	_, err := service.CreateExamExport(context.Background(), f.inv, command)
 	require.Error(t, err, "candidate exported own manager-only records")
-	require.True(t, auth.self, "candidate exported own manager-only records")
+	submission := model.Resource{Type: model.ResourceSubmission, ID: s.selected[0].SubmissionID.String()}
+	require.Contains(t, f.decisions(), decided(model.ActionSubmissionViewOverride, submission, model.AuditStatusFail),
+		"candidate exported own manager-only records")
 	require.Nil(t, s.create, "candidate exported own manager-only records")
 	s.selected[0].CandidateUserID = model.NewUserID()
-	f.auditor.err = errors.New("audit unavailable")
+	f.access.Audits.FailAttempts(errors.New("audit unavailable"))
 	_, err = service.CreateExamExport(context.Background(), f.inv, command)
 	require.Error(t, err, "creation bypassed required audit")
 	require.Nil(t, s.create, "creation bypassed required audit")
 }
 
 func TestExamExportReplayUsesCapturedScopeAfterSittingGrowsPastBound(t *testing.T) {
-	f, service, s, auth, _ := newExportFixture(t)
+	f, service, s, _ := newExportFixture(t)
 	original := slices.Clone(s.selected)
 	s.creationScope = original
 	s.selected = make([]store.ExamSubmissionAuthorization, model.ExamExportMaximumSubmissions+1)
@@ -99,7 +101,7 @@ func TestExamExportReplayUsesCapturedScopeAfterSittingGrowsPastBound(t *testing.
 	require.NotNil(t, s.create, "original captured scope was not preserved")
 	require.Len(t, s.create.SubmissionIDs, 1, "original captured scope was not preserved")
 	require.Equal(t, original[0].SubmissionID, s.create.SubmissionIDs[0], "original captured scope was not preserved")
-	auth.deny = model.ActionSubmissionViewOverride
+	service.authorizer = f.authorizerWithout(t, model.ActionSubmissionViewOverride)
 	s.create = nil
 	_, err = service.CreateExamExport(context.Background(), f.inv, command)
 	require.Error(t, err, "replay-aware scope skipped current ordinary read authority")

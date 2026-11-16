@@ -32,13 +32,15 @@ const (
 )
 
 // Recorder receives what the host observes about plugins, for metrics. Its
-// methods must be safe for concurrent use and return promptly.
+// methods must be safe for concurrent use and return promptly. States
+// arrive as plain strings, so the metrics module implements it without
+// importing plugin types.
 type Recorder interface {
 	// PluginCall reports one call into a plugin: its operation, one of the
 	// Outcome constants, and how long it took.
 	PluginCall(pluginID, operation, outcome string, elapsed time.Duration)
 	// PluginState reports a plugin's new state.
-	PluginState(pluginID string, state State)
+	PluginState(pluginID, state string)
 }
 
 // call runs fn, one call from the server into the plugin, and turns a panic
@@ -98,7 +100,7 @@ func (e *entry) recordPanic() {
 // setState records a new state; e.mu is held.
 func (e *entry) setState(state State) {
 	e.state = state
-	e.recorder.PluginState(e.manifest.ID, state)
+	e.recorder.PluginState(e.manifest.ID, string(state))
 }
 
 // serve runs fn, a call into one of the plugin's capabilities. When the
@@ -126,4 +128,4 @@ func serveValue[T any](e *entry, operation string, fn func() (T, error)) (T, err
 type discardRecorder struct{}
 
 func (discardRecorder) PluginCall(string, string, string, time.Duration) {}
-func (discardRecorder) PluginState(string, State)                        {}
+func (discardRecorder) PluginState(string, string)                       {}

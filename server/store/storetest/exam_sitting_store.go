@@ -181,8 +181,8 @@ func TestExamSittingStore(t *testing.T, ss store.Store) {
 	_, err = ss.ExamSitting().Get(ctx, model.NewExamID(), sitting.ID)
 	require.True(t, store.IsNotFound(err), "Get(foreign Exam) error")
 
-	// A sealed Revision is not transferable between Exams, even when both
-	// Exams belong to the same Academic Unit. The Store returns one stable
+	// A sealed revision is not transferable between exams, even when both
+	// exams belong to the same academic unit. The store returns one stable
 	// lineage conflict without disclosing the foreign snapshot.
 	foreignExam := createCatalogExam(t, ctx, ss, fixture.unitID, fixture.actor.ID, model.NowUTC(), "sitting-foreign-exam")
 	foreignPublication := examRevisionPublication(t, ctx, ss, foreignExam.Value.Exam.ID, fixture.actor.ID, fixture.unitID, 1, model.NowUTC())
@@ -250,7 +250,7 @@ func TestExamSittingStore(t *testing.T, ss store.Store) {
 		examCommand(fixture.actor.ID, "exam.sitting.cancel", "sitting-cancel-stale", "sitting-cancel-stale-command"))
 	requireConflictConstraint(t, err, "exam_sitting_revision")
 
-	// A second Sitting makes list filtering and tuple pagination observable.
+	// A second sitting makes list filtering and tuple pagination observable.
 	secondStart := newStart.Add(24 * time.Hour)
 	second, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID, fixture.class.ID, secondStart, secondStart.Add(time.Hour), model.NowUTC())
 	require.NoError(t, err)
@@ -275,7 +275,7 @@ func TestExamSittingStore(t *testing.T, ss store.Store) {
 // TestExamSittingMailReconciliationAfterObsoleteSuppression proves that a
 // delivery suppressed by the authoritative pre-send membership fence does not
 // strand the candidate's desired projection. A later eligible enrollment must
-// make the unchanged upcoming Sitting due for reconciliation again.
+// make the unchanged upcoming sitting due for reconciliation again.
 func TestExamSittingMailReconciliationAfterObsoleteSuppression(t *testing.T, ss store.Store) {
 	ctx := context.Background()
 	fixture := newExamSittingFixture(t, ctx, ss)
@@ -357,10 +357,8 @@ func TestExamSittingMailReconciliationAfterObsoleteSuppression(t *testing.T, ss 
 	require.FailNow(t, fmt.Sprintf("restored candidate did not make Sitting due for reconciliation: %#v", due))
 }
 
-// TestExamSittingDisabledMailReconciliationConverges proves that the terminal
-// suppression recorded by a Sitting transition is authoritative for that
-// revision. Repeated reconcilers, including concurrent nodes whose mail
-// capability later becomes enabled, must not manufacture another occurrence.
+// ExamSittingDisabledMailSQLProbe ages terminal fan-outs past their mail
+// history cutoff.
 type ExamSittingDisabledMailSQLProbe struct {
 	AgeTerminalFanout func(*testing.T, context.Context, model.MailOccurrenceID)
 }
@@ -478,6 +476,10 @@ func PrepareExamSittingDisabledEligibilityRaceFixture(t *testing.T, ss store.Sto
 	}
 }
 
+// TestExamSittingDisabledMailReconciliationConverges proves that the terminal
+// suppression a sitting transition records while mail is disabled is
+// authoritative for that revision: repeated reconcilers, including concurrent
+// nodes whose mail later becomes enabled, must not create another occurrence.
 func TestExamSittingDisabledMailReconciliationConverges(t *testing.T, ss store.Store, probe ExamSittingDisabledMailSQLProbe) {
 	require.NotNil(t, probe.AgeTerminalFanout, "disabled Sitting mail retention SQL probe is required")
 	ctx := context.Background()
@@ -543,7 +545,7 @@ func TestExamSittingDisabledMailReconciliationConverges(t *testing.T, ss store.S
 	require.True(t, terminal.CompletedAt.Valid)
 
 	// Two nodes may observe the same installation after mail is re-enabled.
-	// The Store is the authoritative terminal fence even if both bypass their
+	// The store is the authoritative terminal fence even if both bypass their
 	// empty due page and race an enabled prepared fan-out directly.
 	prepared := []*store.ExamSittingMailFanout{
 		newExamSittingMailFanout(t, fixture.actor.ID, store.ExamSittingMailReconciled, model.MailTemplateExamSittingScheduled),
@@ -578,9 +580,9 @@ func TestExamSittingDisabledMailReconciliationConverges(t *testing.T, ss store.S
 		}
 	}
 
-	// User mail eligibility is independent of Class membership chronology. A
+	// User mail eligibility is independent of class membership chronology. A
 	// verification or account-enable transition after the disabled watermark is
-	// a new audience fact at the same Sitting revision, while the unchanged
+	// a new audience fact at the same sitting revision, while the unchanged
 	// candidate covered by the watermark remains converged.
 	verificationAt := model.NowUTC()
 	verificationOccurrence, verificationDelivery, verificationJob := userTokenMailFixture(t, unverifiedCandidate.ID,
@@ -653,7 +655,7 @@ func TestExamSittingDisabledMailReconciliationConverges(t *testing.T, ss store.S
 	require.NoError(t, err)
 
 	// Mail history observes the ordinary 90-day cutoff. Its removal must not
-	// erase the durable decision that this Sitting revision was terminally
+	// erase the durable decision that this sitting revision was terminally
 	// suppressed while mail was disabled.
 	probe.AgeTerminalFanout(t, ctx, disabledMail.Occurrence.ID)
 	cleaned, err := ss.Mail().CleanupTerminal(ctx, 10)
@@ -676,7 +678,7 @@ func TestExamSittingDisabledMailReconciliationConverges(t *testing.T, ss store.S
 	}
 
 	// A later membership mutation is a new audience fact even though the
-	// Sitting revision is unchanged. Re-enablement must notify only that new
+	// sitting revision is unchanged. Re-enablement must notify only that new
 	// audience, without resurrecting candidates covered by the disabled fact.
 	newCandidateInput := newUser()
 	newCandidateInput.EmailVerified = true
@@ -733,7 +735,7 @@ func TestExamSittingDisabledMailReconciliationConverges(t *testing.T, ss store.S
 		&store.ExamSittingMailExpansionCompletion{OccurrenceID: enrollmentFanout.Occurrence.ID})
 	require.NoError(t, err)
 
-	// Ending that same membership is another audience fact without a Sitting
+	// Ending that same membership is another audience fact without a sitting
 	// revision change and must yield the assignment-removed projection.
 	_, err = ss.ClassMember().End(ctx, &store.ClassMemberEnd{ID: enrolled.Membership.ID,
 		ExpectedRevision: enrolled.Membership.Revision, ExpectedRecipientRevision: newCandidate.Revision,
@@ -779,8 +781,8 @@ func TestExamSittingDisabledMailReconciliationConverges(t *testing.T, ss store.S
 }
 
 // TestExamSittingClassTransferMailReconciliation proves that one future-dated
-// transfer advances both affected Class audiences. The source Sitting emits an
-// assignment removal while the destination Sitting emits a new schedule, and
+// transfer advances both affected class audiences. The source sitting emits an
+// assignment removal while the destination sitting emits a new schedule, and
 // replay cannot create another reconciliation occurrence.
 func TestExamSittingClassTransferMailReconciliation(t *testing.T, ss store.Store) {
 	t.Helper()
@@ -1027,7 +1029,7 @@ type ExamSittingMailRecoveryFixture struct {
 
 // PrepareExamSittingMailRecoveryFixture creates two active, recipient-free
 // expansions through the public aggregate. SQL tests may then move only their
-// durable Job/deadline facts to exercise otherwise unreachable recovery paths.
+// durable job/deadline facts to exercise otherwise unreachable recovery paths.
 func PrepareExamSittingMailRecoveryFixture(t *testing.T, ss store.Store) ExamSittingMailRecoveryFixture {
 	t.Helper()
 	ctx := context.Background()
@@ -1055,7 +1057,7 @@ func PrepareExamSittingMailRecoveryFixture(t *testing.T, ss store.Store) ExamSit
 }
 
 // TestExamSittingMailRetentionCleanup proves retention through the public Mail
-// Store while the SQL probe only moves immutable terminal timestamps beyond
+// store while the SQL probe only moves immutable terminal timestamps beyond
 // their documented cutoffs and observes the FK/projection result.
 func TestExamSittingMailRetentionCleanup(t *testing.T, ss store.Store, probe ExamSittingMailRetentionSQLProbe) {
 	require.NotNil(t, probe.AgeDeliveries, "complete Sitting mail retention SQL probe is required")
@@ -1141,8 +1143,8 @@ func TestExamSittingMailRetentionCleanup(t *testing.T, ss store.Store, probe Exa
 }
 
 // ExamSittingSQLProbe exposes only the corruption/race setup that cannot be
-// reached through the public Store because normal lifecycle guards correctly
-// prevent archiving an ancestor with a live Class.
+// reached through the public store because normal lifecycle guards correctly
+// prevent archiving an ancestor with a live class.
 type ExamSittingSQLProbe struct {
 	ArchiveProgrammeLevel func(*testing.T, context.Context, model.ProgrammeLevelID)
 }
@@ -1179,7 +1181,7 @@ func TestExamSittingLifecycleStore(t *testing.T, ss store.Store, probe ExamSitti
 		return result
 	}
 
-	// A prepared-Job collision rolls back the Sitting and its second Job.
+	// A prepared-job collision rolls back the sitting and its second job.
 	rollbackStart := fixture.period.StartsAt.Add(time.Hour)
 	rollbackEnd := rollbackStart.Add(time.Hour)
 	rollbackSitting, err := model.NewExamSitting(model.NewExamSittingID(), fixture.examID, fixture.revisionID, fixture.class.ID,
@@ -1438,7 +1440,7 @@ func TestExamSittingLifecycleStore(t *testing.T, ss store.Store, probe ExamSitti
 	require.Equal(t, model.ExamSittingClosing, deadlineClosing.Value.Sitting.State)
 	require.Equal(t, model.ExamSittingReasonScheduledEndReached, deadlineClosing.Value.Sitting.ReasonCode)
 
-	// Competing manager transitions share the Sitting revision fence. Exactly
+	// Competing manager transitions share the sitting revision fence. Exactly
 	// one commits, and the winner's returned value remains coherent with its own
 	// transition even while the loser observes the later row.
 	managerRace := schedule("sitting-manager-race", fixture.class.ID, fixture.period.StartsAt.Add(16*time.Hour), fixture.period.StartsAt.Add(17*time.Hour))
@@ -1485,7 +1487,7 @@ func TestExamSittingLifecycleStore(t *testing.T, ss store.Store, probe ExamSitti
 	require.ErrorAs(t, loser.err, &loserConflict)
 	require.False(t, loserConflict.Constraint != "exam_sitting_revision" && loserConflict.Constraint != "exam_sitting_state")
 
-	// An archived Exam may still be paused or closed when already live, but it
+	// An archived exam may still be paused or closed when already live, but it
 	// cannot be resumed or extended into further participation.
 	archivedLive := schedule("sitting-archived-live", fixture.class.ID, fixture.period.StartsAt.Add(14*time.Hour), fixture.period.StartsAt.Add(15*time.Hour))
 	archivedStart, archivedEnd := model.NowUTC().Add(-time.Minute), model.NowUTC().Add(time.Hour)
@@ -1545,8 +1547,8 @@ func TestExamSittingStoreSQLGuards(t *testing.T, ss store.Store, probe ExamSitti
 		requireConflictConstraint(t, err, constraint)
 	}
 
-	// A Class in another Academic Unit of the same Institution still does not
-	// belong to the Exam's exact ownership scope.
+	// A class in another academic unit of the same institution still does not
+	// belong to the exam's exact ownership scope.
 	foreignUnit := saveAcademicUnit(t, ctx, ss, fixture.institutionID.String(), "", "sitting-foreign-unit")
 	foreignProgramme := saveProgramme(t, ctx, ss, foreignUnit.ID.String(), "sitting-foreign-programme")
 	foreignLevel := saveProgrammeLevel(t, ctx, ss, foreignProgramme.ID.String(), "sitting-foreign-level")
@@ -1568,8 +1570,8 @@ func TestExamSittingStoreSQLGuards(t *testing.T, ss store.Store, probe ExamSitti
 	requireScheduleConflict("sitting-archived-ancestor", "exam_sitting_class_lineage", fixture.revisionID, ancestorClass.ID,
 		fixture.period.StartsAt.Add(5*time.Hour), fixture.period.StartsAt.Add(6*time.Hour))
 
-	// Academic Period containment is inclusive at both outer boundaries while
-	// the Sitting interval itself remains nonempty and half-open.
+	// Academic period containment is inclusive at both outer boundaries while
+	// the sitting interval itself remains nonempty and half-open.
 	boundary, err := schedule("sitting-period-boundaries", fixture.actor.ID, fixture.revisionID, fixture.class.ID,
 		fixture.period.StartsAt, fixture.period.EndsAt)
 	require.NoError(t, err)
@@ -1580,7 +1582,7 @@ func TestExamSittingStoreSQLGuards(t *testing.T, ss store.Store, probe ExamSitti
 	requireScheduleConflict("sitting-after-period", "exam_sitting_period_containment", fixture.revisionID, fixture.class.ID,
 		fixture.period.EndsAt.Add(-time.Hour), fixture.period.EndsAt.Add(time.Hour))
 
-	// Use a currently active Period to isolate the database-clock fence from
+	// Use a currently active period to isolate the database-clock fence from
 	// containment. A client-side "now" is necessarily equal to or behind the
 	// statement timestamp by the time the locked SQL guard executes.
 	now := model.NowUTC()
@@ -1642,7 +1644,7 @@ func TestExamSittingStoreSQLGuards(t *testing.T, ss store.Store, probe ExamSitti
 	requireConflictConstraint(t, invalidUpdate(1, "sitting-precedence-stale"), "exam_sitting_revision")
 	requireConflictConstraint(t, invalidUpdate(2, "sitting-precedence-state"), "exam_sitting_state")
 
-	// Competing mutations serialize on Exam then Sitting. Exactly one commits;
+	// Competing mutations serialize on exam then sitting. Exactly one commits;
 	// the loser observes the advanced optimistic revision (or lifecycle state).
 	race, err := schedule("sitting-race", fixture.actor.ID, fixture.revisionID, fixture.class.ID,
 		fixture.period.StartsAt.Add(13*time.Hour), fixture.period.StartsAt.Add(14*time.Hour))
@@ -1822,8 +1824,8 @@ func newExamSittingFinalizeJob(t *testing.T, sittingID model.ExamSittingID, revi
 }
 
 // requireSittingCommandFor asserts what the application no longer re-checks
-// on a Sitting command result: it carries its snapshot and names the
-// commanded Exam and Sitting.
+// on a sitting command result: it carries its snapshot and names the
+// commanded exam and sitting.
 func requireSittingCommandFor(t *testing.T, result *store.ExamSittingCommandResult, examID model.ExamID, sittingID model.ExamSittingID) {
 	t.Helper()
 	require.NotNil(t, result)
@@ -1834,8 +1836,8 @@ func requireSittingCommandFor(t *testing.T, result *store.ExamSittingCommandResu
 }
 
 // requireSittingLifecycleFor asserts what the application no longer re-checks
-// on a Sitting lifecycle result: it carries its snapshot, names the commanded
-// Exam and Sitting, and a change names a known transition.
+// on a sitting lifecycle result: it carries its snapshot, names the commanded
+// exam and sitting, and a change names a known transition.
 func requireSittingLifecycleFor(t *testing.T, result *store.ExamSittingLifecycleResult, examID model.ExamID, sittingID model.ExamSittingID) {
 	t.Helper()
 	require.NotNil(t, result)

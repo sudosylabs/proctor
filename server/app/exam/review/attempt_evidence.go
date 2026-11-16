@@ -17,10 +17,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ListAttemptEvidence returns one page of the Attempt evidence sealed
-// with a Submission to a caller authorized to view its Submission Review. The
-// records raise no Flag, so they are listed beside the Flags rather than
-// under one; the snapshot carries their sealed inventory.
+// ListAttemptEvidence returns one page of the attempt evidence sealed with a
+// submission. The records raise no flag, so they are listed beside the flags
+// rather than under one; the review snapshot carries their inventory.
 func (s *Service) ListAttemptEvidence(
 	ctx context.Context,
 	inv invocation.Invocation,

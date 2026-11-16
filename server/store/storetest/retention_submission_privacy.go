@@ -32,7 +32,7 @@ type RetentionSubmissionPrivacyProbe struct {
 }
 
 // TestRetentionSubmissionPrivacy verifies that integrity can expire separately
-// from work without replaying private Review text or recreating attention.
+// from work without replaying private review text or recreating attention.
 func TestRetentionSubmissionPrivacy(t *testing.T, ss store.Store, probe RetentionSubmissionPrivacyProbe) {
 	testRetentionSubmissionPrivacy(t, ss, probe, false, false)
 }
@@ -362,7 +362,7 @@ func appendRetirementNativeCondition(t *testing.T, ctx context.Context, ss store
 	renewal := &store.ExamAttemptParticipationRenewal{AttemptID: access.AttemptID, ParticipationID: connected.Participation.ID, ConnectionID: access.ConnectionID, CandidateUserID: access.CandidateUserID, SessionID: access.SessionID, DesktopRegistrationID: access.DesktopRegistrationID, DPoPKeyThumbprint: access.DPoPKeyThumbprint, ContinuityCredentialHash: access.ContinuityCredentialHash, Generation: connected.Participation.Generation, DesktopCompatibilityPolicyRevision: 1}
 	prepareParticipationSecurityControl(t, ctx, ss, renewal)
 	at := model.NowUTC().Truncate(time.Millisecond)
-	// Desktop agrees the window rule is met: no rule changes, so the Attempt's
+	// Desktop agrees the window rule is met: no rule changes, so the attempt's
 	// native evidence is the two readiness rule statuses kept at Start.
 	status := model.NativeRuleStatusReport{Kind: "rule_status", RuleID: "baseline.window", Status: model.NativeRuleMet, ObservedAt: at}
 	b := model.NativeSecurityBatch{StreamID: connected.Security.DeliveryStreamID, BatchSequence: 1, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, SecuritySessionID: connected.Security.SecuritySessionID, PolicyDigest: connected.Security.Policy.Digest, ApplicationReleaseID: connected.Security.Policy.ApplicationReleaseID, MatrixID: connected.Security.Policy.MatrixID, Records: []model.NativeRecord{{RuleStatus: &status}}}

@@ -18,21 +18,21 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ExportQuery names one Examination Export within its scope.
+// ExportQuery names one export within its scope.
 type ExportQuery struct {
 	Scope    model.RetentionHoldScope
 	ExportID model.ExamExportID
 }
 
-// ExportDownload pairs a ready Examination Export with its archive body,
-// which the caller must close.
+// ExportDownload pairs a ready export with its archive body, which the caller
+// must close.
 type ExportDownload struct {
 	Export *model.ExamExport
 	Body   io.ReadCloser
 }
 
-// GetExamExport returns the caller's own Examination Export after re-checking
-// authority over its scope and sources.
+// GetExamExport returns the caller's own export after re-checking authority
+// over its scope and sources.
 func (s *Exports) GetExamExport(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -47,9 +47,7 @@ func (s *Exports) GetExamExport(
 	return result.Export, nil
 }
 
-// OpenExamExport opens the archive of the caller's own ready Examination
-// Export, re-reading the export after opening so expiry or a change in
-// authority is not bypassed.
+// OpenExamExport opens the archive of the caller's own ready export.
 func (s *Exports) OpenExamExport(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -72,9 +70,9 @@ func (s *Exports) OpenExamExport(
 		return nil, apperror.New("exam.export.unavailable").Wrap(errors.New("missing export body"))
 	}
 
-	// Storage can block across expiry or an authority change. Re-read through
-	// the authoritative Store before exposing a body; node wall-clock time
-	// cannot extend or shorten the archive's PostgreSQL-clocked lifetime.
+	// Opening can block across expiry or an authority change, so re-read before
+	// exposing the body. The archive's lifetime runs on database time, never the
+	// node's clock.
 	current, err := s.getExport(ctx, inv, q)
 	if err == nil {
 		err = requireReadyExport(current)

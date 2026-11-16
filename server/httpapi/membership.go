@@ -18,8 +18,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// The membership sorts: each scope's start sort (a Class member's enrollment,
-// an Academic Unit member's membership start), its default, and the member's
+// The membership sorts: each scope's start sort (a class member's enrollment,
+// an academic unit member's membership start), its default, and the member's
 // name.
 const (
 	membershipSortEnrolled = "enrolled"

@@ -20,12 +20,10 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// DesktopAuthorizationPolicy bounds hosted Desktop authorization. Issuer is
-// the installation's public origin, under which the hosted authorization page
-// lives; it must be HTTPS unless AllowLoopbackHTTPDevelopment permits HTTP on
-// a loopback host. TransactionLifetime limits the whole browser transaction
-// and CodeLifetime the one-use code: zero selects the model maximum (five
-// minutes and one minute) and a longer value is refused.
+// DesktopAuthorizationPolicy bounds hosted desktop authorization. Issuer must
+// be HTTPS unless AllowLoopbackHTTPDevelopment permits HTTP on loopback. A zero
+// lifetime selects the model maximum (five minutes for the transaction, one
+// for the code); a longer one is refused.
 type DesktopAuthorizationPolicy struct {
 	Issuer                       string
 	AllowLoopbackHTTPDevelopment bool
@@ -57,9 +55,6 @@ func (o desktopAuthorizationAttemptOperation) qualifier() (string, bool) {
 	}
 }
 
-// checkDesktopAuthorizationAttempt counts one public Desktop authorization or
-// reauthentication attempt against its identity and source limits under the
-// login rate-limit policy.
 func (s *Service) checkDesktopAuthorizationAttempt(
 	ctx context.Context,
 	operation desktopAuthorizationAttemptOperation,
@@ -108,11 +103,9 @@ type StartDesktopAuthorizationCommand struct {
 	Source           string
 }
 
-// DesktopAuthorizationStart is what the Desktop receives for a started
-// authorization. AuthorizationURL is the hosted page to open in a browser; it
-// carries the one-use handle and the state in its query and the browser proof
-// in its fragment. ExpiresAt is the transaction deadline in Unix milliseconds.
-// DPoPNonce is bound to this authorization and the Desktop's proposed key.
+// DesktopAuthorizationStart is returned to the desktop app. AuthorizationURL
+// carries the browser proof in its fragment so it never reaches a server log;
+// ExpiresAt is Unix milliseconds; DPoPNonce is bound to the proposed key.
 type DesktopAuthorizationStart struct {
 	AuthorizationURL string
 	ExpiresAt        int64
@@ -122,45 +115,37 @@ type DesktopAuthorizationStart struct {
 type BindDesktopAuthorizationCommand struct{ Handle, BrowserProof, State string }
 
 // DesktopAuthorizationBinding is the browser's credential for one bound
-// Desktop authorization or reauthentication. Binding is the raw secret, of
-// which only a hash is stored; the HTTP layer returns it as a cookie.
-// ExpiresAt is Unix milliseconds.
+// desktop authorization. Binding is the raw secret (only its hash is stored),
+// set as a cookie; ExpiresAt is Unix milliseconds.
 type DesktopAuthorizationBinding struct {
 	Binding   string
 	ExpiresAt int64
 }
 
-// DesktopAuthorizationAccount identifies the account a bound Desktop
-// authorization has authenticated, for the hosted page to show before the
-// person approves signing the Desktop in as it.
+// DesktopAuthorizationAccount is the account the hosted page shows before the
+// person approves signing the desktop app in as it.
 type DesktopAuthorizationAccount struct {
 	ID          model.UserID
 	Username    string
 	DisplayName string
-	// Email is the authenticated account's own address, shown so the person
-	// can confirm which account the Desktop will use.
-	Email string
+	Email       string
 }
 
-// DesktopAuthorizationBrowserContext is what the hosted page shows for a bound
-// Desktop authorization. Once the transaction is authenticated, Account is
-// set and the sign-in fields stay empty. Before that, Account is nil and
-// LocalLoginEnabled and ExternalProviders name the sign-in methods the access
-// policy allows for Desktop authorization. ExpiresAt is Unix milliseconds.
+// DesktopAuthorizationBrowserContext is what the hosted page shows. Account is
+// nil until the transaction is authenticated; until then the sign-in fields
+// list the methods the policy allows. Times are Unix milliseconds.
 type DesktopAuthorizationBrowserContext struct {
 	State             model.BrowserAuthenticationState
 	Account           *DesktopAuthorizationAccount
 	LocalLoginEnabled bool
 	ExternalProviders []model.ExternalAuthenticationProvider
 	DeviceName        string
-	// RequestedAt is when Desktop started this authorization request.
-	RequestedAt int64
-	ExpiresAt   int64
+	RequestedAt       int64
+	ExpiresAt         int64
 }
 
-// requireDesktopAuthorization defaults the Desktop authorization lifetimes and
-// refuses a Service whose Desktop authorization collaborators or policy are
-// incomplete. New calls it once, after sign-in is set up.
+// requireDesktopAuthorization also defaults the lifetimes, and must run after
+// sign-in is set up.
 func (s *Service) requireDesktopAuthorization() error {
 	if s.browserAuthentications == nil || s.institutions == nil {
 		return errors.New("desktop authorization persistence is required")
@@ -238,8 +223,8 @@ func (s *Service) BindDesktopAuthorization(
 	return &DesktopAuthorizationBinding{Binding: binding, ExpiresAt: bound.ExpiresAt.UnixMilli()}, nil
 }
 
-// DesktopAuthorizationContext projects the bound Desktop authorization: the
-// authenticated account, or the sign-in methods it may still use.
+// DesktopAuthorizationContext returns the authenticated account, or the
+// sign-in methods still open to the bound authorization.
 func (s *Service) DesktopAuthorizationContext(
 	ctx context.Context,
 	_ invocation.Invocation,
@@ -316,8 +301,8 @@ var desktopAuthorizationStoreErrors = apperror.StoreTable{
 	Unavailable: "authentication.desktop_authorization.unavailable",
 }
 
-// StartDesktopAuthorization begins a Desktop authorization for a compatible
-// Desktop build and returns the hosted page to open.
+// StartDesktopAuthorization begins an authorization for a compatible desktop
+// build; it fails with incompatible or unavailable otherwise.
 func (s *Service) StartDesktopAuthorization(
 	ctx context.Context,
 	inv invocation.Invocation,

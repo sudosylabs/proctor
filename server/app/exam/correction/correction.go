@@ -14,27 +14,13 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Authorizer is the part of *access.Authorizer the correction use cases call.
-type Authorizer interface {
-	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
-}
-
-// Auditor records the attempt and failure of each audited correction
-// command; the Store completes the audit event with the change it commits.
-type Auditor interface {
-	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
-	Fail(context.Context, model.AuditEventID, string) error
-}
-
-// Content writes the bytes of a staged Exam Resource under the File Revision
-// and Rendition identifiers the Store reserved, so a retry of the same stage
-// writes the same object.
+// Content writes staged resource bytes under the revision and rendition IDs
+// the store reserved, so a retried stage writes the same object.
 type Content interface {
 	StoreExamResourceRendition(
 		context.Context,
@@ -47,18 +33,19 @@ type Content interface {
 	) (model.FileRendition, error)
 }
 
-// Service stages Exam Resource content for, and applies, live corrections to
-// an Exam Sitting.
+// Service stages resource content for, and applies, live corrections; build
+// it with New.
 type Service struct {
-	corrections store.ExamCorrectionStore
-	revisions   store.ExamRevisionStore
-	// sittings finds the candidates whose Exam activity a correction refreshes.
+	corrections         store.ExamCorrectionStore
+	revisions           store.ExamRevisionStore
 	sittings            store.ExamSittingStore
 	exams               store.ExamAuthoringStore
 	academicUnitMembers store.AcademicUnitMemberStore
 
-	authorizer        Authorizer
-	auditor           Auditor
+	authorizer *access.Authorizer
+	// auditor only begins and fails audits; the store completes them in the
+	// same transaction as the change.
+	auditor           access.MutationAuditAdapter
 	publisher         realtime.Publisher
 	content           Content
 	now               func() time.Time
@@ -73,16 +60,16 @@ type Service struct {
 	newExamRevisionID func() model.ExamRevisionID
 }
 
-// Dependencies are the collaborators New validates once and distributes to
-// the Service.
+// Dependencies are the Service's collaborators. New requires every field
+// except InstitutionOrigin.
 type Dependencies struct {
 	Persistence       store.ExamCorrectionStore
 	Revisions         store.ExamRevisionStore
 	Sittings          store.ExamSittingStore
 	Access            store.ExamAuthoringStore
 	Memberships       store.AcademicUnitMemberStore
-	Authorizer        Authorizer
-	Auditor           Auditor
+	Authorizer        *access.Authorizer
+	Auditor           *access.Auditor
 	Publisher         realtime.Publisher
 	Content           Content
 	Now               func() time.Time
@@ -96,8 +83,7 @@ type Dependencies struct {
 	InstitutionOrigin string
 }
 
-// New returns a correction Service, or an error when a required dependency is
-// missing.
+// New returns an error when a required dependency is nil.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Persistence == nil ||
 		deps.Revisions == nil ||
@@ -126,7 +112,7 @@ func New(deps Dependencies) (*Service, error) {
 		exams:               deps.Access,
 		academicUnitMembers: deps.Memberships,
 		authorizer:          deps.Authorizer,
-		auditor:             deps.Auditor,
+		auditor:             deps.Auditor.MutationAudit(),
 		publisher:           deps.Publisher,
 		content:             deps.Content,
 		now:                 deps.Now,

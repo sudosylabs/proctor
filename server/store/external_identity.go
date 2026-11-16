@@ -29,8 +29,8 @@ type ExternalIdentityResolutionRequest struct {
 	DefaultProfilePictureJob *model.Job
 }
 
-// ExternalIdentityLink is the proof-completed, application-prepared command
-// that attaches one immutable provider subject to the exact current User.
+// ExternalIdentityLink attaches a proved provider subject to the current
+// user.
 type ExternalIdentityLink struct {
 	ExternalLoginStateID model.ExternalLoginStateID
 	Identity             *model.ExternalIdentity
@@ -39,8 +39,8 @@ type ExternalIdentityLink struct {
 	AuditAt              time.Time
 }
 
-// ExternalIdentityUnlink removes one exact provider identity and revokes only
-// Sessions that authenticated through that provider.
+// ExternalIdentityUnlink removes one provider identity and revokes only the
+// sessions that authenticated through it.
 type ExternalIdentityUnlink struct {
 	ID               model.ExternalIdentityID
 	UserID           model.UserID
@@ -58,9 +58,9 @@ type AuthenticationMethodMutationResult struct {
 	RevokedTokenHashes []string
 }
 
-// ExternalIdentityStore persists provider-subject links and owns the
-// transaction that either resolves an existing link or provisions a new user
-// and link without email-based account merging.
+// ExternalIdentityStore persists provider-subject links. ResolveOrProvision
+// either finds the link or creates a user and link; it never merges accounts
+// by email.
 type ExternalIdentityStore interface {
 	Save(context.Context, *model.ExternalIdentity) (*model.ExternalIdentity, error)
 	Get(context.Context, model.ExternalIdentityID) (*model.ExternalIdentity, error)
@@ -71,25 +71,24 @@ type ExternalIdentityStore interface {
 	Unlink(context.Context, *ExternalIdentityUnlink) (*AuthenticationMethodMutationResult, error)
 }
 
-// ExternalLoginStateStore persists hashed, browser-bound, one-use login
-// transactions so any node may receive the provider callback.
+// ExternalLoginStateStore persists hashed, browser-bound, single-use login
+// transactions so any node can take the provider callback.
 type ExternalLoginStateStore interface {
-	// Save applies lifetime to one authoritative database timestamp. Callers
-	// provide no absolute creation or expiry deadline.
+	// Save starts the lifetime from the database clock; callers give no
+	// absolute times.
 	Save(context.Context, *ExternalLoginStateCreation) (*model.ExternalLoginState, error)
-	// SaveInvitationAdmission resolves a raw-claim digest against one currently
-	// pending Invitation and atomically binds its identity to the new browser
-	// transaction. The digest is used only for the lookup and is not copied into
-	// the external-login state.
+	// SaveInvitationAdmission looks up the pending invitation by claim digest
+	// and binds it to the new transaction atomically. The digest is not
+	// stored in the login state.
 	SaveInvitationAdmission(context.Context, *ExternalLoginStateInvitationAdmission) (*model.ExternalLoginState, error)
 	GetByStateHash(context.Context, string) (*model.ExternalLoginState, error)
 	Consume(context.Context, *ExternalLoginStateConsumption) (*model.ExternalLoginState, error)
 	Maintain(context.Context, int) (*ExternalLoginStateMaintenanceResult, error)
 }
 
-// ExternalLoginStateMaintenanceResult reports one bounded database-time pass.
-// Terminalized is the number of abandoned provider-connection audit attempts
-// completed as failures; Purged is safe state metadata removed after retention.
+// ExternalLoginStateMaintenanceResult reports one bounded pass on the
+// database clock. Terminalized counts abandoned provider-connection audit
+// attempts completed as failures; Purged counts rows removed after retention.
 type ExternalLoginStateMaintenanceResult struct {
 	Terminalized int
 	Purged       int

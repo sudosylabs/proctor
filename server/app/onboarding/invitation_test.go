@@ -9,11 +9,12 @@ package onboarding
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
@@ -107,11 +108,13 @@ func TestOnboardingInvitationNoOpDoesNotRequireMail(t *testing.T) {
 	now := model.TimeFromMillis(1_800_000_000_000)
 	periodID, classID := model.NewAcademicPeriodID(), model.NewClassID()
 	persistence := &invitationStoreFake{onboardingNoOp: true}
+	inviterID := model.NewUserID()
+	composer, _ := newTestMail(t, false)
 	service := newInvitationServiceForTest(t, persistence,
-		invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{}, &authorizerFake{}, &mailFake{disabled: true}, now)
+		invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{}, permissiveAccess(t, accesstest.Options{}, []model.UserID{inviterID}), composer, now)
 	service.classes = invitationClassStoreFake{class: &model.Class{ID: classID, AcademicPeriodID: periodID}}
 	service.periods = invitationPeriodStoreFake{period: &model.AcademicPeriod{ID: periodID, StartsAt: now.Add(time.Hour), EndsAt: now.Add(24 * time.Hour)}}
-	view, err := service.IssueStudentClassInvitation(context.Background(), invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{}),
+	view, err := service.IssueStudentClassInvitation(context.Background(), sessionCaller(inviterID, now),
 		IssueStudentClassInvitationCommand{TargetEmail: "existing@example.edu", ClassID: classID, IdempotencyKey: "import-row",
 			onboardingImportID: model.NewOnboardingImportID(), onboardingImportRowNumber: 1})
 	require.NoError(t, err, "mail-disabled no-op = %#v / %#v", view, persistence.issued)
@@ -276,78 +279,61 @@ func (f invitationRoleStoreFake) Get(context.Context, model.RoleID) (*model.Role
 	return f.role, nil
 }
 
-// mailFake stands in for the mail mail: it records the Invitation
-// action URL and the public registration verification it prepares. A
-// disabled fake suppresses acceptance notices and refuses registration mail.
-type mailFake struct {
-	issueURL        string
-	disabled        bool
-	directJobType   model.JobType
-	directErr       error
-	prepareCalls    int
-	actionURL       string
-	registrationErr error
+// anyClassStore resolves every Class as a live Class of testAcademicUnitID
+// in an Institution-owned Academic Period, for tests whose authority is not
+// about which Class it is.
+type anyClassStore struct{ store.ClassStore }
+
+func (anyClassStore) Get(_ context.Context, id model.ClassID) (*model.Class, error) {
+	return &model.Class{ID: id, AcademicPeriodID: model.NewAcademicPeriodID()}, nil
 }
 
-func (f *mailFake) Enabled() bool { return !f.disabled }
-
-func (f *mailFake) PrepareInvitation(invitation *model.Invitation, actionURL string) (*store.PreparedMail, error) {
-	f.issueURL = actionURL
-	return invitationPreparedMail(invitation.InviterUserID, "", invitation.ID, model.MailOccurrenceID(invitation.ID.String()), model.MailTemplateAccessStudentClassInvitation, invitation.CreatedAt, invitation.ExpiresAt), nil
+func (anyClassStore) GetAcademicUnitID(context.Context, model.ClassID) (model.AcademicUnitID, error) {
+	return testAcademicUnitID, nil
 }
 
-func (f *mailFake) PrepareInvitationResend(invitation *model.Invitation, actionURL string, actor model.UserID, at time.Time) (*store.PreparedMail, error) {
-	f.issueURL = actionURL
-	return invitationPreparedMail(actor, "", invitation.ID, model.NewMailOccurrenceID(), model.MailTemplateAccessStudentClassInvitation, at, invitation.ExpiresAt), nil
+// anyPeriodStore resolves every Academic Period as live and owned by the
+// Institution.
+type anyPeriodStore struct{ store.AcademicPeriodStore }
+
+func (anyPeriodStore) Get(_ context.Context, id model.AcademicPeriodID) (*model.AcademicPeriod, error) {
+	return &model.AcademicPeriod{ID: id, Owner: model.AcademicPeriodOwner{InstitutionID: model.NewInstitutionID()}}, nil
 }
 
-func (f *mailFake) PrepareInvitationRevocation(invitation *model.Invitation, actor model.UserID, at time.Time) (*store.PreparedMail, error) {
-	prepared := invitationPreparedMail(actor, "", invitation.ID, model.NewMailOccurrenceID(), model.MailTemplateAccessInvitationRevoked, at, at.Add(24*time.Hour))
-	command, _ := model.EncodeMailDeliveryCommand(model.MailDeliveryCommand{DeliveryID: prepared.Delivery.ID})
-	prepared.Job, _ = model.NewJob(prepared.Job.ID, model.JobTypeMailDeliver, command, prepared.Delivery.ID.String(), at, at, model.MailMaximumAttempts)
-	return prepared, nil
-}
+// testAcademicUnitID is the Academic Unit every anyClassStore Class belongs
+// to.
+var testAcademicUnitID = model.NewAcademicUnitID()
 
-func (f *mailFake) PrepareInvitationAccepted(request mail.NoticePreparation) (*store.PreparedMail, error) {
-	if f.directErr != nil {
-		return nil, f.directErr
+// permissiveAccess builds the real authorizer and auditor for callers whose
+// authority is not what the test is about: each holds every Action
+// Institution-wide, every Class and Academic Period resolves, and the listed
+// Academic Units exist beside testAcademicUnitID. options adds Users or
+// further grants.
+func permissiveAccess(t testing.TB, options accesstest.Options, callers []model.UserID, units ...model.AcademicUnitID) *accesstest.Fixture {
+	t.Helper()
+	if options.Classes == nil {
+		options.Classes = anyClassStore{}
 	}
-	f.directJobType = model.JobTypeMailDeliver
-	prepared := invitationPreparedMail(request.Recipient.ID, request.Recipient.ID, "", model.NewMailOccurrenceID(),
-		model.MailTemplateAccessInvitationAccepted, request.At, request.At.Add(24*time.Hour))
-	command, _ := model.EncodeMailDeliveryCommand(model.MailDeliveryCommand{DeliveryID: prepared.Delivery.ID})
-	prepared.Job, _ = model.NewJob(prepared.Job.ID, model.JobTypeMailDeliver, command, prepared.Delivery.ID.String(), request.At, request.At, model.MailMaximumAttempts)
-	if f.disabled {
-		prepared.Job, _ = prepared.Job.RequestCancellation(request.At)
-		prepared.Delivery.State = model.MailDeliverySuppressed
-		prepared.Delivery.PublicFailureCode = model.MailDeliveryDisabledCode
-		prepared.Delivery.EncryptedPayload = nil
+	if options.AcademicPeriods == nil {
+		options.AcademicPeriods = anyPeriodStore{}
 	}
-	return prepared, nil
+	options.Units = append(options.Units, &model.AcademicUnit{ID: testAcademicUnitID, Name: "Computing"})
+	for _, id := range units {
+		options.Units = append(options.Units, &model.AcademicUnit{ID: id, Name: "Unit " + id.String()})
+	}
+	options.Grants = append(options.Grants, grantAll(callers...)...)
+	return accesstest.New(t, options)
 }
 
-func invitationPreparedMail(actor, targetUser model.UserID, targetInvitation model.InvitationID, occurrenceID model.MailOccurrenceID, key model.MailTemplateKey, at, deadline time.Time) *store.PreparedMail {
-	deliveryID, jobID := model.NewMailDeliveryID(), model.NewJobID()
-	command, _ := model.EncodeMailDeliveryCommand(model.MailDeliveryCommand{DeliveryID: deliveryID})
-	job, _ := model.NewJob(jobID, model.JobTypeMailDeliverCredential, command, deliveryID.String(), at, at, model.MailMaximumAttempts)
-	return &store.PreparedMail{
-		Occurrence: &model.MailOccurrence{ID: occurrenceID, Kind: model.MailOccurrenceInvitation, TemplateKey: key, ActorUserID: actor, CreatedAt: at},
-		Delivery: &model.MailDelivery{ID: deliveryID, OccurrenceID: occurrenceID, JobID: jobID, TargetUserID: targetUser,
-			TargetInvitationID: targetInvitation, TemplateKey: key, TemplateDigest: strings.Repeat("d", 64),
-			MaskedRecipient: "s***@example.edu", State: model.MailDeliveryQueued, CreatedAt: at, UpdatedAt: at,
-			MessageDate: at, Deadline: deadline, MessageID: "<invite." + deliveryID.String() + "@example.test>",
-			EncryptedPayload: []byte(`{"version":1,"key_id":"11111111111111111111111111111111","ciphertext":"sealed"}`), Revision: 1},
-		Job: job,
-	}
-}
-
+// newInvitationServiceForTest builds a Service over the test's Invitation,
+// Academic Unit and Role stores, the real access and mail given and the real
+// password hasher.
 func newInvitationServiceForTest(t *testing.T, persistence store.InvitationStore, units store.AcademicUnitStore,
-	roles store.RoleStore, authorization resourceAuthorizer, composer mailComposer, now time.Time,
+	roles store.RoleStore, authorization *accesstest.Fixture, composer *mail.Composer, now time.Time,
 ) *Service {
 	t.Helper()
-	events := []string{}
 	return &Service{invitations: persistence, classes: invitationClassStoreFake{}, periods: invitationPeriodStoreFake{}, academicUnits: units, roles: roles,
-		authorizer: authorization, mail: composer, hasher: passwordHasherFake{}, auditor: &mutationAttemptAuditorFake{events: &events, beginID: model.NewAuditEventID().String()},
+		authorizer: authorization.Authorizer, auditor: authorization.Auditor.MutationAudit(), mail: composer, hasher: testPasswordHasher(t),
 		attempts: testAttempts(t), rateLimit: testRateLimit, publisher: &realtimetest.Publisher{}, nodeID: "node-1", publicURL: "https://proctor.example.edu",
 		recentAuthenticationTTL: 15 * time.Minute, newToken: model.NewCredentialToken, now: func() time.Time { return now }}
 }
@@ -358,13 +344,13 @@ func TestInvitationServiceIssuesAndAcceptsWithoutPersistingRawClaim(t *testing.T
 	period := &model.AcademicPeriod{ID: periodID, StartsAt: now.Add(time.Hour), EndsAt: now.Add(180 * 24 * time.Hour)}
 	class := &model.Class{ID: classID, AcademicPeriodID: periodID}
 	persistence := &invitationStoreFake{}
-	authorizer := &authorizerFake{}
-	composer := &mailFake{}
-	events := []string{}
-	auditor := &mutationAttemptAuditorFake{events: &events, beginID: model.NewAuditEventID().String()}
+	authorization := permissiveAccess(t, accesstest.Options{}, []model.UserID{inviterID})
+	composer, rendered := newTestMail(t, true)
 	raw := model.NewCredentialToken()
-	service := &Service{invitations: persistence, classes: invitationClassStoreFake{class: class}, periods: invitationPeriodStoreFake{period: period}, academicUnits: invitationAcademicUnitStoreFake{}, roles: invitationRoleStoreFake{}, authorizer: authorizer, mail: composer, hasher: passwordHasherFake{}, auditor: auditor, attempts: testAttempts(t), rateLimit: testRateLimit, publisher: &realtimetest.Publisher{}, nodeID: "node-1", publicURL: "https://proctor.example.edu", recentAuthenticationTTL: 15 * time.Minute, newToken: func() string { return raw }, now: func() time.Time { return now }}
-	call := invocation.New(model.Principal{UserID: inviterID}, model.RequestMetadata{})
+	service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{}, authorization, composer, now)
+	service.classes, service.periods = invitationClassStoreFake{class: class}, invitationPeriodStoreFake{period: period}
+	service.newToken = func() string { return raw }
+	call := sessionCaller(inviterID, now)
 	view, err := service.IssueStudentClassInvitation(context.Background(), call, IssueStudentClassInvitationCommand{
 		TargetEmail: " Student@Example.edu ", ClassID: classID, IntendedStartsAt: model.MillisFromTime(period.StartsAt),
 		IntendedEndsAt: model.MillisFromTime(period.EndsAt), SuggestedUsername: "student-one", SuggestedDisplayName: "Student One", SuggestedLocale: "en",
@@ -374,10 +360,9 @@ func TestInvitationServiceIssuesAndAcceptsWithoutPersistingRawClaim(t *testing.T
 	require.NotContains(t, view.String(), raw, "unsafe or incomplete issue: view=%#v input=%#v url", view, persistence.issued)
 	require.Equal(t, model.HashInvitationClaim(raw), persistence.issued.Invitation.ClaimHash, "unsafe or incomplete issue: view=%#v input=%#v url", view, persistence.issued)
 	require.NotContains(t, string(persistence.issued.Delivery.EncryptedPayload), raw, "unsafe or incomplete issue: view=%#v input=%#v url", view, persistence.issued)
-	require.Contains(t, composer.issueURL, "/join#token=", "unsafe or incomplete issue: view=%#v input=%#v url", view, persistence.issued)
-	require.Len(t, authorizer.actions, 2)
-	require.Equal(t, model.ActionInvitationCreate, authorizer.actions[0])
-	require.Equal(t, model.ActionClassMembersManage, authorizer.actions[1])
+	require.Equal(t, 1, rendered.Count())
+	require.Contains(t, openedMail(t, persistence.issued.Delivery).Text, "/join#token="+raw, "unsafe or incomplete issue: view=%#v input=%#v url", view, persistence.issued)
+	require.Equal(t, []model.Action{model.ActionInvitationCreate, model.ActionClassMembersManage}, decidedActions(authorization))
 	result, err := service.AcceptStudentClassInvitation(context.Background(), invocation.Invocation{}, AcceptStudentClassInvitationCommand{
 		Claim: raw, Password: "correct horse battery staple", Username: "student-one", DisplayName: "Student One", Locale: "en",
 	})
@@ -385,6 +370,6 @@ func TestInvitationServiceIssuesAndAcceptsWithoutPersistingRawClaim(t *testing.T
 	require.NotNil(t, result.User, "acceptance result/input = %#v / %#v", result, persistence.accepted)
 	require.Equal(t, "student@example.edu", result.User.Email, "acceptance result/input = %#v / %#v", result, persistence.accepted)
 	require.True(t, result.User.EmailVerified, "acceptance result/input = %#v / %#v", result, persistence.accepted)
-	require.Equal(t, "encoded:correct horse battery staple", persistence.accepted.PasswordCredential.PasswordHash, "acceptance result/input = %#v / %#v", result, persistence.accepted)
+	requirePasswordHash(t, service.hasher, persistence.accepted.PasswordCredential.PasswordHash, "correct horse battery staple")
 	require.Equal(t, model.HashInvitationClaim(raw), persistence.accepted.ClaimHash, "acceptance result/input = %#v / %#v", result, persistence.accepted)
 }

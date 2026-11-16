@@ -25,11 +25,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ListRoleBindingsQuery names exactly one of: one User, one scope, or up to
-// store.MaximumRoleBindingListRoles Roles whose Role Bindings to list. Only a
-// Role listing is paged: BeforeCreatedAt and BeforeID, both set or both zero,
-// continue after the previous page's last binding, and Limit is its page
-// size.
+// ListRoleBindingsQuery names exactly one of: a user, a scope, or up to
+// store.MaximumRoleBindingListRoles roles. Only a role listing is paged;
+// BeforeCreatedAt and BeforeID are both set or both zero.
 type ListRoleBindingsQuery struct {
 	UserID          model.UserID
 	ScopeType       model.RoleScopeType
@@ -40,7 +38,7 @@ type ListRoleBindingsQuery struct {
 	Limit           int
 }
 
-// CreateRoleBindingCommand binds a User to a Role at a scope.
+// CreateRoleBindingCommand binds a user to a role at a scope.
 type CreateRoleBindingCommand struct {
 	UserID         model.UserID
 	RoleID         model.RoleID
@@ -52,7 +50,7 @@ type CreateRoleBindingCommand struct {
 	Batch          batchitem.Item
 }
 
-// EndRoleBindingCommand ends a Role Binding.
+// EndRoleBindingCommand ends a role binding.
 type EndRoleBindingCommand struct {
 	ID             model.RoleBindingID
 	IdempotencyKey string
@@ -61,12 +59,9 @@ type EndRoleBindingCommand struct {
 	Batch          batchitem.Item
 }
 
-// ListRoleBindings lists one User's Role Bindings within the caller's
-// visibility, every Role Binding at one scope the caller may view, or one
-// page of the current Role Bindings of the named Roles within the caller's
-// visibility. A User or scope listing returns every binding, uncounted; a
-// Role listing returns one keyset page, newest first, whose first page also
-// carries its total.
+// ListRoleBindings returns every binding of one user or at one scope,
+// uncounted, or one keyset page of the named roles' bindings, newest first,
+// whose first page carries its total. All within the caller's visibility.
 func (s *Service) ListRoleBindings(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -112,11 +107,10 @@ func (s *Service) ListRoleBindings(
 	}
 }
 
-// listRoleHolders pages the current Role Bindings of the named Roles inside
-// the caller's role_binding.view visibility, recording that one decision. A
-// Role is seen through Institution-wide role.view, so without it, or for a
-// Role that does not exist or is archived, every requested Role is refused
-// alike as request.invalid on role_id, never revealing which Roles exist.
+// listRoleHolders records one role_binding.view decision. Without
+// institution-wide role.view, or for a missing or archived role, every
+// requested role is refused alike as request.invalid on role_id, so the
+// response never reveals which roles exist.
 func (s *Service) listRoleHolders(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -188,9 +182,9 @@ func (s *Service) listRoleHolders(
 	return paging.Counted[*model.RoleBinding]{Page: page, Total: total}, nil
 }
 
-// CreateRoleBinding binds a User to a Role at a scope the caller manages,
-// when the caller may delegate the Role's permissions there. It prepares the
-// assignment notice and drops the User's cached authorization after commit.
+// CreateRoleBinding needs a scope the caller manages and the right to
+// delegate the role's permissions there. It prepares the assignment notice
+// and drops the user's cached authorization after commit.
 func (s *Service) CreateRoleBinding(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -314,7 +308,6 @@ func (s *Service) CreateRoleBinding(
 	return saved, nil
 }
 
-// authorizeRoleDelegation loads the bound Role and authorizes delegating its permissions at the candidate scope.
 func (s *Service) authorizeRoleDelegation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -340,9 +333,9 @@ func (s *Service) authorizeRoleDelegation(
 
 	delegatedPermissions := role.Permissions
 	if role.BuiltIn && role.Name == model.SystemAdministratorRoleName {
-		// Downgrade-preserved unknown permissions remain dormant and must not
-		// make the protected administrator Role impossible to bind. Every
-		// action recognized by this binary is still checked.
+		// Unknown permissions kept across a downgrade stay dormant and must
+		// not make the protected administrator role impossible to bind.
+		// Every action this binary knows is still checked.
 		delegatedPermissions = model.AllActions()
 	}
 
@@ -359,7 +352,8 @@ func (s *Service) authorizeRoleDelegation(
 	return role, delegatedPermissions, nil
 }
 
-// prepareRoleAssignmentNotice loads the recipient and prepares the Role assignment mail unless the batch retained the outcome.
+// prepareRoleAssignmentNotice skips the mail when the batch retained the
+// outcome.
 func (s *Service) prepareRoleAssignmentNotice(
 	ctx context.Context,
 	command CreateRoleBindingCommand,
@@ -394,9 +388,8 @@ func (s *Service) prepareRoleAssignmentNotice(
 	return recipient, notice, nil
 }
 
-// EndRoleBinding ends a Role Binding at a scope the caller manages. It
-// prepares the ending notice and drops the User's cached authorization after
-// commit.
+// EndRoleBinding needs a scope the caller manages. It prepares the ending
+// notice and drops the user's cached authorization after commit.
 func (s *Service) EndRoleBinding(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -509,9 +502,9 @@ func (s *Service) EndRoleBinding(
 	return ended, nil
 }
 
-// authorizeRoleBindingList authorizes listing a User's Role Bindings and
-// returns the scopes whose bindings the caller may see. It records exactly one
-// authorization decision, at the Institution or the first granted scope.
+// authorizeRoleBindingList returns the scopes whose bindings the caller may
+// see, recording exactly one decision, at the institution or the first
+// granted scope.
 func (s *Service) authorizeRoleBindingList(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -562,9 +555,8 @@ func (s *Service) authorizeRoleBindingList(
 	}, nil
 }
 
-// RoleBindingStoreErrors translates Role Binding Store failures into public
-// application errors. Onboarding imports translate their Role Binding reads
-// through it too.
+// RoleBindingStoreErrors maps role binding store failures to application
+// errors. Onboarding imports use it for their binding reads too.
 var RoleBindingStoreErrors = apperror.AdministrationStoreTable(
 	"role_binding",
 	"role_binding.conflict",

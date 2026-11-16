@@ -585,7 +585,7 @@ func examSubmissionSQLProbe(t *testing.T, persistence *SQLStore) storetest.ExamS
 			defer connection.Close()
 			transaction, err := connection.BeginTxx(ctx, nil)
 			require.NoError(t, err)
-			defer transaction.Rollback()
+			defer func() { _ = transaction.Rollback() }()
 			_, err = transaction.ExecContext(ctx, `SET LOCAL session_replication_role = replica`)
 			require.NoError(t, err)
 			_, err = transaction.ExecContext(ctx, persistence.GetMaster().DB().Rebind(`UPDATE exam_submissions SET manifest_digest=? WHERE id=?`),
@@ -1022,7 +1022,7 @@ func TestExamRevisionPublishedBytesSurviveDraftReplacementAndCleanup(t *testing.
 		_, advanceErr := persistence.GetMaster().Exec(ctx, `UPDATE exam_starter_workspace_objects SET reclaim_after=created_at WHERE id=?`, fixture.OldWorkspaceObjectID.String())
 		require.NoError(t, advanceErr)
 
-		claimed, claimErr := ss.ExamStarterWorkspace().ClaimObjectsForCleanup(ctx, &store.StarterWorkspaceCleanupClaim{Limit: 100, ClaimToken: "revision-vfs-retention"})
+		claimed, claimErr := ss.ExamStarterWorkspace().ClaimObjectsForCleanup(ctx, &store.StarterWorkspaceCleanupClaim{Limit: 100, ClaimToken: "revision-vfs-retention"}) //nolint:gosec // G101: fixed cleanup claim token label, not a credential
 		require.NoError(t, claimErr)
 		foundNeighbor := false
 		for _, object := range claimed {
@@ -1032,7 +1032,7 @@ func TestExamRevisionPublishedBytesSurviveDraftReplacementAndCleanup(t *testing.
 			}
 			foundNeighbor = true
 			require.NoError(t, content.RemoveStarterWorkspaceObject(ctx, object.ID))
-			require.NoError(t, ss.ExamStarterWorkspace().CompleteObjectCleanup(ctx, &store.StarterWorkspaceCleanupCompletion{ObjectID: object.ID, ClaimToken: "revision-vfs-retention"}))
+			require.NoError(t, ss.ExamStarterWorkspace().CompleteObjectCleanup(ctx, &store.StarterWorkspaceCleanupCompletion{ObjectID: object.ID, ClaimToken: "revision-vfs-retention"})) //nolint:gosec // G101: fixed cleanup claim token label, not a credential
 		}
 		require.True(t, foundNeighbor, "cleanup did not claim unpinned neighbor")
 		if opened, openErr := content.OpenStarterWorkspaceObject(ctx, neighbor.ID); openErr == nil {
@@ -1075,8 +1075,8 @@ func assertExamRevisionDatabaseImmutability(t *testing.T, ctx context.Context, p
 	}
 	for _, test := range queries {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := persistence.GetMaster().Exec(ctx, test.query, test.args...)
-			assertPostgresCode(t, test.name, err, "55000")
+			_, execErr := persistence.GetMaster().Exec(ctx, test.query, test.args...)
+			assertPostgresCode(t, test.name, execErr, "55000")
 		})
 	}
 	_, err = persistence.ExamRevision().GetSnapshot(ctx, fixture.ExamID, fixture.RevisionID)

@@ -14,8 +14,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -45,24 +45,27 @@ func TestAcademicUnitMemberPagingAuthorizesEveryPage(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	events := []string{}
+	principal, caller := newCaller()
 	scopeID := model.NewAcademicUnitID()
+	access := academicUnitAccess(t, &events, nil, unitGrant(principal.UserID, scopeID, model.ActionAcademicUnitMembersView))
 	member := &model.AcademicUnitMember{ID: model.NewAcademicUnitMemberID(), UserID: model.NewUserID(), AcademicUnitID: scopeID, StartsAt: model.TimeFromMillis(400)}
 	persistence := &academicUnitMemberStoreFake{events: &events, pageResult: &store.AcademicUnitMemberPage{Members: []*model.AcademicUnitMember{member}, HasMore: true}}
-	authorization := &programmeAuthorizerFake{events: &events}
 	now := model.TimeFromMillis(1000)
-	service := mustNew(Dependencies{Store: &catalogFake{academicUnitMember: persistence, user: relationshipUserStoreTestFake{}}, Authorizer: authorization, Now: func() time.Time { return now }})
-	first, err := service.ListAcademicUnitMembersPage(ctx, invocation.Invocation{}, ListAcademicUnitMembersPageQuery{AcademicUnitID: scopeID, MembershipPageQuery: MembershipPageQuery{Limit: 1}})
+	clock := func() time.Time { return now }
+	service := mustNew(Dependencies{Store: &catalogFake{academicUnitMember: persistence, user: relationshipUserStoreTestFake{}}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: clock})
+	first, err := service.ListAcademicUnitMembersPage(ctx, caller, ListAcademicUnitMembersPageQuery{AcademicUnitID: scopeID, MembershipPageQuery: MembershipPageQuery{Limit: 1}})
 	require.NoError(t, err, "first page = %#v", first)
 	require.True(t, first.HasMore, "first page = %#v", first)
 	// Contract: authorization precedes the read, and the member descriptions
-	// follow it.
-	require.Equal(t, []string{"authorize", "list-page", "count-page", "can-view-institution-users", "can-view-role-bindings:academic_unit:" + scopeID.String()}, events)
+	// follow it. Describing reads the caller's grants twice, once for email
+	// and once for Role Bindings, without recording a decision.
+	require.Equal(t, []string{"grants", "decision:academic_unit.members.view:success", "list-page", "count-page", "grants", "grants"}, events)
 	require.Equal(t, paging.Total{Counted: true, Total: 1}, first.Total, "the first page counts its memberships")
 	require.Equal(t, store.AcademicUnitMemberPageOptions{AcademicUnitID: scopeID, ActiveAt: now, Limit: 1}, persistence.countOptions,
 		"the count reads the page's scope and instant")
 	now = now.Add(time.Hour)
 	persistence.pageResult = &store.AcademicUnitMemberPage{}
-	next, err := service.ListAcademicUnitMembersPage(ctx, invocation.Invocation{}, ListAcademicUnitMembersPageQuery{AcademicUnitID: scopeID, AfterStartAt: member.StartsAt, AfterID: member.ID, MembershipPageQuery: MembershipPageQuery{ActiveAt: &first.ActiveAt}})
+	next, err := service.ListAcademicUnitMembersPage(ctx, caller, ListAcademicUnitMembersPageQuery{AcademicUnitID: scopeID, AfterStartAt: member.StartsAt, AfterID: member.ID, MembershipPageQuery: MembershipPageQuery{ActiveAt: &first.ActiveAt}})
 	require.NoError(t, err, "last page = %#v", next)
 	require.False(t, next.HasMore, "last page = %#v", next)
 	require.NotNil(t, next.Members, "last page = %#v", next)
@@ -70,40 +73,47 @@ func TestAcademicUnitMemberPagingAuthorizesEveryPage(t *testing.T) {
 	require.Equal(t, member.ID, persistence.pageOptions.AfterID)
 	require.Equal(t, store.MembershipPageKeyset{AfterStartAt: member.StartsAt}, persistence.pageOptions.MembershipPageKeyset)
 	require.Equal(t, paging.Total{}, next.Total, "a later page is not counted")
-	_, err = service.ListAcademicUnitMembersPage(ctx, invocation.Invocation{}, ListAcademicUnitMembersPageQuery{AcademicUnitID: scopeID, AfterUserID: member.UserID, AfterID: member.ID, MembershipPageQuery: MembershipPageQuery{ActiveAt: &first.ActiveAt}})
+	_, err = service.ListAcademicUnitMembersPage(ctx, caller, ListAcademicUnitMembersPageQuery{AcademicUnitID: scopeID, AfterUserID: member.UserID, AfterID: member.ID, MembershipPageQuery: MembershipPageQuery{ActiveAt: &first.ActiveAt}})
 	require.True(t, apperror.Is(err, "request.invalid"), "the start order cannot continue from a member: %v", err)
-	_, err = service.ListAcademicUnitMembersPage(ctx, invocation.Invocation{}, ListAcademicUnitMembersPageQuery{AcademicUnitID: scopeID, AfterUserID: member.UserID, AfterID: member.ID,
+	_, err = service.ListAcademicUnitMembersPage(ctx, caller, ListAcademicUnitMembersPageQuery{AcademicUnitID: scopeID, AfterUserID: member.UserID, AfterID: member.ID,
 		MembershipPageQuery: MembershipPageQuery{ActiveAt: &first.ActiveAt, Order: store.MembershipOrderName, Descending: true}})
 	require.NoError(t, err)
 	require.Equal(t, store.MembershipPageKeyset{Order: store.MembershipOrderName, Descending: true, AfterUserID: member.UserID}, persistence.pageOptions.MembershipPageKeyset)
-	authorization.err = apperror.New("authorization.denied")
+	// The same caller after the grant is revoked: the next page is refused
+	// before it is read.
 	events = nil
-	_, err = service.ListAcademicUnitMembersPage(ctx, invocation.Invocation{}, ListAcademicUnitMembersPageQuery{AcademicUnitID: scopeID, AfterStartAt: member.StartsAt, AfterID: member.ID, MembershipPageQuery: MembershipPageQuery{ActiveAt: &first.ActiveAt}})
+	revoked := academicUnitAccess(t, &events, []*model.AcademicUnit{{ID: scopeID, Name: "unit"}})
+	service = mustNew(Dependencies{Store: &catalogFake{academicUnitMember: persistence, user: relationshipUserStoreTestFake{}}, Authorizer: revoked.Authorizer, Auditor: revoked.Auditor, Now: clock})
+	_, err = service.ListAcademicUnitMembersPage(ctx, caller, ListAcademicUnitMembersPageQuery{AcademicUnitID: scopeID, AfterStartAt: member.StartsAt, AfterID: member.ID, MembershipPageQuery: MembershipPageQuery{ActiveAt: &first.ActiveAt}})
 	require.True(t, apperror.Is(err, "authorization.denied"), "revoked membership read: %v, events", err)
-	require.Len(t, events, 1, "revoked membership read: %v, events", err)
-	require.Equal(t, "authorize", events[0], "revoked membership read: %v, events", err)
+	require.Equal(t, []string{"grants", "decision:academic_unit.members.view:fail"}, events, "revoked membership read: %v, events", err)
 }
 
 func TestClassMemberPagingAuthorizesEveryPage(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	events := []string{}
+	principal, caller := newCaller()
+	world := newClassWorld(1)
 	scopeID := model.NewClassID()
+	classes := &classMemberClassStoreFake{events: &events, unitID: world.unitID, value: &model.Class{ID: scopeID, AcademicPeriodID: world.period.ID, DisplayName: "Class"}}
+	access := world.access(t, &events, classes, unitGrant(principal.UserID, world.unitID, model.ActionClassMembersView))
 	member := &model.ClassMember{ID: model.NewClassMemberID(), UserID: model.NewUserID(), ClassID: scopeID, StartsAt: model.TimeFromMillis(400)}
 	persistence := &classMemberStoreFake{events: &events, pageResult: &store.ClassMemberPage{Members: []*model.ClassMember{member}, HasMore: true}}
-	authorization := &programmeAuthorizerFake{events: &events}
 	now := model.TimeFromMillis(1000)
-	service := mustNew(Dependencies{Store: &catalogFake{classMember: persistence}, Authorizer: authorization, Now: func() time.Time { return now }})
-	first, err := service.ListClassMembersPage(ctx, invocation.Invocation{}, ListClassMembersPageQuery{ClassID: scopeID, MembershipPageQuery: MembershipPageQuery{Limit: 1}})
+	clock := func() time.Time { return now }
+	service := mustNew(Dependencies{Store: &catalogFake{classMember: persistence, class: classes}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: clock})
+	first, err := service.ListClassMembersPage(ctx, caller, ListClassMembersPageQuery{ClassID: scopeID, MembershipPageQuery: MembershipPageQuery{Limit: 1}})
 	require.NoError(t, err, "first page = %#v", first)
 	require.True(t, first.HasMore, "first page = %#v", first)
-	require.Equal(t, []string{"authorize", "list-page", "count-page"}, events)
+	// The get-class resolves the Class's scope for the decision.
+	require.Equal(t, []string{"get-class", "grants", "decision:class.members.view:success", "list-page", "count-page"}, events)
 	require.Equal(t, paging.Total{Counted: true, Total: 1}, first.Total, "the first page counts its memberships")
 	require.Equal(t, store.ClassMemberPageOptions{ClassID: scopeID, ActiveAt: now, Limit: 1}, persistence.countOptions,
 		"the count reads the page's Class and instant")
 	now = now.Add(time.Hour)
 	persistence.pageResult = &store.ClassMemberPage{}
-	next, err := service.ListClassMembersPage(ctx, invocation.Invocation{}, ListClassMembersPageQuery{ClassID: scopeID, AfterStartAt: member.StartsAt, AfterID: member.ID, MembershipPageQuery: MembershipPageQuery{ActiveAt: &first.ActiveAt}})
+	next, err := service.ListClassMembersPage(ctx, caller, ListClassMembersPageQuery{ClassID: scopeID, AfterStartAt: member.StartsAt, AfterID: member.ID, MembershipPageQuery: MembershipPageQuery{ActiveAt: &first.ActiveAt}})
 	require.NoError(t, err, "last page = %#v", next)
 	require.False(t, next.HasMore, "last page = %#v", next)
 	require.NotNil(t, next.Members, "last page = %#v", next)
@@ -111,15 +121,17 @@ func TestClassMemberPagingAuthorizesEveryPage(t *testing.T) {
 	require.Equal(t, member.ID, persistence.pageOptions.AfterID)
 	require.Equal(t, store.MembershipPageKeyset{AfterStartAt: member.StartsAt}, persistence.pageOptions.MembershipPageKeyset)
 	require.Equal(t, paging.Total{}, next.Total, "a later page is not counted")
-	_, err = service.ListClassMembersPage(ctx, invocation.Invocation{}, ListClassMembersPageQuery{ClassID: scopeID, AfterStartAt: member.StartsAt, AfterID: member.ID,
+	_, err = service.ListClassMembersPage(ctx, caller, ListClassMembersPageQuery{ClassID: scopeID, AfterStartAt: member.StartsAt, AfterID: member.ID,
 		MembershipPageQuery: MembershipPageQuery{ActiveAt: &first.ActiveAt, Order: store.MembershipOrderName}})
 	require.True(t, apperror.Is(err, "request.invalid"), "the name order cannot continue from a start: %v", err)
-	authorization.err = apperror.New("authorization.denied")
+	// The same caller after the grant is revoked: the next page is refused
+	// before it is read.
 	events = nil
-	_, err = service.ListClassMembersPage(ctx, invocation.Invocation{}, ListClassMembersPageQuery{ClassID: scopeID, AfterStartAt: member.StartsAt, AfterID: member.ID, MembershipPageQuery: MembershipPageQuery{ActiveAt: &first.ActiveAt}})
+	revoked := world.access(t, &events, classes)
+	service = mustNew(Dependencies{Store: &catalogFake{classMember: persistence, class: classes}, Authorizer: revoked.Authorizer, Auditor: revoked.Auditor, Now: clock})
+	_, err = service.ListClassMembersPage(ctx, caller, ListClassMembersPageQuery{ClassID: scopeID, AfterStartAt: member.StartsAt, AfterID: member.ID, MembershipPageQuery: MembershipPageQuery{ActiveAt: &first.ActiveAt}})
 	require.True(t, apperror.Is(err, "authorization.denied"), "revoked membership read: %v, events", err)
-	require.Len(t, events, 1, "revoked membership read: %v, events", err)
-	require.Equal(t, "authorize", events[0], "revoked membership read: %v, events", err)
+	require.Equal(t, []string{"get-class", "grants", "decision:class.members.view:fail"}, events, "revoked membership read: %v, events", err)
 }
 
 type academicUnitMemberRoleBindingStoreFake struct {
@@ -159,9 +171,18 @@ func TestAcademicUnitMemberPageDescribesMembersWithinTheCallersAuthority(t *test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			events := []string{}
+			principal, caller := newCaller()
+			grants := []accesstest.Grant{unitGrant(principal.UserID, unitID, model.ActionAcademicUnitMembersView)}
+			if test.institutionUsers {
+				grants = append(grants, institutionGrant(principal.UserID, model.ActionUserView))
+			}
+			if test.roleBindings {
+				grants = append(grants, unitGrant(principal.UserID, unitID, model.ActionRoleBindingView))
+			}
+			access := academicUnitAccess(t, &events, nil, grants...)
 			bindings := &academicUnitMemberRoleBindingStoreFake{events: &events, summaries: []store.UserRoleBindingSummary{reviewer}}
-			service := mustNew(Dependencies{Store: &catalogFake{academicUnitMember: &academicUnitMemberStoreFake{events: &events, pageResult: &store.AcademicUnitMemberPage{Members: members}}, user: relationshipUserStoreTestFake{}, roleBinding: bindings}, Authorizer: &programmeAuthorizerFake{events: &events, institutionUsers: test.institutionUsers, roleBindings: test.roleBindings}, Now: func() time.Time { return now }})
-			page, err := service.ListAcademicUnitMembersPage(ctx, invocation.Invocation{}, ListAcademicUnitMembersPageQuery{AcademicUnitID: unitID})
+			service := mustNew(Dependencies{Store: &catalogFake{academicUnitMember: &academicUnitMemberStoreFake{events: &events, pageResult: &store.AcademicUnitMemberPage{Members: members}}, user: relationshipUserStoreTestFake{}, roleBinding: bindings}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: func() time.Time { return now }})
+			page, err := service.ListAcademicUnitMembersPage(ctx, caller, ListAcademicUnitMembersPageQuery{AcademicUnitID: unitID})
 			require.NoError(t, err)
 			for _, userID := range []model.UserID{first, second} {
 				identity := page.Users[userID]
@@ -173,7 +194,8 @@ func TestAcademicUnitMemberPageDescribesMembersWithinTheCallersAuthority(t *test
 					require.Empty(t, identity.Email, "email needs Institution-wide user.view")
 				}
 			}
-			described := []string{"authorize", "list-page", "count-page", "can-view-institution-users", "can-view-role-bindings:academic_unit:" + unitID.String()}
+			// Both predicates read the caller's grants without recording a decision.
+			described := []string{"grants", "decision:academic_unit.members.view:success", "list-page", "count-page", "grants", "grants"}
 			if !test.roleBindings {
 				require.Nil(t, page.RolesHere, "Role Bindings need role_binding.view on the unit")
 				// Contract: without role_binding.view the Role Bindings are never read.

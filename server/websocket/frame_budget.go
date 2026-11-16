@@ -16,11 +16,9 @@ import (
 
 const (
 	// inboundFrameBurst and inboundFramesPerSecond bound the request frames
-	// one Session (or, without a Session, one User) may send to this node,
-	// whatever their action and however many connections carry them.
-	// Legitimate clients send a few subscriptions at start-up and then
-	// renewals, signals, and batched browser activity well below the
-	// sustained rate.
+	// one session (or, without one, one user) may send to this node across
+	// all its connections. Legitimate clients stay well below the sustained
+	// rate.
 	inboundFrameBurst      = 64
 	inboundFramesPerSecond = 16
 	// inboundRefusalsBeforeClose closes a connection that keeps sending after
@@ -41,7 +39,6 @@ type frameBudget struct {
 	initialized bool
 }
 
-// allow spends one token at now and reports whether the frame is admitted.
 func (b *frameBudget) allow(now time.Time) bool {
 	if !b.initialized {
 		b.tokens, b.updated, b.initialized = inboundFrameBurst, now, true
@@ -57,8 +54,8 @@ func (b *frameBudget) allow(now time.Time) bool {
 	return false
 }
 
-// sharedFrameBudget is the budget of one Session or User on this node, shared
-// by all of its connections. The Hub shard lock guards holders and releasedAt.
+// sharedFrameBudget is shared by all connections of one session or user. The
+// hub shard lock guards holders and releasedAt.
 type sharedFrameBudget struct {
 	mu         sync.Mutex
 	bucket     frameBudget
@@ -72,7 +69,6 @@ func (s *sharedFrameBudget) allow(now time.Time) bool {
 	return s.bucket.allow(now)
 }
 
-// frameBudgetKey names the budget a principal's connections share.
 func frameBudgetKey(principal model.Principal) string {
 	if !principal.SessionID.IsZero() {
 		return "session:" + principal.SessionID.String()
@@ -80,14 +76,13 @@ func frameBudgetKey(principal model.Principal) string {
 	return "user:" + principal.UserID.String()
 }
 
-// inboundFrameGate is one connection's view of its shared budget. It is
-// owned by the read pump. Without a Hub it uses a private budget.
+// inboundFrameGate is owned by the read pump. Without a hub it uses a private
+// budget.
 type inboundFrameGate struct {
 	shared   *sharedFrameBudget
 	refusals int
 }
 
-// allow spends one frame from the shared budget.
 func (g *inboundFrameGate) allow(now time.Time) bool {
 	if g.shared == nil {
 		g.shared = &sharedFrameBudget{}

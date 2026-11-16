@@ -40,9 +40,9 @@ func TestMFAActivationUsesNativeExclusiveDeadline(t *testing.T) {
 			persistence := &mfaApplicationStoreFake{
 				session: &model.Session{ID: principal.SessionID, UserID: principal.UserID},
 			}
-			service := newTestMFAApplicationService(t, persistence, &securityAuditorFake{}, &realtimetest.Publisher{}, now)
-			mailer := &mfaSecurityNoticeMailPreparerFake{}
-			service.mail = mailer
+			service := newTestMFAApplicationService(t, persistence, newSecurityAuditLog(t, nil), &realtimetest.Publisher{}, now)
+			composer, renders := newTestMail(t, true)
+			service.mail = composer
 			const secret = "JBSWY3DPEHPK3PXP" // #nosec G101 -- Public synthetic TOTP seed for expiry-boundary tests.
 			sealed, err := service.mfa.sealTOTPSecret(principal.UserID.String(), secret)
 			require.NoError(t, err)
@@ -58,14 +58,16 @@ func TestMFAActivationUsesNativeExclusiveDeadline(t *testing.T) {
 			if !test.valid {
 				require.True(t, apperror.Is(err, "authentication.mfa.code_invalid"), "expired activation: error=%v mutation=%v notices", err, persistence.activation != nil)
 				require.Nil(t, persistence.activation, "expired activation: error=%v mutation=%v notices", err, persistence.activation != nil)
-				require.Empty(t, mailer.requests, "expired activation: error=%v mutation=%v notices", err, persistence.activation != nil)
+				require.Zero(t, renders.Count(), "expired activation: error=%v mutation=%v notices", err, persistence.activation != nil)
 				return
 			}
 			require.NoError(t, err)
 			require.NotNil(t, persistence.activation, "activation did not preserve native UTC decision instant")
 			require.Equal(t, model.TimeUTC(now), persistence.activation.At, "activation did not preserve native UTC decision instant")
-			require.Len(t, mailer.requests, 1, "activation changed the frozen notice timestamp contract")
-			require.True(t, mailer.requests[0].At.Equal(model.TimeUTC(now)), "activation notice instant = %v, want the activation instant", mailer.requests[0].At)
+			require.Equal(t, 1, renders.Count(), "activation changed the frozen notice timestamp contract")
+			sent := openedMail(t, persistence.activation.Notice.Delivery).Date
+			require.True(t, sent.Equal(model.TimeUTC(now)), "activation notice instant = %v, want the activation instant", sent)
+			require.True(t, persistence.activation.Notice.Occurrence.CreatedAt.Equal(model.TimeUTC(now)), "activation notice instant = %v, want the activation instant", persistence.activation.Notice.Occurrence.CreatedAt)
 		})
 	}
 }

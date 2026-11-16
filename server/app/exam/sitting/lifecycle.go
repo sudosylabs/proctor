@@ -29,9 +29,8 @@ type CancelCommand struct {
 	IdempotencyKey   string
 }
 
-// ManagerTransitionCommand carries one manager decision that moves a Sitting
-// through its lifecycle (pause, resume or early close) with the private
-// reason recorded for it.
+// ManagerTransitionCommand is a manager's pause, resume or early close, with
+// the private reason recorded for it.
 type ManagerTransitionCommand struct {
 	ExamID           model.ExamID
 	SittingID        model.ExamSittingID
@@ -49,8 +48,8 @@ type ExtendCommand struct {
 	IdempotencyKey   string
 }
 
-// CancelExamSitting idempotently cancels a Scheduled Sitting, fenced by
-// ExpectedRevision, with a private reason kept out of ordinary audit fields.
+// CancelExamSitting idempotently cancels a scheduled sitting, fenced by
+// ExpectedRevision. The private reason is kept out of ordinary audit fields.
 func (s *Service) CancelExamSitting(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -155,8 +154,8 @@ func (s *Service) CancelExamSitting(
 	return value, nil
 }
 
-// PauseExamSitting idempotently pauses an Open Sitting on a manager's
-// decision, fenced by ExpectedRevision.
+// PauseExamSitting idempotently pauses an open sitting, fenced by
+// ExpectedRevision.
 func (s *Service) PauseExamSitting(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -183,8 +182,8 @@ func (s *Service) PauseExamSitting(
 	)
 }
 
-// ResumeExamSitting idempotently resumes a Paused Sitting on a manager's
-// decision, fenced by ExpectedRevision.
+// ResumeExamSitting idempotently resumes a paused sitting, fenced by
+// ExpectedRevision.
 func (s *Service) ResumeExamSitting(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -211,8 +210,8 @@ func (s *Service) ResumeExamSitting(
 	)
 }
 
-// CloseExamSitting idempotently closes a Sitting early on a manager's
-// decision, fenced by ExpectedRevision, and schedules its sealing Job.
+// CloseExamSitting idempotently closes a sitting early, fenced by
+// ExpectedRevision, and schedules its sealing job.
 func (s *Service) CloseExamSitting(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -239,8 +238,8 @@ func (s *Service) CloseExamSitting(
 	)
 }
 
-// ExtendExamSitting idempotently moves a Sitting's scheduled end to
-// ScheduledEndAt, fenced by ExpectedRevision.
+// ExtendExamSitting idempotently moves the scheduled end to ScheduledEndAt,
+// fenced by ExpectedRevision. It is refused on an archived exam.
 func (s *Service) ExtendExamSitting(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -336,6 +335,9 @@ type managerTransitionStoreCall func(
 	*store.CommandIdempotency,
 ) (*store.ExamSittingLifecycleResult, error)
 
+// allowArchived lets an archived exam still pause or close early, which only
+// reduce what candidates can do; resume and extend would restore capability
+// and stay refused.
 func (s *Service) runManagerTransition(
 	ctx context.Context,
 	inv invocation.Invocation,

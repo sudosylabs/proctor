@@ -24,40 +24,22 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// AuthorizerDependencies are the collaborators of Authorizer;
-// NewAuthorizer validates them once and Authorizer keeps them in deps.
+// AuthorizerDependencies configures NewAuthorizer.
 type AuthorizerDependencies struct {
 	Roles    store.RoleStore
 	Bindings store.RoleBindingStore
 	Resolver *ScopeResolver
-	Audit    DecisionAudit
+	Audit    *Auditor
 	// Now is the decision clock; nil means time.Now.
 	Now func() time.Time
 }
 
-// Authorizer is the one application authorization decision. It resolves the
-// current scope of a Resource, evaluates the caller's current Role Bindings,
-// and records the decision before returning it.
+// Authorizer decides from current role bindings and current resource scope,
+// and records each decision before returning it.
 type Authorizer struct {
 	deps AuthorizerDependencies
 
 	now func() time.Time
-}
-
-// DecisionAudit durably records authorization decisions. Auditor implements
-// it; tests substitute a recorder.
-type DecisionAudit interface {
-	RecordAuthorizationDecision(
-		context.Context,
-		model.Principal,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		model.RequestMetadata,
-		bool,
-	) error
-	RecordUserSearchDecision(context.Context, model.Principal, model.Resource, model.RoleScopeType, string, model.RequestMetadata, bool) error
 }
 
 type resolvedAuthorizationResource struct {
@@ -68,7 +50,7 @@ type resolvedAuthorizationResource struct {
 	academicPeriodInstitutionOwned bool
 }
 
-// NewAuthorizer validates its dependencies and returns the Authorizer.
+// NewAuthorizer fails when a required dependency is missing.
 func NewAuthorizer(deps AuthorizerDependencies) (*Authorizer, error) {
 	if deps.Roles == nil || deps.Bindings == nil || deps.Resolver == nil || deps.Audit == nil {
 		return nil, errors.New("authorization dependencies are required")
@@ -80,9 +62,8 @@ func NewAuthorizer(deps AuthorizerDependencies) (*Authorizer, error) {
 	return &Authorizer{deps: deps, now: now}, nil
 }
 
-// Can resolves current durable bindings and roles. It performs no auditing and
-// is intended for composition inside an application use case. Use Authorize at
-// a security boundary so both allowed and denied decisions are durable.
+// Can records no decision, so it is only for composing inside a use case. Use
+// Authorize at a security boundary so both outcomes are durable.
 func (s *Authorizer) Can(
 	ctx context.Context,
 	principal model.Principal,
@@ -193,7 +174,7 @@ func (s *Authorizer) evaluateResolved(
 	return false, nil
 }
 
-// AuthorizeAcademicPeriodOwner authorizes the action on an Academic Period through its owner's scope.
+// AuthorizeAcademicPeriodOwner authorizes at the scope of the period's owner.
 func (s *Authorizer) AuthorizeAcademicPeriodOwner(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -245,8 +226,8 @@ func (s *Authorizer) AuthorizeAcademicPeriodOwner(
 	return nil
 }
 
-// personalAccessTokenAllows is only a credential ceiling. It never grants an
-// action; ordinary current-state role evaluation still has to grant it.
+// personalAccessTokenAllows is only a ceiling: it never grants an action, and
+// role evaluation must still grant it.
 func personalAccessTokenAllows(
 	principal model.Principal,
 	action model.Action,
@@ -286,9 +267,8 @@ func personalAccessTokenAllows(
 	}
 }
 
-// Authorize is the one application authorization shape. It is fail-closed:
-// the requested action is allowed only after the decision itself has been
-// durably recorded against the invocation's principal and request metadata.
+// Authorize fails closed: an action is allowed only after the decision has
+// been durably recorded, so a lost audit write denies.
 func (s *Authorizer) Authorize(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -304,8 +284,8 @@ type AuthorizationScope struct {
 	ScopeID   string
 }
 
-// AuthorizeWithScope is Authorize that also reports the role-binding scope
-// which granted the decision, for use cases that audit at that scope.
+// AuthorizeWithScope is Authorize for use cases that audit at the granting
+// scope.
 func (s *Authorizer) AuthorizeWithScope(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -319,23 +299,21 @@ func (s *Authorizer) AuthorizeWithScope(
 	return AuthorizationScope{ScopeType: scopeType, ScopeID: scopeID}, nil
 }
 
-// ManagerAuthorization reports a granted current Exam Manager decision:
-// Override is true when the decision rested on the explicit override Action
-// rather than the ordinary Manager relationship. The Sitting area decides it;
-// the Attempt and Integrity review areas consume it, so it is declared here,
-// below all three.
+// ManagerAuthorization is a granted exam manager decision; Override is true
+// when it rested on the override action rather than the manager relationship.
+// It lives here because sitting decides it and attempt and integrity review
+// consume it.
 type ManagerAuthorization struct {
 	Override bool
 }
 
-// BrowserActivityAuthorization reports the Academic Unit of the Exam whose
-// browser activity the caller may read.
+// BrowserActivityAuthorization carries the unit of the exam whose browser
+// activity the caller may read.
 type BrowserActivityAuthorization struct {
 	AcademicUnitID model.AcademicUnitID
 }
 
-// InstitutionResource returns the installation's singleton Institution as an
-// authorization Resource.
+// InstitutionResource returns the singleton institution as a Resource.
 func (s *Authorizer) InstitutionResource(ctx context.Context) (model.Resource, error) {
 	institution, err := s.deps.Resolver.deps.Institutions.GetSingleton(ctx)
 	if err != nil {
@@ -344,8 +322,8 @@ func (s *Authorizer) InstitutionResource(ctx context.Context) (model.Resource, e
 	return model.Resource{Type: model.ResourceInstitution, ID: institution.ResourceID()}, nil
 }
 
-// AuthorizeInstitution authorizes action against the singleton Institution
-// and returns that Resource for the caller's audit.
+// AuthorizeInstitution returns the institution Resource for the caller's
+// audit.
 func (s *Authorizer) AuthorizeInstitution(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -361,16 +339,15 @@ func (s *Authorizer) AuthorizeInstitution(
 	return resource, nil
 }
 
-// AuthorizeUserRead authorizes reading another User through the caller's
-// current visibility scope.
+// AuthorizeUserRead authorizes through the caller's current user visibility.
 func (s *Authorizer) AuthorizeUserRead(ctx context.Context, inv invocation.Invocation, userID model.UserID) error {
 	_, err := s.authorizeUserRead(ctx, inv, userID.String())
 	return err
 }
 
-// RecordDenial durably records a denied decision at the Academic Unit scope
-// without evaluating policy, for use cases that refuse by a domain rule such
-// as self-review. The caller returns its own concealing error afterwards.
+// RecordDenial records a denial without evaluating policy, for use cases that
+// refuse by a domain rule such as self-review. The caller still returns its
+// own concealing error.
 func (s *Authorizer) RecordDenial(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -390,8 +367,6 @@ func (s *Authorizer) RecordDenial(
 	)
 }
 
-// authorizeCurrentState performs and audits a fresh authorization decision for
-// the owning application use case.
 func (s *Authorizer) authorizeCurrentState(
 	ctx context.Context,
 	principal model.Principal,
@@ -403,9 +378,9 @@ func (s *Authorizer) authorizeCurrentState(
 	return appErr
 }
 
-// AuthorizeAccountStateManage is the narrow exception to active User resource
-// resolution needed to re-enable a disabled account. It still requires a
-// current user.manage grant and records the decision against the exact User.
+// AuthorizeAccountStateManage resolves a disabled user too, which the normal
+// resolver refuses, so a disabled account can be re-enabled. It still needs a
+// current user.manage grant.
 func (s *Authorizer) AuthorizeAccountStateManage(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -466,9 +441,8 @@ func (s *Authorizer) AuthorizeAccountStateManage(
 	return nil
 }
 
-// authorizeCurrentStateWithScope returns the same resolved scope written to
-// the durable decision so a following mutation attempt can preserve the exact
-// action/resource/scope tuple without resolving the resource a second time.
+// authorizeCurrentStateWithScope returns the scope it recorded, so the
+// following mutation audits the same tuple without resolving again.
 func (s *Authorizer) authorizeCurrentStateWithScope(
 	ctx context.Context,
 	principal model.Principal,
@@ -499,9 +473,8 @@ func (s *Authorizer) authorizeCurrentStateWithScope(
 	return scopeType, scopeID, nil
 }
 
-// authorizeUserRead authorizes reading another User and reports whether the
-// grant came from institution-wide User visibility. A scoped grant through an
-// Academic Unit or Class reports false with a nil error.
+// authorizeUserRead reports true only for institution-wide visibility; a grant
+// through a unit or class reports false with a nil error.
 func (s *Authorizer) authorizeUserRead(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -565,7 +538,8 @@ func (s *Authorizer) authorizeUserRead(
 	return false, DeniedError()
 }
 
-// DeniedError is the public failure of a denied authorization decision.
+// DeniedError is authorization.denied, which Concealment.Conceal reports as
+// not found.
 func DeniedError() error {
 	return apperror.New("authorization.denied")
 }
@@ -621,8 +595,8 @@ func roleBindingApplies(
 	}
 }
 
-// ResourceError translates a Store failure while resolving the named
-// resource for an authorization decision.
+// ResourceError presents a store failure while resolving resource, keeping
+// not found as resource.not_found.
 func ResourceError(resource string, err error) error {
 	return apperror.StoreTable{
 		NotFound:    "resource.not_found",
@@ -631,20 +605,19 @@ func ResourceError(resource string, err error) error {
 	}.Translate(err)
 }
 
-// UnavailableError reports that an authorization decision could not be made.
+// UnavailableError wraps the operator-only cause of a decision that could not
+// be made.
 func UnavailableError(err error) error {
 	return apperror.New("authorization.unavailable").Wrap(err)
 }
 
-// ProfileReadAuthorization reports how much of a User profile the caller
-// may read: FullProfile for its own profile or institution-wide User
-// visibility, the limited profile otherwise.
+// ProfileReadAuthorization grants FullProfile for the caller's own profile or
+// institution-wide user visibility, and the limited profile otherwise.
 type ProfileReadAuthorization struct {
 	FullProfile bool
 }
 
-// AuthorizeProfileRead authorizes reading a User profile and reports whether
-// the caller may read all of it.
+// AuthorizeProfileRead records no decision for the caller's own profile.
 func (s *Authorizer) AuthorizeProfileRead(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -666,9 +639,8 @@ func (s *Authorizer) AuthorizeProfileRead(
 	return ProfileReadAuthorization{FullProfile: fullProfile}, nil
 }
 
-// RoleBindingViewScope reports, without recording a decision, the scopes in
-// which the caller holds role_binding.view at the instant. It narrows what a
-// User directory summary shows; it never admits a request.
+// RoleBindingViewScope records no decision: it narrows what a directory
+// summary shows and never admits a request.
 func (s *Authorizer) RoleBindingViewScope(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -693,9 +665,8 @@ func (s *Authorizer) RoleBindingViewScope(
 	}, nil
 }
 
-// AuthorizeProfilePictureWrite authorizes replacing or removing a User's
-// profile picture: the owner needs user.profile_picture.manage and anyone
-// else needs user.manage on the User.
+// AuthorizeProfilePictureWrite needs user.profile_picture.manage from the
+// owner and user.manage from anyone else.
 func (s *Authorizer) AuthorizeProfilePictureWrite(ctx context.Context, inv invocation.Invocation, userID model.UserID) error {
 	action := model.ActionUserManage
 	if inv.Principal().UserID == userID {
@@ -704,8 +675,8 @@ func (s *Authorizer) AuthorizeProfilePictureWrite(ctx context.Context, inv invoc
 	return s.Authorize(ctx, inv, action, model.Resource{Type: model.ResourceUser, ID: userID.String()})
 }
 
-// RecordAuthorizationDecision durably records a decision a caller made from
-// scopes it derived itself, such as a list or delegation check.
+// RecordAuthorizationDecision records a decision a caller made from scopes it
+// derived itself, such as a list or delegation check.
 func (s *Authorizer) RecordAuthorizationDecision(
 	ctx context.Context,
 	principal model.Principal,
@@ -719,8 +690,7 @@ func (s *Authorizer) RecordAuthorizationDecision(
 	return s.deps.Audit.RecordAuthorizationDecision(ctx, principal, action, resource, scopeType, scopeID, metadata, allowed)
 }
 
-// Institution reads the installation's singleton Institution through the
-// resolver's Store, returning the Store error untranslated.
+// Institution returns the store error untranslated.
 func (s *Authorizer) Institution(ctx context.Context) (*model.Institution, error) {
 	return s.deps.Resolver.deps.Institutions.GetSingleton(ctx)
 }

@@ -69,9 +69,7 @@ type CacheBackend struct {
 	Close func() error
 }
 
-// NewCacheAdapter translates a reusable cache backend into the platform Cache
-// port. Concrete backend construction belongs to the module-root composition
-// package.
+// NewCacheAdapter adapts a cache backend to the platform Cache port.
 func NewCacheAdapter(backend CacheBackend) Cache {
 	return &cacheAdapter{backend: backend}
 }
@@ -147,13 +145,12 @@ func (c *cacheAdapter) Close() error {
 	return nil
 }
 
-// NewMailAdapter wraps a reusable mail sender as the platform Mailer port.
-// Concrete backend construction belongs to the module-root composition package.
+// NewMailAdapter adapts a mail sender to the platform Mailer port.
 func NewMailAdapter(enabled bool, from mail.Address, sender mail.Sender) Mailer {
 	return &mailAdapter{enabled: enabled, from: from, sender: sender}
 }
 
-// NewDisabledMailer constructs an explicitly disabled mail capability.
+// NewDisabledMailer returns a Mailer whose Send fails with ErrMailDisabled.
 func NewDisabledMailer(from mail.Address) Mailer {
 	return &mailAdapter{from: from}
 }

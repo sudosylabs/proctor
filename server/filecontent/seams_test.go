@@ -14,9 +14,6 @@ import (
 )
 
 var (
-	_ user.ProfilePictureUploadFiles            = (*filecontent.Content)(nil)
-	_ user.ProfilePictureReadFiles              = (*filecontent.Content)(nil)
-	_ user.DefaultProfilePictureRenderFiles     = (*filecontent.Content)(nil)
-	_ user.DefaultProfilePictureGenerationFiles = (*filecontent.Content)(nil)
-	_ jobs.FileRevisionContentPurger            = (*filecontent.Content)(nil)
+	_ user.PictureFiles              = (*filecontent.Content)(nil)
+	_ jobs.FileRevisionContentPurger = (*filecontent.Content)(nil)
 )

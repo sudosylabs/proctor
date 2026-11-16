@@ -6,6 +6,8 @@ export type PasswordResetRequestResult =
   | { kind: "rate_limited" }
   | { kind: "unavailable" };
 
+// The server answers 202 whether or not the address has an account, and the
+// page must keep it that way: no outcome may hint that an account exists.
 export async function requestPasswordReset(
   email: string,
 ): Promise<PasswordResetRequestResult> {

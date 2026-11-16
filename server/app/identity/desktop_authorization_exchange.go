@@ -28,10 +28,9 @@ type ExchangeDesktopAuthorizationCommand struct {
 	RealtimeProtocol                  int
 }
 
-// DesktopAuthorizationExchangeResult is what a redeemed authorization code
-// yields: the Desktop Session, its Desktop Registration, and the raw access
-// and refresh tokens, whose token type is DPoP. DPoPNonce is a fresh nonce
-// bound to that Session, Registration, and DPoP key.
+// DesktopAuthorizationExchangeResult is what a redeemed code yields. Tokens
+// are DPoP-bound, and DPoPNonce is bound to the new session, registration and
+// key.
 type DesktopAuthorizationExchangeResult struct {
 	Session      *model.Session
 	Registration *model.DesktopRegistration
@@ -39,8 +38,8 @@ type DesktopAuthorizationExchangeResult struct {
 	DPoPNonce    string
 }
 
-// ExchangeDesktopAuthorization redeems the one-use code with its PKCE
-// verifier and DPoP proof for a Desktop Session and Desktop Registration.
+// ExchangeDesktopAuthorization redeems the one-use code, with its PKCE
+// verifier and DPoP proof, for a desktop session and registration.
 func (s *Service) ExchangeDesktopAuthorization(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -195,7 +194,6 @@ func (s *Service) ExchangeDesktopAuthorization(
 	}, nil
 }
 
-// verifyDesktopExchangeProof verifies the token request's DPoP proof against the authorization's bound key.
 func (s *Service) verifyDesktopExchangeProof(
 	ctx context.Context,
 	command ExchangeDesktopAuthorizationCommand,
@@ -219,7 +217,6 @@ func (s *Service) verifyDesktopExchangeProof(
 	return nil
 }
 
-// evaluateDesktopExchangeCompatibility requires the exchanging desktop build to be compatible and ready.
 func (s *Service) evaluateDesktopExchangeCompatibility(
 	ctx context.Context, inv invocation.Invocation, command ExchangeDesktopAuthorizationCommand,
 ) (DesktopCompatibilityResult, error) {
@@ -248,7 +245,6 @@ func (s *Service) evaluateDesktopExchangeCompatibility(
 	return compatibility, nil
 }
 
-// withdrawUndisclosedDesktopSession revokes and audits the withdrawal of an exchanged Session whose nonce could not be issued.
 func (s *Service) withdrawUndisclosedDesktopSession(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -256,13 +252,10 @@ func (s *Service) withdrawUndisclosedDesktopSession(
 	result *store.DesktopAuthorizationExchangeResult,
 	nonceErr error,
 ) error {
-	// The credentials were never disclosed, but the SQL exchange has
-	// committed. Revoke that exact Session synchronously so a cache outage
-	// cannot consume the per-user Session allowance with inaccessible
-	// Sessions. The active Desktop Registration remains reusable by a fresh
-	// authorization after nonce storage recovers.
-	// The exchange's success audit already committed, so a separate
-	// withdrawal record says the issued Session was taken back.
+	// The exchange committed but its credentials were never disclosed. Revoke
+	// the session now so a cache outage can't fill the per-user session limit
+	// with unusable sessions; the registration stays reusable. The success
+	// audit already committed, so a separate withdrawal record is written.
 	revokeCtx := context.WithoutCancel(ctx)
 	withdrawal, auditErr := s.beginDesktopWithdrawalAudit(
 		revokeCtx,

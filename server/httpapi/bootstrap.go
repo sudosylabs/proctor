@@ -8,7 +8,6 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -52,10 +51,8 @@ type installationStateResponse struct {
 	AdministratorUserID string `json:"administrator_user_id"`
 }
 
-// installationBootstrapResponse is the transport-owned success body for the
-// one-time bootstrap command. Field names match the historical v1 envelope so
-// existing clients and integration tests keep working while domain models no
-// longer serialize directly.
+// installationBootstrapResponse is the one-time bootstrap success body. Its
+// field names are the v1 envelope's, which existing clients depend on.
 type installationBootstrapResponse struct {
 	State         *installationStateResponse   `json:"state"`
 	Institution   *institutionResponse         `json:"institution"`
@@ -142,10 +139,10 @@ func installationBootstrapResponseFromModel(
 }
 
 type bootstrapHandlers struct {
-	app BootstrapApplication
+	app *identity.Service
 }
 
-func bootstrapResource(app BootstrapApplication) route.Resource {
+func bootstrapResource(app *identity.Service) route.Resource {
 	h := bootstrapHandlers{app: app}
 	return route.NewResource(
 		"bootstrap",
@@ -219,14 +216,4 @@ func (h bootstrapHandlers) install(request route.Request) (route.Result, error) 
 	}
 
 	return route.JSON(http.StatusCreated, installationBootstrapResponseFromModel(request.HTTP, result)), nil
-}
-
-// BootstrapApplication is the application port its handlers call; it reports and performs installation bootstrap.
-type BootstrapApplication interface {
-	GetInstallationStatus(context.Context, invocation.Invocation) (*model.InstallationStatus, error)
-	BootstrapInstallation(
-		context.Context,
-		invocation.Invocation,
-		identity.BootstrapInstallationCommand,
-	) (*model.InstallationBootstrapResult, error)
 }

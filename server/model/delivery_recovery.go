@@ -9,8 +9,8 @@ package model
 import "encoding/json"
 
 // DeliveryRecovery is a bounded current observation, never an acknowledgement
-// of the rejected request or permission to exceed a quota. Status can be absent
-// after its independently retained family has retired.
+// of the rejected request or leave to exceed a quota. Status can be absent once
+// its separately retained family has retired.
 type DeliveryRecovery struct {
 	Family  string                      `json:"family"`
 	Budget  DeliveryBudgetSnapshot      `json:"budget"`

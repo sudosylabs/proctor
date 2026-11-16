@@ -23,24 +23,15 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// An academic administration filter preview applies one academic
-// administration operation to the Users a User directory filter matches.
-// Creating it records only the request; a preview Job then resolves the
-// filter under the caller's visibility at that moment and freezes the
-// ordered User list, classifying each row. The caller reads the summary and
-// pages the rows of each group, and commits the exact preview, digest and
-// revision within 15 minutes of it becoming ready. One execution Job then
-// runs the frozen list, never the filter again, and every row is authorized
-// again when it executes.
+// A filter preview freezes the users a directory filter matched when it
+// resolved. Execution runs that frozen list, never the filter again, and
+// authorizes every row again as it executes.
 
-// academicAdministrationFilterQueryMaximumRunes bounds the directory search
-// term a filter preview keeps.
 const academicAdministrationFilterQueryMaximumRunes = 256
 
 // AcademicAdministrationPreviewOperations are the batch operations a filter
-// preview applies. class.transfer is not one: a transfer names the exact
-// source membership it replaces, which a filter cannot choose; Student
-// Progression moves a Class's students instead.
+// preview may apply. class.transfer is excluded: a transfer names the exact
+// source membership it replaces, which a filter cannot choose.
 func AcademicAdministrationPreviewOperations() []AcademicAdministrationBatchOperation {
 	return []AcademicAdministrationBatchOperation{
 		AcademicAdministrationAffiliationAdd,
@@ -57,9 +48,8 @@ func AcademicAdministrationPreviewOperations() []AcademicAdministrationBatchOper
 	}
 }
 
-// AcademicAdministrationUserFilter is the User directory filter of a
-// preview. Each field means what the User directory query field of the same
-// name means, and the same validation and visibility rules admit it.
+// AcademicAdministrationUserFilter is a preview's user directory filter; each
+// field means and validates exactly as the directory query field of that name.
 type AcademicAdministrationUserFilter struct {
 	Query            string
 	Affiliations     []model.AffiliationKind
@@ -72,17 +62,14 @@ type AcademicAdministrationUserFilter struct {
 }
 
 type CreateAcademicAdministrationPreviewCommand struct {
-	Operation AcademicAdministrationBatchOperation
-	ScopeType model.RoleScopeType
-	ScopeID   string
-	Filter    AcademicAdministrationUserFilter
-	// RoleID is the Role a role_binding operation applies, and
-	// AffiliationKind the kind an affiliation operation applies.
+	Operation       AcademicAdministrationBatchOperation
+	ScopeType       model.RoleScopeType
+	ScopeID         string
+	Filter          AcademicAdministrationUserFilter
 	RoleID          model.RoleID
 	AffiliationKind model.AffiliationKind
-	// StartAt and EndAt bound the relationship a creating operation makes.
-	StartAt model.OptionalTime
-	EndAt   model.OptionalTime
+	StartAt         model.OptionalTime
+	EndAt           model.OptionalTime
 }
 
 type CommitAcademicAdministrationPreviewCommand struct {
@@ -100,10 +87,8 @@ type ListAcademicAdministrationPreviewRowsQuery struct {
 	Limit          int
 }
 
-// AcademicAdministrationPreviewView is what the preview's creator reads of
-// it: the import projection, the operation and filter it was asked for,
-// when the ready preview stops admitting a commit, and its row counts by
-// class and skip reason.
+// AcademicAdministrationPreviewView is the creator's view of a filter
+// preview, with row counts by class and skip reason.
 type AcademicAdministrationPreviewView struct {
 	Import           OnboardingImportView
 	Filter           store.AcademicAdministrationFilter
@@ -111,23 +96,18 @@ type AcademicAdministrationPreviewView struct {
 	Groups           []store.AcademicAdministrationPreviewGroup
 }
 
-// requireAcademicAdministrationPreviews refuses a filter preview use case on
-// a Service built without onboarding imports, the User directory, or the
-// audit drafts the batch entry needs.
 func (s *Service) requireAcademicAdministrationPreviews() error {
 	if err := s.requireImports(); err != nil {
 		return err
 	}
-	if s.directory == nil || s.drafts == nil {
+	if s.directory == nil {
 		return apperror.New("onboarding_import.unavailable")
 	}
 	return nil
 }
 
-// CreateAcademicAdministrationPreview proposes the preview of applying one
-// academic administration operation to every User the directory filter
-// matches. It requires a strong, recent Session, refuses a filter the
-// caller's directory would refuse, and queues the Job that resolves it.
+// CreateAcademicAdministrationPreview records a filter preview request and
+// queues the job that resolves it; it requires a strong, recent session.
 func (s *Service) CreateAcademicAdministrationPreview(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -159,10 +139,8 @@ func (s *Service) CreateAcademicAdministrationPreview(
 	if err = s.authorizeAcademicAdministrationPreviewTarget(ctx, inv, filter, command.ScopeType, command.ScopeID, resource); err != nil {
 		return AcademicAdministrationPreviewView{}, err
 	}
-	// The directory refuses, with its own field codes, a filter this caller
-	// may not apply (an activity filter or Role filter without the
-	// Institution-wide visibility it needs), so the preview admits exactly
-	// the filters the directory admits.
+	// Let the directory refuse, with its own field codes, a filter this
+	// caller may not apply, so a preview admits exactly what it admits.
 	if _, err = s.directory.SearchUserPage(ctx, inv, academicAdministrationDirectoryQuery(filter, 1)); err != nil {
 		return AcademicAdministrationPreviewView{}, err
 	}
@@ -220,10 +198,8 @@ func (s *Service) CreateAcademicAdministrationPreview(
 	return academicAdministrationPreviewView(created, nil), nil
 }
 
-// GetAcademicAdministrationPreview reads the creator's own filter preview
-// while the creator's directory still admits its filter, with its row counts
-// by class and skip reason. The counts hold only the rows whose User the
-// creator's directory shows now, as the rows read does.
+// GetAcademicAdministrationPreview reads the creator's own filter preview.
+// Counts include only rows whose user the creator can still see.
 func (s *Service) GetAcademicAdministrationPreview(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -244,11 +220,9 @@ func (s *Service) GetAcademicAdministrationPreview(
 	return academicAdministrationPreviewView(value, groups), nil
 }
 
-// ListAcademicAdministrationPreviewRows pages the rows of one class of the
-// creator's own filter preview while the creator's directory still admits
-// its filter, showing only the rows whose User the caller's User directory
-// shows now: a viewer whose visibility narrowed since the preview froze no
-// longer sees the Users it lost.
+// ListAcademicAdministrationPreviewRows pages one class of rows of the
+// creator's own preview, hiding users the creator can no longer see since
+// the preview froze.
 func (s *Service) ListAcademicAdministrationPreviewRows(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -296,14 +270,10 @@ func (s *Service) ListAcademicAdministrationPreviewRows(
 	return paging.New(rows, limit), nil
 }
 
-// CommitAcademicAdministrationPreview commits the creator's ready filter
-// preview whose digest and revision still match, within 15 minutes of it
-// becoming ready, and proposes the one execution Job over its frozen rows.
-// It requires a strong, recent Session and a filter the creator's directory
-// still admits, reads a preview another User created as absent, and its
-// first commit records the batch-level audit entry. The result is the
-// committed snapshot the Store recorded, so an idempotent replay returns it
-// again.
+// CommitAcademicAdministrationPreview commits a ready preview whose digest
+// and revision still match, within 15 minutes of it becoming ready. Another
+// user's preview reads as absent; an idempotent replay returns the recorded
+// snapshot.
 func (s *Service) CommitAcademicAdministrationPreview(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -342,8 +312,8 @@ func (s *Service) CommitAcademicAdministrationPreview(
 	return s.academicAdministrationPreviewResult(ctx, inv, committed), nil
 }
 
-// CancelAcademicAdministrationPreview cancels the creator's unfinished
-// filter preview; rows already executed stay as they ended.
+// CancelAcademicAdministrationPreview cancels an unfinished preview; rows
+// already executed are not undone.
 func (s *Service) CancelAcademicAdministrationPreview(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -359,11 +329,9 @@ func (s *Service) CancelAcademicAdministrationPreview(
 	return s.academicAdministrationPreviewResult(ctx, inv, canceled), nil
 }
 
-// academicAdministrationPreviewResult is the view a committed or canceled
-// preview answers with: the snapshot the Store returned and, best effort,
-// its row counts. The change already happened, so a failed count, or a
-// filter the creator's directory no longer admits, omits the counts rather
-// than turning the change into an error.
+// academicAdministrationPreviewResult counts rows best effort: the change
+// already happened, so a failed count omits the counts rather than turning
+// the change into an error.
 func (s *Service) academicAdministrationPreviewResult(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -378,10 +346,8 @@ func (s *Service) academicAdministrationPreviewResult(
 	return academicAdministrationPreviewView(value, groups)
 }
 
-// countVisibleAcademicAdministrationPreviewGroups counts a resolved
-// preview's rows by class and reason through the caller's User directory
-// visibility now, the visibility its rows are read through; a preview not
-// yet resolved has no counts.
+// countVisibleAcademicAdministrationPreviewGroups counts through the
+// caller's current visibility, the same visibility rows are read through.
 func (s *Service) countVisibleAcademicAdministrationPreviewGroups(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -404,14 +370,10 @@ func (s *Service) countVisibleAcademicAdministrationPreviewGroups(
 	return groups, nil
 }
 
-// admitAcademicAdministrationFilter asks the User directory, as the caller
-// now, whether it still admits the preview's stored filter, through the same
-// validation the directory applies to its own query. A filter only an
-// Institution-wide viewer may apply (an activity filter) or one needing
-// role.view (a Role filter) stops admitting a creator who lost that
-// authority since the preview was asked for, and any read, commit or row
-// execution of the preview is then refused with
-// academic_administration_preview.authorization_lost.
+// admitAcademicAdministrationFilter re-asks the directory whether the caller
+// may still apply the stored filter. A creator who lost the authority since
+// (institution-wide visibility for an activity filter, role.view for a role
+// filter) is refused with academic_administration_preview.authorization_lost.
 func (s *Service) admitAcademicAdministrationFilter(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -429,10 +391,9 @@ func (s *Service) admitAcademicAdministrationFilter(
 	return nil
 }
 
-// readAcademicAdministrationPreview reads a filter preview the caller may
-// read: onboarding_batch.view at its scope, and only its creator, so the
-// Users it froze are never shown to a second reader. Any other caller reads
-// it as absent.
+// readAcademicAdministrationPreview admits only the creator, so the users a
+// preview froze are never shown to a second reader; anyone else reads it as
+// absent.
 func (s *Service) readAcademicAdministrationPreview(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -462,11 +423,9 @@ func (s *Service) readAcademicAdministrationPreview(
 	return value, nil
 }
 
-// authorizeAcademicAdministrationPreviewTarget authorizes the operation's
-// own action at the scope and, for a Role Binding operation, checks the
-// Role and that the caller may delegate every Action a created binding
-// grants. It is checked when the preview is asked for and again when it
-// resolves; every row is authorized again when it executes.
+// authorizeAcademicAdministrationPreviewTarget runs when the preview is
+// requested and again when it resolves. For a role binding operation the
+// caller must be able to delegate every action the binding grants.
 func (s *Service) authorizeAcademicAdministrationPreviewTarget(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -500,11 +459,9 @@ func (s *Service) authorizeAcademicAdministrationPreviewTarget(
 	return nil
 }
 
-// authorizeAcademicAdministrationAction authorizes the action an operation's
-// rows need at the preview's scope. An action on a User (user.manage,
-// session.manage) is never checked against the scope resource itself: the
-// operations that need it apply Institution-wide, so the caller must hold it
-// Institution-wide, recorded as one decision at the Institution.
+// authorizeAcademicAdministrationAction checks user actions (user.manage,
+// session.manage) at the institution, never at the scope: the operations
+// that need them apply institution-wide.
 func (s *Service) authorizeAcademicAdministrationAction(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -546,13 +503,9 @@ func (s *Service) authorizeAcademicAdministrationAction(
 	return nil
 }
 
-// academicAdministrationPreviewFilter validates a preview request created
-// at createdAt and returns the filter the preview keeps: a supported
-// operation at a scope it applies at, exactly the operation fields it owns,
-// an end after the effective start (start_at, or createdAt when it is
-// omitted, the start every row then takes), and a well-formed bounded
-// directory filter. Whether the caller may apply the directory filter is the
-// directory's own decision.
+// academicAdministrationPreviewFilter validates the request shape only; an
+// omitted start becomes createdAt for every row. Whether the caller may
+// apply the directory filter is the directory's decision.
 func academicAdministrationPreviewFilter(
 	command CreateAcademicAdministrationPreviewCommand,
 	createdAt time.Time,
@@ -659,9 +612,8 @@ func academicAdministrationPreviewFilter(
 	return filter, nil
 }
 
-// academicAdministrationDirectoryQuery is the User directory query of a
-// preview filter: one page of up to limit Users in username order, the
-// order a preview freezes its rows in.
+// academicAdministrationDirectoryQuery orders by username, the order a
+// preview freezes its rows in.
 func academicAdministrationDirectoryQuery(filter store.AcademicAdministrationFilter, limit int) user.SearchUsersQuery {
 	return user.SearchUsersQuery{
 		Query:            filter.Query,
@@ -677,9 +629,8 @@ func academicAdministrationDirectoryQuery(filter store.AcademicAdministrationFil
 	}
 }
 
-// academicAdministrationPreviewAuditValue is the safe audit projection of a
-// preview: its operation, scope and filter. The directory search term is
-// recorded only as present or not, since it may spell a person's name.
+// academicAdministrationPreviewAuditValue records the search term only as
+// present or not, since it may spell a person's name.
 func academicAdministrationPreviewAuditValue(
 	id model.OnboardingImportID,
 	filter store.AcademicAdministrationFilter,
@@ -727,16 +678,14 @@ func academicAdministrationPreviewAuditValue(
 	return value
 }
 
-// prepareAcademicAdministrationBatchAudit drafts the one batch-level audit
-// entry of a filter preview's commit: the operation, the filter, the frozen
-// counts by class and reason, and the preview's identity. The commit
-// aggregate inserts it once, on the first commit only.
+// prepareAcademicAdministrationBatchAudit drafts the batch-level audit entry;
+// the store inserts it on the first commit only.
 func (s *Service) prepareAcademicAdministrationBatchAudit(
 	ctx context.Context,
 	inv invocation.Invocation,
 	current *store.OnboardingImport,
 ) (*model.AuditEvent, error) {
-	if current == nil || current.Filter == nil || s.drafts == nil {
+	if current == nil || current.Filter == nil {
 		return nil, apperror.New("onboarding_import.unavailable")
 	}
 	groups, err := s.imports.CountAcademicAdministrationPreviewGroups(ctx, store.AcademicAdministrationPreviewGroupCountOptions{ImportID: current.ID})
@@ -761,7 +710,7 @@ func (s *Service) prepareAcademicAdministrationBatchAudit(
 	if err != nil {
 		return nil, err
 	}
-	return s.drafts.PrepareAtScope(
+	return s.auditor.PrepareAtScope(
 		ctx,
 		inv,
 		model.ActionOnboardingBatchManage,
@@ -787,9 +736,8 @@ func academicAdministrationPreviewView(
 	return view
 }
 
-// academicAdministrationPreviewStoreErrors presents the Store failures of a
-// filter preview: an expired preview, and any other stale preview, state or
-// fence as a preview conflict.
+// academicAdministrationPreviewStoreErrors maps every stale preview, state or
+// fence failure other than expiry to a preview conflict.
 var academicAdministrationPreviewStoreErrors = apperror.StoreTable{
 	Rules: apperror.Conflicts("onboarding_import", map[string]apperror.Code{
 		"preview_expired": "academic_administration_preview.expired",

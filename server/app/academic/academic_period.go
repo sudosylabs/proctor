@@ -24,8 +24,8 @@ import (
 // ListAcademicPeriodsQuery is the input of ListAcademicPeriods.
 type ListAcademicPeriodsQuery struct {
 	Query string
-	// AfterStartAt, AfterName, and AfterID are the last Academic Period of the
-	// previous page in (start, name, identity) order, all set or all empty.
+	// AfterStartAt, AfterName and AfterID are the last period of the previous
+	// page, all set or all empty.
 	AfterStartAt time.Time
 	AfterName    string
 	AfterID      model.AcademicPeriodID
@@ -55,7 +55,7 @@ type ArchiveAcademicPeriodCommand struct {
 	ID               model.AcademicPeriodID
 }
 
-// GetAcademicPeriod reads one Academic Period after authorizing the caller.
+// GetAcademicPeriod needs academic_period.view.
 func (s *Service) GetAcademicPeriod(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -82,7 +82,7 @@ func (s *Service) GetAcademicPeriod(
 	return period, nil
 }
 
-// ListAcademicPeriods lists Academic Periods after authorizing the caller.
+// ListAcademicPeriods returns only the periods the caller may view.
 func (s *Service) ListAcademicPeriods(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -112,7 +112,7 @@ func (s *Service) ListAcademicPeriods(
 	return paging.New(periods, limit), nil
 }
 
-// CreateAcademicPeriod creates an Academic Period after authorizing the caller.
+// CreateAcademicPeriod needs academic_period.manage.
 func (s *Service) CreateAcademicPeriod(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -196,7 +196,7 @@ func (s *Service) CreateAcademicPeriod(
 	return result.Value, nil
 }
 
-// UpdateAcademicPeriod updates an Academic Period after authorizing the caller.
+// UpdateAcademicPeriod needs academic_period.manage.
 func (s *Service) UpdateAcademicPeriod(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -267,7 +267,7 @@ func (s *Service) UpdateAcademicPeriod(
 	)
 }
 
-// ArchiveAcademicPeriod archives an Academic Period after authorizing the caller.
+// ArchiveAcademicPeriod needs academic_period.manage.
 func (s *Service) ArchiveAcademicPeriod(ctx context.Context, inv invocation.Invocation, command ArchiveAcademicPeriodCommand) error {
 	id := command.ID
 	if !id.IsValid() {

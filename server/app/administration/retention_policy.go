@@ -20,15 +20,15 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ReplaceRetentionPolicyCommand completely replaces the
-// Institution policy behind optimistic revision and idempotency fences.
+// ReplaceRetentionPolicyCommand replaces the whole policy behind revision and
+// idempotency fences.
 type ReplaceRetentionPolicyCommand struct {
 	ExpectedRevision int64
 	Settings         model.RetentionPolicySettings
 	IdempotencyKey   string
 }
 
-// GetRetentionPolicy returns the current administrative policy.
+// GetRetentionPolicy returns the current policy.
 func (s *Service) GetRetentionPolicy(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -145,8 +145,6 @@ func (s *Service) ReplaceRetentionPolicy(
 	return stored.Policy.Clone(), nil
 }
 
-// authorizeRetentionPolicy authorizes a retention Action on the singleton
-// Institution.
 func (s *Service) authorizeRetentionPolicy(
 	ctx context.Context,
 	inv invocation.Invocation,

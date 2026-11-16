@@ -124,7 +124,7 @@ func (s *Service) RequestEmailVerification(
 }
 
 // CompleteEmailVerification consumes an email verification token and returns
-// the verified User.
+// the verified user.
 func (s *Service) CompleteEmailVerification(
 	ctx context.Context,
 	inv invocation.Invocation,

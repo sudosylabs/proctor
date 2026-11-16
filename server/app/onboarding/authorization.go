@@ -17,7 +17,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// authorize authorizes an Action on a concrete Resource.
 func (s *Service) authorize(ctx context.Context, inv invocation.Invocation, action model.Action, resource model.Resource) error {
 	if s.authorizer == nil {
 		return apperror.New("invitation.unavailable")
@@ -25,8 +24,6 @@ func (s *Service) authorize(ctx context.Context, inv invocation.Invocation, acti
 	return s.authorizer.Authorize(ctx, inv, action, resource)
 }
 
-// authorizeActionDelegation refuses unless the caller may grant every Action
-// at the scope.
 func (s *Service) authorizeActionDelegation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -49,11 +46,9 @@ func (s *Service) authorizeActionDelegation(
 	return nil
 }
 
-// visibility resolves and records the caller's institution-family scopes for
-// invitation.view, invitation.manage, onboarding_batch.view, or
-// academic_progression.manage, which share one scope shape: the Institution,
-// Academic Unit subtrees, and Classes. Progression authority is a Class
-// action, so its scopes are resolved for Class resources.
+// visibility resolves the caller's scopes for an action whose scopes are the
+// institution, academic unit subtrees and classes. Progression authority is
+// a class action, so its scopes are resolved for class resources.
 func (s *Service) visibility(
 	ctx context.Context,
 	inv invocation.Invocation,

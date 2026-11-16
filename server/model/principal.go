@@ -13,9 +13,9 @@ import (
 
 type CredentialType string
 
-// PrincipalCredentialID identifies the concrete credential that established
-// a principal. It is intentionally distinct from persistence IDs because the
-// credential may be either a session credential or a personal access token.
+// PrincipalCredentialID identifies the credential that established a
+// principal. It is not a persistence ID because the credential may be a
+// session credential or a personal access token.
 type PrincipalCredentialID string
 
 func (id PrincipalCredentialID) IsValid() bool { return IsValidOpaqueID(string(id)) }
@@ -27,15 +27,15 @@ const (
 	CredentialPersonalAccessToken CredentialType = "personal_access_token"
 )
 
-// Principal is the immutable authentication context attached to one request.
-// It deliberately excludes roles, permissions, affiliations, and academic
-// memberships because authorization must resolve current durable state.
+// Principal is the immutable authentication context of one request. It holds
+// no roles, permissions, affiliations or memberships, because authorization
+// must read current stored state.
 type Principal struct {
 	UserID                   UserID
 	AuthenticationGeneration int64
 	MFARecoveryRequired      bool
-	// MFAEnrollmentRequired marks a Web Session the Access Policy restricts
-	// until its User sets up or completes two-step verification.
+	// MFAEnrollmentRequired marks a web session the access policy restricts
+	// until its user sets up or completes two-step verification.
 	MFAEnrollmentRequired    bool
 	SessionID                SessionID
 	CredentialID             PrincipalCredentialID
@@ -60,8 +60,8 @@ type Principal struct {
 	AcademicUnitID           AcademicUnitID
 }
 
-// AuthenticationTokens contains raw credentials returned exactly once after
-// login or refresh. These values must never be persisted, audited, or logged.
+// AuthenticationTokens holds the raw credentials returned exactly once after
+// login or refresh. Never persist, audit or log them.
 type AuthenticationTokens struct {
 	TokenType        string
 	AccessToken      string
@@ -70,8 +70,7 @@ type AuthenticationTokens struct {
 	RefreshExpiresAt time.Time
 }
 
-// Validate checks that the immutable authentication context is internally
-// consistent for its credential type.
+// Validate checks that the context is consistent for its credential type.
 func (p Principal) Validate() error {
 	if p.MFARecoveryRequired {
 		return invalidModelError("Principal.Validate", "principal", "", "principal is restricted to MFA reenrollment", "")
@@ -82,10 +81,10 @@ func (p Principal) Validate() error {
 	return p.validateIdentity()
 }
 
-// ValidateMFARecovery accepts an ordinary principal or a narrow restricted Web
-// Session: the one established by fresh primary proof after assisted reset, or
-// the one the Access Policy restricts until two-step verification is set up.
-// Only the explicitly bounded MFA operations may call this instead of Validate.
+// ValidateMFARecovery also accepts a narrowly restricted web session: the one
+// fresh primary proof established after an assisted reset, or one the access
+// policy restricts until two-step verification is set up. Only the bounded MFA
+// operations may call it instead of Validate.
 func (p Principal) ValidateMFARecovery() error {
 	if p.MFARecoveryRequired &&
 		(p.AuthenticationGeneration <= 0 || p.ClientType != SessionClientWeb || p.CredentialType != CredentialSessionAccess) {
@@ -203,9 +202,8 @@ func (p Principal) HasStrongAuthentication() bool {
 	return p.AuthenticationStrength == AuthenticationMultiFactor
 }
 
-// HasRegisteredDesktopKey reports the request-scoped proof assurance. Merely
-// holding a Desktop Session snapshot is insufficient; the current request must
-// have passed DPoP verification.
+// HasRegisteredDesktopKey reports whether this request passed DPoP
+// verification; holding a desktop session is not enough.
 func (p Principal) HasRegisteredDesktopKey() bool {
 	return p.RegisteredDesktopKey &&
 		p.ClientType == SessionClientDesktop &&
@@ -213,9 +211,9 @@ func (p Principal) HasRegisteredDesktopKey() bool {
 		IsValidDPoPKeyThumbprint(p.DPoPKeyThumbprint)
 }
 
-// LastAuthenticationAt is the latest primary proof: the initial
-// authentication or a later reauthentication. An MFA challenge proves the
-// second factor, never fresh primary proof, so it does not refresh recency.
+// LastAuthenticationAt is the latest primary proof: the first authentication
+// or a later reauthentication. An MFA challenge proves only the second factor,
+// so it does not refresh recency.
 func (p Principal) LastAuthenticationAt() time.Time {
 	latest := p.AuthenticatedAt
 	if p.ReauthenticatedAt.Valid && p.ReauthenticatedAt.Time.After(latest) {

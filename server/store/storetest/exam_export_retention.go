@@ -25,8 +25,9 @@ type ExamExportRetentionSQLProbe struct {
 	HasExpiryGrace  func(*testing.T, context.Context, string) bool
 }
 
-// A construction reference must be authoritative even when reservation and
-// publication happen between two scheduler scans on another node.
+// TestExamExportRetention proves a construction reference is authoritative
+// even when reservation and publication happen between two scheduler scans on
+// another node.
 func TestExamExportRetention(t *testing.T, ss store.Store, dates RetentionSQLProbe, probe ExamExportRetentionSQLProbe) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)

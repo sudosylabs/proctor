@@ -46,8 +46,8 @@ func TestDeliveryExpiryScanAuditsBeforeCommitAndRejectsUnboundedWork(t *testing.
 	require.Equal(t, 1, persistence.calls, "scan=%#v calls=%d order=%v", result, persistence.calls, f.order)
 	require.True(t, model.AuditEventID(persistence.auditID).IsValid(), "scan=%#v calls=%d order=%v", result, persistence.calls, f.order)
 	// The commit carries the begun audit event, so the audit preceded it.
-	require.NotNil(t, f.systemAudit.values, "the expiry was not audited")
-	require.Empty(t, f.systemAudit.failedCode)
+	require.NotNil(t, f.systemAudit().values, "the expiry was not audited")
+	require.Empty(t, f.systemAudit().failedCode)
 	for _, limit := range []int{0, 201} {
 		_, err = f.service.ScanExpiredDeliveries(context.Background(), expiryScanSystem, limit)
 		require.Error(t, err, "unbounded scan accepted")

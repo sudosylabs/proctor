@@ -22,8 +22,6 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// middlewarePolicy carries the deployment-owned inputs of the common
-// middleware chain.
 type middlewarePolicy struct {
 	trustedProxies trustedProxies
 	// tracing is nil unless tracing is enabled.
@@ -110,8 +108,8 @@ func traceRequests(next http.Handler, tracing Tracing) http.Handler {
 	})
 }
 
-// nameRequestSpan gives the request span its sealed route template, with each
-// parameter shown by name only.
+// nameRequestSpan names the span by route template, never by request path,
+// so identifiers stay out of traces.
 func nameRequestSpan(next http.Handler, path string) http.Handler {
 	route := routeTemplate(path)
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

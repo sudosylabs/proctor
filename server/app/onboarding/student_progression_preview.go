@@ -121,8 +121,6 @@ func (s *Service) previewProgression(ctx context.Context, id model.OnboardingImp
 	return err
 }
 
-// previewProgressionRow builds the preview row for one source roster member, classifying the member's eligibility
-// and any existing destination membership.
 func (s *Service) previewProgressionRow(
 	ctx context.Context,
 	id model.OnboardingImportID,

@@ -22,9 +22,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ListUserSessionsQuery pages one User's Sessions newest first. Limit is
-// between 1 and 200; a continuation names the last Session of the previous
-// page by its creation instant and ID.
+// ListUserSessionsQuery pages sessions newest first. Limit is 1 to 200; a
+// continuation names the previous page's last session by creation time and ID.
 type ListUserSessionsQuery struct {
 	UserID          model.UserID
 	IncludeRevoked  bool
@@ -40,7 +39,7 @@ type RevokeUserSessionsCommand struct {
 	Batch batchitem.Item
 }
 
-// ListUserSessions pages one User's Sessions for an administrator.
+// ListUserSessions pages another user's sessions for an administrator.
 func (s *Service) ListUserSessions(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -86,8 +85,8 @@ func (s *Service) ListUserSessions(
 	return paging.New(sessions, query.Limit), nil
 }
 
-// RevokeUserSession revokes one of a User's Sessions for an administrator and
-// notifies the User.
+// RevokeUserSession revokes one of a user's sessions for an administrator and
+// notifies the user.
 func (s *Service) RevokeUserSession(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -152,8 +151,8 @@ func (s *Service) RevokeUserSession(
 	)
 }
 
-// RevokeUserSessions revokes every Session of a User for an administrator, or
-// for an administration batch row, and notifies the User.
+// RevokeUserSessions revokes every session of a user, for an administrator or
+// an administration batch row, and notifies the user.
 func (s *Service) RevokeUserSessions(
 	ctx context.Context,
 	inv invocation.Invocation,

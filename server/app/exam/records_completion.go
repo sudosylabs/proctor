@@ -25,9 +25,8 @@ type CompleteRecordsCommand struct {
 	IdempotencyKey               string
 }
 
-// GetExamSittingRecords returns a Sitting's Sitting Records Completion state
-// and pending Submission Review counts to a caller authorized to complete
-// records.
+// GetExamSittingRecords returns a sitting's records completion state and
+// pending review counts; the caller needs records completion permission.
 func (r *Records) GetExamSittingRecords(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -59,9 +58,8 @@ func (r *Records) GetExamSittingRecords(
 	return value, nil
 }
 
-// CompleteExamSittingRecords idempotently records Sitting Records Completion
-// for a Sitting, fenced by ExpectedRevision and the acknowledged evidence
-// revision.
+// CompleteExamSittingRecords idempotently completes a sitting's records,
+// fenced by ExpectedRevision and the acknowledged evidence revision.
 func (r *Records) CompleteExamSittingRecords(
 	ctx context.Context,
 	inv invocation.Invocation,

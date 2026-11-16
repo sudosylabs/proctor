@@ -43,7 +43,7 @@ type ExamRevisionRetentionProbe struct {
 
 // TestExamRevisionStoreWithRetention runs conformance around a VFS-aware
 // probe. It stages original bytes before publication, then verifies them only
-// after the Draft replacements and cleanup eligibility changes have occurred.
+// after the draft replacements and cleanup eligibility changes have occurred.
 func TestExamRevisionStoreWithRetention(t *testing.T, ss store.Store, probe ExamRevisionRetentionProbe) {
 	testExamRevisionStore(t, ss, &probe)
 }
@@ -126,8 +126,8 @@ func testExamRevisionStore(t *testing.T, ss store.Store, probe *ExamRevisionRete
 	retentionFixture.ResourceID = firstSnapshot.Resources[0].ResourceID
 	retentionFixture.OldResourceEntryID = firstSnapshot.Resources[0].FileEntryID
 
-	// A lost success response retries with the original Draft fence and a new
-	// generated Revision ID. The stored outcome must win before stale/no-change.
+	// A lost success response retries with the original draft fence and a new
+	// generated revision ID. The stored outcome must win before stale/no-change.
 	retry := examRevisionPublication(t, ctx, ss, examID, creator.ID, unit.ID, 4, at.Add(5*time.Second))
 	replayed, err := ss.ExamRevision().Publish(ctx, retry, firstCommand)
 	require.NoError(t, err)
@@ -142,7 +142,7 @@ func testExamRevisionStore(t *testing.T, ss store.Store, probe *ExamRevisionRete
 	require.ErrorAs(t, err, &conflict)
 	require.Equal(t, "exam_revision_no_changes", conflict.Constraint)
 
-	// Change both content families after publication. The first Revision must
+	// Change both content families after publication. The first revision must
 	// keep its exact old bytes while the second freezes the new selections.
 	alteredCapacity := model.DefaultExamCapacityPolicy()
 	alteredCapacity.ResourceMaximumCount = 20
@@ -187,8 +187,8 @@ func testExamRevisionStore(t *testing.T, ss store.Store, probe *ExamRevisionRete
 	require.Len(t, listed, 1)
 	require.Equal(t, first.Revision.ID, listed[0].ID)
 
-	// The Exam/Draft lock serializes two fresh commands against the same fence:
-	// exactly one publishes and the loser observes the advanced Draft.
+	// The exam/draft lock serializes two fresh commands against the same fence:
+	// exactly one publishes and the loser observes the advanced draft.
 	thirdReplacement := reserveExamResource(t, ctx, ss, examID, creator.ID, resourceResult.Value.Resource.ID, "Reference", 0, 8, at.Add(10*time.Second), model.ExamResourceMediaText, replacedResource.Value)
 	thirdResource, err := ss.ExamResource().FinalizeUpload(ctx, thirdReplacement.finalization, examCommand(creator.ID, "exam.resource.replace", "revision-race-replace", "revision-race-replace-command"))
 	require.NoError(t, err)
@@ -225,7 +225,7 @@ func testExamRevisionStore(t *testing.T, ss store.Store, probe *ExamRevisionRete
 	require.Equal(t, 1, successes, "concurrent publications successes=%d stale=%d errors=%v", successes, stale, errs)
 	require.Equal(t, 1, stale, "concurrent publications successes=%d stale=%d errors=%v", successes, stale, errs)
 
-	// Publication and each authoring family share the same Exam/Draft lock. A
+	// Publication and each authoring family share the same exam/draft lock. A
 	// race must produce one complete before-or-after state, never a mixed one.
 	raceTitle := "Revision race title"
 	_, err = ss.ExamAuthoring().UpdateDraftText(ctx, newExamDraftTextUpdate(t, ctx, ss, examID, creator.ID, 10, &raceTitle, nil, at.Add(13*time.Second)), examCommand(creator.ID, "exam.draft.text.edit", "revision-race-title", "revision-race-title-command"))

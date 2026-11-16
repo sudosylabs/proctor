@@ -31,9 +31,9 @@ type ConfigureDraftFocusLossCommand struct {
 	IdempotencyKey        string
 }
 
-// ConfigureExamDraftFocusLoss replaces only the supported Focus Loss rule. The
-// complete policy is reconstructed from authoritative Draft state so callers
-// cannot supply or weaken Connection Loss.
+// ConfigureExamDraftFocusLoss replaces only the focus-loss rule. The rest of
+// the policy is rebuilt from the stored draft so callers cannot supply or
+// weaken the connection-loss rule.
 func (a *Authoring) ConfigureExamDraftFocusLoss(
 	ctx context.Context,
 	inv invocation.Invocation,

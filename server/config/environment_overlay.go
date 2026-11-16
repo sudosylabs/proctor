@@ -135,9 +135,8 @@ func stringListEnvironmentOverride(
 	}
 }
 
-// headerMapEnvironmentOverride replaces a header map from the
-// OTEL_EXPORTER_OTLP_HEADERS list format. Its parse error never repeats the
-// value, which carries credentials.
+// headerMapEnvironmentOverride's parse error never repeats the value, which
+// carries credentials.
 func headerMapEnvironmentOverride(
 	key string,
 	field func(*Config) *map[string]string,

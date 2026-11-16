@@ -19,8 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ReplaceEnvironmentCommand asks for a new machine for a candidate's
-// execution environment, built from the Attempt Workspace.
+// ReplaceEnvironmentCommand asks for a new machine built from the workspace.
 // ExpectedIncarnation is the incarnation the manager saw on the board.
 type ReplaceEnvironmentCommand struct {
 	ExamID              model.ExamID
@@ -30,19 +29,18 @@ type ReplaceEnvironmentCommand struct {
 	IdempotencyKey      string
 }
 
-// ReplaceEnvironmentResult is the environment after the request. The owner
-// replaces the machine shortly after; Incarnation then reaches
-// ReplaceBefore, and the restart is recorded as an execution gap.
+// ReplaceEnvironmentResult is the environment after the request; the owner
+// replaces the machine later, when Incarnation reaches ReplaceBefore, and
+// records the restart as an execution gap.
 type ReplaceEnvironmentResult struct {
 	Environment   model.AttemptEnvironment
 	ReplaceBefore int64
 	Replayed      bool
 }
 
-// ReplaceExamAttemptEnvironment asks the owner of a candidate's environment
-// to replace its machine, for a manager of the Sitting, as a Kick is. The
-// Workspace is the authority, so nothing the candidate saved is lost; what
-// only the old machine held (processes, terminals, ignored files) is.
+// ReplaceExamAttemptEnvironment is authorized like a kick. The workspace is
+// the authority, so nothing the candidate saved is lost; what only the old
+// machine held (processes, terminals, ignored files) is.
 func (s *Service) ReplaceExamAttemptEnvironment(
 	ctx context.Context,
 	inv invocation.Invocation,

@@ -11,45 +11,44 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Publication owns the authorization, audit, persistence and after-commit
-// effect recipe for freezing Drafts into immutable Exam Revisions.
+// Publication freezes drafts into immutable revisions.
 type Publication struct {
-	revisions store.ExamRevisionStore
-	// exams reads the Exam ownership a publication is authorized against.
+	revisions           store.ExamRevisionStore
 	exams               store.ExamAuthoringStore
 	academicUnitMembers store.AcademicUnitMemberStore
 
-	authorizer        Authorizer
-	auditor           Auditor
+	authorizer        *access.Authorizer
+	auditor           access.MutationAuditAdapter
 	publisher         realtime.Publisher
 	now               func() time.Time
 	newID             func() model.ExamRevisionID
 	institutionOrigin string
 	executionEnabled  bool
-	operational       OperationalRecorder
+	operational       operational.Recorder
 }
 
-// PublicationDependencies are the collaborators NewPublication validates once
-// and distributes to the Publication.
+// PublicationDependencies are the collaborators of NewPublication.
 type PublicationDependencies struct {
 	Persistence       store.ExamRevisionStore
 	Access            store.ExamAuthoringStore
 	Memberships       store.AcademicUnitMemberStore
-	Authorizer        Authorizer
-	Auditor           Auditor
+	Authorizer        *access.Authorizer
+	Auditor           *access.Auditor
 	Publisher         realtime.Publisher
 	Now               func() time.Time
 	NewID             func() model.ExamRevisionID
 	InstitutionOrigin string
-	// ExecutionEnabled is whether Exams may publish with an execution
-	// environment.
+	// ExecutionEnabled is whether the installation allows publishing with an
+	// execution environment.
 	ExecutionEnabled bool
-	Operational      OperationalRecorder
+	Operational      operational.Recorder
 }
 
 // NewPublication returns a Publication service, or an error when a required
@@ -71,7 +70,7 @@ func NewPublication(deps PublicationDependencies) (*Publication, error) {
 		exams:               deps.Access,
 		academicUnitMembers: deps.Memberships,
 		authorizer:          deps.Authorizer,
-		auditor:             deps.Auditor,
+		auditor:             deps.Auditor.MutationAudit(),
 		publisher:           deps.Publisher,
 		now:                 deps.Now,
 		newID:               deps.NewID,

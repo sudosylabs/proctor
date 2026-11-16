@@ -19,8 +19,9 @@ const (
 	SecurityPreflightReportOperation  = "exam.security_preflight.report"
 )
 
-// SecurityPreflightAccess is an authenticated selector, never a wire DTO.
-// Build meaning comes from the verified server release catalog.
+// SecurityPreflightAccess is built from the authenticated request, never
+// decoded from the wire. What DesktopBuild means comes from the server's
+// verified release catalog.
 type SecurityPreflightAccess struct {
 	SittingID                          model.ExamSittingID
 	CandidateUserID                    model.UserID
@@ -52,12 +53,8 @@ type SecurityPreflightPrepared struct {
 	Replayed                   bool
 }
 
-// ConsistentWith reports whether the prepared preflight carries a valid
-// challenge and a policy that is valid at the server time and resolved for the
-// given Sitting.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the challenge is valid and the policy is
+// valid at ServerTime and resolved for the sitting.
 func (p *SecurityPreflightPrepared) ConsistentWith(sittingID model.ExamSittingID) bool {
 	return !(p == nil ||
 		p.Challenge.Validate() != nil ||
@@ -73,8 +70,8 @@ type SecurityPreflightReport struct {
 	AuditAt      time.Time
 }
 
-// SecurityPolicyRecovery returns privileged admission provenance only to the
-// active owner's registered Session. It does not grant or renew a lease.
+// SecurityPolicyRecovery is returned only to the active owner's registered
+// session. Recovering it grants and renews no lease.
 type SecurityPolicyRecovery struct {
 	Security                   model.AdmittedSecurity
 	Control                    model.SecurityControlResult
@@ -82,12 +79,8 @@ type SecurityPolicyRecovery struct {
 	FrozenAttemptConfiguration model.AttemptConfiguration
 }
 
-// ConsistentWith reports whether the recovery carries its server time, a
-// valid renewal result, a valid admitted security binding bound to the given
-// Attempt, and a valid frozen Attempt configuration.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether every part is present and valid and the
+// admitted security is bound to the attempt.
 func (r *SecurityPolicyRecovery) ConsistentWith(attemptID model.ExamAttemptID) bool {
 	return !(r == nil ||
 		r.ServerTime.IsZero() ||
@@ -97,32 +90,27 @@ func (r *SecurityPolicyRecovery) ConsistentWith(attemptID model.ExamAttemptID) b
 		r.FrozenAttemptConfiguration.Validate() != nil)
 }
 
-// SecurityPreflightStore persists the security preflight a Candidate's
-// Desktop completes before it connects to a Sitting, and the recovery of the
-// security policy an admitted Attempt runs under.
+// SecurityPreflightStore persists the preflight a candidate's Desktop
+// completes before connecting to a sitting, and recovers the policy an
+// admitted attempt runs under.
 type SecurityPreflightStore interface {
-	// PrepareSecurityPreflight issues the preflight challenge for the
-	// Candidate's Desktop build against the Sitting's current policy. A
-	// replayed command returns the original challenge.
+	// PrepareSecurityPreflight issues the challenge for the Desktop build
+	// against the sitting's current policy. A replay returns the original
+	// challenge.
 	PrepareSecurityPreflight(context.Context, *SecurityPreflightPrepare, *CommandIdempotency) (*SecurityPreflightPrepared, error)
-	// ResolveSecurityPreflightSitting returns the Sitting of a preflight this
-	// User and Session prepared.
+	// ResolveSecurityPreflightSitting finds only a preflight this user and
+	// session prepared.
 	ResolveSecurityPreflightSitting(context.Context, string, model.UserID, model.SessionID) (model.ExamSittingID, error)
-	// ReportSecurityPreflight evaluates the Desktop's report against the
-	// prepared challenge and records the result.
 	ReportSecurityPreflight(context.Context, *SecurityPreflightReport, *CommandIdempotency) (*model.SecurityPreflightResult, error)
-	// RecoverSecurityPolicy returns the admitted security policy, frozen
-	// Attempt Configuration and native control state of the Candidate's active
-	// Participation, for a Desktop that lost its Connect response.
+	// RecoverSecurityPolicy serves a Desktop that lost its Connect response.
 	RecoverSecurityPolicy(context.Context, SecurityPreflightAccess, model.ExamAttemptID) (*SecurityPolicyRecovery, error)
-	// ReadSecurityPolicyOverview resolves the Sitting's current policy for the
-	// readiness overview, under the same eligibility checks as preparation,
-	// without creating a preflight.
+	// ReadSecurityPolicyOverview applies the same eligibility checks as
+	// preparation but creates no preflight.
 	ReadSecurityPolicyOverview(context.Context, SecurityPreflightAccess) (*SecurityPolicyOverview, error)
 }
 
-// SecurityPolicyOverview is the policy the readiness overview checks the
-// candidate's machine against before Start.
+// SecurityPolicyOverview is the policy the readiness check compares the
+// candidate's machine with before start.
 type SecurityPolicyOverview struct {
 	ServerTime                time.Time
 	Resolved                  model.ResolvedNativePolicy

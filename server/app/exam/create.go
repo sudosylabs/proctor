@@ -27,8 +27,8 @@ type CreateCommand struct {
 	IdempotencyKey       string
 }
 
-// CreateExam idempotently creates an Exam with its initial Exam Draft in the
-// given Academic Unit.
+// CreateExam idempotently creates an exam and its initial draft in the given
+// academic unit.
 func (a *Authoring) CreateExam(ctx context.Context, inv invocation.Invocation, command CreateCommand) (_ View, resultErr error) {
 	defer func() { a.recordOperational("create", resultErr) }()
 	defer func() { resultErr = publicFailures.Present(resultErr) }()

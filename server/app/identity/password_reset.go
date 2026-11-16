@@ -39,9 +39,9 @@ type CompletePasswordResetCommand struct {
 	Source   string
 }
 
-// RequestPasswordReset deliberately returns success for unknown, disabled, or
-// external-only accounts and for per-account persistence/delivery failures.
-// Operational failures are logged without the requested email or raw token.
+// RequestPasswordReset returns success for unknown, disabled or external-only
+// accounts and for per-account persistence or delivery failures, so responses
+// cannot enumerate accounts. Failures are logged without the email or token.
 func (s *Service) RequestPasswordReset(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -152,8 +152,8 @@ func (s *Service) RequestPasswordReset(
 	return nil
 }
 
-// CompletePasswordReset consumes a password reset token, replaces the
-// password, and revokes the User's Sessions after the reset commits.
+// CompletePasswordReset replaces the password and revokes the user's sessions
+// once the reset commits.
 func (s *Service) CompletePasswordReset(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -209,7 +209,7 @@ func (s *Service) CompletePasswordReset(
 		return nil, accountRecoveryStoreFailure(err)
 	}
 
-	// Hash only for a live token's account. The hashing permit is shared with
+	// Hash only for a live token's account: the hashing permit is shared with
 	// login, so guessed tokens must not be able to consume it.
 	if err = CheckNewPassword(command.Password, passwordIdentityOf(user)); err != nil {
 		return nil, err

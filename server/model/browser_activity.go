@@ -188,12 +188,11 @@ func (l BrowserLocation) Validate() error {
 	return l.validateNetwork("https", "443")
 }
 
-// ValidateBlocked accepts only the reason-specific minimized location shapes.
-// HTTPS policy failures retain their canonical network location. Plain HTTP
-// retains the same bounded components with its default port removed. Other
-// denied schemes retain the scheme only so file paths, script/data payloads,
-// and custom-protocol data never cross the wire. An invalid URL has no safely
-// parsed components and is represented by the all-empty location value.
+// ValidateBlocked accepts only the minimized location shape for reason. HTTPS
+// policy failures keep their network location and plain HTTP the same parts
+// without its default port. Other denied schemes keep only the scheme, so file
+// paths, script or data payloads and custom-protocol data never cross the
+// wire. An invalid URL is the all-empty location.
 func (l BrowserLocation) ValidateBlocked(reason BrowserActivityBlockReason) error {
 	switch reason {
 	case BrowserBlockInvalidURL:

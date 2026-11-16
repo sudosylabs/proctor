@@ -8,29 +8,14 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
-	"github.com/sudosylabs/proctor/server/model"
 )
 
-// SessionReauthentication is the application port its handlers call; it
-// refreshes a Session's recent authentication by password or through an
-// external provider.
-type SessionReauthentication interface {
-	ReauthenticatePassword(context.Context, invocation.Invocation, identity.ReauthenticatePasswordCommand) (*model.Session, error)
-	BeginExternalReauthentication(
-		context.Context,
-		invocation.Invocation,
-		identity.BeginExternalReauthenticationCommand,
-	) (*model.ExternalAuthenticationStart, error)
-}
-
 type sessionReauthenticationHandlers struct {
-	app     SessionReauthentication
+	app     *identity.Service
 	cookies route.Cookies
 }
 
@@ -46,7 +31,7 @@ type externalReauthenticationResponse struct {
 	RedirectURL string `json:"redirect_url"`
 }
 
-func sessionReauthenticationResource(app SessionReauthentication, cookies route.Cookies) route.Resource {
+func sessionReauthenticationResource(app *identity.Service, cookies route.Cookies) route.Resource {
 	h := sessionReauthenticationHandlers{app: app, cookies: cookies}
 	return route.NewResource("session-reauthentication",
 		route.Endpoint{

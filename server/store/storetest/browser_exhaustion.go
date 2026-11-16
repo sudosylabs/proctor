@@ -19,7 +19,7 @@ import (
 )
 
 // TestBrowserExhaustionSettlement covers the transaction that refuses new detail,
-// including buffered records on a different source and an already finalized Review.
+// including buffered records on a different source and an already finalized review.
 func TestBrowserExhaustionSettlement(t *testing.T, ss store.Store, mode string, exhaust func(model.ExamAttemptID, model.AttemptParticipationID), pendingBytes func(model.ExamAttemptID) int64) {
 	ctx := context.Background()
 	f, connected, access := newBrowserActivityFixture(t, ctx, ss, "exhaustion-settlement")

@@ -74,8 +74,8 @@ func (s SQLAuditStore) ListNames(ctx context.Context, options store.AuditNameOpt
 	return names, nil
 }
 
-// listAuditUserNames names the Users visible through visibility as the User
-// directory applies it: a scoped visibility never names a disabled User.
+// listAuditUserNames names the users visible through visibility as the user
+// directory applies it: a scoped visibility never names a disabled user.
 func (s SQLAuditStore) listAuditUserNames(
 	ctx context.Context,
 	ids []string,
@@ -98,8 +98,8 @@ func (s SQLAuditStore) listAuditUserNames(
 	})
 }
 
-// listAuditAcademicUnitNames names the unarchived Academic Units inside the
-// Institution-wide or subtree visibility.
+// listAuditAcademicUnitNames names the unarchived academic units inside the
+// institution-wide or subtree visibility.
 func (s SQLAuditStore) listAuditAcademicUnitNames(
 	ctx context.Context,
 	ids []string,
@@ -125,7 +125,7 @@ func (s SQLAuditStore) listAuditAcademicUnitNames(
 	})
 }
 
-// listAuditClassNames names the Classes inside visibility as a Class search
+// listAuditClassNames names the classes inside visibility as a class search
 // applies it.
 func (s SQLAuditStore) listAuditClassNames(
 	ctx context.Context,
@@ -147,8 +147,8 @@ func (s SQLAuditStore) listAuditClassNames(
 	})
 }
 
-// listAuditRoleNames names the unarchived Roles; the caller asks only for
-// Roles the reader may see.
+// listAuditRoleNames names the unarchived roles; the caller asks only for
+// roles the reader may see.
 func (s SQLAuditStore) listAuditRoleNames(ctx context.Context, ids []string, names map[model.RoleID]store.AuditRoleName) error {
 	if len(ids) == 0 {
 		return nil

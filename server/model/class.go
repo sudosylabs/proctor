@@ -11,9 +11,9 @@ import (
 	"time"
 )
 
-// Class is a concrete student roster for one ProgrammeLevel during one
-// AcademicPeriod, such as "Computer Science Year 1 - Class A". Several classes
-// may serve the same programme level in the same period.
+// Class is one student roster for a programme level in an academic period,
+// such as "Computer Science Year 1 - Class A". Several classes may serve the
+// same level in the same period.
 type Class struct {
 	ID               ClassID
 	CreatedAt        time.Time
@@ -27,7 +27,7 @@ type Class struct {
 	Description      string
 }
 
-// NewClass constructs a class with application-supplied identity and clock.
+// NewClass builds a class at revision 1 and validates it.
 func NewClass(
 	id ClassID,
 	programmeLevelID ProgrammeLevelID,
@@ -54,7 +54,8 @@ func NewClass(
 	return class, nil
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
+// PrepareCreate stamps the ID and creation time and clears archive state; it
+// does nothing on nil.
 func (c *Class) PrepareCreate(id ClassID, at time.Time) {
 	if c == nil {
 		return
@@ -70,7 +71,7 @@ func (c *Class) PrepareCreate(id ClassID, at time.Time) {
 	sanitizeNamed(&c.Name, &c.DisplayName, &c.Description)
 }
 
-// PrepareUpdate applies the application-selected transition time.
+// PrepareUpdate stamps the update time and bumps the revision.
 func (c *Class) PrepareUpdate(at time.Time) {
 	if c == nil {
 		return
@@ -83,7 +84,7 @@ func (c *Class) PrepareUpdate(at time.Time) {
 	sanitizeNamed(&c.Name, &c.DisplayName, &c.Description)
 }
 
-// Archive marks the class archived.
+// Archive sets ArchivedAt and bumps the revision; archiving twice fails.
 func (c *Class) Archive(at time.Time) error {
 	if c == nil {
 		return invalidModelError("Class.Archive", "class", "", "class is nil", "")
@@ -101,12 +102,12 @@ func (c *Class) Archive(at time.Time) error {
 	return c.Validate()
 }
 
-// IsArchived reports whether the class is archived.
+// IsArchived reports whether ArchivedAt is set; a nil class is not archived.
 func (c *Class) IsArchived() bool {
 	return c != nil && c.ArchivedAt.Valid
 }
 
-// Validate checks rehydrated class state.
+// Validate checks the class's fields, for new and stored values alike.
 func (c *Class) Validate() error {
 	const where = "Class.Validate"
 	if c == nil {
@@ -142,7 +143,7 @@ func (c *Class) Validate() error {
 	return validateNamed(where, "class", c.ID.String(), c.Name, c.DisplayName, c.Description)
 }
 
-// Auditable returns a deliberately safe audit projection.
+// Auditable returns the fields that are safe to record in the audit log.
 func (c *Class) Auditable() map[string]any {
 	if c == nil {
 		return map[string]any{}
@@ -160,7 +161,7 @@ func (c *Class) Auditable() map[string]any {
 	}
 }
 
-// ResourceID returns the string form used by authorization Resource contracts.
+// ResourceID returns the ID in the form authorization resources use.
 func (c *Class) ResourceID() string {
 	if c == nil {
 		return ""

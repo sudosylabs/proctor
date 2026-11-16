@@ -30,7 +30,7 @@ type certificateFileStamp struct {
 	certificateSize, privateKeySize         int64
 }
 
-// Static serves an operator-managed key pair and replaces it when both files
+// Static serves an operator-managed key pair and replaces it when the files
 // change on disk or when Reload is requested. A replacement that fails to
 // parse keeps the previously loaded certificate in service.
 type Static struct {

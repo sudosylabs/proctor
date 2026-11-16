@@ -6,6 +6,8 @@ import { Button } from "../Button/Button";
 import { TaskStateActions } from "../TaskState/TaskState";
 import styles from "./AccountSecurity.module.css";
 
+// Codes appear only in the activation or regeneration response and cannot be
+// fetched again. The acknowledgement is the User's word, not proof a copy exists.
 export function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone(): void }) {
   const [acknowledged, setAcknowledged] = useState(false);
   const [copyStatus, setCopyStatus] = useState<"copied" | "failed">();

@@ -15,19 +15,15 @@ package route
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-type dpopAuthenticator interface {
-	AuthenticateDPoP(context.Context, string, string, string, string) (*model.Principal, error)
-}
 
 func (a *API) newHandlerWithErrorPolicy(
 	handler http.Handler,
@@ -129,8 +125,6 @@ func requireAuthentication(
 	}
 }
 
-// requireRefreshCredential admits a request carrying a refresh credential,
-// verifying CSRF when the credential arrived in a cookie.
 func requireRefreshCredential(
 	next http.Handler,
 	logger *logging.Logger,
@@ -155,8 +149,6 @@ func requireRefreshCredential(
 	})
 }
 
-// authenticateAccessCredential resolves the principal for an access
-// credential through DPoP, bearer, or access-token authentication by source.
 func authenticateAccessCredential(
 	request *http.Request,
 	requirement AuthRequirement,
@@ -167,16 +159,11 @@ func authenticateAccessCredential(
 	var authErr error
 	spec, _ := specFor(requirement)
 	if credential.Source == CredentialDPoP {
-		dpop, ok := application.(dpopAuthenticator)
-		if !ok {
-			authErr = applicationError("authentication.dpop.unavailable")
+		proof, proofErr := DPoPProof(request)
+		if proofErr != nil {
+			authErr = proofErr
 		} else {
-			proof, proofErr := DPoPProof(request)
-			if proofErr != nil {
-				authErr = proofErr
-			} else {
-				principal, authErr = dpop.AuthenticateDPoP(request.Context(), credential.Token, proof, request.Method, request.URL.EscapedPath())
-			}
+			principal, authErr = application.AuthenticateDPoP(request.Context(), credential.Token, proof, request.Method, request.URL.EscapedPath())
 		}
 	} else if spec.personalAccessToken &&
 		credential.Source == CredentialBearer {
@@ -195,9 +182,8 @@ func authenticateAccessCredential(
 
 // DPoPProof returns the request's single DPoP proof header, or "" when it
 // carries none. A repeated, padded or otherwise malformed header is
-// authentication.dpop.invalid. The kernel reads the proof for the routes it
-// authenticates; an operation that redeems a credential itself, such as
-// refresh, reads it here.
+// authentication.dpop.invalid. Operations that redeem a credential
+// themselves, such as refresh, read the proof here.
 func DPoPProof(request *http.Request) (string, error) {
 	values := request.Header.Values("DPoP")
 	if len(values) == 0 {
@@ -209,14 +195,9 @@ func DPoPProof(request *http.Request) (string, error) {
 	return values[0], nil
 }
 
-// dpopNonceChallenge is a DPoP authentication failure that asks the client to
-// sign its proof again with the server-issued nonce it carries (RFC 9449
-// section 8). The kernel answers it with DPoP-Nonce and use_dpop_nonce; any
-// other DPoP failure is invalid_dpop_proof.
-type dpopNonceChallenge interface {
-	DPoPNonce() string
-}
-
+// writeDPoPApplicationError answers use_dpop_nonce when the proof lacked only
+// the current server nonce, so the client can sign again with the nonce it is
+// sent (RFC 9449 section 8); any other failure is invalid_dpop_proof.
 func writeDPoPApplicationError(
 	writer http.ResponseWriter,
 	request *http.Request,
@@ -224,9 +205,8 @@ func writeDPoPApplicationError(
 	policy routeErrorPolicy,
 	err error,
 ) {
-	var challenge dpopNonceChallenge
-	if errors.As(err, &challenge) && challenge.DPoPNonce() != "" {
-		writer.Header().Set("DPoP-Nonce", challenge.DPoPNonce())
+	if nonce, ok := identity.DPoPChallengeNonce(err); ok {
+		writer.Header().Set("DPoP-Nonce", nonce)
 		writer.Header().Set("WWW-Authenticate", `DPoP error="use_dpop_nonce"`)
 	} else {
 		writer.Header().Set("WWW-Authenticate", `DPoP error="invalid_dpop_proof"`)
@@ -249,9 +229,9 @@ func requirePrincipalAssurance(
 		return apperror.New("authentication.token_invalid")
 	}
 
-	// A restricted Web Session reaches only the routes that declare the
-	// restriction. Both restrictions share the recovery routes; the Access
-	// Policy enrollment restriction also reaches the second-factor challenge.
+	// A restricted web session reaches only the routes that declare the
+	// restriction. Both restrictions share the recovery routes; the
+	// enrollment restriction also reaches the second-factor challenge.
 	spec, _ := specFor(requirement)
 	if principal.MFARecoveryRequired && !spec.admitsRecoverySession {
 		return apperror.New("authentication.token_invalid")
@@ -284,13 +264,12 @@ func RequiresCSRF(method string) bool {
 	}
 }
 
-// Authenticator resolves the credentials the kernel extracts.
-// AuthenticateBearer answers a bearer credential on a route that also admits a
-// Personal Access Token; every other access credential goes to
-// AuthenticateAccess. An authenticator that also has AuthenticateDPoP serves
-// proof-bound Desktop credentials; without it they fail with
-// authentication.dpop.unavailable.
+// Authenticator resolves the credentials the kernel extracts: DPoP-bound ones
+// through AuthenticateDPoP, bearer ones on routes that admit a personal access
+// token through AuthenticateBearer, and every other access credential through
+// AuthenticateAccess.
 type Authenticator interface {
 	AuthenticateAccess(context.Context, string) (*model.Principal, error)
 	AuthenticateBearer(context.Context, string) (*model.Principal, error)
+	AuthenticateDPoP(ctx context.Context, token, proof, method, path string) (*model.Principal, error)
 }

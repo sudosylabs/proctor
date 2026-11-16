@@ -47,7 +47,7 @@ type roleBindingCommandOutcome struct {
 func (roleBindingCommandOutcome) outcomeDocument() {}
 
 // roleBindingRow maps the native PostgreSQL timestamps and nullable lifecycle
-// fields onto a validated domain Role Binding.
+// fields onto a validated domain role binding.
 type roleBindingRow struct {
 	ID                         string              `db:"id"`
 	CreatedAt                  time.Time           `db:"created_at"`
@@ -134,8 +134,8 @@ func (s SQLRoleBindingStore) Save(
 	}
 
 	execute := func(ctx context.Context, tx *sqlxTxWrapper) (*roleBindingMutationResult, error) {
-		// The grant tuple may take the Class lifecycle lock and the insert takes
-		// the Attempt admission fence; both follow the User row.
+		// The grant tuple may take the class lifecycle lock and the insert takes
+		// the attempt admission fence; both follow the user row.
 		if err := lockCandidateUser(ctx, tx, candidate.UserID.String()); err != nil {
 			return nil, err
 		}
@@ -316,7 +316,7 @@ func insertRoleBinding(ctx context.Context, tx *sqlxTxWrapper, candidate *model.
 }
 
 // guardRoleBindingExamCandidateConflict closes the grant/admission race on the
-// same candidate-scoped lock used by Attempt admission and Exam management.
+// same candidate-scoped lock used by attempt admission and exam management.
 // A historical binding that has already ended cannot confer authority and is
 // therefore outside the fence.
 func guardRoleBindingExamCandidateConflict(ctx context.Context, tx *sqlxTxWrapper, candidate *model.RoleBinding) error {
@@ -471,7 +471,7 @@ func (s SQLRoleBindingStore) ListByUser(ctx context.Context, userID model.UserID
 
 // ListVisibleByUser returns the unarchived role bindings of userID whose scope
 // lies within visibility: everything when InstitutionWide, otherwise bindings
-// on the listed Academic Unit subtrees or Classes (at most 256 IDs in total).
+// on the listed academic unit subtrees or classes (at most 256 IDs in total).
 func (s SQLRoleBindingStore) ListVisibleByUser(
 	ctx context.Context,
 	userID model.UserID,
@@ -498,8 +498,8 @@ func (s SQLRoleBindingStore) ListVisibleByUser(
 }
 
 // roleBindingVisibilityPredicate restricts role_bindings rows to the scopes a
-// non-institution-wide visibility reaches: bindings on its Academic Unit
-// subtrees, on its Classes, and on Classes inside those subtrees. units is the
+// non-institution-wide visibility reaches: bindings on its academic unit
+// subtrees, on its classes, and on classes inside those subtrees. units is the
 // allowed_units CTE the predicate reads, empty with a predicate that matches
 // nothing when the visibility lists no scope.
 func roleBindingVisibilityPredicate(
@@ -526,9 +526,9 @@ func roleBindingVisibilityPredicate(
 	)`, []any{pq.Array(idStrings(visibility.ClassIDs))}
 }
 
-// ListVisibleSummariesByUsers returns, for each listed User with any, the
-// current Role Bindings inside visibility, at most Limit each, with their
-// Role and scope display names and the count of further visible bindings.
+// ListVisibleSummariesByUsers returns, for each listed user with any, the
+// current role bindings inside visibility, at most Limit each, with their
+// role and scope display names and the count of further visible bindings.
 func (s SQLRoleBindingStore) ListVisibleSummariesByUsers(
 	ctx context.Context,
 	options store.RoleBindingSummaryOptions,
@@ -651,12 +651,12 @@ func (s SQLRoleBindingStore) ListByScope(
 		OrderBy("role_bindings.start_at", "role_bindings.id"), "list role bindings by scope")
 }
 
-// maximumHolderCountRoles bounds the Roles one CountHoldersByRoles reads: one
-// page of the Role collection.
+// maximumHolderCountRoles bounds the roles one CountHoldersByRoles reads: one
+// page of the role collection.
 const maximumHolderCountRoles = 200
 
 // currentRoleBindingScopePredicate keeps role_bindings rows whose scope is an
-// unarchived Institution, Academic Unit or Class, as a current binding's
+// unarchived institution, academic unit or class, as a current binding's
 // scope must be.
 const currentRoleBindingScopePredicate = `(
 	(role_bindings.scope_type = 'institution' AND EXISTS (
@@ -670,8 +670,8 @@ const currentRoleBindingScopePredicate = `(
 		WHERE scope_class.id = role_bindings.scope_id AND scope_class.archived_at IS NULL))
 )`
 
-// validRoleBindingRoleVisibility reports whether a Role read names canonical
-// Roles, carries its instant, and bounds its visibility as ListVisibleByUser
+// validRoleBindingRoleVisibility reports whether a role read names canonical
+// roles, carries its instant, and bounds its visibility as ListVisibleByUser
 // does.
 func validRoleBindingRoleVisibility(roleIDs []model.RoleID, visibility store.UserVisibilityScope) bool {
 	return validVisibilityIDs(roleIDs) &&
@@ -681,8 +681,8 @@ func validRoleBindingRoleVisibility(roleIDs []model.RoleID, visibility store.Use
 		validVisibilityIDs(visibility.ClassIDs)
 }
 
-// validRoleBindingRoleListOptions reports whether a Role listing names one to
-// MaximumRoleBindingListRoles Roles, a coherent keyset, and a probe size.
+// validRoleBindingRoleListOptions reports whether a role listing names one to
+// MaximumRoleBindingListRoles roles, a coherent keyset, and a probe size.
 func validRoleBindingRoleListOptions(options store.RoleBindingRoleListOptions) bool {
 	return len(options.RoleIDs) > 0 &&
 		len(options.RoleIDs) <= store.MaximumRoleBindingListRoles &&
@@ -693,7 +693,7 @@ func validRoleBindingRoleListOptions(options store.RoleBindingRoleListOptions) b
 }
 
 // currentRoleBindingsByRoles selects columns from the bindings of roleIDs
-// current at the visibility's instant, with an unarchived Role and scope,
+// current at the visibility's instant, with an unarchived role and scope,
 // whose scope lies within the visibility. The listing and its count share it,
 // so a total always counts the listed rows.
 func (s SQLRoleBindingStore) currentRoleBindingsByRoles(
@@ -720,7 +720,7 @@ func (s SQLRoleBindingStore) currentRoleBindingsByRoles(
 }
 
 // ListCurrentByRoles returns one page, newest first by creation then ID, of
-// the visible current bindings of the listed Roles.
+// the visible current bindings of the listed roles.
 func (s SQLRoleBindingStore) ListCurrentByRoles(
 	ctx context.Context,
 	options store.RoleBindingRoleListOptions,
@@ -755,9 +755,9 @@ func (s SQLRoleBindingStore) CountCurrentByRoles(
 	return countBounded(ctx, s.GetMaster(), query, maximum, "current role bindings by roles")
 }
 
-// CountHoldersByRoles counts, per listed Role, the visible current bindings,
-// their distinct Users and their distinct scopes. Each Role reads at most
-// maximum bindings, so one page of Roles bounds the statement's work.
+// CountHoldersByRoles counts, per listed role, the visible current bindings,
+// their distinct users and their distinct scopes. Each role reads at most
+// maximum bindings, so one page of roles bounds the statement's work.
 func (s SQLRoleBindingStore) CountHoldersByRoles(
 	ctx context.Context,
 	options store.RoleHolderCountOptions,

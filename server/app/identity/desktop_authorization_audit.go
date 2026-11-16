@@ -16,8 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// beginDesktopIssueAudit records the approval attempt with the approving
-// account as the actor and the browser request's identity, never as an
+// beginDesktopIssueAudit names the approving account as actor, never an
 // actor-less system event.
 func (s *Service) beginDesktopIssueAudit(
 	ctx context.Context,
@@ -44,9 +43,6 @@ func (s *Service) beginDesktopIssueAudit(
 	)
 }
 
-// beginDesktopExchangeAudit records the Desktop Session issuance attempt for
-// the account that approved the code, with the Desktop request's network
-// identity.
 func (s *Service) beginDesktopExchangeAudit(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -68,10 +64,9 @@ func (s *Service) beginDesktopExchangeAudit(
 	)
 }
 
-// recordRejectedDesktopIssue durably records an approval refused because the
-// approving browser Session belongs to another account than the one the
-// handoff authenticated: the approving Session's account is the actor and the
-// handoff's account the resource.
+// recordRejectedDesktopIssue audits an approval from a browser signed in as a
+// different account: that account is the actor, the handoff's account the
+// resource.
 func (s *Service) recordRejectedDesktopIssue(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -105,9 +100,8 @@ func (s *Service) recordRejectedDesktopIssue(
 	return s.failDesktopAudit(ctx, event.ID, errorCode)
 }
 
-// beginDesktopWithdrawalAudit records the attempt to take back a Desktop
-// Session whose exchange committed but whose credentials were never
-// disclosed.
+// beginDesktopWithdrawalAudit audits taking back a desktop session whose
+// exchange committed but whose credentials were never disclosed.
 func (s *Service) beginDesktopWithdrawalAudit(
 	ctx context.Context,
 	inv invocation.Invocation,

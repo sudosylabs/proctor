@@ -20,6 +20,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// ManagerEndCommand ends an attempt on a manager's decision. PrivateReason is
+// kept only in durable provenance; it must not reach the response, mail,
+// realtime events or ordinary audit values.
 type ManagerEndCommand struct {
 	ExamID                  model.ExamID
 	SittingID               model.ExamSittingID
@@ -29,10 +32,8 @@ type ManagerEndCommand struct {
 	IdempotencyKey          string
 }
 
-// EndExamAttemptByManager idempotently ends a suspended Attempt on a
-// manager's decision and seals its Submission, fenced by
-// ExpectedAttemptRevision. It authorizes Sitting management on the exact
-// Sitting before reading the Attempt so existence is not probeable.
+// EndExamAttemptByManager idempotently ends a suspended attempt and seals its
+// submission, fenced by ExpectedAttemptRevision.
 func (s *Service) EndExamAttemptByManager(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -57,8 +58,8 @@ func (s *Service) EndExamAttemptByManager(
 		return store.ExamSubmissionReceipt{}, err
 	}
 
-	// Authorize the exact Sitting before reading the Attempt so existence is
-	// not probeable; later exits complete the audit attempt as failed.
+	// Authorize the exact sitting before reading the attempt so existence is
+	// not probeable.
 	management, err := s.managers.AuthorizeSittingManage(ctx, inv, command.SittingID)
 	override := management.Override
 	if err != nil {
@@ -181,7 +182,6 @@ func (s *Service) EndExamAttemptByManager(
 	return result.Receipt, nil
 }
 
-// checkManagerEndPreparation requires the Submission preparation to target the commanded, already-verified Attempt.
 func checkManagerEndPreparation(
 	preparation *store.ExamSubmissionManagerEndPreparation,
 	command ManagerEndCommand,
@@ -205,7 +205,6 @@ func checkManagerEndPreparation(
 	return nil
 }
 
-// prepareManagerEndReceiptMail prepares the candidate's Submission receipt mail unless the end is a replay.
 func (s *Service) prepareManagerEndReceiptMail(
 	ctx context.Context,
 	preparation *store.ExamSubmissionManagerEndPreparation,

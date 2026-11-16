@@ -130,7 +130,7 @@ func (s SQLExternalIdentityStore) ListByUser(ctx context.Context, userID model.U
 }
 
 // ResolveOrProvision resolves the linked external identity for a provider
-// subject, or provisions a new User for it when the provider admits automatic
+// subject, or provisions a new user for it when the provider admits automatic
 // provisioning.
 func (s SQLExternalIdentityStore) ResolveOrProvision(
 	ctx context.Context,
@@ -165,7 +165,6 @@ func (s SQLExternalIdentityStore) ResolveOrProvision(
 	})
 }
 
-// resolveOrProvisionExternalIdentity resolves a linked external identity or provisions a new User inside the resolution transaction.
 func resolveOrProvisionExternalIdentity(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -212,7 +211,6 @@ func resolveOrProvisionExternalIdentity(
 	return provisionExternalIdentity(ctx, tx, request, provider, lastSeenAt)
 }
 
-// requireExternalIdentityAutoProvision rejects provisioning an unlinked identity unless the provider admits automatic provisioning.
 func requireExternalIdentityAutoProvision(
 	admission model.ProviderAdmissionMode,
 	capability store.AccessProviderCapability,
@@ -234,7 +232,6 @@ func requireExternalIdentityAutoProvision(
 	return nil
 }
 
-// provisionExternalIdentity inserts the prepared User, settings, external identity, profile picture Job and audit event.
 func provisionExternalIdentity(
 	ctx context.Context,
 	tx *sqlxTxWrapper,

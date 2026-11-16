@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -28,14 +27,14 @@ func TestRecordsRequiresManagerAndExactMembershipOrScopedOverride(t *testing.T) 
 		order           []string
 	}{
 		{"manager and current member", true, true, model.ActionExamRecordsComplete,
-			[]string{"records.resolve", "store.access", "membership", "authorize", "audit.begin", "records.complete"}},
+			[]string{"records.resolve", "store.access", "membership", "grants", "decision:exam.records.complete:success", "audit-begin:exam.records.complete", "records.complete"}},
 		{"manager without membership", true, false, model.ActionExamRecordsCompleteOverride,
-			[]string{"records.resolve", "store.access", "membership", "authorize", "audit.begin", "records.complete"}},
+			[]string{"records.resolve", "store.access", "membership", "grants", "decision:exam.records.complete.override:success", "audit-begin:exam.records.complete.override", "records.complete"}},
 		{"scoped nonmanager", false, true, model.ActionExamRecordsCompleteOverride,
-			[]string{"records.resolve", "store.access", "authorize", "audit.begin", "records.complete"}},
+			[]string{"records.resolve", "store.access", "grants", "decision:exam.records.complete.override:success", "audit-begin:exam.records.complete.override", "records.complete"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			f, records, persistence, _ := newRecordsFixture(t)
+			f, records, persistence := newRecordsFixture(t)
 			f.persistence.actorIsManager = tc.manager
 			if tc.member {
 				f.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: f.unitID}}
@@ -44,7 +43,7 @@ func TestRecordsRequiresManagerAndExactMembershipOrScopedOverride(t *testing.T) 
 			value, err := records.CompleteExamSittingRecords(context.Background(), f.inv, command)
 			require.NoError(t, err)
 			require.True(t, value.IsCurrent(), "completion failed to carry current authority: %#v, %#v", value, persistence.completion)
-			require.Equal(t, tc.want, f.authorizer.action, "completion failed to carry current authority: %#v, %#v", value, persistence.completion)
+			require.Equal(t, []string{decided(tc.want, persistence.scope.Scope.Resource(), model.AuditStatusSuccess)}, f.decisions(), "completion failed to carry current authority: %#v, %#v", value, persistence.completion)
 			require.Equal(t, tc.want, persistence.completion.Action, "completion failed to carry current authority: %#v, %#v", value, persistence.completion)
 			require.Equal(t, f.userID, persistence.completion.Principal.UserID, "completion failed to carry current authority: %#v, %#v", value, persistence.completion)
 			require.Equal(t, store.ExamRecordsCompleteOperation, persistence.idempotency.Operation, "completion failed to carry current authority: %#v, %#v", value, persistence.completion)
@@ -56,7 +55,7 @@ func TestRecordsRequiresManagerAndExactMembershipOrScopedOverride(t *testing.T) 
 }
 
 func TestRecordsIdempotencyAndAuditFailClosed(t *testing.T) {
-	f, records, persistence, _ := newRecordsFixture(t)
+	f, records, persistence := newRecordsFixture(t)
 	command := CompleteRecordsCommand{Scope: persistence.scope.Scope, ExpectedRevision: 1}
 	_, err := records.CompleteExamSittingRecords(context.Background(), f.inv, command)
 	var fault *apperror.Error
@@ -68,38 +67,26 @@ func TestRecordsIdempotencyAndAuditFailClosed(t *testing.T) {
 	_, err = records.CompleteExamSittingRecords(context.Background(), f.inv, command)
 	require.ErrorAs(t, err, &fault, "current authority failure")
 	require.Equal(t, "resource.not_found", fault.Code(), "current authority failure")
-	require.Equal(t, "exam.not_found", f.auditor.failedCode, "current authority failure")
+	require.Equal(t, "exam.not_found", f.failedCode(t), "current authority failure")
 }
 
-func newRecordsFixture(t *testing.T) (authoringFixture, *Records, *recordsStoreFake, *recordsAuthorizerFake) {
+func newRecordsFixture(t *testing.T) (authoringFixture, *Records, *recordsStoreFake) {
 	t.Helper()
 	f := newAuthoringFixture(t)
 	persistence := &recordsStoreFake{order: f.order, scope: store.ExamRecordsScope{Scope: model.RetentionHoldScope{ExamID: f.examID, SittingID: model.NewExamSittingID()},
 		InstitutionID: model.NewInstitutionID(), AcademicUnitID: f.unitID, CandidateUserID: model.NewUserID(), AttemptID: model.NewExamAttemptID()}}
-	authorizer := &recordsAuthorizerFake{authorizerFake: f.authorizer}
 	records, err := NewRecords(RecordsDependencies{
 		Persistence: persistence,
 		Access:      f.persistence,
 		Memberships: f.memberships,
-		Authorizer:  authorizer,
-		Auditor:     f.auditor,
+		Authorizer:  f.access.Authorizer,
+		Auditor:     f.access.Auditor,
 		RecentTTL:   5 * time.Minute,
 		Now:         fixedPublicationTime,
 		NewHoldID:   model.NewRetentionHoldID,
 	})
 	require.NoError(t, err)
-	return f, records, persistence, authorizer
-}
-
-type recordsAuthorizerFake struct {
-	*authorizerFake
-	denied bool
-}
-
-func (f *recordsAuthorizerFake) RecordDenial(_ context.Context, _ invocation.Invocation, _ model.Action, _ model.Resource, _ model.AcademicUnitID) error {
-	*f.order = append(*f.order, "records.deny_self")
-	f.denied = true
-	return nil
+	return f, records, persistence
 }
 
 type recordsStoreFake struct {

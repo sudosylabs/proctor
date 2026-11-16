@@ -19,7 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// GetMailFanout returns the Sitting mail fan-out of the mail occurrence,
+// GetMailFanout returns the sitting mail fan-out of the mail occurrence,
 // including its encrypted bundle while expansion is incomplete, or a not-found
 // error.
 func (s SQLExamSittingStore) GetMailFanout(
@@ -304,7 +304,7 @@ func sittingMailRecipientTemplate(
 	return ""
 }
 
-// CommitMailRecipient decides and records one recipient's Sitting mail delivery
+// CommitMailRecipient decides and records one recipient's sitting mail delivery
 // for the fan-out, fenced on SittingRevision. An existing delivery is returned
 // without inserting another, and an ineligible or completed recipient is
 // reported as Suppressed.
@@ -444,7 +444,7 @@ func commitSittingMailRecipient(
 	return &store.ExamSittingMailRecipientResult{Delivery: input.Delivery.Clone(), Inserted: true}, nil
 }
 
-// insertSittingMailRecipientDelivery inserts the prepared delivery and its Job
+// insertSittingMailRecipientDelivery inserts the prepared delivery and its job
 // under the primary payload key and points the recipient projection at it.
 func insertSittingMailRecipientDelivery(
 	ctx context.Context,
@@ -562,7 +562,7 @@ func lockSittingMailFanout(
 		return nil, nil, time.Time{}, invalidPersistedState("exam_sitting_mail_fanout", "exam_sitting_id", err)
 	}
 
-	// Sitting transitions lock the Exam and Sitting before inserting their
+	// Sitting transitions lock the exam and sitting before inserting their
 	// fan-out. Expansion takes the same order so a concurrent reschedule cannot
 	// deadlock with recipient relevance evaluation.
 	sitting, err := lockExamSitting(ctx, tx, examID, sittingID)
@@ -1158,7 +1158,7 @@ func (s SQLExamSittingStore) CompleteMailExpansion(
 }
 
 // MaintainMailExpansions terminalizes up to limit incomplete fan-outs whose
-// deadline passed or whose expansion Job is missing or finished, then
+// deadline passed or whose expansion job is missing or finished, then
 // suppresses deliveries left behind by terminal fan-outs. More reports that
 // work remains.
 func (s SQLExamSittingStore) MaintainMailExpansions(ctx context.Context, limit int) (*store.ExamSittingMailMaintenanceResult, error) {
@@ -1465,9 +1465,9 @@ func suppressTerminalSittingMailChildren(ctx context.Context, tx *sqlxTxWrapper,
 	return suppressed, more, nil
 }
 
-// ListMailReconciliationDue returns one page of scheduled future Sittings whose
-// mail needs reconciliation and that have no active fan-out, each with the Exam
-// Manager to act as, ordered by scheduled start and Sitting ID.
+// ListMailReconciliationDue returns one page of scheduled future sittings whose
+// mail needs reconciliation and that have no active fan-out, each with the exam
+// manager to act as, ordered by scheduled start and sitting ID.
 func (s SQLExamSittingStore) ListMailReconciliationDue(ctx context.Context,
 	options store.ExamSittingMailReconciliationOptions,
 ) ([]store.ExamSittingMailReconciliationCandidate, error) {
@@ -1616,8 +1616,8 @@ func sittingMailReconciliationDueSQL(alias string) string {
 		)`
 }
 
-// ReconcileMail starts a new mail fan-out for the scheduled Sitting as the
-// given actor. The Sitting must still be at ExpectedRevision, due for
+// ReconcileMail starts a new mail fan-out for the scheduled sitting as the
+// given actor. The sitting must still be at ExpectedRevision, due for
 // reconciliation, and without an active fan-out; otherwise it is a conflict.
 func (s SQLExamSittingStore) ReconcileMail(ctx context.Context,
 	input *store.ExamSittingMailReconciliation,
@@ -1663,10 +1663,10 @@ func (s SQLExamSittingStore) ReconcileMail(ctx context.Context,
 				}
 			}
 
-			// User rows precede the shared Class/hierarchy fence throughout
+			// User rows precede the shared class/hierarchy fence throughout
 			// invitation acceptance and reconciliation; disabled mail also locks the
 			// eligibility singleton between them. This prevents a manager who is also
-			// accepting a Class Invitation from forming a User/singleton/Class cycle.
+			// accepting a class invitation from forming a user/singleton/Class cycle.
 			if err = lockExamSittingLifecycle(ctx, tx); err != nil {
 				return nil, err
 			}

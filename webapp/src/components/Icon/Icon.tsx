@@ -12,6 +12,8 @@ import {
 
 import styles from "./Icon.module.css";
 
+// The only place lucide-react is imported. Add a name only once a real use
+// proves its meaning; directional glyphs need an RTL review first.
 const iconComponents = {
   loading: Loader,
   hidePassword: EyeOff,
@@ -32,6 +34,7 @@ export interface IconProps {
   size?: IconSize;
 }
 
+/** Always decorative: the owner states the meaning in visible or accessible text. */
 export function Icon({ className, name, size = "default" }: IconProps) {
   const IconComponent = iconComponents[name];
   const classes = [styles.icon, styles[size], className]

@@ -20,6 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/secretseal"
 )
 
+// The production renderer cannot produce invalid content, so this exercises
+// the payload validation every prepared delivery passes through.
 func TestComposerRejectsInvalidFrozenContent(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
@@ -34,24 +36,29 @@ func TestComposerRejectsInvalidFrozenContent(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			composer, err := NewComposer(ComposerDependencies{Renderer: &payloadRendererFake{content: test.content}, Sender: &sittingSenderFake{enabled: true, from: Address{Address: "no-reply@example.test"}}, Sealer: sittingTestSealer(t)})
-			require.NoError(t, err)
 			at := time.Date(2026, 8, 21, 9, 0, 0, 0, time.UTC)
-			prepared, err := composer.PrepareOperatorTest(NoticePreparation{Recipient: payloadTestUser(at), At: at})
-			require.Error(t, err, "invalid content was prepared: prepared")
-			require.Nil(t, prepared, "invalid content was prepared: prepared")
+			recipient := payloadTestUser(at)
+			frozen, err := freezeDeliveryPayload(sittingTestSealer(t), model.NewMailDeliveryID(), Address{Address: "no-reply@example.test"},
+				Address{Name: recipient.DisplayName, Address: recipient.Email}, test.content)
+			require.Error(t, err, "invalid content was frozen")
+			require.Empty(t, frozen.encrypted, "invalid content was frozen")
 		})
 	}
 }
 
 func TestComposerPreservesRendererFailure(t *testing.T) {
 	t.Parallel()
-	renderErr := errors.New("renderer unavailable")
-	composer, err := NewComposer(ComposerDependencies{Renderer: &payloadRendererFake{err: renderErr}, Sender: &sittingSenderFake{enabled: true, from: Address{Address: "no-reply@example.test"}}, Sealer: sittingTestSealer(t)})
+	renderer := mailTestRenderer(t)
+	composer, err := NewComposer(ComposerDependencies{Renderer: renderer, Sender: &sittingSenderFake{enabled: true, from: Address{Address: "no-reply@example.test"}}, Sealer: sittingTestSealer(t)})
 	require.NoError(t, err)
 	at := time.Date(2026, 8, 21, 9, 0, 0, 0, time.UTC)
-	prepared, err := composer.PrepareOperatorTest(NoticePreparation{Recipient: payloadTestUser(at), At: at})
-	require.ErrorIs(t, err, renderErr, "renderer failure was lost: prepared")
+	// The renderer refuses an action link that is not HTTPS.
+	actionURL := "http://proctor.example.test/account/verify-email#token=secret"
+	_, renderErr := renderer.Render(RenderRequest{Key: model.MailTemplateIdentityVerifyEmail, ActionURL: actionURL, At: at, Deadline: at.Add(time.Hour)})
+	require.Error(t, renderErr)
+	prepared, err := composer.PrepareEmailVerification(AccountTokenPreparation{Recipient: payloadTestUser(at),
+		OccurrenceID: model.NewMailOccurrenceID(), ActionURL: actionURL, At: at, Deadline: at.Add(time.Hour)})
+	require.EqualError(t, err, renderErr.Error(), "renderer failure was lost: prepared")
 	require.Nil(t, prepared, "renderer failure was lost: prepared")
 }
 
@@ -59,13 +66,16 @@ func TestOpenDeliveryPreservesPreparedContent(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 21, 9, 0, 0, 0, time.UTC)
 	sealer := sittingTestSealer(t)
-	content := FrozenContent{Subject: "Frozen subject", Text: "Frozen text", HTML: "<p>Frozen HTML</p>"}
-	renderer := &payloadRendererFake{content: content}
+	renderer := mailTestRenderer(t)
 	sender := &sittingSenderFake{enabled: true, from: Address{Name: "Proctor", Address: "no-reply@example.test"}}
 	recipient := payloadTestUser(at)
 	composer, err := NewComposer(ComposerDependencies{Renderer: renderer, Sender: sender, Sealer: sealer})
 	require.NoError(t, err)
 	prepared, err := composer.PrepareOperatorTest(NoticePreparation{Recipient: recipient, At: at})
+	require.NoError(t, err)
+	content, err := renderer.Render(RenderRequest{Key: model.MailTemplateSystemTest, Locale: recipient.Locale,
+		RecipientName: recipient.DisplayName, RecipientAddress: recipient.Email, RecipientTimezone: recipient.Timezone,
+		At: at, Deadline: prepared.Delivery.Deadline})
 	require.NoError(t, err)
 	want := Outbound{From: sender.from, EnvelopeFrom: sender.from.Address,
 		To: Address{Name: recipient.DisplayName, Address: recipient.Email}, Subject: content.Subject, Text: content.Text, HTML: content.HTML,
@@ -73,8 +83,6 @@ func TestOpenDeliveryPreservesPreparedContent(t *testing.T) {
 		MessageID: prepared.Delivery.MessageID, Date: at}
 	require.NotContains(t, string(prepared.Delivery.EncryptedPayload), content.Text, "prepared payload exposes content or recipient")
 	require.NotContains(t, string(prepared.Delivery.EncryptedPayload), recipient.Email, "prepared payload exposes content or recipient")
-	renderer.content = FrozenContent{Subject: "Changed", Text: "Changed"}
-	renderer.err = errors.New("renderer must not run during reopening")
 	sender.from = Address{Address: "changed@example.test"}
 	recipient.Email, recipient.DisplayName = "changed@example.test", "Changed"
 	for range 2 {
@@ -196,6 +204,8 @@ func TestOpenDeliveryBoundsEncryptedPayload(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			sealer, delivery := preparedPayloadTestDelivery(t)
+			original, err := OpenDelivery(sealer, delivery)
+			require.NoError(t, err)
 			// JSON whitespace leaves the authentic envelope unchanged, so only
 			// its persisted byte limit can reject the larger representation.
 			delivery.EncryptedPayload = append(delivery.EncryptedPayload,
@@ -209,7 +219,7 @@ func TestOpenDeliveryBoundsEncryptedPayload(t *testing.T) {
 			}
 			require.NoError(t, err, "valid envelope at limit did not reopen: message=%#v err", message)
 			require.Equal(t, delivery.MessageID, message.MessageID, "valid envelope at limit did not reopen: message=%#v err", message)
-			require.Equal(t, "Subject", message.Subject, "valid envelope at limit did not reopen: message=%#v err", message)
+			require.Equal(t, original.Subject, message.Subject, "valid envelope at limit did not reopen: message=%#v err", message)
 		})
 	}
 }
@@ -240,13 +250,6 @@ func TestOpenDeliveryBoundsMessageID(t *testing.T) {
 	}
 }
 
-type payloadRendererFake struct {
-	content FrozenContent
-	err     error
-}
-
-func (r *payloadRendererFake) Render(RenderRequest) (FrozenContent, error) { return r.content, r.err }
-
 func payloadTestUser(at time.Time) *model.User {
 	user := &model.User{Username: "operator", Email: "operator@example.test", DisplayName: "Operator", EmailVerified: true,
 		Locale: "en", Timezone: "UTC"}
@@ -258,7 +261,7 @@ func preparedPayloadTestDelivery(t *testing.T) (*secretseal.Sealer, *model.MailD
 	t.Helper()
 	at := time.Date(2026, 8, 21, 9, 0, 0, 0, time.UTC)
 	sealer := sittingTestSealer(t)
-	composer, err := NewComposer(ComposerDependencies{Renderer: &payloadRendererFake{content: FrozenContent{Subject: "Subject", Text: "Text", HTML: "<p>HTML</p>"}}, Sender: &sittingSenderFake{enabled: true, from: Address{Name: "Proctor", Address: "no-reply@example.test"}}, Sealer: sealer})
+	composer, err := NewComposer(ComposerDependencies{Renderer: mailTestRenderer(t), Sender: &sittingSenderFake{enabled: true, from: Address{Name: "Proctor", Address: "no-reply@example.test"}}, Sealer: sealer})
 	require.NoError(t, err)
 	prepared, err := composer.PrepareOperatorTest(NoticePreparation{Recipient: payloadTestUser(at), At: at})
 	require.NoError(t, err)

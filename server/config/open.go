@@ -15,17 +15,14 @@ import (
 )
 
 const (
-	// DefaultPath is the conventional location of the deployment
-	// configuration, relative to the working directory.
+	// DefaultPath is relative to the working directory.
 	DefaultPath = "config/config.json"
-	// PathEnv names the environment variable that selects the configuration
-	// file when no explicit path is given.
+	// PathEnv selects the configuration file when Open is given no path.
 	PathEnv = "PROCTOR_CONFIG"
 )
 
-// Open loads the required operator-owned deployment configuration. An
-// explicit path wins over PROCTOR_CONFIG, which wins over the conventional
-// config/config.json path. It never creates the active file.
+// Open loads the configuration from path, else PROCTOR_CONFIG, else
+// DefaultPath. It never creates the file: a missing one is an error.
 func Open(ctx context.Context, path string) (*Store, error) {
 	if path == "" {
 		path = os.Getenv(PathEnv)

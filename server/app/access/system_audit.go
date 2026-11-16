@@ -14,14 +14,13 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// SystemAuditAdapter begins and fails the audit attempt of trusted actorless
-// work: a durable Job or a periodic runtime task. The attempt names no actor,
-// so that work never fabricates a User to record what it did.
+// SystemAuditAdapter audits trusted work with no requesting user, such as a
+// job or a periodic task, so that work never fabricates a user to record
+// what it did.
 type SystemAuditAdapter struct{ audit *Auditor }
 
-// Begin persists the attempt of an actorless mutation and records the value
-// exactly as given. Periodic runtime tasks, which run under no Job, begin
-// their attempts here.
+// Begin records value as given; it is for periodic tasks, which run under no
+// job.
 func (a SystemAuditAdapter) Begin(
 	ctx context.Context,
 	action model.Action,
@@ -39,9 +38,8 @@ func (a SystemAuditAdapter) Begin(
 	return a.begin(ctx, action, resource, scopeType, scopeID, operation, auditValue)
 }
 
-// BeginJob persists the attempt of a mutation a Job execution performs and
-// names that execution in the recorded value, whatever the caller put under
-// those keys, so the audit trail leads back to the Job that did the work.
+// BeginJob overwrites job_id and job_attempt_id in value, so the trail always
+// leads back to the job that did the work.
 func (a SystemAuditAdapter) BeginJob(
 	ctx context.Context,
 	system invocation.System,
@@ -62,12 +60,10 @@ func (a SystemAuditAdapter) BeginJob(
 	return a.begin(ctx, action, resource, scopeType, scopeID, operation, auditValue)
 }
 
-// BeginOnBehalf persists the attempt of a mutation trusted core work makes on
-// a User's behalf outside any request of theirs, and names that User as the
-// actor. The event has no Session, client or request identity, because none
-// exists. An execution environment writing a candidate's Workspace is the one
-// such writer: the change is the candidate's own work, and there is no plugin
-// principal to attribute it to instead.
+// BeginOnBehalf names actor as the actor of work done outside any request of
+// theirs, so the event has no session or request identity. Its one caller is
+// an execution environment writing a candidate's workspace: the change is the
+// candidate's own work, and there is no plugin principal to attribute it to.
 func (a SystemAuditAdapter) BeginOnBehalf(
 	ctx context.Context,
 	actor model.UserID,
@@ -118,7 +114,7 @@ func (a SystemAuditAdapter) begin(
 	return event.ID, nil
 }
 
-// Fail completes an attempt as failed with the error code.
+// Fail completes an attempt as failed; code is the public error code.
 func (a SystemAuditAdapter) Fail(ctx context.Context, id model.AuditEventID, code string) error {
 	_, err := a.audit.CompleteCriticalAction(ctx, id, model.AuditStatusFail, code, nil)
 	return err

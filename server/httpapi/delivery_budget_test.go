@@ -7,51 +7,22 @@
 package httpapi
 
 import (
-	"context"
+	"crypto/sha256"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/exam/attempt"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type deliveryBudgetHTTPFake struct {
-	*examAttemptHTTPFake
-	query attempt.DeliveryBudgetQuery
-	stop  attempt.StopDeliveryDetailsCommand
-	calls int
-}
-
-func (f *deliveryBudgetHTTPFake) DeliveryBudget(_ context.Context, _ invocation.Invocation, q attempt.DeliveryBudgetQuery) (*model.DeliveryBudgetSnapshot, error) {
-	f.query = q
-	f.calls++
-	return testHTTPDeliveryBudget(q.ParticipationID), nil
-}
-func (f *deliveryBudgetHTTPFake) StopDeliveryDetails(_ context.Context, _ invocation.Invocation, c attempt.StopDeliveryDetailsCommand) (*model.StopDeliveryDetailsResult, error) {
-	f.stop = c
-	f.calls++
-	value := &model.StopDeliveryDetailsResult{Budget: *testHTTPDeliveryBudget(f.participation.ID), Browser: []model.BrowserSourceStatus{}}
-	value.Budget.Browser.Participation.SummaryOnly = true
-	reason := model.DeliveryStopLocalLossInventory
-	value.Budget.Browser.Participation.StopReason = &reason
-	return value, nil
-}
-func testHTTPDeliveryBudget(part model.AttemptParticipationID) *model.DeliveryBudgetSnapshot {
-	return &model.DeliveryBudgetSnapshot{ParticipationID: part, Generation: 1, Native: model.DeliveryFamilyBudget{Participation: model.NewDeliveryQuotaUsage(true, false), Attempt: model.NewDeliveryQuotaUsage(true, true), PendingByteLimit: model.DeliveryPendingByteLimit}, Browser: model.DeliveryFamilyBudget{Participation: model.NewDeliveryQuotaUsage(false, false), Attempt: model.NewDeliveryQuotaUsage(false, true), PendingByteLimit: model.DeliveryPendingByteLimit}, ServerTime: time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)}
-}
 func TestDeliveryBudgetHTTPRequiresOwnedSelectorAndLiveStopFences(t *testing.T) {
-	f := &deliveryBudgetHTTPFake{examAttemptHTTPFake: newExamAttemptHTTPFake(t)}
-	logger, _ := routetest.NewLogger(t)
-	api := newFocusedResourceAPI(t, logger, f, deliveryBudgetResource(f))
-	base := "/api/v1/exam-attempts/" + f.attempt.ID.String() + "/delivery-limits"
+	f := newAttemptFixture(t)
+	api := f.api(t, deliveryBudgetResource(f.service))
+	base := f.candidatePath("/delivery-limits")
 	request := f.candidateRequest(t, http.MethodGet, base+"?participation_id="+f.participation.ID.String())
 	request.Header.Del(candidateAttemptCredentialHeader)
 	request.Header.Del(candidateAttemptConnectionHeader)
@@ -59,14 +30,15 @@ func TestDeliveryBudgetHTTPRequiresOwnedSelectorAndLiveStopFences(t *testing.T) 
 	api.ServeHTTP(response, request)
 	require.Equal(t, 200, response.Code, "budget=%d %s", response.Code, response.Body.String())
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"), "budget=%d %s", response.Code, response.Body.String())
-	require.Equal(t, f.participation.ID, f.query.ParticipationID, "budget=%d %s", response.Code, response.Body.String())
+	require.Len(t, f.deliveryStore.budgets, 1, "budget=%d %s", response.Code, response.Body.String())
+	require.Equal(t, f.participation.ID, f.deliveryStore.budgets[0].ParticipationID, "budget=%d %s", response.Code, response.Body.String())
 	for _, bad := range []string{"", "?participation_id=invalid", "?participation_id=" + f.participation.ID.String() + "&participation_id=" + f.participation.ID.String()} {
-		before := f.calls
+		before := f.deliveryStore.requests()
 		request = f.candidateRequest(t, http.MethodGet, base+bad)
 		response = httptest.NewRecorder()
 		api.ServeHTTP(response, request)
-		require.Equal(t, 400, response.Code, "invalid budget selector reached application")
-		require.Equal(t, before, f.calls, "invalid budget selector reached application")
+		require.Equal(t, 400, response.Code, "invalid budget selector reached the Store")
+		require.Equal(t, before, f.deliveryStore.requests(), "invalid budget selector reached the Store")
 	}
 	body := `{"family":"browser","reason":"local_loss_inventory_exhausted"}`
 	for _, test := range []struct {
@@ -77,7 +49,7 @@ func TestDeliveryBudgetHTTPRequiresOwnedSelectorAndLiveStopFences(t *testing.T) 
 		{"valid", body, true, true, 200}, {"no Connection", body, false, true, 400}, {"no idempotency", body, true, false, 400}, {"unknown family", `{"family":"all","reason":"local_loss_inventory_exhausted"}`, true, true, 400}, {"invented reason", `{"family":"browser","reason":"reset_quota"}`, true, true, 400}, {"client-selected generation", `{"family":"browser","reason":"local_loss_inventory_exhausted","generation":2}`, true, true, 400},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			before := f.calls
+			before := f.deliveryStore.requests()
 			request := f.candidateRequest(t, http.MethodPost, base+"/stop-details")
 			request.Body = io.NopCloser(strings.NewReader(test.body))
 			request.Header.Set("Content-Type", "application/json")
@@ -90,11 +62,12 @@ func TestDeliveryBudgetHTTPRequiresOwnedSelectorAndLiveStopFences(t *testing.T) 
 			response := httptest.NewRecorder()
 			api.ServeHTTP(response, request)
 			require.Equal(t, test.want, response.Code, "stop=%d %s", response.Code, response.Body.String())
-			require.False(t, test.want != 200 && f.calls != before, "stop=%d %s", response.Code, response.Body.String())
+			require.False(t, test.want != 200 && f.deliveryStore.requests() != before, "stop=%d %s", response.Code, response.Body.String())
 			if test.want == 200 {
-				require.Equal(t, f.connection.ID, f.stop.Access.ConnectionID, "live fences or idempotency lost")
-				require.Equal(t, f.credential, f.stop.Access.ContinuityCredential, "live fences or idempotency lost")
-				require.Equal(t, "stop-once", f.stop.IdempotencyKey, "live fences or idempotency lost")
+				stop := f.deliveryStore.stops[len(f.deliveryStore.stops)-1]
+				require.Equal(t, f.connection.ID, stop.Access.ConnectionID, "live fences or idempotency lost")
+				require.Equal(t, model.HashToken(f.credential), stop.Access.ContinuityCredentialHash, "live fences or idempotency lost")
+				require.Equal(t, sha256.Sum256([]byte("stop-once")), f.deliveryStore.lastCommand(t).KeyDigest, "live fences or idempotency lost")
 			}
 		})
 	}

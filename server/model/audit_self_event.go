@@ -9,11 +9,10 @@ package model
 
 import "slices"
 
-// AuditSelfEvent is the stable, client-labeled name of one account-relevant
-// audit fact in a User's own history. An action name alone is too coarse to
-// label (session.manage covers revoking one, all, or the other Sessions), so
-// each name is derived from the recorded action, the operation the writer put
-// in its parameters, and, for sign-in only, the terminal status.
+// AuditSelfEvent is the stable, client-labeled name of one fact in a user's
+// own account history. An action alone is too coarse (session.manage covers
+// revoking one, all or the other sessions), so a name comes from the action,
+// the writer's recorded operation and, for sign-in only, the final status.
 type AuditSelfEvent string
 
 const (
@@ -63,8 +62,8 @@ const (
 	AuditSelfEventClassUnenrolled                 AuditSelfEvent = "class.unenrolled"
 )
 
-// The operation strings writers record in audit parameters. They are part of
-// this catalogue's key, so a writer that renames one must change it here too.
+// Operation strings writers record in audit parameters. They are part of the
+// catalogue's key, so renaming one in a writer means changing it here too.
 const (
 	AuditOperationDisableAccount            = "disable_account"
 	AuditOperationEnableAccount             = "enable_account"
@@ -73,15 +72,14 @@ const (
 )
 
 // AuditSelfEventKey is one exact (action, operation, status) combination a
-// self-history event name covers. Status is always terminal.
+// self-history name covers; Status is always final.
 type AuditSelfEventKey struct {
 	Action    string
 	Operation string
 	Status    AuditStatus
 }
 
-// auditSelfEventRule maps a recorded action and operation to a name. A zero
-// status matches either terminal status; sign-in names bind the status
+// A zero status matches either final status. Sign-in rules bind the status
 // because success and failure are different facts to the account holder.
 type auditSelfEventRule struct {
 	action    Action
@@ -90,8 +88,7 @@ type auditSelfEventRule struct {
 	event     AuditSelfEvent
 }
 
-// auditSelfEventRules is the closed catalogue. Rows matching no rule are not
-// part of anyone's self history.
+// Rows matching no rule are not part of anyone's self history.
 var auditSelfEventRules = []auditSelfEventRule{
 	{ActionAuthenticationLogin, "", AuditStatusSuccess, AuditSelfEventSignInSucceeded},
 	{ActionAuthenticationLogin, "", AuditStatusFail, AuditSelfEventSignInFailed},
@@ -154,7 +151,7 @@ var auditSelfEventRules = []auditSelfEventRule{
 	{ActionClassMembersManage, "end", "", AuditSelfEventClassUnenrolled},
 }
 
-// IsValid reports whether the name belongs to the closed catalogue.
+// IsValid reports whether e is a name in the catalogue.
 func (e AuditSelfEvent) IsValid() bool {
 	for _, rule := range auditSelfEventRules {
 		if rule.event == e {
@@ -164,8 +161,8 @@ func (e AuditSelfEvent) IsValid() bool {
 	return false
 }
 
-// AuditSelfEventFor names a terminal audit fact, or reports that it is not
-// part of self history.
+// AuditSelfEventFor names a final audit fact; false means it is not part of
+// self history.
 func AuditSelfEventFor(action, operation string, status AuditStatus) (AuditSelfEvent, bool) {
 	if status != AuditStatusSuccess && status != AuditStatusFail {
 		return "", false
@@ -182,9 +179,9 @@ func AuditSelfEventFor(action, operation string, status AuditStatus) (AuditSelfE
 	return "", false
 }
 
-// AuditSelfEventKeys expands event names into the exact keys persistence
-// matches. Empty events select the whole catalogue; a non-empty status keeps
-// only keys with that terminal status. Unknown names select nothing.
+// AuditSelfEventKeys expands names into the exact keys persistence matches. No
+// names selects the whole catalogue, a non-empty status keeps only keys with
+// it, and unknown names select nothing.
 func AuditSelfEventKeys(events []AuditSelfEvent, status AuditStatus) []AuditSelfEventKey {
 	keys := make([]AuditSelfEventKey, 0, len(auditSelfEventRules)*2)
 	for _, rule := range auditSelfEventRules {
@@ -201,13 +198,10 @@ func AuditSelfEventKeys(events []AuditSelfEvent, status AuditStatus) []AuditSelf
 	return keys
 }
 
-// singularAuditSelfEvents are the events whose rows never follow one another
-// in one actor's history, so a history never folds them into a run. Each
-// needs a change in between before it can happen again and is never done to
-// many people at once: two-step verification is turned on only by the User
-// for themself, an email change is undone once through its own link, offline
-// administrator recovery restores one account at a time, and signing out the
-// other Sessions leaves none to sign out until the User signs in again.
+// singularAuditSelfEvents never repeat back to back in one actor's history, so
+// they are never folded into a run: each needs a change in between and is
+// never done to many people at once. For example, signing out the other
+// sessions leaves none to sign out until the user signs in again.
 var singularAuditSelfEvents = []AuditSelfEvent{
 	AuditSelfEventMFAEnabled,
 	AuditSelfEventEmailChangeUndone,
@@ -215,9 +209,8 @@ var singularAuditSelfEvents = []AuditSelfEvent{
 	AuditSelfEventSessionsRevokedOthers,
 }
 
-// Repeats reports whether consecutive rows of this event may be presented as
-// one run, such as an administrator's change to many people's profiles or a
-// User's repeated sign-ins.
+// Repeats reports whether consecutive rows of this event may be shown as one
+// run, such as a user's repeated sign-ins.
 func (e AuditSelfEvent) Repeats() bool {
 	return e.IsValid() && !slices.Contains(singularAuditSelfEvents, e)
 }

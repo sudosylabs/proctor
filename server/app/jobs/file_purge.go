@@ -26,16 +26,16 @@ const (
 	filePurgeMaximumBatchSize = 100
 )
 
-// FilePurgeExpiredContentCommand bounds one purge Job. Cursor is set only on
-// a continuation and resumes the FileRevision phase after its predecessor.
+// FilePurgeExpiredContentCommand bounds one purge job. Cursor is set only on
+// a continuation and resumes the file revision phase after its predecessor.
 type FilePurgeExpiredContentCommand struct {
 	BatchSize int    `json:"batch_size"`
 	Cursor    string `json:"cursor,omitempty"`
 }
 
 // FilePurgeExpiredContentCheckpoint counts examined objects for the whole
-// batch and separately for each workspace phase; the FileRevision phase's
-// count is the remainder.
+// batch and for each workspace phase; the file revision phase's count is the
+// remainder.
 type FilePurgeExpiredContentCheckpoint struct {
 	Cursor          string `json:"cursor,omitempty"`
 	Examined        int64  `json:"examined"`
@@ -44,13 +44,14 @@ type FilePurgeExpiredContentCheckpoint struct {
 	AttemptExamined int64  `json:"attempt_examined,omitempty"`
 }
 
-// FilePurgeExpiredContentResult is the safe result of the expired file-content purge Job.
+// FilePurgeExpiredContentResult is the result of the expired-content purge
+// job.
 type FilePurgeExpiredContentResult struct {
 	Examined int64 `json:"examined"`
 	Purged   int64 `json:"purged"`
 }
 
-// EncodeFilePurgeExpiredContentCommand validates and encodes an expired file-content purge Job command.
+// EncodeFilePurgeExpiredContentCommand validates and encodes a command.
 func EncodeFilePurgeExpiredContentCommand(value FilePurgeExpiredContentCommand) (json.RawMessage, error) {
 	if err := validateFilePurgeCommand(value); err != nil {
 		return nil, err
@@ -68,7 +69,8 @@ func validateFilePurgeCommand(value FilePurgeExpiredContentCommand) error {
 	return nil
 }
 
-// DecodeFilePurgeExpiredContentCommand strictly decodes and validates an expired file-content purge Job command.
+// DecodeFilePurgeExpiredContentCommand decodes and validates a command
+// strictly.
 func DecodeFilePurgeExpiredContentCommand(document json.RawMessage) (FilePurgeExpiredContentCommand, error) {
 	var value FilePurgeExpiredContentCommand
 	if err := decodeStrictFilePurgeDocument(document, &value); err != nil {
@@ -80,7 +82,8 @@ func DecodeFilePurgeExpiredContentCommand(document json.RawMessage) (FilePurgeEx
 	return value, nil
 }
 
-// EncodeFilePurgeExpiredContentCheckpoint validates and encodes an expired file-content purge Job checkpoint.
+// EncodeFilePurgeExpiredContentCheckpoint validates and encodes a
+// checkpoint.
 func EncodeFilePurgeExpiredContentCheckpoint(value FilePurgeExpiredContentCheckpoint) (json.RawMessage, error) {
 	if (value.Cursor != "" && !validFilePurgeCursor(value.Cursor)) ||
 		value.Examined < 0 ||
@@ -100,7 +103,8 @@ func validFilePurgeCursor(value string) bool {
 	return ok && (prefix == "lease" || prefix == "archived") && model.IsValidOpaqueID(id)
 }
 
-// DecodeFilePurgeExpiredContentCheckpoint strictly decodes and validates an expired file-content purge Job checkpoint.
+// DecodeFilePurgeExpiredContentCheckpoint decodes and validates a checkpoint
+// strictly.
 func DecodeFilePurgeExpiredContentCheckpoint(document json.RawMessage) (FilePurgeExpiredContentCheckpoint, error) {
 	var value FilePurgeExpiredContentCheckpoint
 	if err := decodeStrictFilePurgeDocument(document, &value); err != nil {
@@ -127,21 +131,21 @@ func decodeStrictFilePurgeDocument(document json.RawMessage, target any) error {
 	return nil
 }
 
-// FileRevisionContentPurger is the physical-content capability used after the
-// file store has durably fenced a purge candidate.
+// FileRevisionContentPurger removes physical content only after the file
+// store has durably fenced the purge candidate.
 type FileRevisionContentPurger interface {
 	PurgeAbandonedFileRevision(context.Context, model.FileRevisionID) error
 	RemoveFileRevisionRenditions(context.Context, model.FileRevisionID, []model.FileRenditionID) error
 }
 
-// StarterWorkspaceObjectPurger removes the stored content of a Starter
-// Workspace object the Store has fenced for purge.
+// StarterWorkspaceObjectPurger removes a starter workspace object's content
+// once the store has fenced it for purge.
 type StarterWorkspaceObjectPurger interface {
 	RemoveStarterWorkspaceObject(context.Context, model.StarterWorkspaceObjectID) error
 }
 
-// AttemptWorkspaceObjectPurger removes the stored content of an Attempt
-// Workspace object the Store has fenced for purge.
+// AttemptWorkspaceObjectPurger removes an attempt workspace object's content
+// once the store has fenced it for purge.
 type AttemptWorkspaceObjectPurger interface {
 	RemoveAttemptWorkspaceObject(context.Context, model.AttemptWorkspaceObjectID) error
 }
@@ -158,7 +162,7 @@ type filePurgeExpiredContentHandler struct {
 }
 
 // filePurgeContinuationDelay spaces successors so a backlog drains steadily
-// without a tight chain of Jobs.
+// without a tight chain of jobs.
 const filePurgeContinuationDelay = time.Second
 
 func (h filePurgeExpiredContentHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
@@ -213,17 +217,15 @@ func (h filePurgeExpiredContentHandler) Run(ctx context.Context, execution job.E
 	return h.finish(ctx, execution.Job, command, checkpoint)
 }
 
-// filePurgeAllowances is how many objects each phase may examine in one batch.
 type filePurgeAllowances struct {
 	starter, attempt, generic int
 }
 
 // phaseAllowances gives each enabled workspace phase an equal share of the
-// batch, so a FileRevision backlog cannot starve workspace cleanup. The
-// phases run in order (Starter Workspace, Attempt Workspace, FileRevision),
-// and each may also spend what earlier phases left unused, so the
-// FileRevision phase takes the rest of the batch. Allowances derive from the
-// checkpoint counts alone, so a resumed attempt recomputes the same ones.
+// batch, so a file revision backlog cannot starve workspace cleanup. Phases
+// run starter, attempt, then file revision, and each may spend what earlier
+// phases left, so the last takes the rest. Allowances derive only from the
+// checkpoint counts, so a resumed attempt recomputes the same ones.
 func (h filePurgeExpiredContentHandler) phaseAllowances(batchSize int, checkpoint FilePurgeExpiredContentCheckpoint) filePurgeAllowances {
 	phases := 1
 	if h.starterWorkspace != nil {
@@ -251,8 +253,6 @@ func genericExamined(checkpoint FilePurgeExpiredContentCheckpoint) int64 {
 	return checkpoint.Examined - checkpoint.StarterExamined - checkpoint.AttemptExamined
 }
 
-// remainingFilePurgeWork bounds one phase by its allowance and by the Job's
-// durable work reservation.
 func remainingFilePurgeWork(execution job.Execution, command FilePurgeExpiredContentCommand, allowance int, examined int64) int {
 	return min(allowance-int(examined), command.BatchSize-execution.Job.WorkReserved)
 }
@@ -328,12 +328,11 @@ func (h filePurgeExpiredContentHandler) purgeFileRevisions(
 	return nil
 }
 
-// finish succeeds the Job, first enqueueing one continuation when some phase
-// examined its whole allowance and may hold more work. The continuation is
-// permanently deduplicated on this Job, so a retry or an unknown enqueue
-// outcome cannot fork the chain, and it starts with a fresh batch. Only
-// examined work fills an allowance, so the chain ends once every phase drains;
-// a reservation lost to an uncertain checkpoint never extends it.
+// finish enqueues one continuation when some phase used its whole allowance.
+// The continuation is permanently deduplicated on this job, so a retry or an
+// unknown enqueue outcome cannot fork the chain. Only examined work fills an
+// allowance, so the chain ends once every phase drains; a reservation lost to
+// an uncertain checkpoint never extends it.
 func (h filePurgeExpiredContentHandler) finish(
 	ctx context.Context,
 	parent *model.Job,
@@ -372,7 +371,6 @@ func (h filePurgeExpiredContentHandler) finish(
 	return job.Outcome{Kind: job.OutcomeSucceeded, Result: result, Err: err}
 }
 
-// mayHaveMoreWork reports whether some phase examined its whole allowance.
 func (h filePurgeExpiredContentHandler) mayHaveMoreWork(
 	command FilePurgeExpiredContentCommand,
 	checkpoint FilePurgeExpiredContentCheckpoint,
@@ -384,8 +382,8 @@ func (h filePurgeExpiredContentHandler) mayHaveMoreWork(
 		full(genericExamined(checkpoint), allowances.generic)
 }
 
-// purgeStarterWorkspaceObjects is the first physical-content phase. On failure it returns the last durable checkpoint and a retryable outcome;
-// otherwise it returns the updated aggregate checkpoint.
+// purgeStarterWorkspaceObjects returns the last durable checkpoint and a
+// retryable outcome on failure.
 func (h filePurgeExpiredContentHandler) purgeStarterWorkspaceObjects(
 	ctx context.Context,
 	execution job.Execution,
@@ -432,8 +430,9 @@ func (h filePurgeExpiredContentHandler) purgeStarterWorkspaceObjects(
 		}
 
 		if err = h.starterWorkspaceContent.RemoveStarterWorkspaceObject(ctx, object.ID); err != nil {
-			// Removal errors have an unknown outcome. Keep this object fenced for
-			// stale-claim retry, but release every object never sent to storage.
+			// A removal error has an unknown outcome. Keep this object fenced
+			// for stale-claim retry, but release every object never sent to
+			// storage.
 			if releaseErr := h.releaseStarterWorkspaceClaims(ctx, objects[index+1:], claimToken); releaseErr != nil {
 				failure := job.RetryableFailure("database.unavailable", releaseErr)
 				return checkpoint, &failure
@@ -447,8 +446,8 @@ func (h filePurgeExpiredContentHandler) purgeStarterWorkspaceObjects(
 			ctx,
 			&store.StarterWorkspaceCleanupCompletion{ObjectID: object.ID, ClaimToken: claimToken},
 		); err != nil {
-			// Physical removal is idempotent. Leave the current claim fenced so a
-			// stale-claim retry can safely repeat it and complete metadata cleanup.
+			// Physical removal is idempotent. Leave the current claim fenced so
+			// a stale-claim retry can repeat it and complete metadata cleanup.
 			if releaseErr := h.releaseStarterWorkspaceClaims(ctx, objects[index+1:], claimToken); releaseErr != nil {
 				failure := job.RetryableFailure("database.unavailable", releaseErr)
 				return checkpoint, &failure
@@ -475,9 +474,8 @@ func (h filePurgeExpiredContentHandler) purgeStarterWorkspaceObjects(
 	return checkpoint, nil
 }
 
-// purgeAttemptWorkspaceObjects follows the Starter Workspace phase. It shares
-// the Job's one bounded work reservation, checkpoint and claim token with the
-// Starter Workspace and FileRevision phases.
+// purgeAttemptWorkspaceObjects shares the job's one work reservation,
+// checkpoint and claim token with the other phases.
 func (h filePurgeExpiredContentHandler) purgeAttemptWorkspaceObjects(
 	ctx context.Context,
 	execution job.Execution,
@@ -524,8 +522,8 @@ func (h filePurgeExpiredContentHandler) purgeAttemptWorkspaceObjects(
 		}
 
 		if err = h.attemptWorkspaceContent.RemoveAttemptWorkspaceObject(ctx, object.ID); err != nil {
-			// Outcome-unknown removal remains claimed for stale retry; only objects
-			// never sent to the backend are released.
+			// An outcome-unknown removal stays claimed for stale retry; only
+			// objects never sent to the backend are released.
 			if releaseErr := h.releaseAttemptWorkspaceClaims(ctx, objects[index+1:], claimToken); releaseErr != nil {
 				failure := job.RetryableFailure("database.unavailable", releaseErr)
 				return checkpoint, &failure
@@ -660,7 +658,7 @@ func (p filePurgeExpiredContentProposer) Propose(ctx context.Context, occurrence
 }
 
 // FilePurgeDependencies are the collaborators of the expired-content purge
-// Job: file revisions plus Starter and Attempt Workspace objects.
+// job.
 type FilePurgeDependencies struct {
 	Files                   store.FileStore
 	Content                 FileRevisionContentPurger
@@ -674,8 +672,8 @@ type FilePurgeDependencies struct {
 	Now  func() time.Time
 }
 
-// NewFilePurge registers the purge of expired file and workspace content,
-// proposed daily.
+// NewFilePurge registers the daily purge of expired file and workspace
+// content.
 func NewFilePurge(deps FilePurgeDependencies) job.Registration {
 	handler := filePurgeExpiredContentHandler{
 		files:                   deps.Files,

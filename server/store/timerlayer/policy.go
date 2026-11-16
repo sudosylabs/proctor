@@ -7,9 +7,8 @@
 
 package timerlayer
 
-// aggregateName and methodName form the handwritten closed vocabulary for
-// store metrics. Generated forwarding may reference these values but cannot
-// invent labels or decide what data enters an observation.
+// aggregateName and methodName are the closed metric label vocabulary.
+// Generated forwarding may use these values but cannot invent labels.
 type aggregateName string
 type methodName string
 

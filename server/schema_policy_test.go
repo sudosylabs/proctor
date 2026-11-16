@@ -1,3 +1,5 @@
+//go:build integration
+
 // ---------------------------------------------------------------------------------------------
 // Copyright (c) 2026 Sudosy Labs. All rights reserved.
 // Licensed under the GNU Affero General Public License, version 3 only.
@@ -10,53 +12,52 @@ package server
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/store/sqlstore"
 )
 
-type schemaPersistenceFake struct {
-	migrations  int
-	validations int
-	validateErr error
-}
-
-func (f *schemaPersistenceFake) ApplyPendingMigrations(context.Context) (sqlstore.MigrationResult, error) {
-	f.migrations++
-	return sqlstore.MigrationResult{Applied: 1, SchemaVersion: 1}, nil
-}
-
-func (f *schemaPersistenceFake) ValidateSchema(context.Context) error {
-	f.validations++
-	return f.validateErr
+// openEmptySchemaStore opens the SQL store over a new, never-migrated
+// database, as acquirePersistence does before it prepares the schema.
+func openEmptySchemaStore(t *testing.T, ctx context.Context) *sqlstore.SQLStore {
+	t.Helper()
+	settings := config.Default().Database
+	settings.DataSource = newStartupMigrationDatabase(t, ctx)
+	persistence, err := sqlstore.New(ctx, sqlstore.SettingsFromConfig(settings))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = persistence.Close() })
+	return persistence
 }
 
 func TestRequiredCurrentSchemaRefusesWithoutMigrating(t *testing.T) {
-	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	persistence := openEmptySchemaStore(t, ctx)
 
-	behind := &sqlstore.ErrSchemaBehind{Database: 0, Local: 1}
-	persistence := &schemaPersistenceFake{validateErr: behind}
-	_, err := prepareSchema(context.Background(), persistence, schemaRequireCurrent)
+	_, err := prepareSchema(ctx, persistence, schemaRequireCurrent)
 	require.ErrorAs(t, err, new(*sqlstore.ErrSchemaBehind), "prepareSchema()")
 	require.Contains(t, err.Error(), "proctor migrate up", "prepareSchema()")
-	require.Equal(t, 0, persistence.migrations, "required-current schema applied")
+	require.ErrorAs(t, persistence.ValidateSchema(ctx), new(*sqlstore.ErrSchemaBehind), "required-current schema applied")
 
-	persistence.validateErr = nil
-	migration, err := prepareSchema(context.Background(), persistence, schemaRequireCurrent)
+	_, err = persistence.ApplyPendingMigrations(ctx)
+	require.NoError(t, err, "migrate the database outside prepareSchema")
+	migration, err := prepareSchema(ctx, persistence, schemaRequireCurrent)
 	require.NoError(t, err, "current schema")
 	require.Nil(t, migration, "current schema")
-	require.Equal(t, 0, persistence.migrations, "current schema")
 }
 
 func TestServingSchemaPolicyAppliesPendingMigrations(t *testing.T) {
-	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	persistence := openEmptySchemaStore(t, ctx)
 
-	persistence := &schemaPersistenceFake{}
-	migration, err := prepareSchema(context.Background(), persistence, schemaMigrate)
+	migration, err := prepareSchema(ctx, persistence, schemaMigrate)
 	require.NoError(t, err, "serving schema")
 	require.NotNil(t, migration, "serving schema")
-	require.Equal(t, 1, migration.Applied, "serving schema")
-	require.Equal(t, 1, persistence.migrations, "serving schema")
-	require.Equal(t, 0, persistence.validations, "serving schema")
+	require.Positive(t, migration.Applied, "serving schema")
+	require.Equal(t, migration.SchemaVersion, migration.Applied, "an empty database applies every migration")
+	require.NoError(t, persistence.ValidateSchema(ctx), "serving schema")
 }

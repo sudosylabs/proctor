@@ -20,8 +20,8 @@ func validateAcademicRevision(value route.Optional[int64]) error {
 }
 
 // archiveAcademicRequest is the optional revision fence of an academic
-// archive. Like every other fence it travels in the JSON body; a DELETE
-// without a body archives unconditionally.
+// archive. It travels in the JSON body like every fence, so a DELETE without
+// a body archives unconditionally.
 type archiveAcademicRequest struct {
 	ExpectedRevision route.Optional[int64] `json:"expected_revision"`
 }

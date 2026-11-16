@@ -96,9 +96,8 @@ const (
 	FilePurgeCandidateArchivedCustom FilePurgeCandidateKind = "archived_custom"
 )
 
-// FilePurgeCandidate is an authoritative metadata-derived unit of physical
-// cleanup. Cursor and IDs are safe operational values; storage paths never
-// cross this boundary.
+// FilePurgeCandidate is one unit of physical cleanup, derived from metadata.
+// Storage paths never cross this boundary.
 type FilePurgeCandidate struct {
 	Cursor       string
 	Kind         FilePurgeCandidateKind
@@ -117,53 +116,51 @@ type FilePurgeCandidatePage struct {
 	Candidates []FilePurgeCandidate
 }
 
-// FilePurgeClaim is the durable tombstone created before physical content is
-// removed. Reusing a claim makes cleanup recoverable after a worker crash.
+// FilePurgeClaim is the tombstone written before content is removed; reusing
+// it lets cleanup recover after a worker crash.
 type FilePurgeClaim struct {
 	ID        string
 	Candidate FilePurgeCandidate
 }
 
-// FileStore owns file metadata and the atomic publication of domain references.
+// FileStore persists file metadata and publishes it to the records that
+// reference it.
 type FileStore interface {
-	// CreateUpload atomically creates a pristine entry, its first pending revision,
-	// and an active bounded lease owned by the named actor.
+	// CreateUpload creates an entry, its first pending revision and the
+	// actor's lease, atomically.
 	CreateUpload(context.Context, *FileUploadCreation) (*FileUpload, error)
-	// CreateRevisionUpload atomically appends a pending revision and active lease
-	// to an existing, unarchived entry without changing its current revision.
+	// CreateRevisionUpload adds a pending revision and lease to an unarchived
+	// entry without changing its current revision.
 	CreateRevisionUpload(context.Context, *FileRevisionUploadCreation) (*FileUpload, error)
-	// DiscardProfilePictureUpload removes only the named pending revision and lease
-	// when the actor, user revision, active entry, and current revision still match.
-	// If the upload created a distinct pristine entry, that entry is removed too;
-	// the operation never changes the visible picture.
+	// DiscardProfilePictureUpload removes the pending revision and lease (and
+	// the entry, if the upload created it) only while the actor, user
+	// revision, active entry and current revision still match. It never
+	// changes the visible picture.
 	DiscardProfilePictureUpload(context.Context, *ProfilePictureUploadDiscard) error
 	RenewUploadLease(context.Context, *UploadLeaseRenewal) (*model.UploadLease, error)
-	// PublishProfilePicture atomically consumes the actor-owned, unexpired lease,
-	// persists the complete rendition set, makes the revision current, updates the
-	// user's active custom entry under optimistic concurrency, and completes the
-	// pre-existing audit attempt. Any failed precondition rolls back every change.
+	// PublishProfilePicture consumes the actor's unexpired lease, stores every
+	// rendition, makes the revision current, sets the user's custom entry under
+	// the revision fence and completes the audit. Any failed check rolls back
+	// everything.
 	PublishProfilePicture(context.Context, *ProfilePicturePublication) (*ProfilePicturePublicationResult, error)
-	// PublishDefaultProfilePicture atomically consumes the target-user-owned,
-	// unexpired upload lease, publishes the complete rendition set, and attaches
-	// the entry only while that User still has no default and its revision matches.
-	// It advances User revision without changing visible-picture time.
+	// PublishDefaultProfilePicture attaches the entry only while the user still
+	// has no default and the revision matches. It advances the user revision
+	// without changing the visible-picture time.
 	PublishDefaultProfilePicture(context.Context, *DefaultProfilePicturePublication) (*ProfilePicturePublicationResult, error)
 	GetProfilePictureState(context.Context, model.UserID) (*ProfilePictureState, error)
 	GetProfilePictureRendition(context.Context, model.UserID, string) (*model.FileRendition, error)
-	// RemoveProfilePicture atomically verifies the user's revision, active
-	// custom entry, current file revision, and expected normalized checksum; it then
-	// archives that entry, clears the custom relationship, advances the user, and
-	// completes the pre-existing audit attempt. Races fail with no partial change.
+	// RemoveProfilePicture checks the user revision, custom entry, current
+	// revision and checksum, then archives the entry and completes the audit
+	// atomically. A race fails with no partial change.
 	RemoveProfilePicture(context.Context, *ProfilePictureRemoval) (*model.User, error)
-	// ListPurgeCandidates returns a stable bounded page derived from leases and
-	// semantic metadata using the database clock. It never discovers ownership
-	// by listing VFS objects.
+	// ListPurgeCandidates derives candidates from metadata on the database
+	// clock; it never finds ownership by listing VFS objects.
 	ListPurgeCandidates(context.Context, *FilePurgeCandidateRequest) (*FilePurgeCandidatePage, error)
-	// ClaimPurgeCandidate atomically revalidates eligibility against the database
-	// clock and writes a durable tombstone before any physical content is removed.
+	// ClaimPurgeCandidate rechecks eligibility on the database clock and writes
+	// the tombstone before any content is removed.
 	ClaimPurgeCandidate(context.Context, *FilePurgeCandidate) (*FilePurgeClaim, error)
-	// CompletePurge deletes metadata only after the caller has idempotently
-	// removed the claimed physical content.
+	// CompletePurge deletes the metadata. Call it only after removing the
+	// claimed content.
 	CompletePurge(context.Context, *FilePurgeClaim) error
 }
 

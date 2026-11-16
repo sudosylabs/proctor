@@ -12,7 +12,9 @@ import (
 	"github.com/sudosylabs/proctor/server/pluginhost"
 )
 
-// pluginDirectory presents the plugin host to the HTTP API.
+// pluginDirectory presents the plugin host to the HTTP API. It stays here
+// because the plugin host may not import the HTTP API: platform's tests
+// activate plugins, and the HTTP API reaches platform through metrics.
 type pluginDirectory struct {
 	host *pluginhost.Host
 }

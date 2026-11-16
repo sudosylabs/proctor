@@ -9,6 +9,7 @@ package correction
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"strings"
 	"testing"
@@ -16,7 +17,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
@@ -36,12 +37,13 @@ type correctionFixture struct {
 	persistence    *correctionStoreFake
 	access         *correctionAccessFake
 	memberships    *correctionMembershipFake
-	authorizer     *correctionAuthorizerFake
-	auditor        *correctionAuditFake
-	publisher      *realtimetest.Publisher
-	sittings       *correctionSittingsFake
-	content        *correctionContentFake
-	revisions      *correctionRevisionsFake
+	// grants is the real authorizer and auditor; the caller manages Sittings
+	// in the Exam's unit, ordinarily and by override.
+	grants    *accesstest.Fixture
+	publisher *realtimetest.Publisher
+	sittings  *correctionSittingsFake
+	content   *correctionContentFake
+	revisions *correctionRevisionsFake
 }
 
 func newCorrectionFixture(t *testing.T) *correctionFixture {
@@ -50,8 +52,6 @@ func newCorrectionFixture(t *testing.T) *correctionFixture {
 	f.persistence = &correctionStoreFake{f: f}
 	f.access = &correctionAccessFake{f: f}
 	f.memberships = &correctionMembershipFake{f: f}
-	f.authorizer = &correctionAuthorizerFake{f: f}
-	f.auditor = &correctionAuditFake{f: f}
 	f.publisher = &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
 		if call.Method == realtimetest.Publish {
 			f.order = append(f.order, "effect")
@@ -60,14 +60,25 @@ func newCorrectionFixture(t *testing.T) *correctionFixture {
 	f.sittings = &correctionSittingsFake{f: f}
 	f.content = &correctionContentFake{f: f}
 	f.revisions = &correctionRevisionsFake{}
+	f.grants = accesstest.New(t, accesstest.Options{
+		Grants: []accesstest.Grant{{
+			UserID:    f.userID,
+			Actions:   []model.Action{model.ActionExamSittingManage, model.ActionExamSittingManageOverride},
+			ScopeType: model.RoleScopeAcademicUnit,
+			ScopeID:   f.unitID.String(),
+		}},
+		Exams:    f.access,
+		Sittings: f.sittings,
+		Observe:  func(event string) { f.order = append(f.order, event) },
+	})
 	service, err := New(Dependencies{
 		Persistence:       f.persistence,
 		Revisions:         f.revisions,
 		Sittings:          f.sittings,
 		Access:            f.access,
 		Memberships:       f.memberships,
-		Authorizer:        f.authorizer,
-		Auditor:           f.auditor,
+		Authorizer:        f.grants.Authorizer,
+		Auditor:           f.grants.Auditor,
 		Publisher:         f.publisher,
 		Content:           f.content,
 		Now:               func() time.Time { return f.at },
@@ -151,6 +162,12 @@ func (a *correctionAccessFake) Access(context.Context, model.ExamID, model.UserI
 	return &store.ExamAccessSnapshot{Exam: exam, ActorIsManager: true}, nil
 }
 
+// Resolve gives the real authorizer the Exam's owning unit.
+func (a *correctionAccessFake) Resolve(context.Context, model.ExamID) (*model.Exam, error) {
+	exam, _ := model.NewExam(a.f.examID, a.f.unitID, a.f.userID, a.f.at)
+	return exam, nil
+}
+
 type correctionMembershipFake struct {
 	store.AcademicUnitMemberStore
 	f     *correctionFixture
@@ -166,31 +183,36 @@ func (m *correctionMembershipFake) ListActiveByUser(context.Context, model.UserI
 	return []*model.AcademicUnitMember{{AcademicUnitID: m.f.unitID, UserID: m.f.userID}}, m.err
 }
 
-type correctionAuthorizerFake struct {
-	f        *correctionFixture
-	action   model.Action
-	resource model.Resource
+// decisions describes each recorded authorization decision as
+// "<action> <resource type>:<resource id> <status>".
+func (f *correctionFixture) decisions() []string {
+	var described []string
+	for _, event := range f.grants.Audits.Decisions() {
+		described = append(described, event.Action+" "+string(event.Resource.Type)+":"+event.Resource.ID+" "+string(event.Status))
+	}
+	return described
 }
 
-func (a *correctionAuthorizerFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource) error {
-	a.f.order = append(a.f.order, "authorize")
-	a.action, a.resource = action, resource
-	return nil
-}
-
-type correctionAuditFake struct {
-	f     *correctionFixture
-	value map[string]any
-}
-
-func (a *correctionAuditFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
-	a.f.order = append(a.f.order, "audit.begin")
-	a.value = attempt.Value
-	return model.NewAuditEventID(), nil
-}
-func (a *correctionAuditFake) Fail(context.Context, model.AuditEventID, string) error {
-	a.f.order = append(a.f.order, "audit.fail")
-	return nil
+// auditValue returns the value the one recorded mutation attempt stored, with
+// whole numbers decoded as int64.
+func (f *correctionFixture) auditValue(t *testing.T) map[string]any {
+	t.Helper()
+	attempts := f.grants.Audits.Attempts()
+	require.Len(t, attempts, 1, "mutation attempts")
+	var parameters struct {
+		Value map[string]any `json:"value"`
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(attempts[0].Parameters)))
+	decoder.UseNumber()
+	require.NoError(t, decoder.Decode(&parameters))
+	for key, value := range parameters.Value {
+		if number, ok := value.(json.Number); ok {
+			if whole, err := number.Int64(); err == nil {
+				parameters.Value[key] = whole
+			}
+		}
+	}
+	return parameters.Value
 }
 
 // correctionSittingsFake answers the candidates of the corrected Sitting in
@@ -209,6 +231,11 @@ func (s *correctionSittingsFake) ListCandidateInvalidationTargetsBySitting(
 ) ([]model.UserID, error) {
 	s.f.order = append(s.f.order, "candidates")
 	return s.candidateIDs, nil
+}
+
+// Resolve gives the real authorizer the Sitting's Exam.
+func (s *correctionSittingsFake) Resolve(_ context.Context, id model.ExamSittingID) (*store.ExamSittingSnapshot, error) {
+	return &store.ExamSittingSnapshot{Sitting: &model.ExamSitting{ID: id, ExamID: s.f.examID}}, nil
 }
 
 type correctionContentFake struct {

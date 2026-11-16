@@ -20,12 +20,13 @@ everything the code does.
 | Authored API concepts and worked recipes | `docs/api` |
 | Exact public paths, schemas, errors, authentication, and examples | `server/openapi` |
 | Docusaurus rendering, components, search, and generated adapters | `docs/site` |
-| Exact behavior of one component | A README or `CONTRACT.md` beside it |
-| Durable domain or architectural rule and rationale | The owning tracked skill, reference, or component contract routed by `AGENTS.md` |
+| Exact behavior of one component | Comments on the code that enforces it, or a README beside it |
+| Canonical domain terms | `docs/glossary.md` |
+| Repository-wide rules for contributors and agents | `AGENTS.md`, with subtree differences in the nearest `AGENTS.md` |
 | Public availability or maturity | The affected public page and the implementation and tests that support it |
 | Discoverable implementation detail | Code, tests, configuration, or command help |
 
-Don't copy an architecture or component contract into public prose. Explain
+Don't copy architecture rules or code comments into public prose. Explain
 the reader's task and what follows from it. When a contributor needs more
 engineering detail, link to the exact source.
 

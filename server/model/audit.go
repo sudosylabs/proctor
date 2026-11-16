@@ -7,9 +7,9 @@
 
 package model
 
-// Auditable is implemented by model values that can produce a deliberately
-// safe audit representation. Implementations must omit secrets, credentials,
-// tokens, and unbounded user-controlled content.
+// Auditable is implemented by values that can describe themselves safely for
+// the audit log. Implementations must leave out secrets, credentials, tokens
+// and unbounded user-controlled content.
 type Auditable interface {
 	Auditable() map[string]any
 }

@@ -63,10 +63,8 @@ func (o accountRecoveryAttemptOperation) qualifier() (string, bool) {
 	}
 }
 
-// requireAccountTokens checks the collaborators of purpose-specific
-// verification and recovery tokens. Terminal transitions and their success
-// audits remain named atomic store operations; only post-commit session
-// effects happen outside persistence.
+// Account-token transitions commit with their success audit in one store
+// operation; only the post-commit session effects run outside it.
 func (s *Service) requireAccountTokens() error {
 	required := []struct {
 		missing bool
@@ -94,8 +92,6 @@ func (s *Service) requireAccountTokens() error {
 	return nil
 }
 
-// recoveryAuditEvent is the success audit an account-token transition commits
-// with its atomic Store operation, recorded on this node.
 func (s *Service) recoveryAuditEvent(
 	action model.Action,
 	resource model.Resource,
@@ -198,7 +194,8 @@ func RecoveryAuditEvent(
 }
 
 // AccountCredentialLink builds the hosted link that carries a raw account
-// credential, such as an Invitation claim or an email verification token.
+// credential, such as an invitation claim. The token rides in the fragment so
+// browsers never send it to a server or in a Referer header.
 func AccountCredentialLink(
 	publicURL string,
 	path string,
@@ -235,8 +232,8 @@ func accountRecoveryUnavailable(err error) error {
 	return apperror.New("authentication.account_recovery.unavailable").Wrap(err)
 }
 
-// AccountRecoveryPolicy is the operator projection for email verification and
-// password reset TTLs and rate limits.
+// AccountRecoveryPolicy holds the operator-set token TTLs and rate limit for
+// email verification, password reset and email change undo.
 type AccountRecoveryPolicy struct {
 	EmailVerificationTTL time.Duration
 	PasswordResetTTL     time.Duration

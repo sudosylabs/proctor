@@ -19,8 +19,8 @@ type accessPolicyChangedData struct {
 	Revision int64 `json:"revision"`
 }
 
-// NewAccessPolicyChangedEvent creates the content-free refetch signal emitted
-// after a durable policy commit. No policy fields or provider facts fan out.
+// NewAccessPolicyChangedEvent is a content-free refetch signal; no policy
+// fields or provider facts fan out.
 func NewAccessPolicyChangedEvent(institutionID model.InstitutionID, revision int64) (Event, error) {
 	if !institutionID.IsValid() || revision < 1 {
 		return Event{}, errors.New("Access Policy change event requires valid bounded metadata")
@@ -44,9 +44,8 @@ type pluginSettingsChangedData struct {
 	Revision int64  `json:"revision"`
 }
 
-// NewPluginSettingsChangedEvent creates the content-free refetch signal
-// emitted after an administrator's change to a plugin's settings commits.
-// No setting values fan out.
+// NewPluginSettingsChangedEvent is a content-free refetch signal; no setting
+// values fan out.
 func NewPluginSettingsChangedEvent(institutionID model.InstitutionID, pluginID model.PluginID, revision int64) (Event, error) {
 	if !institutionID.IsValid() || !pluginID.IsValid() || revision < 1 {
 		return Event{}, errors.New("plugin settings change event requires valid bounded metadata")

@@ -550,7 +550,7 @@ func (d examDocument) model() (*model.Exam, error) {
 	return exam, nil
 }
 
-// examArchiveOutcome is the persisted outcome of an Exam archive.
+// examArchiveOutcome is the persisted outcome of an exam archive.
 type examArchiveOutcome struct {
 	Exam examDocument `json:"exam"`
 }

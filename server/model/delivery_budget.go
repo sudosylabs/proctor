@@ -29,11 +29,11 @@ const (
 	BrowserEvidenceByteLimit          int64 = 8 * 1024 * 1024
 	SecurityControlReceiptLimit             = 128
 	SecurityControlReceiptMaxBytes          = 2048
-	// Compact control receipts hold bounded outcomes and references to separately
-	// charged immutable reset facts. They never copy a full coverage snapshot.
+	// Control receipts hold bounded outcomes and references to separately
+	// charged reset facts, never a full coverage snapshot.
 	SecurityControlCacheMaxBytes = SecurityControlReceiptLimit*SecurityControlReceiptMaxBytes + SecurityControlReceiptLimit + 1
-	// Reserve each closed stored slot at its byte ceiling, including an envelope
-	// allowance. Canonical data, not SQL/index overhead, is the charged quantity.
+	// Each stored slot is reserved at its byte ceiling plus an envelope
+	// allowance. Canonical data is charged, not SQL or index overhead.
 	NativeOwnerReservationBytes  int64 = 128*1024 + 2*64*1024 + SecurityControlCacheMaxBytes + 16*1024 + 3*2048 + 4096 + 512
 	BrowserOwnerReservationBytes int64 = 16*1024 + 4*2048 + 4096 + 512
 )
@@ -136,8 +136,8 @@ func (q DeliveryQuotaUsage) Validate() error {
 	return nil
 }
 
-// Charge atomically computes a prospective charge; callers persist it only
-// with the corresponding records/receipt. Exhaustion freezes all boundaries.
+// Charge returns the usage after a prospective charge; persist it only with
+// the records or receipt it pays for. Exhaustion freezes every boundary.
 func (q DeliveryQuotaUsage) Charge(records, bytes, positions int64) (DeliveryQuotaUsage, error) {
 	if q.Validate() != nil || !securitySafeInt(records) || !securitySafeInt(bytes) || !securitySafeInt(positions) {
 		return q, invalidModelError("DeliveryQuotaUsage.Charge", "delivery_quota_usage", "", "delivery charge is invalid", "")
@@ -165,7 +165,8 @@ func (q DeliveryQuotaUsage) Charge(records, bytes, positions int64) (DeliveryQuo
 	return q, nil
 }
 
-// Pending admission reserves repair headroom in both pending and retained pools.
+// CanRetainPendingDelivery reports whether bytes fit the pending and retained
+// pools; anything but a repair leaves repair headroom in both.
 func CanRetainPendingDelivery(pending, retained, retainedLimit, bytes int64, repair, recoverableGap bool) bool {
 	if !securitySafeInt(pending) ||
 		!securitySafeInt(retained) ||

@@ -15,8 +15,8 @@ import (
 	"github.com/sudosylabs/proctor/server/localization"
 )
 
-// Localizer is the narrow presentation-owned localization port. Application
-// and domain failures remain stable codes; only the HTTP edge asks for prose.
+// Localizer renders the kernel's prose; failures stay stable codes until the
+// HTTP edge.
 type Localizer interface {
 	Translate(locale, id string, args any) (string, error)
 	// TranslateRequest renders one message with its template data and, for a
@@ -25,17 +25,15 @@ type Localizer interface {
 	SupportedLocales() []string
 }
 
-// Metrics is the narrow, transport-owned observation port. Route is the
-// sealed template, never a request path or resource identifier.
+// Metrics records request observations. Route is the template, never a
+// request path, so no identifier becomes a label.
 type Metrics interface {
 	HTTPStarted() func()
 	ObserveHTTPRequest(route, method string, status int, duration time.Duration)
 	ObserveHTTPPayload(route, method string, requestBytes, responseBytes int64)
 }
 
-// Tracing is the narrow, transport-owned tracing port. Composition supplies
-// it only when tracing is enabled; package httpapi never imports a tracing
-// SDK.
+// Tracing starts request spans. It is nil unless tracing is enabled.
 type Tracing interface {
 	StartRequest(ctx context.Context, request TracedRequest) (context.Context, RequestSpan)
 }
@@ -46,13 +44,11 @@ type TracedRequest struct {
 	// Header is consulted only for W3C trace context, and only when
 	// ContinueParent is true.
 	Header http.Header
-	// Method is the bounded HTTP method.
 	Method string
 	// ContinueParent is true only when the connection peer is a trusted
 	// proxy, so an untrusted client cannot choose a trace or force sampling.
 	ContinueParent bool
-	// RequestID is the request's server-assigned correlation ID.
-	RequestID string
+	RequestID      string
 }
 
 // RequestSpan is one request's span. SetRoute receives the sealed route

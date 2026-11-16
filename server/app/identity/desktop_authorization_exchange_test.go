@@ -25,9 +25,9 @@ func TestDesktopAuthorizationExchangeFailsClosedWhenSessionNonceCannotBeStored(t
 
 	at := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
 	persistence := &desktopAuthorizationStoreFake{}
-	auditor := &securityAuditorFake{}
+	auditor := newSecurityAuditLog(t, nil)
 	service := newTestDesktopAuthorizationService(t, persistence, func() time.Time { return at })
-	service.securityAudit = auditor
+	service.securityAudit = auditor.auditor
 	command := testDesktopAuthorizationExchangeCommand(
 		t, service, at, model.NewCredentialToken(), model.NewCredentialToken(), model.NewCredentialToken(), "",
 	)
@@ -48,7 +48,9 @@ func TestDesktopAuthorizationExchangeFailsClosedWhenSessionNonceCannotBeStored(t
 	// The exchange's success audit is followed by a record of the withdrawal.
 	withdrawals := auditor.withOperation("withdraw")
 	require.Len(t, withdrawals, 1)
-	require.Equal(t, map[string]any{"session_id": session.ID}, withdrawals[0].parameters.(map[string]any)["value"])
+	// The stored audit is JSON, so the Session identifier reads back as its
+	// string form.
+	require.Equal(t, map[string]any{"session_id": session.ID.String()}, withdrawals[0].parameters.(map[string]any)["value"])
 	require.Equal(t, model.AuditStatusSuccess, withdrawals[0].status)
-	require.Equal(t, session.ID, withdrawals[0].result.(map[string]any)["session_id"])
+	require.Equal(t, session.ID.String(), withdrawals[0].result.(map[string]any)["session_id"])
 }

@@ -18,14 +18,12 @@ type AccessProviderCapability struct {
 	AutoProvision bool
 }
 
-// AccessDeploymentCapabilities is an ephemeral validated deployment snapshot.
-// It deliberately contains no protocol, claim, SMTP, or credential material.
+// AccessDeploymentCapabilities is what the deployment's configuration allows.
+// It deliberately carries no protocol, claim, SMTP or credential material.
 type AccessDeploymentCapabilities struct {
 	Providers   map[string]AccessProviderCapability
 	DurableMail bool
-	// MFA reports whether the server configuration enables two-step
-	// verification.
-	MFA bool
+	MFA         bool
 }
 
 type AccessPolicyBlockerCode string
@@ -38,8 +36,8 @@ const (
 	AccessPolicyBlockerMFAUnavailable               AccessPolicyBlockerCode = "mfa_unavailable"
 )
 
-// AccessPolicyBlocker contains only safe operator-facing facts. ProviderID is
-// an already-public configured identifier; user identities are never exposed.
+// AccessPolicyBlocker is safe to show an operator: ProviderID is already
+// public and no user identity is included.
 type AccessPolicyBlocker struct {
 	Code       AccessPolicyBlockerCode
 	ProviderID string
@@ -55,23 +53,22 @@ type AccessPolicyPreflight struct {
 	Settings               model.AccessPolicySettings
 	RevokeExistingSessions bool
 	Capabilities           AccessDeploymentCapabilities
-	// SessionLimits are the deployment bounds the Session lengths must meet;
-	// replacement also uses them to pull live Session deadlines in.
+	// SessionLimits bound the policy's session lengths; replacement also uses
+	// them to pull live session deadlines in.
 	SessionLimits model.SessionLengthLimits
 	CheckedAt     time.Time
 }
 
-// AccessPolicyPreflightResult reports the blockers of a proposed replacement
-// and the safe counts an administrator weighs before applying it.
+// AccessPolicyPreflightResult is the blockers of a proposed replacement and
+// counts an administrator weighs before applying it; it names no user.
 type AccessPolicyPreflightResult struct {
 	Blockers []AccessPolicyBlocker
-	// RoleHoldersWithoutMFACount counts active role holders, Users with a
-	// current Role Binding at any scope, who have no active second factor.
+	// RoleHoldersWithoutMFACount counts active users with a current role
+	// binding at any scope and no active second factor.
 	RoleHoldersWithoutMFACount int
-	// RoleHolderSingleFactorSessionCount counts the live Sessions of active
-	// role holders that are not multi-factor: those revoke_existing_sessions
-	// signs out when the replacement starts requiring two-step verification
-	// of role holders.
+	// RoleHolderSingleFactorSessionCount counts role holders' live
+	// single-factor sessions: the ones revoke_existing_sessions signs out
+	// when the replacement starts requiring two-step verification.
 	RoleHolderSingleFactorSessionCount int
 }
 
@@ -87,22 +84,23 @@ type AccessPolicyReplacementResult struct {
 	Changed            bool
 	Replayed           bool
 	SessionRevocations []AccessPolicySessionRevocation
-	// SessionDeadlineChanges name the live Sessions whose deadlines a shorter
-	// Session length pulled in, so cached authentication can be invalidated.
+	// SessionDeadlineChanges name the live sessions a shorter session length
+	// pulled in, so cached authentication can be invalidated.
 	SessionDeadlineChanges []AccessPolicySessionDeadlineChange
 }
 
-// AccessPolicySessionDeadlineChange contains post-commit invalidation facts
-// for one User whose live Sessions now end sooner. Raw credentials never
-// leave persistence.
+// AccessPolicySessionDeadlineChange is what post-commit cache invalidation
+// needs for one user whose sessions now end sooner. It carries token hashes,
+// never raw credentials.
 type AccessPolicySessionDeadlineChange struct {
 	UserID            model.UserID
 	SessionIDs        []model.SessionID
 	AccessTokenHashes []string
 }
 
-// AccessPolicySessionRevocation contains post-commit invalidation facts for
-// one affected User. Raw credentials never leave persistence.
+// AccessPolicySessionRevocation is what post-commit cache invalidation needs
+// for one user whose sessions were revoked. It carries token hashes, never
+// raw credentials.
 type AccessPolicySessionRevocation struct {
 	UserID            model.UserID
 	SessionIDs        []model.SessionID
@@ -113,10 +111,9 @@ type AccessPolicyStore interface {
 	Get(context.Context, int) (*AccessPolicySnapshot, error)
 	Preflight(context.Context, *AccessPolicyPreflight) (*AccessPolicyPreflightResult, error)
 	Replace(context.Context, *AccessPolicyReplacement, *CommandIdempotency) (*AccessPolicyReplacementResult, error)
-	// HasRoleHolderMFARequirement reports whether the current Access Policy
-	// requires two-step verification of role holders and the active User holds, at
-	// the given instant, a current Role Binding of an unarchived Role whose
-	// scope is still live.
+	// HasRoleHolderMFARequirement reports whether the access policy requires
+	// two-step verification of role holders and the active user holds, at the
+	// instant, a current binding of an unarchived role whose scope is live.
 	HasRoleHolderMFARequirement(context.Context, model.UserID, time.Time) (bool, error)
 }
 

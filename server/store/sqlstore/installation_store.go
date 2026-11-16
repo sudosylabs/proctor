@@ -405,7 +405,6 @@ func prepareInstallationBootstrap(
 	}, nil
 }
 
-// prepareBootstrapInstitution builds the installation's Institution under a fresh identifier.
 func prepareBootstrapInstitution(input *store.InstallationBootstrap) (*model.Institution, error) {
 	institutionID, err := model.ParseInstitutionID(model.NewID())
 	if err != nil {
@@ -424,7 +423,6 @@ func prepareBootstrapInstitution(input *store.InstallationBootstrap) (*model.Ins
 	return institution, nil
 }
 
-// prepareBootstrapAdministrator validates the first administrator, its profile picture Job and its initial settings.
 func prepareBootstrapAdministrator(input *store.InstallationBootstrap) (*model.User, *model.UserSettingsDocument, error) {
 	administrator := *input.Administrator
 	administrator.EmailVerified = false
@@ -444,7 +442,6 @@ func prepareBootstrapAdministrator(input *store.InstallationBootstrap) (*model.U
 	return &administrator, administratorSettings, nil
 }
 
-// prepareBootstrapAdministratorRole creates the built-in System Administrator Role from its prepared template.
 func prepareBootstrapAdministratorRole(input *store.InstallationBootstrap, at time.Time) (*model.Role, error) {
 	role := input.Role.Clone()
 	role.ID = ""
@@ -461,7 +458,6 @@ func prepareBootstrapAdministratorRole(input *store.InstallationBootstrap, at ti
 	return role, nil
 }
 
-// prepareBootstrapRoleBinding binds the administrator to the System Administrator Role across the Institution.
 func prepareBootstrapRoleBinding(
 	input *store.InstallationBootstrap,
 	administratorID model.UserID,
@@ -487,7 +483,6 @@ func prepareBootstrapRoleBinding(
 	return &binding, nil
 }
 
-// prepareBootstrapAuditEvent builds the successful bootstrap audit event describing every created resource.
 func prepareBootstrapAuditEvent(
 	input *store.InstallationBootstrap,
 	result *model.InstallationBootstrapResult,

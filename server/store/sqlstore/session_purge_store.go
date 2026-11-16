@@ -18,7 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// sessionRetiredAt is the instant a Session stopped being usable: revocation,
+// sessionRetiredAt is the instant a session stopped being usable: revocation,
 // absolute expiry, or idle expiry, whichever came first. The baseline indexes
 // the same expression.
 const sessionRetiredAt = `LEAST(sessions.expires_at, sessions.idle_expires_at, COALESCE(sessions.revoked_at, 'infinity'::timestamptz))`
@@ -28,9 +28,9 @@ const sessionCredentialRetiredAt = `LEAST(
 		session_credentials.expires_at, COALESCE(session_credentials.revoked_at, 'infinity'::timestamptz)
 	)`
 
-// sessionUnreferenced holds while no durable record outside the Session's own
-// credentials names the Session or one of its credentials. Audit, examination
-// and authentication records keep their Session until their own retention
+// sessionUnreferenced holds while no durable record outside the session's own
+// credentials names the session or one of its credentials. Audit, examination
+// and authentication records keep their session until their own retention
 // removes them.
 const sessionUnreferenced = `
 	NOT EXISTS (SELECT 1 FROM audit_events r WHERE r.session_id = sessions.id)
@@ -49,8 +49,8 @@ const sessionUnreferenced = `
 		WHERE own.session_id = sessions.id
 			AND other.session_id <> sessions.id)`
 
-// PurgeRetired deletes Sessions retired longer than Grace ago, with their
-// credentials, examining at most Limit retired Sessions after the cursor.
+// PurgeRetired deletes sessions retired longer than Grace ago, with their
+// credentials, examining at most Limit retired sessions after the cursor.
 func (s SQLSessionStore) PurgeRetired(ctx context.Context, input *store.SessionPurge) (*store.SessionPurgeResult, error) {
 	if input == nil ||
 		input.Grace <= 0 ||
@@ -137,7 +137,7 @@ func (s SQLSessionStore) PurgeRetired(ctx context.Context, input *store.SessionP
 	})
 }
 
-// PurgeRetired deletes up to Limit credentials of any Session retired longer
+// PurgeRetired deletes up to Limit credentials of any session retired longer
 // than Grace ago. A credential's lineage links from surviving credentials are
 // cleared first; replay detection still sees a surviving parent's use.
 func (s SQLSessionCredentialStore) PurgeRetired(ctx context.Context, input *store.SessionCredentialPurge) (int64, error) {

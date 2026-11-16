@@ -13,29 +13,28 @@ import (
 )
 
 var (
-	// ErrStopped reports that the transport has been permanently stopped.
+	// ErrStopped reports that the transport was stopped; it cannot restart.
 	ErrStopped = errors.New("cluster transport is stopped")
-	// ErrNotStarted reports that Start has not completed successfully.
+	// ErrNotStarted reports a call before Start succeeded.
 	ErrNotStarted = errors.New("cluster transport is not started")
-	// ErrHandlerExists reports duplicate handler registration for one event.
+	// ErrHandlerExists reports a second handler for the same event.
 	ErrHandlerExists = errors.New("cluster message handler is already registered")
-	// ErrNodeUnavailable reports a targeted send to an unknown node.
+	// ErrNodeUnavailable reports a send to a node that is not a member.
 	ErrNodeUnavailable = errors.New("cluster node is unavailable")
-	// ErrNodeIDInUse reports duplicate node identity during multi-node join.
+	// ErrNodeIDInUse reports that another member already joined with this node ID.
 	ErrNodeIDInUse = errors.New("cluster node ID is already in use")
 )
 
-// Handler processes one cloned cluster message. Panics are recovered at the
-// transport boundary. Handlers must be idempotent under best-effort delivery.
+// Handler receives its own clone of a message. The transport recovers its
+// panics. It must be idempotent, since a message may arrive twice.
 type Handler func(context.Context, *Message) error
 
-// Logger reports operational transport failures without depending on logging.
+// Logger receives transport failures; it keeps cluster free of the logging package.
 type Logger interface {
 	ErrorContext(ctx context.Context, message string, err error)
 }
 
-// Metrics receives only bounded transport facts selected inside cluster
-// implementations. It never receives node identities, addresses, payloads, or
+// Metrics receives bounded labels only: never node IDs, addresses, payloads or
 // error text.
 type Metrics interface {
 	ObserveClusterMessage(direction, event, outcome string, bytes int)
@@ -45,11 +44,10 @@ type Metrics interface {
 	ObserveClusterFanout(recipients int)
 }
 
-// Transport is the server-owned inter-node messaging contract.
+// Transport sends messages between nodes, best effort and not stored.
 //
-// Broadcast sends to peer nodes only and never invokes this node's handlers.
-// SendToNode may target the current node and is used by the local transport to
-// exercise registered handlers. Delivery is best-effort and non-durable.
+// Broadcast reaches peers only, never this node's handlers. SendToNode may
+// target this node, which is how the local transport runs its own handlers.
 type Transport interface {
 	NodeID() string
 	Start(context.Context) error

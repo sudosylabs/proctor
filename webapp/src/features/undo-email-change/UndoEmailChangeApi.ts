@@ -29,6 +29,8 @@ export function resolveEmailChangeUndoResult(
   }
 }
 
+// Spends the token, so it runs only from the explicit button: mail scanners
+// and link previews must never consume an undo link.
 export async function undoEmailChange(
   token: string,
 ): Promise<EmailChangeUndoResult> {

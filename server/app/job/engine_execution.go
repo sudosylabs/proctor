@@ -80,7 +80,6 @@ func (r *Engine) executeClaim(parent context.Context, descriptor Descriptor, cla
 	r.completeAttempt(parent, descriptor, claim, outcome)
 }
 
-// newClaimExecution builds the handler's Execution with work reservation and checkpoint hooks fenced by the claim.
 func (r *Engine) newClaimExecution(descriptor Descriptor, claim *store.JobClaim) Execution {
 	execution := NewExecution(claim.Job, claim.Attempt, nil, nil)
 	execution.reserveWork = func(ctx context.Context, units, limit int) (bool, error) {
@@ -150,8 +149,8 @@ func (r *Engine) newClaimExecution(descriptor Descriptor, claim *store.JobClaim)
 }
 
 // runHandler is the only place a handler is invoked. It fails the attempt
-// without calling the handler when the Execution has no Job, and contains a
-// handler panic as a retryable failure.
+// without calling the handler when the execution has no job, and turns a
+// handler panic into a retryable failure.
 func runHandler(ctx context.Context, handler Handler, execution Execution) (outcome Outcome) {
 	if execution.Job == nil {
 		return PermanentFailure("job.command.invalid", errors.New("job is missing"))

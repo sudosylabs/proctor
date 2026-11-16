@@ -20,20 +20,13 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// examExportBuilder is the part of *exam.Exports the build Job drives. It is
-// a seam because the handler test fakes it: the real service builds and
-// publishes an archive.
-type examExportBuilder interface {
-	BuildFromJob(context.Context, invocation.System, store.ExamExportBuild) error
-}
-
-// ExamExportPurger removes the stored content of an expired Exam export,
-// fenced by the Job Attempt that claimed the purge.
+// ExamExportPurger removes an expired export's stored content, fenced by the
+// job attempt that claimed the purge.
 type ExamExportPurger interface {
 	PurgeExamExport(context.Context, model.ExamExportID, model.JobAttemptID) error
 }
 
-type examExportBuildHandler struct{ service examExportBuilder }
+type examExportBuildHandler struct{ service *exam.Exports }
 type examExportBuildCommand struct {
 	ExportID model.ExamExportID `json:"export_id"`
 }
@@ -67,7 +60,7 @@ func (h examExportBuildHandler) Run(ctx context.Context, e job.Execution) job.Ou
 		ClaimToken:         e.Attempt.ClaimToken,
 	}
 	if err = h.service.BuildFromJob(ctx, invocation.Job(e.Job.ID, e.Attempt.ID), input); err != nil {
-		// SQL/provider details and archive content never enter ordinary Job logs.
+		// SQL and provider details and archive content never enter job logs.
 		return job.RetryableFailure("exam.export.unavailable", errors.New("Exam export construction failed"))
 	}
 
@@ -194,12 +187,12 @@ func (p examExportCleanupProposer) Propose(ctx context.Context, occurrence time.
 	return err
 }
 
-// NewExamExportBuild registers the build of a requested Exam export.
+// NewExamExportBuild registers the build of a requested exam export.
 func NewExamExportBuild(exports *exam.Exports) job.Registration {
 	return job.Registration{Descriptor: examExportBuildDescriptor(examExportBuildHandler{service: exports})}
 }
 
-// NewExamExportCleanup registers the removal of expired Exam exports and
+// NewExamExportCleanup registers the removal of expired exam exports and
 // their content, proposed hourly.
 func NewExamExportCleanup(exports store.ExamExportStore, content ExamExportPurger, jobs store.JobStore, now func() time.Time) job.Registration {
 	return job.Registration{

@@ -18,31 +18,31 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// CandidateFenceKind names a lock that Invitation acceptance takes after it
-// has locked the candidate User row.
+// CandidateFenceKind names a lock that invitation acceptance takes after it
+// has locked the candidate user row.
 type CandidateFenceKind string
 
 const (
-	// CandidateFenceClassEnrollment is the candidate's per-period Class
-	// enrollment fence (student Class acceptance).
+	// CandidateFenceClassEnrollment is the candidate's per-period class
+	// enrollment fence (student class acceptance).
 	CandidateFenceClassEnrollment CandidateFenceKind = "class_enrollment"
-	// CandidateFenceAttemptAdmission is the candidate's Attempt admission fence
-	// (Role Binding grants inside teacher and scoped-Role acceptance).
+	// CandidateFenceAttemptAdmission is the candidate's attempt admission fence
+	// (role binding grants inside teacher and scoped-role acceptance).
 	CandidateFenceAttemptAdmission CandidateFenceKind = "attempt_admission"
-	// CandidateFenceClassLifecycle is the installation-wide Class lifecycle
-	// lock (student Class acceptance).
+	// CandidateFenceClassLifecycle is the installation-wide class lifecycle
+	// lock (student class acceptance).
 	CandidateFenceClassLifecycle CandidateFenceKind = "class_lifecycle"
 )
 
-// CandidateFence selects the lock a CandidateLockProbe takes after the User
-// row. AcademicPeriodID is used only by the Class-enrollment fence.
+// CandidateFence selects the lock a CandidateLockProbe takes after the user
+// row. AcademicPeriodID is used only by the class-enrollment fence.
 type CandidateFence struct {
 	Kind             CandidateFenceKind
 	AcademicPeriodID model.AcademicPeriodID
 }
 
 // CandidateLockProbe runs operation while a concurrent transaction replays
-// Invitation acceptance's lock sequence for the candidate: the User row for
+// invitation acceptance's lock sequence for the candidate: the user row for
 // update, then fence once operation is waiting. It returns the first error
 // from either side; a deadlock aborts one of them.
 type CandidateLockProbe func(
@@ -53,9 +53,9 @@ type CandidateLockProbe func(
 	operation func() error,
 ) error
 
-// TestExamManagerAddCandidateLockOrder verifies that adding an Exam Manager
-// locks the target User before the Attempt admission fence, so it waits behind
-// an Invitation acceptance for the same User instead of deadlocking it.
+// TestExamManagerAddCandidateLockOrder verifies that adding an exam manager
+// locks the target user before the attempt admission fence, so it waits behind
+// an invitation acceptance for the same user instead of deadlocking it.
 func TestExamManagerAddCandidateLockOrder(t *testing.T, ss store.Store, probe CandidateLockProbe) {
 	t.Helper()
 	require.NotNil(t, probe, "candidate lock probe is required")
@@ -82,9 +82,9 @@ func TestExamManagerAddCandidateLockOrder(t *testing.T, ss store.Store, probe Ca
 	require.Equal(t, target.ID, added.Manager.UserID)
 }
 
-// TestRoleBindingCandidateLockOrder verifies that granting a Role Binding
-// locks the User before the Attempt admission fence and the Class lifecycle
-// lock, so it waits behind an Invitation acceptance for the same User.
+// TestRoleBindingCandidateLockOrder verifies that granting a role binding
+// locks the user before the attempt admission fence and the class lifecycle
+// lock, so it waits behind an invitation acceptance for the same user.
 func TestRoleBindingCandidateLockOrder(t *testing.T, ss store.Store, probe CandidateLockProbe) {
 	t.Helper()
 	require.NotNil(t, probe, "candidate lock probe is required")
@@ -120,9 +120,9 @@ func TestRoleBindingCandidateLockOrder(t *testing.T, ss store.Store, probe Candi
 	}
 }
 
-// TestClassEnrollmentCandidateLockOrder verifies that an audited Class
-// enrollment locks the student (as its notice recipient) before the Class
-// lifecycle lock and the Class-enrollment fence, matching Invitation
+// TestClassEnrollmentCandidateLockOrder verifies that an audited class
+// enrollment locks the student (as its notice recipient) before the class
+// lifecycle lock and the class-enrollment fence, matching invitation
 // acceptance.
 func TestClassEnrollmentCandidateLockOrder(t *testing.T, ss store.Store, probe CandidateLockProbe) {
 	t.Helper()

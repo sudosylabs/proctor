@@ -8,7 +8,6 @@
 package app
 
 import (
-	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
@@ -27,8 +26,6 @@ import (
 	"github.com/sudosylabs/proctor/server/secretseal"
 )
 
-// examServices are the Exam area's services, together with the Sitting mail
-// composition that the Sitting service and the Sitting mail Jobs share.
 type examServices struct {
 	authoring              *exam.Authoring
 	publication            *exam.Publication
@@ -44,10 +41,6 @@ type examServices struct {
 	sittingMailPreparation sitting.ScheduleMail
 }
 
-// newExamServices builds the Exam area in dependency order: authoring and
-// publication, Sittings, the Attempts and reviews that run inside them, the
-// Draft content services, then records and exports. desktopBuilds resolves
-// Desktop builds for Attempt admission.
 func newExamServices(
 	deps Dependencies,
 	shared sharedMechanics,
@@ -111,25 +104,18 @@ func newExamAuthoring(
 		Sittings:          deps.Store.ExamSitting(),
 		Mail:              shared.mail,
 		Authorizer:        authorizer,
-		Auditor:           shared.audit.MutationAudit(),
+		Auditor:           shared.audit,
 		Publisher:         shared.realtime,
 		Now:               time.Now,
 		NewID:             model.NewExamID,
 		InstitutionOrigin: deps.PublicURL,
-		Operational:       operationalRecorderAdapter{recorder: deps.OperationalRecorder},
+		Operational:       deps.OperationalRecorder,
 	})
 }
 
-// newSittingMail builds the Sitting mail composer, which needs the Sitting
-// renderer capability of the configured template renderer.
 func newSittingMail(deps Dependencies) (*mail.SittingComposer, error) {
-	sittingRenderer, ok := deps.MailTemplateRenderer.(mail.SittingRenderer)
-	if !ok {
-		return nil, errors.New("Sitting mail template renderer is unavailable")
-	}
-
 	return newSittingMailPreparer(
-		sittingRenderer,
+		deps.MailTemplateRenderer,
 		deps.MailDeliverySender,
 		deps.MailSecretSealer,
 		time.Now,
@@ -137,10 +123,10 @@ func newSittingMail(deps Dependencies) (*mail.SittingComposer, error) {
 	)
 }
 
-// newSittingMailPreparer builds the Sitting mail composer over an explicit
-// clock, so its tests freeze time.
+// newSittingMailPreparer takes an explicit clock so its tests can freeze
+// time.
 func newSittingMailPreparer(
-	renderer mail.SittingRenderer,
+	renderer *mail.TemplateRenderer,
 	sender mail.Sender,
 	sealer *secretseal.Sealer,
 	now func() time.Time,
@@ -165,13 +151,13 @@ func newExamPublication(
 		Access:            deps.Store.ExamAuthoring(),
 		Memberships:       deps.Store.AcademicUnitMember(),
 		Authorizer:        authorizer,
-		Auditor:           shared.audit.MutationAudit(),
+		Auditor:           shared.audit,
 		Publisher:         shared.realtime,
 		Now:               time.Now,
 		NewID:             model.NewExamRevisionID,
 		InstitutionOrigin: deps.PublicURL,
 		ExecutionEnabled:  deps.ExecutionEnabled,
-		Operational:       operationalRecorderAdapter{recorder: deps.OperationalRecorder},
+		Operational:       deps.OperationalRecorder,
 	})
 }
 
@@ -182,18 +168,17 @@ func newSittings(
 	scheduleMail sitting.ScheduleMail,
 ) (*sitting.Service, error) {
 	return sitting.New(sitting.Dependencies{
-		Persistence:   deps.Store.ExamSitting(),
-		Access:        deps.Store.ExamAuthoring(),
-		Memberships:   deps.Store.AcademicUnitMember(),
-		Authorizer:    authorizer,
-		Auditor:       shared.audit.MutationAudit(),
-		SystemAuditor: shared.audit.SystemAudit(),
-		Publisher:     shared.realtime,
-		Jobs:          sittingLifecycleJobs(deps),
-		Mail:          scheduleMail,
-		Now:           time.Now,
-		NewID:         model.NewExamSittingID,
-		Operational:   operationalRecorderAdapter{recorder: deps.OperationalRecorder},
+		Persistence: deps.Store.ExamSitting(),
+		Access:      deps.Store.ExamAuthoring(),
+		Memberships: deps.Store.AcademicUnitMember(),
+		Authorizer:  authorizer,
+		Auditor:     shared.audit,
+		Publisher:   shared.realtime,
+		Jobs:        sittingLifecycleJobs(deps),
+		Mail:        scheduleMail,
+		Now:         time.Now,
+		NewID:       model.NewExamSittingID,
+		Operational: deps.OperationalRecorder,
 	})
 }
 
@@ -224,8 +209,7 @@ func newAttempts(
 			Submissions: deps.Store.ExamSubmission(),
 			Audit:       shared.audit,
 		},
-		Auditor:             shared.audit.MutationAudit(),
-		SystemAuditor:       shared.audit.SystemAudit(),
+		Auditor:             shared.audit,
 		Publisher:           shared.realtime,
 		Content:             deps.FileContent,
 		Mail:                submissionMail,
@@ -250,7 +234,7 @@ func newAttempts(
 		NewReceiptCode:      model.NewSubmissionReceiptCode,
 		NewDomainEvent:      model.NewDomainEventID,
 		NewJob:              model.NewJobID,
-		Operational:         operationalRecorderAdapter{recorder: deps.OperationalRecorder},
+		Operational:         deps.OperationalRecorder,
 	})
 }
 
@@ -268,7 +252,7 @@ func newReviews(deps Dependencies, shared sharedMechanics, sittings *sitting.Ser
 			Sittings: sittings,
 			Audit:    shared.audit,
 		},
-		Auditor:       shared.audit.MutationAudit(),
+		Auditor:       shared.audit,
 		Publisher:     shared.realtime,
 		Mail:          resultReleaseMail,
 		Now:           time.Now,
@@ -283,7 +267,7 @@ func newExamResources(deps Dependencies, shared sharedMechanics, authorizer *acc
 		Access:        deps.Store.ExamAuthoring(),
 		Memberships:   deps.Store.AcademicUnitMember(),
 		Authorizer:    authorizer,
-		Auditor:       shared.audit.MutationAudit(),
+		Auditor:       shared.audit,
 		Publisher:     shared.realtime,
 		Content:       deps.FileContent,
 		Now:           time.Now,
@@ -306,7 +290,7 @@ func newCorrections(
 		Access:            deps.Store.ExamAuthoring(),
 		Memberships:       deps.Store.AcademicUnitMember(),
 		Authorizer:        authorizer,
-		Auditor:           shared.audit.MutationAudit(),
+		Auditor:           shared.audit,
 		Publisher:         shared.realtime,
 		Content:           deps.FileContent,
 		Now:               time.Now,
@@ -327,7 +311,7 @@ func newStarterWorkspaces(deps Dependencies, shared sharedMechanics, authorizer 
 		Access:      deps.Store.ExamAuthoring(),
 		Memberships: deps.Store.AcademicUnitMember(),
 		Authorizer:  authorizer,
-		Auditor:     shared.audit.MutationAudit(),
+		Auditor:     shared.audit,
 		Content:     deps.FileContent,
 		Publisher:   shared.realtime,
 		Now:         time.Now,
@@ -343,7 +327,7 @@ func newExamRecords(deps Dependencies, shared sharedMechanics, authorizer *acces
 		Access:      deps.Store.ExamAuthoring(),
 		Memberships: deps.Store.AcademicUnitMember(),
 		Authorizer:  authorizer,
-		Auditor:     shared.audit.MutationAudit(),
+		Auditor:     shared.audit,
 		RecentTTL:   deps.RecentAuthenticationTTL,
 		Now:         time.Now,
 		NewHoldID:   model.NewRetentionHoldID,
@@ -356,7 +340,7 @@ func newExamExports(deps Dependencies, shared sharedMechanics, authorizer *acces
 		Access:      deps.Store.ExamAuthoring(),
 		Memberships: deps.Store.AcademicUnitMember(),
 		Authorizer:  authorizer,
-		Auditor:     shared.audit.MutationAudit(),
+		Auditor:     shared.audit,
 		Content:     deps.FileContent,
 		Now:         time.Now,
 		NewID:       model.NewExamExportID,
@@ -368,7 +352,7 @@ func newExamExports(deps Dependencies, shared sharedMechanics, authorizer *acces
 // execution environment to settle.
 const attemptEnvironmentSettleBudget = 5 * time.Second
 
-// sittingLifecycleJobs delays a closing Sitting's sealing Job by the settle
+// sittingLifecycleJobs delays a closing sitting's sealing job by the settle
 // budget when the installation runs execution environments.
 func sittingLifecycleJobs(deps Dependencies) jobs.ExamSittingLifecycleJobFactory {
 	factory := jobs.NewExamSittingLifecycleJobFactory(time.Now, model.NewJobID)
@@ -378,8 +362,6 @@ func sittingLifecycleJobs(deps Dependencies) jobs.ExamSittingLifecycleJobFactory
 	return factory
 }
 
-// environmentSettler settles execution environments before their seals when
-// the installation runs them; otherwise nothing settles.
 func environmentSettler(deps Dependencies) attempt.EnvironmentSettler {
 	if !deps.ExecutionEnabled || deps.Store.AttemptEnvironment() == nil || deps.EnvironmentSettles == nil {
 		return nil
@@ -396,4 +378,19 @@ func environmentSettler(deps Dependencies) attempt.EnvironmentSettler {
 		return nil
 	}
 	return settler
+}
+
+// newTerminals returns nil when the installation runs no execution
+// environments.
+func newTerminals(deps Dependencies, attempts *attempt.Service) (*environment.Terminals, error) {
+	if deps.EnvironmentHosts == nil || deps.Store.AttemptEnvironment() == nil || attempts == nil {
+		return nil, nil
+	}
+	return environment.NewTerminals(environment.TerminalsDependencies{
+		Environments: deps.Store.AttemptEnvironment(),
+		Evidence:     deps.Store.ExamAttemptWorkspace(),
+		Hosts:        deps.EnvironmentHosts,
+		Candidates:   environment.AttemptCandidates(attempts),
+		Report:       deps.EnvironmentDiagnostics,
+	})
 }

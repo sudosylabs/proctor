@@ -8,115 +8,19 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-type academicUnitHTTPApplication struct {
-	InstitutionApplication
-	principal      model.Principal
-	unit           *model.AcademicUnit
-	created        *model.AcademicUnit
-	createCommand  academic.CreateAcademicUnitCommand
-	updateCommand  academic.UpdateAcademicUnitCommand
-	archiveCommand academic.ArchiveAcademicUnitCommand
-	getErr         error
-}
-
-func (a *academicUnitHTTPApplication) AuthenticateAccess(
-	context.Context, string,
-) (*model.Principal, error) {
-	principal := a.principal
-	return &principal, nil
-}
-
-func (a *academicUnitHTTPApplication) AuthenticateBearer(
-	context.Context, string,
-) (*model.Principal, error) {
-	principal := a.principal
-	return &principal, nil
-}
-
-func (a *academicUnitHTTPApplication) GetAcademicUnit(
-	_ context.Context,
-	inv invocation.Invocation,
-	id model.AcademicUnitID,
-) (*model.AcademicUnit, error) {
-	if inv.Principal().UserID != a.principal.UserID || id != a.unit.ID {
-		return nil, apperror.New("request.invalid")
-	}
-	if a.getErr != nil {
-		return nil, a.getErr
-	}
-	return a.unit, nil
-}
-
-func (a *academicUnitHTTPApplication) ListAcademicUnits(
-	context.Context,
-	invocation.Invocation,
-	academic.ListAcademicUnitsQuery,
-) (paging.Page[*model.AcademicUnit], error) {
-	return paging.Page[*model.AcademicUnit]{Items: []*model.AcademicUnit{}}, nil
-}
-
-func (a *academicUnitHTTPApplication) SearchAcademicUnits(
-	context.Context,
-	invocation.Invocation,
-	academic.SearchAcademicUnitsQuery,
-) (paging.Page[*model.AcademicUnit], error) {
-	return paging.Page[*model.AcademicUnit]{Items: []*model.AcademicUnit{}}, nil
-}
-
-func (a *academicUnitHTTPApplication) CreateAcademicUnit(
-	_ context.Context,
-	inv invocation.Invocation,
-	command academic.CreateAcademicUnitCommand,
-) (*model.AcademicUnit, error) {
-	if inv.Principal().UserID != a.principal.UserID {
-		return nil, apperror.New("request.invalid")
-	}
-	a.createCommand = command
-	return a.created, nil
-}
-
-func (a *academicUnitHTTPApplication) UpdateAcademicUnit(
-	_ context.Context,
-	inv invocation.Invocation,
-	command academic.UpdateAcademicUnitCommand,
-) (*model.AcademicUnit, error) {
-	if inv.Principal().UserID != a.principal.UserID {
-		return nil, apperror.New("request.invalid")
-	}
-	a.updateCommand = command
-	return a.unit, nil
-}
-
-func (a *academicUnitHTTPApplication) ArchiveAcademicUnit(
-	_ context.Context,
-	inv invocation.Invocation,
-	command academic.ArchiveAcademicUnitCommand,
-) error {
-	if inv.Principal().UserID != a.principal.UserID {
-		return apperror.New("request.invalid")
-	}
-	a.archiveCommand = command
-	return nil
-}
 
 func TestAcademicUnitResponsePreservesExistingWireShape(t *testing.T) {
 	t.Parallel()
@@ -158,19 +62,14 @@ func TestAcademicUnitHTTPReadMapsDTOWithoutPermissionPreflight(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
 	unit := &model.AcademicUnit{
 		ID: model.AcademicUnitID(model.NewID()), CreatedAt: model.TimeFromMillis(10), UpdatedAt: model.TimeFromMillis(20),
-		InstitutionID: model.InstitutionID(model.NewID()), Name: "computing", DisplayName: "Computing",
+		Name: "computing", DisplayName: "Computing",
 	}
-	application := &academicUnitHTTPApplication{
-		principal: model.Principal{
-			UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-			CredentialType:         model.CredentialSessionAccess,
-			AuthenticationMethod:   "password",
-			AuthenticationStrength: model.AuthenticationSingleFactor,
-			ClientType:             model.SessionClientCLI, AuthenticatedAt: time.Now(),
-		},
-		unit: unit,
-	}
-	httpAPI := newFocusedResourceAPI(t, logger, application, academicUnitResource(application))
+	principal := academicCaller()
+	fixture := newAcademicFixture(t, academicOptions{
+		Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, unit.ID, model.ActionAcademicUnitView)},
+		Units:  []*model.AcademicUnit{unit},
+	})
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitResource(fixture.service))
 
 	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet, "/api/v1/academic-units/"+unit.ID.String(), nil,
@@ -192,23 +91,12 @@ func TestAcademicUnitHTTPErrorUsesProblemDetailsContract(t *testing.T) {
 	t.Parallel()
 
 	logger, _ := routetest.NewLogger(t)
-	unit := &model.AcademicUnit{ID: model.AcademicUnitID(model.NewID())}
-	fakeApplication := &academicUnitHTTPApplication{
-		principal: model.Principal{
-			UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-			CredentialType:         model.CredentialSessionAccess,
-			AuthenticationMethod:   "password",
-			AuthenticationStrength: model.AuthenticationSingleFactor,
-			ClientType:             model.SessionClientCLI,
-			AuthenticatedAt:        time.Now(),
-		},
-		unit: unit,
-		getErr: apperror.New("resource.not_found").
-			WithField("resource", "academic_unit"),
-	}
-	httpAPI := newFocusedResourceAPI(t, logger, fakeApplication, academicUnitResource(fakeApplication))
+	principal := academicCaller()
+	// The caller may view every unit; the unit it asks for does not exist.
+	fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{institutionWide(principal.UserID, model.ActionAcademicUnitView)}})
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitResource(fixture.service))
 
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+unit.ID.String(), nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+model.NewID(), nil)
 	request.Header.Set("Authorization", "Bearer test-credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -242,24 +130,15 @@ func TestAcademicUnitHTTPCreateMapsCommandWithoutPermissionPreflight(t *testing.
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			logger, _ := routetest.NewLogger(t)
-			created := &model.AcademicUnit{
-				ID: model.AcademicUnitID(model.NewID()), CreatedAt: model.TimeFromMillis(10), UpdatedAt: model.TimeFromMillis(10),
-				InstitutionID: model.InstitutionID(model.NewID()), ParentID: model.AcademicUnitID(tt.wantParentID),
-				Name: "computing", DisplayName: "Computing", Description: "School",
+			principal := academicCaller()
+			grant := institutionWide(principal.UserID, model.ActionAcademicUnitManage)
+			if tt.wantParentID != "" {
+				grant = inAcademicUnit(principal.UserID, model.AcademicUnitID(tt.wantParentID), model.ActionAcademicUnitManage)
 			}
-			fakeApplication := &academicUnitHTTPApplication{
-				principal: model.Principal{
-					UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-					CredentialType:       model.CredentialSessionAccess,
-					AuthenticationMethod: "password", ClientType: model.SessionClientCLI,
-					AuthenticationStrength: model.AuthenticationSingleFactor,
-					AuthenticatedAt:        time.Now(),
-				},
-				unit: created, created: created,
-			}
+			fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{grant}})
 			settings := validHTTPSettings(t)
 			settings.Logger = logger
-			httpAPI, err := newAPI(settings, fakeApplication, academicUnitResource(fakeApplication), institutionResource(fakeApplication))
+			httpAPI, err := newAPI(settings, routetest.Authenticator{Principal: principal}, academicUnitResource(fixture.service), institutionResource(fixture.service))
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = httpAPI.Close() })
 
@@ -276,11 +155,12 @@ func TestAcademicUnitHTTPCreateMapsCommandWithoutPermissionPreflight(t *testing.
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
 			require.Equal(t, http.StatusCreated, response.Code, "status = %d: %s", response.Code, response.Body.String())
-			wantCommand := academic.CreateAcademicUnitCommand{
-				ParentID: model.AcademicUnitID(tt.wantParentID), Name: "computing",
-				DisplayName: "Computing", Description: "School",
-			}
-			require.Equal(t, wantCommand, fakeApplication.createCommand, "command")
+			require.Len(t, fixture.units.created, 1, "the create reached the Academic Unit Store")
+			created := fixture.units.created[0].Unit
+			require.Equal(t, model.AcademicUnitID(tt.wantParentID), created.ParentID)
+			require.Equal(t, "computing", created.Name)
+			require.Equal(t, "Computing", created.DisplayName)
+			require.Equal(t, "School", created.Description)
 			var got academicUnitResponse
 			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &got))
 			require.Equal(t, created.ID.String(), got.ID)
@@ -292,44 +172,37 @@ func TestAcademicUnitHTTPCreateMapsCommandWithoutPermissionPreflight(t *testing.
 func TestAcademicUnitHTTPMutationsMapCommandsWithoutPermissionPreflight(t *testing.T) {
 	t.Parallel()
 
-	unit := &model.AcademicUnit{
-		ID: model.AcademicUnitID(model.NewID()), CreatedAt: model.TimeFromMillis(10), UpdatedAt: model.TimeFromMillis(20),
-		InstitutionID: model.InstitutionID(model.NewID()), ParentID: model.AcademicUnitID(model.NewID()),
-		Name: "computing", DisplayName: "Computing", Description: "School",
-	}
-	fakeApplication := &academicUnitHTTPApplication{
-		principal: model.Principal{
-			UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-			CredentialType:       model.CredentialSessionAccess,
-			AuthenticationMethod: "password", ClientType: model.SessionClientCLI,
-			AuthenticationStrength: model.AuthenticationSingleFactor,
-			AuthenticatedAt:        time.Now(),
-		},
-		unit: unit,
-	}
+	world := newAcademicWorld()
+	parent, destination := world.unit, &model.AcademicUnit{ID: model.NewAcademicUnitID(), Name: "engineering-school"}
+	unit := &model.AcademicUnit{ParentID: parent.ID, Name: "computing", DisplayName: "Computing", Description: "School"}
+	unit.PrepareCreate(model.NewAcademicUnitID(), parent.CreatedAt)
+	principal := academicCaller()
+	fixture := newAcademicFixture(t, academicOptions{
+		Grants: []accesstest.Grant{institutionWide(principal.UserID, model.ActionAcademicUnitManage)},
+		Units:  []*model.AcademicUnit{parent, destination, unit},
+	})
 	logger, _ := routetest.NewLogger(t)
 	settings := validHTTPSettings(t)
 	settings.Logger = logger
-	httpAPI, err := newAPI(settings, fakeApplication, academicUnitResource(fakeApplication), institutionResource(fakeApplication))
+	httpAPI, err := newAPI(settings, routetest.Authenticator{Principal: principal}, academicUnitResource(fixture.service), institutionResource(fixture.service))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
 
-	parentID := model.NewID()
 	name := "engineering"
 	patchRequest := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPatch, "/api/v1/academic-units/"+unit.ID.String(),
-		strings.NewReader(`{"parent_id":"`+parentID+`","name":"`+name+`"}`),
+		strings.NewReader(`{"parent_id":"`+destination.ID.String()+`","name":"`+name+`"}`),
 	)
 	patchRequest.Header.Set("Authorization", "Bearer test-credential")
 	patchRequest.Header.Set("Content-Type", "application/json")
 	patchResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(patchResponse, patchRequest)
 	require.Equal(t, http.StatusOK, patchResponse.Code, "patch status = %d: %s", patchResponse.Code, patchResponse.Body.String())
-	require.Equal(t, unit.ID, fakeApplication.updateCommand.ID)
-	require.NotNil(t, fakeApplication.updateCommand.ParentID)
-	require.Equal(t, model.AcademicUnitID(parentID), *fakeApplication.updateCommand.ParentID)
-	require.NotNil(t, fakeApplication.updateCommand.Name)
-	require.Equal(t, name, *fakeApplication.updateCommand.Name)
+	require.Len(t, fixture.units.updates, 1, "the PATCH reached the Academic Unit Store")
+	updated := fixture.units.updates[0].Unit
+	require.Equal(t, unit.ID, updated.ID)
+	require.Equal(t, destination.ID, updated.ParentID)
+	require.Equal(t, name, updated.Name)
 
 	archiveRequest := httptest.NewRequestWithContext(t.Context(),
 		http.MethodDelete, "/api/v1/academic-units/"+unit.ID.String(), nil,
@@ -339,7 +212,8 @@ func TestAcademicUnitHTTPMutationsMapCommandsWithoutPermissionPreflight(t *testi
 	httpAPI.ServeHTTP(archiveResponse, archiveRequest)
 	require.Equal(t, http.StatusNoContent, archiveResponse.Code, "archive status = %d: %s", archiveResponse.Code, archiveResponse.Body.String())
 	require.Equal(t, "no-store", archiveResponse.Header().Get("Cache-Control"))
-	require.Equal(t, unit.ID, fakeApplication.archiveCommand.ID)
+	require.Len(t, fixture.units.archives, 1, "the archive reached the Academic Unit Store")
+	require.Equal(t, unit.ID, fixture.units.archives[0].ID)
 }
 
 func TestAcademicUnitOpenAPIDocument(t *testing.T) {

@@ -17,27 +17,25 @@ func IsValidPasswordHash(value string) bool {
 	return len(value) > 0 && len(value) <= PasswordHashMaxLength
 }
 
-// PasswordCredential contains only an established password hasher's encoded
-// output. Plaintext passwords must never be assigned to this model. Keeping it
-// separate permits external-only accounts and future credential replacement
-// without exposing password material through User serialization.
-//
-// PasswordHash is deliberately excluded from JSON. Soft archive uses
-// ArchivedAt.
+// PasswordCredential holds only a password hasher's encoded output; never
+// assign a plaintext password to it. It is kept apart from User so
+// external-only accounts work and password material never appears in user
+// serialization. PasswordHash is never in JSON.
 type PasswordCredential struct {
 	ID         PasswordCredentialID
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 	ArchivedAt OptionalTime
 	UserID     UserID
-	// Revision advances on password replacement, but not a work-factor rehash.
-	// Together with ID it invalidates proof from a superseded password.
+	// Revision advances when the password is replaced, not on a work-factor
+	// rehash; with ID it invalidates proof from a superseded password.
 	Revision          int64
 	PasswordHash      string `json:"-"`
 	PasswordChangedAt time.Time
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
+// PrepareCreate stamps the ID and creation time at revision 1 and defaults
+// PasswordChangedAt to it; it does nothing on nil.
 func (pc *PasswordCredential) PrepareCreate(id PasswordCredentialID, at time.Time) {
 	if pc == nil {
 		return
@@ -55,7 +53,8 @@ func (pc *PasswordCredential) PrepareCreate(id PasswordCredentialID, at time.Tim
 	}
 }
 
-// PrepareUpdate applies the application-selected transition time.
+// PrepareUpdate stamps the update time; Revision is changed only on password
+// replacement.
 func (pc *PasswordCredential) PrepareUpdate(at time.Time) {
 	if pc == nil {
 		return
@@ -63,7 +62,7 @@ func (pc *PasswordCredential) PrepareUpdate(at time.Time) {
 	pc.UpdatedAt = TimeUTC(at)
 }
 
-// Validate checks rehydrated password-credential state.
+// Validate checks the credential's fields, for new and stored values alike.
 func (pc *PasswordCredential) Validate() error {
 	const where = "PasswordCredential.Validate"
 	if pc == nil {
@@ -107,8 +106,7 @@ func (pc *PasswordCredential) Validate() error {
 	return nil
 }
 
-// Auditable returns a deliberately safe audit projection. The password hash is
-// never included.
+// Auditable returns the fields safe to audit; the hash is never included.
 func (pc *PasswordCredential) Auditable() map[string]any {
 	if pc == nil {
 		return map[string]any{}

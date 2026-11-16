@@ -16,8 +16,6 @@ import (
 	"github.com/sudosylabs/proctor/server/plugin"
 )
 
-// AddIdentityProviderType records providerType for the plugin being
-// activated.
 func (r *registrar) AddIdentityProviderType(providerType plugin.IdentityProviderType) error {
 	if providerType == nil {
 		return errors.New("identity provider type is nil")

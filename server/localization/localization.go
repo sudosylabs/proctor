@@ -5,8 +5,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package localization validates and resolves server-owned translations.
-// Catalog storage is supplied by the composition root.
+// Package localization validates and resolves the server's translations. The
+// composition root supplies the catalog files.
 package localization
 
 import (
@@ -79,21 +79,21 @@ func (t *catalogTranslation) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Translation records the locale which supplied a resolved message.
+// Translation is resolved text with the locale that supplied it, which may be a fallback.
 type Translation struct {
 	Locale string
 	Text   string
 }
 
-// Request describes one resolution. PluralCount activates CLDR plural
-// selection; TemplateData remains caller-owned and is never retained.
+// Request is one message lookup. A non-nil PluralCount selects the CLDR plural
+// form; TemplateData is never retained.
 type Request struct {
 	ID           string
 	TemplateData any
 	PluralCount  any
 }
 
-// Localizer is an immutable, concurrently safe set of validated locale catalogs.
+// Localizer is immutable and safe for concurrent use.
 type Localizer struct {
 	defaultLocale string
 	catalogs      map[string]map[string]message
@@ -101,7 +101,7 @@ type Localizer struct {
 	bundle        *goi18n.Bundle
 }
 
-// New validates top-level JSON catalogs and constructs a localizer.
+// New loads and validates the JSON catalogs at the root of source.
 func New(source fs.FS, defaultLocale string) (*Localizer, error) {
 	if source == nil {
 		return nil, errors.New("i18n catalog filesystem is nil")
@@ -315,14 +315,14 @@ func validateMessageText(key, value string) (string, error) {
 	return strings.Join(names, ","), nil
 }
 
-// Translate resolves one message through requested-locale, installation
-// default, then English fallback and performs bounded interpolation.
+// Resolve tries the requested locale, then the installation default, then
+// English. Rendered text is size-bounded and a missing template key is an error.
 func (l *Localizer) Resolve(requestedLocale, id string, args any) (Translation, error) {
 	return l.ResolveRequest(requestedLocale, Request{ID: id, TemplateData: args})
 }
 
-// ResolveRequest resolves singular or plural text through requested-locale,
-// installation-default, then English fallback.
+// ResolveRequest is Resolve with plural support; a plural message without
+// PluralCount is an error.
 func (l *Localizer) ResolveRequest(requestedLocale string, request Request) (Translation, error) {
 	if l == nil {
 		return Translation{}, errors.New("localizer is nil")
@@ -372,20 +372,19 @@ func (l *Localizer) ResolveRequest(requestedLocale string, request Request) (Tra
 	return Translation{Locale: locale, Text: text}, nil
 }
 
-// Translate resolves text for callers that do not need the supplying locale.
+// Translate is Resolve without the supplying locale.
 func (l *Localizer) Translate(requestedLocale, id string, args any) (string, error) {
 	translation, err := l.Resolve(requestedLocale, id, args)
 	return translation.Text, err
 }
 
-// TranslateRequest resolves text for plural-aware callers that do not need the
-// supplying locale.
+// TranslateRequest is ResolveRequest without the supplying locale.
 func (l *Localizer) TranslateRequest(requestedLocale string, request Request) (string, error) {
 	translation, err := l.ResolveRequest(requestedLocale, request)
 	return translation.Text, err
 }
 
-// SupportedLocales returns a stable copy of the locales included in the bundle.
+// SupportedLocales returns a copy, in a stable order.
 func (l *Localizer) SupportedLocales() []string {
 	if l == nil {
 		return nil
@@ -393,8 +392,7 @@ func (l *Localizer) SupportedLocales() []string {
 	return append([]string(nil), l.locales...)
 }
 
-// DefaultLocale returns the normalized installation locale used before the
-// final English fallback.
+// DefaultLocale returns the normalized installation locale, tried before English.
 func (l *Localizer) DefaultLocale() string {
 	if l == nil {
 		return ""

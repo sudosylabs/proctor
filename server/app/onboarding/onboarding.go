@@ -5,27 +5,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package onboarding owns bringing people into the installation: issuing,
-// replacing, revoking and accepting Invitations, browser Invitation handoff,
+// Package onboarding owns bringing people into the installation: invitations,
 // public self-registration, academic administration batches, onboarding
-// imports and Student Progression. One flat Service holds every one of these
-// use cases, one file per concern; its fields are the Store contracts it
-// calls and one of each collaborator: the authorizer, the mutation auditor,
-// Mail, the shared password hasher and attempt accounting, the realtime
-// Publisher, and the academic, administration and identity commands a batch
-// runs.
+// imports and student progression.
 //
-// Onboarding imports and Student Progression are optional: a reduced Store
-// catalog that lacks the academic administration stores builds a Service
-// without them, whose import use cases refuse with onboarding_import.unavailable.
-//
-// New also returns Ports, the trusted entry points only composition receives:
-// external sign-in's Invitation acceptance, the administration summary
-// counts and the onboarding import Jobs. They are not on Service, so no
-// transport can reach them.
-//
-// Start with onboarding.go for the Service and its collaborators, then open
-// the file named for the concern you are changing.
+// Imports are optional: a store catalog without the academic administration
+// stores builds a Service whose import use cases refuse with
+// onboarding_import.unavailable. Ports holds trusted entry points that only
+// composition receives; they stay off Service so no transport can reach them.
 package onboarding
 
 import (
@@ -41,122 +28,13 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// resourceAuthorizer is the part of *access.Authorizer the onboarding use
-// cases call. A use case authorizes an Action on a concrete Resource
-// immediately before the work it guards; a scoped list resolves the caller's
-// granted scopes and records its one decision.
-type resourceAuthorizer interface {
-	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
-	CanDelegateActionsAtScope(context.Context, model.Principal, []string, model.RoleScopeType, string) (bool, error)
-	GrantedScopes(context.Context, model.Principal, model.Action, model.ResourceType) (access.AuthorizedScopeConstraint, error)
-	AuthorizeUserSearch(context.Context, invocation.Invocation) (store.UserVisibilityScope, error)
-	CanViewClassMembers(context.Context, invocation.Invocation, model.Resource) (bool, error)
-	Institution(context.Context) (*model.Institution, error)
-	RecordAuthorizationDecision(
-		context.Context,
-		model.Principal,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		model.RequestMetadata,
-		bool,
-	) error
-}
-
-var _ resourceAuthorizer = (*access.Authorizer)(nil)
-
-// auditDrafter prepares the audit draft a Store aggregate inserts itself:
-// the one batch-level entry of an academic administration filter preview.
-// The mutation auditor composition passes is probed for it.
-type auditDrafter interface {
-	PrepareAtScope(
-		context.Context,
-		invocation.Invocation,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		string,
-		map[string]any,
-	) (*model.AuditEvent, error)
-}
-
-var _ auditDrafter = access.MutationAuditAdapter{}
-
-// userDirectory is the User directory read an academic administration
-// filter preview resolves its filter through, held as the user Service, so
-// the preview applies exactly the directory's validation and visibility.
-type userDirectory interface {
-	SearchUserPage(context.Context, invocation.Invocation, user.SearchUsersQuery) (paging.Page[*model.User], error)
-}
-
-var _ userDirectory = (*user.Service)(nil)
-
-// mailComposer is the part of *mail.Composer onboarding prepares frozen mail
-// with: the Invitation lifecycle messages and the public registration
-// verification.
-type mailComposer interface {
-	Enabled() bool
-	PrepareInvitation(*model.Invitation, string) (*store.PreparedMail, error)
-	PrepareInvitationResend(*model.Invitation, string, model.UserID, time.Time) (*store.PreparedMail, error)
-	PrepareInvitationRevocation(*model.Invitation, model.UserID, time.Time) (*store.PreparedMail, error)
-	PrepareInvitationAccepted(mail.NoticePreparation) (*store.PreparedMail, error)
-	PreparePublicRegistrationVerification(*model.User, model.MailOccurrenceID, string, time.Time, time.Time) (*store.PreparedMail, error)
-}
-
-var _ mailComposer = (*mail.Composer)(nil)
-
-// passwordHasher is the password work of the shared *identity.PasswordHasher.
-type passwordHasher interface {
-	Hash(context.Context, string) (string, error)
-}
-
-var _ passwordHasher = (*identity.PasswordHasher)(nil)
-
-// academicCommands, roleBindingCommands and identityCommands are the
-// ordinary use cases an academic administration batch row runs, held as the
-// academic, administration and identity Services themselves. identityCommands
-// also revalidates an onboarding import's frozen Principal.
-type academicCommands interface {
-	CreateAffiliation(context.Context, invocation.Invocation, academic.CreateAffiliationCommand) (*model.Affiliation, error)
-	EndAffiliation(context.Context, invocation.Invocation, academic.EndAffiliationCommand) (*model.Affiliation, error)
-	CreateAcademicUnitMember(
-		context.Context,
-		invocation.Invocation,
-		academic.CreateAcademicUnitMemberCommand,
-	) (*model.AcademicUnitMember, error)
-	EndAcademicUnitMember(context.Context, invocation.Invocation, academic.EndAcademicUnitMemberCommand) (*model.AcademicUnitMember, error)
-	EnrollClassMember(context.Context, invocation.Invocation, academic.EnrollClassMemberCommand) (*model.ClassEnrollment, error)
-	EndClassMember(context.Context, invocation.Invocation, academic.EndClassMemberCommand) (*model.ClassMember, error)
-}
-
-type roleBindingCommands interface {
-	CreateRoleBinding(context.Context, invocation.Invocation, administration.CreateRoleBindingCommand) (*model.RoleBinding, error)
-	EndRoleBinding(context.Context, invocation.Invocation, administration.EndRoleBindingCommand) (*model.RoleBinding, error)
-}
-
-type identityCommands interface {
-	SetUserEnabled(context.Context, invocation.Invocation, identity.SetUserEnabledCommand) (*model.User, error)
-	RevokeUserSessions(context.Context, invocation.Invocation, identity.RevokeUserSessionsCommand) error
-	ValidatePrincipal(context.Context, model.Principal) error
-}
-
-var (
-	_ academicCommands    = (*academic.Service)(nil)
-	_ roleBindingCommands = (*administration.Service)(nil)
-	_ identityCommands    = (*identity.Service)(nil)
-)
-
-// OnboardingImportFiles stages, opens, removes and pages the private files of
-// onboarding imports.
+// OnboardingImportFiles stores the private uploaded files of onboarding imports.
 type OnboardingImportFiles interface {
 	StageOnboardingImport(context.Context, model.OnboardingImportID, io.Reader, int64) (string, int64, error)
 	IsOnboardingImportTooLarge(error) bool
@@ -165,24 +43,20 @@ type OnboardingImportFiles interface {
 	ListOnboardingImportFiles(context.Context, string, int, time.Time) ([]model.OnboardingImportID, string, error)
 }
 
-// Dependencies are the collaborators New distributes to the Service. Hasher
-// and Attempts are the shared password hasher and attempt accounting the
-// parent builds once for every flow. Publisher delivers the realtime effects
-// of the Class Membership and Role an accepted Invitation grants. Wake wakes
-// the Job runtime once it exists.
+// Dependencies are the collaborators New wires into the Service. Hasher and
+// Attempts are shared with every other password flow.
 type Dependencies struct {
 	Store          store.Catalog
 	Content        OnboardingImportFiles
 	Authorizer     *access.Authorizer
-	Auditor        access.MutationAuditor
+	Auditor        *access.Auditor
 	Mail           *mail.Composer
 	Hasher         *identity.PasswordHasher
 	Attempts       *identity.AttemptAccounting
 	Identity       *identity.Service
 	Academic       *academic.Service
 	Administration *administration.Service
-	// Users is the User directory academic administration filter previews
-	// resolve their filter through; without it they are unavailable.
+	// Users may be nil; filter previews are then unavailable.
 	Users     *user.Service
 	Publisher realtime.Publisher
 	Wake      func()
@@ -193,8 +67,7 @@ type Dependencies struct {
 	RecentAuthenticationTTL time.Duration
 }
 
-// Service holds every onboarding use case. Its fields are the Store contracts
-// it calls and one of each collaborator.
+// Service holds every onboarding use case.
 type Service struct {
 	invitations           store.InvitationStore
 	browserAuthentication store.BrowserAuthenticationStore
@@ -213,35 +86,33 @@ type Service struct {
 	unitMembers           store.AcademicUnitMemberStore
 	classMembers          store.ClassMemberStore
 	roleBindings          store.RoleBindingStore
-	// sittings finds the Sitting boards an accepted Class Membership refreshes.
-	sittings store.ExamSittingStore
-	// imports is nil when the Store catalog is too reduced for onboarding
-	// imports; every import use case then refuses (see requireImports).
-	// Otherwise it announces each committed state change (see effects.go).
+	sittings              store.ExamSittingStore
+	// imports is nil when the catalog has no onboarding imports; every
+	// import use case then refuses (see requireImports).
 	imports store.OnboardingImportStore
 	content OnboardingImportFiles
 
-	// authorizer is nil when composition supplies no Authorizer; every
-	// authorization then refuses with invitation.unavailable.
-	authorizer     resourceAuthorizer
-	auditor        access.MutationAuditor
-	mail           mailComposer
-	hasher         passwordHasher
+	// authorizer may be nil; every authorization then refuses with
+	// invitation.unavailable.
+	authorizer *access.Authorizer
+	auditor    access.MutationAuditAdapter
+	mail       *mail.Composer
+	hasher     *identity.PasswordHasher
+	// hashHook is set only by tests, to reach hashing failures the real
+	// derivation never returns.
+	hashHook       func(context.Context, string) (string, error)
 	attempts       *identity.AttemptAccounting
 	publisher      realtime.Publisher
-	academic       academicCommands
-	administration roleBindingCommands
-	identity       identityCommands
-	// directory and drafts are nil when composition supplies no User
-	// directory or no drafting auditor; filter previews then refuse.
-	directory userDirectory
-	drafts    auditDrafter
+	academic       *academic.Service
+	administration *administration.Service
+	identity       *identity.Service
+	// directory may be nil; filter previews then refuse.
+	directory *user.Service
 	wake      func()
 
 	nodeID    string
 	publicURL string
-	// rateLimit bounds Invitation claim acceptance and public registration
-	// attempts; emailVerificationTTL is a registration token's lifetime.
+	// rateLimit bounds invitation claim and public registration attempts.
 	rateLimit               identity.LoginRateLimitPolicy
 	emailVerificationTTL    time.Duration
 	recentAuthenticationTTL time.Duration
@@ -249,12 +120,11 @@ type Service struct {
 	now                     func() time.Time
 }
 
-// Ports are the trusted entry points New hands only to composition. None
-// authorizes a transport caller, so none is on Service.
+// Ports are trusted entry points for composition only. None authorizes a
+// transport caller, so none may be exposed on Service.
 type Ports struct {
-	// AcceptExternalIdentity admits an External Identity through the
-	// Invitation its login state carries. External sign-in calls it once it
-	// has verified the provider's assertion.
+	// AcceptExternalIdentity must only be called after the provider's
+	// assertion has been verified.
 	AcceptExternalIdentity func(
 		context.Context,
 		*model.ExternalLoginState,
@@ -263,19 +133,14 @@ type Ports struct {
 		model.RequestMetadata,
 		string,
 	) (*store.ExternalIdentityInvitationAcceptanceResult, error)
-	// CountPendingInvitations and CountOpenImports are the administration
-	// summary counts; each authorizes like its list. CountOpenImports is nil
-	// when the Service has no onboarding imports.
+	// CountOpenImports and ImportJobs are nil when the Service has no
+	// onboarding imports.
 	CountPendingInvitations func(context.Context, invocation.Invocation, int) (int, error)
 	CountOpenImports        func(context.Context, invocation.Invocation, int) (int, error)
-	// ImportJobs is the port the onboarding import Jobs call, or nil when the
-	// Service has no onboarding imports.
-	ImportJobs jobs.OnboardingImportService
+	ImportJobs              jobs.OnboardingImportService
 }
 
-// New builds the Service, keeping the Store contracts it calls, and the
-// Ports composition wires into external sign-in, the administration summary
-// and the Job catalog. It refuses missing collaborators.
+// New builds the Service and its Ports, refusing missing collaborators.
 func New(deps Dependencies) (*Service, Ports, error) {
 	if deps.Store == nil {
 		return nil, Ports{}, errors.New("onboarding store catalog is required")
@@ -330,7 +195,8 @@ func New(deps Dependencies) (*Service, Ports, error) {
 		classMembers:            catalog.ClassMember(),
 		roleBindings:            catalog.RoleBinding(),
 		sittings:                catalog.ExamSitting(),
-		auditor:                 deps.Auditor,
+		authorizer:              deps.Authorizer,
+		auditor:                 deps.Auditor.MutationAudit(),
 		mail:                    deps.Mail,
 		hasher:                  deps.Hasher,
 		attempts:                deps.Attempts,
@@ -338,6 +204,7 @@ func New(deps Dependencies) (*Service, Ports, error) {
 		academic:                deps.Academic,
 		administration:          deps.Administration,
 		identity:                deps.Identity,
+		directory:               deps.Users,
 		nodeID:                  deps.NodeID,
 		publicURL:               deps.PublicURL,
 		rateLimit:               rateLimit,
@@ -346,16 +213,6 @@ func New(deps Dependencies) (*Service, Ports, error) {
 		newToken:                model.NewCredentialToken,
 		now:                     time.Now,
 	}
-	if deps.Authorizer != nil {
-		s.authorizer = deps.Authorizer
-	}
-	if deps.Users != nil {
-		s.directory = deps.Users
-	}
-	if drafter, ok := deps.Auditor.(auditDrafter); ok {
-		s.drafts = drafter
-	}
-
 	enabled, err := onboardingImportsEnabled(deps)
 	if err != nil {
 		return nil, Ports{}, err
@@ -371,10 +228,8 @@ func New(deps Dependencies) (*Service, Ports, error) {
 	return s, ports, nil
 }
 
-// onboardingImportsEnabled reports whether the Store catalog projects every
-// onboarding import store. A deliberately reduced lifecycle test catalog
-// omits whole capability families and so has no onboarding imports;
-// production catalogs project every target store together.
+// onboardingImportsEnabled reports false only for a deliberately reduced test
+// catalog without the academic stores; a partial production catalog is an error.
 func onboardingImportsEnabled(deps Dependencies) (bool, error) {
 	catalog := deps.Store
 	if catalog.OnboardingImport() == nil {
@@ -405,4 +260,11 @@ func onboardingImportsEnabled(deps Dependencies) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func (s *Service) hashPassword(ctx context.Context, password string) (string, error) {
+	if s.hashHook != nil {
+		return s.hashHook(ctx, password)
+	}
+	return s.hasher.Hash(ctx, password)
 }

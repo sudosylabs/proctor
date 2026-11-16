@@ -9,12 +9,11 @@ package model
 
 import "time"
 
-// RetentionNotice is the durable recipient projection of a scheduled category.
-// Delivery status is separate from the retention state and never acknowledges
-// that the recipient read a notice. Besides identifiers it carries only the
-// immutable title of the Exam Revision the Sitting delivered and the Sitting's
-// scheduled times, which retention never removes; every recipient sees them,
-// even after losing access to the Exam. It contains no candidate or answer
+// RetentionNotice is what one recipient is told about a scheduled category.
+// Delivery status is separate from retention state and never means the notice
+// was read. Besides IDs it carries only the revision's title and the sitting's
+// scheduled times, which retention never removes, so every recipient sees them
+// even after losing access to the exam. It holds no candidate or answer
 // content.
 type RetentionNotice struct {
 	RetirementID      RetentionRetirementID

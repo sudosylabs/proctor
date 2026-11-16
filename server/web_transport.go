@@ -14,10 +14,9 @@ import (
 	"github.com/sudosylabs/proctor/server/webui"
 )
 
-// rootHTTPTransport owns the API transport lifecycle while dispatching the
-// installation's API and browser modules through one listener. The API and
-// webapp handlers remain siblings; neither can turn an unknown route into a
-// fallback owned by the other.
+// rootHTTPTransport serves the API and the webapp on one listener. The two
+// handlers are siblings, so neither can turn an unknown route into a fallback
+// owned by the other.
 type rootHTTPTransport struct {
 	owned  runtimeTransport
 	api    http.Handler

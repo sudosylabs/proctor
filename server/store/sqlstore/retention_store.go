@@ -148,7 +148,7 @@ func validRetentionMutation(input store.RetentionMutation, command *store.Comman
 		command.Batch == nil
 }
 
-// Current assurance comes from the locked Session, not the request's earlier
+// Current assurance comes from the locked session, not the request's earlier
 // Principal snapshot. Time is read after all potentially waiting row locks.
 func lockRetentionAuthority(
 	ctx context.Context,
@@ -857,7 +857,7 @@ func (s *SQLRetentionStore) ListRecords(ctx context.Context, options store.Reten
 	})
 }
 
-// retentionPreviewOutcome is the persisted outcome of a Retention Preview
+// retentionPreviewOutcome is the persisted outcome of a retention preview
 // creation.
 type retentionPreviewOutcome struct {
 	ID                  model.RetentionPreviewID       `json:"id"`
@@ -943,7 +943,7 @@ func decodeRetentionPreviewOutcome(data []byte) (*model.RetentionPreview, error)
 	return p, p.Validate()
 }
 
-// retentionControlOutcome is the persisted outcome of a Retention Control
+// retentionControlOutcome is the persisted outcome of a retention control
 // change; it converts directly to model.RetentionControl.
 type retentionControlOutcome struct {
 	InstitutionID          model.InstitutionID         `json:"institution_id"`

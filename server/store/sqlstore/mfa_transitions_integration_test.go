@@ -35,7 +35,7 @@ func TestMFAEnrollmentRechecksDeadlinesAfterSessionRowLock(t *testing.T) {
 				Lifetime: time.Minute, RecentAuthenticationTTL: time.Hour, AuditEventID: audit.ID}
 			controller, err := s.GetMaster().Begin(ctx)
 			require.NoError(t, err)
-			defer controller.Rollback()
+			defer func() { _ = controller.Rollback() }()
 			var id string
 			err = controller.Get(ctx, &id, `SELECT id FROM sessions WHERE id=? FOR UPDATE`, f.targetSession.ID.String())
 			require.NoError(t, err)

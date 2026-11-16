@@ -52,7 +52,7 @@ func TestExamStarterWorkspaceStore(t *testing.T, ss store.Store, probes ...Start
 	require.Equal(t, fileResult.Object.ID, fileResult.Entry.CurrentObjectID)
 	require.True(t, fileResult.Object.CreatedAt.Equal(at.Add(3*time.Second)), "file finalization lost the reservation timestamp precision")
 	require.True(t, fileResult.Object.UpdatedAt.Equal(fileResult.Object.CreatedAt), "file finalization lost the reservation timestamp precision")
-	// The exact retry arrives after the first finalize advanced the Draft. Its
+	// The exact retry arrives after the first finalize advanced the draft. Its
 	// fresh opaque reservation must remain possible so the named idempotent
 	// mutation can return the already-committed outcome.
 	replay := reserveStarterWorkspaceObject(t, ctx, ss, examID, creator.ID, unit.ID, 3, model.NewStarterWorkspaceEntryID(), "cmd/app/main.go", at.Add(3*time.Second+2*time.Millisecond), 13)
@@ -113,8 +113,8 @@ func TestExamStarterWorkspaceStore(t *testing.T, ss store.Store, probes ...Start
 	require.Equal(t, replaced.Object.ID, got.Object.ID)
 	require.Equal(t, "src/app/main.go", got.Entry.Path)
 
-	// Two callers can reserve independently against the same Draft revision,
-	// but the ordered Draft/entry locks admit exactly one conditional replace.
+	// Two callers can reserve independently against the same draft revision,
+	// but the ordered draft/entry locks admit exactly one conditional replace.
 	raceFirst := reserveStarterWorkspaceObject(t, ctx, ss, examID, creator.ID, unit.ID, 6, fileID, "", at.Add(6*time.Second+time.Millisecond), 6)
 	raceSecond := reserveStarterWorkspaceObject(t, ctx, ss, examID, creator.ID, unit.ID, 6, fileID, "", at.Add(6*time.Second+2*time.Millisecond), 7)
 	raceFirst.ExpectedContentVersion = replaced.Object.ContentVersion

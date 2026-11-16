@@ -28,8 +28,8 @@ type ExamExportCreation struct {
 	SubmissionIDs []model.SubmissionID
 }
 
-// ExamExportFile is private archive-construction input. Storage origins and
-// object identities never enter the portable manifest or public HTTP response.
+// ExamExportFile is private input to building the archive. Storage locations
+// and object identities must never reach the manifest or an HTTP response.
 type ExamExportFile struct {
 	SubmissionID model.SubmissionID
 	Entry        model.ExamSubmissionManifestEntry
@@ -41,12 +41,10 @@ type ExamExportSnapshot struct {
 	Files   []ExamExportFile
 }
 
-// BuildInputConsistent reports whether the snapshot is buildable: its
-// Examination Export is still queued, its frozen records are present and
-// within the snapshot size bound, and it lists exactly as many files as the
-// Export counted. It reads the Export without checking that it is present, so
-// it is asked only of a snapshot whose Export the caller has already
-// validated.
+// BuildInputConsistent reports whether the snapshot is buildable: the export
+// is queued, its records are present and within the size bound, and it lists
+// as many files as the export counted. It dereferences Export unchecked, so
+// call it only after validating Export.
 func (s *ExamExportSnapshot) BuildInputConsistent() bool {
 	return !(s == nil ||
 		s.Export.State != model.ExamExportQueued ||
@@ -78,11 +76,8 @@ type ExamExportDownload struct {
 	Submissions []ExamSubmissionAuthorization
 }
 
-// ConsistentWith reports whether the read result carries the valid Examination
-// Export that was asked for, on the given scope, requested by the given User.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the result is the valid export asked for, on
+// the given scope and requested by the given user.
 func (d *ExamExportDownload) ConsistentWith(
 	exportID model.ExamExportID,
 	scope model.RetentionHoldScope,
@@ -95,28 +90,26 @@ func (d *ExamExportDownload) ConsistentWith(
 		d.Export.RequesterUserID != requesterID)
 }
 
-// ExamExportStore freezes an authorized exact scope/category snapshot and
-// enqueues its finite Job with durable source protections in one transaction.
-// It locks Policy before Exam, Sitting and ordered Submissions, matching the
-// retirement fence; reads and replays recheck current credentials, manager
-// relationship and both export and ordinary read authority. Integrity excludes
-// the requester as candidate and also requires the dedicated Browser Activity
-// permission and exact current Exam Manager membership, including
-// when the general export action uses an override. Retained categories, never
-// caller-provided read categories, determine that history check.
+// ExamExportStore persists exam exports. Create freezes the authorized
+// snapshot and enqueues its Job, with retention holds on the sources, in one
+// transaction. It locks the policy before the exam, sitting and submissions
+// (in order), matching the retirement fence. Reads and replays recheck
+// credentials, the manager relationship, and export and read authority. The
+// integrity category also excludes the requester as candidate and requires the
+// browser activity permission and current manager membership even under an
+// override; retained categories, never the caller's, decide that check.
 //
-// A unique artifact is registered before each attempt writes. Publication is
-// fenced by the live Job claim, source deadline and immutable request expiry.
-// Only verified publication releases successful construction's source references.
-// Failed/expired requests erase frozen payloads and release expired protections.
-// Cleanup retains uncertain writer identities for repeated exact-key removal;
-// an absence observation is not proof that a late remote write cannot complete.
+// Each build attempt registers a unique artifact before writing. Publication
+// is fenced by the live Job claim, the source deadline and the request
+// expiry, and only a verified publication releases the source holds. Failed
+// or expired requests erase the frozen payload. Cleanup keeps uncertain
+// writer identities for repeated removal, because seeing an object absent does
+// not prove a late remote write will not land.
 type ExamExportStore interface {
 	ListScope(context.Context, model.RetentionHoldScope) ([]ExamSubmissionAuthorization, error)
-	// ListCreationScope resolves original captured ownership on exact retained
-	// replay, or the bounded current scope for a new command. It never renews
-	// the outcome or archive lifetime. Create repeats authority and exact-set
-	// checks in its own atomic mutation; this projection grants no authority.
+	// ListCreationScope returns the originally captured scope for a replay, or
+	// the current scope for a new command, without renewing any lifetime. It
+	// grants no authority: Create repeats every check.
 	ListCreationScope(context.Context, model.RetentionHoldScope, *CommandIdempotency) ([]ExamSubmissionAuthorization, error)
 	Create(context.Context, *ExamExportCreation, *CommandIdempotency) (*model.ExamExport, error)
 	Get(context.Context, *ExamExportAccess) (*ExamExportDownload, error)
@@ -124,24 +117,23 @@ type ExamExportStore interface {
 	Publish(context.Context, *ExamExportPublication) error
 	FinishWriter(context.Context, ExamExportArtifact) error
 	Reconcile(context.Context, int) (int, error)
-	// BeginPurgeBatch atomically selects the oldest due eligible artifacts and
-	// defers each selected key for one hour before I/O. Concurrent callers skip
-	// the selected batch; failed or uncertain attempts preserve exact-key writer
-	// references and do not record absence. The caller reserves its finite work
-	// budget first, including when the result of this mutation is uncertain.
+	// BeginPurgeBatch selects the oldest due artifacts and defers each for one
+	// hour before any I/O, so concurrent callers skip them. A failed or
+	// uncertain attempt keeps the writer references and records no absence.
+	// The caller reserves its work budget first, even when this call's result
+	// is uncertain.
 	BeginPurgeBatch(context.Context, int) ([]ExamExportArtifact, error)
 	CompletePurge(context.Context, ExamExportArtifact) error
-	// ListBuildTitles reads, for each given build Job, the title of the sealed
-	// Exam revision its export's Sitting runs. At most MaximumExamExportBuildTitles
-	// Jobs are read; a Job with no export is absent from the result. It grants
-	// no authority.
+	// ListBuildTitles returns, per build Job, the title of the revision its
+	// export's sitting runs. At most MaximumExamExportBuildTitles Jobs are read;
+	// a Job with no export is absent. It grants no authority.
 	ListBuildTitles(context.Context, []model.JobID) ([]ExamExportBuildTitle, error)
 }
 
 // MaximumExamExportBuildTitles bounds one ExamExportStore.ListBuildTitles read.
 const MaximumExamExportBuildTitles = 200
 
-// ExamExportBuildTitle is the Exam title of one export build Job.
+// ExamExportBuildTitle is the exam title of one export build Job.
 type ExamExportBuildTitle struct {
 	JobID model.JobID
 	Title string

@@ -21,8 +21,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// UserSettingsView is the exact current self-owned settings source plus the
-// metadata a client needs for compatibility and optimistic concurrency.
+// UserSettingsView is the stored settings source, byte for byte. Writable is
+// false for a format version this server cannot write.
 type UserSettingsView struct {
 	Source        string
 	FormatVersion int
@@ -31,8 +31,8 @@ type UserSettingsView struct {
 	UpdatedAt     time.Time
 }
 
-// UserSettingsReplacementResult reports the stored document after a
-// replacement and whether it changed it or replayed an earlier one.
+// UserSettingsReplacementResult describes the stored document; Replayed
+// means an earlier request with the same idempotency key answered.
 type UserSettingsReplacementResult struct {
 	Revision      model.UserSettingsRevision
 	FormatVersion int
@@ -41,8 +41,8 @@ type UserSettingsReplacementResult struct {
 	Replayed      bool
 }
 
-// ReplaceOwnUserSettingsCommand replaces the caller's settings source when
-// ExpectedRevision still names the stored revision.
+// ReplaceOwnUserSettingsCommand applies only while ExpectedRevision is still
+// the stored revision.
 type ReplaceOwnUserSettingsCommand struct {
 	Source           string
 	FormatVersion    int
@@ -50,15 +50,16 @@ type ReplaceOwnUserSettingsCommand struct {
 	IdempotencyKey   string
 }
 
-// UserSettingsDiagnostic locates one reason a settings source was refused.
+// UserSettingsDiagnostic locates one reason a source was refused; Line and
+// Column are 1-based.
 type UserSettingsDiagnostic struct {
 	Code   string `json:"code"`
 	Line   int    `json:"line"`
 	Column int    `json:"column"`
 }
 
-// ReplaceOwnUserSettings replaces the caller's own settings document when the
-// expected revision is current, and is idempotent per key.
+// ReplaceOwnUserSettings fails with user_settings.revision_conflict when the
+// expected revision is stale, and is idempotent per key.
 func (s *Service) ReplaceOwnUserSettings(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -182,8 +183,8 @@ var userSettingsStoreErrors = apperror.StoreTable{
 	Unavailable: "user_settings.unavailable",
 }
 
-// ReadOwnUserSettings returns only the document owned by the interactive Session
-// principal. There is intentionally no caller-supplied User identifier.
+// ReadOwnUserSettings takes no user ID on purpose: it reads only the
+// session principal's own document.
 func (s *Service) ReadOwnUserSettings(ctx context.Context, inv invocation.Invocation) (UserSettingsView, error) {
 	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
@@ -213,8 +214,8 @@ func userSettingsUnavailable(err error) error {
 	return apperror.New("user_settings.unavailable").Wrap(err)
 }
 
-// PrepareInitialSettingsDocument builds the settings document a newly created
-// User starts with, to be stored in the same step that creates the User.
+// PrepareInitialSettingsDocument builds a new user's settings document, to be
+// stored in the same step that creates the user.
 func PrepareInitialSettingsDocument(user *model.User) (*model.UserSettingsDocument, error) {
 	if user == nil || !user.ID.IsValid() || user.CreatedAt.IsZero() {
 		return nil, errors.New("prepared user is required for initial settings")

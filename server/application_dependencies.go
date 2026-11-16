@@ -16,17 +16,21 @@ import (
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/config"
+	"github.com/sudosylabs/proctor/server/desktoprelease"
+	"github.com/sudosylabs/proctor/server/metrics"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/platform"
+	"github.com/sudosylabs/proctor/server/pluginhost"
+	"github.com/sudosylabs/proctor/server/secretseal"
 )
 
-// applicationDependencies projects platform capabilities and deployment
-// configuration into the explicit app.Dependencies bundle so package app never
-// imports platform.
+// applicationDependencies builds app.Dependencies from the platform and the
+// configuration, so package app never imports platform.
 func applicationDependencies(
 	capabilities constructionCapabilities,
 	cfg config.Config,
 	content app.FileContent,
-	mailRenderer mail.Renderer,
+	mailRenderer *mail.TemplateRenderer,
 ) (app.Dependencies, error) {
 	auth := cfg.Authentication
 	cache := platformAuthenticationCache{cache: capabilities.cache}
@@ -35,12 +39,12 @@ func applicationDependencies(
 		return app.Dependencies{}, errors.New("file content is nil")
 	}
 
-	mailSecretSealer, err := newMailSecretSealer(cfg.Mail)
+	mailSecretSealer, err := secretseal.NewMailSealer(cfg.Mail)
 	if err != nil {
 		return app.Dependencies{}, err
 	}
 
-	mfaSecretSealer, err := newMFASecretSealer(cfg.Authentication.MFA)
+	mfaSecretSealer, err := secretseal.NewMFASealer(cfg.Authentication.MFA)
 	if err != nil {
 		return app.Dependencies{}, err
 	}
@@ -58,9 +62,9 @@ func applicationDependencies(
 		return app.Dependencies{}, fmt.Errorf("construct mail inline assets: %w", err)
 	}
 
-	mailer := accountMailerAdapter{mailer: capabilities.mailer, assets: mailAssets}
-	mailDeliveryRecorder, mailMetricsReader := newMailTelemetry(log)
-	desktopBuilds, err := verifiedDesktopBuildCatalog()
+	mailer := platform.NewMailSender(capabilities.mailer, mailAssets)
+	mailDeliveryRecorder, mailMetricsReader := metrics.NewMailTelemetry(log)
+	desktopBuilds, err := desktoprelease.VerifiedCatalog()
 	if err != nil {
 		return app.Dependencies{}, err
 	}
@@ -74,7 +78,7 @@ func applicationDependencies(
 		MailMetricsReader:       mailMetricsReader,
 		MFASecretSealer:         mfaSecretSealer,
 		MailSecretSealer:        mailSecretSealer,
-		Registry:                externalProviderRegistryAdapter{registry: capabilities.externalAuthentication},
+		Registry:                pluginhost.IdentityProviders(capabilities.externalAuthentication),
 		FileContent:             content,
 		DesktopBuildCatalog:     desktopBuilds,
 		NodeID:                  capabilities.nodeID,
@@ -112,7 +116,6 @@ func applicationDependencies(
 	}, nil
 }
 
-// passwordPolicyFromConfig translates the configured password settings into the application password policy.
 func passwordPolicyFromConfig(auth config.Authentication) identity.PasswordPolicy {
 	return identity.PasswordPolicy{
 		MaximumConcurrentOperations: auth.Password.MaximumConcurrentOperations,
@@ -127,7 +130,6 @@ func passwordPolicyFromConfig(auth config.Authentication) identity.PasswordPolic
 	}
 }
 
-// sessionPolicyFromConfig translates the configured Session settings into the application Session policy.
 func sessionPolicyFromConfig(auth config.Authentication) identity.SessionPolicy {
 	return identity.SessionPolicy{
 		AccessTTL:              auth.Sessions.AccessTTL.Duration,
@@ -140,7 +142,6 @@ func sessionPolicyFromConfig(auth config.Authentication) identity.SessionPolicy 
 	}
 }
 
-// accountRecoveryPolicyFromConfig translates the configured account recovery settings into the application policy.
 func accountRecoveryPolicyFromConfig(auth config.Authentication) identity.AccountRecoveryPolicy {
 	return identity.AccountRecoveryPolicy{
 		EmailVerificationTTL: auth.AccountRecovery.EmailVerificationTTL.Duration,
@@ -154,7 +155,6 @@ func accountRecoveryPolicyFromConfig(auth config.Authentication) identity.Accoun
 	}
 }
 
-// externalAuthenticationPolicyFromConfig translates the configured external authentication settings into the application policy.
 func externalAuthenticationPolicyFromConfig(auth config.Authentication, publicURL, nodeID string) identity.ExternalAuthenticationPolicy {
 	return identity.ExternalAuthenticationPolicy{
 		PublicURL:     publicURL,
@@ -168,9 +168,8 @@ func externalAuthenticationPolicyFromConfig(auth config.Authentication, publicUR
 	}
 }
 
-// explicitLoopbackHTTPDevelopment projects the deliberately local HTTP
-// origin into the application without coupling app/model to deployment
-// configuration. Non-loopback HTTP never receives this capability.
+// explicitLoopbackHTTPDevelopment reports whether the public URL is plain
+// HTTP on loopback. Non-loopback HTTP never gets the development allowance.
 func explicitLoopbackHTTPDevelopment(raw string) bool {
 	parsed, err := url.Parse(raw)
 	return err == nil &&

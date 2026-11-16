@@ -27,9 +27,9 @@ import (
 )
 
 // TestExamAttemptScreenClipStore verifies managers' screen clip requests:
-// refused when the Exam does not record the screen, bounded per Attempt,
+// refused when the exam does not record the screen, bounded per attempt,
 // replayed exactly, private-reason-free outside their row, and taken once by
-// the Desktop of the live Connection.
+// the Desktop of the live connection.
 func TestExamAttemptScreenClipStore(t *testing.T, ss store.Store) {
 	t.Helper()
 	ctx := context.Background()
@@ -173,7 +173,7 @@ func screenClipRequest(
 }
 
 // testScreenClipUpload verifies a taken clip's upload: declared once,
-// bounded by the Attempt's byte limit, chunk by chunk against the declared
+// bounded by the attempt's byte limit, chunk by chunk against the declared
 // hashes, and ready only once whole.
 func testScreenClipUpload(t *testing.T, ctx context.Context, ss store.Store, access store.CandidateAttemptAccess, clipID model.ScreenClipID) {
 	t.Helper()
@@ -254,9 +254,9 @@ func storetestDesktopSignature(t *testing.T, message []byte) string {
 	return base64.RawURLEncoding.EncodeToString(append(r.FillBytes(make([]byte, 32)), s.FillBytes(make([]byte, 32))...))
 }
 
-// testIncidentScreenClip checks that a Flag on a recording Attempt asks for
-// the minute either side of it, linked to the Flag, and that a second
-// occurrence on the same Flag asks for nothing more.
+// testIncidentScreenClip checks that a flag on a recording attempt asks for
+// the minute either side of it, linked to the flag, and that a second
+// occurrence on the same flag asks for nothing more.
 func testIncidentScreenClip(t *testing.T, ctx context.Context, ss store.Store) {
 	t.Helper()
 	fixture := newExamAttemptFixtureWithScreenRecording(t, ctx, ss)
@@ -328,7 +328,7 @@ func testIncidentScreenClip(t *testing.T, ctx context.Context, ss store.Store) {
 	require.Zero(t, replayed.StatusDiscrepancies, "a replay counts nothing")
 
 	// A manager clip Desktop took before submission may finish uploading
-	// after it, without the Connection; one never taken fails.
+	// after it, without the connection; one never taken fails.
 	taken := screenClipRequest(t, ctx, ss, fixture, connected.Attempt.ID)
 	_, err = ss.ExamAttempt().RequestScreenClip(ctx, taken,
 		examCommand(fixture.manager.ID, store.ExamAttemptScreenClipRequestOperation, "incident-manager", "incident-manager"))

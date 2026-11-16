@@ -9,18 +9,16 @@ package apperror
 
 import "slices"
 
-// Concealment declares how one family of protected use cases presents its
-// failures. Present passes application errors through and reports anything
-// else as Unavailable. Conceal also replaces a denial, or any code listed in
-// Concealed, with resource.not_found, so a caller cannot tell a missing
-// resource from one it may not see.
+// Concealment presents the failures of one family of protected use cases.
+// Conceal reports a denial, or any code in Concealed, as resource.not_found
+// so a caller cannot tell a missing resource from one it may not see.
 type Concealment struct {
 	Unavailable Code
 	Concealed   []Code
 }
 
-// Present returns err as the use case's public failure without concealing
-// existence. A nil err stays nil.
+// Present passes application errors through and reports any other error as
+// Unavailable. A nil err stays nil.
 func (c Concealment) Present(err error) error {
 	if err == nil {
 		return nil

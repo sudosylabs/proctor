@@ -13,17 +13,17 @@ import (
 	"unicode/utf8"
 )
 
-// AttemptEnvironmentDesired is what Attempt facts ask of an environment.
+// AttemptEnvironmentDesired is what the attempt's facts ask of its environment.
 type AttemptEnvironmentDesired string
 
 const (
 	// AttemptEnvironmentDesiredRunning asks for a running machine: the
-	// candidate's Participation is active and the Sitting is not paused.
+	// candidate's participation is active and the sitting is not paused.
 	AttemptEnvironmentDesiredRunning AttemptEnvironmentDesired = "running"
 	// AttemptEnvironmentDesiredFrozen asks for a machine whose processes are
-	// stopped but kept: the candidate is away or the Sitting is paused.
+	// stopped but kept: the candidate is away or the sitting is paused.
 	AttemptEnvironmentDesiredFrozen AttemptEnvironmentDesired = "frozen"
-	// AttemptEnvironmentDesiredEnded asks for no machine: the Attempt is
+	// AttemptEnvironmentDesiredEnded asks for no machine: the attempt is
 	// sealed. Ended is final.
 	AttemptEnvironmentDesiredEnded AttemptEnvironmentDesired = "ended"
 )
@@ -66,11 +66,11 @@ func (s AttemptEnvironmentState) IsValid() bool {
 	}
 }
 
-// AttemptEnvironment is the one execution environment of an Attempt whose
-// Revision's execution policy is enabled. It belongs to the Attempt, not to
-// a Participation: a disconnect freezes it and a reconnect thaws it. The
-// profile it was created from is copied in, so a later retirement changes
-// nothing. One owner node acts on it at a time, under a fenced runtime lease.
+// AttemptEnvironment is the one execution environment of an attempt whose
+// revision enables execution. It belongs to the attempt, not a participation:
+// a disconnect freezes it and a reconnect thaws it. Its profile is copied in,
+// so retiring the profile later changes nothing. One owner node acts on it at
+// a time, under a fenced runtime lease.
 type AttemptEnvironment struct {
 	AttemptID ExamAttemptID
 	SittingID ExamSittingID
@@ -81,14 +81,14 @@ type AttemptEnvironment struct {
 	// IdleWindow is how long the environment may stay frozen before it is
 	// suspended.
 	IdleWindow time.Duration
-	// Terminals is how many terminals the candidate may open.
+	// Terminals is the most terminals the candidate may open at once.
 	Terminals   int
 	RecordInput bool
 
 	Desired AttemptEnvironmentDesired
 	State   AttemptEnvironmentState
-	// Generation is the newest Participation generation the environment has
-	// heard of; an older fact changes nothing.
+	// Generation is the newest participation generation the environment has
+	// heard of; a fact from an older one changes nothing.
 	Generation int64
 	// Incarnation counts machines: each replacement of a lost one raises it.
 	Incarnation int64
@@ -101,7 +101,7 @@ type AttemptEnvironment struct {
 	// ControlFence is the execution host's fence revision the owner last
 	// applied to the machine.
 	ControlFence int64
-	// ProjectionCursor is the Workspace cursor the machine holds.
+	// ProjectionCursor is the workspace cursor the machine holds.
 	ProjectionCursor int64
 	// ObservationCursor and ProcessCursor are the machine's observation and
 	// process log positions the owner acknowledged.
@@ -124,10 +124,10 @@ type AttemptEnvironment struct {
 	SettleRequested   int64
 	SettleCompleted   int64
 	SettleRequestedAt time.Time
-	// SyncPaths is the latest sync status of each guest path the owner did
-	// not store, oldest first and at most AttemptEnvironmentSyncPathsMaximum.
-	// A path the Workspace holds is synced and not listed. It is derived from
-	// the harvests and is no authority.
+	// SyncPaths is the latest sync status of each guest path the owner did not
+	// store, oldest first, at most AttemptEnvironmentSyncPathsMaximum. A path the
+	// workspace holds is synced and not listed. It is derived from harvests and
+	// is not authoritative.
 	SyncPaths []AttemptEnvironmentSyncPath
 	// ReplaceBefore is the incarnation a manager's replacement asked for:
 	// while Incarnation is below it, the owner replaces the machine.
@@ -139,7 +139,7 @@ type AttemptEnvironment struct {
 	UpdatedAt time.Time
 }
 
-// Validate checks the environment.
+// Validate checks the environment's fields and bounds.
 func (e *AttemptEnvironment) Validate() error {
 	const where = "AttemptEnvironment.Validate"
 	switch {
@@ -188,16 +188,16 @@ func validProjectedVersions(versions map[AttemptWorkspaceEntryID]WorkspaceConten
 	return true
 }
 
-// AttemptEnvironmentSyncStatus says why a guest path is not in the
-// Attempt Workspace.
+// AttemptEnvironmentSyncStatus says why a guest path is not in the attempt
+// workspace.
 type AttemptEnvironmentSyncStatus string
 
 const (
 	// AttemptEnvironmentPathIgnored stays on the machine: an ignore rule,
 	// or the default patterns, keep it there.
 	AttemptEnvironmentPathIgnored AttemptEnvironmentSyncStatus = "ignored"
-	// AttemptEnvironmentPathRefused was refused by the Workspace, such as
-	// over a quota, or lost a conflict to a newer Workspace version.
+	// AttemptEnvironmentPathRefused was refused by the workspace, for example over
+	// a quota, or lost a conflict to a newer workspace version.
 	AttemptEnvironmentPathRefused AttemptEnvironmentSyncStatus = "refused"
 )
 
@@ -205,16 +205,16 @@ func (s AttemptEnvironmentSyncStatus) IsValid() bool {
 	return s == AttemptEnvironmentPathIgnored || s == AttemptEnvironmentPathRefused
 }
 
-// The reasons of an ignored path that name what ignored it.
+// What ignored a path, recorded as the reason of an ignored sync path.
 const (
-	// AttemptEnvironmentIgnoredByDefault: the default patterns apply, as the
-	// Workspace has no ignore file or one that does not parse.
+	// AttemptEnvironmentIgnoredByDefault means the default patterns applied,
+	// because the workspace has no ignore file or it does not parse.
 	AttemptEnvironmentIgnoredByDefault = "default"
-	// AttemptEnvironmentIgnoredByFile: a pattern of the Workspace's
-	// .proctorignore.
+	// AttemptEnvironmentIgnoredByFile means a pattern in the workspace's
+	// .proctorignore matched.
 	AttemptEnvironmentIgnoredByFile = ".proctorignore"
-	// AttemptEnvironmentIgnoredByParent: the path is under a directory the
-	// Workspace does not hold.
+	// AttemptEnvironmentIgnoredByParent means the path is under a directory the
+	// workspace does not hold.
 	AttemptEnvironmentIgnoredByParent = "parent_not_synced"
 )
 
@@ -222,12 +222,12 @@ const (
 	// AttemptEnvironmentSyncPathsMaximum bounds the paths an environment
 	// keeps a status for; the oldest go first.
 	AttemptEnvironmentSyncPathsMaximum = 256
-	// AttemptEnvironmentSyncReasonMaximumBytes bounds one reason.
+	// AttemptEnvironmentSyncReasonMaximumBytes bounds one reason, in bytes.
 	AttemptEnvironmentSyncReasonMaximumBytes = 128
 )
 
 // AttemptEnvironmentSyncPath is the sync status of one guest path: ignored
-// with what ignored it, or refused with the Workspace's public code.
+// with what ignored it, or refused with the workspace's public code.
 type AttemptEnvironmentSyncPath struct {
 	Path   string
 	Status AttemptEnvironmentSyncStatus
@@ -274,7 +274,7 @@ func validSyncPaths(paths []AttemptEnvironmentSyncPath) bool {
 
 // NoteSyncPath records the latest status of a guest path the owner did not
 // store, dropping the oldest past the bound. A path too long for the
-// Workspace keeps no status.
+// workspace keeps no status.
 func (e *AttemptEnvironment) NoteSyncPath(path AttemptEnvironmentSyncPath) {
 	if !path.Valid() {
 		return
@@ -306,13 +306,13 @@ func (e *AttemptEnvironment) clearSyncPath(name string, descendants bool) {
 	e.SyncPaths = kept
 }
 
-// Done reports whether nothing is left to do: the Attempt is sealed and its
+// Done reports whether nothing is left to do: the attempt is sealed and its
 // machine revoked.
 func (e *AttemptEnvironment) Done() bool {
 	return e.Desired == AttemptEnvironmentDesiredEnded && e.State == AttemptEnvironmentEnded
 }
 
-// AttemptEnvironmentFactKind names an Attempt or Sitting fact that changes
+// AttemptEnvironmentFactKind names an attempt or sitting fact that changes
 // what an environment should be.
 type AttemptEnvironmentFactKind string
 
@@ -326,7 +326,7 @@ const (
 )
 
 // AttemptEnvironmentFact is one committed fact for environments. Attempt
-// facts name the Attempt; Sitting facts name only the Sitting.
+// facts name the attempt; sitting facts name only the sitting.
 type AttemptEnvironmentFact struct {
 	Kind       AttemptEnvironmentFactKind
 	AttemptID  ExamAttemptID
@@ -372,8 +372,8 @@ func (e *DomainEvent) AttemptEnvironmentFact() (AttemptEnvironmentFact, error) {
 	return fact, nil
 }
 
-// SealsTheAttempt reports whether a Participation that ended for reason
-// ended with the Attempt's Submission.
+// SealsTheAttempt reports whether a participation that ended for this reason
+// ended with the attempt's submission.
 func (r AttemptParticipationEndReason) SealsTheAttempt() bool {
 	return r == AttemptParticipationEndSubmitted || r == AttemptParticipationEndManagerEnded ||
 		r == AttemptParticipationEndSittingClosed
@@ -419,7 +419,7 @@ func (e *AttemptEnvironment) ApplyFact(fact AttemptEnvironmentFact, participatio
 	case AttemptEnvironmentFactSubmitted:
 		e.Desired = AttemptEnvironmentDesiredEnded
 	case AttemptEnvironmentFactSittingClosing:
-		// The Sitting's sealing Job waits for its environments to settle.
+		// The sitting's sealing job waits for its environments to settle.
 		e.SettleRequested++
 		e.touch(at)
 		e.SettleRequestedAt = e.UpdatedAt

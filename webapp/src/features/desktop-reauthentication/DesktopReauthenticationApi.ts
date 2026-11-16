@@ -41,6 +41,9 @@ export type DesktopReauthenticationApprovalResult =
 
 const base = "/api/v1/auth/desktop/reauthentications";
 
+// Trades the one-use handle and fragment proof for a route-scoped binding
+// cookie. This page never signs the browser in, and a browser Web Session is
+// never accepted as proof for the Desktop Session.
 export async function bindDesktopReauthentication(
   proof: DesktopReauthenticationProof,
 ): Promise<{ kind: "bound" } | DesktopReauthenticationFailure> {

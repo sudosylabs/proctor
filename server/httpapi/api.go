@@ -20,9 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 )
 
-// New constructs the production API over the application. Each resource in
-// productionResources is built from the application service that owns its
-// use cases, and the Identity service authenticates every request.
+// New builds the production API. It fails when application lacks a service a
+// resource needs, or when the settings or public URL are invalid.
 func New(application *app.App, settings Settings) (*route.API, error) {
 	if err := requireApplication(application); err != nil {
 		return nil, err
@@ -41,10 +40,9 @@ func New(application *app.App, settings Settings) (*route.API, error) {
 	)
 }
 
-// requireApplication rejects an application missing a service a resource is
-// built from, reporting the first absent one. Jobs and Mail are absent in a
-// graph that has no Job store; those services answer job.unavailable and
-// mail.unavailable on a nil receiver.
+// requireApplication reports the first missing service. Jobs and Mail are
+// left out on purpose: a graph without a job store has neither, and both
+// answer job.unavailable and mail.unavailable on a nil receiver.
 func requireApplication(application *app.App) error {
 	if application == nil {
 		return errors.New("application is required")
@@ -81,9 +79,8 @@ func requireApplication(application *app.App) error {
 	return nil
 }
 
-// compileAPI validates the settings and hands the resources to the routing
-// kernel, which compiles them into the sealed route catalog. New passes the
-// production inventory; handler tests pass resources built over their fakes.
+// compileAPI validates the settings and compiles resources into the sealed
+// route catalog. Handler tests call it with resources built over fakes.
 func compileAPI(
 	settings Settings,
 	authenticator route.Authenticator,

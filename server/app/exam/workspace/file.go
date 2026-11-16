@@ -42,9 +42,9 @@ type ReplaceFileCommand struct {
 	IdempotencyKey         string
 }
 
-// CreateExamStarterWorkspaceFile idempotently uploads and creates a file in
-// the Exam Draft's Starter Workspace, fenced by ExpectedDraftRevision. Size
-// -1 means the length is not known in advance.
+// CreateExamStarterWorkspaceFile rejects an upload whose SHA-256 differs from
+// ExpectedSHA256, and is fenced by ExpectedDraftRevision. Size -1 means the
+// length is not known in advance.
 func (s *Service) CreateExamStarterWorkspaceFile(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -105,9 +105,8 @@ func (s *Service) CreateExamStarterWorkspaceFile(
 	)
 }
 
-// ReplaceExamStarterWorkspaceFile idempotently replaces a Starter Workspace
-// file's content, fenced by ExpectedDraftRevision and its expected Workspace
-// Content Version.
+// ReplaceExamStarterWorkspaceFile is fenced by both ExpectedDraftRevision and
+// ExpectedContentVersion. Size -1 means the length is not known in advance.
 func (s *Service) ReplaceExamStarterWorkspaceFile(
 	ctx context.Context,
 	inv invocation.Invocation,

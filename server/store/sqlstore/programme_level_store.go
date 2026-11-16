@@ -27,7 +27,7 @@ import (
 
 // SQLProgrammeLevelStore implements store.ProgrammeLevelStore on
 // programme_levels. It refuses to archive a level that still has active
-// Classes.
+// classes.
 type SQLProgrammeLevelStore struct {
 	*SQLStore
 	programmeLevelsQuery sq.SelectBuilder
@@ -117,7 +117,7 @@ func (s SQLProgrammeLevelStore) createProgrammeLevel(
 	})
 }
 
-// Get returns the unarchived Programme Level with id, or a not-found error.
+// Get returns the unarchived programme level with id, or a not-found error.
 func (s SQLProgrammeLevelStore) Get(ctx context.Context, id model.ProgrammeLevelID) (*model.ProgrammeLevel, error) {
 	var row programmeLevelRow
 	query := s.programmeLevelsQuery.Where(sq.Eq{
@@ -130,7 +130,7 @@ func (s SQLProgrammeLevelStore) Get(ctx context.Context, id model.ProgrammeLevel
 	return row.model()
 }
 
-// GetByName returns the unarchived Programme Level of the Programme with the
+// GetByName returns the unarchived programme level of the programme with the
 // exact name, or a not-found error.
 func (s SQLProgrammeLevelStore) GetByName(ctx context.Context, programmeID model.ProgrammeID, name string) (*model.ProgrammeLevel, error) {
 	var row programmeLevelRow
@@ -145,7 +145,7 @@ func (s SQLProgrammeLevelStore) GetByName(ctx context.Context, programmeID model
 	return row.model()
 }
 
-// ListByProgramme returns the unarchived Programme Levels of the Programme,
+// ListByProgramme returns the unarchived programme levels of the programme,
 // ordered by name.
 func (s SQLProgrammeLevelStore) ListByProgramme(ctx context.Context, programmeID model.ProgrammeID) ([]*model.ProgrammeLevel, error) {
 	query := s.programmeLevelsQuery.
@@ -170,8 +170,8 @@ func (s SQLProgrammeLevelStore) ListByProgramme(ctx context.Context, programmeID
 	return levels, nil
 }
 
-// SearchByProgramme returns one page of unarchived Programme Levels of the
-// Programme selected and ordered by options.
+// SearchByProgramme returns one page of unarchived programme levels of the
+// programme selected and ordered by options.
 func (s SQLProgrammeLevelStore) SearchByProgramme(
 	ctx context.Context,
 	programmeID model.ProgrammeID,
@@ -285,8 +285,8 @@ func (s SQLProgrammeLevelStore) Update(ctx context.Context, input *store.Program
 	)
 }
 
-// Archive archives the Programme Level and completes its audit event. A
-// positive ExpectedRevision must match the stored revision, and active Classes
+// Archive archives the programme level and completes its audit event. A
+// positive ExpectedRevision must match the stored revision, and active classes
 // make it a conflict.
 func (s SQLProgrammeLevelStore) Archive(ctx context.Context, input *store.ProgrammeLevelArchive) (*model.ProgrammeLevel, error) {
 	if input == nil ||
@@ -449,7 +449,7 @@ func (row programmeLevelRow) model() (*model.ProgrammeLevel, error) {
 var _ store.ProgrammeLevelStore = (*SQLProgrammeLevelStore)(nil)
 
 // SeedUpdate is an unaudited fixture write that may also change what the
-// audited Update forbids (moving the owner, or editing a bound Role); production
+// audited Update forbids (moving the owner, or editing a bound role); production
 // code never calls it, which an architecture test enforces.
 func (s SQLProgrammeLevelStore) SeedUpdate(
 	ctx context.Context,
@@ -468,7 +468,7 @@ func (s SQLProgrammeLevelStore) SeedUpdate(
 	return s.updateProgrammeLevel(ctx, &candidate, "", nil)
 }
 
-// CountByProgramme counts through the same Programme and term filter as
+// CountByProgramme counts through the same programme and term filter as
 // SearchByProgramme.
 func (s SQLProgrammeLevelStore) CountByProgramme(
 	ctx context.Context,
@@ -480,7 +480,7 @@ func (s SQLProgrammeLevelStore) CountByProgramme(
 	return countAcademicNamePage(ctx, s.GetMaster(), rows, "programme_levels", options, maximum)
 }
 
-// levelsInProgramme keeps the Programme's unarchived Programme Levels.
+// levelsInProgramme keeps the programme's unarchived programme levels.
 func levelsInProgramme(query sq.SelectBuilder, programmeID model.ProgrammeID) sq.SelectBuilder {
 	return query.Where(sq.Eq{"programme_levels.programme_id": programmeID, "programme_levels.archived_at": nil})
 }

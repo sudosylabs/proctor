@@ -14,11 +14,9 @@ import (
 	"github.com/sudosylabs/proctor/server/app/realtime"
 )
 
-// publishCorrected announces an applied live correction, in this order: the
-// corrected-content fact to the Sitting's managers, the same fact to its
-// candidates, the Sitting board invalidation, and the Exam activity
-// invalidation of every candidate of the Sitting. A failed publication never
-// stops the ones after it; the failures are returned joined in that order.
+// publishCorrected notifies managers, then candidates, then the sitting board,
+// then each candidate's exam activity. A failed publication never stops the
+// later ones; failures are returned joined in that order.
 func (s *Service) publishCorrected(ctx context.Context, result Result) error {
 	managerEvent, err := realtime.NewExamSittingContentCorrectedEvent(
 		result.ExamID,

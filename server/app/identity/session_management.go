@@ -26,25 +26,21 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// RevokeOtherSessionsResult reports how many of the caller's other Sessions
-// this request revoked.
+// RevokeOtherSessionsResult counts only sessions this request newly revoked.
 type RevokeOtherSessionsResult struct {
 	RevokedSessionCount int
 }
 
-// ListSessionsResult is the caller's active Sessions with the name of the
-// Desktop Registration each Desktop Session is bound to.
+// ListSessionsResult is the caller's active sessions.
 type ListSessionsResult struct {
 	Sessions []*model.Session
-	// DesktopRegistrationNames holds the display name of every Desktop
-	// Registration a listed Desktop Session is bound to, keyed by its ID.
+	// DesktopRegistrationNames names the registration each listed desktop
+	// session is bound to, keyed by registration ID.
 	DesktopRegistrationNames map[model.DesktopRegistrationID]string
 }
 
-// ListSessions lists the caller's active Sessions. A Desktop Session is named
-// by its Desktop Registration, so the names are read with the list in one
-// further read of the caller's registrations, only when a Desktop Session is
-// listed.
+// ListSessions reads the caller's registrations only when a desktop session
+// is listed, since a desktop session is named by its registration.
 func (s *Service) ListSessions(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -84,10 +80,9 @@ type RenameSessionCommand struct {
 	DeviceName string
 }
 
-// RenameSession gives one of the caller's own live browser or CLI Sessions
-// the name they chose. A Desktop Session is named by its Desktop
-// Registration, so renaming one is refused with a pointer to that
-// registration. A rename changes no credential, so any interactive Session
+// RenameSession names one of the caller's browser or CLI sessions. A desktop
+// session is named by its registration, so renaming one is refused with a
+// pointer to it. A rename changes no credential, so any interactive session
 // may make it.
 func (s *Service) RenameSession(
 	ctx context.Context,
@@ -152,7 +147,8 @@ func (s *Service) RenameSession(
 	return renamed, nil
 }
 
-// RevokeSession revokes one of the caller's own Sessions.
+// RevokeSession revokes one of the caller's own sessions; another user's
+// session is not found.
 func (s *Service) RevokeSession(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -199,7 +195,8 @@ func (s *Service) RevokeSession(
 	)
 }
 
-// RevokeAllSessions revokes every active Session of the caller.
+// RevokeAllSessions revokes every active session of the caller, the current
+// one included.
 func (s *Service) RevokeAllSessions(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -227,9 +224,8 @@ func (s *Service) RevokeAllSessions(
 	)
 }
 
-// RevokeOtherSessions revokes every live Session of the caller except the
-// one making the request, which stays signed in. The principal must hold a
-// Session; the kept Session is recorded in the audit result.
+// RevokeOtherSessions keeps the requesting session signed in and records it in
+// the audit result; the principal must hold a session.
 func (s *Service) RevokeOtherSessions(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -264,15 +260,15 @@ func (s *Service) RevokeOtherSessions(
 	return &RevokeOtherSessionsResult{RevokedSessionCount: count}, nil
 }
 
-// A kept Session that is no longer live means the caller's own credential
+// A kept session that is no longer live means the caller's own credential
 // stopped being valid during the request.
 var selfOtherSessionsRevocationStoreErrors = apperror.StoreTable{
 	NotFound:    "authentication.token_invalid",
 	Unavailable: "authentication.internal",
 }
 
-// A Session that stopped being live, or a Desktop Session, after the read
-// above is reported as the read would have reported it.
+// A session that stopped being live, or turned out to be a desktop session,
+// after the read is reported as the read would have reported it.
 var selfSessionRenameStoreErrors = apperror.StoreTable{
 	NotFound:    "session.not_found",
 	Conflict:    "session.desktop_named_by_registration",

@@ -22,6 +22,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
@@ -29,14 +30,10 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// FileContent is the bounded composition contract. Each workflow receives a
-// narrower consumer-owned capability; only the application constructor needs
-// the complete concrete content adapter surface.
+// FileContent is the full file content adapter. Only New needs all of it;
+// each workflow receives a narrower interface of its own.
 type FileContent interface {
-	user.ProfilePictureUploadFiles
-	user.ProfilePictureReadFiles
-	user.DefaultProfilePictureRenderFiles
-	user.DefaultProfilePictureGenerationFiles
+	user.PictureFiles
 	jobs.FileRevisionContentPurger
 	jobs.StarterWorkspaceObjectPurger
 	jobs.AttemptWorkspaceObjectPurger
@@ -49,61 +46,59 @@ type FileContent interface {
 	onboarding.OnboardingImportFiles
 }
 
-// Dependencies are the explicit capabilities package app needs. The module-root
-// composition package builds these from deployment configuration and concrete
-// adapters; App never holds platform.Service.
+// Dependencies are the capabilities the server package supplies to New. App
+// never holds platform.Service.
 type Dependencies struct {
 	Store                store.Catalog
 	Cache                identity.AuthenticationCache
 	MailDeliverySender   mail.Sender
-	MailTemplateRenderer mail.Renderer
+	MailTemplateRenderer *mail.TemplateRenderer
 	MailDeliveryRecorder mail.DeliveryRecorder
 	MailMetricsReader    mail.MetricsReader
 	JobRecorder          job.Recorder
-	// JobTracer, when set, encloses each claimed Job execution in a span.
+	// JobTracer, when set, encloses each claimed job execution in a span.
 	JobTracer           job.Tracer
-	OperationalRecorder OperationalRecorder
-	// MFASecretSealer is the concrete in-process cryptographic module for TOTP
-	// secrets. It is nil until the independent MFA ring is configured.
+	OperationalRecorder operational.Recorder
+	// MFASecretSealer seals TOTP secrets; nil until the MFA ring is
+	// configured.
 	MFASecretSealer *secretseal.Sealer
-	// MailSecretSealer is the concrete in-process cryptographic module for
-	// recoverable mail payloads. It is nil until an independent ring is configured.
+	// MailSecretSealer seals recoverable mail payloads; nil until its ring is
+	// configured.
 	MailSecretSealer *secretseal.Sealer
 	Registry         identity.ExternalProviderSource
 	FileContent      FileContent
-	// Plugins describes and validates the compiled-in plugins for plugin
-	// administration; nil makes it unavailable.
+	// Plugins nil makes plugin administration unavailable.
 	Plugins administration.PluginCatalog
-	// DesktopBuildCatalog is the immutable verified build catalog embedded by
-	// the server release. An empty catalog admits no released builds.
+	// DesktopBuildCatalog is the verified build catalog embedded in the
+	// release. An empty catalog admits no released builds.
 	DesktopBuildCatalog []model.DesktopBuildTuple
-	// SkipDesktopCompatibility is the immutable development-environment policy
-	// for login. Protected Attempt admission always requires a verified build.
+	// SkipDesktopCompatibility relaxes the login build check for development.
+	// Protected attempt admission always requires a verified build.
 	SkipDesktopCompatibility bool
 
 	NodeID    string
 	PublicURL string
-	// ExecutionEnabled is whether Exams may publish with an execution
+	// ExecutionEnabled is whether exams may publish with an execution
 	// environment.
 	ExecutionEnabled bool
-	// EnvironmentWaker wakes the owner of an Attempt's execution environment
-	// after its facts or Workspace change. Nil wakes nobody; the runtime's
-	// backstop still finds the change.
+	// EnvironmentWaker wakes an attempt environment's owner after its facts
+	// or workspace change. Nil wakes nobody; the runtime's backstop still
+	// finds the change.
 	EnvironmentWaker environment.Waker
-	// EnvironmentSettles delivers the settles owners complete, which a seal
-	// waits on. Nil settles nothing before a seal.
-	EnvironmentSettles environment.SettleSubscriber
-	// EnvironmentDiagnostics receives execution environment failures nobody
-	// else sees, such as a settle that could not be asked. Nil drops them.
+	// EnvironmentSettles delivers completed settles, which a seal waits on.
+	// Nil settles nothing before a seal.
+	EnvironmentSettles *environment.ClusterSettles
+	// EnvironmentDiagnostics receives environment failures nobody else sees,
+	// such as a settle that could not be asked. Nil drops them.
 	EnvironmentDiagnostics func(model.ExamAttemptID, error)
-	// EnvironmentHosts reaches the execution hosts, so any node serves a
-	// candidate's terminals. Nil serves none.
+	// EnvironmentHosts lets any node serve a candidate's terminals. Nil
+	// serves none.
 	EnvironmentHosts environment.Hosts
-	// SupportAddress is the operator-configured help mailbox that public
-	// discovery publishes for hosted pages; empty publishes none.
+	// SupportAddress is the help mailbox public discovery publishes; empty
+	// publishes none.
 	SupportAddress string
-	// LoopbackHTTPDevelopment is the immutable composition-owned projection of
-	// explicit local development. It never relaxes non-loopback issuer rules.
+	// LoopbackHTTPDevelopment marks explicit local development. It never
+	// relaxes non-loopback issuer rules.
 	LoopbackHTTPDevelopment bool
 
 	Password                identity.PasswordPolicy

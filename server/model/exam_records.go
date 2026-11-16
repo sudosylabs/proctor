@@ -14,10 +14,10 @@ import (
 	"unicode/utf8"
 )
 
-// ExamSittingRecordsCompletion is the separate records lifecycle of a Closed
-// Sitting. It never changes delivery, Submission seals, or finalized Reviews.
-// Revision fences the full snapshot; EvidenceRevision identifies newly accepted
-// integrity state. A stale completion cannot authorize retention.
+// ExamSittingRecordsCompletion is the records lifecycle of a closed sitting,
+// separate from delivery, seals and finalized reviews. Revision fences the
+// snapshot; EvidenceRevision marks newly accepted integrity state. A stale
+// completion cannot authorize retention.
 type ExamSittingRecordsCompletion struct {
 	SittingID                 ExamSittingID
 	Revision                  int64
@@ -60,8 +60,8 @@ func (c *ExamSittingRecordsCompletion) IsCurrent() bool {
 	return c != nil && c.Validate() == nil && c.CompletedAt.Valid && !c.StaleAt.Valid
 }
 
-// Complete requires explicit acknowledgement of the current integrity revision.
-// Repeating an already-current completion never restarts its retention clock.
+// Complete requires acknowledging the current integrity revision. Repeating
+// a current completion never restarts its retention clock.
 func (c *ExamSittingRecordsCompletion) Complete(expected, acknowledged int64, actor UserID, at time.Time) (bool, error) {
 	if c.Validate() != nil || !actor.IsValid() || at.IsZero() || c.Revision != expected || acknowledged != c.EvidenceRevision {
 		return false, invalidModelError(
@@ -104,8 +104,8 @@ func (c *ExamSittingRecordsCompletion) Complete(expected, acknowledged int64, ac
 	return true, nil
 }
 
-// ObserveIntegrity records a fresh accepted change; callers must exclude exact
-// replay before invoking it. Previous completion provenance remains visible.
+// ObserveIntegrity records a freshly accepted change; callers must rule out an
+// exact replay first. Earlier completion provenance stays visible.
 func (c *ExamSittingRecordsCompletion) ObserveIntegrity(at time.Time) error {
 	if c.Validate() != nil || at.IsZero() || c.Revision == math.MaxInt64 || c.EvidenceRevision == math.MaxInt64 {
 		return invalidModelError(
@@ -138,8 +138,8 @@ func (c *ExamSittingRecordsCompletion) ObserveIntegrity(at time.Time) error {
 }
 
 // SubmissionReviewWaiver records a deliberate decision that the current
-// Submission inventory needs no finalized Review. It is invalidated by later
-// discrepancies or Review edits. PrivateReason never belongs in ordinary audit.
+// submissions need no finalized review. Later discrepancies or review edits
+// void it. PrivateReason never belongs in ordinary audit.
 type SubmissionReviewWaiver struct {
 	DeliveryInventoryRevision int64
 	InventoryInvalidated      bool
@@ -169,8 +169,8 @@ func (w *SubmissionReviewWaiver) Validate() error {
 	return nil
 }
 
-// RetentionHoldScope is an exact preservation target. ExamID is always supplied
-// so nested identifiers cannot be used to cross an Exam boundary.
+// RetentionHoldScope is an exact preservation target. ExamID is always set so
+// nested IDs cannot cross an exam boundary.
 type RetentionHoldScope struct {
 	ExamID       ExamID
 	SittingID    ExamSittingID
@@ -197,8 +197,8 @@ func (s RetentionHoldScope) Resource() Resource {
 	return Resource{Type: ResourceExam, ID: s.ExamID.String()}
 }
 
-// RetentionHold protects its exact scope and future descendants until an
-// explicitly authorized release. It has no automatic expiry.
+// RetentionHold protects its scope and future descendants until an authorized
+// release. It never expires on its own.
 type RetentionHold struct {
 	ID                   RetentionHoldID
 	Scope                RetentionHoldScope
@@ -211,7 +211,7 @@ type RetentionHold struct {
 	ReleasedByUserID     UserID
 	ReleaseReasonCode    string
 	ReleasePrivateReason string
-	// These creation-time counts disclose content that a new hold cannot restore.
+	// Counts taken at creation disclose content a new hold cannot restore.
 	WorkRetiredSubmissionCount      int64
 	IntegrityRetiredSubmissionCount int64
 }
@@ -255,8 +255,8 @@ func (h *RetentionHold) Release(expected int64, actor UserID, code, reason strin
 	return nil
 }
 
-// ValidateRecordsReason uses a closed audit vocabulary and bounds dedicated
-// private rationale. The private text is never ordinary audit data.
+// ValidateRecordsReason checks code against the closed audit vocabulary and
+// bounds the private rationale, which is never ordinary audit data.
 func ValidateRecordsReason(code, private string) error {
 	switch code {
 	case "institution_request", "integrity_review", "records_review", "review_not_required", "case_closed", "mistake", "other":

@@ -410,7 +410,7 @@ components:
     ClassListItemResponse:
       description: >-
         One Class in a Class listing. It includes the current student count when the caller holds
-        class.members.view on the listing's scope.
+        class.members.view on that Class.
       type: object
       additionalProperties: false
       required:
@@ -469,7 +469,7 @@ components:
           maximum: 10000
           description: >-
             How many members the Class has now, counted up to 10,000. Present only when the caller holds
-            class.members.view on the listing's scope. To sort a page by it, sort on the client.
+            class.members.view on this Class. To sort a page by it, sort on the client.
         student_count_is_lower_bound:
           type: boolean
           description: True when `student_count` reached 10,000. Present with `student_count`.

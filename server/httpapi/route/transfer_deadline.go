@@ -13,17 +13,12 @@ import (
 	"time"
 )
 
-// minimumTransferBytesPerSecond is the slowest sustained client throughput a
-// declared upload or download route admits. The server-wide read and write
-// timeouts bound ordinary JSON requests; a bounded binary transfer instead
-// receives that timeout plus the time its declared size takes at this rate,
-// so a slow but legitimate connection can finish a large Resource or
-// Workspace transfer.
+// minimumTransferBytesPerSecond is the slowest client a binary transfer route
+// admits. Such a route gets the server-wide timeout plus its declared size at
+// this rate, so a slow but legitimate connection can finish a large file.
 const minimumTransferBytesPerSecond = 64 << 10
 
-// transferDeadlines sizes connection deadlines for authenticated streaming
-// upload and binary download routes. The zero value leaves the server-wide
-// deadlines unchanged.
+// transferDeadlines' zero value leaves the server-wide deadlines unchanged.
 type transferDeadlines struct {
 	readTimeout  time.Duration
 	writeTimeout time.Duration
@@ -34,8 +29,6 @@ func newTransferDeadlines(readTimeout, writeTimeout time.Duration) transferDeadl
 	return transferDeadlines{readTimeout: readTimeout, writeTimeout: writeTimeout, now: time.Now}
 }
 
-// transferAllowance returns the time a transfer of size bytes may take at the
-// minimum admitted throughput.
 func transferAllowance(size int64) time.Duration {
 	if size <= 0 {
 		return 0
@@ -59,8 +52,6 @@ func uploadTransferBytes(contentLength, maxBodyBytes int64) int64 {
 	return maxBodyBytes
 }
 
-// extendForUpload extends the read deadline for the request body, sized by
-// uploadTransferBytes, and the write deadline for the response that follows.
 func (d transferDeadlines) extendForUpload(writer http.ResponseWriter, contentLength, maxBodyBytes int64) error {
 	allowance := transferAllowance(uploadTransferBytes(contentLength, maxBodyBytes))
 	controller := http.NewResponseController(writer)
@@ -74,8 +65,7 @@ func (d transferDeadlines) extendForUpload(writer http.ResponseWriter, contentLe
 	return result
 }
 
-// extendForDownload extends the write deadline for a response body of
-// exactly contentLength bytes, measured from the start of the body copy.
+// extendForDownload measures from the start of the body copy.
 func (d transferDeadlines) extendForDownload(writer http.ResponseWriter, contentLength int64) error {
 	if d.writeTimeout <= 0 {
 		return nil

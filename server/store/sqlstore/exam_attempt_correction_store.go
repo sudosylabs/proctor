@@ -95,7 +95,7 @@ type correctionAcknowledgementOutcome struct {
 
 func (correctionAcknowledgementOutcome) outcomeDocument() {}
 
-// AcknowledgeCorrection records the Candidate's acknowledgement of an Exam
+// AcknowledgeCorrection records the candidate's acknowledgement of an exam
 // correction under command. Replays recheck the target and return the retained
 // result with Replayed set.
 func (s *SQLExamAttemptStore) AcknowledgeCorrection(

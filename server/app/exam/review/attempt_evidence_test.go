@@ -10,12 +10,12 @@ package review
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -43,20 +43,18 @@ func testAttemptEvidence(t *testing.T) model.AttemptEvidence {
 
 func TestAttemptEvidenceRequiresCurrentDetailedReviewAuthority(t *testing.T) {
 	f := newReviewFixture(t)
-	denied := errors.New("review denied")
-	auth := &nativeReviewAuthorizer{Authorizer: f.authorizer, err: denied}
 	record := testAttemptEvidence(t)
 	p := &capabilityReviewStore{ExamIntegrityReviewStore: f.persistence,
 		page: &store.AttemptEvidencePage{Items: []model.AttemptEvidence{record}}}
-	f.service.authorizer = auth
 	f.service.reviews = p
 	query := store.AttemptEvidenceListOptions{SubmissionID: f.submissionID, Limit: 100}
 
-	_, err := f.service.ListAttemptEvidence(context.Background(), f.inv, query)
-	require.ErrorIs(t, err, denied, "private evidence read before authorization")
+	_, err := f.service.ListAttemptEvidence(context.Background(), outsiderInvocation(f), query)
+	// A refused caller cannot tell the Submission exists: the denial is
+	// concealed as not found.
+	require.True(t, apperror.Is(err, "resource.not_found"), "error = %v", err)
 	require.Equal(t, 0, p.calls, "private evidence read before authorization")
 
-	auth.err = nil
 	page, err := f.service.ListAttemptEvidence(context.Background(), f.inv, query)
 	require.NoError(t, err)
 	require.Equal(t, []model.AttemptEvidence{record}, page.Items)

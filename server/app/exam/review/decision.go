@@ -38,10 +38,9 @@ type UpdateDraftCommand struct {
 	IdempotencyKey         string
 }
 
-// SaveExamIntegrityDecision idempotently records the reviewer's decision on
-// one Integrity Flag, creating the Submission Review when
-// ExpectedReviewRevision is zero. It is fenced by the expected Review and
-// decision revisions.
+// SaveExamIntegrityDecision idempotently records a decision on one integrity
+// flag, creating the review when ExpectedReviewRevision is zero. It is fenced
+// by the expected review and decision revisions.
 func (s *Service) SaveExamIntegrityDecision(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -141,8 +140,8 @@ func (s *Service) SaveExamIntegrityDecision(
 	return result, nil
 }
 
-// UpdateExamIntegrityReview idempotently saves the draft remarks of a
-// Submission Review, creating the Review when ExpectedReviewRevision is zero.
+// UpdateExamIntegrityReview idempotently saves the draft notes and remarks,
+// creating the review when ExpectedReviewRevision is zero.
 func (s *Service) UpdateExamIntegrityReview(
 	ctx context.Context,
 	inv invocation.Invocation,

@@ -21,10 +21,9 @@ import (
 	"github.com/sudosylabs/proctor/server/plugin"
 )
 
-// writeExamExport hands format the archive and fails unless format read
-// every file exactly once, to its end, with the recorded size and digest.
-// A failure a source recorded wins over format's own error, so the export
-// fails with the error the source reported.
+// writeExamExport fails unless format read every file exactly once, to its
+// end, with the recorded size and digest. A source's recorded failure wins
+// over format's own error.
 func (c *Content) writeExamExport(ctx context.Context, input exam.ExportArchiveInput, format plugin.ExportFormat, w io.Writer) error {
 	sources := make([]*examExportSource, len(input.Files))
 	archive := plugin.ExportArchive{ExportID: input.ExportID.String(), Records: input.Records, Files: make([]plugin.ExportFile, len(input.Files))}
@@ -50,8 +49,7 @@ func (c *Content) writeExamExport(ctx context.Context, input exam.ExportArchiveI
 	case failure != nil:
 		return failure
 	case writeErr != nil:
-		// A format's error text is its own; sanitize keeps it out of
-		// what callers report.
+		// sanitize keeps the plugin's error text out of what callers report.
 		return sanitize("write Exam export archive", writeErr)
 	case !verified:
 		return errExamExportSourceVerification()
@@ -63,12 +61,10 @@ func errExamExportSourceVerification() error {
 	return errors.New("Exam export source verification failed")
 }
 
-// examExportSource opens one file's object at most once and verifies the
-// bytes a format reads from it. Reads are limited to Size+1 bytes and
-// observe the build's cancellation. At EOF the source records whether the
-// size and SHA-256 matched; Close reports a digest mismatch so a format
-// stops at the altered file. After the format returns, the source is sealed:
-// it closes a body the format left open and refuses further use.
+// examExportSource opens one file at most once and verifies what the format
+// reads, up to Size+1 bytes. Close reports a digest mismatch so the format
+// stops at the altered file. Once sealed it closes any body the format left
+// open and refuses further use.
 type examExportSource struct {
 	content *Content
 	work    context.Context
@@ -84,8 +80,7 @@ type examExportSource struct {
 	read     int64
 	eof      bool
 	verified bool
-	// failure is the first failure this source reported to the format.
-	failure error
+	failure  error
 }
 
 func (s *examExportSource) open(ctx context.Context) (io.ReadCloser, error) {
@@ -114,8 +109,7 @@ func (s *examExportSource) open(ctx context.Context) (io.ReadCloser, error) {
 	return examExportSourceReader{source: s}, nil
 }
 
-// fail records err as the source's failure unless one is already recorded,
-// and returns the recorded failure.
+// fail keeps the first failure and returns it.
 func (s *examExportSource) fail(err error) error {
 	if s.failure == nil {
 		s.failure = err
@@ -123,8 +117,6 @@ func (s *examExportSource) fail(err error) error {
 	return s.failure
 }
 
-// seal ends the format's use of the source and reports its first failure
-// and whether the format read every byte with a match.
 func (s *examExportSource) seal() (failure error, verified bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

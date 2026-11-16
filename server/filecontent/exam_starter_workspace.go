@@ -19,9 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// StarterWorkspaceInvalidContentError identifies caller-controlled content
-// that failed bounded validation. The application can distinguish it from an
-// opaque storage failure without depending on this adapter package.
+// StarterWorkspaceInvalidContentError marks caller content that failed
+// validation, as distinct from a storage failure.
 type StarterWorkspaceInvalidContentError struct{ cause error }
 
 func (err *StarterWorkspaceInvalidContentError) Error() string {
@@ -36,9 +35,8 @@ func invalidStarterWorkspaceContent(cause error) error {
 	return &StarterWorkspaceInvalidContentError{cause: cause}
 }
 
-// StageStarterWorkspaceObject streams one bounded file to a new exact opaque
-// object identity. PostgreSQL publication remains a separate authoritative
-// step; successfully staged bytes are not application-visible by themselves.
+// StageStarterWorkspaceObject streams one bounded file to a new object, which
+// stays invisible until the caller publishes it in PostgreSQL.
 func (c *Content) StageStarterWorkspaceObject(
 	ctx context.Context,
 	objectID model.StarterWorkspaceObjectID,
@@ -77,8 +75,8 @@ func (c *Content) StageStarterWorkspaceObject(
 	return &model.StarterWorkspaceContent{MediaType: mediaType, SizeBytes: info.Size, SHA256: fmt.Sprintf("%x", hash.Sum(nil))}, nil
 }
 
-// OpenStarterWorkspaceObject opens only an exact opaque object selected by
-// authorized PostgreSQL metadata.
+// OpenStarterWorkspaceObject opens the object named by authorized stored
+// metadata; it checks no access itself.
 func (c *Content) OpenStarterWorkspaceObject(ctx context.Context, objectID model.StarterWorkspaceObjectID) (io.ReadCloser, error) {
 	if c == nil || c.filesystem == nil || !objectID.IsValid() {
 		return nil, fmt.Errorf("invalid Starter Workspace object identity")
@@ -90,8 +88,8 @@ func (c *Content) OpenStarterWorkspaceObject(ctx context.Context, objectID model
 	return file.Body, nil
 }
 
-// RemoveStarterWorkspaceObject idempotently removes one exact opaque object
-// after persistence has durably established cleanup eligibility.
+// RemoveStarterWorkspaceObject removes an object the caller has durably
+// claimed for cleanup. A missing object is not an error.
 func (c *Content) RemoveStarterWorkspaceObject(ctx context.Context, objectID model.StarterWorkspaceObjectID) error {
 	if c == nil || c.filesystem == nil || !objectID.IsValid() {
 		return fmt.Errorf("invalid Starter Workspace object identity")

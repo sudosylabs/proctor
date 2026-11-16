@@ -23,8 +23,8 @@ const (
 	UserSettingsCollectionMaxElements = 256
 )
 
-// UserSettingsRevision is an opaque comparison token for one exact current
-// User Settings Document source. It is not an ordering, time, or content hash.
+// UserSettingsRevision is an opaque comparison token for one exact settings
+// document. It is not an ordering, a time or a content hash.
 type UserSettingsRevision string
 
 func NewUserSettingsRevision() UserSettingsRevision {
@@ -41,9 +41,9 @@ func ParseUserSettingsRevision(value string) (UserSettingsRevision, error) {
 func (r UserSettingsRevision) IsValid() bool  { return IsValidOpaqueID(string(r)) }
 func (r UserSettingsRevision) String() string { return string(r) }
 
-// UserSettingsDocument is the server-authoritative exact portable
-// presentation-preference source for one User. Source is deliberately omitted
-// from generic JSON so logs and audit helpers cannot expose it accidentally.
+// UserSettingsDocument is the server's authoritative copy of one user's
+// portable presentation preferences. Source is never in JSON, so logs and audit
+// helpers cannot expose it by accident.
 type UserSettingsDocument struct {
 	UserID        UserID
 	Source        string `json:"-"`

@@ -17,12 +17,11 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// prepareWorkspaceBatchIdempotency fingerprints a batch by everything the
-// writer asked for, in order. Server-chosen identities are not part of it, so
-// an exact retry matches. The outcome is keyed under the candidate for every
-// writer, and fingerprints the author kind, so one kind's batch can never
-// replay as, or collide with, another's under the same key. The author's
-// reference is left out, so a retry through a new Connection still matches.
+// prepareWorkspaceBatchIdempotency fingerprints a batch by what the writer
+// asked for, in order. Server-chosen identities and the author's reference are
+// left out, so an exact retry matches even through a new connection. The
+// author kind is fingerprinted so one kind's batch never replays as another's
+// under the same candidate-scoped key.
 func prepareWorkspaceBatchIdempotency(
 	candidateID model.UserID,
 	authorKind model.AttemptWorkspaceAuthorKind,

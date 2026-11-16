@@ -22,10 +22,9 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// PersonalAccessTokenGrantableScopes is the caller's current PAT scope
-// catalogue. AcademicUnits holds at most 50 delegable roots ordered by display
-// name; AcademicUnitsHasMore reports that more exist. Each scope lists only the
-// returned roots at which it is delegable.
+// PersonalAccessTokenGrantableScopes holds at most 50 delegable academic unit
+// roots, ordered by display name, with AcademicUnitsHasMore set when more
+// exist. Each scope lists only the returned roots at which it is delegable.
 type PersonalAccessTokenGrantableScopes struct {
 	Scopes               []PersonalAccessTokenGrantableScope
 	AcademicUnits        []*model.AcademicUnit
@@ -40,10 +39,9 @@ type PersonalAccessTokenGrantableScope struct {
 	AcademicUnitIDs []model.AcademicUnitID
 }
 
-// ListGrantablePersonalAccessTokenScopes reports which actions the interactive
-// caller may currently delegate to a new PAT, and at which Academic Unit roots.
-// It applies creation's delegation ceiling, so every offered placement is one
-// CreatePersonalAccessToken accepts for the same principal.
+// ListGrantablePersonalAccessTokenScopes applies the same delegation ceiling as
+// creation, so every offered placement is one CreatePersonalAccessToken accepts
+// for the same principal.
 func (s *Service) ListGrantablePersonalAccessTokenScopes(
 	ctx context.Context,
 	inv invocation.Invocation,

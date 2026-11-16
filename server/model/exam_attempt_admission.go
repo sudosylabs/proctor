@@ -12,37 +12,36 @@ import (
 	"time"
 )
 
-// Why a candidate may not be admitted to a Sitting. The Store's admission
-// transaction reads the facts under its row locks and asks the two checks
-// below to decide.
+// Admission refusals. The store's admission transaction reads the facts under
+// its row locks and asks the two checks below to decide.
 var (
-	// ErrAttemptAdmissionMembership means the Sitting's Class is no longer
-	// in the Academic Period the candidate's enrollment was locked for.
+	// ErrAttemptAdmissionMembership means the sitting's class is no longer in
+	// the academic period the candidate's enrollment was locked for.
 	ErrAttemptAdmissionMembership = errors.New("sitting's class changed academic period during admission")
-	// ErrAttemptAdmissionSittingState means the Sitting is not Open.
+	// ErrAttemptAdmissionSittingState means the sitting is not open.
 	ErrAttemptAdmissionSittingState = errors.New("sitting does not admit candidates in its current state")
-	// ErrAttemptAdmissionManagementAuthority means the candidate manages
-	// the Exam, so may not sit it.
+	// ErrAttemptAdmissionManagementAuthority means the candidate manages the
+	// exam, so may not sit it.
 	ErrAttemptAdmissionManagementAuthority = errors.New("candidate holds management authority over the exam")
-	// ErrAttemptAdmissionDeadlineReached means the Sitting's scheduled end
-	// has passed.
+	// ErrAttemptAdmissionDeadlineReached means the sitting's scheduled end has
+	// passed.
 	ErrAttemptAdmissionDeadlineReached = errors.New("sitting has reached its scheduled end")
 )
 
-// AttemptAdmissionSitting is what admission knows once the Sitting and its
-// Class are locked.
+// AttemptAdmissionSitting is what admission knows once the sitting and its
+// class are locked.
 type AttemptAdmissionSitting struct {
-	// PeriodMatches reports that the locked Class is in the Academic Period
+	// PeriodMatches reports that the locked class is in the academic period
 	// the candidate's enrollment was locked for.
 	PeriodMatches bool
 	State         ExamSittingState
-	// AllowPaused admits a Paused Sitting. Only the exact replay of an
-	// earlier admission sets it; a new Connection always needs Open.
+	// AllowPaused admits a paused sitting. Only the exact replay of an earlier
+	// admission sets it; a new connection always needs an open sitting.
 	AllowPaused bool
 }
 
-// CheckAttemptAdmissionSitting decides the rules that need only the Sitting.
-// Admission runs it before it locks the candidate's Session, so a refusal
+// CheckAttemptAdmissionSitting decides the rules that need only the sitting.
+// Admission runs it before locking the candidate's session, so a refusal
 // takes no further locks.
 func CheckAttemptAdmissionSitting(facts AttemptAdmissionSitting) error {
 	if !facts.PeriodMatches {

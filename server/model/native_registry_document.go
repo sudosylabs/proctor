@@ -13,15 +13,14 @@ import (
 	"time"
 )
 
-// NativeRegistryDocumentMaxBytes bounds Desktop's registry document.
+// NativeRegistryDocumentMaxBytes bounds Desktop's registry document, in bytes.
 const NativeRegistryDocumentMaxBytes = 1 << 20
 
 // nativeFactSchemaKinds are the fact schemas every capability publishes.
 var nativeFactSchemaKinds = []string{"state", "summary"}
 
-// nativeRegistryWire is the registry part of Desktop's registry document, and
-// of its rule conformance vectors, as Desktop generates it from its Rust
-// types.
+// nativeRegistryWire is the registry part of Desktop's registry document and
+// of its rule conformance vectors, as generated from Desktop's Rust types.
 type nativeRegistryWire struct {
 	Applications  []nativeApplicationWire `json:"applications"`
 	BaselineRules []json.RawMessage       `json:"baseline_rules"`
@@ -54,10 +53,9 @@ type nativeFieldWire struct {
 }
 
 // ParseNativeCapabilityRegistry reads the registry document a Desktop release
-// ships: its capabilities with their typed fields and reasons, the baseline
-// rules every policy carries, and each capability's published fact schemas.
-// It refuses anything it does not model, so a format change surfaces here
-// rather than as a silently ignored field.
+// ships: capabilities with their typed fields and reasons, the baseline rules,
+// and each capability's fact schemas. It refuses anything it does not model,
+// so a format change fails here rather than being silently ignored.
 func ParseNativeCapabilityRegistry(document []byte) (*NativeCapabilityRegistry, error) {
 	if len(document) == 0 || len(document) > NativeRegistryDocumentMaxBytes {
 		return nil, errNativeRegistry

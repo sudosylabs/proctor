@@ -20,6 +20,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -30,14 +31,14 @@ type RefreshSessionCommand struct {
 	DPoP         *DPoPRequestProof
 }
 
-// RefreshSession rotates a Session's access and refresh credentials for a
-// valid refresh token, verifying the DPoP proof of a Desktop Session.
+// RefreshSession rotates a session's credentials and verifies the DPoP proof
+// of a desktop session.
 func (s *Service) RefreshSession(
 	ctx context.Context,
 	_ invocation.Invocation,
 	command RefreshSessionCommand,
 ) (_ *model.Session, _ *model.AuthenticationTokens, resultErr error) {
-	defer func() { recordOperational(s.operational, "authentication", "refresh", resultErr) }()
+	defer func() { operational.Record(s.operational, "authentication", "refresh", resultErr) }()
 	rawRefreshToken := command.RefreshToken
 	if !validRawCredential(rawRefreshToken) {
 		return nil, nil, access.InvalidTokenAppError()
@@ -69,8 +70,8 @@ func (s *Service) RefreshSession(
 	now := model.TimeUTC(s.now())
 	mfaRequired := false
 	if session.AuthenticationStrength != model.AuthenticationMultiFactor {
-		// A User who became a role holder mid-Session, or whose Session predates the
-		// policy, is restricted here; a Desktop Session is refused instead.
+		// A user who became a role holder mid-session, or whose session predates
+		// the policy, is restricted here; a desktop session is refused instead.
 		mfaRequired, err = s.accessPolicy.RequiresMFA(ctx, session.UserID)
 		if err != nil {
 			return nil, nil, authenticationUnavailable(err)

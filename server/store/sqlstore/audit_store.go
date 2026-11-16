@@ -340,7 +340,7 @@ func (s SQLAuditStore) Count(ctx context.Context, options store.AuditListOptions
 }
 
 // filterAuditList validates and applies every List filter but the keyset:
-// the visibility (operator, academic Institution-wide, or academic subtrees
+// the visibility (operator, academic institution-wide, or academic subtrees
 // limited to the allowed actions), actor, action, kind, resource, and creation
 // range. List and Count share it so a total always counts the listed rows.
 func filterAuditList(query sq.SelectBuilder, options store.AuditListOptions) (sq.SelectBuilder, error) {
@@ -498,7 +498,7 @@ type auditSelfRow struct {
 
 // ListSelf reads the subject and actor relations through their own partial
 // indexes, each bounded by the page keyset and limit, and merges them. A
-// self action is about the User's own account, so the actor relation keeps
+// self action is about the user's own account, so the actor relation keeps
 // only events whose subject is someone or nothing else and no row is read
 // twice.
 func (s SQLAuditStore) ListSelf(ctx context.Context, options store.AuditSelfListOptions) ([]*store.AuditSelfEntry, error) {
@@ -748,9 +748,9 @@ func (row auditSelfRow) entry() (*store.AuditSelfEntry, error) {
 	}, nil
 }
 
-// auditSelfRoleID keeps a Role identifier read from audit values only when
+// auditSelfRoleID keeps a role identifier read from audit values only when
 // it is well formed. The values are writer-owned JSON rather than a typed
-// column, so a malformed one names no Role instead of failing the history.
+// column, so a malformed one names no role instead of failing the history.
 func auditSelfRoleID(raw string) model.RoleID {
 	if id := model.RoleID(raw); id.IsValid() {
 		return id

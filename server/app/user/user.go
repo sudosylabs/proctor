@@ -5,15 +5,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package user owns what a User reads and changes about themself and what an
-// administrator reads and changes about a User's profile: the User directory
-// and profile, the portable settings document, and the profile picture.
-// Service holds every one of these use cases, one file per concern.
-// Account state, email addresses and account recovery belong to the identity
-// area in app/identity.
-// Start with user.go for the Service and its collaborators, then open the
-// file named for the concern you are changing. effects.go builds the realtime
-// events a committed change publishes.
+// Package user owns the user directory and profile, the portable settings
+// document and the profile picture, both for the user themself and for an
+// administrator. Account state, email addresses and account recovery belong
+// to app/identity.
 package user
 
 import (
@@ -23,67 +18,31 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Authorizer is the part of *access.Authorizer the User use cases call.
-type Authorizer interface {
-	AuthorizeUserSearch(context.Context, invocation.Invocation) (store.UserVisibilityScope, error)
-	// RoleBindingViewScope reports, without recording a decision, the scopes
-	// in which the caller holds role_binding.view at the instant. It narrows
-	// what a directory summary shows; it never admits a request.
-	RoleBindingViewScope(context.Context, invocation.Invocation, time.Time) (store.UserVisibilityScope, error)
-	// CanViewRoles reports, without recording a decision, whether the caller
-	// holds Institution-wide role.view, which is how a caller sees Roles.
-	CanViewRoles(context.Context, invocation.Invocation) (bool, error)
-	// AuthorizeProfileRead reports fullProfile when the caller reads its own
-	// profile or holds institution-wide User visibility; a scoped grant reads
-	// the limited profile.
-	AuthorizeProfileRead(context.Context, invocation.Invocation, model.UserID) (access.ProfileReadAuthorization, error)
-	AuthorizeProfilePictureWrite(context.Context, invocation.Invocation, model.UserID) error
-	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
-}
-
-// Auditor records the attempt and failure of each audited mutation.
-type Auditor interface {
-	access.MutationAuditor
-}
-
-// SettingsAuditor prepares the audit event that commits with a settings
-// replacement.
-type SettingsAuditor interface {
-	PrepareReplacement(context.Context, access.UserSettingsAuditInput) (*model.AuditEvent, error)
-}
-
-// DefaultPictureJobs proposes the durable generation of a User's default
+// DefaultPictureJobs proposes a durable job that renders a user's default
 // profile picture.
 type DefaultPictureJobs interface {
 	ProposeDefaultProfilePicture(context.Context, model.UserID, time.Time) error
 }
 
-// Dependencies are the collaborators New distributes to the Service.
-// Publisher delivers the realtime events the use cases build in effects.go
-// after a change commits. DefaultJobs may be nil, which leaves default
+// Dependencies configures New. DefaultJobs may be nil, which leaves default
 // pictures to be rendered on every read.
 type Dependencies struct {
-	Store           store.Catalog
-	Authorizer      Authorizer
-	Auditor         Auditor
-	SettingsAuditor SettingsAuditor
-	Publisher       realtime.Publisher
-	DefaultJobs     DefaultPictureJobs
-	Uploads         ProfilePictureUploadFiles
-	Reads           ProfilePictureReadFiles
-	Fallback        DefaultProfilePictureRenderFiles
-	Defaults        DefaultProfilePictureGenerationFiles
-	Now             func() time.Time
+	Store       store.Catalog
+	Authorizer  *access.Authorizer
+	Auditor     *access.Auditor
+	Publisher   realtime.Publisher
+	DefaultJobs DefaultPictureJobs
+	Pictures    PictureFiles
+	Now         func() time.Time
 }
 
-// Service holds every User profile, directory, settings and profile-picture
-// use case.
+// Service holds the profile, directory, settings and profile-picture use
+// cases.
 type Service struct {
 	users        store.UserStore
 	roles        store.RoleStore
@@ -91,19 +50,16 @@ type Service struct {
 	files        store.FileStore
 	settings     store.UserSettingsStore
 
-	authorizer      Authorizer
-	auditor         Auditor
-	settingsAuditor SettingsAuditor
+	authorizer      *access.Authorizer
+	auditor         access.MutationAuditAdapter
+	settingsAuditor access.UserSettingsAuditAdapter
 	publisher       realtime.Publisher
 	defaultJobs     DefaultPictureJobs
-	uploads         ProfilePictureUploadFiles
-	reads           ProfilePictureReadFiles
-	fallback        DefaultProfilePictureRenderFiles
-	defaults        DefaultProfilePictureGenerationFiles
+	pictures        PictureFiles
 	now             func() time.Time
 }
 
-// New builds the Service, keeping the Store contracts it calls.
+// New fails when a required dependency is missing.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Store == nil {
 		return nil, errors.New("user store catalog is required")
@@ -111,8 +67,11 @@ func New(deps Dependencies) (*Service, error) {
 	if deps.Store.UserSettings() == nil {
 		return nil, errors.New("user settings store is required")
 	}
-	if deps.SettingsAuditor == nil {
-		return nil, errors.New("user settings audit preparer is required")
+	if deps.Authorizer == nil {
+		return nil, errors.New("user authorizer is required")
+	}
+	if deps.Auditor == nil {
+		return nil, errors.New("user auditor is required")
 	}
 	if deps.Publisher == nil {
 		return nil, errors.New("user realtime publisher is required")
@@ -128,19 +87,15 @@ func New(deps Dependencies) (*Service, error) {
 		files:           deps.Store.File(),
 		settings:        deps.Store.UserSettings(),
 		authorizer:      deps.Authorizer,
-		auditor:         deps.Auditor,
-		settingsAuditor: deps.SettingsAuditor,
+		auditor:         deps.Auditor.MutationAudit(),
+		settingsAuditor: deps.Auditor.UserSettingsAudit(),
 		publisher:       deps.Publisher,
 		defaultJobs:     deps.DefaultJobs,
-		uploads:         deps.Uploads,
-		reads:           deps.Reads,
-		fallback:        deps.Fallback,
-		defaults:        deps.Defaults,
+		pictures:        deps.Pictures,
 		now:             deps.Now,
 	}, nil
 }
 
-// StoreErrors presents Store failures of a User as application errors. The
-// identity area uses it for the User reads of email changes, and the parent
-// app package for those of onboarding import.
+// StoreErrors presents user store failures; identity and onboarding import
+// reuse it for their user reads.
 var StoreErrors = apperror.AdministrationStoreTable("user", "user.conflict", "user.invalid", nil)

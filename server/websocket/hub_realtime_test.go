@@ -11,33 +11,46 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"net"
+	"net/http"
 	"testing"
+	"testing/synctest"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/config"
+	"github.com/sudosylabs/proctor/server/metrics"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type websocketMetricsFake struct {
-	broadcastEvent      string
-	broadcastOutcome    string
-	broadcastRecipients int
-	replays             []string
-	subscriptions       int
+// newServedMetrics is an enabled metrics module serving on a free loopback
+// port, and a function that returns one scrape of its /metrics page.
+func newServedMetrics(t *testing.T) (*metrics.Module, func() string) {
+	t.Helper()
+	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	address := listener.Addr().String()
+	require.NoError(t, listener.Close())
+	settings := config.Default().Metrics
+	settings.Enabled, settings.ListenAddress, settings.BearerToken = true, address, ""
+	module, err := metrics.New(settings, metrics.BuildInfo{Version: "test"}, metrics.Sources{})
+	require.NoError(t, err)
+	require.NoError(t, module.Start(t.Context()))
+	t.Cleanup(func() { _ = module.Close(context.Background()) })
+	return module, func() string {
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+address+"/metrics", nil)
+		require.NoError(t, err)
+		response, err := http.DefaultClient.Do(request)
+		require.NoError(t, err)
+		defer response.Body.Close()
+		body, err := io.ReadAll(response.Body)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, response.StatusCode, "scrape: %s", body)
+		return string(body)
+	}
 }
-
-func (*websocketMetricsFake) ConnectionOpened(string)                             {}
-func (*websocketMetricsFake) ConnectionClosed(string)                             {}
-func (*websocketMetricsFake) Backpressure()                                       {}
-func (*websocketMetricsFake) ObserveWebSocketMessage(string, string, string, int) {}
-func (r *websocketMetricsFake) ObserveWebSocketBroadcast(event, outcome string, recipients int) {
-	r.broadcastEvent, r.broadcastOutcome, r.broadcastRecipients = event, outcome, recipients
-}
-func (r *websocketMetricsFake) ObserveWebSocketReplay(outcome string, _ int) {
-	r.replays = append(r.replays, outcome)
-}
-func (r *websocketMetricsFake) AddWebSocketSubscriptions(delta int) { r.subscriptions += delta }
 
 func TestEventFromRealtimePreservesWireFieldsAndClonesData(t *testing.T) {
 	t.Parallel()
@@ -71,63 +84,63 @@ func TestHubMetricsObserveBroadcastFanoutAndResumeOutcome(t *testing.T) {
 	t.Parallel()
 
 	hub := newInternalTestHub(t)
-	recorder := &websocketMetricsFake{}
+	recorder, scrape := newServedMetrics(t)
 	require.NoError(t, hub.AttachRecorder(recorder))
 	require.NoError(t, hub.Start(context.Background()))
 	defer func() { _ = hub.Close(context.Background()) }()
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}
-	connection, _ := hub.register(newRuntimeTestSocket(), principal, model.RequestMetadata{}, "missing-resume", 0, "")
+	socket, _ := newSocketPair(t)
+	connection, _ := hub.register(socket, principal, model.RequestMetadata{}, "missing-resume", 0, "")
 	require.NotNil(t, connection, "register returned nil")
 	event := realtime.Event{ID: model.NewID(), Name: "academic_unit.updated", UserID: principal.UserID, Data: json.RawMessage(`{"updated":true}`)}
 	hub.PublishLocal(context.Background(), event)
-	require.Equal(t, "event", recorder.broadcastEvent, "broadcast metrics")
-	require.Equal(t, "published", recorder.broadcastOutcome, "broadcast metrics")
-	require.Equal(t, 1, recorder.broadcastRecipients, "broadcast metrics")
-	require.Len(t, recorder.replays, 1)
-	require.Equal(t, "resync_required", recorder.replays[0])
+	observed := scrape()
+	require.Contains(t, observed, `proctor_websocket_broadcasts_total{event="event",outcome="published"} 1`, "broadcast metrics")
+	require.Contains(t, observed, "proctor_websocket_broadcast_recipients_sum 1\n", "broadcast metrics")
+	require.Contains(t, observed, "proctor_websocket_broadcast_recipients_count 1\n", "broadcast metrics")
+	require.Contains(t, observed, `proctor_websocket_replays_total{outcome="resync_required"} 1`)
+	require.NotContains(t, observed, `proctor_websocket_replays_total{outcome="resumed"}`, "one replay outcome")
 }
 
 func TestHubUnbindExamAttemptConnectionClearsOnlyExactBindingAndKeepsSocketOpen(t *testing.T) {
 	t.Parallel()
 
-	hub := newInternalTestHub(t)
-	require.NoError(t, hub.Start(context.Background()))
-	defer func() { _ = hub.Close(context.Background()) }()
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}
-	exactSocket, otherSocket := newRuntimeTestSocket(), newRuntimeTestSocket()
-	exact, _ := hub.register(exactSocket, principal, model.RequestMetadata{}, "", 0, "")
-	other, _ := hub.register(otherSocket, principal, model.RequestMetadata{}, "", 0, "")
-	require.NotNil(t, exact, "Hub did not register test connections")
-	require.NotNil(t, other, "Hub did not register test connections")
-	exactID, otherID := model.NewAttemptConnectionID(), model.NewAttemptConnectionID()
-	exactSubscription := bindRuntimeForUnbindTest(exact, exactID)
-	bindRuntimeForUnbindTest(other, otherID)
+	synctest.Test(t, func(t *testing.T) {
+		hub := newInternalTestHub(t)
+		require.NoError(t, hub.Start(context.Background()))
+		defer func() { _ = hub.Close(context.Background()) }()
+		principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}
+		exactSocket, exactPeer := newSocketPair(t)
+		otherSocket, otherPeer := newSocketPair(t)
+		exactPeer.listen()
+		otherPeer.listen()
+		exact, _ := hub.register(exactSocket, principal, model.RequestMetadata{}, "", 0, "")
+		other, _ := hub.register(otherSocket, principal, model.RequestMetadata{}, "", 0, "")
+		require.NotNil(t, exact, "Hub did not register test connections")
+		require.NotNil(t, other, "Hub did not register test connections")
+		exactID, otherID := model.NewAttemptConnectionID(), model.NewAttemptConnectionID()
+		exactSubscription := bindRuntimeForUnbindTest(exact, exactID)
+		bindRuntimeForUnbindTest(other, otherID)
 
-	hub.UnbindExamAttemptConnection(exactID)
+		hub.UnbindExamAttemptConnection(exactID)
 
-	exact.mu.Lock()
-	exactBinding := exact.attempt
-	_, exactSubscribed := exact.subscriptions[exactSubscription.Key()]
-	exact.mu.Unlock()
-	other.mu.Lock()
-	otherBinding := other.attempt
-	otherSubscribed := len(other.subscriptions) == 1
-	other.mu.Unlock()
-	require.Nil(t, exactBinding, "exact binding")
-	require.False(t, exactSubscribed, "exact binding")
-	require.NotNil(t, otherBinding, "exact binding")
-	require.Equal(t, otherID, otherBinding.connectionID, "exact binding")
-	require.True(t, otherSubscribed, "exact binding")
-	select {
-	case <-exactSocket.closed:
-		require.FailNow(t, "exact generic WebSocket was closed")
-	default:
-	}
-	select {
-	case <-otherSocket.closed:
-		require.FailNow(t, "unrelated generic WebSocket was closed")
-	default:
-	}
+		exact.mu.Lock()
+		exactBinding := exact.attempt
+		_, exactSubscribed := exact.subscriptions[exactSubscription.Key()]
+		exact.mu.Unlock()
+		other.mu.Lock()
+		otherBinding := other.attempt
+		otherSubscribed := len(other.subscriptions) == 1
+		other.mu.Unlock()
+		require.Nil(t, exactBinding, "exact binding")
+		require.False(t, exactSubscribed, "exact binding")
+		require.NotNil(t, otherBinding, "exact binding")
+		require.Equal(t, otherID, otherBinding.connectionID, "exact binding")
+		require.True(t, otherSubscribed, "exact binding")
+		synctest.Wait()
+		require.False(t, exactPeer.ended(), "exact generic WebSocket was closed")
+		require.False(t, otherPeer.ended(), "unrelated generic WebSocket was closed")
+	})
 }
 
 func bindRuntimeForUnbindTest(runtime *connectionRuntime, connectionID model.AttemptConnectionID) Subscription {
@@ -188,9 +201,11 @@ func TestHubDeliversAScopedEventOnlyToItsScopeSubscribers(t *testing.T) {
 	hub := newInternalTestHub(t)
 	require.NoError(t, hub.Start(context.Background()))
 	defer func() { _ = hub.Close(context.Background()) }()
-	inScope, _ := hub.register(newRuntimeTestSocket(),
+	inScopeSocket, _ := newSocketPair(t)
+	outOfScopeSocket, _ := newSocketPair(t)
+	inScope, _ := hub.register(inScopeSocket,
 		model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}, model.RequestMetadata{}, "", 0, "")
-	outOfScope, _ := hub.register(newRuntimeTestSocket(),
+	outOfScope, _ := hub.register(outOfScopeSocket,
 		model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}, model.RequestMetadata{}, "", 0, "")
 	require.NotNil(t, inScope)
 	require.NotNil(t, outOfScope)

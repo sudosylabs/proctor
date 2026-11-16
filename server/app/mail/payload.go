@@ -19,12 +19,10 @@ import (
 )
 
 // ErrInvalidMessage identifies frozen content or metadata that cannot form a
-// valid outbound message. Reopening failures otherwise describe an unavailable
-// or unsupported payload. Neither error class includes frozen content.
+// valid outbound message; other reopening failures mean an unavailable or
+// unsupported payload. Neither error includes frozen content.
 var ErrInvalidMessage = errors.New("mail message is invalid")
 
-// frozenPayload is the private persisted representation shared by direct
-// composition, fan-out composition, and delivery reopening.
 type frozenPayload struct {
 	RecipientName        string `json:"recipient_name"`
 	RecipientAddress     string `json:"recipient_address"`
@@ -91,10 +89,10 @@ func freezeDeliveryPayload(
 	}, nil
 }
 
-// OpenDelivery reopens and validates one immutable prepared delivery for Sender.
-// Recipient, sender, content, and automatic-response headers come only from the
-// frozen payload; Message-ID and Date retain the delivery's original metadata.
-// It neither resolves current recipient details nor renders templates again.
+// OpenDelivery reopens and validates one prepared delivery. Recipient,
+// sender, content and automatic-response headers come only from the frozen
+// payload, and Message-ID and Date from the delivery's original metadata; it
+// never resolves current recipient details or renders again.
 func OpenDelivery(sealer *secretseal.Sealer, delivery *model.MailDelivery) (Outbound, error) {
 	var envelope secretseal.Envelope
 	if sealer == nil ||
@@ -162,3 +160,10 @@ func (p frozenPayload) validate() error {
 
 	return nil
 }
+
+// DeliverySealingPurpose binds a delivery's sealed payload to its delivery ID,
+// so a payload copied onto another delivery fails to open. Mail rekeying
+// reseals under the same purpose.
+const (
+	DeliverySealingPurpose = "mail.delivery"
+)

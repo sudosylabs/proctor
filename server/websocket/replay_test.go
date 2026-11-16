@@ -74,16 +74,16 @@ func TestConnectionRuntimeClonesTheAcceptedPrincipal(t *testing.T) {
 		SessionID:        model.NewSessionID(),
 		CredentialScopes: []string{"class.view"},
 	}
-	application := &inboundTestApplication{}
 	logger, _ := newTestLogger(t)
+	socket, _ := newSocketPair(t)
 	runtime := newConnectionRuntime(
-		application,
-		application,
+		newAdmissionWorld(t, admissionOptions{}).admission,
+		nil,
 		logger,
 		nil,
 		"",
 		"node-a",
-		newInboundTestSocket(),
+		socket,
 		principal,
 		model.RequestMetadata{},
 		model.NewID(),
@@ -100,7 +100,7 @@ func TestConnectionRuntimeClonesTheAcceptedPrincipal(t *testing.T) {
 func TestConnectionRuntimeFinalSnapshotWaitsForSelectedPublication(t *testing.T) {
 	t.Parallel()
 
-	runtime := newOutboundTestRuntime(newOutboundTestSocket(), 1)
+	runtime, _ := newOutboundTestRuntime(t, 1)
 	require.True(t, runtime.acquire(), "active runtime rejected Hub publication")
 	snapshotReady := make(chan connectionSnapshot, 1)
 	go func() {
@@ -190,11 +190,10 @@ func TestHubRetainsOnlyTheRuntimeFinalSnapshot(t *testing.T) {
 
 func newInternalTestHub(t *testing.T) *Hub {
 	t.Helper()
-	application := &inboundTestApplication{}
 	logger, _ := newTestLogger(t)
 	hub, err := NewHub(
-		application,
-		application,
+		newAdmissionWorld(t, admissionOptions{}).admission,
+		newAttemptFixture(t).service,
 		logger,
 		"https://proctor.example",
 		"node-a",

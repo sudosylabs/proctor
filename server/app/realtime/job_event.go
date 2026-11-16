@@ -29,10 +29,9 @@ type jobProgressData struct {
 	Stage   string `json:"stage"`
 }
 
-// NewJobChangedEvent tells operators who may view Jobs to refetch one Job:
-// its status changed, or it checkpointed new progress. progress is nil unless
-// the Job's type reports progress. The command, checkpoint, result and errors
-// never travel; GET /api/v1/jobs/{job_id} is the authority.
+// NewJobChangedEvent tells job viewers to refetch one job. progress is nil
+// unless the job type reports progress. The command, checkpoint, result and
+// errors never travel.
 func NewJobChangedEvent(
 	institutionID model.InstitutionID,
 	jobID model.JobID,

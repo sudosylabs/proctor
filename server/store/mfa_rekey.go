@@ -13,9 +13,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// MFARekeyStart fences the MFA key ring on PrimaryKeyID and queues the rekey
-// Job that re-seals every live TOTP secret under it, completing the attempt
-// audit in the same transaction.
+// MFARekeyStart fences the key ring on PrimaryKeyID and queues the Job that
+// re-seals every live TOTP secret with it.
 type MFARekeyStart struct {
 	PrimaryKeyID  string
 	RetiringKeyID string
@@ -24,7 +23,7 @@ type MFARekeyStart struct {
 	AuditAt       time.Time
 }
 
-// MFARekeyOperation is the queued rekey a successful MFARekeyStart returns.
+// MFARekeyOperation is the rekey queued by MFAStore.StartRekey.
 type MFARekeyOperation struct {
 	JobID         model.JobID
 	PrimaryKeyID  string
@@ -32,18 +31,17 @@ type MFARekeyOperation struct {
 	CreatedAt     time.Time
 }
 
-// MFAKeyState is the durable primary-key fence and the live credentials per
-// sealing key. RequiredPrimaryKeyID is empty until the first rekey; after it,
-// every new TOTP secret must be sealed with that key.
+// MFAKeyState is the primary-key fence and the live credentials per key.
+// RequiredPrimaryKeyID is empty until the first rekey; after it, every new
+// secret must be sealed with that key.
 type MFAKeyState struct {
 	RequiredPrimaryKeyID string
 	ActiveRekeyJobID     model.JobID
 	Active               []MFASecretKeyUsage
 }
 
-// MFARekeyTarget is one live credential whose secret is sealed with a key
-// other than the fenced primary. EncryptedSecret is the stored envelope; it
-// never leaves the rekey Job.
+// MFARekeyTarget is a live credential sealed with a non-primary key.
+// EncryptedSecret must never leave the rekey Job.
 type MFARekeyTarget struct {
 	CredentialID    model.MFACredentialID
 	UserID          model.UserID
@@ -51,8 +49,8 @@ type MFARekeyTarget struct {
 	EncryptedSecret string
 }
 
-// MFARekeyTargetPageRequest continues the credential scan of one fenced
-// rekey Job after AfterCredentialID, in credential identity order.
+// MFARekeyTargetPageRequest continues a rekey Job's scan after
+// AfterCredentialID, in credential ID order.
 type MFARekeyTargetPageRequest struct {
 	JobID             model.JobID
 	PrimaryKeyID      string
@@ -60,16 +58,15 @@ type MFARekeyTargetPageRequest struct {
 	Limit             int
 }
 
-// MFARekeyTargetPage is one page of rekey targets; More reports that another
-// page follows the last target.
+// MFARekeyTargetPage is one page of rekey targets; More means another follows.
 type MFARekeyTargetPage struct {
 	Targets []MFARekeyTarget
 	More    bool
 }
 
-// MFARekeyReplacement swaps one credential's secret envelope for the same
-// secret sealed with PrimaryKeyID, only while the credential is still live and
-// sealed with ExpectedKeyID and the Job still holds the fence.
+// MFARekeyReplacement swaps a credential's envelope for the same secret sealed
+// with PrimaryKeyID, only while the credential is live and sealed with
+// ExpectedKeyID and the Job still holds the fence.
 type MFARekeyReplacement struct {
 	JobID           model.JobID
 	CredentialID    model.MFACredentialID
@@ -78,16 +75,16 @@ type MFARekeyReplacement struct {
 	EncryptedSecret string
 }
 
-// MFARekeyProofRequest asks how many live credentials one fenced rekey Job
-// still has to move.
+// MFARekeyProofRequest asks how many live credentials a rekey Job still has to
+// move.
 type MFARekeyProofRequest struct {
 	JobID         model.JobID
 	PrimaryKeyID  string
 	RetiringKeyID string
 }
 
-// MFARekeyProof is safe operational metadata: key identities and aggregate
-// credential counts only. It never contains key material, owners, or secrets.
+// MFARekeyProof holds key IDs and counts only, never key material, owners or
+// secrets.
 type MFARekeyProof struct {
 	PrimaryKeyID         string
 	RetiringKeyID        string

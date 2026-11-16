@@ -14,9 +14,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/realtime"
 )
 
-// reviewEventFact is the bounded fact every Review event carries: the
-// identities, the Review's state, revision and release state, and when it
-// changed. Notes, remarks and rationale never leave the Review.
+// reviewEventFact deliberately leaves out notes, remarks and rationale; they
+// never leave the review.
 func reviewEventFact(result Result) realtime.ExamIntegrityReviewEventFact {
 	return realtime.ExamIntegrityReviewEventFact{
 		SubmissionID: result.Authorization.SubmissionID,
@@ -30,8 +29,6 @@ func reviewEventFact(result Result) realtime.ExamIntegrityReviewEventFact {
 	}
 }
 
-// publishSittingBoardChanged tells the managers of the reviewed Submission's
-// Sitting to refresh its board.
 func (s *Service) publishSittingBoardChanged(ctx context.Context, result Result) error {
 	return realtime.PublishSittingBoardChanged(
 		ctx,
@@ -41,8 +38,6 @@ func (s *Service) publishSittingBoardChanged(ctx context.Context, result Result)
 	)
 }
 
-// publishReviewChanged tells managers that a draft Review changed, then
-// invalidates the Sitting board.
 func (s *Service) publishReviewChanged(ctx context.Context, result Result) error {
 	event, err := realtime.NewExamIntegrityReviewChangedEvent(reviewEventFact(result))
 	if err != nil {
@@ -52,8 +47,6 @@ func (s *Service) publishReviewChanged(ctx context.Context, result Result) error
 	return errors.Join(s.publisher.Publish(ctx, event), s.publishSittingBoardChanged(ctx, result))
 }
 
-// publishReviewFinalized tells managers that a Review was finalized, then
-// invalidates the Sitting board.
 func (s *Service) publishReviewFinalized(ctx context.Context, result Result) error {
 	event, err := realtime.NewExamIntegrityReviewFinalizedEvent(reviewEventFact(result))
 	if err != nil {
@@ -63,11 +56,10 @@ func (s *Service) publishReviewFinalized(ctx context.Context, result Result) err
 	return errors.Join(s.publisher.Publish(ctx, event), s.publishSittingBoardChanged(ctx, result))
 }
 
-// publishResultReleased announces a released student result, in this order:
-// the release to managers, the release to the candidate, the candidate's Exam
-// activity invalidation, and the Sitting board invalidation. Nothing is
-// published unless all three events can be built; after that a failed
-// publication never stops the ones after it.
+// publishResultReleased publishes to managers, then the candidate, then the
+// candidate's activity and the board invalidations. Nothing is published unless
+// all three events build; after that a failed publication never stops the ones
+// after it.
 func (s *Service) publishResultReleased(ctx context.Context, result Result) error {
 	fact := reviewEventFact(result)
 	manager, err := realtime.NewExamStudentResultReleasedEvent(fact)
@@ -93,9 +85,8 @@ func (s *Service) publishResultReleased(ctx context.Context, result Result) erro
 	)
 }
 
-// publishUnlessReplayed delivers one committed Review change unless the Store replayed an
-// earlier outcome. A failed publication is reported under operation and the
-// command still succeeds.
+// publishUnlessReplayed reports a failed publication rather than returning it,
+// so the command still succeeds.
 func (s *Service) publishUnlessReplayed(
 	ctx context.Context,
 	operation string,

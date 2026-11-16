@@ -8,25 +8,13 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-// RetentionPolicyApplication is the transport's complete policy capability.
-type RetentionPolicyApplication interface {
-	GetRetentionPolicy(context.Context, invocation.Invocation) (*model.RetentionPolicy, error)
-	ReplaceRetentionPolicy(
-		context.Context,
-		invocation.Invocation,
-		administration.ReplaceRetentionPolicyCommand,
-	) (*model.RetentionPolicy, error)
-}
 
 type retentionPolicyRequest struct {
 	ExpectedRevision                 int64                `json:"expected_revision"`
@@ -56,10 +44,10 @@ type retentionPolicyResponse struct {
 }
 
 type retentionPolicyHandlers struct {
-	app RetentionPolicyApplication
+	app *administration.Service
 }
 
-func retentionPolicyResource(app RetentionPolicyApplication) route.Resource {
+func retentionPolicyResource(app *administration.Service) route.Resource {
 	h := retentionPolicyHandlers{app: app}
 	replace := route.Endpoint{
 		Method:      http.MethodPut,

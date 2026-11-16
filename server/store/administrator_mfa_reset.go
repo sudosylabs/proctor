@@ -9,11 +9,11 @@ package store
 
 import "github.com/sudosylabs/proctor/server/model"
 
-// AdministratorMFAReset is accepted only by the explicit offline host command.
-// The exact installation and active administrator are confirmed under the
-// serving-lease and protected administrator fences. Deployment capabilities
-// confirm that reenrollment and an existing primary authentication path remain
-// available; this operation never adds or changes a primary credential.
+// AdministratorMFAReset is accepted only from the offline host command. The
+// store confirms the installation and active administrator under the
+// serving-lease and protected-administrator fences, and refuses unless
+// reenrollment and a primary sign-in path remain; it never adds or changes a
+// primary credential.
 type AdministratorMFAReset struct {
 	InstitutionID model.InstitutionID
 	UserID        model.UserID

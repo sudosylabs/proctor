@@ -25,20 +25,16 @@ type RetentionPolicyReplacementResult struct {
 	Replayed bool
 }
 
-// RetentionPolicyStore owns the active Institution's Retention Policy. Archiving
-// an Institution preserves its policy; creating a replacement initializes a new
-// policy for that identity. Get never returns the archived Institution's policy.
-// Get returns ErrNotFound before Institution creation; it never invents defaults.
-// Replace serializes policy edits and administrator revocation, checks the
-// actor's active system-administrator binding, current access credential and
-// strong recent Session assurance at the post-lock database time, and commits the
-// revision-fenced policy, successful audit completion, and idempotent outcome.
-// A missing audit attempt rolls everything back. Exact retries replay the
-// recorded result before the stale-revision check and complete a fresh audit;
-// application authorization and the current credential, binding and assurance
-// checks are required on every attempt, including replay and exact no-ops.
-// Exact no-ops keep the revision and timestamp but still complete audit.
-// This Store never deletes records or enqueues cleanup work.
+// RetentionPolicyStore persists the active institution's retention policy. Get
+// never returns an archived institution's policy and returns ErrNotFound
+// before the institution exists, rather than inventing defaults.
+//
+// Replace serializes with administrator revocation and, after locking,
+// rechecks on the database clock the actor's system-administrator binding,
+// access credential and strong recent session. A replay returns the recorded
+// result before the stale-revision check but still repeats every check and
+// completes a fresh audit; a no-op keeps the revision but completes the
+// audit too. Nothing here deletes records or queues cleanup.
 type RetentionPolicyStore interface {
 	Get(context.Context) (*model.RetentionPolicy, error)
 	Replace(context.Context, *RetentionPolicyReplacement, *CommandIdempotency) (*RetentionPolicyReplacementResult, error)

@@ -14,42 +14,40 @@ import (
 	"time"
 )
 
-// DomainEventMaximumDataBytes bounds one domain event's Data document. Events
-// carry identifiers only, so the bound is small.
+// DomainEventMaximumDataBytes bounds one event's Data. Events carry IDs only,
+// so the bound is small.
 const DomainEventMaximumDataBytes = 4 << 10
 
-// DomainEventDispatchMaximumAttempts is the claim budget of one
-// domain-event dispatch Job.
+// DomainEventDispatchMaximumAttempts is the claim budget of one dispatch job.
 const DomainEventDispatchMaximumAttempts = 8
 
-// DomainEventTopic names a kind of domain event. The vocabulary is closed.
+// DomainEventTopic names a kind of domain event, from a closed set.
 type DomainEventTopic string
 
-// The closed vocabulary. The seal operations write exam.attempt.submitted
-// themselves. The schema writes the others from triggers on the state change
-// they describe, so every path that makes the change, including the Session
-// revocation fence that runs in SQL, writes its event in the same
-// transaction.
+// The seal operations write exam.attempt.submitted themselves. Schema
+// triggers write the others on the state change they describe, so every path
+// that makes the change, including the session revocation fence in SQL,
+// writes its event in the same transaction.
 const (
 	// DomainEventTopicExamAttemptSubmitted is recorded when a seal commits a
-	// new Submission: the candidate submitted, a manager ended the Attempt,
-	// or the Sitting closed.
+	// new submission: the candidate submitted, a manager ended the attempt, or
+	// the sitting closed.
 	DomainEventTopicExamAttemptSubmitted DomainEventTopic = "exam.attempt.submitted"
 	// DomainEventTopicExamAttemptParticipationStarted is recorded when a
-	// Participation generation becomes active: at admission, including the
-	// admission that follows a re-allow.
+	// participation generation becomes active at admission, including after a
+	// re-allow.
 	DomainEventTopicExamAttemptParticipationStarted DomainEventTopic = "exam.attempt.participation.started"
-	// DomainEventTopicExamAttemptParticipationEnded is recorded when a
-	// Participation generation ends, on every path that ends one. It freezes
-	// the Attempt's execution environment, or ends it with the seal.
+	// DomainEventTopicExamAttemptParticipationEnded is recorded on every path
+	// that ends a participation generation. It freezes the attempt's execution
+	// environment, or ends it with the seal.
 	DomainEventTopicExamAttemptParticipationEnded DomainEventTopic = "exam.attempt.participation.ended"
-	// DomainEventTopicExamSittingPaused is recorded when a Sitting pauses.
+	// DomainEventTopicExamSittingPaused is recorded when a sitting pauses.
 	DomainEventTopicExamSittingPaused DomainEventTopic = "exam.sitting.paused"
-	// DomainEventTopicExamSittingResumed is recorded when a paused Sitting
+	// DomainEventTopicExamSittingResumed is recorded when a paused sitting
 	// opens again.
 	DomainEventTopicExamSittingResumed DomainEventTopic = "exam.sitting.resumed"
-	// DomainEventTopicExamSittingClosing is recorded when a Sitting enters
-	// Closing, before its unfinished Attempts are sealed.
+	// DomainEventTopicExamSittingClosing is recorded when a sitting starts
+	// closing, before its unfinished attempts are sealed.
 	DomainEventTopicExamSittingClosing DomainEventTopic = "exam.sitting.closing"
 )
 
@@ -65,10 +63,9 @@ var domainEventTopics = []DomainEventTopic{
 // IsValid reports whether t is a known domain event topic.
 func (t DomainEventTopic) IsValid() bool { return slices.Contains(domainEventTopics, t) }
 
-// DomainEvent is one committed domain fact waiting in the outbox for
-// delivery. Data is the topic's canonical JSON document; it holds identifiers
-// only, never a candidate's identity, answers, Workspace content or integrity
-// evidence.
+// DomainEvent is one committed fact waiting in the outbox. Data is the topic's
+// canonical JSON and holds IDs only, never a candidate's identity, answers,
+// workspace content or integrity evidence.
 type DomainEvent struct {
 	ID         DomainEventID
 	Topic      DomainEventTopic
@@ -76,8 +73,6 @@ type DomainEvent struct {
 	Data       json.RawMessage
 }
 
-// examAttemptSubmittedData is the canonical Data of
-// DomainEventTopicExamAttemptSubmitted.
 type examAttemptSubmittedData struct {
 	SubmissionID SubmissionID  `json:"submission_id"`
 	AttemptID    ExamAttemptID `json:"attempt_id"`
@@ -89,9 +84,8 @@ func (d examAttemptSubmittedData) valid() bool {
 	return d.SubmissionID.IsValid() && d.AttemptID.IsValid() && d.SittingID.IsValid() && d.ExamID.IsValid()
 }
 
-// examAttemptParticipationData is the canonical Data of
-// DomainEventTopicExamAttemptParticipationStarted. ExamRevisionID is the
-// Revision the Attempt was admitted to, whose frozen plugin sections apply.
+// ExamRevisionID is the revision the attempt was admitted to, whose frozen
+// plugin sections apply.
 type examAttemptParticipationData struct {
 	AttemptID       ExamAttemptID          `json:"attempt_id"`
 	ParticipationID AttemptParticipationID `json:"participation_id"`
@@ -106,9 +100,6 @@ func (d examAttemptParticipationData) valid() bool {
 		d.SittingID.IsValid() && d.ExamID.IsValid() && d.ExamRevisionID.IsValid()
 }
 
-// examAttemptParticipationEndedData is the canonical Data of
-// DomainEventTopicExamAttemptParticipationEnded: the started members and the
-// generation's closed end reason.
 type examAttemptParticipationEndedData struct {
 	AttemptID       ExamAttemptID                 `json:"attempt_id"`
 	ParticipationID AttemptParticipationID        `json:"participation_id"`
@@ -125,7 +116,6 @@ func (d examAttemptParticipationEndedData) valid() bool {
 		d.Reason.IsValid()
 }
 
-// examSittingData is the canonical Data of the Sitting topics.
 type examSittingData struct {
 	SittingID ExamSittingID `json:"sitting_id"`
 	ExamID    ExamID        `json:"exam_id"`
@@ -133,7 +123,7 @@ type examSittingData struct {
 
 func (d examSittingData) valid() bool { return d.SittingID.IsValid() && d.ExamID.IsValid() }
 
-// ExamAttemptSubmittedEvent identifies the sealed Submission that an
+// ExamAttemptSubmittedEvent identifies the sealed submission an
 // exam.attempt.submitted event announces.
 type ExamAttemptSubmittedEvent struct {
 	ID           DomainEventID
@@ -145,7 +135,7 @@ type ExamAttemptSubmittedEvent struct {
 }
 
 // NewExamAttemptSubmittedEvent builds the exam.attempt.submitted event for a
-// newly sealed Submission.
+// newly sealed submission.
 func NewExamAttemptSubmittedEvent(spec ExamAttemptSubmittedEvent) (*DomainEvent, error) {
 	data := examAttemptSubmittedData{SubmissionID: spec.SubmissionID, AttemptID: spec.AttemptID,
 		SittingID: spec.SittingID, ExamID: spec.ExamID}
@@ -160,8 +150,8 @@ func NewExamAttemptSubmittedEvent(spec ExamAttemptSubmittedEvent) (*DomainEvent,
 	return event, nil
 }
 
-// Validate checks the identity, topic, instant and topic-specific Data
-// document. Data is decoded strictly, so an unknown or missing member fails.
+// Validate checks the event and its topic's Data, decoded strictly so an
+// unknown or missing member fails.
 func (e *DomainEvent) Validate() error {
 	if e == nil || !e.ID.IsValid() || !e.Topic.IsValid() || e.OccurredAt.IsZero() {
 		return invalidModelError("DomainEvent.Validate", "domain_event", "", "invalid domain event", "")
@@ -199,12 +189,12 @@ func decodeStrictDomainEventData(raw json.RawMessage, target any) bool {
 	return decoder.Decode(&struct{}{}) != nil
 }
 
-// DomainEventDispatchCommand is the payload of a domain-event dispatch Job.
+// DomainEventDispatchCommand is the payload of a domain-event dispatch job.
 type DomainEventDispatchCommand struct {
 	EventID DomainEventID `json:"event_id"`
 }
 
-// EncodeDomainEventDispatchCommand returns the Job payload for one event.
+// EncodeDomainEventDispatchCommand returns the job payload for one event.
 func EncodeDomainEventDispatchCommand(command DomainEventDispatchCommand) (json.RawMessage, error) {
 	if !command.EventID.IsValid() {
 		return nil, invalidModelError("EncodeDomainEventDispatchCommand", "domain_event_job", "", "invalid domain event dispatch command", "")
@@ -212,7 +202,8 @@ func EncodeDomainEventDispatchCommand(command DomainEventDispatchCommand) (json.
 	return json.Marshal(command)
 }
 
-// DecodeDomainEventDispatchCommand strictly decodes a dispatch Job payload.
+// DecodeDomainEventDispatchCommand decodes a dispatch job payload, rejecting
+// unknown fields.
 func DecodeDomainEventDispatchCommand(raw json.RawMessage) (DomainEventDispatchCommand, error) {
 	var command DomainEventDispatchCommand
 	if len(raw) == 0 || DecodeStrictJobDocument(raw, &command) != nil || !command.EventID.IsValid() {
@@ -222,8 +213,8 @@ func DecodeDomainEventDispatchCommand(raw json.RawMessage) (DomainEventDispatchC
 	return command, nil
 }
 
-// NewDomainEventDispatchJob builds the queued Job that delivers event. The
-// event ID is the dedupe key and the Job starts at the event's instant.
+// NewDomainEventDispatchJob builds the queued job that delivers event, deduped
+// on the event ID and runnable from the event's instant.
 func NewDomainEventDispatchJob(id JobID, event *DomainEvent) (*Job, error) {
 	if event == nil {
 		return nil, invalidModelError("NewDomainEventDispatchJob", "domain_event_job", "", "missing domain event", "")
@@ -240,9 +231,8 @@ func NewDomainEventDispatchJob(id JobID, event *DomainEvent) (*Job, error) {
 // dispatch checkpoint records.
 const DomainEventDispatchMaximumSubscriptions = 64
 
-// DomainEventDispatchCheckpoint is what a dispatch Job remembers between
-// attempts: the keys of the plugin subscriptions that already accepted the
-// event, so a retry offers it only to the others.
+// DomainEventDispatchCheckpoint holds the keys of the plugin subscriptions that
+// already accepted the event, so a retry offers it only to the others.
 type DomainEventDispatchCheckpoint struct {
 	Delivered []string `json:"delivered"`
 }
@@ -258,8 +248,8 @@ func EncodeDomainEventDispatchCheckpoint(checkpoint DomainEventDispatchCheckpoin
 	return json.Marshal(checkpoint)
 }
 
-// DecodeDomainEventDispatchCheckpoint strictly decodes a dispatch Job
-// checkpoint. An absent checkpoint is an empty one.
+// DecodeDomainEventDispatchCheckpoint decodes a dispatch checkpoint strictly;
+// an absent checkpoint is an empty one.
 func DecodeDomainEventDispatchCheckpoint(raw json.RawMessage) (DomainEventDispatchCheckpoint, error) {
 	var checkpoint DomainEventDispatchCheckpoint
 	if len(raw) == 0 {

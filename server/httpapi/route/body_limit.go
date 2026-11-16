@@ -25,8 +25,6 @@ func limitRequestBody(next http.Handler, maxBodyBytes int64) http.Handler {
 	})
 }
 
-// requestBodyTooLarge reports whether err records reading past the route's
-// request body limit, through any application or decoding wrapper.
 func requestBodyTooLarge(err error) bool {
 	var limit *http.MaxBytesError
 	return errors.As(err, &limit)

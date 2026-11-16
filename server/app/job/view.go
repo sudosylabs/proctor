@@ -13,8 +13,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// View is the canonical safe Job projection. Commands, checkpoints, results,
-// deduplication keys, claim data, and internal errors are intentionally absent.
+// View is the operator-safe job projection. Commands, checkpoints, results,
+// deduplication keys, claim data and internal errors are deliberately absent.
 type View struct {
 	ID              model.JobID
 	Type            model.JobType
@@ -29,17 +29,16 @@ type View struct {
 	MaximumAttempts int
 	Progress        *model.JobProgress
 	Revision        int64
-	// CreatedByUserID names the operator who started the Job; it is zero for
-	// recurring and system work.
+	// CreatedByUserID is zero for recurring and system work.
 	CreatedByUserID model.UserID
-	// CreatedByDisplayName and Subject are presentation the application adds
-	// for operators; the engine leaves them empty.
+	// CreatedByDisplayName and Subject are added by Operations; the engine
+	// leaves them empty.
 	CreatedByDisplayName string
 	Subject              string
 }
 
-// AttemptView is the canonical safe Job Attempt projection. Claim ownership,
-// tokens, checkpoints, and internal errors are intentionally absent.
+// AttemptView is the operator-safe attempt projection. Claim ownership,
+// tokens, checkpoints and internal errors are deliberately absent.
 type AttemptView struct {
 	ID              model.JobAttemptID
 	Number          int
@@ -51,10 +50,8 @@ type AttemptView struct {
 	PublicErrorCode string
 }
 
-// Page is one page of operator-visible Jobs; HasMore reports that another
-// page follows the last item. The first page, read without a keyset, sets
-// Counted and carries Total: every operator-visible Job the status filter
-// matches, stopped at store.MaximumListCount, where TotalIsLowerBound is set.
+// Page is one page of operator-visible jobs. Only the first page, read
+// without a keyset, is counted, up to store.MaximumListCount.
 type Page struct {
 	Items             []View
 	HasMore           bool
@@ -63,8 +60,7 @@ type Page struct {
 	TotalIsLowerBound bool
 }
 
-// AttemptPage is one page of a Job's attempts; HasMore reports that another
-// page follows the last item.
+// AttemptPage is one page of a job's attempts.
 type AttemptPage struct {
 	Items   []AttemptView
 	HasMore bool

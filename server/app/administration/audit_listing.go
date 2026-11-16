@@ -21,10 +21,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ListAuditEventsQuery narrows the listing: ActorID, SubjectUserID (the User
-// the Event is about), Status and Resource match exactly, Actions, each a
-// known audit action, are alternatives, and Kind keeps the reads or the
-// changes among them.
+// ListAuditEventsQuery narrows the listing. ActorID, SubjectUserID, Status
+// and Resource match exactly; Actions, each a known audit action, are
+// alternatives; Kind keeps the reads or the changes.
 type ListAuditEventsQuery struct {
 	ActorID       model.UserID
 	SubjectUserID model.UserID
@@ -38,8 +37,8 @@ type ListAuditEventsQuery struct {
 	Until time.Time
 	// Ascending reads oldest first; the default is newest first.
 	Ascending bool
-	// BeforeCreatedAt and BeforeID continue a page at microsecond precision,
-	// past the previous page's last event in the read order.
+	// BeforeCreatedAt and BeforeID continue past the previous page's last
+	// event at microsecond precision.
 	BeforeCreatedAt time.Time
 	BeforeID        model.AuditEventID
 	Limit           int
@@ -47,7 +46,7 @@ type ListAuditEventsQuery struct {
 
 // AuditEventPage is one page of the audit listing with the current names of
 // the records its events refer to, each present only when the caller could
-// see that record now. Redacted reports an academic-only reader, whose events
+// see that record now. Redacted marks an academic-only reader, whose events
 // carry no parameters, so they name neither an operation nor a subject.
 type AuditEventPage struct {
 	paging.Counted[*model.AuditEvent]
@@ -134,12 +133,10 @@ func (s *Service) ListAuditEvents(
 	return page, nil
 }
 
-// auditNames reads, in one call, the names of the actors, subjects and
-// resources a page refers to, each only inside the caller's current authority
-// to see it: the User directory's visibility for Users, academic_unit.view
-// for Academic Units and class.view for Classes. Seeing the audit history does
-// not by itself reveal a name. A redacted page names no subject, because its
-// events carry no parameters to say what happened to one.
+// auditNames names actors, subjects and resources only inside the caller's
+// current authority to see each one: user directory visibility for users,
+// academic_unit.view for academic units and class.view for classes. Seeing
+// the audit history does not by itself reveal a name.
 func (s *Service) auditNames(
 	ctx context.Context,
 	principal model.Principal,
@@ -200,7 +197,6 @@ func (s *Service) auditNames(
 	return names, nil
 }
 
-// validAuditListStatus reports whether status is empty or an audit status.
 func validAuditListStatus(status model.AuditStatus) bool {
 	switch status {
 	case "", model.AuditStatusAttempt, model.AuditStatusSuccess, model.AuditStatusFail:
@@ -209,10 +205,10 @@ func validAuditListStatus(status model.AuditStatus) bool {
 	return false
 }
 
-// auditListActions trims the requested actions, drops repeats and refuses
-// more than store.MaximumAuditListActions or one outside the audit action
-// catalog. An academic visibility still intersects them with its own catalog,
-// so naming an action never widens what the caller reads.
+// auditListActions refuses more than store.MaximumAuditListActions or an
+// action outside the catalog. An academic visibility still intersects them
+// with its own catalog, so naming an action never widens what the caller
+// reads.
 func auditListActions(requested []string) ([]string, error) {
 	if len(requested) > store.MaximumAuditListActions {
 		return nil, apperror.New("audit.query.invalid")
@@ -253,10 +249,9 @@ func academicAuditProjection(events []*model.AuditEvent) []*model.AuditEvent {
 	return result
 }
 
-// authorizeAuditList authorizes the audit listing and returns the caller's
-// audit visibility: every event with Institution-wide audit.view, otherwise
-// the academic events beneath the Academic Units where the caller holds
-// academic_audit.view. It records exactly one authorization decision.
+// authorizeAuditList returns every event with institution-wide audit.view,
+// otherwise the academic events beneath the academic units where the caller
+// holds academic_audit.view. It records exactly one authorization decision.
 func (s *Service) authorizeAuditList(ctx context.Context, inv invocation.Invocation) (store.AuditVisibilityScope, error) {
 	institution, err := s.institutions.GetSingleton(ctx)
 	if err != nil {
@@ -317,6 +312,8 @@ func (s *Service) authorizeAuditList(ctx context.Context, inv invocation.Invocat
 		return store.AuditVisibilityScope{}, access.DeniedError()
 	}
 
+	// An institution-wide academic grant keeps the academic action catalog
+	// and scope fence; it must never widen into audit.view's full history.
 	return store.AuditVisibilityScope{
 		AcademicInstitutionWide: academic.InstitutionWide,
 		AcademicUnitRootIDs:     append([]model.AcademicUnitID(nil), academic.AcademicUnitRootIDs...),
@@ -329,8 +326,6 @@ func auditListingError(err error) error {
 	return apperror.New("audit.unavailable").WithField("resource", "audit").Wrap(err)
 }
 
-// appendAuditName adds id once, so a page that refers to one record many
-// times asks for its name once.
 func appendAuditName[T comparable](ids []T, id T) []T {
 	if slices.Contains(ids, id) {
 		return ids

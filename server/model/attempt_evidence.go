@@ -15,42 +15,39 @@ import (
 	"time"
 )
 
-// The bounds of Attempt evidence. One record's Detail is at most
-// IntegrityEvidenceDetailMaxBytes. One Attempt keeps at most
-// AttemptEvidenceMaximumRecords records and AttemptEvidenceMaximumBytes of
-// canonical records; an append past either is refused and only counted, so
-// one Submission's Attempt evidence always fits an Examination Export.
+// Bounds on attempt evidence. An append past either per-attempt bound is
+// refused and only counted, so one submission's evidence always fits an
+// examination export.
 const (
 	AttemptEvidenceMaxRecordBytes = IntegrityEvidenceDetailMaxBytes + 2048
 	AttemptEvidenceMaximumRecords = 4096
 	AttemptEvidenceMaximumBytes   = 8 << 20
 )
 
-// ErrAttemptEvidenceInvalid reports Attempt evidence or an inventory outside
-// its contract.
+// ErrAttemptEvidenceInvalid reports a record or inventory outside its bounds.
 var ErrAttemptEvidenceInvalid = invalidModelError("AttemptEvidence.Validate", "attempt_evidence", "",
 	"invalid Attempt evidence", "")
 
-// AttemptEvidenceKind is the closed set of Attempt evidence the core records.
-// A new kind is added here, with the code that records it.
+// AttemptEvidenceKind is the closed set of evidence the core records; a new
+// kind is added together with the code that records it.
 type AttemptEvidenceKind string
 
 const (
 	// AttemptEvidenceProcess is a slice of the execution environment's
 	// command log: what processes started and how they ended.
 	AttemptEvidenceProcess AttemptEvidenceKind = "execution.process"
-	// AttemptEvidenceInput is recorded terminal input, only when the Exam
-	// opts in. Output is never recorded.
+	// AttemptEvidenceInput is recorded terminal input, only when the exam opts
+	// in. Output is never recorded.
 	AttemptEvidenceInput AttemptEvidenceKind = "execution.input"
 	// AttemptEvidenceGap says coverage is missing: the environment was lost
 	// or restarted, the candidate waited for capacity, the command log broke
 	// off, or a settle did not finish before the seal. Detail names why.
 	AttemptEvidenceGap AttemptEvidenceKind = "execution.gap"
-	// AttemptEvidenceOverwritten is a guest change lost to a newer Workspace
+	// AttemptEvidenceOverwritten is a guest change lost to a newer workspace
 	// version.
 	AttemptEvidenceOverwritten AttemptEvidenceKind = "execution.overwritten"
-	// AttemptEvidenceRefused is a guest change the Workspace refused, with
-	// the reason.
+	// AttemptEvidenceRefused is a guest change the workspace refused, with the
+	// reason.
 	AttemptEvidenceRefused AttemptEvidenceKind = "execution.refused"
 )
 
@@ -64,19 +61,13 @@ func (k AttemptEvidenceKind) IsValid() bool {
 	}
 }
 
-// AttemptEvidence is one append-only record of an Attempt's evidence, such as
-// a slice of the command log. It never raises a Flag: it is review context,
-// and a gap record says that coverage is missing rather than accusing anyone.
-//
-// The record belongs to the Attempt, not to a Participation, so it can be
-// recorded whenever the Attempt has no Submission yet. Author is the actor
-// that produced it, such as one environment incarnation. Sequence numbers the
-// author's stream of that kind, so a repeated append is recognized.
-// ObservedAt is the author's claim, never later than RecordedAt, which is
-// PostgreSQL's.
-//
-// Detail is the bounded JSON object the core stores and presents but does
-// not read.
+// AttemptEvidence is one append-only record of an attempt's evidence. It never
+// raises a flag: it is review context, and a gap says coverage is missing
+// without accusing anyone. It can be recorded until the attempt has a
+// submission. Sequence numbers the author's stream of one kind so a repeated
+// append is recognized. ObservedAt is the author's claim and never later than
+// RecordedAt, which PostgreSQL sets. Detail is a bounded JSON object the core
+// stores but does not read.
 type AttemptEvidence struct {
 	ID         IntegrityEvidenceID    `json:"id"`
 	AttemptID  ExamAttemptID          `json:"attempt_id"`
@@ -91,14 +82,14 @@ type AttemptEvidence struct {
 // Gap reports whether the record says that coverage is missing.
 func (e AttemptEvidence) Gap() bool { return e.Kind == AttemptEvidenceGap }
 
-// ValidAttemptEvidenceClaim reports whether what an author supplies for a
-// record is within the contract: a known kind, a valid author, a positive
-// sequence and one bounded JSON object as Detail.
+// ValidAttemptEvidenceClaim reports whether an author's input is acceptable: a
+// known kind, a valid author, a positive sequence and one bounded JSON object.
 func ValidAttemptEvidenceClaim(kind AttemptEvidenceKind, author AttemptWorkspaceAuthor, sequence int64, detail json.RawMessage) bool {
 	return kind.IsValid() && author.IsValid() && sequence >= 1 && securitySafeInt(sequence) && validEvidenceDetail(detail)
 }
 
-// Validate checks identity, provenance, bounds and instants.
+// Validate checks the record's IDs, author, bounds and that ObservedAt is not
+// after RecordedAt.
 func (e AttemptEvidence) Validate() error {
 	if !e.ID.IsValid() ||
 		!e.AttemptID.IsValid() ||
@@ -124,7 +115,8 @@ func (e AttemptEvidence) Canonical() ([]byte, error) {
 	return raw, nil
 }
 
-// DecodeAttemptEvidence strictly decodes a stored canonical record.
+// DecodeAttemptEvidence decodes a stored canonical record, rejecting unknown
+// fields.
 func DecodeAttemptEvidence(raw []byte) (AttemptEvidence, error) {
 	var value AttemptEvidence
 	decoder := json.NewDecoder(bytes.NewReader(raw))
@@ -149,12 +141,10 @@ func (e AttemptEvidence) SameClaim(other AttemptEvidence) bool {
 	return leftErr == nil && rightErr == nil && bytes.Equal(left, right)
 }
 
-// AttemptEvidenceInventory is the running account of an Attempt's evidence:
-// how many records and canonical bytes it keeps, how many of them are gaps,
-// how many appends were refused over the bounds, and a digest chained over
-// every kept record in order. The Submission seal fixes it, Review
-// finalization binds its digest, and the Examination Export carries it beside
-// the records.
+// AttemptEvidenceInventory is the running count of an attempt's kept records,
+// bytes, gaps and refused appends, with a digest chained over every kept
+// record in order. The submission seal fixes it, review finalization binds the
+// digest, and the examination export carries it.
 type AttemptEvidenceInventory struct {
 	Records  int64  `json:"records"`
 	Bytes    int64  `json:"bytes"`
@@ -170,7 +160,7 @@ func NewAttemptEvidenceInventory() AttemptEvidenceInventory {
 	return AttemptEvidenceInventory{Digest: SHA256Fingerprint([]byte(attemptEvidenceInventorySeed))}
 }
 
-// Validate checks the bounds and the empty digest.
+// Validate checks the bounds and that an empty inventory has the empty digest.
 func (v AttemptEvidenceInventory) Validate() error {
 	if v.Records < 0 || v.Records > AttemptEvidenceMaximumRecords ||
 		v.Bytes < 0 || v.Bytes > AttemptEvidenceMaximumBytes ||
@@ -189,7 +179,8 @@ func (v AttemptEvidenceInventory) Admits(size int) bool {
 	return v.Records < AttemptEvidenceMaximumRecords && v.Bytes+int64(size) <= AttemptEvidenceMaximumBytes
 }
 
-// Append chains one kept canonical record into the inventory.
+// Append chains one canonical record into the digest and counts it; a record
+// that Admits refuses is an error.
 func (v AttemptEvidenceInventory) Append(record []byte, gap bool) (AttemptEvidenceInventory, error) {
 	if v.Validate() != nil || len(record) == 0 || len(record) > AttemptEvidenceMaxRecordBytes || !v.Admits(len(record)) {
 		return v, ErrAttemptEvidenceInvalid
@@ -205,9 +196,9 @@ func (v AttemptEvidenceInventory) Append(record []byte, gap bool) (AttemptEviden
 	return next, nil
 }
 
-// IntegrityReviewAttemptEvidenceDigest binds the sealed Attempt evidence
-// inventory into a Review finalization digest. An Attempt with no evidence
-// and no refused append leaves the digest as it was.
+// IntegrityReviewAttemptEvidenceDigest binds the sealed evidence inventory into
+// a review finalization digest. An attempt with no evidence and no refused
+// append leaves base unchanged.
 func IntegrityReviewAttemptEvidenceDigest(base string, inventory AttemptEvidenceInventory) (string, error) {
 	if !validLowerSHA256(base) || inventory.Validate() != nil {
 		return "", ErrAttemptEvidenceInvalid

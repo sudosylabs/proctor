@@ -21,7 +21,7 @@ import (
 
 // TestDomainEventStore verifies the outbox read and retire contract. Rows
 // exist only through the aggregate that commits their fact, so the suite
-// seals a voluntary Submission to create one.
+// seals a voluntary submission to create one.
 func TestDomainEventStore(t *testing.T, ss store.Store) {
 	t.Helper()
 	ctx := context.Background()
@@ -73,8 +73,8 @@ type examAttemptSubmittedFact struct {
 }
 
 // requireExamAttemptSubmittedEvent asserts that a fresh seal committed exactly
-// the proposed outbox row, naming only the sealed Submission's identifiers, and
-// its queued dispatch Job.
+// the proposed outbox row, naming only the sealed submission's identifiers, and
+// its queued dispatch job.
 func requireExamAttemptSubmittedEvent(t *testing.T, ctx context.Context, ss store.Store, eventID model.DomainEventID,
 	jobID model.JobID, fact examAttemptSubmittedFact,
 ) {
@@ -104,7 +104,7 @@ func requireExamAttemptSubmittedEvent(t *testing.T, ctx context.Context, ss stor
 }
 
 // requireNoDomainEvent asserts that a replayed or failed seal committed
-// neither the proposed outbox row nor its dispatch Job.
+// neither the proposed outbox row nor its dispatch job.
 func requireNoDomainEvent(t *testing.T, ctx context.Context, ss store.Store, eventID model.DomainEventID, jobID model.JobID) {
 	t.Helper()
 	event, err := ss.DomainEvent().Get(ctx, eventID)
@@ -115,14 +115,14 @@ func requireNoDomainEvent(t *testing.T, ctx context.Context, ss store.Store, eve
 	require.Nil(t, job)
 }
 
-// DomainEventCounter returns the number of outbox rows and of dispatch Jobs.
+// DomainEventCounter returns the number of outbox rows and of dispatch jobs.
 // Only the SQL adapter can count rows the public contract never lists.
 type DomainEventCounter func(*testing.T, context.Context) (events, dispatchJobs int)
 
 // TestExamSubmissionDomainEvents verifies that each seal path (voluntary,
 // manager-ended and automatic) commits exactly
-// one exam.attempt.submitted event and one dispatch Job with a new
-// Submission, and that a replayed or failed seal commits neither.
+// one exam.attempt.submitted event and one dispatch job with a new
+// submission, and that a replayed or failed seal commits neither.
 func TestExamSubmissionDomainEvents(t *testing.T, ss store.Store, count DomainEventCounter) {
 	t.Helper()
 	ctx := context.Background()

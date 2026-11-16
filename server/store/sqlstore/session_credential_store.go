@@ -156,10 +156,9 @@ func (s SQLSessionCredentialStore) RotateRefresh(ctx context.Context, input *sto
 	})
 }
 
-// rotateRefreshCredential performs the refresh rotation inside its transaction.
-// When the Access Policy requires the User to use two-step verification, a
-// single-factor Web Session becomes restricted to MFA enrollment and any other
-// single-factor Session is refused with store.ErrMFAEnrollmentRequired.
+// rotateRefreshCredential restricts a single-factor web session to MFA
+// enrollment when the access policy requires two-step verification, and
+// refuses any other single-factor session with store.ErrMFAEnrollmentRequired.
 func rotateRefreshCredential(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -225,7 +224,7 @@ func rotateRefreshCredential(
 	}, nil
 }
 
-// lockRefreshCredentialSession locks the owner's Sessions, then the refresh credential and its Session.
+// lockRefreshCredentialSession locks the owner's sessions, then the refresh credential and its session.
 func lockRefreshCredentialSession(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -300,7 +299,6 @@ func lockRefreshCredentialSession(
 	return current, session, nil
 }
 
-// expireRotatingSession revokes a Session whose idle or absolute lifetime elapsed before the rotation.
 func expireRotatingSession(ctx context.Context, tx *sqlxTxWrapper, session *model.Session, now time.Time) (*store.SessionRotation, error) {
 	hashes, revokeErr := revokeOneUserSessionAt(
 		ctx,
@@ -325,7 +323,7 @@ func expireRotatingSession(ctx context.Context, tx *sqlxTxWrapper, session *mode
 	}, nil
 }
 
-// prepareRotatedSessionCredentials builds the replacement access and refresh credentials bounded by the Session lifetime.
+// prepareRotatedSessionCredentials builds the replacement access and refresh credentials bounded by the session lifetime.
 func prepareRotatedSessionCredentials(
 	access, refresh, current *model.SessionCredential,
 	session *model.Session,
@@ -356,7 +354,7 @@ func prepareRotatedSessionCredentials(
 	return &newAccess, &newRefresh, nil
 }
 
-// replaceRefreshCredential revokes the Session's access credentials, inserts the replacements and marks the current refresh credential used.
+// replaceRefreshCredential revokes the session's access credentials, inserts the replacements and marks the current refresh credential used.
 func replaceRefreshCredential(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -412,9 +410,9 @@ func replaceRefreshCredential(
 	return revokedHashes, nil
 }
 
-// touchRotatedSession records the rotation as Session activity, extends its
+// touchRotatedSession records the rotation as session activity, extends its
 // idle expiry within the absolute lifetime, and, when restrict is set, limits
-// the Web Session to MFA enrollment. A restriction is never lifted here.
+// the web session to MFA enrollment. A restriction is never lifted here.
 func touchRotatedSession(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -449,7 +447,7 @@ func touchRotatedSession(
 	return advanceUserActivity(ctx, tx, session.UserID, session.LastActivityAt)
 }
 
-// advanceUserActivity moves a User's last activity forward to at, never
+// advanceUserActivity moves a user's last activity forward to at, never
 // backwards. It is not a profile change, so it bumps neither updated_at nor
 // the revision.
 func advanceUserActivity(ctx context.Context, executor sqlxExecutor, userID model.UserID, at time.Time) error {

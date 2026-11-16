@@ -7,6 +7,7 @@ export interface LoadingProps {
   label: ReactNode;
   showLabel?: boolean;
   size?: IconSize;
+  /** Pass false when the parent already owns a live region, so it speaks once. */
   announce?: boolean;
   className?: string;
 }

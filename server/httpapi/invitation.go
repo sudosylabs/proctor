@@ -8,81 +8,15 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-// InvitationApplication is the application port its handlers call; it issues
-// and accepts Invitations of each purpose and lists, resends, revokes,
-// replaces and batches them.
-type InvitationApplication interface {
-	IssueStudentClassInvitation(
-		context.Context,
-		invocation.Invocation,
-		onboarding.IssueStudentClassInvitationCommand,
-	) (onboarding.InvitationView, error)
-	AcceptStudentClassInvitation(
-		context.Context,
-		invocation.Invocation,
-		onboarding.AcceptStudentClassInvitationCommand,
-	) (*onboarding.InvitationAcceptanceView, error)
-	IssueTeacherAcademicUnitInvitation(
-		context.Context,
-		invocation.Invocation,
-		onboarding.IssueTeacherAcademicUnitInvitationCommand,
-	) (onboarding.InvitationView, error)
-	AcceptTeacherAcademicUnitInvitation(
-		context.Context,
-		invocation.Invocation,
-		onboarding.AcceptTeacherAcademicUnitInvitationCommand,
-	) (*onboarding.InvitationAcceptanceView, error)
-	IssueAcademicUnitRoleInvitation(
-		context.Context,
-		invocation.Invocation,
-		onboarding.IssueAcademicUnitRoleInvitationCommand,
-	) (onboarding.InvitationView, error)
-	AcceptAcademicUnitRoleInvitation(
-		context.Context,
-		invocation.Invocation,
-		onboarding.AcceptAcademicUnitRoleInvitationCommand,
-	) (*onboarding.InvitationAcceptanceView, error)
-	IssueInstitutionRoleInvitation(
-		context.Context,
-		invocation.Invocation,
-		onboarding.IssueInstitutionRoleInvitationCommand,
-	) (onboarding.InvitationView, error)
-	AcceptInstitutionRoleInvitation(
-		context.Context,
-		invocation.Invocation,
-		onboarding.AcceptInstitutionRoleInvitationCommand,
-	) (*onboarding.InvitationAcceptanceView, error)
-	ListInvitations(context.Context, invocation.Invocation, onboarding.ListInvitationsQuery) (onboarding.InvitationAdministrationPage, error)
-	GetInvitation(context.Context, invocation.Invocation, model.InvitationID) (onboarding.InvitationAdministrationView, error)
-	ResendInvitation(
-		context.Context,
-		invocation.Invocation,
-		onboarding.ResendInvitationCommand,
-	) (onboarding.InvitationAdministrationView, error)
-	RevokeInvitation(
-		context.Context,
-		invocation.Invocation,
-		onboarding.RevokeInvitationCommand,
-	) (onboarding.InvitationAdministrationView, error)
-	ReplaceInvitation(
-		context.Context,
-		invocation.Invocation,
-		onboarding.ReplaceInvitationCommand,
-	) (onboarding.InvitationAdministrationView, error)
-	RunInvitationBatch(context.Context, invocation.Invocation, onboarding.RunInvitationBatchCommand) (onboarding.InvitationBatchResult, error)
-}
 
 type issueStudentClassInvitationRequest struct {
 	Email                string `json:"email"`
@@ -267,9 +201,9 @@ type invitationCursor struct {
 	ID        string `json:"id"`
 }
 
-type invitationHandlers struct{ app InvitationApplication }
+type invitationHandlers struct{ app *onboarding.Service }
 
-func invitationResource(app InvitationApplication) route.Resource {
+func invitationResource(app *onboarding.Service) route.Resource {
 	h := invitationHandlers{app: app}
 	return route.NewResource("invitations",
 		route.Endpoint{

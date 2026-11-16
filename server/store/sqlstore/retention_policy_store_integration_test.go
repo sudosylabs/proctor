@@ -44,10 +44,10 @@ func TestRetentionPolicyCurrentCredentialAndAssurancePreserveGrace(t *testing.T)
 			institution, err := s.Institution().GetSingleton(ctx)
 			require.NoError(t, err)
 			mutation := func(action model.Action) store.RetentionMutation {
-				audit, err := s.Audit().Save(ctx, &model.AuditEvent{ActorID: f.principal.UserID, SessionID: f.principal.SessionID,
+				audit, auditErr := s.Audit().Save(ctx, &model.AuditEvent{ActorID: f.principal.UserID, SessionID: f.principal.SessionID,
 					Action: string(action), Resource: model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()},
 					ScopeType: model.RoleScopeInstitution, ScopeID: institution.ID.String(), Status: model.AuditStatusAttempt, NodeID: "policy-test"})
-				require.NoError(t, err)
+				require.NoError(t, auditErr)
 				return store.RetentionMutation{Principal: f.principal, RecentAuthenticationTTL: time.Hour,
 					AuditEventID: audit.ID, AuditAt: audit.CreatedAt}
 			}

@@ -8,24 +8,12 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-// AcademicAdministrationBatchApplication is the application port its handler
-// calls; it runs one batch of academic administration rows.
-type AcademicAdministrationBatchApplication interface {
-	RunAcademicAdministrationBatch(
-		context.Context,
-		invocation.Invocation,
-		onboarding.RunAcademicAdministrationBatchCommand,
-	) (onboarding.AcademicAdministrationBatchResult, error)
-}
 
 type academicAdministrationBatchItemRequest struct {
 	Key             string `json:"key"`
@@ -60,10 +48,10 @@ type academicAdministrationBatchResponse struct {
 }
 
 type academicAdministrationBatchHandlers struct {
-	app AcademicAdministrationBatchApplication
+	app *onboarding.Service
 }
 
-func academicAdministrationBatchResource(app AcademicAdministrationBatchApplication) route.Resource {
+func academicAdministrationBatchResource(app *onboarding.Service) route.Resource {
 	h := academicAdministrationBatchHandlers{app: app}
 	return route.NewResource("academic-administration-batches",
 		route.Endpoint{

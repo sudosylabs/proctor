@@ -26,15 +26,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// New constructs the application graph from explicit dependencies. Only the
-// module-root composition package calls it. It reads top to bottom: validate
-// the dependencies, build the shared mechanics and Access Control, then each
-// area in the order its collaborators require, then the optional Job runtime
-// and the services that span areas.
+// New builds the application graph. Only the module-root composition package
+// calls it.
 func New(deps Dependencies) (*App, error) {
-	if deps.OperationalRecorder == nil {
-		deps.OperationalRecorder = nopOperationalRecorder{}
-	}
 	if err := validateApplicationDependencies(deps); err != nil {
 		return nil, err
 	}
@@ -55,7 +49,7 @@ func New(deps Dependencies) (*App, error) {
 		Health:     shared.mailHealth,
 		MFAEnabled: deps.MFA.Enabled,
 	}
-	administrations, err := newAdministration(deps, shared, authorizer, capabilities)
+	administrations, err := newAdministration(deps, shared, authorizer, &capabilities)
 	if err != nil {
 		return nil, err
 	}
@@ -65,17 +59,17 @@ func New(deps Dependencies) (*App, error) {
 		return nil, err
 	}
 
-	// The Job runtime that a default profile picture proposal wakes is built
-	// last, so newJobRuntime attaches its wake to these proposals.
+	// The job runtime is built last; newJobRuntime attaches its wake to these
+	// proposals.
 	defaultPictureJobs := newDefaultProfilePictureJobs(deps)
 	users, err := newUsers(deps, shared, authorizer, defaultPictureJobs)
 	if err != nil {
 		return nil, err
 	}
 
-	// External sign-in admits an External Identity through an Invitation, and
-	// MFA rekey proposes Jobs. Onboarding and the Job runtime are built after
-	// identity, so it receives handles that are connected once they exist.
+	// External sign-in admits through an invitation and MFA rekey proposes
+	// jobs, but onboarding and the job runtime are built after identity, so
+	// identity gets handles that are connected once they exist.
 	wake, acceptor := &jobWake{}, &externalInvitationAcceptor{}
 	identities, err := newIdentity(deps, shared, authorizer, capabilities, acceptor, wake)
 	if err != nil {
@@ -98,15 +92,12 @@ func New(deps Dependencies) (*App, error) {
 		return nil, err
 	}
 	if runtime.engine != nil && deps.Store.Institution() != nil {
-		changes := &jobChangePublisher{publisher: shared.realtime, institutions: deps.Store.Institution()}
+		changes := realtime.NewJobChangePublisher(shared.realtime, deps.Store.Institution())
 		if err = runtime.engine.AttachChangeListener(changes); err != nil {
 			return nil, err
 		}
 	}
 
-	// Search spans Exams, Users and Classes, and the administration counts
-	// span Invitations, Jobs, mail and onboarding imports, so both are built
-	// once every one of those services exists.
 	searches := search.New(search.Dependencies{
 		Exams:              exams.authoring,
 		Users:              users,
@@ -138,13 +129,13 @@ func New(deps Dependencies) (*App, error) {
 		Search:            searches,
 		Counts:            counts,
 		Realtime:          shared.realtime,
-		RealtimeAdmission: &RealtimeAdmission{
-			principals:    identities,
-			exams:         exams.authoring,
-			sittings:      exams.sittings,
-			authorization: authorizer,
-			operational:   deps.OperationalRecorder,
-		},
+		RealtimeAdmission: NewRealtimeAdmission(RealtimeAdmissionDependencies{
+			Principals:  identities,
+			Exams:       exams.authoring,
+			Sittings:    exams.sittings,
+			Authorizer:  authorizer,
+			Operational: deps.OperationalRecorder,
+		}),
 		Jobs:      runtime.operations,
 		Mail:      runtime.mail,
 		jobEngine: runtime.engine,
@@ -186,10 +177,8 @@ func validateApplicationDependencies(deps Dependencies) error {
 	return nil
 }
 
-// sharedMechanics holds what every area is built over: password hashing,
-// attempt accounting, authentication cache invalidation, realtime
-// publication, audit, mail composition and mail health. It exists only
-// during New.
+// sharedMechanics is what every area is built over. It exists only during
+// New.
 type sharedMechanics struct {
 	hasher      *identity.PasswordHasher
 	attempts    *identity.AttemptAccounting
@@ -235,7 +224,7 @@ func newSharedMechanics(deps Dependencies) (sharedMechanics, error) {
 	publication, err := realtime.New(realtime.Dependencies{
 		Delivery:    delivery,
 		Diagnostics: deps.RealtimeDiagnostics,
-		Attempts:    sessionAttemptTargets{attempts: examAttempts},
+		Attempts:    examAttempts,
 	})
 	if err != nil {
 		return sharedMechanics{}, err
@@ -271,8 +260,8 @@ func newSharedMechanics(deps Dependencies) (sharedMechanics, error) {
 	}, nil
 }
 
-// newInstitutionName supplies the institution display name to mail copy,
-// read through its own short-lived cache.
+// newInstitutionName reads the institution display name for mail copy
+// through its own short-lived cache.
 func newInstitutionName(deps Dependencies) func() string {
 	return mail.NewInstitutionNameCache(mail.InstitutionNameCacheDependencies{
 		Institutions: deps.Store.Institution(),
@@ -280,8 +269,6 @@ func newInstitutionName(deps Dependencies) func() string {
 	}).Name
 }
 
-// newAuthorizer builds Access Control over the Role and Role Binding stores
-// and the scope resolver that places each Resource in its scopes.
 func newAuthorizer(deps Dependencies, shared sharedMechanics) (*access.Authorizer, error) {
 	scopeResolver, err := access.NewScopeResolver(access.ScopeResolverDependencies{
 		Institutions:    deps.Store.Institution(),
@@ -312,12 +299,12 @@ func newAdministration(
 	deps Dependencies,
 	shared sharedMechanics,
 	authorizer *access.Authorizer,
-	capabilities identity.DeploymentCapabilities,
+	capabilities *identity.DeploymentCapabilities,
 ) (*administration.Service, error) {
 	return administration.New(administration.Dependencies{
 		Store:                   deps.Store,
 		Authorizer:              authorizer,
-		Auditor:                 shared.audit.MutationAudit(),
+		Auditor:                 shared.audit,
 		Capabilities:            capabilities,
 		Mail:                    shared.mail,
 		Publisher:               shared.realtime,
@@ -335,7 +322,7 @@ func newAcademic(deps Dependencies, shared sharedMechanics, authorizer *access.A
 	return academic.New(academic.Dependencies{
 		Store:      deps.Store,
 		Authorizer: authorizer,
-		Auditor:    shared.audit.MutationAudit(),
+		Auditor:    shared.audit,
 		Mail:       shared.mail,
 		Publisher:  shared.realtime,
 		Now:        time.Now,
@@ -343,8 +330,7 @@ func newAcademic(deps Dependencies, shared sharedMechanics, authorizer *access.A
 	})
 }
 
-// newDefaultProfilePictureJobs proposes default profile picture generation;
-// it exists only when Jobs are enabled.
+// newDefaultProfilePictureJobs returns nil when jobs are disabled.
 func newDefaultProfilePictureJobs(deps Dependencies) *jobs.DefaultProfilePictureJobs {
 	if deps.Store.Job() == nil {
 		return nil
@@ -364,17 +350,13 @@ func newUsers(
 	}
 
 	return user.New(user.Dependencies{
-		Store:           deps.Store,
-		Authorizer:      authorizer,
-		Auditor:         shared.audit.MutationAudit(),
-		SettingsAuditor: shared.audit.UserSettingsAudit(),
-		Publisher:       shared.realtime,
-		DefaultJobs:     proposals,
-		Uploads:         deps.FileContent,
-		Reads:           deps.FileContent,
-		Fallback:        deps.FileContent,
-		Defaults:        deps.FileContent,
-		Now:             time.Now,
+		Store:       deps.Store,
+		Authorizer:  authorizer,
+		Auditor:     shared.audit,
+		Publisher:   shared.realtime,
+		DefaultJobs: proposals,
+		Pictures:    deps.FileContent,
+		Now:         time.Now,
 	})
 }
 
@@ -382,7 +364,7 @@ func newIdentity(
 	deps Dependencies,
 	shared sharedMechanics,
 	authorizer *access.Authorizer,
-	capabilities identity.AccessPolicyCapabilitySource,
+	capabilities identity.DeploymentCapabilities,
 	invitations *externalInvitationAcceptor,
 	wake *jobWake,
 ) (*identity.Service, error) {
@@ -392,14 +374,14 @@ func newIdentity(
 		Registry:                  deps.Registry,
 		Authorizer:                authorizer,
 		Auditor:                   shared.audit,
-		Capabilities:              capabilities,
+		Capabilities:              &capabilities,
 		Publisher:                 shared.realtime,
 		Mail:                      shared.mail,
 		Hasher:                    shared.hasher,
 		Attempts:                  shared.attempts,
 		Invalidator:               shared.invalidator,
 		Invitations:               invitations,
-		Operational:               operationalRecorderAdapter{recorder: deps.OperationalRecorder},
+		Operational:               deps.OperationalRecorder,
 		MFASecretSealer:           deps.MFASecretSealer,
 		MFARekeyWake:              wake.Wake,
 		DesktopBuildCatalog:       deps.DesktopBuildCatalog,
@@ -420,9 +402,6 @@ func newIdentity(
 	})
 }
 
-// newOnboarding builds the onboarding area over the identity, academic and
-// administration areas. New connects external sign-in to the Invitation
-// acceptance its Ports return.
 func newOnboarding(
 	deps Dependencies,
 	shared sharedMechanics,
@@ -437,7 +416,7 @@ func newOnboarding(
 		Store:                   deps.Store,
 		Content:                 deps.FileContent,
 		Authorizer:              authorizer,
-		Auditor:                 shared.audit.MutationAudit(),
+		Auditor:                 shared.audit,
 		Mail:                    shared.mail,
 		Hasher:                  shared.hasher,
 		Attempts:                shared.attempts,
@@ -454,9 +433,8 @@ func newOnboarding(
 	})
 }
 
-// externalInvitationAcceptor lets external sign-in in the identity area admit
-// an External Identity through the Invitation its login state carries. The
-// identity area is built first, so New connects it to the onboarding area.
+// externalInvitationAcceptor breaks the build-order cycle: identity is built
+// before onboarding, so New connects this to onboarding afterwards.
 type externalInvitationAcceptor struct {
 	accept func(
 		context.Context,
@@ -479,9 +457,8 @@ func (a *externalInvitationAcceptor) AcceptExternalIdentity(
 	return a.accept(ctx, state, assertion, capabilities, metadata, sessionClientType)
 }
 
-// jobWake wakes the Job runtime once it exists. The identity and onboarding
-// areas need the wake when they are built, before the runtime that they
-// propose Jobs to.
+// jobWake breaks the build-order cycle: identity and onboarding need the wake
+// before the job runtime they propose jobs to exists.
 type jobWake struct{ wake func() }
 
 func (w *jobWake) Wake() {

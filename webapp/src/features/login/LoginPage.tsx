@@ -243,6 +243,8 @@ function LoginMethods({
               variant="secondary"
               onClick={() => {
                 onAuthenticationAction();
+                // client_type stays explicit even though the server has a
+                // default; the destination is fixed, never taken from the URL.
                 const parameters = new URLSearchParams({
                   client_type: "web",
                   return_to: "/authorization/complete",
@@ -375,7 +377,8 @@ function LocalLoginForm({
         setLoginID("");
         setPassword("");
         setMFACode({ kind: "authenticator", code: "" });
-        // A restricted Session can only set up two-step verification.
+        // A restricted Session can only set up two-step verification. Replacing
+        // the entry keeps Back from restoring the submitted credential form.
         window.location.replace(result.kind === "authenticated" ? "/authorization/complete" : "/account/security");
         return;
       }

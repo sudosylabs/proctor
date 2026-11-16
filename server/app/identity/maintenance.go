@@ -12,9 +12,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// MaintenanceTasks returns the bounded periodic passes that expire and purge
-// browser authentication transactions, external login states and personal
-// access token preparations. Every node may run them.
+// MaintenanceTasks returns the periodic passes that purge expired browser
+// authentication transactions, external login states and token preparations.
+// They are safe to run on every node.
 func MaintenanceTasks(catalog store.Catalog) []job.PeriodicTask {
 	return []job.PeriodicTask{
 		{

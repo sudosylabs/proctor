@@ -13,21 +13,16 @@ import (
 	"io"
 )
 
-// maximumJPEGScans bounds how many start-of-scan segments an uploaded JPEG may
-// carry. Go's image/jpeg walks the whole coefficient buffer once per scan and
-// has no scan limit of its own, so a small progressive file with thousands of
-// scans costs minutes of CPU while it holds a content permit. Encoders emit
-// one scan for baseline images and at most 18 for libjpeg's progressive
-// scripts (10 for color, 6 for greyscale, 18 for CMYK).
+// maximumJPEGScans exists because image/jpeg walks the whole coefficient
+// buffer once per scan with no limit, so a small progressive file with
+// thousands of scans burns minutes of CPU while holding a work slot. Real
+// encoders emit at most 18 (libjpeg's CMYK progressive script).
 const maximumJPEGScans = 32
 
 var errJPEGTooManyScans = errors.New("JPEG has too many scans")
 
-// checkJPEGScanCount walks the JPEG marker stream the way image/jpeg does and
-// fails as soon as it has seen more than maximumJPEGScans scans. It reads only
-// marker segments and skips entropy-coded data byte by byte, so its cost is
-// linear in the file size. Malformed or truncated streams are left for the
-// decoder to reject.
+// checkJPEGScanCount walks markers the way image/jpeg does, in time linear in
+// the file size. Malformed or truncated streams are left for the decoder.
 func checkJPEGScanCount(r io.Reader) error {
 	reader := bufio.NewReader(r)
 	var start [2]byte

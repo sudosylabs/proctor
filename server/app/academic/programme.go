@@ -49,7 +49,7 @@ type ArchiveProgrammeCommand struct {
 	ID               model.ProgrammeID
 }
 
-// GetProgramme reads one Programme after authorizing the caller.
+// GetProgramme needs programme.view.
 func (s *Service) GetProgramme(ctx context.Context, inv invocation.Invocation, id model.ProgrammeID) (*model.Programme, error) {
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "programme_id")
@@ -65,7 +65,8 @@ func (s *Service) GetProgramme(ctx context.Context, inv invocation.Invocation, i
 	return programme, nil
 }
 
-// ListProgrammes lists Programmes after authorizing the caller.
+// ListProgrammes lists a unit's programmes; it needs programme.view on the
+// unit.
 func (s *Service) ListProgrammes(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -116,7 +117,7 @@ func (s *Service) ListProgrammes(
 	return page, nil
 }
 
-// CreateProgramme creates a Programme after authorizing the caller.
+// CreateProgramme needs programme.manage.
 func (s *Service) CreateProgramme(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -175,7 +176,7 @@ func (s *Service) CreateProgramme(
 	)
 }
 
-// UpdateProgramme updates a Programme after authorizing the caller.
+// UpdateProgramme needs programme.manage.
 func (s *Service) UpdateProgramme(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -231,7 +232,7 @@ func (s *Service) UpdateProgramme(
 	)
 }
 
-// ArchiveProgramme archives a Programme after authorizing the caller.
+// ArchiveProgramme needs programme.manage.
 func (s *Service) ArchiveProgramme(ctx context.Context, inv invocation.Invocation, command ArchiveProgrammeCommand) error {
 	current, scopeType, scopeID, err := s.getForMutation(ctx, inv, command.ID)
 	if err != nil {

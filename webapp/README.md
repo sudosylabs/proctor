@@ -14,56 +14,38 @@ fingerprints. Building and checking these assets uses only package-local files.
 Human-owned tokens live in [`design-system/tokens.mjs`](./design-system/tokens.mjs)
 and generate [`src/styles/tokens.css`](./src/styles/tokens.css) plus the typed
 [`src/generated/design-system/themes.ts`](./src/generated/design-system/themes.ts)
-runtime catalog. The narrow
-[`product theme contract`](./src/theme/CONTRACT.md) resolves one effective
-theme for document metadata, semantic tokens, and the in-page lockup. The first
-visible slice is the server-hosted `/login` route;
-its exact preimplementation behavior lives in the feature-local
-[`login` contract](./src/features/login/CONTRACT.md). One-time installation
-establishment and public local account admission live in the
-[`setup`](./src/features/setup/CONTRACT.md) and
-[`register`](./src/features/register/CONTRACT.md) contracts. Terminal
-Session-confirmation behavior lives in the companion
-[`authorization-complete` contract](./src/features/authorization-complete/CONTRACT.md).
-Purpose-specific email-token consumption lives in the
-[`verify-email` contract](./src/features/verify-email/CONTRACT.md). Those routes
-and the password-recovery, Invitation acceptance, Desktop authorization, and
-provider-connection feature contracts describe the hosted access route family.
-The bounded [`account-security`](./src/features/account-security/CONTRACT.md)
-and [`reauthenticate`](./src/features/reauthenticate/CONTRACT.md) contracts own
-MFA setup, recovery, and fresh proof without a general administration shell.
-Their shared
-structural frame is governed beside
-[`AccessPageShell`](./src/components/AccessPageShell/CONTRACT.md); feature
-modules retain their own state, transport, content, and recovery behavior.
-The shared [`auth` contract](./src/auth/CONTRACT.md) owns runtime validation and
-canonical-origin pinning for public discovery; each consuming feature still
-owns its admission decisions and visible states.
-The [`application orchestration contract`](./src/app/CONTRACT.md) owns the
-StrictMode-safe initial resource and retry lifecycle used by route modules.
-The remaining focused access tasks share the narrow
-[`AccessTaskIntro`](./src/components/AccessTaskIntro/CONTRACT.md) introduction,
-[`TaskState`](./src/components/TaskState/CONTRACT.md) terminal and loading-state
-grammar, [`Notice`](./src/components/Notice/CONTRACT.md) evidence contract,
-and hairline [`FactList`](./src/components/FactList/CONTRACT.md) without
-introducing decorative workflow steps. The shell's masthead and help line read
-the Institution name from the shared hosted-page discovery described in the
-`auth` contract.
+runtime catalog. [`ProductTheme`](./src/theme/ProductTheme.tsx) resolves one
+effective theme for document metadata, semantic tokens, and the in-page lockup.
+The first visible slice is the server-hosted `/login` route. Each hosted access
+route, from setup and registration through password recovery, Invitation
+acceptance, Desktop authorization, email tasks, provider connection, account
+security, and fresh proof, lives in its own module under
+[`src/features`](./src/features), and comments on its API module record the
+rules the code alone doesn't show. Every route shares the structural frame of
+[`AccessPageShell`](./src/components/AccessPageShell/AccessPageShell.tsx);
+feature modules retain their own state, transport, content, and recovery
+behavior. [`src/auth`](./src/auth) owns runtime validation and canonical-origin
+pinning for public discovery; each consuming feature still owns its admission
+decisions and visible states. [`src/app`](./src/app) owns the StrictMode-safe
+initial resource and retry lifecycle used by route modules.
+The focused access tasks share the narrow `AccessTaskIntro` introduction,
+`TaskState` terminal and loading states, `Notice` evidence, and hairline
+`FactList` without introducing decorative workflow steps. The shell's masthead
+and help line read the Institution name from the shared hosted-page discovery.
 Product icons use semantic names from the owned
-[`Icon`](./src/components/Icon/CONTRACT.md) adapter; feature code never imports
+[`Icon`](./src/components/Icon/Icon.tsx) adapter; feature code never imports
 the underlying icon library directly. Brand and provider marks remain governed
 assets rather than product icons.
-The shared [`Loading`](./src/components/Loading/CONTRACT.md) indicator serves
+The shared [`Loading`](./src/components/Loading/Loading.tsx) indicator serves
 pending controls and page content without owning their layout or operations.
 Buttons preserve their original dimensions; hosted pages keep known context
 visible and reserve the loading region locally.
 Repeated action styling, single-line field behavior, and inline state evidence
-live beside the narrow
-[`Button`](./src/components/Button/CONTRACT.md) and
-[`InputField`](./src/components/InputField/CONTRACT.md), and
-[`Notice`](./src/components/Notice/CONTRACT.md) contracts. Persistent
-submission failures use the shared action-adjacent
-[`FormFeedback`](./src/components/FormFeedback/CONTRACT.md) region. These
+live in [`Button`](./src/components/Button/Button.tsx),
+[`InputField`](./src/components/InputField/InputField.tsx), and
+[`Notice`](./src/components/Notice/Notice.tsx). Persistent submission failures
+use the shared action-adjacent
+[`FormFeedback`](./src/components/FormFeedback/FormFeedback.tsx) region. These
 components remain domain-neutral; page modules still own values, copy,
 validation, API orchestration, and recovery.
 Visible browser copy uses the delegated `webapp.*` namespace in

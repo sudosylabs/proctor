@@ -9,8 +9,8 @@ package model
 
 import "slices"
 
-// NativeFamilyID names an authored native family: a group of options an Exam
-// author turns on together, compiled into rules on one capability.
+// NativeFamilyID names an authored native family: options an exam author turns
+// on together, compiled into rules on one capability.
 type NativeFamilyID string
 
 const (
@@ -284,7 +284,6 @@ func compileNativeProcessFamily(b nativeRuleBuilder, registry *NativeCapabilityR
 	return rules
 }
 
-// nativeFamilyDefinitionOf returns a family's definition.
 func nativeFamilyDefinitionOf(id NativeFamilyID) (nativeFamilyDefinition, bool) {
 	i := slices.IndexFunc(nativeFamilyDefinitions, func(d nativeFamilyDefinition) bool { return d.id == id })
 	if i < 0 {
@@ -293,8 +292,8 @@ func nativeFamilyDefinitionOf(id NativeFamilyID) (nativeFamilyDefinition, bool) 
 	return nativeFamilyDefinitions[i], true
 }
 
-// nativeFamilyCapability returns the capability a family compiles rules on,
-// and whether it compiles any.
+// nativeFamilyCapability returns the capability a family compiles rules on;
+// false means it compiles none.
 func nativeFamilyCapability(id NativeFamilyID) (NativeCapabilityID, bool) {
 	definition, ok := nativeFamilyDefinitionOf(id)
 	return definition.capability, ok && definition.capability != ""

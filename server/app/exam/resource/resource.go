@@ -14,29 +14,14 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Authorizer is the part of *access.Authorizer the Exam Resource use cases
-// call.
-type Authorizer interface {
-	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
-}
-
-// Auditor records the attempt and failure of each audited Resource command;
-// the Store completes the audit event with the change it commits.
-type Auditor interface {
-	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
-	Fail(context.Context, model.AuditEventID, string) error
-}
-
-// FileContent stores, opens and removes the bytes of one Resource rendition.
-// StoreExamResource returns the rendition it wrote, whose checksum the use
-// case compares with the one the caller declared; RemoveExamResource discards
-// a rendition that never became visible.
+// FileContent holds the bytes of resource renditions. StoreExamResource
+// returns the rendition it wrote so the caller can check the declared
+// checksum; RemoveExamResource discards a rendition that never became visible.
 type FileContent interface {
 	StoreExamResource(
 		context.Context,
@@ -50,16 +35,16 @@ type FileContent interface {
 	RemoveExamResource(context.Context, model.FileRevisionID, model.FileRenditionID) error
 }
 
-// Service manages the Exam Resources of an Exam Draft.
+// Service manages exam draft resources; build it with New.
 type Service struct {
-	resources store.ExamResourceStore
-	// exams reads the Exam ownership and Draft a command is authorized and
-	// fenced against.
+	resources           store.ExamResourceStore
 	exams               store.ExamAuthoringStore
 	academicUnitMembers store.AcademicUnitMemberStore
 
-	authorizer    Authorizer
-	auditor       Auditor
+	authorizer *access.Authorizer
+	// auditor only begins and fails audits; the store completes them in the
+	// same transaction as the change.
+	auditor       access.MutationAuditAdapter
 	publisher     realtime.Publisher
 	content       FileContent
 	now           func() time.Time
@@ -69,14 +54,13 @@ type Service struct {
 	newLeaseID    func() model.UploadLeaseID
 }
 
-// Dependencies are the collaborators New validates once and distributes to
-// the Service.
+// Dependencies are the Service's collaborators; New requires every field.
 type Dependencies struct {
 	Persistence   store.ExamResourceStore
 	Access        store.ExamAuthoringStore
 	Memberships   store.AcademicUnitMemberStore
-	Authorizer    Authorizer
-	Auditor       Auditor
+	Authorizer    *access.Authorizer
+	Auditor       *access.Auditor
 	Publisher     realtime.Publisher
 	Content       FileContent
 	Now           func() time.Time
@@ -86,8 +70,7 @@ type Dependencies struct {
 	NewLeaseID    func() model.UploadLeaseID
 }
 
-// New returns an Exam Resource Service, or an error when a required
-// dependency is missing.
+// New returns an error when any dependency is nil.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Persistence == nil ||
 		deps.Access == nil ||
@@ -109,7 +92,7 @@ func New(deps Dependencies) (*Service, error) {
 		exams:               deps.Access,
 		academicUnitMembers: deps.Memberships,
 		authorizer:          deps.Authorizer,
-		auditor:             deps.Auditor,
+		auditor:             deps.Auditor.MutationAudit(),
 		publisher:           deps.Publisher,
 		content:             deps.Content,
 		now:                 deps.Now,

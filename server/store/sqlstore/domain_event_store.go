@@ -67,7 +67,7 @@ func (s *SQLDomainEventStore) Delete(ctx context.Context, id model.DomainEventID
 }
 
 // domainEventIdentities is the application-proposed identity of one outbox
-// row and its dispatch Job.
+// row and its dispatch job.
 type domainEventIdentities struct {
 	EventID model.DomainEventID
 	JobID   model.JobID
@@ -76,7 +76,7 @@ type domainEventIdentities struct {
 func (ids domainEventIdentities) valid() bool { return ids.EventID.IsValid() && ids.JobID.IsValid() }
 
 // insertExamAttemptSubmittedEvent writes the exam.attempt.submitted outbox
-// row for a newly sealed Submission and its queued dispatch Job, inside the
+// row for a newly sealed submission and its queued dispatch job, inside the
 // sealing transaction and at its PostgreSQL time.
 func insertExamAttemptSubmittedEvent(ctx context.Context, tx *sqlxTxWrapper, ids domainEventIdentities,
 	submission *model.ExamSubmission, sittingID model.ExamSittingID, examID model.ExamID, at time.Time,

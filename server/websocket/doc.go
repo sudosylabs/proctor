@@ -9,23 +9,12 @@
 // This package implementation is adapted from Mattermost's WebSocket runtime.
 // See server/NOTICE for exact provenance.
 
-// Package websocket is the transport for Proctor's realtime connection: the one
-// authenticated WebSocket a signed-in client keeps open to receive events and,
-// during an Exam, to keep its Attempt connected.
+// Package websocket is the realtime transport: the one authenticated socket a
+// signed-in client keeps open for events and, during an exam, its attempt
+// connection. Hub is the realtime.Sink for this node.
 //
-// Hub accepts upgrades, enforces connection limits and delivers the events the
-// application publishes to the connections that should receive them; it is the
-// realtime.Sink. Each connection numbers the events it sends and is closed when
-// it cannot keep up. A client that reconnects to the same node within the
-// replay retention, naming its previous connection and the last sequence it
-// received, is sent the events it missed, provided they are still in that
-// connection's bounded history. Otherwise it gets a new connection and a
-// resync event telling it to fetch current state again. The candidate actions
-// that arrive over the socket (connect, renew, Focus Loss, browser activity)
-// are decoded in exam_attempt.go and handed to app/exam/attempt.
-//
-// Nothing here is durable, and nothing here decides who may see what:
-// subscriptions are authorized by the application. The HTTP route that upgrades
-// a request is declared in httpapi. Start with hub.go, then protocol.go for the
-// wire types and connection.go for the life of one connection.
+// Nothing here is durable, and nothing here decides who may see what; the
+// application authorizes subscriptions. Replay after a reconnect covers only
+// the same node and the connection's bounded history; otherwise the client
+// gets a resync event.
 package websocket

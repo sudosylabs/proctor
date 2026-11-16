@@ -15,16 +15,13 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// Every integrity policy writes its decision through these three functions,
-// inside the transaction that decided it, so every Flag, every piece of
-// evidence and every policy Suspension has one shape whichever policy wrote
-// it. Each policy still owns when it may create a Flag, how much evidence it
-// retains, and how the Attempt, Participation and Connection it suspends
-// change state. The session-revocation fence in the baseline schema writes
-// Connection Loss records itself, in SQL, in the same shape.
+// Every integrity policy writes flags, evidence and policy suspensions through
+// these three functions, inside the deciding transaction, so they share one
+// shape. The session-revocation fence in the baseline schema writes connection
+// loss records itself in SQL; keep it in the same shape.
 
-// insertIntegrityFlag writes a new open Flag, and asks for an incident screen
-// clip around it when the Attempt records its screen. It reports whether it
+// insertIntegrityFlag writes a new open flag, and asks for an incident screen
+// clip around it when the attempt records its screen. It reports whether it
 // asked, so the caller can tell the candidate's Desktop.
 func insertIntegrityFlag(ctx context.Context, tx *sqlxTxWrapper, flag *model.IntegrityFlag) (bool, error) {
 	if err := flag.Validate(); err != nil {
@@ -51,7 +48,7 @@ func insertIntegrityFlag(ctx context.Context, tx *sqlxTxWrapper, flag *model.Int
 	return requestIncidentScreenClip(ctx, tx, flag)
 }
 
-// insertIntegrityEvidence writes one piece of evidence for an open Flag. Only
+// insertIntegrityEvidence writes one piece of evidence for an open flag. Only
 // the columns of the evidence's own kind are set.
 func insertIntegrityEvidence(ctx context.Context, tx *sqlxTxWrapper, evidence *model.IntegrityEvidence) error {
 	if err := evidence.Validate(); err != nil {
@@ -109,8 +106,8 @@ func insertIntegrityEvidence(ctx context.Context, tx *sqlxTxWrapper, evidence *m
 	return nil
 }
 
-// insertPolicySuspension writes the Suspension a policy opened.
-// attemptRevision is the Attempt revision the suspension produced.
+// insertPolicySuspension writes the suspension a policy opened.
+// attemptRevision is the attempt revision the suspension produced.
 func insertPolicySuspension(
 	ctx context.Context,
 	tx *sqlxTxWrapper,

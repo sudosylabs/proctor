@@ -44,8 +44,8 @@ func (r browserSourceRefusalRecord) Validate() error {
 	return nil
 }
 
-// StartBrowserActivity starts the Browser Activity source declared by input for
-// the Candidate's active Participation generation and open connection. Retrying
+// StartBrowserActivity starts the browser activity source declared by input for
+// the candidate's active participation generation and open connection. Retrying
 // the same declaration returns the original source status or refusal; a
 // different declaration under the same source ID is a conflict, and a refusal
 // is returned as *store.BrowserSourceRefusal.
@@ -82,7 +82,7 @@ type browserSourceStartOutcome struct {
 	Refusal *store.BrowserSourceRefusal
 }
 
-// browserSourceStartParticipation is the locked Participation generation and
+// browserSourceStartParticipation is the locked participation generation and
 // browser start counters a source start is checked against.
 type browserSourceStartParticipation struct {
 	Generation  int64 `db:"generation"`
@@ -91,7 +91,7 @@ type browserSourceStartParticipation struct {
 	Resets      int64 `db:"browser_runtime_reset_starts"`
 }
 
-// browserSourcePrior is the Participation's newest Browser source, which a
+// browserSourcePrior is the participation's newest Browser source, which a
 // runtime reset or policy correction succeeds.
 type browserSourcePrior struct {
 	ID       string `db:"id"`
@@ -193,8 +193,8 @@ func (s *SQLBrowserDeliveryStore) startBrowserActivity(
 	return browserSourceStartOutcome{Status: status}, nil
 }
 
-// lockBrowserSourceStart locks the Sitting, Attempt, Candidate guard and the
-// active Participation and checks the declared generation.
+// lockBrowserSourceStart locks the sitting, attempt, candidate guard and the
+// active participation and checks the declared generation.
 func (s *SQLBrowserDeliveryStore) lockBrowserSourceStart(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -383,7 +383,7 @@ func replayBrowserSourceStart(
 	return nil, nil
 }
 
-// checkBrowserSourceStartGate requires an open Sitting, no pending browser
+// checkBrowserSourceStartGate requires an open sitting, no pending browser
 // correction acknowledgement and the enabled sealed policy the start declares.
 func checkBrowserSourceStartGate(
 	ctx context.Context,
@@ -445,7 +445,7 @@ func checkBrowserSourceStartGate(
 }
 
 // checkBrowserSourceTransition checks the declared start transition against
-// the Participation's start history and newest source.
+// the participation's start history and newest source.
 func checkBrowserSourceTransition(
 	input *store.BrowserActivitySourceStart,
 	part browserSourceStartParticipation,
@@ -555,7 +555,7 @@ func refuseBrowserSourceStart(
 }
 
 // insertBrowserSource inserts the started source, reserves its control
-// metadata and advances the Participation's browser start counters.
+// metadata and advances the participation's browser start counters.
 func insertBrowserSource(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -931,7 +931,7 @@ func browserInitialStartCount(value bool) int64 {
 	return 0
 }
 
-// The owning lifecycle transaction has already fenced the Participation. Every
+// The owning lifecycle transaction has already fenced the participation. Every
 // source has a reserved closure slot, including sources closed by old delivery
 // finalization paths earlier in that same transaction.
 func closeParticipationBrowserSources(
@@ -982,8 +982,8 @@ func (s *SQLBrowserDeliveryStore) BrowserSourceStatus(
 	})
 }
 
-// BrowserSourceList returns the delivery status of every Browser Activity
-// source of the Participation, in start order.
+// BrowserSourceList returns the delivery status of every browser activity
+// source of the participation, in start order.
 func (s *SQLBrowserDeliveryStore) BrowserSourceList(
 	ctx context.Context,
 	access store.BrowserDeliveryAccess,
@@ -1158,7 +1158,7 @@ func closeSittingBrowserSources(ctx context.Context, tx *sqlxTxWrapper, sittingI
 		reason = model.DeliveryClosedBrowserDisabled
 	}
 
-	// The correction owns the Sitting write fence. Page the affected candidates
+	// The correction owns the sitting write fence. Page the affected candidates
 	// while retaining one transaction, so no source is left on a superseded policy.
 	for {
 		var ids []string

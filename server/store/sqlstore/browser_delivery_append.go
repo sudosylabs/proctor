@@ -188,7 +188,7 @@ func (s *SQLBrowserDeliveryStore) debitBrowserAppend(ctx context.Context, access
 	return nil
 }
 
-// AppendBrowserActivity appends live Browser Activity events for the caller's
+// AppendBrowserActivity appends live browser activity events for the caller's
 // open connection and returns their acknowledgement.
 func (s *SQLBrowserDeliveryStore) AppendBrowserActivity(
 	ctx context.Context,
@@ -197,9 +197,9 @@ func (s *SQLBrowserDeliveryStore) AppendBrowserActivity(
 	return s.appendBrowserActivity(ctx, input, nil)
 }
 
-// AppendHistoricalBrowserDelivery appends Browser Activity delivered after the
+// AppendHistoricalBrowserDelivery appends browser activity delivered after the
 // live connection ended. It requires a BrowserDeliveryAppendOperation command
-// owned by the Candidate and an access without connection or continuity
+// owned by the candidate and an access without connection or continuity
 // credential.
 func (s *SQLBrowserDeliveryStore) AppendHistoricalBrowserDelivery(
 	ctx context.Context,
@@ -354,7 +354,7 @@ func (s *SQLBrowserDeliveryStore) hydrateBrowserAppendReplay(
 	return s.performBrowserAppend(ctx, tx, input, access, command, false)
 }
 
-// browserAppendSource is the Exam, Sitting and canonical policy of the Browser
+// browserAppendSource is the exam, sitting and canonical policy of the Browser
 // source an append targets.
 type browserAppendSource struct {
 	Exam    string `db:"exam_id"`

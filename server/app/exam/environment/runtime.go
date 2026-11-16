@@ -17,19 +17,19 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Owner acts on one Attempt's environment while its node holds the lease.
-// Run returns when the environment is done, when ctx ends (the lease was
-// lost or the node is stopping), or on a failure the runtime reports. A wake
-// says the Attempt's facts or Workspace changed; Run must not rely on it,
-// since a wake can be lost.
+// Owner acts on one attempt's environment while its node holds the lease.
+// Run returns when the environment is done, when ctx ends (the lease was lost
+// or the node is stopping), or on a failure the runtime reports. A wake says
+// the attempt's facts or workspace changed; Run must not rely on it, since a
+// wake can be lost.
 type Owner interface {
 	Run(ctx context.Context, lease store.AttemptRuntimeLease, wake <-chan struct{}) error
 }
 
-// OwnerFactory makes the owner of one Attempt's environment.
+// OwnerFactory makes the owner of one attempt's environment.
 type OwnerFactory func(attemptID model.ExamAttemptID) Owner
 
-// The runtime's defaults.
+// Defaults for the zero RuntimeDependencies.LeaseLifetime and Backstop.
 const (
 	DefaultLeaseLifetime = 30 * time.Second
 	DefaultBackstop      = 10 * time.Second
@@ -37,7 +37,8 @@ const (
 	releaseTimeout = 5 * time.Second
 )
 
-// RuntimeDependencies is what NewRuntime needs: the leases and the owners it runs, and the bounds and timing of its claims.
+// RuntimeDependencies configures NewRuntime; Leases, NodeID, NewOwner and a
+// positive Owners are required.
 type RuntimeDependencies struct {
 	Leases   store.AttemptRuntimeLeaseStore
 	NodeID   string
@@ -55,9 +56,8 @@ type RuntimeDependencies struct {
 	Report func(attemptID model.ExamAttemptID, err error)
 }
 
-// Runtime owns environments on this node: it claims their leases, keeps
-// them renewed, and runs one owner per held environment. It is inert until
-// Start, and Close stops every owner and releases its lease.
+// Runtime claims environment leases on this node, keeps them renewed, and
+// runs one owner per held environment. It is inert until Start.
 type Runtime struct {
 	deps RuntimeDependencies
 
@@ -76,7 +76,7 @@ type heldOwner struct {
 	cancel context.CancelFunc
 }
 
-// NewRuntime validates its dependencies and returns an inert runtime.
+// NewRuntime returns an inert runtime, defaulting LeaseLifetime and Backstop.
 func NewRuntime(deps RuntimeDependencies) (*Runtime, error) {
 	if deps.Leases == nil || deps.NodeID == "" || deps.NewOwner == nil || deps.Owners < 1 {
 		return nil, errors.New("attempt environment runtime needs leases, a node ID, an owner factory and an owner bound")
@@ -95,7 +95,8 @@ func NewRuntime(deps RuntimeDependencies) (*Runtime, error) {
 	}, nil
 }
 
-// Start begins claiming environments. It runs once.
+// Start begins claiming environments; later calls, and calls after Close, do
+// nothing.
 func (r *Runtime) Start(context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -111,7 +112,7 @@ func (r *Runtime) Start(context.Context) error {
 }
 
 // Close stops every owner, releases its lease, and waits for them within
-// ctx. It runs once.
+// ctx. Later calls do nothing.
 func (r *Runtime) Close(ctx context.Context) error {
 	r.mu.Lock()
 	if r.closed {
@@ -183,7 +184,6 @@ func (r *Runtime) claimLoop(ctx context.Context) {
 	}
 }
 
-// room is how many more environments this node may own.
 func (r *Runtime) room() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -229,7 +229,6 @@ func (r *Runtime) claimPending(ctx context.Context) {
 	}
 }
 
-// run starts the owner of a lease this node just claimed.
 func (r *Runtime) run(parent context.Context, lease store.AttemptRuntimeLease) {
 	ctx, cancel := context.WithCancel(parent)
 	held := &heldOwner{wake: make(chan struct{}, 1), cancel: cancel}

@@ -55,9 +55,9 @@ func (c *connectionRuntime) readPump(ctx context.Context) {
 		<-appendDone
 	}()
 	c.socket.SetReadLimit(MaxMessageBytes)
-	_ = c.socket.SetReadDeadline(c.clock.Now().Add(pongWait))
+	_ = c.socket.SetReadDeadline(time.Now().Add(pongWait))
 	c.socket.SetPongHandler(func(string) error {
-		return c.socket.SetReadDeadline(c.clock.Now().Add(pongWait))
+		return c.socket.SetReadDeadline(time.Now().Add(pongWait))
 	})
 	for {
 		if ctx.Err() != nil {
@@ -78,7 +78,7 @@ func (c *connectionRuntime) readPump(ctx context.Context) {
 
 		// Every frame spends from the connection budget before validation or
 		// dispatch, so no action can drive unbounded application work.
-		if !c.inbound.allow(c.clock.Now()) {
+		if !c.inbound.allow(time.Now()) {
 			if c.recorder != nil {
 				c.recorder.ObserveWebSocketMessage("inbound", boundedWebSocketAction(request.Action), "rate_limited", len(request.Data))
 			}
@@ -122,15 +122,15 @@ func (c *connectionRuntime) readPump(ctx context.Context) {
 }
 
 func (c *connectionRuntime) sessionPump(ctx context.Context) {
-	ticker := c.clock.NewTicker(sessionCheck)
+	ticker := time.NewTicker(sessionCheck)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			c.closeTransport()
 			return
-		case <-ticker.Chan():
-			if appErr := c.application.ValidateWebSocketPrincipal(
+		case <-ticker.C:
+			if appErr := c.admission.ValidateWebSocketPrincipal(
 				ctx,
 				c.principal,
 			); appErr != nil {
@@ -158,18 +158,13 @@ func (c *connectionRuntime) handleRequest(
 
 		metadata := c.metadata
 		metadata.RequestID = fmt.Sprintf("%s:%d", c.id, request.Sequence)
-		if err := c.application.AuthorizeWebSocketSubscription(
+		if err := c.admission.AuthorizeWebSocketSubscription(
 			ctx,
 			invocation.New(c.principal, metadata),
 			subscription.Action,
 			subscription.Resource.model(),
 		); err != nil {
-			code := apperror.Classify(err, "authorization.denied")
-			presentation := websocketErrorSubscriptionDenied
-			if code != "authorization.denied" {
-				presentation = websocketErrorSubscriptionFailed
-			}
-
+			code, presentation := subscriptionFailure(err)
 			c.enqueueError(request.Sequence, code, presentation)
 			return
 		}
@@ -487,6 +482,17 @@ func (c *connectionRuntime) handleExamAttemptBrowserAppend(ctx context.Context, 
 	}
 
 	c.enqueueResponse(request.Sequence, encoded)
+}
+
+// subscriptionFailure maps a refused subscription to its protocol code and
+// prose. An error without an application code is reported as a denial, so an
+// unclassified failure never reads as a transient one.
+func subscriptionFailure(err error) (apperror.Code, websocketErrorPresentation) {
+	code := apperror.Classify(err, "authorization.denied")
+	if code != "authorization.denied" {
+		return code, websocketErrorSubscriptionFailed
+	}
+	return code, websocketErrorSubscriptionDenied
 }
 
 func streamResult(err error) string {

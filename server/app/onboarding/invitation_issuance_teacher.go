@@ -22,8 +22,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// IssueTeacherAcademicUnitInvitation invites a teacher into an Academic Unit with a
-// delegable Role and mails the claim.
+// IssueTeacherAcademicUnitInvitation invites a teacher into an academic
+// unit with a role the caller may delegate, and mails the claim.
 func (s *Service) IssueTeacherAcademicUnitInvitation(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -194,7 +194,6 @@ func (s *Service) IssueTeacherAcademicUnitInvitation(
 	return issuedInvitationView(created), nil
 }
 
-// newTeacherAcademicUnitInvitationValue builds the Teacher Academic Unit Invitation for the command with the given claim hash.
 func newTeacherAcademicUnitInvitationValue(
 	inv invocation.Invocation,
 	command IssueTeacherAcademicUnitInvitationCommand,
@@ -234,8 +233,8 @@ func newTeacherAcademicUnitInvitationValue(
 	return value, nil
 }
 
-// storeTeacherAcademicUnitInvitation records the audited Teacher Academic Unit Invitation issue, idempotently when a
-// key is present.
+// storeTeacherAcademicUnitInvitation is idempotent only when the command
+// carries a key.
 func (s *Service) storeTeacherAcademicUnitInvitation(
 	ctx context.Context,
 	commandIdempotency *store.CommandIdempotency,

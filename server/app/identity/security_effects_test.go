@@ -50,7 +50,7 @@ func TestAuthenticationServiceRequiresSecurityDependencies(t *testing.T) {
 		sessions           store.SessionStore
 		sessionCredentials store.SessionCredentialStore
 		attempts           *AttemptAccounting
-		audit              access.MutationAuditor
+		hasher             *PasswordHasher
 		effects            realtime.Publisher
 		mfa                *mfaMechanics
 		personalTokens     store.PersonalAccessTokenStore
@@ -60,7 +60,7 @@ func TestAuthenticationServiceRequiresSecurityDependencies(t *testing.T) {
 		users: persistence.User(), passwords: persistence.PasswordCredential(),
 		sessions: persistence.Session(), sessionCredentials: persistence.SessionCredential(),
 		attempts: mustAuthenticationAttemptAccounting(t, cache),
-		audit:    &mutationAttemptAuditorFake{},
+		hasher:   hasher,
 		effects:  &realtimetest.Publisher{},
 		mfa:      mustTestMFAMechanics(t), personalTokens: discardPersonalAccessTokenStore{},
 		newCredential: model.NewCredentialToken,
@@ -69,8 +69,8 @@ func TestAuthenticationServiceRequiresSecurityDependencies(t *testing.T) {
 	construct := func(deps dependencies) error {
 		service := &Service{users: deps.users, passwords: deps.passwords, sessions: deps.sessions, sessionCredentials: deps.sessionCredentials,
 			desktopRegistrations: authenticationDesktopRegistrationLookupFake{}, personalAccessTokens: deps.personalTokens,
-			accessPolicy: allowAllAuthenticationAccessPolicy(), dpop: dpop, cache: cache, attempts: deps.attempts, hasher: hasher,
-			auditor: deps.audit, securityAudit: &securityAuditorFake{}, publisher: deps.effects, mfaCredentials: &mfaApplicationStoreFake{}, mfa: deps.mfa,
+			accessPolicy: allowAllAuthenticationAccessPolicy(t), dpop: dpop, cache: cache, attempts: deps.attempts, hasher: deps.hasher,
+			auditor: grantedAccess(t, nil).Auditor.MutationAudit(), securityAudit: newSecurityAuditLog(t, nil).auditor, publisher: deps.effects, mfaCredentials: &mfaApplicationStoreFake{}, mfa: deps.mfa,
 			diagnostics: newDiscardLogger(t), newCredential: deps.newCredential, now: time.Now}
 		return service.requireSessionAuthentication()
 	}
@@ -84,7 +84,9 @@ func TestAuthenticationServiceRequiresSecurityDependencies(t *testing.T) {
 		{name: "sessions", mutate: func(deps *dependencies) { deps.sessions = nil }},
 		{name: "session credentials", mutate: func(deps *dependencies) { deps.sessionCredentials = nil }},
 		{name: "attempt accounting", mutate: func(deps *dependencies) { deps.attempts = nil }},
-		{name: "audit", mutate: func(deps *dependencies) { deps.audit = nil }},
+		// The mutation auditor is a value composition derives from its
+		// Auditor, so it cannot be missing; the hasher is the pointer that can.
+		{name: "password hasher", mutate: func(deps *dependencies) { deps.hasher = nil }},
 		{name: "effects", mutate: func(deps *dependencies) { deps.effects = nil }},
 		{name: "MFA mechanics", mutate: func(deps *dependencies) { deps.mfa = nil }},
 		{name: "personal access token store", mutate: func(deps *dependencies) { deps.personalTokens = nil }},
@@ -125,9 +127,9 @@ func TestExternalAuthenticationServiceRequiresInvalidator(t *testing.T) {
 	service := authentication
 	service.externalProviders, service.externalLoginStates = securityEffectsProviderSourceFake{}, securityExternalLoginStateStore{}
 	service.institutions, service.externalIdentities, service.sessions = securityInstitutionStore{}, securityExternalIdentityStore{}, persistence.Session()
-	service.accessPolicy, service.attempts = allowAllAuthenticationAccessPolicy(), mustAuthenticationAttemptAccounting(t, newAuthenticationCacheFake())
+	service.accessPolicy, service.attempts = allowAllAuthenticationAccessPolicy(t), mustAuthenticationAttemptAccounting(t, newAuthenticationCacheFake())
 	service.invalidator, service.securityAudit, service.auditor = nil, audit, audit.MutationAudit()
-	service.capabilities, service.invitations = &accessPolicyCapabilitiesFake{}, &externalInvitationAcceptorFake{}
+	service.capabilities, service.invitations = noCapabilities(), &externalInvitationAcceptorFake{}
 	service.externalAuthenticationPolicy, service.recentAuthenticationTTL = ExternalAuthenticationPolicy{}, 15*time.Minute
 	service.diagnostics, service.newCredential, service.now = newDiscardLogger(t), model.NewCredentialToken, nil
 	err := service.requireExternalAuthentication()

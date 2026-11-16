@@ -20,7 +20,8 @@ import (
 
 const maximumJobHistoryCleanupBatch = 200
 
-// JobHistoryCleanupCommand is the immutable command of the Job history cleanup Job.
+// JobHistoryCleanupCommand is the immutable command of the history cleanup
+// job.
 type JobHistoryCleanupCommand struct {
 	BatchSize int `json:"batch_size"`
 }
@@ -34,12 +35,12 @@ type JobHistoryCleanupCheckpoint struct {
 	Done             bool        `json:"done"`
 }
 
-// JobHistoryCleanupResult is the safe result of the Job history cleanup Job.
+// JobHistoryCleanupResult is the result of the history cleanup job.
 type JobHistoryCleanupResult struct {
 	Deleted int64 `json:"deleted"`
 }
 
-// EncodeJobHistoryCleanupCommand validates and encodes a Job history cleanup Job command.
+// EncodeJobHistoryCleanupCommand validates and encodes a command.
 func EncodeJobHistoryCleanupCommand(value JobHistoryCleanupCommand) (json.RawMessage, error) {
 	if value.BatchSize < 1 || value.BatchSize > maximumJobHistoryCleanupBatch {
 		return nil, errors.New("job history cleanup batch size is invalid")
@@ -47,7 +48,7 @@ func EncodeJobHistoryCleanupCommand(value JobHistoryCleanupCommand) (json.RawMes
 	return json.Marshal(value)
 }
 
-// DecodeJobHistoryCleanupCommand strictly decodes and validates a Job history cleanup Job command.
+// DecodeJobHistoryCleanupCommand decodes and validates a command strictly.
 func DecodeJobHistoryCleanupCommand(document json.RawMessage) (JobHistoryCleanupCommand, error) {
 	var value JobHistoryCleanupCommand
 	if err := decodeStrictJobDocument(document, &value); err != nil {
@@ -112,7 +113,7 @@ func (h jobHistoryCleanupHandler) Run(ctx context.Context, execution job.Executi
 		// A reservation survives a crash or failure before deletion or
 		// checkpoint. Never reuse it, and never answer it with an immediate
 		// successor: a deletion that keeps failing would otherwise spawn an
-		// unbounded chain of Jobs with fresh budgets. The next daily
+		// unbounded chain of jobs with fresh budgets. The next daily
 		// occurrence starts from the oldest remaining history.
 		return job.PermanentFailure("dependency.unavailable", errors.New("job history cleanup batch did not complete"))
 	}
@@ -225,10 +226,9 @@ func jobHistoryCleanupDescriptor(handler job.Handler) job.Descriptor {
 	return descriptor
 }
 
-// NewJobHistoryCleanup registers the deletion of terminal Job history,
-// proposed daily. Each Job type is kept for the retention its descriptor in
-// registered declares, and the cleanup Job for its own, so this Job is built
-// after all the others.
+// NewJobHistoryCleanup registers the daily deletion of terminal job history.
+// Each type is kept for the retention its descriptor in registered declares,
+// so this job must be built after all the others.
 func NewJobHistoryCleanup(
 	jobs store.JobStore,
 	continuations store.JobStore,

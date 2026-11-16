@@ -9,7 +9,6 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -17,7 +16,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -25,20 +23,8 @@ import (
 
 const examSittingCorrectionUploadBodyLimit = model.ExamResourceMaximumBytes + 64*1024
 
-// ExamSittingCorrectionApplication is the application port its handlers call;
-// it stages corrected resource content and applies a correction to a live
-// Sitting.
-type ExamSittingCorrectionApplication interface {
-	StageExamSittingCorrectionResourceContent(
-		context.Context,
-		invocation.Invocation,
-		correction.StageResourceContentCommand,
-	) (correction.ResourceStage, error)
-	ApplyExamSittingCorrection(context.Context, invocation.Invocation, correction.ApplyCommand) (correction.AppliedCorrection, error)
-}
-
 type examSittingCorrectionHandlers struct {
-	app ExamSittingCorrectionApplication
+	app *correction.Service
 }
 
 type examSittingCorrectionStageMetadata struct {
@@ -50,6 +36,8 @@ type examSittingCorrectionStageMetadata struct {
 	SHA256             string `json:"sha256"`
 }
 
+// examSittingCorrectionStageResponse names only the stage and resource. File
+// entry, revision, rendition, upload-lease and storage identities stay inside.
 type examSittingCorrectionStageResponse struct {
 	StageID    string `json:"stage_id"`
 	ResourceID string `json:"resource_id"`
@@ -60,15 +48,17 @@ type examSittingCorrectionStageResponse struct {
 }
 
 type applyExamSittingCorrectionRequest struct {
-	ExpectedSittingRevision   int64                                  `json:"expected_revision"`
-	ExpectedCurrentRevisionID string                                 `json:"expected_current_revision_id"`
-	InstructionsMarkdown      route.Optional[string]                 `json:"instructions_markdown"`
-	BrowserPolicy             route.Optional[browserPolicyDocument]  `json:"browser_policy"`
-	AffectedCapabilities      []model.CandidateCapability            `json:"affected_capabilities"`
-	CandidateSummary          string                                 `json:"candidate_summary"`
-	AcknowledgementRequired   bool                                   `json:"acknowledgement_required"`
-	Reason                    string                                 `json:"reason"`
-	Resources                 []examSittingCorrectionResourceRequest `json:"resources"`
+	ExpectedSittingRevision   int64                                 `json:"expected_revision"`
+	ExpectedCurrentRevisionID string                                `json:"expected_current_revision_id"`
+	InstructionsMarkdown      route.Optional[string]                `json:"instructions_markdown"`
+	BrowserPolicy             route.Optional[browserPolicyDocument] `json:"browser_policy"`
+	AffectedCapabilities      []model.CandidateCapability           `json:"affected_capabilities"`
+	CandidateSummary          string                                `json:"candidate_summary"`
+	AcknowledgementRequired   bool                                  `json:"acknowledgement_required"`
+	Reason                    string                                `json:"reason"`
+	// Resources is the complete manifest: an omitted resource is removed, order
+	// is position, and an item without stage_id keeps its exact base content.
+	Resources []examSittingCorrectionResourceRequest `json:"resources"`
 }
 
 type examSittingCorrectionResourceRequest struct {
@@ -158,7 +148,7 @@ func decodeDuplicateFreeExamCorrectionObject(encoded []byte, target any) error {
 	return nil
 }
 
-func examSittingCorrectionResource(app ExamSittingCorrectionApplication) route.Resource {
+func examSittingCorrectionResource(app *correction.Service) route.Resource {
 	h := examSittingCorrectionHandlers{app: app}
 	stages := "/exams/{exam_id}/sittings/{exam_sitting_id}/correction-resource-stages"
 	corrections := "/exams/{exam_id}/sittings/{exam_sitting_id}/corrections"

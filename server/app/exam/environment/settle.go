@@ -16,7 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// The settle's defaults.
+// DefaultSettleBudget bounds one settle when SettlerDependencies.Budget is zero.
 const (
 	DefaultSettleBudget = 5 * time.Second
 	// settleRecordTimeout bounds recording an incomplete settle, which runs
@@ -24,29 +24,14 @@ const (
 	settleRecordTimeout = 5 * time.Second
 )
 
-// SettleNotifier tells whoever waits on an Attempt's settle that its owner
-// completed one, wherever the waiter runs. It never blocks and never
-// fails: a lost signal costs the waiter its budget, never a false gap,
-// because the gap is recorded only for a settle the row still has pending.
-type SettleNotifier interface {
-	Settled(attemptID model.ExamAttemptID)
-}
-
-// SettleSubscriber delivers completed settles to waiters on this node.
-// SubscribeSettled returns a channel that is signaled, without blocking the
-// notifier, after each settle the Attempt's owner completes from then on,
-// and a cancel that ends the subscription.
-type SettleSubscriber interface {
-	SubscribeSettled(attemptID model.ExamAttemptID) (<-chan struct{}, func())
-}
-
-// SettlerDependencies is what NewSettler needs.
+// SettlerDependencies configures NewSettler; Environments, Signals and
+// NewEvidenceID are required.
 type SettlerDependencies struct {
 	Environments store.AttemptEnvironmentStore
 	Waker        Waker
 	// Signals delivers the owner's completed settles; the settler reads the
 	// row only when it wakes the owner and when a signal arrives.
-	Signals SettleSubscriber
+	Signals *ClusterSettles
 	// Budget bounds one settle; zero means DefaultSettleBudget.
 	Budget        time.Duration
 	Now           func() time.Time
@@ -55,16 +40,14 @@ type SettlerDependencies struct {
 	Report func(attemptID model.ExamAttemptID, err error)
 }
 
-// Settler settles an Attempt's environment before its seal, wherever its
-// owner runs: it asks the environment for a settle through the Store, wakes
-// the owner, and waits for the owner's completion signal within the budget.
-// A settle that does not finish in time, or cannot be asked, is recorded as
-// an execution gap and the seal goes ahead.
+// Settler settles an attempt's environment before its seal, wherever its
+// owner runs. A settle that does not finish within the budget, or cannot be
+// requested, is recorded as an execution gap and the seal goes ahead.
 type Settler struct {
 	deps SettlerDependencies
 }
 
-// NewSettler validates its dependencies.
+// NewSettler returns a Settler, defaulting Budget and Now.
 func NewSettler(deps SettlerDependencies) (*Settler, error) {
 	if deps.Environments == nil || deps.Signals == nil || deps.NewEvidenceID == nil {
 		return nil, errors.New("attempt environment settler needs the environment store, its settle signals and an evidence ID source")
@@ -108,11 +91,10 @@ func (s *Settler) Settle(ctx context.Context, attemptID model.ExamAttemptID) {
 }
 
 // AwaitPendingSettle waits for the settle attemptID's environment already
-// has pending, without asking for another: a closing Sitting asked every
-// environment of the Sitting at once. It waits for the owner's signal
-// within what is left of the budget since that settle was asked, then
-// records the incomplete settle gap if it is still pending. An environment
-// with nothing pending returns at once.
+// has pending, without requesting another, because a closing sitting
+// requested one for every environment at once. The budget runs from that
+// request; a settle still pending after it is recorded as a gap. It returns
+// at once when nothing is pending.
 func (s *Settler) AwaitPendingSettle(ctx context.Context, attemptID model.ExamAttemptID) {
 	signal, cancel := s.deps.Signals.SubscribeSettled(attemptID)
 	defer cancel()
@@ -138,7 +120,6 @@ func (s *Settler) AwaitPendingSettle(ctx context.Context, attemptID model.ExamAt
 	s.recordIncomplete(ctx, attemptID, settle)
 }
 
-// completed reads the row once and reports whether settle is complete.
 func (s *Settler) completed(ctx context.Context, attemptID model.ExamAttemptID, settle int64) bool {
 	environment, err := s.deps.Environments.Get(ctx, attemptID)
 	if err != nil {
@@ -150,9 +131,8 @@ func (s *Settler) completed(ctx context.Context, attemptID model.ExamAttemptID, 
 	return environment.SettleCompleted >= settle
 }
 
-// await waits for a completion signal and confirms it with one read, until
-// settle is complete or ctx ends. A signal for an earlier settle keeps it
-// waiting.
+// await confirms each completion signal with one read, until settle is
+// complete or ctx ends. A signal for an earlier settle keeps it waiting.
 func (s *Settler) await(ctx context.Context, attemptID model.ExamAttemptID, settle int64, signal <-chan struct{}) bool {
 	for {
 		select {
@@ -167,7 +147,7 @@ func (s *Settler) await(ctx context.Context, attemptID model.ExamAttemptID, sett
 }
 
 // recordIncomplete records the settle gap, even when ctx has ended. The
-// Store changes nothing for a settle that completed meanwhile.
+// store changes nothing for a settle that completed meanwhile.
 func (s *Settler) recordIncomplete(ctx context.Context, attemptID model.ExamAttemptID, settle int64) {
 	recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), settleRecordTimeout)
 	defer cancel()

@@ -7,9 +7,9 @@
 
 package model
 
-// BrowserSubmissionSettlement covers every source ever created for an Attempt.
-// A pending source may also have terminal loss; counts deliberately describe
-// independent facts, while pending takes precedence in the aggregate state.
+// BrowserSubmissionSettlement covers every source ever created for an attempt.
+// A pending source may also have final loss: the counts are independent facts,
+// and pending wins in the aggregate state.
 type BrowserSubmissionSettlement struct {
 	State                 string `json:"state"`
 	InventoryRevision     int64  `json:"inventory_revision"`
@@ -47,10 +47,10 @@ func (v BrowserSubmissionSettlement) Validate() error {
 }
 func (v BrowserSubmissionSettlement) Clone() BrowserSubmissionSettlement { return v }
 
-// BrowserSourceSettlementFacts excludes live interaction authority. Completion
-// requires a declared final boundary and actual receipts, not merely settlement
-// through explicit missing positions. Omission and unresolved provenance remain
-// visible even after all accepted records have arrived.
+// BrowserSourceSettlementFacts derives settlement without any live interaction
+// authority. Completion needs a declared final boundary and actual receipts,
+// not just explicit missing positions; omission and unresolved provenance stay
+// visible after every accepted record has arrived.
 func BrowserSourceSettlementFacts(status BrowserSourceStatus, unresolvedProvenance bool) (pending, incomplete bool, err error) {
 	if status.Validate() != nil {
 		return false, false, ErrDeliveryInvalid

@@ -5,14 +5,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package cluster defines how Proctor nodes send each other messages: the
-// Message envelope, the Transport interface with its handler registration, and
-// the DiscoveryStore through which nodes find each other. It contains no
-// network code and imports only the standard library. The two implementations
-// are cluster/local (one node, no peers) and cluster/memberlist (several nodes).
+// Package cluster defines the contract nodes use to message each other and
+// find each other; cluster/local and cluster/memberlist implement it.
 //
 // Delivery is best effort and nothing is stored: a message may be lost or
-// arrive twice. Handlers must therefore be idempotent, and anything that
-// matters is read again from PostgreSQL. GUARANTEES.md states exactly what a
-// caller may rely on. Start with transport.go.
+// arrive twice. Handlers must be idempotent, and anything that matters is read
+// again from PostgreSQL. GUARANTEES.md states what a caller may rely on.
 package cluster

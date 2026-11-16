@@ -8,10 +8,10 @@
 package user
 
 import (
-	"context"
+	"testing"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
@@ -48,67 +48,41 @@ func publisherIn(events *[]string) *realtimetest.Publisher {
 	}}
 }
 
-// settingsAuditFake prepares the audit event of a settings replacement.
-type settingsAuditFake struct {
-	event *model.AuditEvent
-	err   error
-	input access.UserSettingsAuditInput
-	calls int
+// directoryInstant is the clock of the directory tests: the authorizer
+// decides at it, so every visibility scope it returns is active at it.
+var directoryInstant = model.TimeFromMillis(100)
+
+// accessWith builds the real authorizer and auditor over users, with the
+// grants given, and places what they do in events: "grants" for each read of
+// the caller's Role Bindings, "decision:<action>:<status>" for a recorded
+// decision, and "audit-begin:<action>" and "audit-<status>" for the audit of
+// a mutation.
+func accessWith(t *testing.T, events *[]string, users store.UserStore, grants ...accesstest.Grant) *accesstest.Fixture {
+	t.Helper()
+	return accesstest.New(t, accesstest.Options{
+		Grants: grants, Users: users, Now: func() time.Time { return directoryInstant },
+		Observe: func(event string) {
+			if events != nil {
+				*events = append(*events, event)
+			}
+		},
+	})
 }
 
-func (a *settingsAuditFake) PrepareReplacement(_ context.Context, input access.UserSettingsAuditInput) (*model.AuditEvent, error) {
-	a.calls++
-	a.input = input
-	return a.event, a.err
+// institutionGrant grants the actions Institution-wide.
+func institutionGrant(userID model.UserID, actions ...model.Action) accesstest.Grant {
+	return accesstest.Grant{UserID: userID, Actions: actions}
 }
 
-// authorizerFake answers every Authorizer question from its fields and
-// records the calls it receives in order.
-type authorizerFake struct {
-	events      *[]string
-	searchScope store.UserVisibilityScope
-	roleScope   store.UserVisibilityScope
-	roleScopeAt time.Time
-	rolesView   bool
-	fullRead    bool
-	readErr     error
-	writeErr    error
+// unitGrant grants the actions in one Academic Unit.
+func unitGrant(userID model.UserID, unitID model.AcademicUnitID, actions ...model.Action) accesstest.Grant {
+	return accesstest.Grant{UserID: userID, Actions: actions, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String()}
 }
 
-func (a *authorizerFake) AuthorizeUserSearch(context.Context, invocation.Invocation) (store.UserVisibilityScope, error) {
-	*a.events = append(*a.events, "authorize-search")
-	if a.searchScope.InstitutionWide || a.searchScope.ClassMemberInstitutionWide ||
-		len(a.searchScope.AcademicUnitRootIDs) > 0 || len(a.searchScope.ClassMemberAcademicUnitRootIDs) > 0 ||
-		len(a.searchScope.ClassIDs) > 0 {
-		return a.searchScope, nil
-	}
-	return store.UserVisibilityScope{ClassIDs: []model.ClassID{"class-a"}, ActiveAt: model.TimeFromMillis(100)}, nil
-}
-
-func (a *authorizerFake) RoleBindingViewScope(_ context.Context, _ invocation.Invocation, at time.Time) (store.UserVisibilityScope, error) {
-	*a.events = append(*a.events, "role-binding-view-scope")
-	a.roleScopeAt = at
-	return a.roleScope, nil
-}
-
-func (a *authorizerFake) CanViewRoles(context.Context, invocation.Invocation) (bool, error) {
-	*a.events = append(*a.events, "can-view-roles")
-	return a.rolesView, nil
-}
-
-func (a *authorizerFake) AuthorizeProfileRead(context.Context, invocation.Invocation, model.UserID) (access.ProfileReadAuthorization, error) {
-	*a.events = append(*a.events, "authorize-read")
-	return access.ProfileReadAuthorization{FullProfile: a.fullRead}, a.readErr
-}
-
-func (a *authorizerFake) Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error {
-	*a.events = append(*a.events, "authorize-manage")
-	return nil
-}
-
-func (a *authorizerFake) AuthorizeProfilePictureWrite(context.Context, invocation.Invocation, model.UserID) error {
-	*a.events = append(*a.events, "authorize-profile-picture-write")
-	return a.writeErr
+// newCaller returns a signed-in caller and the invocation it makes.
+func newCaller() (model.Principal, invocation.Invocation) {
+	principal := userSettingsSessionPrincipal(directoryInstant)
+	return principal, invocation.New(principal, model.RequestMetadata{})
 }
 
 func userSettingsSessionPrincipal(at time.Time) model.Principal {

@@ -195,8 +195,6 @@ func checkOperationMessages(operation, channel string, value any, used map[strin
 	return nil
 }
 
-// validateExamples checks that every message has an example and that each
-// example payload is valid against the message payload.
 func validateExamples(encoded []byte, root map[string]any) error {
 	compiler, err := NewCompiler(encoded)
 	if err != nil {

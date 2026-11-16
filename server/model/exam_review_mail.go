@@ -11,8 +11,8 @@ import (
 	"encoding/binary"
 )
 
-// ResultReleaseOccurrenceID identifies one approved Review revision. Releasing
-// a newly reviewed inventory is a different transition; retries are the same.
+// ResultReleaseOccurrenceID identifies one approved review revision, so retries
+// share it and releasing a newly reviewed inventory does not.
 func ResultReleaseOccurrenceID(review SubmissionReviewID, revision int64) (MailOccurrenceID, error) {
 	if !review.IsValid() || revision < 1 {
 		return "", invalidModelError("ResultReleaseOccurrenceID", "exam_review_mail", "", "invalid result release identity", "")

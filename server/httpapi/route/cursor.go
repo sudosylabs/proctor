@@ -150,7 +150,6 @@ func validateOpaqueCursorSpec[T any](spec CursorSpec[T]) error {
 	return nil
 }
 
-// opaqueCursorJSONMembers returns the json member names of a cursor struct.
 func opaqueCursorJSONMembers(cursorType reflect.Type) []string {
 	if cursorType.Kind() != reflect.Struct {
 		return nil
@@ -177,8 +176,8 @@ func invalidOpaqueCursorError(label string, err error) error {
 	return fmt.Errorf("invalid %s cursor: %w", label, err)
 }
 
-// scanOpaqueCursorJSONObject verifies the cursor envelope without sharing the
-// labels or ownership of request-body duplicate-member validation.
+// scanOpaqueCursorJSONObject is separate from request-body duplicate-member
+// validation so cursor errors never carry body labels.
 func scanOpaqueCursorJSONObject(data []byte, members []string) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	token, err := decoder.Token()

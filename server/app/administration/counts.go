@@ -17,71 +17,59 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// MaximumCount bounds each administration summary count; a
-// count at the bound is a lower bound.
+// MaximumCount bounds each administration count; a count at the bound is a
+// lower bound.
 const MaximumCount = 1000
 
-// failedJobWindow is how far back the summary counts failed
-// Jobs, so old failures an operator has already seen stop drawing attention.
+// failedJobWindow keeps old failures an operator has already seen from
+// drawing attention.
 const failedJobWindow = 7 * 24 * time.Hour
 
-// Count is one bounded summary count. IsLowerBound reports
-// that counting stopped at MaximumCount.
+// Count is one bounded count. IsLowerBound reports that counting stopped at
+// MaximumCount.
 type Count struct {
 	Count        int
 	IsLowerBound bool
 }
 
-// CountsResult summarizes the administration work waiting on the
-// caller. A count is nil when the caller may not list that resource.
+// CountsResult summarizes the administration work waiting on the caller. A
+// count is nil when the caller may not list that resource.
 type CountsResult struct {
-	// PendingInvitations are pending Invitations that have not expired,
-	// within the caller's invitation.view scopes.
+	// PendingInvitations are unexpired pending invitations within the
+	// caller's invitation.view scopes.
 	PendingInvitations *Count
-	// FailedJobs are operator-visible Jobs that failed in the last seven
+	// FailedJobs are operator-visible jobs that failed in the last seven
 	// days.
-	FailedJobs *Count
-	// FailedMailDeliveries are mail deliveries in the failed terminal state.
+	FailedJobs           *Count
 	FailedMailDeliveries *Count
-	// OpenOnboardingImports are unexpired administrative imports still
-	// uploading, parsing, awaiting commit, or executing, within the caller's
-	// onboarding_batch.view scopes.
+	// OpenOnboardingImports are unexpired imports not yet finished, within
+	// the caller's onboarding_batch.view scopes.
 	OpenOnboardingImports *Count
 }
 
-// CountsDependencies are the collaborators of Counts: one count per resource,
-// each answered by the service that owns the resource, so every count is
-// authorized, audited and scoped exactly as its list is. A nil count is left
-// out of the summary; a reduced test graph may lack some.
+// CountsDependencies are one count per resource, each answered by the service
+// that owns it, so every count is authorized, audited and scoped exactly as
+// its list is. A nil count is left out of the summary.
 type CountsDependencies struct {
-	// PendingInvitations counts pending Invitations that have not expired.
-	PendingInvitations func(ctx context.Context, inv invocation.Invocation, maximum int) (int, error)
-	// RecentJobFailures counts operator-visible Jobs that failed within the
-	// span.
-	RecentJobFailures func(ctx context.Context, inv invocation.Invocation, within time.Duration, maximum int) (int, error)
-	// FailedMailDeliveries counts mail deliveries in the failed terminal
-	// state.
-	FailedMailDeliveries func(ctx context.Context, inv invocation.Invocation, maximum int) (int, error)
-	// OpenOnboardingImports counts administrative imports still in progress.
+	PendingInvitations    func(ctx context.Context, inv invocation.Invocation, maximum int) (int, error)
+	RecentJobFailures     func(ctx context.Context, inv invocation.Invocation, within time.Duration, maximum int) (int, error)
+	FailedMailDeliveries  func(ctx context.Context, inv invocation.Invocation, maximum int) (int, error)
 	OpenOnboardingImports func(ctx context.Context, inv invocation.Invocation, maximum int) (int, error)
 }
 
-// Counts answers the bounded counts behind the administration navigation,
-// each through the service that owns the counted resource.
+// Counts answers the bounded counts behind the administration navigation.
 type Counts struct {
 	deps CountsDependencies
 }
 
-// NewCounts builds the administration counts over the given counters.
+// NewCounts builds Counts over deps; nil counters are left out.
 func NewCounts(deps CountsDependencies) *Counts {
 	return &Counts{deps: deps}
 }
 
-// AdministrationCounts returns the bounded counts behind the administration
-// navigation. It requires an interactive Session, like the other
-// administration reads. Each count runs its resource's own list
-// authorization, which records the decision as that list does; a count the
-// caller may not list is left out rather than failing the summary.
+// AdministrationCounts requires an interactive session, like the other
+// administration reads. Each count runs its own list authorization; a count
+// the caller may not list is left out rather than failing the summary.
 func (s *Counts) AdministrationCounts(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -120,8 +108,8 @@ func (s *Counts) AdministrationCounts(
 	return counts, nil
 }
 
-// boundedCount runs one count. A denial omits it; any other failure
-// fails the summary, so an outage is never shown as an empty queue.
+// boundedCount omits a denied count; any other failure fails the summary, so
+// an outage is never shown as an empty queue.
 func boundedCount(available bool, count func() (int, error)) (*Count, error) {
 	if !available {
 		return nil, nil

@@ -22,21 +22,19 @@ import (
 	"strings"
 )
 
-// storeConstraintSources are the module directories whose production Go
-// string literals may name a Store conflict constraint, and the SQL baseline
-// whose constraint and index names translateError reports verbatim.
+// A store conflict constraint can be named by a Go string literal under these
+// directories, or by a constraint or index in the SQL baseline, which
+// translateError reports verbatim.
 var (
 	storeConstraintSources = []string{"store", "model"}
 	storeConstraintSchema  = filepath.Join("migrations", "postgres")
 	sqlIdentifier          = regexp.MustCompile(`[a-z][a-z0-9_]*`)
 )
 
-// verifyStoreTableConstraints fails when an apperror.StoreTable in the
-// application maps a constraint that nothing in the Store can produce: no
-// production string literal under store/ or model/ spells it and no SQL
-// baseline object carries that name. Such an entry is dead, and a dead entry
-// usually means the Store mints the condition under another spelling that
-// then falls back to the table's generic code.
+// verifyStoreTableConstraints fails when an apperror.StoreTable maps a
+// constraint the store can never report. A dead entry usually means the store
+// spells the condition differently, so it falls back to the table's generic
+// code.
 func verifyStoreTableConstraints(moduleDir string) error {
 	produced, err := producedStoreConstraints(moduleDir)
 	if err != nil {
@@ -132,8 +130,6 @@ func isStoreTableType(expression ast.Expr) bool {
 	return ok && pkg.Name == "apperror"
 }
 
-// producedStoreConstraints collects every name the Store can report as a
-// constraint: production string literals and SQL baseline identifiers.
 func producedStoreConstraints(moduleDir string) (map[string]bool, error) {
 	produced := make(map[string]bool)
 	fset := token.NewFileSet()
@@ -179,8 +175,7 @@ func producedStoreConstraints(moduleDir string) (map[string]bool, error) {
 	return produced, nil
 }
 
-// walkProductionGo calls visit for every non-test Go file below root; a
-// missing root has none.
+// walkProductionGo skips _test.go files; a missing root is not an error.
 func walkProductionGo(root string, visit func(string) error) error {
 	if _, err := os.Stat(root); errors.Is(err, fs.ErrNotExist) {
 		return nil

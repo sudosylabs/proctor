@@ -19,7 +19,7 @@ import (
 
 // AppendTerminalInput stores one terminal input record from the node that
 // serves the terminal. That node holds no lease, so the record is checked
-// against the environment's current incarnation instead: the Attempt and the
+// against the environment's current incarnation instead: the attempt and the
 // environment are share-locked, so a seal or a new incarnation waits for the
 // append or is seen by it.
 func (s *SQLExamAttemptWorkspaceStore) AppendTerminalInput(

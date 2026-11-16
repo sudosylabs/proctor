@@ -15,9 +15,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ResultReleaseMail is the ResultReleaseMailPreparer the application runs. It
-// reads the candidate, the Sitting and the published Exam title, and has the
-// mail composer freeze a notice that says only that a result is available.
+// ResultReleaseMail prepares the notice telling a candidate a result is
+// available. The notice never carries the result itself.
 type ResultReleaseMail struct {
 	Composer  *mail.Composer
 	Users     store.UserStore
@@ -25,10 +24,9 @@ type ResultReleaseMail struct {
 	Revisions store.ExamRevisionStore
 }
 
-// PrepareResultRelease prepares the notice for one release. The mail
-// occurrence is derived from the Review and the Review revision the release
-// expects, and the result carries the revision of the candidate the notice
-// was prepared from.
+// PrepareResultRelease prepares the notice for one release. The occurrence
+// derives from the review and its expected revision, and
+// ExpectedRecipientRevision is the candidate revision the notice was built from.
 func (m ResultReleaseMail) PrepareResultRelease(
 	ctx context.Context,
 	request ResultReleaseMailPreparation,

@@ -17,19 +17,16 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// AutomaticSubmissionResult is the receipt of a Submission sealed at Sitting
-// close. ConnectionClosed reports that sealing also closed the candidate's
-// live Attempt Connection.
+// AutomaticSubmissionResult is the receipt of a submission sealed at sitting
+// close; ConnectionClosed reports that sealing also closed the live connection.
 type AutomaticSubmissionResult struct {
 	SubmissionResult
 	ConnectionClosed bool
 }
 
-// ListAutomaticSealTargets returns up to limit Attempts in the Sitting that
-// still need an automatic Submission at Sitting close, ordered by Attempt ID
-// strictly after the after cursor (zero starts from the beginning). It
-// returns an empty, non-nil slice when nothing remains. system names the
-// sealing Job.
+// ListAutomaticSealTargets returns up to limit unsealed attempts ordered by ID
+// strictly after the cursor (zero starts from the beginning), or an empty,
+// non-nil slice when nothing remains. system names the sealing job.
 func (s *Service) ListAutomaticSealTargets(
 	ctx context.Context,
 	system invocation.System,
@@ -80,10 +77,9 @@ func validAutomaticSealTarget(target store.ExamSubmissionAutomaticSealTarget, si
 		target.ConnectionID.IsValid()
 }
 
-// SealForSittingClose seals one target Attempt's Submission because its
-// Sitting closed, under a system audit tied to the invoking Job. Replays of
-// an already sealed Attempt return the stored receipt and skip the receipt
-// mail and post-commit effects.
+// SealForSittingClose seals one target under a system audit tied to the
+// invoking job. A replay returns the stored receipt and skips the mail and
+// post-commit effects.
 func (s *Service) SealForSittingClose(
 	ctx context.Context,
 	system invocation.System,
@@ -100,11 +96,9 @@ func (s *Service) SealForSittingClose(
 	if preparation == nil || preparation.SealAt.IsZero() {
 		return AutomaticSubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("invalid automatic Submission preparation"))
 	}
-	// The closing Sitting asked every environment to settle and its sealing
-	// Job waited the settle budget, so this normally finds it settled. It
-	// asks for no new settle: one still pending waits only what is left of
-	// its budget, then has its gap recorded before the seal, so a Sitting
-	// of unreachable hosts seals without a budget per Attempt.
+	// The closing sitting already asked every environment to settle and
+	// waited the budget. Asking for no new settle here means a sitting of
+	// unreachable hosts seals without spending a budget per attempt.
 	if !preparation.Replayed && s.settler != nil {
 		s.settler.AwaitPendingSettle(ctx, target.AttemptID)
 	}

@@ -37,7 +37,8 @@ type CommitStudentProgressionCommand struct {
 	IdempotencyKey   string
 }
 
-// GetStudentProgression reads one Student Progression, its rows and its Class names.
+// GetStudentProgression reads a student progression with its rows and class
+// names.
 func (s *Service) GetStudentProgression(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -63,9 +64,7 @@ func (s *Service) GetStudentProgression(
 }
 
 // ListStudentProgressionsQuery selects one page of student progressions,
-// newest first. States is an optional closed-state filter and each Period or
-// Class filter is optional; BeforeCreatedAt and BeforeID continue after the
-// previous page's last item, both set or both zero.
+// newest first. BeforeCreatedAt and BeforeID are both set or both zero.
 type ListStudentProgressionsQuery struct {
 	States              []model.OnboardingImportState
 	SourcePeriodID      model.AcademicPeriodID
@@ -77,13 +76,9 @@ type ListStudentProgressionsQuery struct {
 	Limit               int
 }
 
-// ListStudentProgressions lists the unexpired student progressions the caller
-// could read one by one. The single read authorizes
-// academic_progression.manage on both the source and the destination Class,
-// so that authority is resolved once into a scope, recorded as one
-// authorization decision, and applied to both Classes as a Store predicate.
-// Items carry the summary projection without rows plus both Class names; the
-// first page also carries the total.
+// ListStudentProgressions lists the progressions the caller could read one
+// by one: academic_progression.manage must cover both the source and the
+// destination class. Only the first page carries the total.
 func (s *Service) ListStudentProgressions(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -180,7 +175,7 @@ func (s *Service) ListStudentProgressions(
 	return page, nil
 }
 
-// CommitStudentProgression commits a previewed Student Progression whose preview
+// CommitStudentProgression commits a previewed progression only while its
 // digest and revision still match.
 func (s *Service) CommitStudentProgression(
 	ctx context.Context,
@@ -202,7 +197,8 @@ func (s *Service) CommitStudentProgression(
 	return onboardingImportView(committed), studentProgressionError(err)
 }
 
-// CancelStudentProgression cancels an unfinished Student Progression.
+// CancelStudentProgression cancels an unfinished progression; rows already
+// executed are not undone.
 func (s *Service) CancelStudentProgression(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -212,7 +208,7 @@ func (s *Service) CancelStudentProgression(
 	return onboardingImportView(canceled), studentProgressionError(err)
 }
 
-// StudentProgressionReport writes a finished Student Progression's row report.
+// StudentProgressionReport writes the row report of a finished progression.
 func (s *Service) StudentProgressionReport(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -222,8 +218,8 @@ func (s *Service) StudentProgressionReport(
 	return studentProgressionError(s.reportImport(ctx, inv, id, output, model.OnboardingImportStudentProgression))
 }
 
-// DryRunStudentProgression proposes the preview of moving a source Class's Students
-// into a destination Class.
+// DryRunStudentProgression previews moving a source class's students into a
+// destination class; nothing changes until it is committed.
 func (s *Service) DryRunStudentProgression(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -367,7 +363,7 @@ func (s *Service) DryRunStudentProgression(
 
 func runProgressionAudited[T any](
 	ctx context.Context,
-	audit access.MutationAuditor,
+	audit access.MutationAuditAdapter,
 	inv invocation.Invocation,
 	operation, progressionID string,
 	sourceClassID, destinationClassID model.ClassID,

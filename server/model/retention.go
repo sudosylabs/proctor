@@ -41,9 +41,9 @@ const (
 	RetentionControlPaused   RetentionControlState = "paused"
 )
 
-// RetentionControl records deliberate approval separately from configuration.
-// Approval applies only to one exact Policy revision. A pause cancels pending
-// retirement; enabling again always starts a new grace period for each record.
+// RetentionControl records approval separately from configuration, and only
+// for one exact policy revision. A pause cancels pending retirement; enabling
+// again always starts a new grace period for each record.
 type RetentionControl struct {
 	InstitutionID          InstitutionID
 	Revision               int64
@@ -82,10 +82,10 @@ func (c *RetentionControl) Permits(policy *RetentionPolicy) bool {
 		policy.DeletionGraceDays > 0
 }
 
-// RetentionPreview contains aggregate counts, never examination content. Its
-// timestamp and bounded lifetime describe a review of eligibility, not a frozen
-// list of deletion commands. Every scheduled and final transition rechecks the
-// live policy, completion, holds, and source protections independently.
+// RetentionPreview holds aggregate counts, never examination content. It
+// reviews eligibility at one time and is not a frozen list of deletions: every
+// scheduled and final step rechecks the live policy, completion, holds and
+// source protections.
 type RetentionPreview struct {
 	ID                  RetentionPreviewID
 	InstitutionID       InstitutionID
@@ -163,14 +163,15 @@ const (
 	RetentionBlockerDeadline       RetentionBlocker = "retention_period"
 )
 
-// RetentionRecordsPerSubmission is the number of RetentionRecord values each
-// Submission contributes to a record listing: one per RetentionCategory, in the
-// order work, integrity, Browser Activity, security operational.
+// RetentionRecordsPerSubmission is how many records each submission adds to a
+// listing: one per RetentionCategory, in the order work, integrity, browser
+// activity, security operational.
 const RetentionRecordsPerSubmission = 4
 
-// RetentionRecord is a content-free projection used for review and scheduling.
-// SharedPublishedObjects reports references which will survive work retirement;
-// retirement releases the Submission's reference, never the published material.
+// RetentionRecord is a content-free projection for review and scheduling.
+// SharedPublishedObjects counts references that survive work retirement;
+// retirement releases the submission's reference, never the published
+// material.
 type RetentionRecord struct {
 	Scope                  RetentionHoldScope
 	Category               RetentionCategory
@@ -189,9 +190,9 @@ type RetentionEligibility struct {
 	EligibleAt OptionalTime
 }
 
-// Eligibility uses durations of 24 hours. Zero is indefinite/unconfigured.
-// Supporting work uses the later configured deadline of the two categories;
-// an indefinite integrity period protects that work indefinitely.
+// Eligibility counts a day as 24 hours, and zero means indefinite or
+// unconfigured. Supporting work uses the later deadline of its two categories,
+// so an indefinite integrity period protects that work indefinitely.
 func (r RetentionRecord) Eligibility(policy *RetentionPolicy, at time.Time) (RetentionEligibility, error) {
 	if policy.Validate() != nil ||
 		r.Scope.Validate() != nil ||
@@ -258,8 +259,8 @@ const (
 	RetentionRetirementCommitted RetentionRetirementState = "retired"
 )
 
-// RetentionRetirement is both the grace record and, after commit, the minimal
-// receipt. It contains no path, answer, remark, evidence, or content digest.
+// RetentionRetirement is the grace record and, after commit, the minimal
+// receipt. It holds no path, answer, remark, evidence or content digest.
 type RetentionRetirement struct {
 	ID                 RetentionRetirementID
 	Scope              RetentionHoldScope

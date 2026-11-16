@@ -7,10 +7,8 @@
 
 package store
 
-// MaximumListCount is the largest bound a collection Count accepts. A Count
-// reads at most one row past its bound and reports the bound when more rows
-// match, so a caller presents a total at its bound as a lower bound. Every
-// Count takes its bound explicitly, between 1 and MaximumListCount.
+// MaximumListCount is the largest bound a Count accepts. A Count that reaches
+// its bound returns the bound, so callers must present it as "at least".
 const MaximumListCount = 10000
 
 // ValidCountMaximum reports whether maximum is a bound a Count accepts.

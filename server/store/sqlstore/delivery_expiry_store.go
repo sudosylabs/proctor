@@ -17,8 +17,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ListExpiredDeliveries returns up to limit (1..200) native and Browser
-// Activity delivery sources whose upload deadline has passed by the database
+// ListExpiredDeliveries returns up to limit (1..200) native and browser
+// activity delivery sources whose upload deadline has passed by the database
 // clock and that are not yet marked expired, oldest deadline first.
 func (s *SQLDeliveryBudgetStore) ListExpiredDeliveries(ctx context.Context, limit int) ([]store.DeliveryExpiryDue, error) {
 	if limit < 1 || limit > 200 {
@@ -152,7 +152,7 @@ func (s *SQLDeliveryBudgetStore) ExpireDelivery(ctx context.Context, input *stor
 	})
 }
 
-// The caller holds Sitting then Attempt and owns an audit in this transaction.
+// The caller holds sitting then attempt and owns an audit in this transaction.
 func expireDeliveryOwner(ctx context.Context, tx *sqlxTxWrapper, d store.DeliveryExpiryDue, now time.Time) (bool, error) {
 	var row struct {
 		Raw       []byte       `db:"closure_canonical"`

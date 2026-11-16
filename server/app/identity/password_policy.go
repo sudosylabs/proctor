@@ -72,10 +72,9 @@ func passwordIdentityOf(user *model.User) PasswordIdentity {
 	}
 }
 
-// CheckNewPassword applies the content policy to a password a User is about
-// to set. The length bounds stay with the hasher, which also applies them to
-// a login rehash; this check runs only where a new password is chosen.
-// Each rejection is a distinct public code so clients can explain it.
+// CheckNewPassword applies the content policy where a new password is chosen.
+// Length bounds stay with the hasher, which also applies them on a login
+// rehash. Each rejection has its own public code so clients can explain it.
 func CheckNewPassword(password string, identity PasswordIdentity) error {
 	if !utf8.ValidString(password) {
 		return apperror.Invalid("authentication.password.invalid", "password")
@@ -195,10 +194,9 @@ func compactPasswordText(value string) string {
 	}, value)
 }
 
-// ReuseCheck returns the Store-side check that refuses password when it
-// matches one of the User's configured number of recent passwords. The Store
-// runs it inside the credential transaction, so each comparison takes an
-// ordinary password work permit there.
+// ReuseCheck returns the check that refuses password when it matches one of
+// the user's recent passwords. The store runs it inside the credential
+// transaction, so each comparison takes an ordinary password work permit.
 func (h *PasswordHasher) ReuseCheck(password string) store.PasswordReuseCheck {
 	if h.historyCount == 0 {
 		return store.PasswordReuseCheck{}
@@ -206,7 +204,6 @@ func (h *PasswordHasher) ReuseCheck(password string) store.PasswordReuseCheck {
 	return store.PasswordReuseCheck{Limit: h.historyCount, Matcher: passwordReuseMatcher{hasher: h, password: password}}
 }
 
-// passwordReuseMatcher compares one candidate password with retained hashes.
 type passwordReuseMatcher struct {
 	hasher   *PasswordHasher
 	password string
@@ -220,7 +217,6 @@ func (m passwordReuseMatcher) Matches(ctx context.Context, encoded string) (bool
 	return err == nil, err
 }
 
-// passwordReused is the public refusal for a password the history check matched.
 func passwordReused() error {
 	return apperror.Invalid("authentication.password.reused", "password")
 }

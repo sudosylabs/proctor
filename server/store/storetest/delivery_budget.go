@@ -73,7 +73,7 @@ func TestDeliveryBudgetStore(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.NoError(t, result.Validate("native"), "Participation stop exhausted the whole Attempt")
 	require.False(t, result.Budget.Native.Attempt.SummaryOnly, "Participation stop exhausted the whole Attempt")
-	// Neither family cutoff changes live security or Submission eligibility.
+	// Neither family cutoff changes live security or submission eligibility.
 	seal := store.ExamSubmissionSealAccess{AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, ConnectionID: connected.Connection.ID, CandidateUserID: f.candidate.ID, SessionID: f.session.ID, ContinuityCredentialHash: access.ContinuityCredentialHash, ExpectedCurrentRevisionID: f.revisionID, ExpectedWorkspaceCursor: connected.Workspace.Cursor}
 	_, err = ss.ExamSubmission().ResolveSealTarget(ctx, seal)
 	require.NoError(t, err)

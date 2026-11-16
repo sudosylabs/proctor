@@ -13,8 +13,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -109,18 +110,16 @@ func TestOnboardingImportListingScopesTheStoreReadToOneDecision(t *testing.T) {
 		{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportStudentClass, State: model.OnboardingImportCompleted, ScopeType: model.RoleScopeClass, ScopeID: classID.String(), CreatedAt: at.Add(-2 * time.Minute)},
 	}
 	persistence := &onboardingImportListingFake{values: values}
-	authorizer := &authorizerFake{visibility: &store.InvitationVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{unitID}, ClassIDs: []model.ClassID{classID}}}
-	service := &Service{imports: persistence, authorizer: authorizer}
+	caller := sessionCaller(model.NewUserID(), at)
+	authorization := scopedAccess(t, caller.Principal().UserID, model.ActionOnboardingBatchView, unitID, classID)
+	service := &Service{imports: persistence, authorizer: authorization.Authorizer}
 	beforeID := model.NewOnboardingImportID()
-	page, err := service.ListOnboardingImports(context.Background(), invocation.Invocation{}, ListOnboardingImportsQuery{
+	page, err := service.ListOnboardingImports(context.Background(), caller, ListOnboardingImportsQuery{
 		States:          []model.OnboardingImportState{model.OnboardingImportCompleted, model.OnboardingImportPreviewReady, model.OnboardingImportCompleted},
 		BeforeCreatedAt: at.Add(time.Hour), BeforeID: beforeID, Limit: 2})
 	require.NoError(t, err)
 	// One onboarding_batch.view scope decision precedes the one Store read.
-	require.Equal(t, []model.Action{model.ActionOnboardingBatchView}, authorizer.actions)
-	require.Equal(t, []authorizationDecision{{action: model.ActionOnboardingBatchView,
-		resource: model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}, scopeType: model.RoleScopeAcademicUnit,
-		scopeID: unitID.String(), allowed: true}}, authorizer.decisions, "the one decision names the first granted Academic Unit")
+	requireOneScopedDecision(t, authorization, model.ActionOnboardingBatchView, unitID)
 	require.Equal(t, []store.OnboardingImportListOptions{{
 		Visibility:      store.OnboardingImportVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{unitID}, ClassIDs: []model.ClassID{classID}},
 		States:          []model.OnboardingImportState{model.OnboardingImportCompleted, model.OnboardingImportPreviewReady},
@@ -130,7 +129,7 @@ func TestOnboardingImportListingScopesTheStoreReadToOneDecision(t *testing.T) {
 	require.Len(t, page.Items, 2)
 
 	persistence.options, persistence.values = nil, values[:1]
-	page, err = service.ListOnboardingImports(context.Background(), invocation.Invocation{}, ListOnboardingImportsQuery{})
+	page, err = service.ListOnboardingImports(context.Background(), caller, ListOnboardingImportsQuery{})
 	require.NoError(t, err)
 	require.False(t, page.HasMore)
 	require.Equal(t, 51, persistence.options[0].Limit)
@@ -138,13 +137,12 @@ func TestOnboardingImportListingScopesTheStoreReadToOneDecision(t *testing.T) {
 
 func TestOnboardingImportListingRefusesWithoutAuthorityOrValidQuery(t *testing.T) {
 	t.Parallel()
-	denied := apperror.New("authorization.denied")
 	for name, test := range map[string]struct {
-		query ListOnboardingImportsQuery
-		err   error
-		code  string
+		query  ListOnboardingImportsQuery
+		denied bool
+		code   string
 	}{
-		"denied":         {err: denied, code: "authorization.denied"},
+		"denied":         {denied: true, code: "authorization.denied"},
 		"unknown state":  {query: ListOnboardingImportsQuery{States: []model.OnboardingImportState{"archived"}}, code: "request.invalid"},
 		"half cursor":    {query: ListOnboardingImportsQuery{BeforeID: model.NewOnboardingImportID()}, code: "request.invalid"},
 		"invalid cursor": {query: ListOnboardingImportsQuery{BeforeID: "bad", BeforeCreatedAt: time.Now()}, code: "request.invalid"},
@@ -153,8 +151,13 @@ func TestOnboardingImportListingRefusesWithoutAuthorityOrValidQuery(t *testing.T
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			persistence := &onboardingImportListingFake{}
-			service := &Service{imports: persistence, authorizer: &authorizerFake{err: test.err}}
-			_, err := service.ListOnboardingImports(context.Background(), invocation.Invocation{}, test.query)
+			caller := sessionCaller(model.NewUserID(), time.Now())
+			var granted []model.UserID
+			if !test.denied {
+				granted = append(granted, caller.Principal().UserID)
+			}
+			service := &Service{imports: persistence, authorizer: permissiveAccess(t, accesstest.Options{}, granted).Authorizer}
+			_, err := service.ListOnboardingImports(context.Background(), caller, test.query)
 			require.True(t, apperror.Is(err, test.code), "error = %v", err)
 			require.Empty(t, persistence.options)
 		})

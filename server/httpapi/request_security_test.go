@@ -18,7 +18,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 )
@@ -66,8 +65,11 @@ func TestPublicLoginRejectsUnsafeBrowserRequestsBeforeAuthentication(t *testing.
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			logger, _ := routetest.NewLogger(t)
-			fake := &authenticationEntryHTTPApplication{loginError: apperror.New("authentication.credentials_invalid")}
-			api := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, authenticationResource(fake, fake, route.Cookies{}))
+			// No User signs in as "student", so an accepted request is refused
+			// as invalid credentials after one lookup.
+			users := newIdentityUsers()
+			fixture := newIdentityFixture(t, identityOptions{Stores: identityStores{Users: users}})
+			api := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, authenticationResource(nil, fixture.service, route.Cookies{}))
 			request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/login",
 				strings.NewReader(`{"login_id":"student","password":"test-password","client_type":"web"}`))
 			request.Host = "other.example"
@@ -85,7 +87,7 @@ func TestPublicLoginRejectsUnsafeBrowserRequestsBeforeAuthentication(t *testing.
 				wantStatus, wantCalls = http.StatusUnauthorized, 1
 			}
 			require.Equal(t, wantStatus, response.Code, "status/calls/cookies")
-			require.Equal(t, wantCalls, fake.loginCalls, "status/calls/cookies")
+			require.Equal(t, wantCalls, users.lookupCount(), "status/calls/cookies")
 			require.Empty(t, response.Header().Values("Set-Cookie"), "status/calls/cookies")
 			if !test.accepted {
 				require.Contains(t, response.Body.String(), `"code":"request.invalid"`)

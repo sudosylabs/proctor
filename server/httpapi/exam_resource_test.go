@@ -9,49 +9,53 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/exam/resource"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
-	"github.com/sudosylabs/proctor/server/store"
 )
+
+// newExamResourceAPI serves the Exam Resource routes over a fresh fixture, as
+// its caller.
+func newExamResourceAPI(t *testing.T) (*examContentFixture, http.Handler) {
+	t.Helper()
+	logger, _ := routetest.NewLogger(t)
+	principal := testExamHTTPPrincipal()
+	f := newExamContentFixture(t, principal)
+	return f, newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examResourceResource(f.resourceService))
+}
 
 func TestExamResourceHTTPUploadUsesStrictMetadataFirstStreamingContract(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	principal := testExamHTTPPrincipal()
-	fake := newExamResourceHTTPFake(principal)
-	api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
+	f, api := newExamResourceAPI(t)
 	raw := []byte("# Notes")
 	checksum := fmt.Sprintf("%x", sha256.Sum256(raw))
 	body, contentType := examResourceMultipart(t, `{"expected_revision":1,"display_name":"Reference","description_markdown":"Read **this**.","media_type":"text/markdown","size":7,"sha256":"`+checksum+`"}`, raw, false)
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+fake.examID.String()+"/draft/resources", body)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+f.examID.String()+"/draft/resources", body)
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", contentType)
 	request.Header.Set("Idempotency-Key", "resource-once")
 	response := httptest.NewRecorder()
 	api.ServeHTTP(response, request)
 	require.Equal(t, http.StatusCreated, response.Code, "status=%d body=%s", response.Code, response.Body.String())
-	require.Equal(t, "# Notes", string(fake.uploaded), "command=%#v uploaded", fake.create)
-	require.Equal(t, checksum, fake.create.ExpectedSHA256, "command=%#v uploaded", fake.create)
-	require.Equal(t, "resource-once", fake.create.IdempotencyKey, "command=%#v uploaded", fake.create)
-	require.Equal(t, model.ExamResourceMediaMarkdown, fake.create.MediaType, "command=%#v uploaded", fake.create)
+	require.Equal(t, [][]byte{raw}, f.resourceFiles.stored, "the uploaded bytes reached the file store unchanged")
+	require.Len(t, f.resourceStore.finalizations, 1, "the upload never reached the Exam Resource Store")
+	finalization := f.resourceStore.finalizations[0]
+	require.Equal(t, checksum, finalization.Rendition.SHA256)
+	require.Equal(t, string(model.ExamResourceMediaMarkdown), finalization.Rendition.MediaType)
+	require.Equal(t, "Reference", finalization.Resource.DisplayName)
+	require.Equal(t, "Read **this**.", finalization.Resource.DescriptionMarkdown)
+	require.Equal(t, sha256.Sum256([]byte("resource-once")), f.resourceStore.lastCommand(t).KeyDigest)
 	require.False(t, bytes.Contains(response.Body.Bytes(), []byte(`"file_entry"`)))
 	require.False(t, bytes.Contains(response.Body.Bytes(), []byte(`"path"`)))
 	require.False(t, bytes.Contains(response.Body.Bytes(), []byte(`"key"`)))
@@ -60,21 +64,19 @@ func TestExamResourceHTTPUploadUsesStrictMetadataFirstStreamingContract(t *testi
 
 func TestExamResourceHTTPRejectsTrailingMultipartPartBeforeApplicationCommit(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	principal := testExamHTTPPrincipal()
-	fake := newExamResourceHTTPFake(principal)
-	api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
+	f, api := newExamResourceAPI(t)
 	raw := []byte("notes")
 	checksum := fmt.Sprintf("%x", sha256.Sum256(raw))
 	body, contentType := examResourceMultipart(t, `{"expected_revision":1,"display_name":"Reference","description_markdown":"","media_type":"text/plain","size":5,"sha256":"`+checksum+`"}`, raw, true)
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+fake.examID.String()+"/draft/resources", body)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+f.examID.String()+"/draft/resources", body)
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", contentType)
 	request.Header.Set("Idempotency-Key", "resource-once")
 	response := httptest.NewRecorder()
 	api.ServeHTTP(response, request)
-	require.Equal(t, http.StatusBadRequest, response.Code, "status=%d created=%v body=%s", response.Code, fake.created, response.Body.String())
-	require.False(t, fake.created, "status=%d created=%v body=%s", response.Code, fake.created, response.Body.String())
+	require.Equal(t, http.StatusBadRequest, response.Code, "status=%d body=%s", response.Code, response.Body.String())
+	require.Empty(t, f.resourceFiles.stored, "content followed by another part was stored")
+	require.Empty(t, f.resourceStore.finalizations, "content followed by another part was committed")
 }
 
 func TestExamResourceHTTPRejectsDuplicateOrMissingMultipartMetadata(t *testing.T) {
@@ -89,99 +91,90 @@ func TestExamResourceHTTPRejectsDuplicateOrMissingMultipartMetadata(t *testing.T
 		{name: "missing size", metadata: `{"expected_revision":1,"display_name":"Reference","media_type":"text/plain","sha256":"` + checksum + `"}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			logger, _ := routetest.NewLogger(t)
-			principal := testExamHTTPPrincipal()
-			fake := newExamResourceHTTPFake(principal)
-			api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
+			f, api := newExamResourceAPI(t)
 			body, contentType := examResourceMultipart(t, test.metadata, []byte("notes"), false)
-			request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+fake.examID.String()+"/draft/resources", body)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+f.examID.String()+"/draft/resources", body)
 			request.Header.Set("Authorization", "Bearer credential")
 			request.Header.Set("Content-Type", contentType)
 			request.Header.Set("Idempotency-Key", "resource-once")
 			response := httptest.NewRecorder()
 			api.ServeHTTP(response, request)
-			require.Equal(t, http.StatusBadRequest, response.Code, "status=%d created=%v body=%s", response.Code, fake.created, response.Body.String())
-			require.False(t, fake.created, "status=%d created=%v body=%s", response.Code, fake.created, response.Body.String())
+			require.Equal(t, http.StatusBadRequest, response.Code, "status=%d body=%s", response.Code, response.Body.String())
+			require.Empty(t, f.resourceStore.reservations, "a rejected upload reached the Exam Resource Store")
+			require.Empty(t, f.resourceFiles.stored, "a rejected upload reached the file store")
 		})
 	}
 }
 
 func TestExamResourceHTTPAcceptsExplicitZeroSizeText(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	principal := testExamHTTPPrincipal()
-	fake := newExamResourceHTTPFake(principal)
-	api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
+	f, api := newExamResourceAPI(t)
 	checksum := fmt.Sprintf("%x", sha256.Sum256(nil))
 	body, contentType := examResourceMultipart(t, `{"expected_revision":1,"display_name":"Empty notes","media_type":"text/plain","size":0,"sha256":"`+checksum+`"}`, nil, false)
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+fake.examID.String()+"/draft/resources", body)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+f.examID.String()+"/draft/resources", body)
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", contentType)
 	request.Header.Set("Idempotency-Key", "resource-empty")
 	response := httptest.NewRecorder()
 	api.ServeHTTP(response, request)
-	require.Equal(t, http.StatusCreated, response.Code, "status=%d created=%v command=%#v uploaded", response.Code, fake.created, fake.create)
-	require.True(t, fake.created, "status=%d created=%v command=%#v uploaded", response.Code, fake.created, fake.create)
-	require.Equal(t, int64(0), fake.create.Size, "status=%d created=%v command=%#v uploaded", response.Code, fake.created, fake.create)
-	require.Empty(t, fake.uploaded, "status=%d created=%v command=%#v uploaded", response.Code, fake.created, fake.create)
+	require.Equal(t, http.StatusCreated, response.Code, "status=%d body=%s", response.Code, response.Body.String())
+	require.Len(t, f.resourceStore.finalizations, 1, "the empty upload never reached the Exam Resource Store")
+	require.Equal(t, int64(0), f.resourceStore.finalizations[0].Rendition.Size)
+	require.Equal(t, [][]byte{{}}, f.resourceFiles.stored, "the file store read an empty body")
 }
 
 func TestExamResourceHTTPMetadataPatchIsPresenceAware(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	principal := testExamHTTPPrincipal()
-	fake := newExamResourceHTTPFake(principal)
-	api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
-	path := "/api/v1/exams/" + fake.examID.String() + "/draft/resources/" + fake.record.Resource.ID.String()
+	f, api := newExamResourceAPI(t)
+	path := "/api/v1/exams/" + f.examID.String() + "/draft/resources/" + f.resource.Resource.ID.String()
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, path, strings.NewReader(`{"expected_revision":1,"description_markdown":""}`))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "resource-metadata")
 	response := httptest.NewRecorder()
 	api.ServeHTTP(response, request)
-	require.Equal(t, http.StatusOK, response.Code, "status=%d edit=%#v body=%s", response.Code, fake.edit, response.Body.String())
-	require.Nil(t, fake.edit.DisplayName, "status=%d edit=%#v body=%s", response.Code, fake.edit, response.Body.String())
-	require.NotNil(t, fake.edit.DescriptionMarkdown, "status=%d edit=%#v body=%s", response.Code, fake.edit, response.Body.String())
-	require.Empty(t, *fake.edit.DescriptionMarkdown, "status=%d edit=%#v body=%s", response.Code, fake.edit, response.Body.String())
+	require.Equal(t, http.StatusOK, response.Code, "status=%d body=%s", response.Code, response.Body.String())
+	require.Len(t, f.resourceStore.metadataUpdates, 1, "the edit never reached the Exam Resource Store")
+	// The explicit empty description replaces the seeded "Old notes"; the
+	// omitted display name keeps the value the Resource already had.
+	update := f.resourceStore.metadataUpdates[0]
+	require.Equal(t, f.resource.Resource.DisplayName, update.DisplayName)
+	require.Empty(t, update.DescriptionMarkdown)
 
 	omitted := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, path, strings.NewReader(`{"expected_revision":1}`))
 	omitted.Header = request.Header.Clone()
 	omittedResponse := httptest.NewRecorder()
 	api.ServeHTTP(omittedResponse, omitted)
-	require.Equal(t, http.StatusBadRequest, omittedResponse.Code, "omitted status=%d edit calls=%d body=%s", omittedResponse.Code, fake.editCalls, omittedResponse.Body.String())
-	require.Equal(t, 1, fake.editCalls, "omitted status=%d edit calls=%d body=%s", omittedResponse.Code, fake.editCalls, omittedResponse.Body.String())
+	require.Equal(t, http.StatusBadRequest, omittedResponse.Code, "omitted status=%d body=%s", omittedResponse.Code, omittedResponse.Body.String())
+	require.Len(t, f.resourceStore.metadataUpdates, 1, "an edit naming nothing reached the Exam Resource Store")
 }
 
 func TestExamResourceHTTPRemoveReturnsNoContent(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	principal := testExamHTTPPrincipal()
-	fake := newExamResourceHTTPFake(principal)
-	api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
-	path := "/api/v1/exams/" + fake.examID.String() + "/draft/resources/" + fake.record.Resource.ID.String()
+	f, api := newExamResourceAPI(t)
+	path := "/api/v1/exams/" + f.examID.String() + "/draft/resources/" + f.resource.Resource.ID.String()
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, path, strings.NewReader(`{"expected_revision":1}`))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "resource-remove")
 	response := httptest.NewRecorder()
 	api.ServeHTTP(response, request)
-	require.Equal(t, http.StatusNoContent, response.Code, "status=%d removed=%v body=%q", response.Code, fake.removed, response.Body.String())
-	require.Equal(t, 0, response.Body.Len(), "status=%d removed=%v body=%q", response.Code, fake.removed, response.Body.String())
-	require.True(t, fake.removed, "status=%d removed=%v body=%q", response.Code, fake.removed, response.Body.String())
+	require.Equal(t, http.StatusNoContent, response.Code, "status=%d body=%q", response.Code, response.Body.String())
+	require.Equal(t, 0, response.Body.Len(), "status=%d body=%q", response.Code, response.Body.String())
+	require.Len(t, f.resourceStore.removals, 1, "the removal never reached the Exam Resource Store")
+	require.Equal(t, f.resource.Resource.ID, f.resourceStore.removals[0].ResourceID)
+	require.Empty(t, f.resourceStore.records, "the Resource is gone from the Draft")
 }
 
 func TestExamResourceHTTPProtectedContentIsInlinePrivateAndConditional(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	principal := testExamHTTPPrincipal()
-	fake := newExamResourceHTTPFake(principal)
-	api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
-	path := "/api/v1/exams/" + fake.examID.String() + "/draft/resources/" + fake.record.Resource.ID.String() + "/content"
+	f, api := newExamResourceAPI(t)
+	path := "/api/v1/exams/" + f.examID.String() + "/draft/resources/" + f.resource.Resource.ID.String() + "/content"
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	api.ServeHTTP(response, request)
-	etag := `"` + fake.record.Rendition.SHA256 + `"`
+	etag := `"` + f.resource.Rendition.SHA256 + `"`
 	require.Equal(t, http.StatusOK, response.Code, "response=%d headers=%v body", response.Code, response.Header())
 	require.Equal(t, "protected", response.Body.String(), "response=%d headers=%v body", response.Code, response.Header())
 	require.Empty(t, response.Header().Get("Content-Disposition"), "response=%d headers=%v body", response.Code, response.Header())
@@ -199,64 +192,6 @@ func TestExamResourceHTTPProtectedContentIsInlinePrivateAndConditional(t *testin
 	require.Equal(t, 0, notModified.Body.Len(), "conditional=%d body=%q", notModified.Code, notModified.Body.String())
 }
 
-type examResourceHTTPFake struct {
-	principal model.Principal
-	examID    model.ExamID
-	record    store.ExamResourceRecord
-	create    resource.CreateCommand
-	uploaded  []byte
-	created   bool
-	edit      resource.EditMetadataCommand
-	editCalls int
-	removed   bool
-}
-
-func newExamResourceHTTPFake(principal model.Principal) *examResourceHTTPFake {
-	examID := model.NewExamID()
-	revisionID := model.NewFileRevisionID()
-	at := time.Now().UTC()
-	examResource, _ := model.NewExamResource(model.NewExamResourceID(), examID, model.NewFileEntryID(), revisionID, "Reference", "", 0, at)
-	rendition, _ := model.NewFileRendition(model.NewFileRenditionID(), revisionID, "original", "text/plain", 9, 0, 0, strings.Repeat("a", 64), at)
-	return &examResourceHTTPFake{principal: principal, examID: examID, record: store.ExamResourceRecord{Resource: examResource, Rendition: rendition, DraftRevision: 2}}
-}
-func (f *examResourceHTTPFake) AuthenticateAccess(context.Context, string) (*model.Principal, error) {
-	p := f.principal
-	return &p, nil
-}
-func (f *examResourceHTTPFake) AuthenticateBearer(context.Context, string) (*model.Principal, error) {
-	p := f.principal
-	return &p, nil
-}
-func (f *examResourceHTTPFake) CreateExamResource(_ context.Context, _ invocation.Invocation, c resource.CreateCommand) (store.ExamResourceRecord, error) {
-	raw, err := io.ReadAll(c.Body)
-	if err != nil {
-		return store.ExamResourceRecord{}, apperror.New("exam.resource.content_invalid")
-	}
-	f.create, f.uploaded, f.created = c, raw, true
-	return f.record, nil
-}
-func (f *examResourceHTTPFake) ReplaceExamResourceContent(context.Context, invocation.Invocation, resource.ReplaceContentCommand) (store.ExamResourceRecord, error) {
-	return f.record, nil
-}
-func (f *examResourceHTTPFake) EditExamResourceMetadata(_ context.Context, _ invocation.Invocation, command resource.EditMetadataCommand) (store.ExamResourceRecord, error) {
-	f.edit = command
-	f.editCalls++
-	return f.record, nil
-}
-func (f *examResourceHTTPFake) ReorderExamResources(context.Context, invocation.Invocation, resource.ReorderCommand) ([]store.ExamResourceRecord, error) {
-	return []store.ExamResourceRecord{f.record}, nil
-}
-func (f *examResourceHTTPFake) RemoveExamResource(context.Context, invocation.Invocation, resource.RemoveCommand) (store.ExamResourceRecord, error) {
-	f.removed = true
-	return f.record, nil
-}
-func (f *examResourceHTTPFake) ListExamResources(context.Context, invocation.Invocation, model.ExamID) ([]store.ExamResourceRecord, error) {
-	return []store.ExamResourceRecord{f.record}, nil
-}
-func (f *examResourceHTTPFake) OpenExamResource(context.Context, invocation.Invocation, model.ExamID, model.ExamResourceID) (resource.Opened, error) {
-	opened := resource.Opened{Record: f.record, Body: io.NopCloser(strings.NewReader("protected"))}
-	return opened, nil
-}
 func examResourceMultipart(t *testing.T, metadata string, content []byte, trailing bool) (*bytes.Buffer, string) {
 	t.Helper()
 	var body bytes.Buffer

@@ -25,8 +25,8 @@ type RemoveCommand struct {
 	IdempotencyKey        string
 }
 
-// RemoveExamResource idempotently removes an Exam Resource from the Exam
-// Draft, fenced by ExpectedDraftRevision.
+// RemoveExamResource is fenced by ExpectedDraftRevision and safe to retry with
+// the same idempotency key.
 func (s *Service) RemoveExamResource(
 	ctx context.Context,
 	inv invocation.Invocation,

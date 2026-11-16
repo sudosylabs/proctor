@@ -8,16 +8,11 @@
 package httpapi
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/app/exam"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -35,177 +30,9 @@ type editExamDraftTextRequest struct {
 	InstructionsMarkdown  route.Optional[string] `json:"instructions_markdown"`
 }
 
-type configureExamDraftNativePolicyRequest struct {
-	ExpectedDraftRevision int64                      `json:"expected_revision"`
-	Native                model.NativeSecurityPolicy `json:"native"`
-}
-
-type configureExamDraftFocusLossRequest struct {
-	ExpectedDraftRevision       int64  `json:"expected_revision"`
-	Enabled                     bool   `json:"enabled"`
-	MinimumDurationMilliseconds int64  `json:"minimum_duration_milliseconds"`
-	IncidentCount               int    `json:"incident_count"`
-	WindowMilliseconds          int64  `json:"window_milliseconds"`
-	Outcome                     string `json:"outcome"`
-}
-
-type configureExamDraftExecutionRequest struct {
-	ExpectedDraftRevision int64                       `json:"expected_revision"`
-	Execution             examExecutionPolicyDocument `json:"execution"`
-}
-
-type configureExamDraftBrowserPolicyRequest struct {
-	ExpectedDraftRevision int64                 `json:"expected_revision"`
-	BrowserPolicy         browserPolicyDocument `json:"browser_policy"`
-}
-
-type browserPolicyDocument struct {
-	Enabled     bool                        `json:"enabled"`
-	StartRuleID string                      `json:"start_rule_id,omitempty"`
-	Rules       []browserPolicyRuleDocument `json:"rules,omitempty"`
-}
-
-type browserPolicyRuleDocument struct {
-	RuleID                   string `json:"rule_id"`
-	Origin                   string `json:"origin"`
-	PathPrefix               string `json:"path_prefix"`
-	HostMatch                string `json:"host_match"`
-	AllowRedirects           bool   `json:"allow_redirects"`
-	BlockedNavigationOutcome string `json:"blocked_navigation_outcome"`
-	InstitutionHTTPException bool   `json:"institution_http_exception"`
-}
-
-func (d *browserPolicyDocument) UnmarshalJSON(encoded []byte) error {
-	if len(encoded) > model.BrowserPolicyMaximumBytes {
-		return errors.New("browser policy exceeds its encoded limit")
-	}
-	if err := rejectDuplicateJSONObjectMembers(encoded, "browser policy"); err != nil {
-		return err
-	}
-	type wire browserPolicyDocument
-	var decoded wire
-	decoder := json.NewDecoder(bytes.NewReader(encoded))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&decoded); err != nil {
-		return err
-	}
-	var members map[string]json.RawMessage
-	if err := json.Unmarshal(encoded, &members); err != nil {
-		return err
-	}
-	if members["enabled"] == nil || bytes.Equal(bytes.TrimSpace(members["enabled"]), []byte("null")) {
-		return errors.New("browser policy enabled is required")
-	}
-
-	if decoded.Enabled {
-		if len(members) != 3 || members["start_rule_id"] == nil || members["rules"] == nil || decoded.Rules == nil {
-			return errors.New("enabled browser policy requires exactly start_rule_id and rules")
-		}
-	} else if len(members) != 1 {
-		return errors.New("disabled browser policy contains enabled fields")
-	}
-	*d = browserPolicyDocument(decoded)
-	return nil
-}
-
-func (d *browserPolicyRuleDocument) UnmarshalJSON(encoded []byte) error {
-	if err := rejectDuplicateJSONObjectMembers(encoded, "browser policy rule"); err != nil {
-		return err
-	}
-
-	type wire browserPolicyRuleDocument
-	var decoded wire
-	decoder := json.NewDecoder(bytes.NewReader(encoded))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&decoded); err != nil {
-		return err
-	}
-
-	var members map[string]json.RawMessage
-	if err := json.Unmarshal(encoded, &members); err != nil {
-		return err
-	}
-
-	for _, name := range []string{
-		"rule_id",
-		"origin",
-		"path_prefix",
-		"host_match",
-		"allow_redirects",
-		"blocked_navigation_outcome",
-		"institution_http_exception",
-	} {
-		if members[name] == nil || bytes.Equal(bytes.TrimSpace(members[name]), []byte("null")) {
-			return errors.New("browser policy rule fields are required")
-		}
-	}
-
-	if len(members) != 7 {
-		return errors.New("browser policy rule contains an unknown field")
-	}
-
-	*d = browserPolicyRuleDocument(decoded)
-	return nil
-}
-
-func (d browserPolicyDocument) model() (model.BrowserPolicy, error) {
-	rules := make([]model.BrowserPolicyRule, len(d.Rules))
-	for index, rule := range d.Rules {
-		rules[index] = model.BrowserPolicyRule{
-			RuleID:                   rule.RuleID,
-			Origin:                   rule.Origin,
-			PathPrefix:               rule.PathPrefix,
-			HostMatch:                model.BrowserPolicyHostMatch(rule.HostMatch),
-			AllowRedirects:           rule.AllowRedirects,
-			BlockedNavigationOutcome: model.BrowserPolicyBlockedNavigationOutcome(rule.BlockedNavigationOutcome),
-			InstitutionHTTPException: rule.InstitutionHTTPException,
-		}
-	}
-
-	if !d.Enabled {
-		return model.DisabledBrowserPolicy(), nil
-	}
-
-	return model.NewBrowserPolicy(true, d.StartRuleID, rules)
-}
-
-func browserPolicyDocumentFromModel(policy model.BrowserPolicy) browserPolicyDocument {
-	document := browserPolicyDocument{Enabled: policy.Enabled}
-	if !policy.Enabled {
-		return document
-	}
-
-	document.StartRuleID = policy.StartRuleID
-	document.Rules = make([]browserPolicyRuleDocument, len(policy.Rules))
-	for index, rule := range policy.Rules {
-		document.Rules[index] = browserPolicyRuleDocument{
-			RuleID:                   rule.RuleID,
-			Origin:                   rule.Origin,
-			PathPrefix:               rule.PathPrefix,
-			HostMatch:                string(rule.HostMatch),
-			AllowRedirects:           rule.AllowRedirects,
-			BlockedNavigationOutcome: string(rule.BlockedNavigationOutcome),
-			InstitutionHTTPException: rule.InstitutionHTTPException,
-		}
-	}
-
-	return document
-}
-
 type archiveExamRequest struct {
 	ExpectedExamRevision int64 `json:"expected_revision"`
 }
-
-type addExamManagerRequest struct {
-	UserID               string `json:"user_id"`
-	ExpectedExamRevision int64  `json:"expected_revision"`
-}
-
-type removeExamManagerRequest struct {
-	ExpectedExamRevision int64 `json:"expected_revision"`
-}
-
-type transferExamOwnershipRequest = addExamManagerRequest
 
 type examCatalogCursor struct {
 	UpdatedAt string `json:"updated_at"`
@@ -244,85 +71,6 @@ type examListResponse struct {
 	NextCursor string                `json:"next_cursor,omitempty"`
 }
 
-type examManagerResponse struct {
-	UserID          string `json:"user_id"`
-	GrantedByUserID string `json:"granted_by_user_id"`
-	GrantedAt       string `json:"granted_at"`
-	IsCreator       bool   `json:"is_creator"`
-	IsOwner         bool   `json:"is_owner"`
-}
-
-type examManagerListResponse struct {
-	Items      []examManagerResponse `json:"items"`
-	NextCursor string                `json:"next_cursor,omitempty"`
-}
-
-type examManagerChangeResponse struct {
-	Exam    examIdentityResponse `json:"exam"`
-	Manager examManagerResponse  `json:"manager"`
-}
-
-type examManagerCursor struct {
-	GrantedAt string `json:"granted_at"`
-	UserID    string `json:"user_id"`
-}
-
-func (r *configureExamDraftFocusLossRequest) UnmarshalJSON(data []byte) error {
-	if err := rejectDuplicateExamPolicyRequestMembers(data); err != nil {
-		return err
-	}
-	type wire configureExamDraftFocusLossRequest
-	var decoded wire
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&decoded); err != nil {
-		return err
-	}
-	var members map[string]json.RawMessage
-	if err := json.Unmarshal(data, &members); err != nil {
-		return err
-	}
-	enabled, ok := members["enabled"]
-	if !ok || bytes.Equal(bytes.TrimSpace(enabled), []byte("null")) {
-		return errors.New("enabled must be provided and non-null")
-	}
-	*r = configureExamDraftFocusLossRequest(decoded)
-	return nil
-}
-
-func rejectDuplicateExamPolicyRequestMembers(data []byte) error {
-	return rejectDuplicateJSONObjectMembers(data, "focus loss policy")
-}
-
-func rejectDuplicateJSONObjectMembers(data []byte, label string) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	token, err := decoder.Token()
-	if err != nil || token != json.Delim('{') {
-		return errors.New(label + " must be a JSON object")
-	}
-	seen := make(map[string]struct{})
-	for decoder.More() {
-		keyToken, tokenErr := decoder.Token()
-		if tokenErr != nil {
-			return tokenErr
-		}
-		key, ok := keyToken.(string)
-		if !ok {
-			return errors.New(label + " member is invalid")
-		}
-		if _, exists := seen[key]; exists {
-			return errors.New(label + " contains a duplicate member")
-		}
-		seen[key] = struct{}{}
-		var value json.RawMessage
-		if decodeErr := decoder.Decode(&value); decodeErr != nil {
-			return decodeErr
-		}
-	}
-	_, err = decoder.Token()
-	return err
-}
-
 type examResponse struct {
 	Exam         examIdentityResponse `json:"exam"`
 	Draft        examDraftResponse    `json:"draft"`
@@ -343,17 +91,19 @@ type examIdentityResponse struct {
 }
 
 type examDraftResponse struct {
-	ExamID               string                     `json:"exam_id"`
-	Title                string                     `json:"title"`
-	InstructionsMarkdown string                     `json:"instructions_markdown"`
-	Policy               examPolicyResponse         `json:"policy"`
-	BrowserPolicy        browserPolicyDocument      `json:"browser_policy"`
-	Capacity             examCapacityPolicyResponse `json:"capacity"`
-	BaseRevisionID       string                     `json:"base_revision_id,omitempty"`
-	UpdatedAt            string                     `json:"updated_at"`
-	Revision             int64                      `json:"revision"`
-	ResourceCount        int                        `json:"resource_count"`
-	HasStarterWorkspace  bool                       `json:"has_starter_workspace"`
+	ExamID               string                `json:"exam_id"`
+	Title                string                `json:"title"`
+	InstructionsMarkdown string                `json:"instructions_markdown"`
+	Policy               examPolicyResponse    `json:"policy"`
+	BrowserPolicy        browserPolicyDocument `json:"browser_policy"`
+	// Capacity is guidance for the editor. Each mutation rechecks the current
+	// policy in PostgreSQL rather than trusting this projection.
+	Capacity            examCapacityPolicyResponse `json:"capacity"`
+	BaseRevisionID      string                     `json:"base_revision_id,omitempty"`
+	UpdatedAt           string                     `json:"updated_at"`
+	Revision            int64                      `json:"revision"`
+	ResourceCount       int                        `json:"resource_count"`
+	HasStarterWorkspace bool                       `json:"has_starter_workspace"`
 }
 
 type examPolicyResponse struct {
@@ -361,15 +111,6 @@ type examPolicyResponse struct {
 	ConnectionLoss examConnectionPolicyResponse `json:"connection_loss"`
 	FocusLoss      examFocusPolicyResponse      `json:"focus_loss"`
 	Execution      examExecutionPolicyDocument  `json:"execution"`
-}
-
-// examExecutionPolicyDocument is the execution policy, as requested and as
-// returned.
-type examExecutionPolicyDocument struct {
-	Enabled     bool   `json:"enabled"`
-	ProfileID   string `json:"profile_id,omitempty"`
-	RecordInput bool   `json:"record_input"`
-	Terminals   int    `json:"terminals"`
 }
 
 type examConnectionPolicyResponse struct {
@@ -384,9 +125,9 @@ type examFocusPolicyResponse struct {
 	Outcome                     string `json:"outcome"`
 }
 
-type examHandlers struct{ app ExamApplication }
+type examHandlers struct{ app *exam.Authoring }
 
-func examResource(app ExamApplication) route.Resource {
+func examResource(app *exam.Authoring) route.Resource {
 	h := examHandlers{app: app}
 	collection := "/exams"
 	member := "/exams/{exam_id}"
@@ -786,146 +527,6 @@ func (h examHandlers) editDraftText(request route.Request) (route.Result, error)
 	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
 }
 
-func (h examHandlers) configureDraftFocusLoss(request route.Request) (route.Result, error) {
-	examID, err := route.PathID[model.ExamID](request, "exam_id")
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	var body configureExamDraftFocusLossRequest
-	if err = request.DecodeJSON(&body); err != nil {
-		return route.Result{}, err
-	}
-	if body.ExpectedDraftRevision < 1 {
-		return route.Result{}, route.InvalidRequest(errors.New("must be positive"))
-	}
-	if body.MinimumDurationMilliseconds < 500 || body.MinimumDurationMilliseconds > 300_000 {
-		return route.Result{}, route.InvalidRequest(errors.New("must be between 500 and 300000"))
-	}
-	if body.IncidentCount < 1 || body.IncidentCount > 100 {
-		return route.Result{}, route.InvalidRequest(errors.New("must be between 1 and 100"))
-	}
-	if body.WindowMilliseconds < 10_000 || body.WindowMilliseconds > 14_400_000 || body.WindowMilliseconds < body.MinimumDurationMilliseconds {
-		return route.Result{}, route.InvalidRequest(errors.New("must be between 10000 and 14400000 and at least minimum_duration_milliseconds"))
-	}
-
-	outcome := model.IntegrityOutcome(body.Outcome)
-	switch outcome {
-	case model.IntegrityOutcomeFlag, model.IntegrityOutcomeFlagAndWarn, model.IntegrityOutcomeFlagAndSuspend:
-	default:
-		return route.Result{}, route.InvalidRequest(errors.New("is not supported"))
-	}
-
-	view, err := h.app.ConfigureExamDraftFocusLoss(request.Context, request.Invocation(), exam.ConfigureDraftFocusLossCommand{
-		ExamID:                examID,
-		ExpectedDraftRevision: body.ExpectedDraftRevision,
-		Enabled:               body.Enabled,
-		MinimumDuration:       time.Duration(body.MinimumDurationMilliseconds) * time.Millisecond,
-		IncidentCount:         body.IncidentCount,
-		Window:                time.Duration(body.WindowMilliseconds) * time.Millisecond,
-		Outcome:               outcome,
-		IdempotencyKey:        request.IdempotencyKey,
-	})
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
-}
-
-func (h examHandlers) configureDraftExecution(request route.Request) (route.Result, error) {
-	examID, err := route.PathID[model.ExamID](request, "exam_id")
-	if err != nil {
-		return route.Result{}, err
-	}
-	var body configureExamDraftExecutionRequest
-	if err = request.DecodeJSON(&body); err != nil {
-		return route.Result{}, err
-	}
-	if body.ExpectedDraftRevision < 1 {
-		return route.Result{}, route.InvalidRequest(errors.New("must be positive"))
-	}
-	var profile model.EnvironmentProfileID
-	if body.Execution.ProfileID != "" {
-		if profile, err = model.ParseEnvironmentProfileID(body.Execution.ProfileID); err != nil {
-			return route.Result{}, route.InvalidRequest(err)
-		}
-	}
-	view, err := h.app.ConfigureExamDraftExecution(request.Context, request.Invocation(), exam.ConfigureDraftExecutionCommand{
-		ExamID:                examID,
-		ExpectedDraftRevision: body.ExpectedDraftRevision,
-		Execution: model.ExecutionPolicy{Enabled: body.Execution.Enabled, Profile: profile,
-			RecordInput: body.Execution.RecordInput, Terminals: body.Execution.Terminals},
-		IdempotencyKey: request.IdempotencyKey,
-	})
-	if err != nil {
-		return route.Result{}, err
-	}
-	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
-}
-
-func (h examHandlers) configureDraftBrowserPolicy(request route.Request) (route.Result, error) {
-	examID, err := route.PathID[model.ExamID](request, "exam_id")
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	var body configureExamDraftBrowserPolicyRequest
-	if err = request.DecodeJSON(&body); err != nil {
-		return route.Result{}, err
-	}
-	if body.ExpectedDraftRevision < 1 {
-		return route.Result{}, route.InvalidRequest(errors.New("must be positive"))
-	}
-
-	policy, err := body.BrowserPolicy.model()
-	if err != nil {
-		return route.Result{}, route.InvalidRequest(err)
-	}
-
-	view, err := h.app.ConfigureExamDraftBrowserPolicy(request.Context, request.Invocation(), exam.ConfigureDraftBrowserPolicyCommand{
-		ExamID:                examID,
-		ExpectedDraftRevision: body.ExpectedDraftRevision,
-		Policy:                policy,
-		IdempotencyKey:        request.IdempotencyKey,
-	})
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
-}
-
-func (h examHandlers) configureDraftNativePolicy(request route.Request) (route.Result, error) {
-	examID, err := route.PathID[model.ExamID](request, "exam_id")
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	var body configureExamDraftNativePolicyRequest
-	if err = request.DecodeJSON(&body); err != nil {
-		return route.Result{}, err
-	}
-	if body.ExpectedDraftRevision < 1 {
-		return route.Result{}, route.InvalidRequest(errors.New("must be positive"))
-	}
-	if validateErr := body.Native.Validate(); validateErr != nil {
-		return route.Result{}, route.InvalidRequest(validateErr)
-	}
-
-	view, err := h.app.ConfigureExamDraftNativePolicy(request.Context, request.Invocation(), exam.ConfigureDraftNativePolicyCommand{
-		ExamID:                examID,
-		ExpectedDraftRevision: body.ExpectedDraftRevision,
-		NativePolicy:          body.Native,
-		IdempotencyKey:        request.IdempotencyKey,
-	})
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
-}
-
 func (h examHandlers) archive(request route.Request) (route.Result, error) {
 	examID, err := route.PathID[model.ExamID](request, "exam_id")
 	if err != nil {
@@ -952,210 +553,12 @@ func (h examHandlers) archive(request route.Request) (route.Result, error) {
 	return route.JSON(http.StatusOK, examIdentityResponseFromModel(archived)), nil
 }
 
-func (h examHandlers) listManagers(request route.Request) (route.Result, error) {
-	examID, err := examIDFromRequest(request)
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	query := exam.ListManagersQuery{ExamID: examID, Limit: 50}
-	values := request.HTTP.URL.Query()
-	if raw := values.Get("limit"); raw != "" {
-		query.Limit, err = strconv.Atoi(raw)
-		if err != nil || query.Limit < 1 || query.Limit > 200 {
-			return route.Result{}, route.InvalidRequest(errors.New("must be between 1 and 200"))
-		}
-	}
-
-	if raw := values.Get("cursor"); raw != "" {
-		cursor, decodeErr := decodeExamManagerCursor(raw)
-		if decodeErr != nil {
-			return route.Result{}, route.InvalidRequest(decodeErr)
-		}
-
-		query.BeforeGrantedAt, _ = model.ParseRFC3339(cursor.GrantedAt)
-		query.BeforeUserID = model.UserID(cursor.UserID)
-	}
-
-	page, err := h.app.ListExamManagers(request.Context, request.Invocation(), query)
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	response := examManagerListResponse{Items: make([]examManagerResponse, 0, len(page.Items))}
-	for _, item := range page.Items {
-		response.Items = append(response.Items, examManagerResponseFromSummary(item))
-	}
-
-	if page.HasMore && len(page.Items) == 0 {
-		return route.Result{}, route.Unpresentable(errors.New("exam manager page made no progress"))
-	}
-
-	if page.HasMore {
-		last := page.Items[len(page.Items)-1].Manager
-		response.NextCursor, err = encodeExamManagerCursor(examManagerCursor{
-			GrantedAt: model.FormatRFC3339(last.GrantedAt),
-			UserID:    last.UserID.String(),
-		})
-		if err != nil {
-			return route.Result{}, route.Unpresentable(err)
-		}
-	}
-
-	return route.JSON(http.StatusOK, response), nil
-}
-
-func (h examHandlers) addManager(request route.Request) (route.Result, error) {
-	examID, err := examIDFromRequest(request)
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	var body addExamManagerRequest
-	if err = request.DecodeJSON(&body); err != nil {
-		return route.Result{}, err
-	}
-
-	userID, err := parseExamManagerRequest(body.UserID, body.ExpectedExamRevision)
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	change, err := h.app.AddExamManager(request.Context, request.Invocation(), exam.ManagerChangeCommand{
-		ExamID:               examID,
-		UserID:               userID,
-		ExpectedExamRevision: body.ExpectedExamRevision,
-		IdempotencyKey:       request.IdempotencyKey,
-	})
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	return route.JSON(http.StatusCreated, examManagerChangeResponseFromApplication(change, true)), nil
-}
-
-func (h examHandlers) removeManager(request route.Request) (route.Result, error) {
-	examID, err := examIDFromRequest(request)
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	userID, err := route.PathID[model.UserID](request, "user_id")
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	var body removeExamManagerRequest
-	if err = request.DecodeJSON(&body); err != nil {
-		return route.Result{}, err
-	}
-	if body.ExpectedExamRevision < 1 {
-		return route.Result{}, route.InvalidRequest(errors.New("must be positive"))
-	}
-
-	change, err := h.app.RemoveExamManager(request.Context, request.Invocation(), exam.ManagerChangeCommand{
-		ExamID:               examID,
-		UserID:               userID,
-		ExpectedExamRevision: body.ExpectedExamRevision,
-		IdempotencyKey:       request.IdempotencyKey,
-	})
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	return route.JSON(http.StatusOK, examManagerChangeResponseFromApplication(change, false)), nil
-}
-
-func (h examHandlers) transferOwner(request route.Request) (route.Result, error) {
-	examID, err := examIDFromRequest(request)
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	var body transferExamOwnershipRequest
-	if err = request.DecodeJSON(&body); err != nil {
-		return route.Result{}, err
-	}
-
-	userID, err := parseExamManagerRequest(body.UserID, body.ExpectedExamRevision)
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	change, err := h.app.TransferExamOwnership(request.Context, request.Invocation(), exam.ManagerChangeCommand{
-		ExamID:               examID,
-		UserID:               userID,
-		ExpectedExamRevision: body.ExpectedExamRevision,
-		IdempotencyKey:       request.IdempotencyKey,
-	})
-	if err != nil {
-		return route.Result{}, err
-	}
-
-	return route.JSON(http.StatusOK, examManagerChangeResponseFromApplication(change, true)), nil
-}
-
 func examIDFromRequest(request route.Request) (model.ExamID, error) {
 	examID, err := route.PathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return "", err
 	}
 	return examID, nil
-}
-
-func parseExamManagerRequest(rawUserID string, revision int64) (model.UserID, error) {
-	userID, err := model.ParseUserID(rawUserID)
-	if err != nil {
-		return "", route.InvalidRequest(err)
-	}
-	if revision < 1 {
-		return "", route.InvalidRequest(errors.New("must be positive"))
-	}
-	return userID, nil
-}
-
-func encodeExamManagerCursor(cursor examManagerCursor) (string, error) {
-	return route.EncodeCursor(cursor, examManagerCursorSpec())
-}
-
-func decodeExamManagerCursor(raw string) (examManagerCursor, error) {
-	return route.DecodeCursor(raw, examManagerCursorSpec())
-}
-
-func examManagerCursorSpec() route.CursorSpec[examManagerCursor] {
-	return route.CursorSpec[examManagerCursor]{
-		Label:                "Exam Manager",
-		MaximumEncodedLength: route.DefaultMaximumCursorLength,
-		Members:              []string{"granted_at", "user_id"},
-		Validate: func(cursor examManagerCursor) error {
-			grantedAt, err := model.ParseRFC3339(cursor.GrantedAt)
-			if err != nil || grantedAt.IsZero() || !model.UserID(cursor.UserID).IsValid() {
-				return errors.New("invalid Exam Manager keyset")
-			}
-
-			return nil
-		},
-	}
-}
-
-func examManagerResponseFromSummary(summary exam.ManagerSummary) examManagerResponse {
-	return examManagerResponse{
-		UserID:          summary.Manager.UserID.String(),
-		GrantedByUserID: summary.Manager.GrantedByUserID.String(),
-		GrantedAt:       model.FormatRFC3339(summary.Manager.GrantedAt),
-		IsCreator:       summary.IsCreator,
-		IsOwner:         summary.IsOwner,
-	}
-}
-
-func examManagerChangeResponseFromApplication(change store.ExamManagerCommandResult, present bool) examManagerChangeResponse {
-	return examManagerChangeResponse{Exam: examIdentityResponseFromModel(*change.Exam), Manager: examManagerResponse{
-		UserID:          change.Manager.UserID.String(),
-		GrantedByUserID: change.Manager.GrantedByUserID.String(),
-		GrantedAt:       model.FormatRFC3339(change.Manager.GrantedAt),
-		IsCreator:       change.Manager.UserID == change.Exam.CreatorUserID,
-		IsOwner:         present && change.Manager.UserID == change.Exam.OwnerUserID,
-	}}
 }
 
 func examListQuery(request *http.Request) (exam.ListQuery, error) {
@@ -1362,49 +765,4 @@ func examResponseFromView(view exam.View) examResponse {
 		OwnerUserID:  view.OwnerUserID.String(),
 		ManagerCount: view.ManagerCount,
 	}
-}
-
-func (r *configureExamDraftNativePolicyRequest) UnmarshalJSON(data []byte) error {
-	if err := rejectDuplicateJSONObjectMembers(data, "native policy request"); err != nil {
-		return err
-	}
-	var members map[string]json.RawMessage
-	if err := json.Unmarshal(data, &members); err != nil {
-		return err
-	}
-	if len(members) != 2 {
-		return errors.New("native policy request requires exactly expected_revision and native")
-	}
-	for _, name := range []string{"expected_revision", "native"} {
-		value, exists := members[name]
-		if !exists || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
-			return errors.New("native policy request member is missing or null")
-		}
-	}
-	type wire configureExamDraftNativePolicyRequest
-	var decoded wire
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&decoded); err != nil {
-		return err
-	}
-	*r = configureExamDraftNativePolicyRequest(decoded)
-	return nil
-}
-
-// ExamApplication is the application port its handlers call; it authors Exams and manages their owners and managers.
-type ExamApplication interface {
-	CreateExam(context.Context, invocation.Invocation, exam.CreateCommand) (exam.View, error)
-	GetExam(context.Context, invocation.Invocation, model.ExamID) (exam.View, error)
-	EditExamDraftText(context.Context, invocation.Invocation, exam.EditDraftTextCommand) (exam.View, error)
-	ConfigureExamDraftNativePolicy(context.Context, invocation.Invocation, exam.ConfigureDraftNativePolicyCommand) (exam.View, error)
-	ConfigureExamDraftFocusLoss(context.Context, invocation.Invocation, exam.ConfigureDraftFocusLossCommand) (exam.View, error)
-	ConfigureExamDraftExecution(context.Context, invocation.Invocation, exam.ConfigureDraftExecutionCommand) (exam.View, error)
-	ConfigureExamDraftBrowserPolicy(context.Context, invocation.Invocation, exam.ConfigureDraftBrowserPolicyCommand) (exam.View, error)
-	ListExams(context.Context, invocation.Invocation, exam.ListQuery) (exam.CatalogPage, error)
-	ArchiveExam(context.Context, invocation.Invocation, exam.ArchiveCommand) (model.Exam, error)
-	ListExamManagers(context.Context, invocation.Invocation, exam.ListManagersQuery) (exam.ManagerPage, error)
-	AddExamManager(context.Context, invocation.Invocation, exam.ManagerChangeCommand) (store.ExamManagerCommandResult, error)
-	RemoveExamManager(context.Context, invocation.Invocation, exam.ManagerChangeCommand) (store.ExamManagerCommandResult, error)
-	TransferExamOwnership(context.Context, invocation.Invocation, exam.ManagerChangeCommand) (store.ExamManagerCommandResult, error)
 }

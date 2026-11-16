@@ -34,10 +34,8 @@ type AttemptListQuery struct {
 // such as a limit over 200, an incomplete keyset or an unknown status.
 var ErrQueryInvalid = errors.New("job query is invalid")
 
-// List returns one page of the Jobs whose type is operator-visible, newest
-// first unless Ascending, 50 when Limit is zero. BeforeCreatedAt and
-// BeforeID continue after the last item of the previous page; only the first
-// page is counted.
+// List returns one page of operator-visible jobs, newest first unless
+// Ascending, 50 when Limit is zero. Only the first page is counted.
 func (r *Engine) List(ctx context.Context, query ListQuery) (Page, error) {
 	if query.Limit == 0 {
 		query.Limit = 50
@@ -91,8 +89,8 @@ func (r *Engine) List(ctx context.Context, query ListQuery) (Page, error) {
 	return page, nil
 }
 
-// CountRecentFailures counts the operator-visible failed Jobs last updated
-// within the given span before PostgreSQL time, stopping at maximum.
+// CountRecentFailures counts operator-visible failed jobs last updated within
+// the span before database time, stopping at maximum.
 func (r *Engine) CountRecentFailures(ctx context.Context, within time.Duration, maximum int) (int, error) {
 	if within <= 0 || maximum < 1 || maximum > store.MaximumListCount {
 		return 0, ErrQueryInvalid
@@ -105,8 +103,7 @@ func (r *Engine) CountRecentFailures(ctx context.Context, within time.Duration, 
 	}, maximum)
 }
 
-// Get returns the safe projection of one Job. A Job whose type is not
-// operator-visible is reported as not found.
+// Get reports a job whose type is not operator-visible as not found.
 func (r *Engine) Get(ctx context.Context, id model.JobID) (View, error) {
 	record, err := r.operatorJob(ctx, id)
 	if err != nil {
@@ -115,8 +112,8 @@ func (r *Engine) Get(ctx context.Context, id model.JobID) (View, error) {
 	return projectJob(record), nil
 }
 
-// Attempts returns one page of an operator-visible Job's attempts, 50 when
-// Limit is zero; BeforeNumber continues after the previous page.
+// Attempts returns one page of an operator-visible job's attempts, 50 when
+// Limit is zero.
 func (r *Engine) Attempts(ctx context.Context, query AttemptListQuery) (AttemptPage, error) {
 	if _, err := r.operatorJob(ctx, query.JobID); err != nil {
 		return AttemptPage{}, err

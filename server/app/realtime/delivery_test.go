@@ -21,6 +21,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -447,17 +448,16 @@ type peerBroadcast struct {
 }
 
 type recordingFanout struct {
+	cluster.Transport
 	mu         sync.Mutex
-	handlers   map[string]func(context.Context, []byte) error
+	handlers   map[string]cluster.Handler
 	broadcasts []peerBroadcast
 	register   func(string) error
 	broadcast  func(string, []byte) error
 }
 
-func (f *recordingFanout) RegisterHandler(
-	event string,
-	handler func(context.Context, []byte) error,
-) error {
+func (f *recordingFanout) RegisterHandler(name cluster.Event, handler cluster.Handler) error {
+	event := string(name)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.register != nil {
@@ -466,7 +466,7 @@ func (f *recordingFanout) RegisterHandler(
 		}
 	}
 	if f.handlers == nil {
-		f.handlers = make(map[string]func(context.Context, []byte) error)
+		f.handlers = make(map[string]cluster.Handler)
 	}
 	if _, exists := f.handlers[event]; exists {
 		return fmt.Errorf("handler %s already registered", event)
@@ -475,7 +475,8 @@ func (f *recordingFanout) RegisterHandler(
 	return nil
 }
 
-func (f *recordingFanout) Broadcast(_ context.Context, event string, data []byte) error {
+func (f *recordingFanout) Broadcast(_ context.Context, message *cluster.Message) error {
+	event, data := string(message.Event), message.Data
 	f.mu.Lock()
 	f.broadcasts = append(f.broadcasts, peerBroadcast{event: event, data: append([]byte(nil), data...)})
 	broadcast := f.broadcast
@@ -486,8 +487,16 @@ func (f *recordingFanout) Broadcast(_ context.Context, event string, data []byte
 	return nil
 }
 
+// handler delivers a peer's payload for event the way the cluster does, in
+// an envelope, or is nil when nothing is registered for event.
 func (f *recordingFanout) handler(event string) func(context.Context, []byte) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.handlers[event]
+	handler := f.handlers[event]
+	if handler == nil {
+		return nil
+	}
+	return func(ctx context.Context, data []byte) error {
+		return handler(ctx, &cluster.Message{Event: cluster.Event(event), Data: data})
+	}
 }

@@ -18,8 +18,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// OpenedFile is an open stream of one Starter Workspace file with its stored
-// metadata. The caller closes Body.
+// OpenedFile is an open file stream with its stored metadata. The caller
+// closes Body.
 type OpenedFile struct {
 	Body           io.ReadCloser
 	MediaType      string
@@ -28,8 +28,8 @@ type OpenedFile struct {
 	ContentVersion model.WorkspaceContentVersion
 }
 
-// ListExamStarterWorkspace returns the entries of the Exam Draft's Starter
-// Workspace to a caller authorized to view the Exam.
+// ListExamStarterWorkspace requires permission to view the exam, not manage
+// it.
 func (s *Service) ListExamStarterWorkspace(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -48,9 +48,8 @@ func (s *Service) ListExamStarterWorkspace(
 	return items, nil
 }
 
-// OpenExamStarterWorkspaceFile opens one file of the Exam Draft's Starter
-// Workspace for a caller authorized to view the Exam. The caller must close
-// the body.
+// OpenExamStarterWorkspaceFile requires permission to view the exam. The
+// caller closes OpenedFile.Body.
 func (s *Service) OpenExamStarterWorkspaceFile(
 	ctx context.Context,
 	inv invocation.Invocation,

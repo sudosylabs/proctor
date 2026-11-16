@@ -18,8 +18,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// resolveOnboardingInvitationNoOp completes an onboarding import row as a no-op when the store reports that the
-// candidate Invitation would change nothing; handled reports whether the caller must return the view and error.
+// resolveOnboardingInvitationNoOp reports handled when the caller must
+// return the view and error as they are.
 func (s *Service) resolveOnboardingInvitationNoOp(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -40,7 +40,6 @@ func (s *Service) resolveOnboardingInvitationNoOp(
 	return InvitationView{}, false, nil
 }
 
-// issuedInvitationView maps an Invitation issue result to its view, carrying replay and no-op markers.
 func issuedInvitationView(created *store.InvitationCommandResult) InvitationView {
 	view := invitationView(created.Invitation)
 	view.Replayed = created.Replayed
@@ -103,9 +102,8 @@ func (s *Service) completeOnboardingInvitationNoOp(
 	return view, nil
 }
 
-// invitationLifetime resolves an inviter's optional whole-day Invitation
-// lifetime: nil selects fallback, and a day count outside the model bounds is
-// invitation.invalid on expires_in_days.
+// invitationLifetime: nil selects fallback; a day count outside the model
+// bounds is invitation.invalid on expires_in_days.
 func invitationLifetime(days *int, fallback time.Duration) (time.Duration, error) {
 	if days == nil {
 		return fallback, nil
@@ -117,8 +115,8 @@ func invitationLifetime(days *int, fallback time.Duration) (time.Duration, error
 	return time.Duration(*days) * day, nil
 }
 
-// replacedInvitationLifetime is the replaced Invitation's own lifetime in
-// whole days, clamped to the model bounds, which a replacement keeps by default.
+// replacedInvitationLifetime rounds to whole days and clamps to the model
+// bounds.
 func replacedInvitationLifetime(current *model.Invitation) time.Duration {
 	const day = 24 * time.Hour
 	if current == nil {

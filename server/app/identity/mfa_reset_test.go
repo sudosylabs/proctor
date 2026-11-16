@@ -47,9 +47,12 @@ func TestMFAAssistedResetRequiresIndependentVerifiedAdministrator(t *testing.T) 
 			base := &mfaApplicationStoreFake{}
 			persistence := &assistedResetStoreFake{mfaApplicationStoreFake: base}
 			effects := &realtimetest.Publisher{}
-			audit := &securityAuditorFake{}
+			audit := newSecurityAuditLog(t, nil)
 			service := newTestMFAApplicationService(t, base, audit, effects, now)
 			service.mfaCredentials = persistence
+			// The administrator holds user.mfa.reset Institution-wide; the
+			// denied case is another caller without it.
+			service.authorizer = mfaTestAccess(t, institutionGrant(principal.UserID, model.ActionUserMFAReset)).Authorizer
 			command := ResetUserMFACommand{UserID: model.NewUserID(), IdentityVerified: true, Reason: "Authenticator lost", VerificationReference: "helpdesk-124"}
 			switch name {
 			case "self":
@@ -70,7 +73,7 @@ func TestMFAAssistedResetRequiresIndependentVerifiedAdministrator(t *testing.T) 
 				principal.AuthenticationGeneration = 1
 				principal.MFARecoveryRequired = true
 			case "denied":
-				service.authorizer = mfaResetAuthorizationFake{err: apperror.New("authorization.denied")}
+				service.authorizer = mfaTestAccess(t).Authorizer
 			case "disabled":
 				service.mfa.deps.Settings.Enabled = false
 			case "commit failure":
@@ -99,10 +102,11 @@ func TestMFAAssistedResetRequiresIndependentVerifiedAdministrator(t *testing.T) 
 			}}, effects.Calls(), "assisted reset lost its exact actor, target, attestation, notice or post-commit effects")
 			// The reset is audited against the target User, which is its own
 			// subject, with the attestation as its prior state.
-			require.Len(t, audit.events, 1)
-			record := audit.events[0]
+			records := audit.events()
+			require.Len(t, records, 1)
+			record := records[0]
 			require.Equal(t, principal.UserID, record.actor)
-			require.Empty(t, record.target, "a User resource is its own audit subject")
+			require.Empty(t, audit.audits.Events()[0].SubjectUserID, "a User resource is its own audit subject")
 			require.Equal(t, model.ActionUserMFAReset, record.action)
 			require.Equal(t, model.Resource{Type: model.ResourceUser, ID: command.UserID.String()}, record.resource)
 			require.Equal(t, map[string]any{"identity_verified": true, "reason": "Authenticator lost", "verification_reference": "helpdesk-124"}, record.prior)
@@ -116,7 +120,7 @@ func TestMFARestrictedContextSurvivesDisabledService(t *testing.T) {
 	principal.AuthenticationGeneration = 2
 	principal.MFARecoveryRequired = true
 	base := &mfaApplicationStoreFake{}
-	service := newTestMFAApplicationService(t, base, &securityAuditorFake{}, &realtimetest.Publisher{}, now)
+	service := newTestMFAApplicationService(t, base, newSecurityAuditLog(t, nil), &realtimetest.Publisher{}, now)
 	service.mfa.deps.Settings.Enabled = false
 	status, err := service.GetMFAStatus(context.Background(), invocation.New(principal, model.RequestMetadata{}))
 	require.NoError(t, err)
@@ -133,7 +137,7 @@ func TestMFAFactorAttemptsAreBoundedBeforeVerification(t *testing.T) {
 	now := time.Now()
 	principal := mfaTestPrincipal(now, model.AuthenticationSingleFactor)
 	base := &mfaApplicationStoreFake{}
-	service := newTestMFAApplicationService(t, base, &securityAuditorFake{}, &realtimetest.Publisher{}, now)
+	service := newTestMFAApplicationService(t, base, newSecurityAuditLog(t, nil), &realtimetest.Publisher{}, now)
 	service.loginRateLimit.MaximumAttempts = 1
 	inv := invocation.New(principal, model.RequestMetadata{IPAddress: "127.0.0.1"})
 	_, _ = service.ChallengeMFA(context.Background(), inv, ChallengeMFACommand{Code: "000000"})

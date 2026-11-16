@@ -15,7 +15,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
@@ -94,6 +98,116 @@ func academicUnitEventCall(name string, unitID model.AcademicUnitID) realtimetes
 	}}
 }
 
+// knownProgrammes resolves the Programmes it holds and no other.
+type knownProgrammes struct {
+	store.ProgrammeStore
+	byID map[model.ProgrammeID]*model.Programme
+}
+
+func programmesOf(programmes ...*model.Programme) knownProgrammes {
+	known := knownProgrammes{byID: map[model.ProgrammeID]*model.Programme{}}
+	for _, programme := range programmes {
+		known.byID[programme.ID] = programme
+	}
+	return known
+}
+
+func (p knownProgrammes) Get(_ context.Context, id model.ProgrammeID) (*model.Programme, error) {
+	if programme, ok := p.byID[id]; ok {
+		return programme, nil
+	}
+	return nil, store.NewErrNotFound("programme", id.String())
+}
+
+// knownProgrammeLevels resolves the Programme Levels it holds and no other.
+type knownProgrammeLevels struct {
+	store.ProgrammeLevelStore
+	byID map[model.ProgrammeLevelID]*model.ProgrammeLevel
+}
+
+func programmeLevelsOf(levels ...*model.ProgrammeLevel) knownProgrammeLevels {
+	known := knownProgrammeLevels{byID: map[model.ProgrammeLevelID]*model.ProgrammeLevel{}}
+	for _, level := range levels {
+		known.byID[level.ID] = level
+	}
+	return known
+}
+
+func (l knownProgrammeLevels) Get(_ context.Context, id model.ProgrammeLevelID) (*model.ProgrammeLevel, error) {
+	if level, ok := l.byID[id]; ok {
+		return level, nil
+	}
+	return nil, store.NewErrNotFound("programme_level", id.String())
+}
+
+// knownAcademicPeriods resolves the Academic Periods it holds and no other.
+type knownAcademicPeriods struct {
+	store.AcademicPeriodStore
+	byID map[model.AcademicPeriodID]*model.AcademicPeriod
+}
+
+func academicPeriodsOf(periods ...*model.AcademicPeriod) knownAcademicPeriods {
+	known := knownAcademicPeriods{byID: map[model.AcademicPeriodID]*model.AcademicPeriod{}}
+	for _, period := range periods {
+		known.byID[period.ID] = period
+	}
+	return known
+}
+
+func (p knownAcademicPeriods) Get(_ context.Context, id model.AcademicPeriodID) (*model.AcademicPeriod, error) {
+	if period, ok := p.byID[id]; ok {
+		return period, nil
+	}
+	return nil, store.NewErrNotFound("academic_period", id.String())
+}
+
+// classWorld is the structure the real authorizer resolves a Class through:
+// a Programme in one Academic Unit, its Levels, and an Institution-owned
+// Academic Period.
+type classWorld struct {
+	unitID    model.AcademicUnitID
+	programme *model.Programme
+	levels    []*model.ProgrammeLevel
+	period    *model.AcademicPeriod
+}
+
+// newClassWorld builds a unit with one Programme holding levels Programme
+// Levels and one Academic Period.
+func newClassWorld(levels int) classWorld {
+	unitID := model.NewAcademicUnitID()
+	world := classWorld{
+		unitID:    unitID,
+		programme: &model.Programme{ID: model.NewProgrammeID(), AcademicUnitID: unitID},
+		period: &model.AcademicPeriod{
+			ID: model.NewAcademicPeriodID(), Owner: model.NewInstitutionAcademicPeriodOwner(model.NewInstitutionID()),
+			StartsAt: model.TimeFromMillis(0), EndsAt: model.TimeFromMillis(1_000_000),
+		},
+	}
+	for range levels {
+		world.levels = append(world.levels, &model.ProgrammeLevel{ID: model.NewProgrammeLevelID(), ProgrammeID: world.programme.ID})
+	}
+	return world
+}
+
+// class returns a Class of the world's first Level in its Period.
+func (w classWorld) class() *model.Class {
+	return &model.Class{ID: model.NewClassID(), ProgrammeLevelID: w.levels[0].ID, AcademicPeriodID: w.period.ID, DisplayName: "Class"}
+}
+
+// access builds the real authorizer over the grants, resolving the world and
+// the Classes the test's own store holds.
+func (w classWorld) access(t *testing.T, events *[]string, classes store.ClassStore, grants ...accesstest.Grant) *accesstest.Fixture {
+	t.Helper()
+	return accessWith(t, events, accesstest.Options{
+		Grants:          grants,
+		Units:           []*model.AcademicUnit{{ID: w.unitID, Name: "unit"}},
+		Classes:         classes,
+		AcademicPeriods: academicPeriodsOf(w.period),
+		Programmes:      programmesOf(w.programme),
+		ProgrammeLevels: programmeLevelsOf(w.levels...),
+	})
+}
+
 // sittingTargetsFake answers the Sitting boards a Class Membership change
 // refreshes and records each Class it was asked for.
 type sittingTargetsFake struct {
@@ -112,6 +226,8 @@ func (s *sittingTargetsFake) ListInvalidationTargetsByClass(
 	return s.targets[classID], nil
 }
 
+// relationshipUserStoreTestFake holds an active User, at revision 1, for
+// every identifier, so mail can be prepared for any member.
 type relationshipUserStoreTestFake struct{ store.UserStore }
 
 func (relationshipUserStoreTestFake) Get(_ context.Context, id model.UserID) (*model.User, error) {
@@ -119,7 +235,7 @@ func (relationshipUserStoreTestFake) Get(_ context.Context, id model.UserID) (*m
 	if err != nil {
 		return nil, err
 	}
-	return &model.User{ID: parsed, Revision: 1}, nil
+	return mailTestUser(model.Principal{UserID: parsed}, time.UnixMilli(500)), nil
 }
 
 func (relationshipUserStoreTestFake) ListIdentities(_ context.Context, ids []model.UserID) ([]store.UserIdentity, error) {
@@ -130,36 +246,49 @@ func (relationshipUserStoreTestFake) ListIdentities(_ context.Context, ids []mod
 	return identities, nil
 }
 
-type relationshipMailPreparerTestFake struct {
-	Mail
-	requests []mail.RelationshipTransitionPreparation
-}
-
-func (f *relationshipMailPreparerTestFake) PrepareRelationshipTransition(request mail.RelationshipTransitionPreparation) (*store.PreparedMail, error) {
-	f.requests = append(f.requests, request)
-	return &store.PreparedMail{}, nil
-}
-
 func mailTestUser(principal model.Principal, at time.Time) *model.User {
 	user := &model.User{Email: "operator@example.test", DisplayName: "Operator", EmailVerified: true, Locale: "en", Timezone: "UTC"}
 	user.PrepareCreate(principal.UserID, at.Add(-time.Hour))
 	return user
 }
 
-// newDirectMailPreparer builds the production mail Composer for a test.
-func newDirectMailPreparer(renderer mail.Renderer, sender mail.Sender, sealer *secretseal.Sealer, institution func() string) (*mail.Composer, error) {
-	return mail.NewComposer(mail.ComposerDependencies{Renderer: renderer, Sender: sender, Sealer: sealer, Institution: institution})
+// newMail builds the production mail Composer over an enabled sender, so
+// every eligible recipient's message is rendered and sealed, and over a
+// renderer that places "render-mail" in the log a test shares with its other
+// fakes.
+func newMail(t *testing.T, events *[]string) (*mail.Composer, *mailtest.Renders) {
+	t.Helper()
+	renderer, renders := mailtest.NewRecordingRenderer(t, func(model.MailTemplateKey) {
+		*events = append(*events, "render-mail")
+	})
+	composer, err := mail.NewComposer(mail.ComposerDependencies{
+		Renderer: renderer,
+		Sender:   mailSenderFake{},
+		Sealer:   mailTestSealer(t),
+	})
+	require.NoError(t, err)
+	return composer, renders
 }
 
-type mailSenderFake struct {
-	enabled bool
-	from    mail.Address
-}
+// mailSenderFake is an enabled mail transport port.
+type mailSenderFake struct{}
 
-func (s *mailSenderFake) Enabled() bool      { return s.enabled }
-func (s *mailSenderFake) From() mail.Address { return s.from }
-func (s *mailSenderFake) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
+func (mailSenderFake) Enabled() bool { return true }
+func (mailSenderFake) From() mail.Address {
+	return mail.Address{Name: "Proctor", Address: "no-reply@example.test"}
+}
+func (mailSenderFake) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
 	return mail.TransportUnknown, nil
+}
+
+// openedNotice opens a prepared notice, so a test reads the message its
+// recipient would get.
+func openedNotice(t *testing.T, notice *store.PreparedMail) mail.Outbound {
+	t.Helper()
+	require.NotNil(t, notice, "prepared notice")
+	opened, err := mail.OpenDelivery(mailTestSealer(t), notice.Delivery)
+	require.NoError(t, err)
+	return opened
 }
 
 func mailTestSealer(t *testing.T) *secretseal.Sealer {
@@ -170,17 +299,57 @@ func mailTestSealer(t *testing.T) *secretseal.Sealer {
 	return value
 }
 
-type classTransitionRendererFake struct {
-	details mail.ClassTransitionDetails
-	calls   int
+// newCaller returns a signed-in caller and the invocation it makes. The real
+// authorizer refuses a zero Principal.
+func newCaller() (model.Principal, invocation.Invocation) {
+	principal := model.Principal{
+		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
+		CredentialID:         model.PrincipalCredentialID(model.NewSessionCredentialID()),
+		CredentialType:       model.CredentialSessionAccess,
+		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
+		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now(),
+	}
+	return principal, invocation.New(principal, model.RequestMetadata{})
 }
 
-func (r *classTransitionRendererFake) Render(request mail.RenderRequest) (mail.FrozenContent, error) {
-	details, ok := request.Presentation.(mail.ClassTransitionDetails)
-	if !ok {
-		return mail.FrozenContent{}, nil
+// accessWith builds the real authorizer and auditor the options describe and
+// places what they do in events: "grants" for each read of the caller's Role
+// Bindings, "decision:<action>:<status>" for a recorded decision, and
+// "audit-begin:<action>" and "audit-<status>" for the audit of a mutation.
+func accessWith(t *testing.T, events *[]string, options accesstest.Options) *accesstest.Fixture {
+	t.Helper()
+	options.Observe = func(event string) {
+		if events != nil {
+			*events = append(*events, event)
+		}
 	}
-	r.calls++
-	r.details = details
-	return mail.FrozenContent{Subject: "Class changed", Text: details.ClassDisplayName, HTML: "<p>Class changed</p>"}, nil
+	return accesstest.New(t, options)
+}
+
+// institutionGrant grants the actions Institution-wide.
+func institutionGrant(userID model.UserID, actions ...model.Action) accesstest.Grant {
+	return accesstest.Grant{UserID: userID, Actions: actions}
+}
+
+// unitGrant grants the actions in one Academic Unit.
+func unitGrant(userID model.UserID, unitID model.AcademicUnitID, actions ...model.Action) accesstest.Grant {
+	return accesstest.Grant{UserID: userID, Actions: actions, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String()}
+}
+
+// decisions describes each recorded authorization decision as
+// "<action> <resource type>:<resource id> <status>".
+func decisions(fixture *accesstest.Fixture) []string {
+	var described []string
+	for _, event := range fixture.Audits.Decisions() {
+		described = append(described, event.Action+" "+string(event.Resource.Type)+":"+event.Resource.ID+" "+string(event.Status))
+	}
+	return described
+}
+
+// onlyAttempt returns the one mutation attempt the auditor recorded.
+func onlyAttempt(t *testing.T, fixture *accesstest.Fixture) *model.AuditEvent {
+	t.Helper()
+	attempts := fixture.Audits.Attempts()
+	require.Len(t, attempts, 1, "mutation attempts")
+	return attempts[0]
 }

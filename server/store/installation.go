@@ -15,9 +15,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// InstallationBootstrap is the complete durable input for the one-time
-// installation bootstrap transaction. PasswordHash is already encoded by the
-// application password hasher and must never be logged or audited.
+// InstallationBootstrap is the input of the one-time bootstrap. PasswordHash
+// is already encoded and must never be logged or audited.
 type InstallationBootstrap struct {
 	BootstrapSecretDigest    [sha256.Size]byte
 	CommandFingerprint       [sha256.Size]byte
@@ -32,28 +31,26 @@ type InstallationBootstrap struct {
 	DefaultProfilePictureJob *model.Job
 }
 
-// SystemAdministratorRoleReconciliation is the complete durable input for
-// adding newly registered grantable actions to the protected built-in Role.
-// Existing permissions are preserved so a rolling downgrade does not destroy
-// actions unknown to the current binary.
+// SystemAdministratorRoleReconciliation adds newly registered actions to the
+// built-in role. It never removes one, so a rolling downgrade keeps actions
+// the older binary does not know.
 type SystemAdministratorRoleReconciliation struct {
 	RequiredPermissions []string
 	ReconciledAt        time.Time
 	AuditEvent          *model.AuditEvent
 }
 
-// SystemAdministratorRoleReconciliationResult reports the authoritative Role
-// after reconciliation. A nil Role with Changed false means the installation
-// is still pristine and therefore has nothing to reconcile.
+// SystemAdministratorRoleReconciliationResult is the role after
+// reconciliation. A nil Role means the installation is not bootstrapped yet.
 type SystemAdministratorRoleReconciliationResult struct {
 	Role             *model.Role
 	Changed          bool
 	AddedPermissions []string
 }
 
-// AdministratorRecovery is the secret-bearing input to the offline,
-// installation-scoped recovery aggregate. RotatePasswordHash is already an
-// encoded password hash; plaintext credentials never cross the Store boundary.
+// AdministratorRecovery is the input of offline administrator recovery.
+// RotatePasswordHash is already encoded; plaintext never crosses the store
+// boundary.
 type AdministratorRecovery struct {
 	InstitutionID      model.InstitutionID
 	UserID             model.UserID
@@ -67,8 +64,8 @@ type AdministratorRecoveryResult struct {
 	PasswordRotated   bool
 }
 
-// AdministratorRecoveryReconciliation is the bounded startup command that
-// turns pending offline security records into ordinary durable audit events.
+// AdministratorRecoveryReconciliation runs at startup and turns pending
+// offline recovery records into audit events.
 type AdministratorRecoveryReconciliation struct {
 	NodeID string
 }
@@ -77,8 +74,8 @@ type AdministratorRecoveryReconciliationResult struct {
 	Reconciled int
 }
 
-// InstallationStore owns the cross-model transaction that makes a pristine
-// database into an initialized logical Proctor installation.
+// InstallationStore bootstraps an empty database into an installation and
+// runs offline administrator recovery.
 type InstallationStore interface {
 	Get(context.Context) (*model.InstallationState, error)
 	Bootstrap(context.Context, *InstallationBootstrap) (*model.InstallationBootstrapResult, error)

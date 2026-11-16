@@ -28,7 +28,7 @@ type attemptEnvironmentReplaceOutcome struct {
 
 func (attemptEnvironmentReplaceOutcome) outcomeDocument() {}
 
-// Replace asks the owner of an Attempt's environment to replace the machine
+// Replace asks the owner of an attempt's environment to replace the machine
 // of the incarnation the manager saw.
 func (s SQLAttemptEnvironmentStore) Replace(
 	ctx context.Context,

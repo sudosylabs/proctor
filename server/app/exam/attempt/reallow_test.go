@@ -47,10 +47,10 @@ func TestReallowRequiresExactSuspensionAndKeepsPrivateReasonOutOfEffects(t *test
 	// Contract: the Manager authorization precedes the audit, the audit begins
 	// before the durable reallow (guardrail 8), and the reallow commits before
 	// its effect (guardrail 14).
-	require.Equal(t, []string{"manager.manage", "sitting", "audit", "manager.get", "reallow", "effects"}, f.order)
-	require.Nil(t, f.audit.values["private_reason"], "private reason escaped persistence input: audit=%#v result=%#v", f.audit.values, result)
-	require.NotContains(t, fmt.Sprintf("%#v", result), reason, "private reason escaped persistence input: audit=%#v result=%#v", f.audit.values, result)
-	for _, capture := range []any{f.audit.values, result} {
+	require.Equal(t, []string{"grants", "decision:exam.sitting.manage:success", "sitting", "audit-begin:exam.sitting.manage", "manager.get", "reallow", "effects"}, f.order)
+	require.Nil(t, f.audit().values["private_reason"], "private reason escaped persistence input: audit=%#v result=%#v", f.audit().values, result)
+	require.NotContains(t, fmt.Sprintf("%#v", result), reason, "private reason escaped persistence input: audit=%#v result=%#v", f.audit().values, result)
+	for _, capture := range []any{f.audit().values, result} {
 		require.NotContains(t, fmt.Sprintf("%#v", capture), reason, "private reason escaped persistence input: %#v", capture)
 	}
 	wantIdempotency, prepareErr := prepareReallowIdempotency(f.inv, ReallowCommand{
@@ -88,10 +88,10 @@ func TestManagerAttemptMissingAfterAuthorizationCompletesFailedAudit(t *testing.
 	_, err := f.service.ReallowExamAttempt(context.Background(), f.inv, ReallowCommand{
 		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: model.NewExamAttemptID(), SuspensionID: model.NewAttemptSuspensionID(),
 		ExpectedAttemptRevision: 2, PrivateReason: "probe", IdempotencyKey: "probe-key"})
-	require.True(t, apperror.Is(err, "resource.not_found"), "error=%v audit=%#v order=%v", err, f.audit, f.order)
-	require.True(t, chainHasCode(err, "exam.attempt.not_found"), "error=%v audit=%#v order=%v", err, f.audit, f.order)
-	require.Equal(t, "exam.attempt.not_found", f.audit.failedCode, "error=%v audit=%#v order=%v", err, f.audit, f.order)
-	require.Nil(t, f.persistence.reallow, "error=%v audit=%#v order=%v", err, f.audit, f.order)
+	require.True(t, apperror.Is(err, "resource.not_found"), "error=%v audit=%#v order=%v", err, f.audit(), f.order)
+	require.True(t, chainHasCode(err, "exam.attempt.not_found"), "error=%v audit=%#v order=%v", err, f.audit(), f.order)
+	require.Equal(t, "exam.attempt.not_found", f.audit().failedCode, "error=%v audit=%#v order=%v", err, f.audit(), f.order)
+	require.Nil(t, f.persistence.reallow, "error=%v audit=%#v order=%v", err, f.audit(), f.order)
 }
 
 func TestReallowValidatesReasonBeforeAuthorization(t *testing.T) {
@@ -112,7 +112,7 @@ func TestReallowReplaySuppressesEffectAndPropagatesAuthorizedOverride(t *testing
 	t.Parallel()
 	f := newFixture(t)
 	useManagerCall(f)
-	f.managerOverride = true
+	useManagerOverride(f)
 	suspensionID := model.NewAttemptSuspensionID()
 	f.persistence.attempt, f.persistence.managerSuspension = managerAttemptFixture(t, f, model.ExamAttemptSuspended, 2, suspensionID)
 	f.persistence.reallowResult = reallowResultFixture(t, f, suspensionID, true)

@@ -30,7 +30,7 @@ type ExamAttemptSQLProbe struct {
 	FocusLossPersistence         func(*testing.T, context.Context, model.ExamAttemptID, int64) FocusLossPersistenceProbe
 	ConcurrentExamFocusLoss      store.ExamFocusLossStore
 	AssertFocusLossSchema        func(*testing.T, context.Context)
-	// LeadDatabaseClock moves one Session's node-clock instants after the
+	// LeadDatabaseClock moves one session's node-clock instants after the
 	// database clock, as a creating node whose clock leads PostgreSQL does.
 	LeadDatabaseClock func(*testing.T, context.Context, model.SessionID)
 }
@@ -44,7 +44,7 @@ type DesktopCompatibilityPolicySerializationProbe func(
 // FocusLossPersistenceProbe exposes bounded persistence totals that cannot be
 // observed through the candidate seam. It is used only by SQL conformance to
 // prove the evidence cap, overflow summary, bucket consumption, and diagnostic
-// bound without making those private details part of the production Store.
+// bound without making those private details part of the production store.
 type FocusLossPersistenceProbe struct {
 	Flags, Evidence, Pending int
 	OverflowCount            int64
@@ -564,8 +564,8 @@ func TestExamAttemptCompatibilityPolicySerialization(
 }
 
 // TestExamAttemptConnectCandidateLockOrder verifies that Connect takes the
-// candidate User before its Class-enrollment fence, so it waits behind an
-// Invitation acceptance for the same candidate instead of deadlocking it.
+// candidate user before its class-enrollment fence, so it waits behind an
+// invitation acceptance for the same candidate instead of deadlocking it.
 func TestExamAttemptConnectCandidateLockOrder(t *testing.T, ss store.Store, probe CandidateLockProbe) {
 	t.Helper()
 	require.NotNil(t, probe, "Attempt candidate lock probe is required")
@@ -595,7 +595,7 @@ func TestExamAttemptConnectCandidateLockOrder(t *testing.T, ss store.Store, prob
 }
 
 // TestSessionRevocationAttemptFence verifies the database-owned security
-// boundary shared by every Session revocation path.
+// boundary shared by every session revocation path.
 func TestSessionRevocationAttemptFence(t *testing.T, ss store.Store) {
 	t.Helper()
 	ctx := context.Background()
@@ -647,7 +647,7 @@ func TestSessionRevocationAttemptFence(t *testing.T, ss store.Store) {
 }
 
 // TestSessionExpiryAttemptFence verifies that authoritative idle/absolute
-// expiry enforcement takes the same atomic Attempt fence as explicit Session
+// expiry enforcement takes the same atomic attempt fence as explicit session
 // revocation.
 func TestSessionExpiryAttemptFence(t *testing.T, ss store.Store) {
 	t.Helper()
@@ -1092,7 +1092,7 @@ type examAttemptFixture struct {
 	unitID        model.AcademicUnitID
 	institutionID model.InstitutionID
 	membership    *model.ClassMember
-	// resourceID is the published Exam Resource of a fixture built with one.
+	// resourceID is the published exam resource of a fixture built with one.
 	resourceID model.ExamResourceID
 }
 
@@ -1124,18 +1124,18 @@ func newExamAttemptFixtureWithCapacity(t *testing.T, ctx context.Context, ss sto
 	return newExamAttemptFixtureWithOptions(t, ctx, ss, focus, browser, capacity, false)
 }
 
-// newExamAttemptFixtureWithResource publishes the fixture Revision with one
-// Exam Resource, whose identifier the fixture records.
+// newExamAttemptFixtureWithResource publishes the fixture revision with one
+// exam resource, whose identifier the fixture records.
 func newExamAttemptFixtureWithResource(t *testing.T, ctx context.Context, ss store.Store) examAttemptFixture {
 	t.Helper()
 	return newExamAttemptFixtureWithOptions(t, ctx, ss, nil, nil, model.ExamCapacityPolicy{}, true)
 }
 
-// examAttemptFixtureNative sets the native policy the fixture Revision
+// examAttemptFixtureNative sets the native policy the fixture revision
 // freezes, for tests that need the screen recorder or a native family on.
 type examAttemptFixtureNative func(*model.NativeSecurityPolicy)
 
-// newExamAttemptFixtureWithScreenRecording publishes the fixture Revision with
+// newExamAttemptFixtureWithScreenRecording publishes the fixture revision with
 // the screen evidence recorder on.
 func newExamAttemptFixtureWithScreenRecording(t *testing.T, ctx context.Context, ss store.Store) examAttemptFixture {
 	t.Helper()
@@ -1150,7 +1150,7 @@ func newExamAttemptFixtureWithOptions(t *testing.T, ctx context.Context, ss stor
 	return newExamAttemptFixtureWithExecutionOptions(t, ctx, ss, focus, browser, capacity, withResource, nil, natives...)
 }
 
-// newExamAttemptFixtureWithExecution publishes the fixture Revision with an
+// newExamAttemptFixtureWithExecution publishes the fixture revision with an
 // execution policy naming profileID, with execution enabled.
 func newExamAttemptFixtureWithExecution(t *testing.T, ctx context.Context, ss store.Store, execution model.ExecutionPolicy) examAttemptFixture {
 	t.Helper()
@@ -1378,7 +1378,7 @@ func testConcurrentExamAttemptAdmission(t *testing.T, ctx context.Context, ss st
 	require.True(t, closeResult.Changed)
 }
 
-// requireConflictConstraint asserts that err is a Store conflict on the named
+// requireConflictConstraint asserts that err is a store conflict on the named
 // constraint.
 func requireConflictConstraint(t *testing.T, err error, constraint string) {
 	t.Helper()
@@ -1402,9 +1402,9 @@ func newExamAttemptAudit(fixture examAttemptFixture) *model.AuditEvent {
 
 // requireExpiryLinks asserts the scope and link facts of an expiry outcome
 // that the application does not re-check, against the due target it expired:
-// every part is present, names the target's scope, Attempt, Participation and
-// generation, is valid, and the evidence and Suspension link the outcome's
-// Flag.
+// every part is present, names the target's scope, attempt, participation and
+// generation, is valid, and the evidence and suspension link the outcome's
+// flag.
 func requireExpiryLinks(t *testing.T, result *store.ExamAttemptParticipationExpiryResult, due store.ExamAttemptParticipationExpiryDue) {
 	t.Helper()
 	require.NotNil(t, result)

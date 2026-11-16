@@ -106,8 +106,8 @@ func testUserEmailChangeUsesDatabaseClock(t *testing.T, ss store.Store) {
 	}
 	result, err := ss.UserToken().ChangeEmail(ctx, command)
 	require.NoError(t, err)
-	// The User's modification time never moves backwards when the database
-	// clock trails the node clock that created the User.
+	// The user's modification time never moves backwards when the database
+	// clock trails the node clock that created the user.
 	wantUserUpdatedAt := result.Token.CreatedAt
 	if user.UpdatedAt.After(wantUserUpdatedAt) {
 		wantUserUpdatedAt = user.UpdatedAt

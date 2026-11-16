@@ -14,12 +14,13 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// DPoPChallengeNonce exposes only the standard replacement nonce carried by a
-// nonce challenge. Other application errors do not reveal internal state.
+// DPoPChallengeNonce returns the replacement nonce from a nonce challenge, and
+// false for any other error so nothing else leaks.
 func DPoPChallengeNonce(err error) (string, bool) {
 	var challenge *dpopChallengeError
 	if !errors.As(err, &challenge) {
@@ -28,9 +29,9 @@ func DPoPChallengeNonce(err error) (string, bool) {
 	return challenge.DPoPNonce(), challenge.DPoPNonce() != ""
 }
 
-// AuthenticateDPoP resolves a Desktop access credential and establishes the
-// request-scoped registered_desktop_key assurance only after proof, nonce,
-// replay, Session, User, and Registration validation.
+// AuthenticateDPoP resolves a desktop access token, granting the
+// registered_desktop_key assurance only after the proof, nonce, replay,
+// session, user and registration all check out.
 func (s *Service) AuthenticateDPoP(
 	ctx context.Context,
 	rawToken string,
@@ -38,7 +39,7 @@ func (s *Service) AuthenticateDPoP(
 	method string,
 	path string,
 ) (_ *model.Principal, resultErr error) {
-	defer func() { recordOperational(s.operational, "authentication", "dpop", resultErr) }()
+	defer func() { operational.Record(s.operational, "authentication", "dpop", resultErr) }()
 	resolved, err := s.resolveDesktopCredential(ctx, rawToken, model.SessionCredentialAccess)
 	if err != nil {
 		return nil, err
@@ -199,9 +200,8 @@ func principalFromDesktopAuthentication(resolved *resolvedAuthentication) *model
 	}
 }
 
-// DPoPRequestProof carries the HTTP proof inputs that must be verified for a
-// Desktop-bound credential. A nil value means the credential was not
-// presented with the DPoP authorization scheme.
+// DPoPRequestProof carries the HTTP inputs a DPoP proof is verified against;
+// nil means the credential was not presented with the DPoP scheme.
 type DPoPRequestProof struct {
 	Proof  string
 	Method string

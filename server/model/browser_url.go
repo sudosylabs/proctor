@@ -70,9 +70,9 @@ func canonicalizeBrowserPolicyRuleOrigin(value string, httpException bool) (stri
 	return scheme + "://" + browserHostPort(host, port), nil
 }
 
-// CanonicalizeBrowserPolicyPath accepts a prefix the browser can preserve
-// exactly. Authoring only removes one non-root trailing slash; it never rewrites
-// dot segments, repeated internal slashes or percent-encoded unreserved bytes.
+// CanonicalizeBrowserPolicyPath accepts only a prefix the browser preserves
+// exactly. It removes one non-root trailing slash and never rewrites dot
+// segments, repeated slashes or percent-encoded unreserved bytes.
 func CanonicalizeBrowserPolicyPath(value string) (string, error) {
 	if len(value) > BrowserPolicyPathMaximumBytes ||
 		!browserASCII(value) ||
@@ -139,8 +139,8 @@ func CanonicalizeBrowserLocation(value string) (BrowserLocation, error) {
 		return BrowserLocation{}, err
 	}
 
-	// Read the original pathname: net/url's escaping and path.Clean have
-	// different semantics from the browser's serialized pathname.
+	// Read the original pathname: net/url escaping and path.Clean differ from the
+	// browser's serialized pathname.
 	rest := value[strings.Index(value, "://")+3:]
 	rawPath := "/"
 	if index := strings.IndexAny(rest, "/?#"); index >= 0 && rest[index] == '/' {
@@ -243,9 +243,9 @@ func browserStringLength(value string) int {
 	return length
 }
 
-// canonicalBrowserPath preserves empty segments and percent-triplet case.
-// Only browser-recognized dot segments and browser path escaping can change
-// navigation bytes; encoded separators and malformed escapes always fail.
+// canonicalBrowserPath keeps empty segments and percent-triplet case. Only
+// browser-recognized dot segments and browser escaping change bytes; encoded
+// separators and malformed escapes always fail.
 func canonicalBrowserPath(value string) (string, error) {
 	if value == "" || value[0] != '/' || invalidBrowserURLText(value) || strings.ContainsAny(value, "?#") {
 		return "", invalidModelError("canonicalBrowserPath", "browser_url", "", "invalid browser pathname", "")
@@ -315,9 +315,9 @@ func browserDotSegment(value string) int {
 	}
 }
 
-// canonicalBrowserIPv4 implements the IPv4-number grammar used by WHATWG URL
-// hosts so the server and the embedded browser agree on non-dotted-decimal
-// spellings before policy matching.
+// canonicalBrowserIPv4 implements the WHATWG URL IPv4-number grammar so the
+// server and the embedded browser agree on non-dotted-decimal spellings before
+// matching.
 func canonicalBrowserIPv4(host string) (string, error) {
 	parts := strings.Split(host, ".")
 	if len(parts) > 1 && parts[len(parts)-1] == "" {

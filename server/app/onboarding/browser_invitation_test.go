@@ -15,6 +15,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
+
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -92,14 +94,14 @@ func withBrowserStores(s *Service, transactions store.BrowserAuthenticationStore
 func TestBrowserInvitationPreservesPasswordWorkFailures(t *testing.T) {
 	for _, purpose := range []model.InvitationPurpose{model.InvitationPurposeStudentClass, model.InvitationPurposeTeacherAcademicUnit} {
 		t.Run(string(purpose), func(t *testing.T) {
-			testPasswordHashFailures(t, "invitation.unavailable", func(t *testing.T, ctx context.Context, hasher testPasswordHasher) error {
+			testPasswordHashFailures(t, "invitation.unavailable", func(t *testing.T, ctx context.Context, hook passwordHashHook) error {
 				invitation := &model.Invitation{ID: model.NewInvitationID(), Purpose: purpose,
 					ClaimHash: model.HashInvitationClaim(model.NewCredentialToken()), TargetEmail: "invited@example.edu"}
 				persistence := &invitationStoreFake{invitation: invitation}
-				mail := &mailFake{}
+				composer, rendered := newTestMail(t, true)
 				invitations := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{},
-					&authorizerFake{}, mail, time.Now())
-				invitations.hasher = hasher
+					permissiveAccess(t, accesstest.Options{}, nil), composer, time.Now())
+				invitations.hashHook = hook
 				transactions := &browserInvitationTransactionStoreFake{resolveResult: &store.BrowserInvitationResolution{
 					ID: model.NewBrowserAuthenticationTransactionID(), InvitationID: invitation.ID, InvitationClaimHash: invitation.ClaimHash,
 				}}
@@ -111,7 +113,7 @@ func TestBrowserInvitationPreservesPasswordWorkFailures(t *testing.T) {
 				require.Nil(t, result, "failed password work advanced hosted Invitation acceptance")
 				require.Nil(t, persistence.accepted, "failed password work advanced hosted Invitation acceptance")
 				require.Nil(t, persistence.teacherAccepted, "failed password work advanced hosted Invitation acceptance")
-				require.Empty(t, mail.directJobType, "failed password work advanced hosted Invitation acceptance")
+				require.Zero(t, rendered.Count(), "failed password work advanced hosted Invitation acceptance")
 				return err
 			})
 		})

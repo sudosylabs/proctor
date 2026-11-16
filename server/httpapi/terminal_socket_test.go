@@ -20,6 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/environment"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/logging"
+	"github.com/sudosylabs/proctor/server/websocket"
 )
 
 func testLogger(t *testing.T) *logging.Logger {
@@ -162,7 +163,7 @@ func TestTerminalSocketProtocol(t *testing.T) {
 	t.Parallel()
 	socket := newPipeSocket()
 	session := &fakeTerminalSession{output: &fakeAttachment{events: make(chan environment.ProcessOutput, 8)}}
-	done := make(chan BinarySocketOutcome, 1)
+	done := make(chan websocket.BinarySocketOutcome, 1)
 	go func() {
 		done <- serveTerminal(context.Background(), socket, session, testLogger(t), time.Hour)
 	}()
@@ -207,7 +208,7 @@ func TestTerminalSocketProtocol(t *testing.T) {
 	exit := socket.next(t)
 	require.Equal(t, terminalFrameExit, exit[0])
 	require.EqualValues(t, 3, binary.BigEndian.Uint32(exit[1:5]))
-	require.Equal(t, BinarySocketDone, <-done)
+	require.Equal(t, websocket.BinarySocketDone, <-done)
 
 	session.mu.Lock()
 	defer session.mu.Unlock()
@@ -221,7 +222,7 @@ func TestTerminalSocketStartsFromTheScreenAndEndsWithAccess(t *testing.T) {
 	t.Parallel()
 	socket := newPipeSocket()
 	session := &fakeTerminalSession{output: &fakeAttachment{events: make(chan environment.ProcessOutput)}}
-	done := make(chan BinarySocketOutcome, 1)
+	done := make(chan websocket.BinarySocketOutcome, 1)
 	go func() {
 		done <- serveTerminal(context.Background(), socket, session, testLogger(t), 5*time.Millisecond)
 	}()
@@ -232,7 +233,7 @@ func TestTerminalSocketStartsFromTheScreenAndEndsWithAccess(t *testing.T) {
 	session.mu.Unlock()
 	select {
 	case outcome := <-done:
-		require.Equal(t, BinarySocketAccessEnded, outcome)
+		require.Equal(t, websocket.BinarySocketAccessEnded, outcome)
 	case <-time.After(2 * time.Second):
 		t.Fatal("the socket outlived its access")
 	}
@@ -246,7 +247,7 @@ func TestTerminalSocketRefusesAnUnknownFirstFrame(t *testing.T) {
 	socket := newPipeSocket()
 	session := &fakeTerminalSession{output: &fakeAttachment{events: make(chan environment.ProcessOutput)}}
 	socket.in <- []byte{terminalFrameInput}
-	require.Equal(t, BinarySocketDone, serveTerminal(context.Background(), socket, session, testLogger(t), time.Hour))
+	require.Equal(t, websocket.BinarySocketDone, serveTerminal(context.Background(), socket, session, testLogger(t), time.Hour))
 	refused := socket.next(t)
 	require.Equal(t, terminalFrameError, refused[0])
 	require.Equal(t, "request.invalid", string(refused[1:]))

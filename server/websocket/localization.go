@@ -136,7 +136,7 @@ func websocketErrorMessage(presentation websocketErrorPresentation) localizedMes
 	return websocketErrorMessages[presentation]
 }
 
-func localizedText(localizer Localizer, locale string, message localizedMessage) string {
+func localizedText(localizer *localization.Localizer, locale string, message localizedMessage) string {
 	if localizer != nil && message.id != "" {
 		if translated, err := localizer.Translate(locale, message.id, nil); err == nil {
 			return translated
@@ -145,7 +145,7 @@ func localizedText(localizer Localizer, locale string, message localizedMessage)
 	return message.fallback
 }
 
-func localizedCloseReason(localizer Localizer, locale string, message localizedMessage) string {
+func localizedCloseReason(localizer *localization.Localizer, locale string, message localizedMessage) string {
 	return boundedCloseReason(localizedText(localizer, locale, message), message.fallback)
 }
 

@@ -15,8 +15,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// AttemptRuntimeLease is one node's fenced claim to own one Attempt's
-// runtime. Fence grows with every claim of the Attempt, so a write carrying
+// AttemptRuntimeLease is one node's fenced claim to own one attempt's
+// runtime. Fence grows with every claim of the attempt, so a write carrying
 // an older fence is refused.
 type AttemptRuntimeLease struct {
 	AttemptID model.ExamAttemptID
@@ -26,10 +26,10 @@ type AttemptRuntimeLease struct {
 }
 
 // ErrAttemptRuntimeLeaseLost reports that a lease expired or was taken by
-// another node; its holder must stop acting on the Attempt.
+// another node; its holder must stop acting on the attempt.
 var ErrAttemptRuntimeLeaseLost = errors.New("attempt runtime lease lost")
 
-// AttemptRuntimeLeaseClaim asks for one Attempt's lease for NodeID, held
+// AttemptRuntimeLeaseClaim asks for one attempt's lease for NodeID, held
 // for Lifetime from the database's now.
 type AttemptRuntimeLeaseClaim struct {
 	AttemptID model.ExamAttemptID
@@ -37,7 +37,7 @@ type AttemptRuntimeLeaseClaim struct {
 	Lifetime  time.Duration
 }
 
-// AttemptRuntimeLeaseAvailableClaim asks for up to Limit leases of Attempts
+// AttemptRuntimeLeaseAvailableClaim asks for up to Limit leases of attempts
 // whose environment is not done and whose lease is free.
 type AttemptRuntimeLeaseAvailableClaim struct {
 	NodeID   string
@@ -61,9 +61,9 @@ type AttemptRuntimeLeaseRelease struct {
 // AttemptRuntimeLeaseStore holds the runtime leases. Every decision uses
 // PostgreSQL's clock.
 //
-// Claim takes the Attempt's lease when nobody holds it unexpired, with the
+// Claim takes the attempt's lease when nobody holds it unexpired, with the
 // next fence, and otherwise returns nil. ClaimAvailable claims up to the
-// limit of Attempts whose environment is not done and whose lease is free.
+// limit of attempts whose environment is not done and whose lease is free.
 // Renew extends the exact node and fence before expiry, or fails with
 // ErrAttemptRuntimeLeaseLost. Release deletes the exact node and fence; a
 // lease already lost releases nothing.
@@ -75,9 +75,9 @@ type AttemptRuntimeLeaseStore interface {
 }
 
 // AttemptEnvironmentFactResult is the environment a fact left, and whether
-// the fact changed it. Environment is nil when the fact named an Attempt
-// whose Revision does not enable execution. Changed lists every environment
-// a Sitting fact changed.
+// the fact changed it. Environment is nil when the fact named an attempt
+// whose exam revision does not enable execution. Changed lists every
+// environment a sitting fact changed.
 type AttemptEnvironmentFactResult struct {
 	Environment *model.AttemptEnvironment
 	Changed     []model.ExamAttemptID
@@ -93,23 +93,23 @@ type AttemptEnvironmentOwnerSave struct {
 	Environment      model.AttemptEnvironment
 }
 
-// AttemptEnvironmentStore owns the Attempt Environments.
+// AttemptEnvironmentStore holds attempt environments.
 //
-// ApplyFact applies one committed Attempt or Sitting fact, idempotently and
+// ApplyFact applies one committed attempt or sitting fact, idempotently and
 // in any order:
 //   - participation started creates the environment at the first admission
-//     of a Revision whose execution policy is enabled, copying its profile,
-//     and asks for running unless the Sitting is paused;
+//     of a revision whose execution policy is enabled, copying its profile,
+//     and asks for running unless the sitting is paused;
 //   - participation ended asks for frozen, or for ended when it ended with
-//     the Submission;
-//   - a Sitting pause freezes, and a resume asks for running, every
-//     environment of the Sitting whose Participation is active;
-//   - a Submission asks for ended;
-//   - a closing Sitting asks every environment of the Sitting to settle;
+//     the submission;
+//   - a sitting pause freezes, and a resume asks for running, every
+//     environment of the sitting whose participation is active;
+//   - a submission asks for ended;
+//   - a closing sitting asks every environment of the sitting to settle;
 //   - a fact for a generation older than the environment's changes nothing,
 //     and nothing moves an ended environment back.
 //
-// SaveOwner writes an owner's state when its lease is the Attempt's current
+// SaveOwner writes an owner's state when its lease is the attempt's current
 // unexpired one (otherwise ErrAttemptRuntimeLeaseLost) and the revision is
 // the one it read (otherwise the conflict attempt_environment_revision). It
 // returns the saved environment with the next revision. An owner completes
@@ -118,16 +118,16 @@ type AttemptEnvironmentOwnerSave struct {
 // Replace records a manager's replacement under command idempotency and
 // completes its audit: the environment of another incarnation conflicts with
 // attempt_environment_incarnation, an ended one with
-// attempt_environment_ended, and an Attempt without one is not found. Asking
+// attempt_environment_ended, and an attempt without one is not found. Asking
 // again for the same incarnation changes nothing.
 //
-// RequestSettle asks the Attempt's environment for one more settle and
-// returns its number, or zero when the Attempt has no environment or it has
+// RequestSettle asks the attempt's environment for one more settle and
+// returns its number, or zero when the attempt has no environment or it has
 // ended. RecordSettleIncomplete gives up on settle number Settle when the
 // owner has not finished it: it records an execution.gap {"gap":
 // "settle_incomplete"} by the current incarnation's settle stream and marks
 // the settle complete, so the seal goes ahead. It changes nothing when that
-// settle is already complete or the Attempt has its Submission.
+// settle is already complete or the attempt has its submission.
 type AttemptEnvironmentStore interface {
 	ApplyFact(context.Context, model.AttemptEnvironmentFact) (*AttemptEnvironmentFactResult, error)
 	Get(context.Context, model.ExamAttemptID) (*model.AttemptEnvironment, error)
@@ -142,9 +142,9 @@ type AttemptEnvironmentStore interface {
 const AttemptEnvironmentReplaceOperation = "exam.attempt.environment.replace"
 
 // AttemptEnvironmentReplacement asks the owner to replace the machine of
-// incarnation ExpectedIncarnation with a new one built from the Workspace.
-// The actor must manage the Sitting (or hold its override) and not be the
-// candidate, and the Sitting must not be closing or closed.
+// incarnation ExpectedIncarnation with a new one built from the workspace.
+// The actor must manage the sitting (or hold its override) and not be the
+// candidate, and the sitting must not be closing or closed.
 type AttemptEnvironmentReplacement struct {
 	ExamID              model.ExamID
 	SittingID           model.ExamSittingID

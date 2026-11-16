@@ -64,7 +64,7 @@ func TestLoginRejectsExistingLocalCredentialWhenCurrentPolicyDisablesLocalLogin(
 		User: &model.User{Username: "policy-user", Email: "policy-user@example.edu"}, Password: "CorrectHorseBatteryStaple1!",
 	})
 	require.NoError(t, err)
-	service.accessPolicy = authenticationAccessPolicyFake{local: false}
+	service.accessPolicy = accessPolicyTerms{local: false}.reader(t)
 	result, err := service.Login(context.Background(), invocation.Invocation{}, LoginCommand{
 		LoginID: user.Email, Password: "CorrectHorseBatteryStaple1!", ClientType: model.SessionClientWeb, Source: "192.0.2.5",
 	})
@@ -124,7 +124,7 @@ func TestLoginPasswordCapacityPreservesAccountParity(t *testing.T) {
 			case "missing credential":
 				delete(persistence.passwords, user.ID.String())
 			case "local login disabled":
-				service.accessPolicy = authenticationAccessPolicyFake{local: false}
+				service.accessPolicy = accessPolicyTerms{local: false}.reader(t)
 			case "invalid login":
 				command.LoginID = ""
 			case "oversized password":

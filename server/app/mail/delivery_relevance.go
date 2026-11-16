@@ -14,9 +14,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// DeliveryIsRelevant reports whether delivery should still be sent. The
-// delivery Jobs ask before each attempt and the operator retry asks before it
-// requeues.
+// DeliveryIsRelevant reports whether delivery should still be sent. Delivery
+// jobs ask before each attempt and operator retry asks before it requeues.
 func DeliveryIsRelevant(ctx context.Context, delivery *model.MailDelivery) (bool, error) {
 	relevance, err := evaluateDeliveryRelevance(ctx, delivery)
 	return relevance == deliveryRelevant, err
@@ -29,9 +28,8 @@ const (
 	deliveryObsolete
 )
 
-// evaluateDeliveryRelevance is the closed typed policy seam used before
-// automatic and operator attempts. Each future template family must add an
-// explicit authoritative check rather than defaulting to send.
+// evaluateDeliveryRelevance must get an explicit check for every new template
+// family rather than defaulting to send.
 func evaluateDeliveryRelevance(_ context.Context, delivery *model.MailDelivery) (deliveryRelevance, error) {
 	if delivery == nil || delivery.Validate() != nil {
 		return 0, errors.New("mail delivery relevance target is invalid")
@@ -84,10 +82,9 @@ func evaluateDeliveryRelevance(_ context.Context, delivery *model.MailDelivery) 
 		model.MailTemplateExamSubmissionManagerEnded,
 		model.MailTemplateExamSubmissionAutomaticallySealed,
 		model.MailTemplateExamResultReleased:
-		// Purpose-bound credential deliveries and retention grace notices
-		// receive their authoritative multi-node relevance fence in
-		// MailStore.StartDelivery. The remaining immutable notifications are
-		// relevant until their deadline.
+		// Credential deliveries and retention grace notices get their
+		// multi-node relevance fence in MailStore.StartDelivery. The other
+		// immutable notifications are relevant until their deadline.
 		return deliveryRelevant, nil
 	default:
 		return 0, errors.New("mail delivery relevance policy is unavailable")

@@ -19,6 +19,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -26,7 +27,7 @@ import (
 
 func TestSittingMailExpansionPagesLargeRosterCheckpointsAndIsolatesOneRecipientConflict(t *testing.T) {
 	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
-	preparer, err := mail.NewSittingComposer(mail.SittingComposerDependencies{Renderer: sittingMailRendererFake{}, Sender: &mailSenderFake{enabled: true,
+	preparer, err := mail.NewSittingComposer(mail.SittingComposerDependencies{Renderer: mailtest.NewRenderer(t), Sender: &mailSenderFake{enabled: true,
 		from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}}, Sealer: mailTestSealer(t), Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(),
@@ -65,7 +66,7 @@ func TestSittingMailExpansionPagesLargeRosterCheckpointsAndIsolatesOneRecipientC
 
 func TestSittingMailExpansionLeaseLossReplaysRecipientCommitsWithoutDuplicates(t *testing.T) {
 	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
-	preparer, err := mail.NewSittingComposer(mail.SittingComposerDependencies{Renderer: sittingMailRendererFake{}, Sender: &mailSenderFake{enabled: true,
+	preparer, err := mail.NewSittingComposer(mail.SittingComposerDependencies{Renderer: mailtest.NewRenderer(t), Sender: &mailSenderFake{enabled: true,
 		from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}}, Sealer: mailTestSealer(t), Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(),
@@ -91,20 +92,6 @@ func TestSittingMailExpansionLeaseLossReplaysRecipientCommitsWithoutDuplicates(t
 	require.Equal(t, prepared.Occurrence.ID, persistence.completed, "second outcome=%#v completed=%s inserted=%d commits", second, persistence.completed, len(persistence.inserted))
 	require.Len(t, persistence.inserted, len(users), "second outcome=%#v completed=%s inserted=%d commits", second, persistence.completed, len(persistence.inserted))
 	require.Len(t, persistence.commits, len(users)*2, "second outcome=%#v completed=%s inserted=%d commits", second, persistence.completed, len(persistence.inserted))
-}
-
-type sittingMailRendererFake struct{}
-
-func (sittingMailRendererFake) SittingLocales() (string, []string) { return "en", []string{"en"} }
-
-func (sittingMailRendererFake) Render(request mail.RenderRequest) (mail.FrozenContent, error) {
-	details, ok := request.Presentation.(mail.SittingScheduleDetails)
-	if !ok {
-		return mail.FrozenContent{}, nil
-	}
-	key := request.Key
-	return mail.FrozenContent{Subject: string(key), Text: details.ExamTitle + " " + details.ClassDisplayName,
-		HTML: "<p>" + details.ExamTitle + " " + details.ClassDisplayName + "</p>"}, nil
 }
 
 type mailSenderFake struct {
@@ -210,7 +197,7 @@ func (f *sittingMailExpansionStoreFake) CompleteMailExpansion(_ context.Context,
 
 func TestSittingMailExpansionSkipsAnUnaddressableRecipientAndReachesLaterOnes(t *testing.T) {
 	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
-	preparer, err := mail.NewSittingComposer(mail.SittingComposerDependencies{Renderer: sittingMailRendererFake{}, Sender: &mailSenderFake{enabled: true,
+	preparer, err := mail.NewSittingComposer(mail.SittingComposerDependencies{Renderer: mailtest.NewRenderer(t), Sender: &mailSenderFake{enabled: true,
 		from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}}, Sealer: mailTestSealer(t), Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(),

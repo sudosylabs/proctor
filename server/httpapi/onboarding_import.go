@@ -9,48 +9,18 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"io"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// OnboardingImportApplication is the application port its handlers call; it
-// uploads, commits, cancels and reports onboarding imports.
-type OnboardingImportApplication interface {
-	UploadOnboardingImport(
-		context.Context,
-		invocation.Invocation,
-		onboarding.UploadOnboardingImportCommand,
-	) (onboarding.OnboardingImportView, error)
-	GetOnboardingImport(
-		context.Context,
-		invocation.Invocation,
-		model.OnboardingImportID,
-	) (onboarding.OnboardingImportView, []onboarding.OnboardingImportRowView, error)
-	ListOnboardingImports(
-		context.Context,
-		invocation.Invocation,
-		onboarding.ListOnboardingImportsQuery,
-	) (paging.Page[onboarding.OnboardingImportView], error)
-	CommitOnboardingImport(
-		context.Context,
-		invocation.Invocation,
-		onboarding.CommitOnboardingImportCommand,
-	) (onboarding.OnboardingImportView, error)
-	CancelOnboardingImport(context.Context, invocation.Invocation, model.OnboardingImportID) (onboarding.OnboardingImportView, error)
-	OnboardingImportReport(context.Context, invocation.Invocation, model.OnboardingImportID, io.Writer) error
-}
-
-type onboardingImportHandlers struct{ app OnboardingImportApplication }
+type onboardingImportHandlers struct{ app *onboarding.Service }
 
 type onboardingImportCommitRequest struct {
 	ExpectedRevision int64  `json:"expected_revision"`
@@ -131,7 +101,7 @@ type onboardingImportRowResponse struct {
 	ResourceID   string `json:"resource_id,omitempty"`
 }
 
-func onboardingImportResource(app OnboardingImportApplication) route.Resource {
+func onboardingImportResource(app *onboarding.Service) route.Resource {
 	h := onboardingImportHandlers{app: app}
 	return route.NewResource("onboarding-imports",
 		route.Endpoint{

@@ -27,23 +27,21 @@ type AttemptCache interface {
 }
 
 const (
-	// Attempt inputs are hashed rather than retained, but still need an
-	// application-owned work bound because accounting deliberately precedes
-	// credential validation in enumeration-resistant flows.
+	// Attempt inputs are hashed, not kept, but still need a size bound:
+	// accounting runs before credential validation so flows resist
+	// enumeration.
 	maxAuthenticationAttemptIdentityBytes  = 4 << 10
 	maxAuthenticationAttemptSourceBytes    = 4 << 10
 	maxAuthenticationAttemptQualifierBytes = 256
 )
 
-// AttemptAccountingDependencies are the collaborators of AttemptAccounting;
-// NewAttemptAccounting validates them once and AttemptAccounting keeps them in deps.
+// AttemptAccountingDependencies holds the required attempt cache.
 type AttemptAccountingDependencies struct {
 	Cache AttemptCache
 }
 
-// AttemptAccounting owns the disposable mechanics shared by
-// authentication attempt policies. It is deliberately stateless: callers own
-// which dimensions and limits apply to each use case.
+// AttemptAccounting counts attempts in a disposable cache. It is deliberately
+// stateless: each caller picks the dimensions and limits for its flow.
 type AttemptAccounting struct {
 	deps AttemptAccountingDependencies
 }
@@ -58,7 +56,7 @@ const (
 	authenticationAttemptPurposeExternalAuthentication
 	authenticationAttemptPurposeInstallationBootstrap
 	authenticationAttemptPurposeMailTest
-	// AttemptPurposeInvitation counts Invitation claim acceptance.
+	// AttemptPurposeInvitation counts invitation claim acceptance.
 	AttemptPurposeInvitation
 	authenticationAttemptPurposeDesktopAuthorization
 	// AttemptPurposePublicRegistration counts public self-registration.
@@ -101,9 +99,8 @@ const (
 	authenticationAttemptDimensionIdentity
 	authenticationAttemptDimensionSource
 	// authenticationAttemptDimensionAccountFailure counts only failed
-	// credential verifications against one resolved account (or, when no
-	// account resolves, one normalized identifier). It never refuses an
-	// attempt; callers derive a progressive delay from it.
+	// verifications against one account, or one normalized identifier when
+	// none resolves. It never refuses; callers derive a progressive delay.
 	authenticationAttemptDimensionAccountFailure
 )
 
@@ -138,14 +135,13 @@ type authenticationAttemptIntent struct {
 	limits    []AttemptLimit
 }
 
-// authenticationAttemptReceipt intentionally exposes no cache key. A caller
-// may use it only to ask the accounting module to reset a dimension selected
-// by that caller's successful-action policy.
+// authenticationAttemptReceipt deliberately hides its cache keys; a caller can
+// only ask accounting to reset one dimension after a success.
 type authenticationAttemptReceipt struct {
 	keys map[authenticationAttemptDimension]string
 }
 
-// NewAttemptAccounting builds the accounting over the attempt cache.
+// NewAttemptAccounting fails when the cache is missing.
 func NewAttemptAccounting(deps AttemptAccountingDependencies) (*AttemptAccounting, error) {
 	if deps.Cache == nil {
 		return nil, errors.New("authentication attempt cache is required")
@@ -196,9 +192,8 @@ func SourceAttemptLimit(source string, maximum int) AttemptLimit {
 	return AttemptLimit{dimension: authenticationAttemptDimensionSource, maximum: maximum, source: source}
 }
 
-// Account counts one attempt of purpose and qualifier against every limit
-// within window, and reports whether any limit is now exceeded. The
-// onboarding area uses it for Invitations and public registration.
+// Account counts one attempt against every limit within window and reports
+// whether any limit is now exceeded.
 func (a *AttemptAccounting) Account(
 	ctx context.Context,
 	purpose AttemptPurpose,
@@ -211,8 +206,7 @@ func (a *AttemptAccounting) Account(
 }
 
 // AccountMailTest counts one administrator test mail sent by userID and
-// reports whether that User has now sent more than maximum within window. It
-// is the rate limit the operator mail service in app/mail holds.
+// reports whether that user has now sent more than maximum within window.
 func (a *AttemptAccounting) AccountMailTest(
 	ctx context.Context,
 	userID model.UserID,
@@ -237,14 +231,12 @@ func (a *AttemptAccounting) reset(
 	return a.deps.Cache.Delete(ctx, key)
 }
 
-// authenticationFailureSubject names one failure counter without exposing its
-// cache key.
 type authenticationFailureSubject struct {
 	key string
 }
 
-// failureSubject derives the failure counter for one subject. The subject is
-// domain-separated by purpose and hashed like every other attempt key.
+// failureSubject domain-separates the subject by purpose and hashes it like
+// every other attempt key.
 func (a *AttemptAccounting) failureSubject(
 	purpose AttemptPurpose,
 	subject string,
@@ -261,8 +253,7 @@ func (a *AttemptAccounting) failureSubject(
 	}, nil
 }
 
-// failures reports the failures recorded for subject in its current fixed
-// window without recording another.
+// failures adds zero so it reads the count without recording another.
 func (a *AttemptAccounting) failures(
 	ctx context.Context,
 	subject authenticationFailureSubject,
@@ -274,7 +265,6 @@ func (a *AttemptAccounting) failures(
 	return a.deps.Cache.Add(ctx, subject.key, 0, window)
 }
 
-// recordFailure counts one failed verification for subject.
 func (a *AttemptAccounting) recordFailure(
 	ctx context.Context,
 	subject authenticationFailureSubject,
@@ -287,7 +277,6 @@ func (a *AttemptAccounting) recordFailure(
 	return err
 }
 
-// clearFailures forgets the failures recorded for subject.
 func (a *AttemptAccounting) clearFailures(
 	ctx context.Context,
 	subject authenticationFailureSubject,

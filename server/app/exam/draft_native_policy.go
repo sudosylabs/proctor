@@ -26,9 +26,9 @@ type ConfigureDraftNativePolicyCommand struct {
 	IdempotencyKey        string
 }
 
-// ConfigureExamDraftNativePolicy idempotently replaces the native security
-// policy of the Exam Draft, fenced by ExpectedDraftRevision. The policy must
-// validate as part of an otherwise default Exam Policy Set.
+// ConfigureExamDraftNativePolicy idempotently replaces the draft's native
+// security policy, fenced by ExpectedDraftRevision. The policy must validate
+// inside an otherwise default policy set.
 func (a *Authoring) ConfigureExamDraftNativePolicy(
 	ctx context.Context,
 	inv invocation.Invocation,

@@ -8,19 +8,18 @@
 package route
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/logging"
 )
 
-// prepareOperation gathers what the middleware attached to the request into
-// the value an operation receives. It answers the request itself and reports
-// false when the route requires a Principal the request does not carry, or
-// the path parameters are missing.
+// prepareOperation answers the request itself and reports false when the
+// route requires a principal the request lacks, or path parameters are
+// missing.
 func (a *API) prepareOperation(
 	writer http.ResponseWriter,
 	request *http.Request,
@@ -61,8 +60,7 @@ func (a *API) writeOperationError(
 	retryInProgress bool,
 ) {
 	headers, cause := responseErrorParts(err)
-	var failure applicationFailure
-	if retryInProgress && errors.As(cause, &failure) && failure.Code() == "idempotency.in_progress" {
+	if retryInProgress && apperror.Is(cause, "idempotency.in_progress") {
 		if headers == nil {
 			headers = make(http.Header)
 		}
@@ -158,6 +156,8 @@ func (a *API) protocolOperationHandler(
 			return
 		}
 
+		// Only after prepareOperation has authenticated the request, so an
+		// anonymous client cannot hold a connection open for a large upload.
 		if definition.ProtocolKind == ProtocolStreamingUpload {
 			if err := a.transferDeadlines.extendForUpload(writer, request.ContentLength, definition.MaxBodyBytes); err != nil {
 				a.logger.ErrorContext(request.Context(), "extend upload transfer deadline", logging.Err(err))

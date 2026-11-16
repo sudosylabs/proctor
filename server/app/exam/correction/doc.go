@@ -5,15 +5,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package correction changes an Open or Paused Sitting while it runs: its
-// Exam Instructions, browser policy, or Exam Resources. New Resource content
-// is staged and verified first; applying the correction then publishes a new
-// immutable Exam Revision for the Sitting instead of editing the old one.
-//
-// The package does not edit Drafts, admit Attempts, or deliver the corrected
-// Exam to candidates; attempt shows candidates the correction and records
-// their acknowledgement. An applied correction is announced to the Sitting's
-// managers and candidates by the events built in effects.go. It imports only
-// model, store, app/access, app/apperror, app/invocation, app/idempotency,
-// app/realtime and app/exam/manageraccess. Start with Service in correction.go.
+// Package correction changes the instructions, browser policy or resources of
+// an open or paused sitting while it runs. New resource content is staged and
+// verified first; applying the correction then publishes a new immutable exam
+// revision for the sitting instead of editing the old one. Showing candidates
+// the correction and recording their acknowledgement belongs to attempt.
 package correction

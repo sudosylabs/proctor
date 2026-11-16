@@ -21,9 +21,8 @@ const (
 	browserAuthenticationMaintenanceInterval     = time.Minute
 )
 
-// browserAuthenticationMaintenance performs one bounded runtime
-// pass. Every node may run it: PostgreSQL row claiming converges safely without
-// a durable Job, Attempt, occurrence, or permanent deduplication-ledger row.
+// browserAuthenticationMaintenance runs one bounded pass. Every node may run
+// it: row claiming in the store converges safely without a durable job.
 type browserAuthenticationMaintenance struct {
 	transactions store.BrowserAuthenticationStore
 }

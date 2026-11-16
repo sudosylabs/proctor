@@ -266,7 +266,7 @@ func (r *runner) populate() error {
 		}
 
 		if i == 0 {
-			// Preserve an actual ended enrollment in a different Academic Period.
+			// Keep one genuinely ended enrollment in a different academic period.
 			pastStart := r.state.StartedAt.AddDate(-1, -2, 0).UTC().Truncate(time.Millisecond)
 			historyUser := teachers[0].UserID
 			pastPath := "/api/v1/users/" + historyUser + "/affiliations"
@@ -432,7 +432,7 @@ func (r *runner) invitedAccount(key string, p person, kind, scope, role string) 
 		return nil, err
 	}
 
-	// An accepted Invitation is authoritative when the acceptance response was lost.
+	// An accepted invitation is authoritative when the acceptance response was lost.
 	raw, err := r.get("/api/v1/invitations/"+str(invitation, "id"), admin)
 	if err != nil {
 		return nil, err

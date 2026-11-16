@@ -15,7 +15,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// claimHeartbeat carries the state one claimed attempt's heartbeat loop shares with its execution.
 type claimHeartbeat struct {
 	parent        context.Context
 	handlerCtx    context.Context
@@ -27,8 +26,8 @@ type claimHeartbeat struct {
 	claimLost     chan<- struct{}
 }
 
-// heartbeatClaim renews the attempt's lease and, for cancelable types, observes cancellation on every heartbeat
-// tick until the handler finishes, abandoning the attempt when the claim is lost.
+// heartbeatClaim renews the lease and, for cancelable types, observes
+// cancellation on every tick until the handler finishes.
 func (r *Engine) heartbeatClaim(h claimHeartbeat) {
 	descriptor, claim := h.descriptor, h.claim
 	ticker := time.NewTicker(descriptor.HeartbeatInterval)

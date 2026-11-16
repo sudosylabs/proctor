@@ -132,8 +132,8 @@ func (r *runner) disableAccount(alias string, a *account) error {
 	return r.save()
 }
 
-// Disabled Users are deliberately hidden from exact profile reads. The
-// administrative directory has its own username/ID pagination protocol.
+// Exact profile reads deliberately hide disabled users, so this pages through
+// the administrative directory instead.
 func (r *runner) administrativeUser(id string) (json.RawMessage, error) {
 	query := url.Values{"include_disabled": {"true"}, "limit": {"200"}}
 	for page := 0; page < 100; page++ {

@@ -8,11 +8,9 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -75,10 +73,10 @@ type updateInstitutionRequest struct {
 }
 
 type institutionHandlers struct {
-	app InstitutionApplication
+	app *academic.Service
 }
 
-func institutionResource(app InstitutionApplication) route.Resource {
+func institutionResource(app *academic.Service) route.Resource {
 	h := institutionHandlers{app: app}
 	return route.NewResource(
 		"institution",
@@ -179,10 +177,4 @@ func institutionResponseFromModel(institution *model.Institution) institutionRes
 		Description:  institution.Description,
 		ExamCapacity: examCapacityPolicyResponseFromModel(institution.ExamCapacity),
 	}
-}
-
-// InstitutionApplication is the application port its handlers call; it reads and updates the Institution.
-type InstitutionApplication interface {
-	GetInstitution(context.Context, invocation.Invocation) (*model.Institution, error)
-	UpdateInstitution(context.Context, invocation.Invocation, academic.UpdateInstitutionCommand) (*model.Institution, error)
 }

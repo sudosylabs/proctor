@@ -9,10 +9,11 @@ package exam
 
 import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/operational"
 )
 
-// publicFailures presents every Exam authoring, publication, records, and export use-case failure: unexpected errors
-// become exam.unavailable, and protected targets conceal denial and absence.
+// publicFailures turns unexpected errors into exam.unavailable and reports
+// denial as exam.not_found, so callers cannot probe for exams.
 var publicFailures = apperror.Concealment{
 	Unavailable: "exam.unavailable",
 	Concealed:   []apperror.Code{"exam.not_found"},
@@ -43,18 +44,18 @@ var examStoreErrors = apperror.StoreTable{
 
 func (a *Authoring) recordOperational(event string, err error) {
 	if a.operational != nil {
-		a.operational.RecordOperational("exam", event, err)
+		operational.Record(a.operational, "exam", event, err)
 	}
 }
 
 func (p *Publication) recordOperational(event string, err error) {
 	if p.operational != nil {
-		p.operational.RecordOperational("exam", event, err)
+		operational.Record(p.operational, "exam", event, err)
 	}
 }
 
-// examRecordsStoreErrors conceals an authorization refusal discovered by the
-// Store as an absent Exam.
+// examRecordsStoreErrors reports an authorization refusal found by the store
+// as a missing exam.
 var examRecordsStoreErrors = examStoreErrors.With(
 	apperror.StoreRule{Kind: apperror.StoreConflict, Entity: "authorization", Code: "exam.not_found"})
 

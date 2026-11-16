@@ -34,7 +34,10 @@ func TestCreateStagesVerifiedBytesBeforeAuditAndAtomicVisibility(t *testing.T) {
 	// Contract: authorization precedes the reservation, verified bytes are stored
 	// inside the reservation before the audit begins (guardrail 8) and the
 	// atomic finalization commits before its effect (guardrail 14).
-	require.Equal(t, []string{"access", "membership", "authorize", "list", "reserve", "content.store", "audit.begin", "finalize", "effect"}, f.order)
+	require.Equal(t, []string{
+		"access", "membership", "grants", "decision:exam.manage:success",
+		"list", "reserve", "content.store", "audit-begin:exam.manage", "finalize", "effect",
+	}, f.order)
 	// Contract: the committed create publishes exactly one Draft update, at the
 	// revision the Store committed.
 	require.Equal(t, []realtimetest.Call{draftUpdated(t, f.examID, 2)}, f.publisher.Calls())
@@ -56,7 +59,7 @@ func TestCreateInvalidContentRemainsInvisibleAndUnaudited(t *testing.T) {
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.resource.content_invalid", fault.Code())
 	require.Nil(t, f.persistence.finalization, "partial visibility/audit: finalize")
-	require.False(t, f.auditor.began, "partial visibility/audit: finalize")
+	require.False(t, f.auditBegan(), "partial visibility/audit: finalize")
 }
 
 func TestContentCapacityRefusalRemainsInvisibleAndUnaudited(t *testing.T) {
@@ -78,7 +81,7 @@ func TestContentCapacityRefusalRemainsInvisibleAndUnaudited(t *testing.T) {
 			require.Equal(t, "service.busy", fault.Code())
 			require.ErrorIs(t, err, f.content.storeErr)
 			require.Nil(t, f.persistence.finalization, "partial visibility/audit: finalize")
-			require.False(t, f.auditor.began, "partial visibility/audit: finalize")
+			require.False(t, f.auditBegan(), "partial visibility/audit: finalize")
 			require.Empty(t, f.publisher.Calls(), "partial visibility/audit: finalize")
 		})
 	}
@@ -187,7 +190,7 @@ func TestInvalidMetadataIsRejectedBeforeUploadReservation(t *testing.T) {
 	for _, event := range f.order {
 		require.NotEqual(t, "reserve", event, "invalid metadata caused %q: order=%v", event, f.order)
 		require.NotEqual(t, "content.store", event, "invalid metadata caused %q: order=%v", event, f.order)
-		require.NotEqual(t, "audit.begin", event, "invalid metadata caused %q: order=%v", event, f.order)
+		require.False(t, strings.HasPrefix(event, "audit-begin:"), "invalid metadata caused %q: order=%v", event, f.order)
 	}
 }
 
@@ -197,7 +200,7 @@ func TestCreateUsesExplicitOverrideWhenCurrentManagerMembershipIsAbsent(t *testi
 	f.memberships.items = []*model.AcademicUnitMember{}
 	_, err := f.service.CreateExamResource(context.Background(), f.inv, CreateCommand{ExamID: f.examID, ExpectedDraftRevision: 1, DisplayName: "Reference", MediaType: model.ExamResourceMediaText, Body: strings.NewReader("notes"), Size: 5, ExpectedSHA256: strings.Repeat("a", 64), IdempotencyKey: "test-key"})
 	require.NoError(t, err)
-	require.Equal(t, model.ActionExamManageOverride, f.authorizer.action, "action")
+	require.Equal(t, []model.Action{model.ActionExamManageOverride}, f.decidedActions(), "action")
 	require.NotNil(t, f.persistence.reservation, "action")
 	require.True(t, f.persistence.reservation.ManagerOverride, "action")
 }
@@ -213,6 +216,6 @@ func TestCreateStopsWhenCurrentManagerMembershipCannotBeRead(t *testing.T) {
 	require.Equal(t, "exam.resource.unavailable", fault.Code())
 	require.ErrorIs(t, err, failure)
 	// Without current membership nothing is authorized or reserved.
-	require.Empty(t, f.authorizer.action, "authorized without current membership")
+	require.Empty(t, f.decidedActions(), "authorized without current membership")
 	require.Nil(t, f.persistence.reservation, "reserved without current membership")
 }

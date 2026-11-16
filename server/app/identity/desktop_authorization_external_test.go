@@ -121,10 +121,10 @@ func TestExternalAuthenticationCompletionIsolatesDesktopPurpose(t *testing.T) {
 			service.externalLoginStates = &externalLoginStateStoreFake{get: state, consumeResult: state, storeNow: at}
 			service.externalIdentities, service.invitations = identities, acceptor
 			service.sessions, service.mfaCredentials = sessions, recovery
-			service.accessPolicy = authenticationAccessPolicyFake{providers: map[string]bool{"campus": true}, desktop: true,
-				providerModes: map[string]model.ProviderAdmissionMode{"campus": model.ProviderAdmissionInvitationRequired}}
-			audit := &securityAuditorFake{}
-			service.securityAudit, service.now = audit, func() time.Time { return at }
+			service.accessPolicy = accessPolicyTerms{providers: map[string]bool{"campus": true}, desktop: true,
+				providerModes: map[string]model.ProviderAdmissionMode{"campus": model.ProviderAdmissionInvitationRequired}}.reader(t)
+			audit := newSecurityAuditLog(t, nil)
+			service.securityAudit, service.now = audit.auditor, func() time.Time { return at }
 			result, err := service.CompleteExternalAuthentication(t.Context(), invocation.Invocation{}, CompleteExternalAuthenticationCommand{
 				ProviderID: "campus", Binding: binding,
 			})
@@ -152,7 +152,8 @@ func TestExternalAuthenticationCompletionIsolatesDesktopPurpose(t *testing.T) {
 				require.Equal(t, state.ID, saved.ExternalLoginStateID, "the Session consumes the login state")
 				require.Equal(t, identity.ID, saved.Session.ExternalIdentityID)
 				require.Equal(t, model.HashToken(result.Tokens.AccessToken), saved.Credentials[0].TokenHash, "the returned token is the saved access credential")
-				begun := audit.events[len(audit.events)-1]
+				events := audit.events()
+				begun := events[len(events)-1]
 				require.Equal(t, model.ActionAuthenticationExternalLogin, begun.action, "the Session completes the external sign-in attempt")
 				require.Equal(t, begun.id, saved.AuditEventID, "the Session completes the external sign-in attempt")
 			} else {
@@ -173,12 +174,11 @@ func newDesktopExternalAuthenticationFixture(t *testing.T, transactions *desktop
 	t.Helper()
 	service := newTestDesktopAuthorizationService(t, transactions, time.Now)
 	service.desktopPolicy.Issuer = "https://proctor.example.test"
-	service.accessPolicy = authenticationAccessPolicyFake{local: true, desktop: true, providers: map[string]bool{"campus": true}}
-	events := []string{}
+	service.accessPolicy = accessPolicyTerms{local: true, desktop: true, providers: map[string]bool{"campus": true}}.reader(t)
 	service.externalProviders = externalProviderSourceFake{provider: externalProviderFake{}}
 	service.externalLoginStates, service.externalIdentities = &externalLoginStateStoreFake{}, externalIdentityStoreFake{}
 	service.invalidator, service.invitations = externalInvalidatorFake{}, &externalInvitationAcceptorFake{}
-	service.auditor = &mutationAttemptAuditorFake{events: &events, beginID: model.NewAuditEventID().String()}
+	service.auditor = grantedAccess(t, nil).Auditor.MutationAudit()
 	service.diagnostics = newDiscardLogger(t)
 	service.externalAuthenticationPolicy = ExternalAuthenticationPolicy{PublicURL: "https://proctor.example.test", LoginStateTTL: 5 * time.Minute,
 		LoginRateLimit: LoginRateLimitPolicy{Window: time.Minute, MaximumSourceAttempts: 10}}

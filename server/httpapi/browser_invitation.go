@@ -8,34 +8,11 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 )
-
-// BrowserInvitationApplication is the application port its handlers call; it
-// starts a browser Invitation from its claim and accepts it with a new account
-// or the current Session.
-type BrowserInvitationApplication interface {
-	StartBrowserInvitation(
-		context.Context,
-		invocation.Invocation,
-		onboarding.StartBrowserInvitationCommand,
-	) (*onboarding.BrowserInvitationStart, error)
-	AcceptBrowserInvitation(
-		context.Context,
-		invocation.Invocation,
-		onboarding.BrowserInvitationAcceptanceCommand,
-	) (*onboarding.InvitationAcceptanceView, error)
-	AcceptBrowserInvitationWithSession(
-		context.Context,
-		invocation.Invocation,
-		onboarding.BrowserInvitationSessionAcceptanceCommand,
-	) (*onboarding.InvitationAcceptanceView, error)
-}
 
 type browserInvitationStartRequest struct {
 	Claim string `json:"claim"`
@@ -66,11 +43,11 @@ type browserInvitationSessionAcceptanceRequest struct {
 }
 
 type browserInvitationHandlers struct {
-	app     BrowserInvitationApplication
+	app     *onboarding.Service
 	cookies route.Cookies
 }
 
-func browserInvitationResource(app BrowserInvitationApplication, cookies route.Cookies) route.Resource {
+func browserInvitationResource(app *onboarding.Service, cookies route.Cookies) route.Resource {
 	h := browserInvitationHandlers{app: app, cookies: cookies}
 	return route.NewResource(
 		"browser-invitations",

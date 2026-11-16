@@ -21,9 +21,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// AcceptScopedRole consumes the pending Academic Unit or Institution Role
-// Invitation named by the claim hash for an existing User, granting its Role
-// Binding, or replays an accepted one.
+// AcceptScopedRole consumes the pending academic unit or institution role
+// invitation named by the claim hash for an existing user, granting its role
+// binding, or replays an accepted one.
 func (s SQLInvitationStore) AcceptScopedRole(
 	ctx context.Context,
 	input *store.ScopedRoleInvitationAcceptance,
@@ -505,7 +505,7 @@ func resolveInvitationUser(
 				return nil, revisionErr
 			}
 
-			// at is PostgreSQL time while the User may carry a leading node clock.
+			// at is PostgreSQL time while the user may carry a leading node clock.
 			if _, updateErr := tx.Exec(
 				ctx,
 				`UPDATE users
@@ -1074,8 +1074,8 @@ func replayTeacherAcademicUnitInvitation(
 	}, nil
 }
 
-// AcceptStudentClass consumes the pending student Class Invitation named by
-// the claim hash, granting the student Affiliation and Class membership, or
+// AcceptStudentClass consumes the pending student class invitation named by
+// the claim hash, granting the student affiliation and class membership, or
 // replays an accepted one.
 func (s SQLInvitationStore) AcceptStudentClass(
 	ctx context.Context,
@@ -1098,7 +1098,6 @@ func (s SQLInvitationStore) AcceptStudentClass(
 	})
 }
 
-// acceptStudentClassInvitation consumes a claimed student Class Invitation inside the acceptance transaction.
 func acceptStudentClassInvitation(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -1167,7 +1166,6 @@ func acceptStudentClassInvitation(
 	}, nil
 }
 
-// lockInvitationRowByClaim reads the Invitation that owns a claim hash under a row lock.
 func lockInvitationRowByClaim(ctx context.Context, tx *sqlxTxWrapper, claimHash string) (invitationRow, error) {
 	var row invitationRow
 	if err := tx.Get(ctx, &row, `SELECT `+invitationColumns+`
@@ -1179,7 +1177,7 @@ func lockInvitationRowByClaim(ctx context.Context, tx *sqlxTxWrapper, claimHash 
 	return row, nil
 }
 
-// requirePendingInvitation rejects an Invitation that is no longer pending or whose admission window has closed.
+// requirePendingInvitation rejects an invitation that is no longer pending or whose admission window has closed.
 func requirePendingInvitation(invitation *model.Invitation, databaseNow time.Time) error {
 	if invitation.State != model.InvitationPending ||
 		!databaseNow.Before(invitation.ExpiresAt) ||
@@ -1190,7 +1188,6 @@ func requirePendingInvitation(invitation *model.Invitation, databaseNow time.Tim
 	return nil
 }
 
-// replayStudentClassInvitationAcceptance returns the recorded result of an already accepted student Class Invitation.
 func replayStudentClassInvitationAcceptance(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -1245,7 +1242,7 @@ func lockStudentClassInvitationAcceptancePaths(
 	return nil
 }
 
-// consumeStudentClassInvitation marks a pending student Class Invitation accepted under its revision fence.
+// consumeStudentClassInvitation marks a pending student class invitation accepted under its revision fence.
 func consumeStudentClassInvitation(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -1285,7 +1282,6 @@ func consumeStudentClassInvitation(
 	return suppressInvitationCredentialMail(ctx, tx, invitation.ID, model.MailDeliveryObsoleteCode, databaseNow)
 }
 
-// recordStudentClassInvitationAcceptance queues the acceptance mail, inserts the audit event and completes the browser transaction.
 func recordStudentClassInvitationAcceptance(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -1314,7 +1310,6 @@ func recordStudentClassInvitationAcceptance(
 	return completeBrowserInvitationTransaction(ctx, tx, input.BrowserTransaction, invitation, userID)
 }
 
-// invitationAcceptanceAuditEvent clones the prepared acceptance audit event with the accepting User and the accepted Invitation.
 func invitationAcceptanceAuditEvent(
 	prepared *model.AuditEvent,
 	invitation *model.Invitation,
@@ -1331,9 +1326,9 @@ func invitationAcceptanceAuditEvent(
 	return event, nil
 }
 
-// AcceptTeacherAcademicUnit consumes the pending teacher Academic Unit
-// Invitation named by the claim hash, granting the teacher Affiliation,
-// membership and Role Binding, or replays an accepted one.
+// AcceptTeacherAcademicUnit consumes the pending teacher academic unit
+// invitation named by the claim hash, granting the teacher affiliation,
+// membership and role binding, or replays an accepted one.
 func (s SQLInvitationStore) AcceptTeacherAcademicUnit(
 	ctx context.Context,
 	input *store.TeacherAcademicUnitInvitationAcceptance,
@@ -1355,7 +1350,6 @@ func (s SQLInvitationStore) AcceptTeacherAcademicUnit(
 	})
 }
 
-// acceptTeacherAcademicUnitInvitation consumes a claimed teacher Academic Unit Invitation inside the acceptance transaction.
 func acceptTeacherAcademicUnitInvitation(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -1447,7 +1441,6 @@ func acceptTeacherAcademicUnitInvitation(
 	}, nil
 }
 
-// replayTeacherAcademicUnitInvitationAcceptance returns the recorded result of an already accepted teacher Invitation.
 func replayTeacherAcademicUnitInvitationAcceptance(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -1465,7 +1458,7 @@ func replayTeacherAcademicUnitInvitationAcceptance(
 	return result, nil
 }
 
-// lockTeacherAcademicUnitInvitationAcceptancePaths takes the locks a teacher acceptance needs and reports whether the invited User already exists.
+// lockTeacherAcademicUnitInvitationAcceptancePaths takes the locks a teacher acceptance needs and reports whether the invited user already exists.
 func lockTeacherAcademicUnitInvitationAcceptancePaths(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -1504,7 +1497,7 @@ func lockTeacherAcademicUnitInvitationAcceptancePaths(
 	return existingUser, nil
 }
 
-// consumeTeacherAcademicUnitInvitation marks a pending teacher Invitation accepted under its revision fence.
+// consumeTeacherAcademicUnitInvitation marks a pending teacher invitation accepted under its revision fence.
 func consumeTeacherAcademicUnitInvitation(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -1555,7 +1548,6 @@ func consumeTeacherAcademicUnitInvitation(
 	return suppressInvitationCredentialMail(ctx, tx, invitation.ID, model.MailDeliveryObsoleteCode, databaseNow)
 }
 
-// recordTeacherAcademicUnitInvitationAcceptance queues a new User's acceptance mail, inserts the audit event and completes the browser transaction.
 func recordTeacherAcademicUnitInvitationAcceptance(
 	ctx context.Context,
 	tx *sqlxTxWrapper,

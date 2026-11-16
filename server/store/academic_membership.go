@@ -14,9 +14,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// MembershipOrder names the order of an Academic Unit or Class membership
-// page: by the membership's start (the zero value) or by the member's
-// presented name (users.sort_name), each then by membership ID.
+// MembershipOrder is the order of a membership page: by start (the zero
+// value) or by the member's users.sort_name, each then by membership ID.
 type MembershipOrder string
 
 const (
@@ -74,18 +73,17 @@ type ClassMemberPage struct {
 	HasMore bool
 }
 
-// ClassStudentCount is the number of current members of one Class, stopped
-// at the bound its read was given.
+// ClassStudentCount is the number of current members of one class, capped at
+// the maximum its read was given.
 type ClassStudentCount struct {
 	ClassID model.ClassID
 	Count   int
 }
 
-// MaximumClassStudentCountClasses bounds one CountCurrentByClasses read: a
-// page of Classes.
+// MaximumClassStudentCountClasses is the most classes one
+// CountCurrentByClasses read accepts: one page.
 const MaximumClassStudentCountClasses = 200
 
-// AffiliationStore persists non-exclusive institution relationships.
 type AffiliationCreation struct {
 	Affiliation  *model.Affiliation
 	AuditEventID model.AuditEventID
@@ -106,6 +104,7 @@ type AffiliationEnd struct {
 	NoOp             bool
 }
 
+// AffiliationStore persists institution affiliations; a user may hold several.
 type AffiliationStore interface {
 	Create(context.Context, *AffiliationCreation) (*model.Affiliation, error)
 	End(context.Context, *AffiliationEnd) (*model.Affiliation, error)
@@ -115,7 +114,6 @@ type AffiliationStore interface {
 	ListActiveByUser(ctx context.Context, userID model.UserID, at time.Time) ([]*model.Affiliation, error)
 }
 
-// AcademicUnitMemberStore persists organizational membership without roles.
 type AcademicUnitMemberCreation struct {
 	Member                    *model.AcademicUnitMember
 	ExpectedRecipientRevision int64
@@ -140,6 +138,8 @@ type AcademicUnitMemberEnd struct {
 	NoOp                      bool
 }
 
+// AcademicUnitMemberStore persists academic unit membership, which grants no
+// role.
 type AcademicUnitMemberStore interface {
 	Create(context.Context, *AcademicUnitMemberCreation) (*model.AcademicUnitMember, error)
 	End(context.Context, *AcademicUnitMemberEnd) (*model.AcademicUnitMember, error)
@@ -153,8 +153,8 @@ type AcademicUnitMemberStore interface {
 	// ignoring the keyset, order, and limit, and stops at maximum (see
 	// MaximumListCount).
 	CountPageByAcademicUnit(context.Context, AcademicUnitMemberPageOptions, int) (int, error)
-	// ListActiveByUser uses UTC microsecond precision and the interval [start, end).
-	// Archived memberships are excluded; no active memberships is an empty list.
+	// ListActiveByUser compares at UTC microsecond precision over [start, end)
+	// and excludes archived memberships.
 	ListActiveByUser(context.Context, model.UserID, time.Time) ([]*model.AcademicUnitMember, error)
 }
 
@@ -163,9 +163,8 @@ type ClassEnrollmentResult struct {
 	Previous   *model.ClassMember
 }
 
-// ClassMemberEnrollment is the complete durable input for an enrollment or
-// transfer and its already-persisted mutation audit. A transfer closes the
-// previous membership and creates Member in the same transaction.
+// ClassMemberEnrollment is the input of an enrollment or transfer. A transfer
+// ends the previous membership and creates Member in the same transaction.
 type ClassMemberEnrollment struct {
 	Member                             *model.ClassMember
 	ExpectedPreviousID                 model.ClassMemberID
@@ -195,7 +194,7 @@ type ClassMemberEnd struct {
 	NoOp                      bool
 }
 
-// ClassMemberStore owns transactional student enrollment and history.
+// ClassMemberStore persists student enrollment and its history.
 type ClassMemberStore interface {
 	Enroll(context.Context, *ClassMemberEnrollment) (*ClassEnrollmentResult, error)
 	End(context.Context, *ClassMemberEnd) (*model.ClassMember, error)
@@ -204,13 +203,13 @@ type ClassMemberStore interface {
 	ListByClass(ctx context.Context, classID model.ClassID, at time.Time) ([]*model.ClassMember, error)
 	ListPageByClass(context.Context, ClassMemberPageOptions) (*ClassMemberPage, error)
 	// CountPageByClass counts the memberships ListPageByClass would return
-	// across every page for the same Class and ActiveAt, ignoring the keyset,
+	// across every page for the same class and ActiveAt, ignoring the keyset,
 	// order, and limit, and stops at maximum (see MaximumListCount).
 	CountPageByClass(context.Context, ClassMemberPageOptions, int) (int, error)
-	// CountCurrentByClasses counts the memberships of each listed Class
-	// current at the instant, each stopped at maximum (see MaximumListCount),
-	// in one statement. At most MaximumClassStudentCountClasses distinct
-	// Classes are read; a Class with no current member has no entry.
+	// CountCurrentByClasses counts each listed class's memberships current at
+	// the instant, each capped at maximum (see MaximumListCount). At most
+	// MaximumClassStudentCountClasses distinct classes are read; a class with
+	// no current member has no entry.
 	CountCurrentByClasses(ctx context.Context, classIDs []model.ClassID, at time.Time, maximum int) ([]ClassStudentCount, error)
 	ListActiveByUser(ctx context.Context, userID model.UserID, at time.Time) ([]*model.ClassMember, error)
 	// SeedEnroll and SeedEnd are unaudited fixture writes for conformance and
@@ -219,7 +218,7 @@ type ClassMemberStore interface {
 	SeedEnd(context.Context, *ClassMemberSeedEnd) (*model.ClassMember, error)
 }
 
-// ClassMemberSeedEnd is the input to ClassMemberStore.SeedEnd.
+// ClassMemberSeedEnd is the input of ClassMemberStore.SeedEnd, a test-only write.
 type ClassMemberSeedEnd struct {
 	ID               model.ClassMemberID
 	ExpectedRevision int64

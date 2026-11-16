@@ -15,9 +15,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// A recovery projection is deliberately obtained after the failed transaction.
-// Every read repeats current ownership checks. Read failures preserve the original
-// refusal without disclosing a cached or client-selected owner's state.
+// The recovery projection is read after the failed transaction, repeating
+// current ownership checks. A read failure keeps the original refusal and
+// discloses no cached or client-selected owner's state.
 func (s *Service) nativeDeliveryFailure(ctx context.Context, deliveryAccess store.NativeDeliveryAccess, err error) error {
 	mapped := deliveryStoreError(err)
 	var fault *apperror.Error
@@ -71,8 +71,8 @@ func withDeliveryRecovery(fault *apperror.Error, recovery model.DeliveryRecovery
 }
 
 // deliveryRecoveryCause carries validated, freshly authorized progress in the
-// application error's cause chain. Transports find it with errors.As and
-// attach it only to the failure codes that SupportsDeliveryRecovery admits.
+// error's cause chain. Transports attach it only to the codes that
+// SupportsDeliveryRecovery admits.
 type deliveryRecoveryCause struct {
 	recovery model.DeliveryRecovery
 	cause    error
@@ -87,13 +87,13 @@ func (c deliveryRecoveryCause) Error() string {
 
 func (c deliveryRecoveryCause) Unwrap() error { return c.cause }
 
-// DeliveryRecovery exposes only validated, freshly authorized progress.
 func (c deliveryRecoveryCause) DeliveryRecovery() *model.DeliveryRecovery {
 	recovery := c.recovery
 	return &recovery
 }
 
-// SupportsDeliveryRecovery identifies the application failures with bounded repair context.
+// SupportsDeliveryRecovery reports whether a failure code may carry recovery
+// progress.
 func SupportsDeliveryRecovery(code string) bool {
 	switch code {
 	case "exam.delivery.pending_capacity",

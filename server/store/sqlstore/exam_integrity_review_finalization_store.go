@@ -16,8 +16,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// reviewFinalizationInventory is the locked integrity inventory a Submission
-// Review finalizes over.
+// reviewFinalizationInventory is the locked integrity inventory a submission
+// review finalizes over.
 type reviewFinalizationInventory struct {
 	flags         []model.IntegrityReviewInventoryFlag
 	evidence      []model.IntegrityReviewInventoryEvidence
@@ -25,7 +25,7 @@ type reviewFinalizationInventory struct {
 }
 
 // reviewFinalizationDelivery is the delivery, native-condition and sealed
-// Attempt evidence state that a finalization digest and snapshot bind.
+// attempt evidence state that a finalization digest and snapshot bind.
 type reviewFinalizationDelivery struct {
 	settlement               model.BrowserSubmissionSettlement
 	deliveryRevision         int64
@@ -105,8 +105,8 @@ func finalizeReview(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamInt
 	return out, nil
 }
 
-// lockReviewInventoryFlags share-locks the Attempt's integrity flags and
-// requires a current decision in the Review for each.
+// lockReviewInventoryFlags share-locks the attempt's integrity flags and
+// requires a current decision in the review for each.
 func lockReviewInventoryFlags(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -162,7 +162,7 @@ func lockReviewInventoryFlags(
 	return flagItems, nil
 }
 
-// lockReviewInventoryEvidence share-locks the Attempt's integrity evidence.
+// lockReviewInventoryEvidence share-locks the attempt's integrity evidence.
 func lockReviewInventoryEvidence(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -205,7 +205,7 @@ func lockReviewInventoryEvidence(
 	return evidenceItems, nil
 }
 
-// lockReviewInventoryDiscrepancies share-locks the Submission's integrity
+// lockReviewInventoryDiscrepancies share-locks the submission's integrity
 // discrepancies.
 func lockReviewInventoryDiscrepancies(
 	ctx context.Context,
@@ -295,7 +295,7 @@ func reviewFinalizationDigest(
 }
 
 // insertReviewInventory records the finalized flag, evidence and discrepancy
-// inventory under the next Review revision.
+// inventory under the next review revision.
 func insertReviewInventory(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -362,7 +362,7 @@ func insertReviewInventory(
 }
 
 // insertReviewFinalizationSnapshot records the canonical snapshot of the
-// finalized Review, its decisions, and the browser and native evidence state.
+// finalized review, its decisions, and the browser and native evidence state.
 func insertReviewFinalizationSnapshot(
 	ctx context.Context,
 	tx *sqlxTxWrapper,

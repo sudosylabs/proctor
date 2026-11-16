@@ -14,7 +14,6 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
@@ -74,9 +73,8 @@ type emailChangeUndoInspectionResponse struct {
 	ChangedAt          string `json:"changed_at"`
 }
 
-// authenticationResponse is the transport-owned login/refresh success body.
-// Field names match the historical v1 envelope so cookie and bearer clients
-// keep working while domain models no longer serialize directly.
+// authenticationResponse is the login and refresh success body. Its field
+// names are the v1 envelope's, which cookie and bearer clients depend on.
 type authenticationResponse struct {
 	User    *userProfileResponse          `json:"user,omitempty"`
 	Session *sessionResponse              `json:"session"`
@@ -251,42 +249,15 @@ func authenticationResponseFromRefresh(
 	}
 }
 
-// RegistrationApplication is public self-registration, which the onboarding
-// area owns beside Invitations.
-type RegistrationApplication interface {
-	RegisterLocalUser(context.Context, invocation.Invocation, onboarding.RegisterLocalUserCommand) error
-}
-
-type authenticationEntryApplication interface {
-	Login(context.Context, invocation.Invocation, identity.LoginCommand) (*identity.LoginResult, error)
-	RefreshSession(context.Context, invocation.Invocation, identity.RefreshSessionCommand) (*model.Session, *model.AuthenticationTokens, error)
-	Logout(context.Context, invocation.Invocation) error
-	RequestEmailVerification(context.Context, invocation.Invocation, identity.RequestEmailVerificationCommand) error
-	CompleteEmailVerification(context.Context, invocation.Invocation, identity.CompleteEmailVerificationCommand) (*model.User, error)
-	CompleteEmailChangeUndo(context.Context, invocation.Invocation, identity.CompleteEmailChangeUndoCommand) error
-	InspectEmailVerification(
-		context.Context,
-		invocation.Invocation,
-		identity.InspectAccountTokenCommand,
-	) (*identity.EmailVerificationInspection, error)
-	InspectEmailChangeUndo(
-		context.Context,
-		invocation.Invocation,
-		identity.InspectAccountTokenCommand,
-	) (*identity.EmailChangeUndoInspection, error)
-	RequestPasswordReset(context.Context, invocation.Invocation, identity.RequestPasswordResetCommand) error
-	CompletePasswordReset(context.Context, invocation.Invocation, identity.CompletePasswordResetCommand) (*model.User, error)
-}
-
 type authenticationHandlers struct {
-	registration   RegistrationApplication
-	authentication authenticationEntryApplication
+	registration   *onboarding.Service
+	authentication *identity.Service
 	cookies        route.Cookies
 }
 
 func authenticationResource(
-	registration RegistrationApplication,
-	authentication authenticationEntryApplication,
+	registration *onboarding.Service,
+	authentication *identity.Service,
 	cookies route.Cookies,
 ) route.Resource {
 	h := authenticationHandlers{registration: registration, authentication: authentication, cookies: cookies}

@@ -29,9 +29,8 @@ type WaiveReviewCommand struct {
 	IdempotencyKey                    string
 }
 
-// GetSubmissionReviewWaiver returns the Submission Review Waiver for one
-// Submission, or nil when none exists. The Submission's own candidate is
-// denied.
+// GetSubmissionReviewWaiver returns a submission's review waiver, or nil when
+// none exists. The submission's own candidate is denied.
 func (r *Records) GetSubmissionReviewWaiver(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -67,9 +66,9 @@ func (r *Records) GetSubmissionReviewWaiver(
 	return value, nil
 }
 
-// WaiveSubmissionReview idempotently records a Submission Review Waiver,
-// fenced by the expected waiver, Review, and delivery inventory revisions and
-// the expected discrepancy count. The Submission's own candidate is denied.
+// WaiveSubmissionReview idempotently waives a submission's review, fenced by
+// the expected waiver, review and delivery inventory revisions and the
+// discrepancy count. The submission's own candidate is denied.
 func (r *Records) WaiveSubmissionReview(
 	ctx context.Context,
 	inv invocation.Invocation,

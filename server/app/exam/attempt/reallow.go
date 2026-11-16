@@ -20,9 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ReallowCommand asks to close one active Attempt Suspension and return the
-// Attempt to active, fenced by ExpectedAttemptRevision. It carries the
-// manager's private reason and is idempotent by IdempotencyKey.
+// ReallowCommand carries the manager's private reason and is idempotent by
+// IdempotencyKey.
 type ReallowCommand struct {
 	ExamID                  model.ExamID
 	SittingID               model.ExamSittingID
@@ -33,8 +32,7 @@ type ReallowCommand struct {
 	IdempotencyKey          string
 }
 
-// ReallowResult is the re-allowed Attempt and its closed Attempt Suspension,
-// with the Exam, Sitting, Class, and candidate they belong to.
+// ReallowResult is the re-allowed attempt and its closed suspension.
 type ReallowResult struct {
 	ExamID          model.ExamID
 	SittingID       model.ExamSittingID
@@ -45,11 +43,9 @@ type ReallowResult struct {
 	Replayed        bool
 }
 
-// ReallowExamAttempt idempotently closes the active Attempt Suspension and
-// returns the Attempt to ready, fenced by ExpectedAttemptRevision; only a
-// new secure admission makes it active again. It authorizes Sitting
-// management on the exact Sitting before reading the Attempt and preserves
-// all evidence.
+// ReallowExamAttempt idempotently closes the active suspension and returns
+// the attempt to ready, fenced by ExpectedAttemptRevision; only a new secure
+// admission makes it active again. All evidence is preserved.
 func (s *Service) ReallowExamAttempt(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -75,8 +71,8 @@ func (s *Service) ReallowExamAttempt(
 		return ReallowResult{}, err
 	}
 
-	// Authorize the exact Sitting before reading the Attempt so existence is
-	// not probeable; later exits complete the audit attempt as failed.
+	// Authorize the exact sitting before reading the attempt so existence is
+	// not probeable.
 	management, err := s.managers.AuthorizeSittingManage(ctx, inv, command.SittingID)
 	override := management.Override
 	if err != nil {

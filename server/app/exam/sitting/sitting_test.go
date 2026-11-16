@@ -9,25 +9,33 @@ package sitting
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 var testNow = time.Date(2026, 8, 15, 9, 0, 0, 0, time.UTC)
 
 type sittingFixture struct {
-	service     *Service
-	inv         invocation.Invocation
+	service *Service
+	inv     invocation.Invocation
+	// stranger is a valid caller without any grant, whom the real authorizer
+	// refuses.
+	stranger    invocation.Invocation
 	userID      model.UserID
 	unitID      model.AcademicUnitID
 	examID      model.ExamID
@@ -37,12 +45,13 @@ type sittingFixture struct {
 	persistence *sittingStoreFake
 	access      *accessFake
 	memberships *membershipsFake
-	authorizer  *authorizerFake
-	auditor     *auditorFake
-	systemAudit *systemAuditorFake
-	publisher   *realtimetest.Publisher
-	jobs        *lifecycleJobFactoryFake
-	mail        *scheduleMailPreparerFake
+	// control is the real authorizer and auditor. The caller holds every
+	// ordinary and override action the Sitting use cases decide, in the
+	// Exam's Academic Unit.
+	control   *accesstest.Fixture
+	publisher *realtimetest.Publisher
+	jobs      *lifecycleJobFactoryFake
+	mail      *scheduleMailWorld
 }
 
 func (f sittingFixture) sitting(t *testing.T) *model.ExamSitting {
@@ -51,6 +60,18 @@ func (f sittingFixture) sitting(t *testing.T) *model.ExamSitting {
 		testNow.Add(time.Hour), testNow.Add(3*time.Hour), testNow)
 	require.NoError(t, err)
 	return sitting
+}
+
+// sittingActions are the actions the fixture's caller is granted.
+var sittingActions = []model.Action{
+	model.ActionExamView, model.ActionExamViewOverride,
+	model.ActionExamSittingView, model.ActionExamSittingViewOverride,
+	model.ActionExamSittingCreate, model.ActionExamSittingCreateOverride,
+	model.ActionExamSittingManage, model.ActionExamSittingManageOverride,
+	model.ActionExamAttemptBrowserActivityView,
+	model.ActionSubmissionView, model.ActionSubmissionViewOverride,
+	model.ActionSubmissionReview, model.ActionSubmissionReviewOverride,
+	model.ActionSubmissionRelease, model.ActionSubmissionReleaseOverride,
 }
 
 func newFixture(t *testing.T) sittingFixture {
@@ -63,27 +84,75 @@ func newFixture(t *testing.T) sittingFixture {
 	persistence := &sittingStoreFake{}
 	accessStore := &accessFake{snapshot: &store.ExamAccessSnapshot{Exam: exam, ActorIsManager: true}}
 	memberships := &membershipsFake{items: []*model.AcademicUnitMember{{AcademicUnitID: unitID}}}
-	authorizer, auditor, systemAudit, publisher := &authorizerFake{}, &auditorFake{id: model.NewID()}, &systemAuditorFake{id: model.NewID()}, &realtimetest.Publisher{}
+	control := accesstest.New(t, accesstest.Options{
+		Grants: []accesstest.Grant{{
+			UserID: userID, Actions: sittingActions, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(),
+		}},
+		Exams:       accessStore,
+		Sittings:    sittingOwnershipFake{sittingID: sittingID, examID: examID},
+		Submissions: submissionOwnershipFake{examID: examID, sittingID: sittingID, unitID: unitID},
+		Now:         func() time.Time { return testNow },
+	})
+	publisher := &realtimetest.Publisher{}
 	jobs := &lifecycleJobFactoryFake{open: &model.Job{}, deadline: &model.Job{}, finalize: &model.Job{}}
-	mailPreparer := &scheduleMailPreparerFake{result: &store.ExamSittingMailFanout{}}
+	mailWorld := newScheduleMailWorld(t, examID, revisionID, classID)
 	service, err := New(Dependencies{
-		Persistence:   persistence,
-		Access:        accessStore,
-		Memberships:   memberships,
-		Authorizer:    authorizer,
-		Auditor:       auditor,
-		SystemAuditor: systemAudit,
-		Publisher:     publisher,
-		Jobs:          jobs,
-		Mail:          mailPreparer,
-		Now:           func() time.Time { return testNow },
-		NewID:         func() model.ExamSittingID { return sittingID },
+		Persistence: persistence,
+		Access:      accessStore,
+		Memberships: memberships,
+		Authorizer:  control.Authorizer,
+		Auditor:     control.Auditor,
+		Publisher:   publisher,
+		Jobs:        jobs,
+		Mail:        mailWorld.preparer,
+		Now:         func() time.Time { return testNow },
+		NewID:       func() model.ExamSittingID { return sittingID },
 	})
 	require.NoError(t, err)
-	return sittingFixture{service: service, inv: invocation.New(testPrincipal(userID), model.RequestMetadata{}), userID: userID,
+	return sittingFixture{service: service, inv: invocation.New(testPrincipal(userID), model.RequestMetadata{}),
+		stranger: invocation.New(testPrincipal(model.NewUserID()), model.RequestMetadata{}), userID: userID,
 		unitID: unitID, examID: examID, revisionID: revisionID, classID: classID, sittingID: sittingID,
-		persistence: persistence, access: accessStore, memberships: memberships, authorizer: authorizer, auditor: auditor,
-		systemAudit: systemAudit, publisher: publisher, jobs: jobs, mail: mailPreparer}
+		persistence: persistence, access: accessStore, memberships: memberships, control: control,
+		publisher: publisher, jobs: jobs, mail: mailWorld}
+}
+
+// requireDecision asserts the last authorization decision the real
+// authorizer recorded.
+func (f sittingFixture) requireDecision(t *testing.T, action model.Action, resource model.Resource, status model.AuditStatus) {
+	t.Helper()
+	decisions := f.control.Audits.Decisions()
+	require.NotEmpty(t, decisions, "authorization decisions")
+	last := decisions[len(decisions)-1]
+	require.Equal(t, string(action), last.Action, "decision action")
+	require.Equal(t, resource, last.Resource, "decision resource")
+	require.Equal(t, status, last.Status, "decision status")
+}
+
+// recordedAttempt is the one mutation attempt the real auditor kept.
+type recordedAttempt struct {
+	event     *model.AuditEvent
+	operation string
+	value     json.RawMessage
+}
+
+func (f sittingFixture) attempt(t *testing.T) recordedAttempt {
+	t.Helper()
+	attempts := f.control.Audits.Attempts()
+	require.Len(t, attempts, 1, "mutation attempts")
+	var parameters struct {
+		Operation string          `json:"operation"`
+		Value     json.RawMessage `json:"value"`
+	}
+	require.NoError(t, json.Unmarshal(attempts[0].Parameters, &parameters))
+	return recordedAttempt{event: attempts[0], operation: parameters.Operation, value: parameters.Value}
+}
+
+// requireValue asserts the audited value as it was stored.
+func (a recordedAttempt) requireValue(t *testing.T, want map[string]any) {
+	t.Helper()
+	encoded, err := json.Marshal(want)
+	require.NoError(t, err)
+	require.JSONEq(t, string(encoded), string(a.value), "audited value")
 }
 
 func assertFaultCode(t *testing.T, err error, want string) {
@@ -128,15 +197,88 @@ type sittingStoreFake struct {
 	getErr        error
 }
 
-type scheduleMailPreparerFake struct {
-	request ScheduleMailRequest
-	result  *store.ExamSittingMailFanout
-	err     error
+// scheduleMailWorld is the mail a Sitting schedule change prepares through
+// the real composer and renderer: an enabled sender, and the Class and
+// published revision a notice names.
+type scheduleMailWorld struct {
+	preparer  ScheduleMail
+	composer  *mail.SittingComposer
+	classes   *scheduleMailClassStoreFake
+	className string
 }
 
-func (f *scheduleMailPreparerFake) Prepare(_ context.Context, request ScheduleMailRequest) (*store.ExamSittingMailFanout, error) {
-	f.request = request
-	return f.result, f.err
+func newScheduleMailWorld(t *testing.T, examID model.ExamID, revisionID model.ExamRevisionID, classID model.ClassID) *scheduleMailWorld {
+	t.Helper()
+	key := base64.StdEncoding.EncodeToString(make([]byte, 32))
+	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
+	require.NoError(t, err)
+	composer, err := mail.NewSittingComposer(mail.SittingComposerDependencies{
+		Renderer: mailtest.NewRenderer(t), Sender: scheduleMailSenderFake{}, Sealer: sealer, Now: func() time.Time { return testNow },
+	})
+	require.NoError(t, err)
+	world := &scheduleMailWorld{composer: composer, className: "Algorithms A"}
+	world.classes = &scheduleMailClassStoreFake{classes: map[model.ClassID]*model.Class{classID: {ID: classID, DisplayName: world.className}}}
+	world.preparer = ScheduleMail{
+		Composer:  composer,
+		Classes:   world.classes,
+		Revisions: scheduleMailRevisionStoreFake{summary: &store.ExamRevisionSummary{ID: revisionID, ExamID: examID, Title: "Algorithms final"}},
+	}
+	return world
+}
+
+// requirePrepared asserts the fan-out the Store received is the notice of
+// change, prepared for the actor, over the Exam title the notice shows, and
+// returns the English messages its bundle froze.
+func (w *scheduleMailWorld) requirePrepared(t *testing.T, fanout *store.ExamSittingMailFanout, change store.ExamSittingMailChangeKind, actor model.UserID) map[model.MailTemplateKey]mail.FrozenContent {
+	t.Helper()
+	require.NotNil(t, fanout, "the Store receives the prepared fan-out")
+	require.Equal(t, change, fanout.ChangeKind, "fan-out change")
+	require.Equal(t, actor, fanout.Occurrence.ActorUserID, "fan-out actor")
+	require.NotNil(t, fanout.Bundle, "an enabled sender freezes the notice bundle")
+	bundle, err := w.composer.OpenBundle(fanout.Bundle)
+	require.NoError(t, err)
+	messages := bundle.Messages["en"]
+	require.NotEmpty(t, messages, "the notice was rendered")
+	for key, message := range messages {
+		require.Contains(t, message.Text, "Algorithms final", "rendered Exam title of %s", key)
+	}
+	return messages
+}
+
+type scheduleMailSenderFake struct{}
+
+func (scheduleMailSenderFake) Enabled() bool { return true }
+func (scheduleMailSenderFake) From() mail.Address {
+	return mail.Address{Name: "Proctor", Address: "no-reply@example.test"}
+}
+func (scheduleMailSenderFake) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
+	return mail.TransportUnknown, nil
+}
+
+// scheduleMailClassStoreFake answers the Classes a notice names and keeps
+// which it was asked for.
+type scheduleMailClassStoreFake struct {
+	store.ClassStore
+	classes map[model.ClassID]*model.Class
+	reads   []model.ClassID
+}
+
+func (f *scheduleMailClassStoreFake) Get(_ context.Context, id model.ClassID) (*model.Class, error) {
+	f.reads = append(f.reads, id)
+	class, ok := f.classes[id]
+	if !ok {
+		return nil, store.NewErrNotFound("class", id.String())
+	}
+	return class, nil
+}
+
+type scheduleMailRevisionStoreFake struct {
+	store.ExamRevisionStore
+	summary *store.ExamRevisionSummary
+}
+
+func (f scheduleMailRevisionStoreFake) GetSummary(context.Context, model.ExamID, model.ExamRevisionID) (*store.ExamRevisionSummary, error) {
+	return f.summary, nil
 }
 
 func (f *sittingStoreFake) Resolve(_ context.Context, sittingID model.ExamSittingID) (*store.ExamSittingSnapshot, error) {
@@ -224,8 +366,41 @@ type accessFake struct {
 	err      error
 }
 
+// Resolve gives the authorizer the Exam's owning Academic Unit.
+func (f *accessFake) Resolve(context.Context, model.ExamID) (*model.Exam, error) {
+	return f.snapshot.Exam, nil
+}
+
 func (f *accessFake) Access(context.Context, model.ExamID, model.UserID) (*store.ExamAccessSnapshot, error) {
 	return f.snapshot, f.err
+}
+
+// sittingOwnershipFake resolves the fixture's Sitting to its Exam for the
+// authorizer, apart from the snapshot a test gives the service.
+type sittingOwnershipFake struct {
+	store.ExamSittingStore
+	sittingID model.ExamSittingID
+	examID    model.ExamID
+}
+
+func (f sittingOwnershipFake) Resolve(_ context.Context, id model.ExamSittingID) (*store.ExamSittingSnapshot, error) {
+	if id != f.sittingID {
+		return nil, store.NewErrNotFound("exam_sitting", id.String())
+	}
+	return &store.ExamSittingSnapshot{Sitting: &model.ExamSitting{ID: id, ExamID: f.examID}}, nil
+}
+
+// submissionOwnershipFake places every Submission in the fixture's Exam.
+type submissionOwnershipFake struct {
+	store.ExamSubmissionStore
+	examID    model.ExamID
+	sittingID model.ExamSittingID
+	unitID    model.AcademicUnitID
+}
+
+func (f submissionOwnershipFake) Resolve(_ context.Context, id model.SubmissionID) (*store.ExamSubmissionAuthorization, error) {
+	return &store.ExamSubmissionAuthorization{SubmissionID: id, ExamID: f.examID, SittingID: f.sittingID,
+		AttemptID: model.NewExamAttemptID(), CandidateUserID: model.NewUserID(), AcademicUnitID: f.unitID}, nil
 }
 
 type membershipsFake struct {
@@ -238,45 +413,6 @@ type membershipsFake struct {
 func (f *membershipsFake) ListActiveByUser(_ context.Context, _ model.UserID, at time.Time) ([]*model.AcademicUnitMember, error) {
 	f.at = at
 	return f.items, f.err
-}
-
-type authorizerFake struct {
-	action   model.Action
-	resource model.Resource
-	err      error
-	denied   bool
-	denyErr  error
-}
-
-func (f *authorizerFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource) error {
-	f.action, f.resource = action, resource
-	return f.err
-}
-
-func (f *authorizerFake) RecordDenial(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource, _ model.AcademicUnitID) error {
-	f.action, f.resource, f.denied = action, resource, true
-	return f.denyErr
-}
-
-type auditorFake struct {
-	id        string
-	action    model.Action
-	resource  model.Resource
-	operation string
-	value     map[string]any
-	failCode  string
-	err       error
-	failErr   error
-}
-
-func (f *auditorFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
-	f.action, f.resource, f.operation, f.value = attempt.Action, attempt.Resource, attempt.Operation, attempt.Value
-	return model.AuditEventID(f.id), f.err
-}
-
-func (f *auditorFake) Fail(_ context.Context, _ model.AuditEventID, code string) error {
-	f.failCode = code
-	return f.failErr
 }
 
 // scheduleCalls are the calls of a schedule change to a Sitting without
@@ -334,28 +470,6 @@ func (f *sittingStoreFake) ListCandidateInvalidationTargetsBySitting(
 	int,
 ) ([]model.UserID, error) {
 	return f.candidateIDs, nil
-}
-
-type systemAuditorFake struct {
-	id, operation, failCode string
-	action                  model.Action
-	resource                model.Resource
-	scopeType               model.RoleScopeType
-	scopeID                 string
-	system                  invocation.System
-	value                   map[string]any
-	err, failErr            error
-}
-
-func (f *systemAuditorFake) BeginJob(_ context.Context, system invocation.System, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value map[string]any) (model.AuditEventID, error) {
-	f.system, f.action, f.resource, f.operation, f.value = system, action, resource, operation, value
-	f.scopeType, f.scopeID = scopeType, scopeID
-	return model.AuditEventID(f.id), f.err
-}
-
-func (f *systemAuditorFake) Fail(_ context.Context, _ model.AuditEventID, code string) error {
-	f.failCode = code
-	return f.failErr
 }
 
 type lifecycleJobFactoryFake struct {

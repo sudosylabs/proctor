@@ -14,10 +14,13 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/localization"
 	"github.com/sudosylabs/proctor/server/operator"
 )
 
@@ -36,8 +39,8 @@ func testExecutors() executors {
 		recoverAdministrator: func(context.Context, string, server.AdministratorRecoveryCommand) (*server.AdministratorRecoveryResult, error) {
 			return &server.AdministratorRecoveryResult{}, nil
 		},
-		currentBuildInfo: func() server.BuildInfo {
-			return server.BuildInfo{Version: "dev", Commit: "unknown", BuildTime: "unknown", GoVersion: "go-test"}
+		currentBuildInfo: func() app.BuildInfo {
+			return app.BuildInfo{Version: "dev", Commit: "unknown", BuildTime: "unknown", GoVersion: "go-test"}
 		},
 		effectiveUID: func() int { return 1000 },
 	}
@@ -61,18 +64,6 @@ func executeForTest(ctx context.Context, args []string, stdin io.Reader, execute
 	return code, stdout.String(), stderr.String()
 }
 
-type commandTestLocalizer map[string]string
-
-func (l commandTestLocalizer) Translate(_ string, id string, _ any) (string, error) {
-	translated, ok := l[id]
-	if !ok {
-		return "", errors.New("translation unavailable")
-	}
-	return translated, nil
-}
-
-func (commandTestLocalizer) SupportedLocales() []string { return []string{"en", "fr"} }
-
 func TestRunLocalizesCommandOwnedPresentation(t *testing.T) {
 	t.Parallel()
 
@@ -85,12 +76,7 @@ func TestRunLocalizesCommandOwnedPresentation(t *testing.T) {
 		&stdout,
 		&stderr,
 		testExecutors(),
-		commandText{
-			localizer: commandTestLocalizer{
-				"cli.config.validate.success": "configuration valide",
-			},
-			locale: "fr",
-		},
+		commandText{localizer: frenchCommandLocalizer(t), locale: "fr"},
 	)
 	require.Equal(t, 0, code, "code")
 	require.Equal(t, "configuration valide\n", stdout.String(), "code")
@@ -195,4 +181,17 @@ func TestRunBuildsAFreshCommandTreeForEveryInvocation(t *testing.T) {
 		require.Contains(t, stdout, `"version": "dev"`, "code")
 		require.Empty(t, stderr, "code")
 	}
+}
+
+// frenchCommandLocalizer is a real localizer whose French catalog translates
+// only the configuration validation message, so a French command line shows
+// it in French.
+func frenchCommandLocalizer(t *testing.T) *localization.Localizer {
+	t.Helper()
+	localizer, err := localization.New(fstest.MapFS{
+		"en.json": {Data: []byte(`[{"id":"cli.config.validate.success","translation":"configuration is valid"}]`)},
+		"fr.json": {Data: []byte(`[{"id":"cli.config.validate.success","translation":"configuration valide"}]`)},
+	}, localization.EnglishLocale)
+	require.NoError(t, err)
+	return localizer
 }

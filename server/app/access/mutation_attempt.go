@@ -17,9 +17,9 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// Mutation describes the safe, application-owned audit context for one
-// named Store mutation. Authorization, candidate preparation, and safe audit
-// projections are complete before the runner receives this value.
+// Mutation is the audit context of one named store mutation. Authorization is
+// done, and Value and Prior hold only safe projections, before RunAudited
+// receives it.
 type Mutation struct {
 	Invocation invocation.Invocation
 	Action     model.Action
@@ -29,32 +29,29 @@ type Mutation struct {
 	Operation  string
 	Value      map[string]any
 	Prior      map[string]any
-	// Subject names the User the mutation concerns when Resource is not that
-	// User, such as the bound User of a Role Binding or the member of a Class.
+	// Subject is the user the mutation concerns when Resource is not that user,
+	// such as a role binding's user or a class member.
 	Subject model.UserID
-	// At is the instant the mutation happens. RunAudited hands it to the named
-	// Store mutation as MutationReference.MutationAt, normalised to UTC
-	// microseconds with model.TimeUTC, and reads no clock of its own. A zero
-	// At is a programming error: RunAudited refuses it before Begin.
+	// At becomes MutationReference.MutationAt in UTC microseconds; RunAudited
+	// reads no clock of its own and refuses a zero At before Begin.
 	At time.Time
 }
 
-// MutationReference is the complete audit input a named Store mutation
-// needs to commit durable state and successful audit completion atomically.
+// MutationReference lets a named store mutation complete its audit event in
+// the same commit as its state change.
 type MutationReference struct {
 	ID         model.AuditEventID
 	MutationAt time.Time
 }
 
-// RunAudited owns the common attempt and failure protocol. Successful
-// completion remains inside the named Store mutation; post-commit effects
-// remain with the calling use case. The mapper may preserve contextual wrappers
-// but must return an error chain containing an application Error. A Mutation
-// whose explicit scope or subject User is malformed is refused with
-// audit.internal before the auditor is asked to begin.
+// RunAudited begins the audit event and records its failure; success is
+// completed inside mutate's own commit, and post-commit effects stay with the
+// caller. mapError must return a chain containing an *apperror.Error, or the
+// failure becomes audit.internal. A malformed scope or subject is refused
+// with audit.internal before Begin.
 func RunAudited[T any](
 	ctx context.Context,
-	auditor MutationAuditor,
+	auditor MutationAuditAdapter,
 	attempt Mutation,
 	mutate func(context.Context, MutationReference) (T, error),
 	mapError func(error) error,

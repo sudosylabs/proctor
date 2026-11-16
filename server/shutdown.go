@@ -54,14 +54,11 @@ func (s *Server) shutdown(plan stopPlan, endRun context.CancelFunc) error {
 	return s.closeErr
 }
 
-// runShutdown makes the node unready and then disposes every constructed
-// owner in reverse dependency order: the Server-owned listener, HTTP serving,
-// Jobs, WebSocket, the HTTP transport, the serving lease, metrics, tracing,
-// and Platform. One budget of Server.ShutdownTimeout, starting now, bounds
-// the whole sequence: every step that waits draws its deadline from what
-// remains of it, so a slow step shortens the later ones rather than extending
-// shutdown. The serving lease keeps renewing until its turn, after HTTP has
-// stopped, so this node never serves without a proven lease.
+// runShutdown withdraws readiness and closes every part in reverse dependency
+// order under one budget of Server.ShutdownTimeout, starting now. Each step
+// draws its deadline from what remains, so a slow step shortens the later
+// ones rather than extending shutdown. The serving lease keeps renewing until
+// HTTP has stopped, so the node never serves without a proven lease.
 func (s *Server) runShutdown(plan stopPlan, endRun context.CancelFunc) error {
 	running := endRun != nil
 	s.beginStopping(running)
@@ -91,7 +88,8 @@ func (s *Server) runShutdown(plan stopPlan, endRun context.CancelFunc) error {
 		closing(s.components.servingLease),
 		draining(s.components.metrics),
 		// Tracing closes after every span producer so their final spans are
-		// flushed, and before Platform so the exporter never outlives logging.
+		// flushed, and before the platform so the exporter never outlives
+		// logging.
 		func(ctx context.Context) error {
 			if s.components.tracing == nil {
 				return nil
@@ -178,10 +176,9 @@ func (s *Server) shutdownBudget() (context.Context, context.CancelFunc) {
 
 // ForceStop demands an immediate stop: a running node begins shutting down,
 // and a graceful drain already in progress ends at once by closing the
-// connections that remain. The shutdown budget ends with it, so Jobs,
-// WebSocket, metrics, tracing, and Platform stop waiting for their work.
-// Run and Close then report ErrShutdownForced. ForceStop is safe to call
-// concurrently and more than once.
+// connections that remain. The shutdown budget ends with it, so no part waits
+// for its work any longer. Run and Close then report ErrShutdownForced.
+// ForceStop is safe to call concurrently and more than once.
 func (s *Server) ForceStop() {
 	s.forceOnce.Do(func() { close(s.forcedSignal()) })
 	s.lifecycleMu.Lock()

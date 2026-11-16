@@ -14,12 +14,13 @@ import (
 	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// publicFailures presents every Attempt use-case failure: unexpected errors
-// become exam.attempt.unavailable, and protected targets conceal denial and absence.
+// publicFailures presents every attempt failure: unexpected errors become
+// exam.attempt.unavailable, and protected targets conceal denial and absence.
 var publicFailures = apperror.Concealment{
 	Unavailable: "exam.attempt.unavailable",
 	Concealed:   []apperror.Code{"exam.attempt.not_found", "exam.attempt.continuity_invalid"},
@@ -93,8 +94,7 @@ var storeErrors = apperror.StoreTable{
 		"attempt_workspace_size_limit":             "exam.attempt.workspace.size_limit",
 		"attempt_workspace_object_state":           "exam.attempt.workspace.object_conflict",
 		"attempt_workspace_cursor":                 "exam.attempt.workspace.cursor_conflict",
-		// An environment owner whose lease or incarnation is no longer
-		// current is in the position of a closed Connection.
+		// A stale environment owner is in the position of a closed connection.
 		"attempt_environment_owner":       "exam.attempt.connection_closed",
 		"attempt_environment_incarnation": "exam.attempt.environment_changed",
 		"attempt_environment_ended":       "exam.attempt.environment_ended",
@@ -118,8 +118,8 @@ var deliveryConflictCodes = map[string]apperror.Code{
 	"summary_rate_limited":    "exam.delivery.summary_rate_limited",
 }
 
-// storeError presents an Attempt Store failure. Typed refusals that carry
-// safe detail are presented before the declarative table.
+// storeError presents typed refusals that carry safe detail before falling
+// back to the table.
 func storeError(table apperror.StoreTable, err error) error {
 	var nativeRefusal *store.NativeDeliveryRefusal
 	var browserRefusal *store.BrowserDeliveryRefusal
@@ -143,8 +143,6 @@ func storeError(table apperror.StoreTable, err error) error {
 	}
 }
 
-// deliveryRefusalCode presents the bounded reason of a committed delivery
-// refusal.
 func deliveryRefusalCode(reason string) apperror.Code {
 	switch reason {
 	case "sequence_limit":
@@ -172,9 +170,8 @@ func (s *Service) failAudit(ctx context.Context, auditID model.AuditEventID, err
 	return mapped
 }
 
-// recordStatusDiscrepancies counts, as operational events, the native rule
-// statuses on which Desktop disagreed with the server. The server's status
-// always decides; a disagreement is only measured.
+// recordStatusDiscrepancies only measures native rule statuses on which
+// Desktop disagreed; the server's status always decides.
 func (s *Service) recordStatusDiscrepancies(count int64) {
 	for range count {
 		s.recordOperational("native_status_discrepancy", nil)
@@ -183,6 +180,6 @@ func (s *Service) recordStatusDiscrepancies(count int64) {
 
 func (s *Service) recordOperational(event string, err error) {
 	if s.operational != nil {
-		s.operational.RecordOperational("exam_attempt", event, err)
+		operational.Record(s.operational, "exam_attempt", event, err)
 	}
 }

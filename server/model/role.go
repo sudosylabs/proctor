@@ -26,13 +26,10 @@ const (
 
 var validPermission = regexp.MustCompile(`^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$`)
 
-// Role is a reusable named set of stable domain permissions. It has no scope
-// by itself; RoleBinding assigns it to a User at an institution, AcademicUnit,
-// or Class scope.
-//
-// Domain time is UTC time.Time. Soft archive uses ArchivedAt.
-// Roles are not revisioned: updates and soft-delete are serialized through
-// explicit store operations and built-in protection, not optimistic concurrency.
+// Role is a reusable named set of permissions with no scope of its own; a
+// RoleBinding assigns it to a user at the institution, an academic unit or a
+// class. Roles have no revision: the store serializes updates and archiving
+// and protects built-in roles.
 type Role struct {
 	ID          RoleID
 	CreatedAt   time.Time
@@ -45,15 +42,15 @@ type Role struct {
 	BuiltIn     bool
 }
 
-// RolePatch contains the mutable fields of a custom role. Role names are
-// stable identifiers and built-in roles are managed by server code.
+// RolePatch holds the mutable fields of a custom role. Names are stable IDs,
+// and server code manages built-in roles.
 type RolePatch struct {
 	DisplayName *string
 	Description *string
 	Permissions *[]string
 }
 
-// Patch applies non-nil fields from patch.
+// Patch applies the non-nil fields of patch.
 func (r *Role) Patch(patch *RolePatch) {
 	if r == nil || patch == nil {
 		return
@@ -69,13 +66,14 @@ func (r *Role) Patch(patch *RolePatch) {
 	}
 }
 
-// IsEmpty reports whether the patch carries no field updates.
+// IsEmpty reports whether the patch changes nothing.
 func (rp *RolePatch) IsEmpty() bool {
 	return rp == nil ||
 		(rp.DisplayName == nil && rp.Description == nil && rp.Permissions == nil)
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
+// PrepareCreate stamps the ID and creation time, clears archive state and
+// copies the permissions; it does nothing on nil.
 func (r *Role) PrepareCreate(id RoleID, at time.Time) {
 	if r == nil {
 		return
@@ -89,7 +87,8 @@ func (r *Role) PrepareCreate(id RoleID, at time.Time) {
 	r.Permissions = cloneStrings(r.Permissions)
 }
 
-// PrepareUpdate applies the application-selected transition time.
+// PrepareUpdate stamps the update time and copies the permissions; roles have
+// no revision.
 func (r *Role) PrepareUpdate(at time.Time) {
 	if r == nil {
 		return
@@ -99,7 +98,7 @@ func (r *Role) PrepareUpdate(at time.Time) {
 	r.Permissions = cloneStrings(r.Permissions)
 }
 
-// Archive marks the role soft-archived (legacy soft-delete).
+// Archive sets ArchivedAt; archiving twice or archiving a built-in role fails.
 func (r *Role) Archive(at time.Time) error {
 	if r == nil {
 		return invalidModelError("Role.Archive", "role", "", "role is nil", "")
@@ -119,12 +118,12 @@ func (r *Role) Archive(at time.Time) error {
 	return r.Validate()
 }
 
-// IsArchived reports soft archive state.
+// IsArchived reports whether ArchivedAt is set; a nil role is not archived.
 func (r *Role) IsArchived() bool {
 	return r != nil && r.ArchivedAt.Valid
 }
 
-// Validate checks rehydrated role state.
+// Validate checks the role's fields, for new and stored values alike.
 func (r *Role) Validate() error {
 	const where = "Role.Validate"
 	if r == nil {
@@ -166,7 +165,7 @@ func (r *Role) Validate() error {
 	return nil
 }
 
-// Clone returns a deep copy of the role including its permissions slice.
+// Clone returns a deep copy, including the permissions slice.
 func (r *Role) Clone() *Role {
 	if r == nil {
 		return nil
@@ -176,8 +175,7 @@ func (r *Role) Clone() *Role {
 	return &cloned
 }
 
-// Auditable returns a deliberately safe audit projection. Lifecycle times remain
-// as Unix milliseconds for wire and audit compatibility during expand.
+// Auditable returns the fields safe to audit, with times as Unix milliseconds.
 func (r *Role) Auditable() map[string]any {
 	if r == nil {
 		return map[string]any{}

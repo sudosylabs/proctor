@@ -257,7 +257,7 @@ func validOnboardingImport(value *store.OnboardingImport) bool {
 		validOnboardingImportFilterPackage(value)
 }
 
-// onboardingImportPreviewJobType is the Job type that turns an import of the
+// onboardingImportPreviewJobType is the job type that turns an import of the
 // mode into its preview: the progression preview, the filter resolution, or
 // the CSV parse.
 func onboardingImportPreviewJobType(mode model.OnboardingImportMode) model.JobType {
@@ -327,12 +327,9 @@ func (s SQLInvitationStore) GetOnboardingImport(ctx context.Context, id model.On
 	return row.value()
 }
 
-// ListOnboardingImports returns one keyset page of unexpired administrative
-// imports inside the visibility scope, newest first. The scope predicate
-// matches the single-import onboarding_batch.view decision: Institution-scoped
-// imports need Institution-wide authority, Academic Unit imports lie in a
-// named subtree, and Class imports are named exactly or lie under a named
-// subtree through their Programme.
+// ListOnboardingImports returns one keyset page of unexpired imports, newest
+// first. Its scope predicate must match the single-import onboarding_batch.view
+// decision.
 func (s SQLInvitationStore) ListOnboardingImports(
 	ctx context.Context,
 	options store.OnboardingImportListOptions,
@@ -1483,8 +1480,8 @@ func validateStudentProgressionTargets(ctx context.Context, tx *sqlxTxWrapper, v
 		return nil
 	}
 
-	// Progression later enters the ordinary Class-member aggregate. Acquire its
-	// prerequisite lifecycle fences before freezing target rows so Class or
+	// Progression later enters the ordinary class-member aggregate. Acquire its
+	// prerequisite lifecycle fences before freezing target rows so class or
 	// enrollment mutations cannot form a row-lock/advisory-lock cycle.
 	for _, lock := range []func(context.Context, sqlxExecutor) error{
 		lockAffiliationLifecycle,

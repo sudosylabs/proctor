@@ -74,6 +74,8 @@ export function AccountSecurityContent({ actions, loading, onRefresh, state }: {
     onRefresh();
   }
 
+    // A lost activation or regeneration response may still have changed the
+    // account, so the page leaves the flow and rereads status instead of retrying.
   function failed(result: SecurityFailure, uncertainMutation = false) {
     if (uncertainMutation && result.kind === "unavailable") {
       changeTask({ kind: "uncertain" });

@@ -21,10 +21,9 @@ const (
 	externalAuthenticationMaintenanceInterval     = time.Minute
 )
 
-// externalAuthenticationMaintenance reconciles abandoned
-// provider-connection audit attempts and retained browser state in bounded,
-// database-clock pages. Every node may run it; PostgreSQL row claiming makes
-// overlapping passes safe without a durable maintenance Job.
+// externalAuthenticationMaintenance reconciles abandoned provider-connection
+// audits and retained login state in bounded pages. Every node may run it: row
+// claiming in the store makes overlapping passes safe without a durable job.
 type externalAuthenticationMaintenance struct {
 	states store.ExternalLoginStateStore
 }

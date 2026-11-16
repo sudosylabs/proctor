@@ -8,67 +8,30 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type programmeLevelHTTPApplication struct {
-	archiveCommand academic.ArchiveProgrammeLevelCommand
-	result         *model.ProgrammeLevel
-	list           []*model.ProgrammeLevel
-	err            error
-	createCommand  academic.CreateProgrammeLevelCommand
-	updateCommand  academic.UpdateProgrammeLevelCommand
-}
-
-func (a *programmeLevelHTTPApplication) GetProgrammeLevel(context.Context, invocation.Invocation, model.ProgrammeLevelID) (*model.ProgrammeLevel, error) {
-	return a.result, a.err
-}
-func (a *programmeLevelHTTPApplication) ListProgrammeLevels(_ context.Context, _ invocation.Invocation, query academic.ListProgrammeLevelsQuery) (paging.Counted[*model.ProgrammeLevel], error) {
-	page := paging.Counted[*model.ProgrammeLevel]{Page: paging.Page[*model.ProgrammeLevel]{Items: a.list}}
-	if query.AfterID == "" {
-		page.Total = paging.CountWhole(len(a.list))
-	}
-	return page, a.err
-}
-func (a *programmeLevelHTTPApplication) CreateProgrammeLevel(_ context.Context, _ invocation.Invocation, command academic.CreateProgrammeLevelCommand) (*model.ProgrammeLevel, error) {
-	a.createCommand = command
-	return a.result, a.err
-}
-func (a *programmeLevelHTTPApplication) UpdateProgrammeLevel(_ context.Context, _ invocation.Invocation, command academic.UpdateProgrammeLevelCommand) (*model.ProgrammeLevel, error) {
-	a.updateCommand = command
-	return a.result, a.err
-}
-func (a *programmeLevelHTTPApplication) ArchiveProgrammeLevel(_ context.Context, _ invocation.Invocation, command academic.ArchiveProgrammeLevelCommand) error {
-	a.archiveCommand = command
-	return a.err
-}
-
 func TestProgrammeLevelHTTPPreservesMissingProgrammeProblemField(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	programmeID := model.NewID()
-	levels := &programmeLevelHTTPApplication{err: apperror.New("resource.not_found").WithField("resource", "programme")}
+	principal := academicCaller()
+	// The caller may view every Level; the Programme it names does not exist.
+	fixture := newAcademicFixture(t, academicOptions{Grants: []accesstest.Grant{institutionWide(principal.UserID, model.ActionProgrammeLevelView)}})
 	httpAPI := newFocusedResourceAPI(
-		t, logger, routetest.Authenticator{Principal: principal}, programmeLevelResource(levels),
+		t, logger, routetest.Authenticator{Principal: principal}, programmeLevelResource(fixture.service),
 	)
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/programmes/"+programmeID+"/levels", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/programmes/"+model.NewID()+"/levels", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -82,30 +45,38 @@ func TestProgrammeLevelHTTPPreservesMissingProgrammeProblemField(t *testing.T) {
 func TestProgrammeLevelHTTPMapsDTOWithoutPermissionPreflight(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	level := &model.ProgrammeLevel{ID: model.ProgrammeLevelID(model.NewID()), ProgrammeID: model.ProgrammeID(model.NewID()), Name: "year-1", DisplayName: "Year 1"}
-	levels := &programmeLevelHTTPApplication{result: level}
+	principal := academicCaller()
+	world := newAcademicWorld()
+	fixture := newAcademicFixture(t, academicOptions{
+		Grants: []accesstest.Grant{inAcademicUnit(principal.UserID, world.unit.ID, model.ActionProgrammeLevelManage)},
+		Units:  world.units(),
+	})
+	fixture.hold(world)
+	programmeID := world.programme.ID
 	httpAPI := newFocusedResourceAPI(
-		t, logger, routetest.Authenticator{Principal: principal}, programmeLevelResource(levels),
+		t, logger, routetest.Authenticator{Principal: principal}, programmeLevelResource(fixture.service),
 	)
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/programmes/"+level.ProgrammeID.String()+"/levels", strings.NewReader(`{"name":"year-1","display_name":"Year 1"}`))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/programmes/"+programmeID.String()+"/levels", strings.NewReader(`{"name":"year-1","display_name":"Year 1"}`))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusCreated, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	require.Equal(t, level.ProgrammeID, levels.createCommand.ProgrammeID)
-	require.Equal(t, level.Name, levels.createCommand.Name)
+	require.Len(t, fixture.levels.created, 1, "the create reached the Programme Level Store")
+	created := fixture.levels.created[0].Level
+	require.Equal(t, programmeID, created.ProgrammeID)
+	require.Equal(t, "year-1", created.Name)
 	var body programmeLevelResponse
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
-	require.Equal(t, level.ID.String(), body.ID)
-	require.Equal(t, level.ProgrammeID.String(), body.ProgrammeID)
-	invalid := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/programmes/"+level.ProgrammeID.String()+"/levels", strings.NewReader(`{"name":"year-1","display_name":"Year 1","unknown":true}`))
+	require.Equal(t, created.ID.String(), body.ID)
+	require.Equal(t, programmeID.String(), body.ProgrammeID)
+	invalid := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/programmes/"+programmeID.String()+"/levels", strings.NewReader(`{"name":"year-1","display_name":"Year 1","unknown":true}`))
 	invalid.Header.Set("Authorization", "Bearer credential")
 	invalid.Header.Set("Content-Type", "application/json")
 	invalidResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(invalidResponse, invalid)
 	require.Equal(t, http.StatusBadRequest, invalidResponse.Code, "invalid status = %d: %s", invalidResponse.Code, invalidResponse.Body.String())
+	require.Len(t, fixture.levels.created, 1, "a rejected create reached the Programme Level Store")
 }
 
 func TestProgrammeLevelPatchOptionalWireStates(t *testing.T) {

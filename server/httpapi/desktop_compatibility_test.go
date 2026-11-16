@@ -9,86 +9,125 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
-type desktopCompatibilityHTTPApplication struct {
-	query          identity.DesktopCompatibilityQuery
-	evaluations    int
-	evaluation     identity.DesktopCompatibilityResult
-	evaluationErr  error
-	policy         *model.DesktopCompatibilityPolicy
-	replaceCommand identity.ReplaceDesktopCompatibilityPolicyCommand
+// desktopCompatibilityPolicies is the Institution's current Desktop
+// compatibility policy. It counts the reads that evaluated it and applies
+// each replacement it receives to the stored policy.
+type desktopCompatibilityPolicies struct {
+	mu           sync.Mutex
+	policy       *model.DesktopCompatibilityPolicy
+	getErr       error
+	gets         int
+	replacements []store.DesktopCompatibilityPolicyReplacement
+	commands     []*store.CommandIdempotency
 }
 
-func (a *desktopCompatibilityHTTPApplication) EvaluateDesktopCompatibility(
+func (s *desktopCompatibilityPolicies) Get(context.Context) (*model.DesktopCompatibilityPolicy, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.gets++
+	if s.getErr != nil {
+		return nil, s.getErr
+	}
+	return s.policy.Clone(), nil
+}
+
+func (s *desktopCompatibilityPolicies) Replace(
 	_ context.Context,
-	_ invocation.Invocation,
-	query identity.DesktopCompatibilityQuery,
-) (identity.DesktopCompatibilityResult, error) {
-	a.query = query
-	a.evaluations++
-	return a.evaluation, a.evaluationErr
+	input *store.DesktopCompatibilityPolicyReplacement,
+	command *store.CommandIdempotency,
+) (*store.DesktopCompatibilityPolicyReplacementResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.replacements = append(s.replacements, *input)
+	s.commands = append(s.commands, command)
+	if err := s.policy.Replace(input.ExpectedRevision, input.Settings, input.AuditAt); err != nil {
+		return nil, err
+	}
+	return &store.DesktopCompatibilityPolicyReplacementResult{Policy: s.policy.Clone()}, nil
 }
 
-func (a *desktopCompatibilityHTTPApplication) GetDesktopCompatibilityPolicy(
-	context.Context,
-	invocation.Invocation,
-) (*model.DesktopCompatibilityPolicy, error) {
-	return a.policy.Clone(), nil
+func (s *desktopCompatibilityPolicies) getCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.gets
 }
 
-func (a *desktopCompatibilityHTTPApplication) ReplaceDesktopCompatibilityPolicy(
-	_ context.Context,
-	_ invocation.Invocation,
-	command identity.ReplaceDesktopCompatibilityPolicyCommand,
-) (*model.DesktopCompatibilityPolicy, error) {
-	a.replaceCommand = command
-	return a.policy.Clone(), nil
+// desktopBuild is one Desktop build of the server's catalog.
+func desktopBuild(release, buildID string, platform model.DesktopPlatform, architecture model.DesktopArchitecture, realtimeProtocol int) model.DesktopBuildTuple {
+	return model.DesktopBuildTuple{
+		DesktopRelease:                          release,
+		DesktopBuildID:                          buildID,
+		Platform:                                platform,
+		Architecture:                            architecture,
+		RealtimeProtocol:                        realtimeProtocol,
+		AttemptConfigurationManifestFingerprint: model.CurrentAttemptConfigurationManifestFingerprint(),
+		DesktopSettingsRegistryFingerprint:      "fnv1a64:" + strings.Repeat("b", 16),
+		DesktopTarget:                           string(platform) + "-" + string(architecture),
+		ConfigurationManifest:                   model.EmptyAttemptConfigurationManifest(),
+		CapabilityMatrixIdentity:                "matrix-" + buildID,
+	}
+}
+
+// desktopPingBuilds is the catalog the ping tests evaluate against: two
+// Darwin builds spanning releases 1.2.0 to 1.4.0 and realtime protocols 1
+// and 2.
+func desktopPingBuilds() []model.DesktopBuildTuple {
+	return []model.DesktopBuildTuple{
+		desktopBuild("1.2.0", "darwin-41", model.DesktopPlatformDarwin, model.DesktopArchitectureARM64, 1),
+		desktopBuild("1.4.0", "darwin-42", model.DesktopPlatformDarwin, model.DesktopArchitectureARM64, 2),
+	}
+}
+
+// desktopCompatibilityPolicy is the initial policy after settings.
+func desktopCompatibilityPolicy(t *testing.T, settings *model.DesktopCompatibilityPolicySettings) *desktopCompatibilityPolicies {
+	t.Helper()
+	policy := model.NewInitialDesktopCompatibilityPolicy(model.NewInstitutionID(), time.Now())
+	if settings != nil {
+		require.NoError(t, policy.Replace(policy.Revision, *settings, time.Now()))
+	}
+	return &desktopCompatibilityPolicies{policy: policy}
+}
+
+// desktopPingAPI serves ping from the real service over policies.
+func desktopPingAPI(t *testing.T, health *app.Health, policies *desktopCompatibilityPolicies, now func() time.Time) http.Handler {
+	t.Helper()
+	logger, _ := routetest.NewLogger(t)
+	fixture := newIdentityFixture(t, identityOptions{
+		Stores:        identityStores{DesktopCompatibilityPolicies: policies},
+		DesktopBuilds: desktopPingBuilds(),
+	})
+	return newFocusedResourceAPI(t, logger, routetest.Authenticator{},
+		systemResourceWithApplication(health, BuildInfo{Version: "server-secret-not-for-ping"}, nil, fixture.service, now))
 }
 
 func TestSystemPingReturnsRequestSpecificNoStoreCompatibility(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
 	now := time.Date(2026, time.August, 28, 10, 11, 12, 345_000_000, time.UTC)
-	applicationFake := &desktopCompatibilityHTTPApplication{
-		evaluation: identity.DesktopCompatibilityResult{
-			Availability:            model.DesktopAvailabilityReady,
-			Compatibility:           identity.DesktopCompatibilityCompatible,
-			Reason:                  "compatible",
-			MinimumDesktopRelease:   "1.2.0",
-			MaximumDesktopRelease:   "1.4.0",
-			MinimumRealtimeProtocol: 1,
-			MaximumRealtimeProtocol: 2,
-			AdministratorMessage:    "Scheduled maintenance is complete.",
-		},
-	}
-	httpAPI := newFocusedResourceAPI(
-		t,
-		logger,
-		routetest.Authenticator{},
-		systemResourceWithApplication(
-			systemHTTPHealth{live: true, ready: true},
-			BuildInfo{Version: "server-secret-not-for-ping"},
-			nil,
-			applicationFake,
-			func() time.Time { return now },
-		),
-	)
+	policies := desktopCompatibilityPolicy(t, &model.DesktopCompatibilityPolicySettings{
+		RevokedDesktopBuildIDs: []string{}, AdministratorMessage: "Scheduled maintenance is complete.",
+		Availability: model.DesktopAvailabilityReady,
+	})
+	httpAPI := desktopPingAPI(t, readyHealth(t, true), policies, func() time.Time { return now })
 	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
 		"/api/v1/system/ping?desktop_release=1.4.0&desktop_build_id=darwin-42&platform=darwin&architecture=arm64&realtime_protocol=2",
@@ -98,44 +137,44 @@ func TestSystemPingReturnsRequestSpecificNoStoreCompatibility(t *testing.T) {
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "ping = %d cache=%q body=%s", response.Code, response.Header().Get("Cache-Control"), response.Body.String())
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"), "ping = %d cache=%q body=%s", response.Code, response.Header().Get("Cache-Control"), response.Body.String())
-	require.Equal(t, "darwin-42", applicationFake.query.DesktopBuildID)
-	require.Equal(t, 2, applicationFake.query.RealtimeProtocol)
+	require.Equal(t, 1, policies.getCount(), "ping did not evaluate the current policy")
 	var body map[string]any
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	require.Equal(t, float64(1), body["schema_version"])
 	require.Equal(t, now.Format(time.RFC3339Nano), body["server_time"])
 	require.Equal(t, "ready", body["availability"])
 	require.Equal(t, "ready", body["reason"])
+	// Only the exact catalog build, darwin-42 at release 1.4.0 over realtime
+	// protocol 2, is compatible: the selectors reached the evaluation.
 	require.Equal(t, "compatible", body["compatibility"])
 	require.Equal(t, "compatible", body["compatibility_reason"])
 	require.Equal(t, "1.2.0", body["minimum_desktop_release"])
 	require.Equal(t, "1.4.0", body["maximum_desktop_release"])
+	require.Equal(t, "Scheduled maintenance is complete.", body["administrator_message"])
 	for _, forbidden := range []string{"canonical_origin", "installation", "institution", "provider", "access_policy", "version", "commit", "download"} {
 		_, exists := body[forbidden]
 		require.False(t, exists, "ping exposed %q: %#v", forbidden, body)
 	}
+
+	// The same build declared over another realtime protocol is not the
+	// catalog build.
+	response = httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet,
+		"/api/v1/system/ping?desktop_release=1.4.0&desktop_build_id=darwin-42&platform=darwin&architecture=arm64&realtime_protocol=1", nil))
+	require.Contains(t, response.Body.String(), `"compatibility_reason":"build_unrecognized"`)
 }
 
 func TestSystemPingPublishesMaintenanceAvailabilityAndRetryTime(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	retryAt := time.Date(2026, time.August, 28, 11, 0, 0, 0, time.UTC)
+	// The service drops a retry time that is not in its own future, so the
+	// retry is an hour from now.
+	retryAt := time.Now().Add(time.Hour).Truncate(time.Millisecond).UTC()
 	serverTime := retryAt.Add(-time.Minute)
-	applicationFake := &desktopCompatibilityHTTPApplication{
-		evaluation: identity.DesktopCompatibilityResult{
-			Availability:         model.DesktopAvailabilityMaintenance,
-			RetryAt:              model.OptionalTimeFrom(retryAt),
-			Compatibility:        identity.DesktopCompatibilityCompatible,
-			Reason:               "compatible",
-			AdministratorMessage: "Scheduled maintenance is in progress.",
-		},
-	}
-	httpAPI := newFocusedResourceAPI(
-		t,
-		logger,
-		routetest.Authenticator{},
-		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, nil, applicationFake, func() time.Time { return serverTime }),
-	)
+	policies := desktopCompatibilityPolicy(t, &model.DesktopCompatibilityPolicySettings{
+		RevokedDesktopBuildIDs: []string{}, AdministratorMessage: "Scheduled maintenance is in progress.",
+		Availability: model.DesktopAvailabilityMaintenance, RetryAt: model.OptionalTimeFrom(retryAt),
+	})
+	httpAPI := desktopPingAPI(t, readyHealth(t, true), policies, func() time.Time { return serverTime })
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
@@ -154,22 +193,14 @@ func TestSystemPingPublishesMaintenanceAvailabilityAndRetryTime(t *testing.T) {
 
 func TestSystemPingOmitsRetryTimeNotLaterThanItsServerTime(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	serverTime := time.Date(2026, time.August, 28, 11, 0, 0, 0, time.UTC)
-	applicationFake := &desktopCompatibilityHTTPApplication{
-		evaluation: identity.DesktopCompatibilityResult{
-			Availability:  model.DesktopAvailabilityMaintenance,
-			RetryAt:       model.OptionalTimeFrom(serverTime),
-			Compatibility: identity.DesktopCompatibilityCompatible,
-			Reason:        "compatible",
-		},
-	}
-	httpAPI := newFocusedResourceAPI(
-		t,
-		logger,
-		routetest.Authenticator{},
-		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, nil, applicationFake, func() time.Time { return serverTime }),
-	)
+	// The retry time is still ahead of the service's clock, which keeps it,
+	// but not ahead of the ping's own server time.
+	serverTime := time.Now().Add(time.Hour).Truncate(time.Millisecond).UTC()
+	policies := desktopCompatibilityPolicy(t, &model.DesktopCompatibilityPolicySettings{
+		RevokedDesktopBuildIDs: []string{}, Availability: model.DesktopAvailabilityMaintenance,
+		RetryAt: model.OptionalTimeFrom(serverTime),
+	})
+	httpAPI := desktopPingAPI(t, readyHealth(t, true), policies, func() time.Time { return serverTime })
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
@@ -178,6 +209,7 @@ func TestSystemPingOmitsRetryTimeNotLaterThanItsServerTime(t *testing.T) {
 	))
 	var body map[string]any
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.Equal(t, "maintenance", body["availability"], "the policy was not evaluated")
 	require.Equal(t, serverTime.Format(time.RFC3339Nano), body["server_time"], "server_time")
 	retryAt, exists := body["retry_at"]
 	require.False(t, exists, "ping exposed non-future retry_at = %#v", retryAt)
@@ -185,14 +217,8 @@ func TestSystemPingOmitsRetryTimeNotLaterThanItsServerTime(t *testing.T) {
 
 func TestSystemPingRejectsMalformedSelectorsWithoutEvaluation(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	applicationFake := &desktopCompatibilityHTTPApplication{}
-	httpAPI := newFocusedResourceAPI(
-		t,
-		logger,
-		routetest.Authenticator{},
-		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, nil, applicationFake, time.Now),
-	)
+	policies := desktopCompatibilityPolicy(t, nil)
+	httpAPI := desktopPingAPI(t, readyHealth(t, true), policies, time.Now)
 	for _, target := range []string{
 		"/api/v1/system/ping?desktop_release=1.0.0&desktop_build_id=build&platform=darwin&architecture=arm64",
 		"/api/v1/system/ping?desktop_release=1.0.0&desktop_build_id=build&platform=darwin&architecture=arm64&realtime_protocol=0",
@@ -204,21 +230,13 @@ func TestSystemPingRejectsMalformedSelectorsWithoutEvaluation(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, response.Code, "%s", target)
 		require.Contains(t, response.Body.String(), `"code":"request.invalid"`, "%s", target)
 	}
-	require.Equal(t, 0, applicationFake.evaluations, "malformed requests evaluated compatibility")
+	require.Equal(t, 0, policies.getCount(), "malformed requests evaluated compatibility")
 }
 
 func TestSystemPingFailsClosedInsideSuccessfulResponseWhenUnavailable(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	applicationFake := &desktopCompatibilityHTTPApplication{
-		evaluationErr: apperror.New("desktop_compatibility_policy.unavailable"),
-	}
-	httpAPI := newFocusedResourceAPI(
-		t,
-		logger,
-		routetest.Authenticator{},
-		systemResourceWithApplication(systemHTTPHealth{live: true}, BuildInfo{}, nil, applicationFake, time.Now),
-	)
+	policies := &desktopCompatibilityPolicies{getErr: errors.New("database unavailable")}
+	httpAPI := desktopPingAPI(t, readyHealth(t, false), policies, time.Now)
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
@@ -227,9 +245,24 @@ func TestSystemPingFailsClosedInsideSuccessfulResponseWhenUnavailable(t *testing
 	))
 	require.Equal(t, http.StatusOK, response.Code, "unavailable ping")
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"), "unavailable ping")
+	require.Equal(t, 1, policies.getCount(), "the unavailable policy was not read")
 	require.Contains(t, response.Body.String(), `"availability":"temporarily_unavailable"`, "unavailable ping")
 	require.Contains(t, response.Body.String(), `"compatibility":"server_incompatible"`, "unavailable ping")
 	require.NotContains(t, response.Body.String(), "desktop_compatibility_policy.unavailable", "unavailable ping")
+
+	// A node without the identity area reports the same.
+	logger, _ := routetest.NewLogger(t)
+	withoutIdentity := newFocusedResourceAPI(t, logger, routetest.Authenticator{},
+		systemResourceWithApplication(readyHealth(t, true), BuildInfo{}, nil, nil, time.Now))
+	response = httptest.NewRecorder()
+	withoutIdentity.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(),
+		http.MethodGet,
+		"/api/v1/system/ping?desktop_release=1.0.0&desktop_build_id=build&platform=darwin&architecture=arm64&realtime_protocol=1",
+		nil,
+	))
+	require.Equal(t, http.StatusOK, response.Code, "ping without identity")
+	require.Contains(t, response.Body.String(), `"availability":"temporarily_unavailable"`, "ping without identity")
+	require.Contains(t, response.Body.String(), `"compatibility_reason":"compatibility_unavailable"`, "ping without identity")
 }
 
 func TestDesktopCompatibilityPolicyHTTPUsesCompleteReplacementAndNoStore(t *testing.T) {
@@ -246,13 +279,16 @@ func TestDesktopCompatibilityPolicyHTTPUsesCompleteReplacementAndNoStore(t *test
 		MFACompletedAt:         model.OptionalTimeFrom(time.Now()),
 		ClientType:             model.SessionClientWeb,
 	}
-	policy := model.NewInitialDesktopCompatibilityPolicy(model.NewInstitutionID(), time.Now())
-	applicationFake := &desktopCompatibilityHTTPApplication{policy: policy}
+	policies := desktopCompatibilityPolicy(t, nil)
+	fixture := newIdentityFixture(t, identityOptions{
+		Stores: identityStores{DesktopCompatibilityPolicies: policies},
+		Grants: []accesstest.Grant{{UserID: principal.UserID, Actions: []model.Action{model.ActionDesktopCompatibilityPolicyManage}}},
+	})
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
 		routetest.Authenticator{Principal: principal},
-		desktopCompatibilityPolicyResource(applicationFake),
+		desktopCompatibilityPolicyResource(fixture.service),
 	)
 	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPut,
@@ -266,12 +302,23 @@ func TestDesktopCompatibilityPolicyHTTPUsesCompleteReplacementAndNoStore(t *test
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "replace = %d cache=%q body=%s", response.Code, response.Header().Get("Cache-Control"), response.Body.String())
 	require.Equal(t, "private, no-store", response.Header().Get("Cache-Control"), "replace = %d cache=%q body=%s", response.Code, response.Header().Get("Cache-Control"), response.Body.String())
-	require.Equal(t, int64(1), applicationFake.replaceCommand.ExpectedRevision)
-	require.Equal(t, "desktop-policy-1", applicationFake.replaceCommand.IdempotencyKey)
-	require.Equal(t, "1.2.0", applicationFake.replaceCommand.Settings.MinimumDesktopRelease)
-	require.Len(t, applicationFake.replaceCommand.Settings.RevokedDesktopBuildIDs, 1)
-	require.Equal(t, model.DesktopAvailabilityReady, applicationFake.replaceCommand.Settings.Availability)
-	require.False(t, applicationFake.replaceCommand.Settings.RetryAt.Valid)
+	require.Len(t, policies.replacements, 1)
+	replacement := policies.replacements[0]
+	require.Equal(t, principal.UserID, replacement.ActorID)
+	require.Equal(t, int64(1), replacement.ExpectedRevision)
+	require.Equal(t, "1.2.0", replacement.Settings.MinimumDesktopRelease)
+	require.Equal(t, []string{"build-7"}, replacement.Settings.RevokedDesktopBuildIDs)
+	require.Equal(t, "Update before the exam.", replacement.Settings.AdministratorMessage)
+	require.Equal(t, model.DesktopAvailabilityReady, replacement.Settings.Availability)
+	require.False(t, replacement.Settings.RetryAt.Valid)
+	require.Equal(t, sha256.Sum256([]byte("desktop-policy-1")), policies.commands[0].KeyDigest, "the Idempotency-Key did not key the replacement")
+	require.Equal(t, "desktop_compatibility_policy.replace", policies.commands[0].Operation)
+	attempts := fixture.access.Audits.Attempts()
+	require.Len(t, attempts, 1)
+	require.Equal(t, string(model.ActionDesktopCompatibilityPolicyManage), attempts[0].Action)
+	require.Equal(t, replacement.AuditEventID, attempts[0].ID)
+	require.Contains(t, response.Body.String(), `"minimum_desktop_release":"1.2.0"`)
+	require.Contains(t, response.Body.String(), `"revision":2`)
 
 	for _, invalidBody := range []string{
 		`{"expected_revision":1,"revoked_desktop_build_ids":[],"administrator_message":""}`,
@@ -288,6 +335,7 @@ func TestDesktopCompatibilityPolicyHTTPUsesCompleteReplacementAndNoStore(t *test
 		require.Equal(t, http.StatusBadRequest, invalidResponse.Code, "incomplete body")
 		require.Contains(t, invalidResponse.Body.String(), `"code":"request.invalid"`, "incomplete body")
 	}
+	require.Len(t, policies.replacements, 1, "an incomplete body reached the policy")
 }
 
 func TestDesktopCompatibilityOpenAPIDocument(t *testing.T) {

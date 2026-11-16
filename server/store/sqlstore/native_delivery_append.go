@@ -20,8 +20,8 @@ import (
 )
 
 // The rate debit commits separately from the append transaction: replay and a
-// refused request consume the same shared User/Attempt allowance. The Attempt
-// has exactly one candidate; Session and transport changes cannot refill it.
+// refused request consume the same shared user/Attempt allowance. The attempt
+// has exactly one candidate; session and transport changes cannot refill it.
 func (s *SQLNativeDeliveryStore) debitNativeAppend(ctx context.Context, access store.NativeDeliveryAccess) error {
 	allowed, err := runSQLTransaction(ctx, s.GetMaster().Begin, "native append allowance", func(
 		ctx context.Context,
@@ -99,9 +99,9 @@ type nativeAppendOutcomeDocument struct {
 
 func (nativeAppendOutcomeDocument) outcomeDocument() {}
 
-// AppendNativeDelivery appends one native security batch to the Participation's
+// AppendNativeDelivery appends one native security batch to the participation's
 // delivery stream under a NativeDeliveryAppendOperation command owned by the
-// Candidate, debiting the delivery budget first. A replay returns the original
+// candidate, debiting the delivery budget first. A replay returns the original
 // receipt with current progress, and an expired upload deadline yields
 // model.ErrDeliveryExpired.
 func (s *SQLNativeDeliveryStore) AppendNativeDelivery(
@@ -171,12 +171,10 @@ func (s *SQLNativeDeliveryStore) AppendNativeDelivery(
 	}, nil
 }
 
-// encodeNativeAppendOutcome encodes a native append outcome for persistence.
 func encodeNativeAppendOutcome(value *nativeAppendOutcome) ([]byte, error) {
 	return encodeOutcome(nativeAppendOutcomeDocument{Capacity: value.Capacity, Receipt: value.Receipt, Refusal: value.Refusal})
 }
 
-// decodeNativeAppendOutcome decodes a persisted native append outcome.
 func decodeNativeAppendOutcome(raw []byte) (*nativeAppendOutcome, error) {
 	var document nativeAppendOutcomeDocument
 	if decodeOutcome(raw, &document) != nil {
@@ -219,7 +217,6 @@ func (s *SQLNativeDeliveryStore) hydrateNativeAppend(
 	return value, nil
 }
 
-// finishNativeAppend completes the append audit and hydrates the outcome.
 func (s *SQLNativeDeliveryStore) finishNativeAppend(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -493,7 +490,7 @@ func retainNativeAppendBatch(
 	}
 
 	if pq.SummaryOnly || aq.SummaryOnly {
-		if _, err := tx.Exec(ctx, `ROLLBACK TO SAVEPOINT native_sources`); err != nil {
+		if _, err = tx.Exec(ctx, `ROLLBACK TO SAVEPOINT native_sources`); err != nil {
 			return nil, err
 		}
 
@@ -501,7 +498,7 @@ func retainNativeAppendBatch(
 		if aq.SummaryOnly {
 			reason, attempt = aq.StopReason, true
 		}
-		if err := latchNativeDelivery(ctx, tx, input.Access.Access.AttemptID, owner.ParticipationID, *reason, attempt); err != nil {
+		if err = latchNativeDelivery(ctx, tx, input.Access.Access.AttemptID, owner.ParticipationID, *reason, attempt); err != nil {
 			return nil, err
 		}
 
@@ -514,7 +511,7 @@ func retainNativeAppendBatch(
 		return nil, nativeAppendConflict("pending_capacity")
 	}
 
-	if err := storeNativeAppendBatch(ctx, tx, input, owner, batch, delta, pq, aq); err != nil {
+	if err = storeNativeAppendBatch(ctx, tx, input, owner, batch, delta, pq, aq); err != nil {
 		return nil, err
 	}
 	// Pending records cannot become authoritative ahead of a gap, so only the

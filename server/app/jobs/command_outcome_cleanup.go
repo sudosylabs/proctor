@@ -20,12 +20,14 @@ import (
 
 const maximumCommandOutcomeCleanupBatch = 500
 
-// CommandOutcomeCleanupCommand is the immutable command of the command outcome cleanup Job.
+// CommandOutcomeCleanupCommand is the immutable command of the command
+// outcome cleanup job.
 type CommandOutcomeCleanupCommand struct {
 	BatchSize int `json:"batch_size"`
 }
 
-// CommandOutcomeCleanupResult is the safe result of the command outcome cleanup Job.
+// CommandOutcomeCleanupResult is the result of the command outcome cleanup
+// job.
 type CommandOutcomeCleanupResult struct {
 	Deleted int64 `json:"deleted"`
 }
@@ -37,7 +39,7 @@ type commandOutcomeCleanupHandler struct {
 }
 
 // commandOutcomeCleanupContinuationDelay spaces successors so a backlog of
-// expired outcomes drains steadily without a tight chain of Jobs.
+// expired outcomes drains steadily without a tight chain of jobs.
 const commandOutcomeCleanupContinuationDelay = time.Second
 
 func (h commandOutcomeCleanupHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
@@ -55,7 +57,7 @@ func (h commandOutcomeCleanupHandler) Run(ctx context.Context, execution job.Exe
 	}
 
 	// A full batch may leave more behind. One successor, permanently
-	// deduplicated on this Job, keeps draining; a retry or an unknown enqueue
+	// deduplicated on this job, keeps draining; a retry or an unknown enqueue
 	// outcome cannot fork the chain, and it ends at the first short batch.
 	if deleted >= int64(command.BatchSize) {
 		if err = h.enqueueContinuation(ctx, execution.Job, command); err != nil {

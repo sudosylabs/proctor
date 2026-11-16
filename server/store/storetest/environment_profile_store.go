@@ -20,7 +20,7 @@ import (
 )
 
 // TestEnvironmentProfileStore checks creating, replaying, refusing and
-// retiring environment profiles, and that a Draft and a publication accept
+// retiring environment profiles, and that a draft and a publication accept
 // only an execution policy naming a usable profile.
 func TestEnvironmentProfileStore(t *testing.T, stores store.Store) {
 	t.Helper()
@@ -77,7 +77,7 @@ func TestEnvironmentProfileStore(t *testing.T, stores store.Store) {
 	_, err = profiles.Get(ctx, model.NewEnvironmentProfileID())
 	require.True(t, store.IsNotFound(err))
 
-	// A Draft takes only a profile that exists, is live and allows the
+	// A draft takes only a profile that exists, is live and allows the
 	// terminals.
 	unit := saveAcademicUnit(t, ctx, stores, institutionID.String(), "", "environment-profile-unit")
 	creator := saveUser(t, ctx, stores)

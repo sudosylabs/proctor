@@ -20,10 +20,9 @@ import (
 const (
 	BrowserPolicyMaximumRules = 128
 	BrowserPolicyMaximumBytes = 32 * 1024
-	// browserPolicyMaximumDocumentBytes bounds a semantically equivalent
-	// database/jsonb representation. PostgreSQL inserts insignificant spacing
-	// when rendering jsonb, while BrowserPolicyMaximumBytes applies to the
-	// canonical encoding that is digested and delivered.
+	// browserPolicyMaximumDocumentBytes bounds the jsonb form, which PostgreSQL
+	// renders with extra spacing; BrowserPolicyMaximumBytes bounds the canonical
+	// encoding that is digested and delivered.
 	browserPolicyMaximumDocumentBytes = 64 * 1024
 )
 
@@ -215,10 +214,10 @@ func (p BrowserPolicy) Match(rawURL string) (*BrowserPolicyRule, BrowserLocation
 	return p.matchLocation(location), location, nil
 }
 
-// MatchLocation validates and selects a rule for already-minimized activity.
-// Its serialized path can be longer than the original navigation's UTF-16
-// input after browser escaping. Reconstructing a URL would apply the wrong
-// bound and could reinterpret bytes that the browser already serialized.
+// MatchLocation validates an already-minimized location and selects its rule.
+// It works on the serialized path, which can be longer than the original
+// UTF-16 input after browser escaping; rebuilding a URL would apply the wrong
+// bound and could reinterpret bytes the browser already serialized.
 func (p BrowserPolicy) MatchLocation(location BrowserLocation) (*BrowserPolicyRule, error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
@@ -328,9 +327,9 @@ func DecodeBrowserPolicy(data []byte) (BrowserPolicy, error) {
 	return decodeBrowserPolicy(data, true)
 }
 
-// ParseBrowserPolicyDocument validates a JSON object without requiring its
-// insignificant whitespace or member order to match the canonical wire
-// encoding. PostgreSQL jsonb normalizes both when it stores a document.
+// ParseBrowserPolicyDocument validates a JSON object without requiring
+// canonical whitespace or member order, because PostgreSQL jsonb normalizes
+// both when it stores a document.
 func ParseBrowserPolicyDocument(data []byte) (BrowserPolicy, error) {
 	return decodeBrowserPolicy(data, false)
 }
@@ -399,9 +398,9 @@ func (r *browserPolicyRuleWire) UnmarshalJSON(raw []byte) error {
 	return nil
 }
 
-// ValidateInstitutionOrigin checks the installation-owned HTTPS pin separately
-// from the portable policy shape. HTTP navigation never authorizes credential
-// transport and cannot be enabled by a caller-supplied institution identity.
+// ValidateInstitutionOrigin checks the installation's HTTPS origin pin apart
+// from the portable policy. HTTP navigation never carries credentials, and a
+// caller-supplied institution identity cannot enable it.
 func (p BrowserPolicy) ValidateInstitutionOrigin(institutionOrigin string) error {
 	if err := p.Validate(); err != nil {
 		return err
@@ -457,8 +456,8 @@ func BrowserPolicyDigest(policy BrowserPolicy) (string, error) {
 	return SHA256Fingerprint(encoded), nil
 }
 
-// MayCreateIntegrityEvidence is derived from the delivered rules, never a
-// candidate assertion. Disabled collection cannot produce browser evidence.
+// MayCreateIntegrityEvidence is derived from the delivered rules, never from a
+// candidate's claim. Disabled collection produces no browser evidence.
 func (p BrowserPolicy) MayCreateIntegrityEvidence() bool {
 	if !p.Enabled {
 		return false

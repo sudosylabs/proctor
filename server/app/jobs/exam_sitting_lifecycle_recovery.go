@@ -25,12 +25,14 @@ const (
 	examSittingLifecycleRecoveryPageSize    = 100
 )
 
-// ExamSittingLifecycleRecoveryCommand is the immutable command of the Exam Sitting lifecycle recovery Job.
+// ExamSittingLifecycleRecoveryCommand is the immutable command of the
+// lifecycle recovery job.
 type ExamSittingLifecycleRecoveryCommand struct {
 	WorkLimit int `json:"work_limit"`
 }
 
-// ExamSittingLifecycleRecoveryCheckpoint is the resumable checkpoint of the Exam Sitting lifecycle recovery Job.
+// ExamSittingLifecycleRecoveryCheckpoint is the resumable checkpoint of the
+// lifecycle recovery job.
 type ExamSittingLifecycleRecoveryCheckpoint struct {
 	AfterDueAt     time.Time           `json:"after_due_at,omitempty"`
 	AfterSittingID model.ExamSittingID `json:"after_sitting_id,omitempty"`
@@ -38,13 +40,14 @@ type ExamSittingLifecycleRecoveryCheckpoint struct {
 	Changed        int64               `json:"changed"`
 }
 
-// ExamSittingLifecycleRecoveryResult is the safe result of the Exam Sitting lifecycle recovery Job.
+// ExamSittingLifecycleRecoveryResult is the result of the lifecycle recovery
+// job.
 type ExamSittingLifecycleRecoveryResult struct {
 	Processed int64 `json:"processed"`
 	Changed   int64 `json:"changed"`
 }
 
-// EncodeExamSittingLifecycleRecoveryCommand validates and encodes an Exam Sitting lifecycle recovery Job command.
+// EncodeExamSittingLifecycleRecoveryCommand validates and encodes a command.
 func EncodeExamSittingLifecycleRecoveryCommand(value ExamSittingLifecycleRecoveryCommand) (json.RawMessage, error) {
 	if value.WorkLimit < 1 || value.WorkLimit > maximumExamSittingLifecycleRecoveryWork {
 		return nil, errors.New("Exam Sitting lifecycle recovery work limit is invalid")
@@ -52,7 +55,8 @@ func EncodeExamSittingLifecycleRecoveryCommand(value ExamSittingLifecycleRecover
 	return json.Marshal(value)
 }
 
-// DecodeExamSittingLifecycleRecoveryCommand strictly decodes and validates an Exam Sitting lifecycle recovery Job command.
+// DecodeExamSittingLifecycleRecoveryCommand decodes and validates a command
+// strictly.
 func DecodeExamSittingLifecycleRecoveryCommand(document json.RawMessage) (ExamSittingLifecycleRecoveryCommand, error) {
 	var value ExamSittingLifecycleRecoveryCommand
 	if err := model.DecodeStrictJobDocument(document, &value); err != nil {
@@ -64,7 +68,8 @@ func DecodeExamSittingLifecycleRecoveryCommand(document json.RawMessage) (ExamSi
 	return value, nil
 }
 
-// EncodeExamSittingLifecycleRecoveryCheckpoint validates and encodes an Exam Sitting lifecycle recovery Job checkpoint.
+// EncodeExamSittingLifecycleRecoveryCheckpoint validates and encodes a
+// checkpoint.
 func EncodeExamSittingLifecycleRecoveryCheckpoint(value ExamSittingLifecycleRecoveryCheckpoint) (json.RawMessage, error) {
 	if err := validateExamSittingLifecycleRecoveryCheckpoint(value); err != nil {
 		return nil, err
@@ -72,7 +77,8 @@ func EncodeExamSittingLifecycleRecoveryCheckpoint(value ExamSittingLifecycleReco
 	return json.Marshal(value)
 }
 
-// DecodeExamSittingLifecycleRecoveryCheckpoint strictly decodes and validates an Exam Sitting lifecycle recovery Job checkpoint.
+// DecodeExamSittingLifecycleRecoveryCheckpoint decodes and validates a
+// checkpoint strictly.
 func DecodeExamSittingLifecycleRecoveryCheckpoint(document json.RawMessage) (ExamSittingLifecycleRecoveryCheckpoint, error) {
 	var value ExamSittingLifecycleRecoveryCheckpoint
 	if err := model.DecodeStrictJobDocument(document, &value); err != nil {
@@ -95,7 +101,7 @@ func validateExamSittingLifecycleRecoveryCheckpoint(value ExamSittingLifecycleRe
 }
 
 type examSittingLifecycleRecoveryHandler struct {
-	sittings sittingLifecycle
+	sittings *sitting.Service
 }
 
 func (h examSittingLifecycleRecoveryHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
@@ -274,8 +280,8 @@ func examSittingLifecycleRecoveryDescriptor(handler job.Handler) job.Descriptor 
 	return descriptor
 }
 
-// NewExamSittingLifecycleRecovery registers the reconciliation of Exam
-// Sittings whose lifecycle Jobs are overdue, proposed daily.
+// NewExamSittingLifecycleRecovery registers the daily reconciliation of
+// sittings whose lifecycle jobs are overdue.
 func NewExamSittingLifecycleRecovery(sittings *sitting.Service, jobs store.JobStore, now func() time.Time) job.Registration {
 	return job.Registration{
 		Descriptor: examSittingLifecycleRecoveryDescriptor(examSittingLifecycleRecoveryHandler{sittings: sittings}),

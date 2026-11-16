@@ -19,29 +19,28 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// ErrAuthenticationMethodDisabled reports that the current Access Policy no
-// longer permits the authentication method at the terminal durable commit.
-// It intentionally carries no provider or account detail.
+// ErrAuthenticationMethodDisabled means the access policy stopped permitting
+// the method before the final commit. It deliberately carries no provider or
+// account detail.
 var ErrAuthenticationMethodDisabled = errors.New("authentication method is disabled by current access policy")
 
-// ErrPasswordCredentialChanged reports that previously verified password proof
-// no longer names the active credential. Public authentication fails generically.
+// ErrPasswordCredentialChanged means a verified password proof no longer names
+// the active credential. Public sign-in must report it as a generic failure.
 var ErrPasswordCredentialChanged = errors.New("password credential has changed")
 
-// ErrPasswordReused reports that a new password matches one of the User's
-// retained recent passwords, so the credential change was refused.
+// ErrPasswordReused means the new password matches one of the user's retained
+// recent passwords.
 var ErrPasswordReused = errors.New("password matches a recent password")
 
-// ErrLastUsableAuthenticationMethod reports that removing a credential would
-// leave the User without a method admitted by current policy and deployment.
+// ErrLastUsableAuthenticationMethod means removing the credential would leave
+// the user no method the policy and deployment admit.
 var ErrLastUsableAuthenticationMethod = errors.New("cannot remove the last usable authentication method")
 
-// ErrInvalidState identifies authoritative data that cannot be rehydrated safely.
-// Application error mapping must classify it before inspecting validation causes.
+// ErrInvalidState means stored data failed validation on read. Error mapping
+// must check for it before inspecting validation causes.
 var ErrInvalidState = errors.New("invalid persisted state")
 
-// ErrInvalidInput reports that a repository received a model in a state it
-// cannot persist.
+// ErrInvalidInput means the store was given a value it cannot persist.
 type ErrInvalidInput struct {
 	Entity     string
 	Field      string
@@ -54,17 +53,16 @@ func NewErrInvalidInput(entity, field string, value any) *ErrInvalidInput {
 	return &ErrInvalidInput{Entity: entity, Field: field, Value: value}
 }
 
-// NewErrConstraintViolation reports a write that the database rejected under a
-// schema constraint (CHECK, NOT NULL, or length) rather than input the Store
-// refused before writing. Field names the constraint or column. A concurrent
-// transition or clock skew can trip such a constraint, so unlike other invalid
+// NewErrConstraintViolation reports a write the database rejected under a
+// CHECK, NOT NULL or length constraint; field names the constraint or column.
+// A concurrent transition or clock skew can trip one, so unlike other invalid
 // input the same request may succeed when retried.
 func NewErrConstraintViolation(entity, field string) *ErrInvalidInput {
 	return &ErrInvalidInput{Entity: entity, Field: field, constraint: true}
 }
 
-// IsConstraintViolation reports whether err contains invalid input that the
-// database, not the Store, rejected.
+// IsConstraintViolation reports whether err holds invalid input the database,
+// not the store, rejected.
 func IsConstraintViolation(err error) bool {
 	for err != nil {
 		var invalid *ErrInvalidInput
@@ -92,7 +90,7 @@ func (e *ErrInvalidInput) Unwrap() error {
 	return e.cause
 }
 
-// ErrNotFound reports that the requested durable resource does not exist.
+// ErrNotFound means the resource does not exist.
 type ErrNotFound struct {
 	Resource string
 	ID       string
@@ -116,29 +114,29 @@ func (e *ErrNotFound) Unwrap() error {
 	return e.cause
 }
 
-// ErrConflict reports a uniqueness or state conflict.
+// ErrConflict means a uniqueness or state conflict; Constraint names which.
 type ErrConflict struct {
 	Resource   string
 	Constraint string
 	cause      error
 }
 
-// ErrIdempotencyConflict reports reuse of a live command key with different
-// semantic input.
+// ErrIdempotencyConflict means a live command key was reused with different
+// input.
 type ErrIdempotencyConflict struct{}
 
 func (*ErrIdempotencyConflict) Error() string {
 	return "idempotency key conflicts with another command"
 }
 
-// ErrIdempotencyInProgress reports that another transaction still owns the
-// same command namespace after the bounded wait.
+// ErrIdempotencyInProgress means another transaction still held the same
+// command when the bounded wait ran out.
 type ErrIdempotencyInProgress struct{}
 
 func (*ErrIdempotencyInProgress) Error() string { return "idempotent command is still in progress" }
 
-// ErrUserSettingsRevisionConflict carries only the safe current opaque
-// revision hint. It never carries the current settings source.
+// ErrUserSettingsRevisionConflict carries only the current opaque revision,
+// never the settings themselves.
 type ErrUserSettingsRevisionConflict struct {
 	CurrentRevision model.UserSettingsRevision
 }
@@ -162,7 +160,7 @@ func (e *ErrConflict) Unwrap() error {
 	return e.cause
 }
 
-// ErrReference reports an invalid foreign-key relationship.
+// ErrReference means a write violated a foreign key.
 type ErrReference struct {
 	Resource   string
 	Constraint string
@@ -191,10 +189,9 @@ func IsConflict(err error) bool {
 	return errors.As(err, &target)
 }
 
-// IsUserIdentityConflict reports only the two persistence conflicts that mean
-// a canonical username or mailbox is already assigned to a User. Public entry
-// points use this narrow classification without learning database constraint
-// names or concealing unrelated transaction failures.
+// IsUserIdentityConflict reports whether err means the username or email is
+// already taken. Public entry points use it so they neither learn constraint
+// names nor hide unrelated failures.
 func IsUserIdentityConflict(err error) bool {
 	var target *ErrConflict
 	if !errors.As(err, &target) || target.Resource != "user" {

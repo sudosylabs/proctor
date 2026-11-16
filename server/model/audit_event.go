@@ -30,29 +30,24 @@ const (
 	AuditStatusFail    AuditStatus = "fail"
 )
 
-// AuditErrorAttemptAbandoned marks an attempt whose outcome was never
-// recorded and that maintenance terminalized after its bound. It means the
-// outcome is unknown, not that the operation was refused.
+// AuditErrorAttemptAbandoned marks an attempt whose outcome was never recorded
+// and that maintenance closed after its bound. The outcome is unknown, not
+// refused.
 const AuditErrorAttemptAbandoned = "audit.attempt_abandoned"
 
-// AuditEvent is an append-oriented security record. Critical mutations are
-// inserted as attempts and may transition exactly once; point-in-time
-// authorization decisions are inserted directly with their terminal result.
-//
-// ActorID and SessionID are optional typed identifiers (zero means absent).
-// SubjectUserID names the User whose account the event concerns, when there
-// is one: a User resource is always its own subject, and writers whose
-// resource is a scope, Class, or the Institution name the affected User
-// explicitly. ScopeID remains a plain string because the target depends on
-// ScopeType.
-// Create/update times use UTC time.Time; public list DTOs still project millis.
+// AuditEvent is an append-oriented security record. A critical mutation is
+// inserted as an attempt and transitions exactly once; an authorization
+// decision is inserted with its final result. Zero ActorID or SessionID means
+// absent. ScopeID is a plain string because its target depends on ScopeType.
 type AuditEvent struct {
 	ID        AuditEventID
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	ActorID   UserID
 	SessionID SessionID
-	// SubjectUserID is the User the event is about; see AuditEvent.
+	// SubjectUserID is the user whose account the event concerns, if any. A user
+	// resource is its own subject; writers whose resource is a scope, class or the
+	// institution name the affected user explicitly.
 	SubjectUserID UserID
 	Action        string
 	Resource      Resource
@@ -71,10 +66,9 @@ type AuditEvent struct {
 	Result        json.RawMessage
 }
 
-// AccountDisableReason returns the optional reason recorded on an account
-// disable event, or empty for any other event or when none was given. Beside
-// Operation, it is the one audit parameter the institution audit list
-// presents, and only to readers that receive parameters at all.
+// AccountDisableReason returns the reason recorded on an account disable
+// event, or empty. Besides Operation it is the only parameter the institution
+// audit list shows, and only to readers that receive parameters.
 func (ae *AuditEvent) AccountDisableReason() string {
 	if ae == nil || ae.Action != string(ActionUserManage) || len(ae.Parameters) == 0 {
 		return ""
@@ -91,9 +85,8 @@ func (ae *AuditEvent) AccountDisableReason() string {
 	return parameters.Value.Reason
 }
 
-// Operation returns the operation name the writer recorded in the event's
-// parameters, or empty when it recorded none or the reader received no
-// parameters. The institution audit list chooses an event's summary by it.
+// Operation returns the operation name the writer recorded in the parameters,
+// or empty when there is none or the reader received no parameters.
 func (ae *AuditEvent) Operation() string {
 	if ae == nil || len(ae.Parameters) == 0 {
 		return ""
@@ -107,7 +100,7 @@ func (ae *AuditEvent) Operation() string {
 	return parameters.Operation
 }
 
-// AuditQuery is the application/store listing filter for audit events.
+// AuditQuery filters an audit event listing.
 type AuditQuery struct {
 	ActorID  string
 	Action   string
@@ -118,8 +111,8 @@ type AuditQuery struct {
 	Limit           int
 }
 
-// PrepareCreate applies application-owned identity and lifecycle fields and
-// bounds string fields that arrive from transport or operational metadata.
+// PrepareCreate stamps the ID and creation time and truncates string fields
+// that arrive from transports or operational metadata.
 func (ae *AuditEvent) PrepareCreate(id AuditEventID, at time.Time) {
 	if ae == nil {
 		return
@@ -131,7 +124,7 @@ func (ae *AuditEvent) PrepareCreate(id AuditEventID, at time.Time) {
 	ae.normalize()
 }
 
-// PrepareUpdate applies the application-selected completion time.
+// PrepareUpdate stamps the completion time.
 func (ae *AuditEvent) PrepareUpdate(at time.Time) {
 	if ae == nil {
 		return
@@ -161,7 +154,7 @@ func (ae *AuditEvent) normalize() {
 	ae.Result = cloneRawMessage(ae.Result)
 }
 
-// Validate checks rehydrated audit-event state.
+// Validate checks the event's fields, for new and stored values alike.
 func (ae *AuditEvent) Validate() error {
 	const where = "AuditEvent.Validate"
 	if ae == nil {
@@ -225,7 +218,7 @@ func (ae *AuditEvent) Validate() error {
 	return nil
 }
 
-// Clone returns a deep copy of the audit event including JSON payloads.
+// Clone returns a deep copy, including the JSON payloads.
 func (ae *AuditEvent) Clone() *AuditEvent {
 	if ae == nil {
 		return nil
@@ -237,7 +230,8 @@ func (ae *AuditEvent) Clone() *AuditEvent {
 	return &cloned
 }
 
-// EncodeAuditData marshals a value into a bounded audit JSON payload.
+// EncodeAuditData marshals value into at most AuditJSONMaxBytes of JSON; nil
+// gives nil.
 func EncodeAuditData(value any) (json.RawMessage, error) {
 	if value == nil {
 		return nil, nil

@@ -22,18 +22,18 @@ import (
 )
 
 func newAuditedDesktopAuthorizationService(t *testing.T, persistence *desktopAuthorizationStoreFake,
-	auditor securityAuditor, at time.Time,
+	auditor *securityAuditLog, at time.Time,
 ) *Service {
 	t.Helper()
 	service := newTestDesktopAuthorizationService(t, persistence, func() time.Time { return at })
-	service.securityAudit = auditor
+	service.securityAudit = auditor.auditor
 	return service
 }
 
 func TestDesktopAuthorizationApproveRejectsForeignPrincipal(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
-	auditor := &securityAuditorFake{}
+	auditor := newSecurityAuditLog(t, nil)
 	persistence := &desktopAuthorizationStoreFake{contextUserID: model.NewUserID(),
 		issueResult: &store.DesktopAuthorizationCodeIssued{CallbackURL: "http://127.0.0.1:49152/" + model.NewCredentialToken(), CodeExpiresAt: at.Add(time.Minute)}}
 	service := newAuditedDesktopAuthorizationService(t, persistence, auditor, at)
@@ -57,7 +57,7 @@ func TestDesktopAuthorizationApproveRejectsForeignPrincipal(t *testing.T) {
 func TestDesktopAuthorizationApproveAndExchangeAuditTheApprovingAccount(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
-	auditor := &securityAuditorFake{}
+	auditor := newSecurityAuditLog(t, nil)
 	account := model.NewUserID()
 	persistence := &desktopAuthorizationStoreFake{contextUserID: account, exchangeUserID: account,
 		issueResult: &store.DesktopAuthorizationCodeIssued{CallbackURL: "http://127.0.0.1:49152/" + model.NewCredentialToken(), CodeExpiresAt: at.Add(time.Minute)},

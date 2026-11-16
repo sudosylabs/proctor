@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -71,13 +70,16 @@ func TestAcademicUnitUpdateReparentAuthorizesBothScopesBeforeCommit(t *testing.T
 	t.Parallel()
 
 	events := []string{}
-	unitID := model.NewID()
+	principal, caller := newCaller()
+	unitID := model.NewAcademicUnitID()
 	oldParentID := model.NewID()
 	newParentID := model.NewAcademicUnitID()
-	institutionID := model.NewID()
+	access := academicUnitAccess(t, &events, nil,
+		unitGrant(principal.UserID, unitID, model.ActionAcademicUnitManage),
+		unitGrant(principal.UserID, newParentID, model.ActionAcademicUnitManage))
 	current := &model.AcademicUnit{
-		ID: model.AcademicUnitID(unitID), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100),
-		InstitutionID: model.InstitutionID(institutionID), ParentID: model.AcademicUnitID(oldParentID),
+		ID: unitID, CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100),
+		InstitutionID: access.Institution.ID, ParentID: model.AcademicUnitID(oldParentID),
 		Name: "computing", DisplayName: "Computing", Revision: 1,
 	}
 	updated := *current
@@ -86,19 +88,10 @@ func TestAcademicUnitUpdateReparentAuthorizesBothScopesBeforeCommit(t *testing.T
 	persistence := &academicUnitMutationStore{
 		events: &events, current: current, updated: &updated,
 	}
-	auditor := &academicUnitCommandAuditor{events: &events, beginID: model.NewID()}
 	publisher := academicUnitPublisherIn(&events)
-	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: persistence}, Authorizer: academicUnitAuthorizerStub{
-		authorize: func(
-			_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource,
-		) error {
-			events = append(events, "authorize-"+resource.ID)
-			require.Equal(t, model.ActionAcademicUnitManage, action)
-			return nil
-		},
-	}, Auditor: auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID, Publisher: publisher})
-	got, err := service.UpdateAcademicUnit(context.Background(), invocation.Invocation{}, UpdateAcademicUnitCommand{
-		ID: model.AcademicUnitID(unitID), ParentID: &newParentID,
+	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID, Publisher: publisher})
+	got, err := service.UpdateAcademicUnit(context.Background(), caller, UpdateAcademicUnitCommand{
+		ID: unitID, ParentID: &newParentID,
 		DisplayName: stringPointer("Applied Computing"),
 	})
 	require.NoError(t, err, "Update()")
@@ -107,11 +100,15 @@ func TestAcademicUnitUpdateReparentAuthorizesBothScopesBeforeCommit(t *testing.T
 	require.Equal(t, newParentID.String(), persistence.updateInput.Unit.ParentID.String())
 	require.Equal(t, "Applied Computing", persistence.updateInput.Unit.DisplayName)
 	require.True(t, persistence.updateInput.Unit.UpdatedAt.Equal(time.UnixMilli(500).UTC()))
-	require.Equal(t, model.AuditEventID(auditor.beginID), persistence.updateInput.AuditEventID)
+	require.Equal(t, onlyAttempt(t, access).ID, persistence.updateInput.AuditEventID)
+	require.Equal(t, []string{
+		"academic_unit.manage academic_unit:" + unitID.String() + " success",
+		"academic_unit.manage academic_unit:" + newParentID.String() + " success",
+	}, decisions(access), "both scopes are authorized")
 	assertAcademicUnitCreateEvents(
 		t, events,
-		"authorize-"+unitID, "get", "authorize-"+newParentID.String(),
-		"audit-begin", "store-update", "effect-update",
+		"grants", "decision:academic_unit.manage:success", "get", "grants", "decision:academic_unit.manage:success",
+		"audit-begin:academic_unit.manage", "store-update", "effect-update",
 	)
 	// Contract: the update publishes one event naming the unit and reports no
 	// failure.
@@ -122,27 +119,26 @@ func TestAcademicUnitUpdateReparentToRootRequiresInstitutionAuthority(t *testing
 	t.Parallel()
 
 	events := []string{}
-	unitID, parentID, institutionID := model.NewID(), model.NewID(), model.NewID()
+	principal, caller := newCaller()
+	unitID, parentID := model.NewAcademicUnitID(), model.NewID()
+	access := academicUnitAccess(t, &events, nil, unitGrant(principal.UserID, unitID, model.ActionAcademicUnitManage))
+	institutionID := access.Institution.ID.String()
 	current := &model.AcademicUnit{
-		ID: model.AcademicUnitID(unitID), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100),
-		InstitutionID: model.InstitutionID(institutionID), ParentID: model.AcademicUnitID(parentID),
+		ID: unitID, CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100),
+		InstitutionID: access.Institution.ID, ParentID: model.AcademicUnitID(parentID),
 		Name: "computing", DisplayName: "Computing", Revision: 1,
 	}
 	persistence := &academicUnitMutationStore{events: &events, current: current}
-	denied := apperror.New("authorization.denied")
-	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: persistence}, Authorizer: academicUnitAuthorizerStub{authorize: func(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource) error {
-		events = append(events, "authorize-"+string(resource.Type)+"-"+resource.ID)
-		require.Equal(t, model.ActionAcademicUnitManage, action)
-		if resource.Type == model.ResourceInstitution {
-			return denied
-		}
-		return nil
-	}}, Auditor: &academicUnitCommandAuditor{events: &events}, Now: time.Now, NewID: model.NewID, Publisher: academicUnitPublisherIn(&events)})
+	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID, Publisher: academicUnitPublisherIn(&events)})
 	emptyParent := model.AcademicUnitID("")
-	_, err := service.UpdateAcademicUnit(context.Background(), invocation.Invocation{}, UpdateAcademicUnitCommand{ID: model.AcademicUnitID(unitID), ParentID: &emptyParent})
+	_, err := service.UpdateAcademicUnit(context.Background(), caller, UpdateAcademicUnitCommand{ID: unitID, ParentID: &emptyParent})
 	require.True(t, apperror.Is(err, "authorization.denied"), "Update() error = %v, want authorization.denied", err)
+	require.Equal(t, []string{
+		"academic_unit.manage academic_unit:" + unitID.String() + " success",
+		"academic_unit.manage institution:" + institutionID + " fail",
+	}, decisions(access), "a root unit needs Institution authority")
 	assertAcademicUnitCreateEvents(t, events,
-		"authorize-academic_unit-"+unitID, "get", "authorize-institution-"+institutionID,
+		"grants", "decision:academic_unit.manage:success", "get", "grants", "decision:academic_unit.manage:fail",
 	)
 }
 
@@ -150,10 +146,15 @@ func TestAcademicUnitUpdateCycleFailureIsAuditedWithoutPublication(t *testing.T)
 	t.Parallel()
 
 	events := []string{}
-	unitID := model.NewID()
+	principal, caller := newCaller()
+	unitID := model.NewAcademicUnitID()
+	missingParentID := model.NewAcademicUnitID()
+	access := academicUnitAccess(t, &events, nil,
+		unitGrant(principal.UserID, unitID, model.ActionAcademicUnitManage),
+		unitGrant(principal.UserID, missingParentID, model.ActionAcademicUnitManage))
 	current := &model.AcademicUnit{
-		ID: model.AcademicUnitID(unitID), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100),
-		InstitutionID: model.InstitutionID(model.NewID()), Name: "engineering", DisplayName: "Engineering",
+		ID: unitID, CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100),
+		InstitutionID: access.Institution.ID, Name: "engineering", DisplayName: "Engineering",
 		Revision: 1,
 	}
 	persistence := &academicUnitMutationStore{
@@ -162,21 +163,16 @@ func TestAcademicUnitUpdateCycleFailureIsAuditedWithoutPublication(t *testing.T)
 			"academic_unit", "academic_units_acyclic", errors.New("cycle"),
 		),
 	}
-	auditor := &academicUnitCommandAuditor{events: &events, beginID: model.NewID()}
-	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: persistence}, Authorizer: academicUnitAuthorizerStub{authorize: academicUnitAuthorizerFunc(func(
-		context.Context, invocation.Invocation, model.Action, model.Resource,
-	) error {
-		events = append(events, "authorize")
-		return nil
-	})}, Auditor: auditor, Now: time.Now, NewID: model.NewID, Publisher: academicUnitPublisherIn(&events)})
-	missingParentID := model.NewAcademicUnitID()
-	_, err := service.UpdateAcademicUnit(context.Background(), invocation.Invocation{}, UpdateAcademicUnitCommand{
-		ID: model.AcademicUnitID(unitID), ParentID: &missingParentID,
+	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID, Publisher: academicUnitPublisherIn(&events)})
+	_, err := service.UpdateAcademicUnit(context.Background(), caller, UpdateAcademicUnitCommand{
+		ID: unitID, ParentID: &missingParentID,
 	})
 	require.True(t, apperror.Is(err, "academic_unit.conflict"), "Update() error = %v, failure audit", err)
-	require.Equal(t, "academic_unit.conflict", auditor.failCode, "Update() error = %v, failure audit", err)
+	require.Equal(t, "academic_unit.conflict", onlyAttempt(t, access).ErrorCode, "Update() error = %v, failure audit", err)
 	assertAcademicUnitCreateEvents(
-		t, events, "authorize", "get", "authorize", "audit-begin", "store-update", "audit-fail",
+		t, events,
+		"grants", "decision:academic_unit.manage:success", "get", "grants", "decision:academic_unit.manage:success",
+		"audit-begin:academic_unit.manage", "store-update", "audit-fail",
 	)
 }
 
@@ -184,10 +180,12 @@ func TestAcademicUnitArchiveCommitsBeforePublishing(t *testing.T) {
 	t.Parallel()
 
 	events := []string{}
-	unitID := model.NewID()
+	principal, caller := newCaller()
+	unitID := model.NewAcademicUnitID()
+	access := academicUnitAccess(t, &events, nil, unitGrant(principal.UserID, unitID, model.ActionAcademicUnitManage))
 	current := &model.AcademicUnit{
-		ID: model.AcademicUnitID(unitID), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100),
-		InstitutionID: model.InstitutionID(model.NewID()), Name: "engineering", DisplayName: "Engineering",
+		ID: unitID, CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100),
+		InstitutionID: access.Institution.ID, Name: "engineering", DisplayName: "Engineering",
 		Revision: 1,
 	}
 	archived := *current
@@ -196,21 +194,15 @@ func TestAcademicUnitArchiveCommitsBeforePublishing(t *testing.T) {
 	persistence := &academicUnitMutationStore{
 		events: &events, current: current, archived: &archived,
 	}
-	auditor := &academicUnitCommandAuditor{events: &events, beginID: model.NewID()}
-	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: persistence}, Authorizer: academicUnitAuthorizerStub{authorize: academicUnitAuthorizerFunc(func(
-		context.Context, invocation.Invocation, model.Action, model.Resource,
-	) error {
-		events = append(events, "authorize")
-		return nil
-	})}, Auditor: auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID, Publisher: academicUnitPublisherIn(&events)})
-	err := service.ArchiveAcademicUnit(context.Background(), invocation.Invocation{}, ArchiveAcademicUnitCommand{ID: model.AcademicUnitID(unitID)})
+	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID, Publisher: academicUnitPublisherIn(&events)})
+	err := service.ArchiveAcademicUnit(context.Background(), caller, ArchiveAcademicUnitCommand{ID: unitID})
 	require.NoError(t, err)
 	require.NotNil(t, persistence.archiveInput)
-	require.Equal(t, model.AcademicUnitID(unitID), persistence.archiveInput.ID)
+	require.Equal(t, unitID, persistence.archiveInput.ID)
 	require.True(t, time.UnixMilli(500).UTC().Equal(persistence.archiveInput.ArchiveAt))
-	require.Equal(t, model.AuditEventID(auditor.beginID), persistence.archiveInput.AuditEventID)
+	require.Equal(t, onlyAttempt(t, access).ID, persistence.archiveInput.AuditEventID)
 	assertAcademicUnitCreateEvents(
-		t, events, "authorize", "get", "audit-begin", "store-archive", "effect-archive",
+		t, events, "grants", "decision:academic_unit.manage:success", "get", "audit-begin:academic_unit.manage", "store-archive", "effect-archive",
 	)
 }
 

@@ -13,7 +13,7 @@ import (
 	"github.com/sudosylabs/proctor/server/logging"
 )
 
-// loggingClusterLogger adapts logging to cluster.Logger at the composition root.
+// loggingClusterLogger adapts logging to cluster.Logger.
 type loggingClusterLogger struct {
 	log *logging.Logger
 }

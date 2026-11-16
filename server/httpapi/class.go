@@ -8,11 +8,9 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
@@ -32,8 +30,8 @@ type classResponse struct {
 	Description      string `json:"description"`
 }
 
-// classListItemResponse is one Class of a Class listing with its current
-// student count, present only for a caller who may view the Classes'
+// classListItemResponse is one class of a class listing with its current
+// student count, present only for a caller who may view the classes'
 // members. The count stops at 10,000 and then is a lower bound.
 type classListItemResponse struct {
 	classResponse
@@ -57,10 +55,10 @@ type updateClassRequest struct {
 }
 
 type classHandlers struct {
-	app ClassApplication
+	app *academic.Service
 }
 
-func classResource(app ClassApplication) route.Resource {
+func classResource(app *academic.Service) route.Resource {
 	h := classHandlers{app: app}
 	return route.NewResource(
 		"classes",
@@ -177,13 +175,12 @@ func (h classHandlers) list(request route.Request) (route.Result, error) {
 	return classListResult(page, pageQuery)
 }
 
-// classListResult presents one name-ordered Class page with its first-page
-// total and, when the application read them, each Class's student count.
+// classListResult presents one name-ordered class page with its first-page
+// total and the student count of each class the application counted.
 func classListResult(page academic.ClassPage, query paging.NameQuery) (route.Result, error) {
 	present := func(class *model.Class) classListItemResponse {
 		item := classListItemResponse{classResponse: classResponseFromModel(class)}
-		if page.StudentCounts != nil {
-			count := page.StudentCounts[class.ID]
+		if count, counted := page.StudentCounts[class.ID]; counted {
 			lowerBound := count >= store.MaximumListCount
 			item.StudentCount, item.StudentCountIsLowerBound = &count, &lowerBound
 		}
@@ -301,14 +298,4 @@ func classResponseFromModel(class *model.Class) classResponse {
 		DisplayName:      class.DisplayName,
 		Description:      class.Description,
 	}
-}
-
-// ClassApplication is the application port its handlers call; it reads and changes Classes.
-type ClassApplication interface {
-	GetClass(context.Context, invocation.Invocation, model.ClassID) (*model.Class, error)
-	ListClasses(context.Context, invocation.Invocation, academic.ListClassesQuery) (academic.ClassPage, error)
-	SearchClasses(context.Context, invocation.Invocation, academic.SearchClassesQuery) (academic.ClassPage, error)
-	CreateClass(context.Context, invocation.Invocation, academic.CreateClassCommand) (*model.Class, error)
-	UpdateClass(context.Context, invocation.Invocation, academic.UpdateClassCommand) (*model.Class, error)
-	ArchiveClass(context.Context, invocation.Invocation, academic.ArchiveClassCommand) error
 }

@@ -13,8 +13,9 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// Before is an immutable upper event-time bound shared by all pages of one
-// finite scan. A zero value selects the database clock for the first page.
+// RetentionExpiryListOptions pages one scan. Before is the event-time bound
+// every page of the scan shares; zero on the first page means the database
+// clock.
 type RetentionExpiryListOptions struct {
 	Kind         model.RetentionExpiryKind
 	CleanupAudit bool
@@ -43,10 +44,9 @@ type RetentionExpiryResult struct {
 	Expired   bool
 }
 
-// RetentionCleanupAuditReconciliation coalesces the cleanup workflow's own
-// terminal audit history. A prepared actorless attempt is inserted only when
-// a bounded batch changes state, then completed with scalar counts atomically.
-// A no-change scan persists neither an audit nor another work item.
+// RetentionCleanupAuditReconciliation expires the cleanup workflow's own audit
+// history. AuditEvent is written, with counts, only when a batch changes
+// something; a no-change scan writes no audit and queues no further work.
 type RetentionCleanupAuditReconciliation struct {
 	AfterID    model.AuditEventID
 	Before     time.Time

@@ -14,18 +14,16 @@ import (
 	"time"
 )
 
-// The types in this file are documents of the desktop native delivery
-// agreement. Batches are decoded closed and canonically re-encoded; receipts,
-// progress and stream status are persisted as replay outcomes and returned
-// verbatim. Their json tags are that one canonical spelling (see the package
-// documentation on serialization).
+// These are documents of the desktop native delivery agreement, so their json
+// tags are the one canonical spelling. Batches decode strictly and are
+// re-encoded canonically; receipts, progress and stream status are stored as
+// replay results and returned verbatim.
 
 var ErrNativeDeliveryInvalid = errors.New("native delivery is invalid")
 
-// NativeCapabilityFact is one capability's full minimized state, as Desktop
-// observed it at ObservedAt, with the envelope around it. Facts are
-// change-driven: Desktop sends one whenever the state or its envelope
-// changes, and the server evaluates the policy's rules on it again.
+// NativeCapabilityFact is one capability's full minimized state as Desktop
+// observed it at ObservedAt, with its envelope. Desktop sends one whenever the
+// state or envelope changes, and the server re-evaluates the rules on it.
 type NativeCapabilityFact struct {
 	observedAtSpelling string
 
@@ -34,7 +32,7 @@ type NativeCapabilityFact struct {
 	NativeCapabilityReadiness
 }
 
-// NativeCapabilityFactMaxBytes bounds one fact record.
+// NativeCapabilityFactMaxBytes bounds one fact record, in bytes.
 const NativeCapabilityFactMaxBytes = 16 * 1024
 
 func (v NativeCapabilityFact) Validate() error {
@@ -147,7 +145,7 @@ func (r NativeSourceReset) Validate() error {
 	return nil
 }
 
-// NativeRecord is a closed union. It never retains an arbitrary raw detail bag.
+// NativeRecord is a closed union; it never keeps an arbitrary raw detail bag.
 type NativeRecord struct {
 	Fact       *NativeCapabilityFact
 	Confirmed  *NativeParticipationConfirmed

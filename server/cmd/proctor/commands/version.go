@@ -12,11 +12,10 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-
-	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/app"
 )
 
-type buildInfoExecutor func() server.BuildInfo
+type buildInfoExecutor func() app.BuildInfo
 
 func newVersionCommand(current buildInfoExecutor, text commandText) *cobra.Command {
 	var asJSON bool

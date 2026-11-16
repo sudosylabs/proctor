@@ -27,8 +27,8 @@ type ConfigureDraftBrowserPolicyCommand struct {
 	IdempotencyKey        string
 }
 
-// ConfigureExamDraftBrowserPolicy replaces the complete canonical enforcement
-// value. Publication, rather than this mutable Draft, controls open Sittings.
+// ConfigureExamDraftBrowserPolicy replaces the draft's whole browser policy.
+// Open sittings follow publication, not the draft.
 func (a *Authoring) ConfigureExamDraftBrowserPolicy(
 	ctx context.Context,
 	inv invocation.Invocation,

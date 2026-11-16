@@ -34,10 +34,9 @@ type ChangeRetentionControlCommand struct {
 }
 
 // RetentionRecordPage is one page of retention records. Paging counts
-// Submissions, and each Submission contributes one record per retention
-// category, so Items can hold up to four times the requested limit; HasMore
-// means further Submissions follow. AsOf is the time eligibility was evaluated
-// at and PolicyRevision the retention policy revision it was evaluated under.
+// submissions, each contributing one record per retention category, so Items
+// can hold up to four times the limit. AsOf and PolicyRevision are the time
+// and policy revision eligibility was evaluated under.
 type RetentionRecordPage struct {
 	PolicyRevision int64
 	AsOf           time.Time
@@ -45,9 +44,9 @@ type RetentionRecordPage struct {
 	HasMore        bool
 }
 
-// RetentionRecordView pairs one retention record with its Eligibility at the
-// page's AsOf time. Retirement is nil unless the Submission has a retirement
-// for the record's category that has not been canceled.
+// RetentionRecordView pairs a record with its eligibility at the page's AsOf.
+// Retirement is nil unless the record's category has an uncanceled
+// retirement.
 type RetentionRecordView struct {
 	Record      model.RetentionRecord
 	Eligibility model.RetentionEligibility
@@ -96,7 +95,7 @@ func (s *Service) GetRetentionPreview(
 }
 
 // CreateRetentionPreview records an audited preview of what the expected
-// Retention Policy revision would retire.
+// policy revision would retire.
 func (s *Service) CreateRetentionPreview(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -162,9 +161,8 @@ func (s *Service) CreateRetentionPreview(
 	return preview, nil
 }
 
-// ChangeRetentionControl enables retention cleanup against a reviewed
-// preview, or pauses it. It needs a strong, recent Session and
-// retention_cleanup.manage.
+// ChangeRetentionControl enables cleanup against a reviewed preview, or
+// pauses it. It needs a strong, recent session and retention_cleanup.manage.
 func (s *Service) ChangeRetentionControl(
 	ctx context.Context,
 	inv invocation.Invocation,

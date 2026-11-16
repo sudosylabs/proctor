@@ -15,9 +15,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// StudentClassInvitationIssue is the named transaction that makes one
-// pre-User Invitation and its recoverable delivery intent durable before
-// completing the already-recorded security audit attempt.
+// StudentClassInvitationIssue stores an invitation for someone with no
+// account yet, with its mail delivery, and completes the audit.
 type StudentClassInvitationIssue struct {
 	Invitation   *model.Invitation
 	Occurrence   *model.MailOccurrence
@@ -27,13 +26,12 @@ type StudentClassInvitationIssue struct {
 	AuditAt      time.Time
 }
 
-// TeacherAcademicUnitInvitationIssue atomically persists one exact teacher
-// relationship package, its recoverable credential delivery, and the
-// successful mutation audit.
+// TeacherAcademicUnitInvitationIssue stores a teacher invitation with its
+// mail delivery and completes the audit, atomically.
 type TeacherAcademicUnitInvitationIssue struct {
 	Invitation *model.Invitation
-	// Lifetime is a bounded duration, never a node-selected absolute deadline.
-	// SQL derives the authoritative lifecycle from one PostgreSQL timestamp.
+	// Lifetime is a duration, not a deadline: the store starts it from the
+	// database clock so node clock skew cannot move the expiry.
 	Lifetime     time.Duration
 	Occurrence   *model.MailOccurrence
 	Delivery     *model.MailDelivery
@@ -42,10 +40,10 @@ type TeacherAcademicUnitInvitationIssue struct {
 	AuditAt      time.Time
 }
 
-// StudentClassInvitationAcceptance is the complete prepared package for one
-// claim. Persistence resolves an existing User by the invited mailbox inside
-// the transaction and uses the prepared User artifacts only when creation or
-// missing local enrollment is required.
+// StudentClassInvitationAcceptance is the prepared input of one claim. The
+// store finds an existing user by the invited email in the transaction and
+// uses the prepared User and credential only when it must create the account
+// or its local sign-in.
 type StudentClassInvitationAcceptance struct {
 	ClaimHash                string
 	AcceptedAt               time.Time
@@ -63,9 +61,8 @@ type StudentClassInvitationAcceptance struct {
 	BrowserTransaction       *BrowserInvitationTransactionProof
 }
 
-// StudentClassInvitationAcceptanceResult is the authoritative accepted
-// account and package. Replayed reports exact claim replay without repeating
-// relationship, mail, audit, or Job effects.
+// StudentClassInvitationAcceptanceResult is the accepted account. Replayed
+// means the claim was already accepted and nothing was repeated.
 type StudentClassInvitationAcceptanceResult struct {
 	Invitation  *model.Invitation
 	User        *model.User
@@ -74,9 +71,8 @@ type StudentClassInvitationAcceptanceResult struct {
 	Replayed    bool
 }
 
-// TeacherAcademicUnitInvitationAcceptance is the complete prepared package
-// for one teacher claim. Persistence resolves existing relationships and adds
-// only missing effects inside the same transaction.
+// TeacherAcademicUnitInvitationAcceptance is the prepared input of one
+// teacher claim. The store adds only the relationships that are missing.
 type TeacherAcademicUnitInvitationAcceptance struct {
 	ClaimHash                string
 	AcceptedAt               time.Time
@@ -104,8 +100,8 @@ type TeacherAcademicUnitInvitationAcceptanceResult struct {
 	Replayed           bool
 }
 
-// ScopedRoleInvitationIssue atomically persists one existing-User Role
-// Invitation, its recoverable claim delivery, and the successful issue audit.
+// ScopedRoleInvitationIssue stores a role invitation for an existing user with
+// its mail delivery and completes the audit, atomically.
 type ScopedRoleInvitationIssue struct {
 	Invitation   *model.Invitation
 	Lifetime     time.Duration
@@ -116,15 +112,15 @@ type ScopedRoleInvitationIssue struct {
 	AuditAt      time.Time
 }
 
-// ScopedRoleInvitationAcceptance consumes one role-only claim for the exact
-// authenticated User and adds only a missing compatible Role Binding. It
-// intentionally carries no User/profile mutation or acceptance mail.
+// ScopedRoleInvitationAcceptance consumes a role-only claim for the signed-in
+// user and adds the binding if missing. It deliberately changes no profile and
+// sends no mail.
 type ScopedRoleInvitationAcceptance struct {
 	ClaimHash   string
 	UserID      model.UserID
 	RoleBinding *model.RoleBinding
-	// AuditEventID identifies the already-persisted secret-free attempt. The
-	// aggregate completes it atomically with acceptance or exact replay.
+	// AuditEventID is the recorded audit attempt, completed with the
+	// acceptance or its replay.
 	AuditEventID       model.AuditEventID
 	AuditAt            time.Time
 	RequiredActions    []model.Action
@@ -138,11 +134,10 @@ type ScopedRoleInvitationAcceptanceResult struct {
 	Replayed    bool
 }
 
-// ExternalIdentityInvitationAcceptance is the provider-proof-completed input
-// for atomically linking one immutable subject and applying the exact pending
-// Invitation package. ExternalStateID identifies the consumed, browser-bound
-// redirect transaction; ProviderEmail is a verified provider mailbox hint,
-// never an account-selection key.
+// ExternalIdentityInvitationAcceptance links a proved provider subject and
+// accepts the pending invitation atomically. ExternalStateID is the consumed
+// redirect transaction. ProviderEmail is a hint only and never selects an
+// account.
 type ExternalIdentityInvitationAcceptance struct {
 	ExternalStateID          model.ExternalLoginStateID
 	Identity                 *model.ExternalIdentity
@@ -176,18 +171,17 @@ type InvitationMaintenanceResult struct {
 	More    bool
 }
 
-// InvitationVisibilityScope is the bounded persistence-side authorization
-// constraint for Invitation administration. AcademicUnitRootIDs name complete
-// subtrees and ClassIDs name exact Class grants.
+// InvitationVisibilityScope limits which invitations an administrator sees.
+// AcademicUnitRootIDs cover whole subtrees; ClassIDs cover single classes.
 type InvitationVisibilityScope struct {
 	InstitutionWide     bool
 	AcademicUnitRootIDs []model.AcademicUnitID
 	ClassIDs            []model.ClassID
 }
 
-// InvitationDeliverySummary is the approved operational projection of the
-// newest delivery for an Invitation. It deliberately excludes ciphertext,
-// rendered content, transport detail, Job identity, and Message-ID.
+// InvitationDeliverySummary is the newest delivery of an invitation. It
+// deliberately excludes ciphertext, rendered content, transport detail, the
+// Job and the Message-ID.
 type InvitationDeliverySummary struct {
 	TemplateKey       model.MailTemplateKey
 	State             model.MailDeliveryState
@@ -204,8 +198,8 @@ type InvitationAdministrationRecord struct {
 	Delivery   *InvitationDeliverySummary
 }
 
-// InvitationCommandResult reports whether an Invitation issue command
-// executed or recovered its previously committed outcome.
+// InvitationCommandResult is the result of an issue command; Replayed means
+// an earlier committed outcome was returned.
 type InvitationCommandResult struct {
 	Invitation *model.Invitation
 	Replayed   bool
@@ -213,16 +207,16 @@ type InvitationCommandResult struct {
 	NoOp       bool
 }
 
-// InvitationAdministrationCommandResult is the lifecycle-command equivalent
-// for resend and revoke.
+// InvitationAdministrationCommandResult is InvitationCommandResult for resend
+// and revoke.
 type InvitationAdministrationCommandResult struct {
 	Record    *InvitationAdministrationRecord
 	Replayed  bool
 	Duplicate bool
 }
 
-// InvitationBatchCommandResult is the secret-free retained disposition of an
-// item that was classified as a duplicate before its ordinary command ran.
+// InvitationBatchCommandResult is the retained outcome of a batch item found
+// to be a duplicate before its command ran. It holds no secret.
 type InvitationBatchCommandResult struct {
 	InvitationID model.InvitationID
 	Replayed     bool
@@ -249,9 +243,8 @@ type InvitationListOptions struct {
 	TargetID      string
 	CreatedAfter  time.Time
 	CreatedBefore time.Time
-	// Unexpired keeps only Invitations whose expires_at is after PostgreSQL
-	// time, so a pending Invitation that maintenance has not yet expired is
-	// not mistaken for an open one.
+	// Unexpired compares expires_at with the database clock, so a pending
+	// invitation maintenance has not expired yet is not shown as open.
 	Unexpired       bool
 	BeforeCreatedAt time.Time
 	BeforeID        model.InvitationID
@@ -263,8 +256,8 @@ type InvitationPage struct {
 	More  bool
 }
 
-// InvitationResend rotates the claim and atomically replaces every unsent
-// credential delivery with one newly frozen occurrence.
+// InvitationResend rotates the claim and replaces every unsent delivery with
+// one new one, atomically.
 type InvitationResend struct {
 	ID               model.InvitationID
 	ExpectedRevision int64
@@ -277,8 +270,8 @@ type InvitationResend struct {
 	AuditAt          time.Time
 }
 
-// InvitationRevocation terminalizes one pending Invitation. RevocationNotice
-// is inserted only when an original Invitation delivery was SMTP Accepted.
+// InvitationRevocation revokes a pending invitation. RevocationNotice is sent
+// only if an earlier delivery was accepted by SMTP.
 type InvitationRevocation struct {
 	ID               model.InvitationID
 	ExpectedRevision int64
@@ -288,8 +281,8 @@ type InvitationRevocation struct {
 	AuditAt          time.Time
 }
 
-// InvitationReplacement supersedes CurrentID and inserts Replacement plus its
-// initial delivery in one authoritative transaction.
+// InvitationReplacement supersedes CurrentID and inserts Replacement with its
+// delivery in one transaction.
 type InvitationReplacement struct {
 	CurrentID               model.InvitationID
 	ExpectedRevision        int64
@@ -304,16 +297,15 @@ type InvitationReplacement struct {
 	AuditAt                 time.Time
 }
 
-// InvitationStore owns durable Invitation issuance, acceptance,
-// administration, and their retained idempotent outcomes. Raw claims never
-// cross this boundary.
-// InvitationReplay is the audit attempt a retained Invitation outcome replay
-// completes after fresh authorization.
+// InvitationReplay is the audit attempt a replay completes after the caller
+// has authorized it again.
 type InvitationReplay struct {
 	AuditEventID model.AuditEventID
 	AuditAt      time.Time
 }
 
+// InvitationStore persists invitations from issue to acceptance. Only claim
+// hashes cross it, never raw claims.
 type InvitationStore interface {
 	IssueStudentClass(context.Context, *StudentClassInvitationIssue) (*model.Invitation, error)
 	IssueStudentClassIdempotently(context.Context, *StudentClassInvitationIssue, *CommandIdempotency) (*InvitationCommandResult, error)
@@ -340,9 +332,8 @@ type InvitationStore interface {
 	AcceptScopedRole(context.Context, *ScopedRoleInvitationAcceptance) (*ScopedRoleInvitationAcceptanceResult, error)
 	AcceptExternalIdentity(context.Context, *ExternalIdentityInvitationAcceptance) (*ExternalIdentityInvitationAcceptanceResult, error)
 	List(context.Context, InvitationListOptions) (*InvitationPage, error)
-	// Count counts the Invitations List would return across every page for
-	// the same filters and visibility, ignoring the keyset and limit, and
-	// stops at maximum (see MaximumListCount).
+	// Count counts what List would return across every page, ignoring the
+	// keyset and limit, capped at maximum (see MaximumListCount).
 	Count(context.Context, InvitationListOptions, int) (int, error)
 	GetForAdministration(context.Context, model.InvitationID, InvitationVisibilityScope) (*InvitationAdministrationRecord, error)
 	Resend(context.Context, *InvitationResend) (*InvitationAdministrationRecord, error)

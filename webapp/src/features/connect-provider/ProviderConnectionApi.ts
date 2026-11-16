@@ -81,6 +81,9 @@ async function requestAllProviders(): Promise<Provider[] | undefined> {
   return undefined;
 }
 
+// Called only from an explicit Continue, never on load or after a return from
+// fresh proof, so a connection is never replayed. The server-returned redirect
+// is the only external destination the page follows.
 export async function beginProviderConnection(
   providerID: string,
 ): Promise<BeginProviderConnectionResult> {

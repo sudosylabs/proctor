@@ -20,8 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ResetUserMFACommand records an institution-assisted verification. The
-// reference identifies the institution's verification record; it must not
+// ResetUserMFACommand records an institution-assisted verification.
+// VerificationReference points at the institution's record and must not
 // contain documents, passwords, factor secrets or recovery codes.
 type ResetUserMFACommand struct {
 	UserID                model.UserID
@@ -30,8 +30,8 @@ type ResetUserMFACommand struct {
 	VerificationReference string
 }
 
-// ResetUserMFA removes another User's second factor after an
-// institution-assisted identity verification and requires reenrollment.
+// ResetUserMFA removes another user's second factor after institution-assisted
+// identity verification and requires reenrollment.
 func (s *Service) ResetUserMFA(ctx context.Context, inv invocation.Invocation, command ResetUserMFACommand) error {
 	principal := inv.Principal()
 	if err := s.requireMFAStrongRecentSession(principal); err != nil {

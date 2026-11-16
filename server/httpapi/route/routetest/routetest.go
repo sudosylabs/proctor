@@ -5,11 +5,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package routetest holds the test fixtures the routing kernel's tests and
-// the resource tests in httpapi share: a real logger that captures its
-// records, the English localizer, and an authenticator that admits every
-// credential as one Principal. Only tests import it, and it does not import
-// route, so the kernel's own white-box tests can use it too.
+// Package routetest holds fixtures shared by the route and httpapi tests. It
+// must not import route, so the kernel's white-box tests can use it too.
 package routetest
 
 import (
@@ -62,14 +59,14 @@ func NewLocalizer(tb testing.TB) *localization.Localizer {
 	return localizer
 }
 
-// Authenticator admits every access and bearer credential as Principal, or
-// refuses every one with Err when it is set.
+// Authenticator admits every credential as Principal, or refuses every one
+// with Err when it is set. It checks no DPoP proof.
 type Authenticator struct {
 	Principal model.Principal
 	Err       error
 }
 
-// AuthenticateAccess answers a Session access credential.
+// AuthenticateAccess admits any session access credential.
 func (a Authenticator) AuthenticateAccess(context.Context, string) (*model.Principal, error) {
 	if a.Err != nil {
 		return nil, a.Err
@@ -78,9 +75,19 @@ func (a Authenticator) AuthenticateAccess(context.Context, string) (*model.Princ
 	return &principal, nil
 }
 
-// AuthenticateBearer answers a bearer credential that may be a Personal
-// Access Token.
+// AuthenticateBearer admits any bearer credential, including a personal
+// access token.
 func (a Authenticator) AuthenticateBearer(context.Context, string) (*model.Principal, error) {
+	if a.Err != nil {
+		return nil, a.Err
+	}
+	principal := a.Principal
+	return &principal, nil
+}
+
+// AuthenticateDPoP admits any DPoP-bound credential without checking the
+// proof.
+func (a Authenticator) AuthenticateDPoP(context.Context, string, string, string, string) (*model.Principal, error) {
 	if a.Err != nil {
 		return nil, a.Err
 	}

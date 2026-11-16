@@ -38,10 +38,10 @@ the current feature, component, API and design-system contracts.
 - Has the feature avoided inventing a global store, service locator, router
   or signed-in shell?
 
-## Feature contract and state
+## Feature state
 
-- Does the feature contract name the real states, credentials, transport,
-  recovery, focus, privacy, and what it deliberately leaves out?
+- Does the feature handle its real states, credentials, transport, recovery,
+  focus and privacy, and do comments explain the rules the code can't show?
 - Where they change behavior, are loading, empty, invalid, denied, expired,
   unavailable, pending, complete and fatal kept as separate states?
 - Does an ordinary recoverable failure keep the user's values and allow a
@@ -100,10 +100,10 @@ the current feature, component, API and design-system contracts.
 
 ## Components and visual system
 
-- Does the contract of every reused component match the behavior you need?
+- Does every reused component behave the way you need?
 - Was a new pattern kept local until a second consumer showed it was worth
   sharing?
-- If it was promoted, does the component have a narrow contract and focused
+- If it was promoted, does the component have a narrow interface and focused
   tests?
 - Do styles live next to their code, and are they built from semantic
   tokens?

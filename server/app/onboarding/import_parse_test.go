@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -61,12 +63,13 @@ func TestOnboardingImportCSVBuildsExistingUserAcademicPreview(t *testing.T) {
 	class, err := model.NewClass(model.NewClassID(), model.NewProgrammeLevelID(), model.NewAcademicPeriodID(), "a", "A", "", at)
 	require.NoError(t, err)
 	user := &model.User{ID: model.NewUserID(), Username: "existing", Email: "existing@example.edu"}
-	authorization := &authorizerFake{actionErrors: map[model.Action]error{}}
-	service := &Service{classes: onboardingImportClassStoreFake{value: class}, users: onboardingImportUserStoreFake{value: user}, authorizer: authorization, now: func() time.Time { return at }}
+	caller := sessionCaller(model.NewUserID(), at)
+	authorization := permissiveAccess(t, accesstest.Options{}, []model.UserID{caller.Principal().UserID})
+	service := &Service{classes: onboardingImportClassStoreFake{value: class}, users: onboardingImportUserStoreFake{value: user}, authorizer: authorization.Authorizer, now: func() time.Time { return at }}
 	current := &store.OnboardingImport{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportAcademicAdministration,
 		ScopeType: model.RoleScopeClass, ScopeID: class.ID.String(), ActorUserID: model.NewUserID(), CreatedAt: at}
 	csv := "operation,user_id,reference\nclass.enroll," + user.ID.String() + ",first\nclass.enroll," + user.ID.String() + ",second\n"
-	rows, ignored, digest, err := service.parseImportCSV(context.Background(), invocation.Invocation{}, current, strings.NewReader(csv))
+	rows, ignored, digest, err := service.parseImportCSV(context.Background(), caller, current, strings.NewReader(csv))
 	require.NoError(t, err)
 	require.Len(t, rows, 2, "academic administration preview")
 	require.Empty(t, ignored, "academic administration preview")
@@ -79,7 +82,7 @@ func TestOnboardingImportCSVBuildsExistingUserAcademicPreview(t *testing.T) {
 	require.Equal(t, model.OnboardingImportRowDuplicate, rows[0].PreviewStatus, "academic administration preview")
 	require.Equal(t, model.OnboardingImportRowDuplicate, rows[1].PreviewStatus, "academic administration preview")
 	service.now = func() time.Time { return at.Add(time.Hour) }
-	_, _, retryDigest, err := service.parseImportCSV(context.Background(), invocation.Invocation{}, current, strings.NewReader(csv))
+	_, _, retryDigest, err := service.parseImportCSV(context.Background(), caller, current, strings.NewReader(csv))
 	require.NoError(t, err, "academic administration retry digest")
 	require.Equal(t, digest, retryDigest, "academic administration retry digest")
 }
@@ -101,13 +104,14 @@ func TestOnboardingImportCSVPreservesDistinctAffiliationHistories(t *testing.T) 
 	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
 	institution := &model.Institution{ID: model.NewInstitutionID(), Revision: 2}
 	user := &model.User{ID: model.NewUserID(), Username: "existing", Email: "existing@example.edu"}
-	service := &Service{institutions: onboardingImportInstitutionStoreFake{value: institution}, users: onboardingImportUserStoreFake{value: user}, authorizer: &authorizerFake{actionErrors: map[model.Action]error{}}, now: func() time.Time { return at }}
+	caller := sessionCaller(model.NewUserID(), at)
+	service := &Service{institutions: onboardingImportInstitutionStoreFake{value: institution}, users: onboardingImportUserStoreFake{value: user}, authorizer: permissiveAccess(t, accesstest.Options{Users: onboardingImportUserStoreFake{value: user}}, []model.UserID{caller.Principal().UserID}).Authorizer, now: func() time.Time { return at }}
 	current := &store.OnboardingImport{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportAcademicAdministration,
 		ScopeType: model.RoleScopeInstitution, ScopeID: institution.ID.String(), ActorUserID: model.NewUserID(), CreatedAt: at}
 	csv := "operation,user_id,affiliation_kind,start_at,reference\n" +
 		"affiliation.add," + user.ID.String() + ",staff,2026-09-01T00:00:00Z,staff\n" +
 		"affiliation.add," + user.ID.String() + ",teacher,2026-10-01T00:00:00Z,teacher\n"
-	rows, _, _, err := service.parseImportCSV(context.Background(), invocation.Invocation{}, current, strings.NewReader(csv))
+	rows, _, _, err := service.parseImportCSV(context.Background(), caller, current, strings.NewReader(csv))
 	require.NoError(t, err, "distinct affiliation preview")
 	require.Len(t, rows, 2, "distinct affiliation preview")
 	require.Equal(t, model.OnboardingImportRowValid, rows[0].PreviewStatus, "distinct affiliation preview")
@@ -190,17 +194,18 @@ func TestOnboardingImportCSVValidatesTeacherAndInstitutionRolePackages(t *testin
 	role.PrepareCreate(model.NewRoleID(), at)
 	err = role.Validate()
 	require.NoError(t, err)
-	service := &Service{academicUnits: onboardingImportUnitStoreFake{value: unit}, roles: onboardingImportRoleStoreFake{value: role}, institutions: onboardingImportInstitutionStoreFake{value: institution}, authorizer: &authorizerFake{actionErrors: map[model.Action]error{}}, now: func() time.Time { return at }, recentAuthenticationTTL: 15 * time.Minute}
+	service := &Service{academicUnits: onboardingImportUnitStoreFake{value: unit}, roles: onboardingImportRoleStoreFake{value: role}, institutions: onboardingImportInstitutionStoreFake{value: institution}, now: func() time.Time { return at }, recentAuthenticationTTL: 15 * time.Minute}
 	// A scoped Role preview requires the strong recent interactive session
 	// an Invitation of that Role does.
 	session := invocation.New(model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor, ClientType: model.SessionClientWeb,
 		AuthenticatedAt: at, MFACompletedAt: model.OptionalTimeFrom(at)}, model.RequestMetadata{})
+	service.authorizer = permissiveAccess(t, accesstest.Options{}, []model.UserID{session.Principal().UserID}, unit.ID).Authorizer
 
 	teacher := &store.OnboardingImport{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportTeacherAcademicUnit, ScopeType: model.RoleScopeAcademicUnit,
 		ScopeID: unit.ID.String(), RoleID: role.ID, ActorUserID: model.NewUserID()}
-	rows, _, _, err := service.parseImportCSV(context.Background(), invocation.Invocation{}, teacher, strings.NewReader("email,timezone\nteacher@example.edu,Europe/Paris\n"))
+	rows, _, _, err := service.parseImportCSV(context.Background(), session, teacher, strings.NewReader("email,timezone\nteacher@example.edu,Europe/Paris\n"))
 	require.NoError(t, err, "teacher preview")
 	require.Len(t, rows, 1, "teacher preview")
 	require.Equal(t, model.OnboardingImportRowValid, rows[0].PreviewStatus, "teacher preview")

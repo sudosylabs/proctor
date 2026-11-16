@@ -1,0 +1,226 @@
+# The retry allowlist. layergen turns each line into a retrying override in
+# forwarding_gen.go; every other store method is forwarded exactly once. A
+# retried write that is not idempotent commits twice, so add a line only for
+# a read or for a write whose replay is proven safe.
+#
+# Each line is "Contract.Method mode":
+#   always   retry every transient failure.
+#   command  retry only when the *store.CommandIdempotency argument is
+#            non-nil; its durable outcome makes a replay safe. A call
+#            without one runs once.
+#
+# Generation fails on a line that names no contract method.
+
+Store.Ping                                                 always
+Store.GetDBSchemaVersion                                   always
+Store.ValidateSchema                                       always
+
+InstitutionStore.Get                                       always
+InstitutionStore.GetSingleton                              always
+
+AcademicUnitStore.Get                                      always
+AcademicUnitStore.ListChildren                             always
+AcademicUnitStore.ListAncestors                            always
+AcademicUnitStore.Search                                   always
+AcademicUnitStore.CreateIdempotently                       command
+
+ProgrammeStore.Get                                         always
+ProgrammeStore.GetByName                                   always
+ProgrammeStore.ListByAcademicUnit                          always
+ProgrammeStore.SearchByAcademicUnit                        always
+
+ProgrammeLevelStore.Get                                    always
+ProgrammeLevelStore.GetByName                              always
+ProgrammeLevelStore.ListByProgramme                        always
+ProgrammeLevelStore.SearchByProgramme                      always
+
+AcademicPeriodStore.Get                                    always
+AcademicPeriodStore.GetByOwnerName                         always
+AcademicPeriodStore.ListVisible                            always
+AcademicPeriodStore.CreateIdempotently                     command
+
+InvitationStore.IssueStudentClassIdempotently              command
+InvitationStore.IssueTeacherAcademicUnitIdempotently       command
+InvitationStore.IssueScopedRoleIdempotently                command
+InvitationStore.ResendIdempotently                         command
+InvitationStore.RevokeIdempotently                         command
+# Only reads the outcome recorded for the command.
+InvitationStore.FindCommandOutcome                         always
+# The two replays return a retained outcome and never run the mutation.
+InvitationStore.ReplayIssue                                always
+InvitationStore.ReplayAdministration                       always
+# Rejects a nil command as invalid input; with one, the outcome is durable.
+InvitationStore.RecordBatchDuplicate                       always
+
+ExamAuthoringStore.Create                                  command
+ExamAuthoringStore.UpdateDraftText                         command
+ExamAuthoringStore.UpdateDraftFocusLoss                    command
+ExamAuthoringStore.UpdateDraftExecution                    command
+ExamAuthoringStore.List                                    always
+ExamAuthoringStore.Archive                                 command
+ExamAuthoringStore.Access                                  always
+ExamAuthoringStore.Get                                     always
+ExamAuthoringStore.Resolve                                 always
+ExamAuthoringStore.UpdateDraftNativePolicy                 command
+
+ExamRevisionStore.GetSummary                               always
+ExamRevisionStore.List                                     always
+ExamRevisionStore.GetSnapshot                              always
+
+ExamSittingStore.Resolve                                   always
+ExamSittingStore.Get                                       always
+ExamSittingStore.List                                      always
+ExamSittingStore.Schedule                                  command
+ExamSittingStore.UpdateSchedule                            command
+ExamSittingStore.Cancel                                    command
+ExamSittingStore.ListLifecycleDue                          always
+ExamSittingStore.Pause                                     command
+ExamSittingStore.Resume                                    command
+ExamSittingStore.Extend                                    command
+ExamSittingStore.EarlyClose                                command
+
+ExamAttemptStore.Connect                                   command
+# Repeating the current renewal sequence returns the existing lease.
+ExamAttemptStore.RenewParticipation                        always
+ExamAttemptStore.ResolveParticipationExpiry                always
+ExamAttemptStore.ListExpiredParticipations                 always
+ExamAttemptStore.SuspendAttempt                            command
+ExamAttemptStore.ReallowAttempt                            command
+ExamAttemptStore.Get                                       always
+ExamAttemptStore.List                                      always
+ExamAttemptStore.GetCandidatePresentation                  always
+ExamAttemptStore.ResolveCandidateAccess                    always
+ExamAttemptStore.ResolveCandidateResource                  always
+# A replay finds its own receipt in the security control ledger, keyed by
+# control sequence and digest, and returns it without applying again.
+ExamAttemptStore.UpdateSecurity                            always
+
+# RecordFocusLoss is deliberately absent: after an unknown commit an
+# in-process retry would reuse the completed audit event. The client's retry
+# starts a fresh audit.
+ExamFocusLossStore.ResolveFocusLossTarget                  always
+
+ExamAttemptWorkspaceStore.List                             always
+ExamAttemptWorkspaceStore.ResolveFile                      always
+ExamAttemptWorkspaceStore.ListJournal                      always
+# Re-reserving an object this batch already staged is a no-op, and marking
+# it ready again with the same content returns success.
+ExamAttemptWorkspaceStore.ReserveObjects                   always
+ExamAttemptWorkspaceStore.MarkObjectsReady                 always
+ExamAttemptWorkspaceStore.ApplyBatch                       command
+
+ExamResourceStore.List                                     always
+ExamResourceStore.Get                                      always
+ExamResourceStore.FinalizeUpload                           command
+ExamResourceStore.UpdateMetadata                           command
+ExamResourceStore.Reorder                                  command
+ExamResourceStore.Remove                                   command
+
+ExamStarterWorkspaceStore.List                             always
+ExamStarterWorkspaceStore.GetFile                          always
+ExamStarterWorkspaceStore.CreateDirectory                  command
+ExamStarterWorkspaceStore.CreateFile                       command
+ExamStarterWorkspaceStore.MoveEntry                        command
+ExamStarterWorkspaceStore.ReplaceFile                      command
+ExamStarterWorkspaceStore.RemoveEntry                      command
+
+ClassStore.Get                                             always
+ClassStore.GetByName                                       always
+ClassStore.ListByProgrammeLevel                            always
+ClassStore.ListByAcademicPeriod                            always
+ClassStore.SearchByAcademicUnit                            always
+ClassStore.SearchVisible                                   always
+ClassStore.GetAcademicUnitID                               always
+
+UserStore.Get                                              always
+UserStore.GetByUsername                                    always
+UserStore.GetByEmail                                       always
+UserStore.List                                             always
+UserStore.Count                                            always
+UserStore.ListDirectorySummaries                           always
+UserStore.ListIdentities                                   always
+UserStore.MatchVisibility                                  always
+UserStore.ListDisplayNames                                 always
+UserStore.ListVisibleDisplayNames                          always
+
+ExternalIdentityStore.Get                                  always
+ExternalIdentityStore.GetByProviderSubject                 always
+ExternalIdentityStore.ListByUser                           always
+
+ExternalLoginStateStore.GetByStateHash                     always
+
+UserTokenStore.GetByHash                                   always
+
+PersonalAccessTokenStore.Get                               always
+PersonalAccessTokenStore.ListByUser                        always
+
+MFAStore.GetByUser                                         always
+MFAStore.CountRecoveryCodes                                always
+MFAStore.SummarizeRecoveryCodes                            always
+
+AffiliationStore.Get                                       always
+AffiliationStore.ListByUser                                always
+AffiliationStore.ListActiveByUser                          always
+
+AcademicUnitMemberStore.Get                                always
+AcademicUnitMemberStore.ListByUser                         always
+AcademicUnitMemberStore.ListByAcademicUnit                 always
+AcademicUnitMemberStore.ListActiveByUser                   always
+
+ClassMemberStore.Get                                       always
+ClassMemberStore.ListByUser                                always
+ClassMemberStore.ListByClass                               always
+ClassMemberStore.ListActiveByUser                          always
+
+PasswordCredentialStore.GetByUser                          always
+
+SessionStore.Get                                           always
+SessionStore.ListByUser                                    always
+SessionStore.ListActiveByUser                              always
+
+SessionCredentialStore.GetSessionByTokenHash               always
+
+RoleStore.Get                                              always
+RoleStore.GetByName                                        always
+RoleStore.GetByIDs                                         always
+RoleStore.List                                             always
+
+RoleBindingStore.Get                                       always
+RoleBindingStore.ListByUser                                always
+RoleBindingStore.ListVisibleByUser                         always
+RoleBindingStore.ListVisibleSummariesByUsers               always
+RoleBindingStore.ListByScope                               always
+RoleBindingStore.ListCurrentByRoles                        always
+RoleBindingStore.CountCurrentByRoles                       always
+RoleBindingStore.CountHoldersByRoles                       always
+RoleBindingStore.ListActiveByUser                          always
+
+AuditStore.Get                                             always
+AuditStore.List                                            always
+AuditStore.Count                                           always
+AuditStore.ListSelf                                        always
+AuditStore.CountSelf                                       always
+AuditStore.ListNames                                       always
+
+InstallationStore.Get                                      always
+
+ClusterDiscoveryStore.ListLive                             always
+
+SecurityPreflightStore.PrepareSecurityPreflight            command
+SecurityPreflightStore.ReportSecurityPreflight             command
+SecurityPreflightStore.ResolveSecurityPreflightSitting     always
+SecurityPreflightStore.RecoverSecurityPolicy               always
+
+# Upsert is idempotent for one incarnation claim: a replay after a rolled-back
+# failure re-extends the same lease or reports its terminal conflict.
+ServingNodeLeaseStore.Upsert                               always
+# Delete withdraws only the exact incarnation.
+ServingNodeLeaseStore.Delete                               always
+
+AttemptEnvironmentStore.Get                                always
+
+# Renew extends only the caller's exact fence, so a replay after a lost commit
+# extends the same lease again or reports it lost. Release deletes only that
+# fence.
+AttemptRuntimeLeaseStore.Renew                             always
+AttemptRuntimeLeaseStore.Release                           always

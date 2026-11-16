@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -65,7 +66,8 @@ func TestSelfAuditListingProjectsOnlyTheCallersFacts(t *testing.T) {
 			Roles:         map[model.RoleID]store.AuditRoleName{teacherRole: {Name: "teacher", DisplayName: "Teacher"}},
 		},
 	}
-	service := &Service{audits: persistence, authorizer: &auditListingAuthorizerFake{events: &events}}
+	fixture := accessWith(t, &events, accesstest.Options{Now: func() time.Time { return at }})
+	service := &Service{audits: persistence, authorizer: fixture.Authorizer}
 
 	page, err := service.ListSelfAuditEvents(context.Background(), caller, ListSelfAuditEventsQuery{Limit: 4})
 	require.NoError(t, err)
@@ -123,10 +125,15 @@ func TestSelfAuditListingProjectsOnlyTheCallersFacts(t *testing.T) {
 		Limit: 10, Ascending: true, BeforeCreatedAt: at.Add(-5 * time.Minute), BeforeID: model.NewAuditEventID(),
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{"list-self-audits", "user-visibility", "list-audit-names"}, events,
+	// The two grants reads are the caller's User visibility, for user.view
+	// and class.members.view.
+	require.Equal(t, []string{"list-self-audits", "grants", "grants", "list-audit-names"}, events,
 		"a later page must not count again, and an unrelated Class needs no name but the enrolled User does")
+	require.Empty(t, fixture.Audits.Decisions(), "naming the page records no decision")
 	require.Equal(t, []store.AuditNameOptions{{
-		UserIDs:                     []model.UserID{other},
+		UserIDs: []model.UserID{other},
+		// The caller holds no grant, so it sees no other User as of now.
+		UserVisibility:              store.UserVisibilityScope{ActiveAt: at},
 		AcademicUnitInstitutionWide: true,
 		ClassVisibility:             store.ClassVisibilityScope{InstitutionWide: true},
 	}}, persistence.namesInputs[1:], "the User the caller acted on is named only through the caller's User visibility")
@@ -170,11 +177,15 @@ func TestSelfAuditListingNamesTheUserTheCallerActedOnOnlyWhenVisible(t *testing.
 		// scoped caller cannot see hidden.
 		names: store.AuditNames{Users: map[model.UserID]string{visible: "Bo Student"}},
 	}
-	service := &Service{audits: persistence, authorizer: &auditListingAuthorizerFake{events: &events, users: scoped}}
+	fixture := accessWith(t, &events, accesstest.Options{
+		Grants: []accesstest.Grant{unitGrant(me, rootID, model.ActionUserView)},
+		Now:    func() time.Time { return at },
+	})
+	service := &Service{audits: persistence, authorizer: fixture.Authorizer}
 
 	page, err := service.ListSelfAuditEvents(context.Background(), caller, ListSelfAuditEventsQuery{Limit: 10})
 	require.NoError(t, err)
-	require.Equal(t, []string{"list-self-audits", "user-visibility", "list-audit-names", "count-self-audits"}, events)
+	require.Equal(t, []string{"list-self-audits", "grants", "grants", "list-audit-names", "count-self-audits"}, events)
 	require.Equal(t, []store.AuditNameOptions{{
 		UserIDs:                     []model.UserID{visible, hidden},
 		UserVisibility:              scoped,
@@ -228,7 +239,7 @@ func TestSelfAuditListingFindsRunsInsideThePage(t *testing.T) {
 	}
 	events := []string{}
 	persistence := &auditListingStoreFake{events: &events, self: rows, count: len(rows)}
-	service := &Service{audits: persistence, authorizer: &auditListingAuthorizerFake{events: &events}}
+	service := &Service{audits: persistence, authorizer: accessWith(t, &events, accesstest.Options{}).Authorizer}
 
 	page, err := service.ListSelfAuditEvents(context.Background(), caller, ListSelfAuditEventsQuery{Limit: 12})
 	require.NoError(t, err)
@@ -249,7 +260,7 @@ func TestSelfAuditListingNarrowsTheCatalogue(t *testing.T) {
 	t.Parallel()
 	events := []string{}
 	persistence := &auditListingStoreFake{events: &events}
-	service := &Service{audits: persistence, authorizer: &auditListingAuthorizerFake{events: &events}}
+	service := &Service{audits: persistence, authorizer: accessWith(t, &events, accesstest.Options{}).Authorizer}
 	since := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	_, err := service.ListSelfAuditEvents(context.Background(), selfAuditSessionInvocation(), ListSelfAuditEventsQuery{
 		Events: []model.AuditSelfEvent{model.AuditSelfEventSignInFailed, model.AuditSelfEventPasswordChanged},
@@ -277,7 +288,7 @@ func TestSelfAuditListingRejectsInvalidQueriesAndNonSessionCallers(t *testing.T)
 	t.Parallel()
 	events := []string{}
 	persistence := &auditListingStoreFake{events: &events}
-	service := &Service{audits: persistence, authorizer: &auditListingAuthorizerFake{events: &events}}
+	service := &Service{audits: persistence, authorizer: accessWith(t, &events, accesstest.Options{}).Authorizer}
 	at := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	for name, query := range map[string]ListSelfAuditEventsQuery{
 		"limit":         {Limit: 201},
@@ -311,7 +322,7 @@ func TestSelfAuditListingRefusesRowsOutsideTheCallersHistory(t *testing.T) {
 			Action: string(model.ActionMFAActivate), Status: model.AuditStatusAttempt, Resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()}},
 	} {
 		persistence := &auditListingStoreFake{events: &events, self: []*store.AuditSelfEntry{entry}}
-		service := &Service{audits: persistence, authorizer: &auditListingAuthorizerFake{events: &events}}
+		service := &Service{audits: persistence, authorizer: accessWith(t, &events, accesstest.Options{}).Authorizer}
 		_, err := service.ListSelfAuditEvents(context.Background(), caller, ListSelfAuditEventsQuery{})
 		require.True(t, apperror.Is(err, "audit.unavailable"), "%s escaped: %v", name, err)
 	}
@@ -321,7 +332,7 @@ func TestSelfAuditListingReportsTheCountBoundAsALowerBound(t *testing.T) {
 	t.Parallel()
 	events := []string{}
 	persistence := &auditListingStoreFake{events: &events, count: store.MaximumAuditSelfCount}
-	service := &Service{audits: persistence, authorizer: &auditListingAuthorizerFake{events: &events}}
+	service := &Service{audits: persistence, authorizer: accessWith(t, &events, accesstest.Options{}).Authorizer}
 	page, err := service.ListSelfAuditEvents(context.Background(), selfAuditSessionInvocation(), ListSelfAuditEventsQuery{Limit: 10})
 	require.NoError(t, err)
 	require.Equal(t, store.MaximumAuditSelfCount, page.Total)

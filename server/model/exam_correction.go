@@ -17,7 +17,7 @@ import (
 
 const ExamSittingMaximumLiveCorrections = 32
 
-// CandidateCapability identifies an independently gated candidate operation family.
+// CandidateCapability is a family of candidate operations gated on its own.
 type CandidateCapability string
 
 const (
@@ -35,8 +35,8 @@ func (c CandidateCapability) IsValid() bool {
 	}
 }
 
-// ValidateCandidateCapabilities checks the bounded, sorted, unique projection.
-// An empty set is valid for a pending union; authored selections must be nonempty.
+// ValidateCandidateCapabilities checks a bounded, sorted, unique set. An empty
+// set is valid for a pending union; an authored selection must not be empty.
 func ValidateCandidateCapabilities(capabilities []CandidateCapability) error {
 	if len(capabilities) > 3 {
 		return invalidModelError("ValidateCandidateCapabilities", "exam_correction", "", "invalid Candidate capabilities", "")
@@ -49,8 +49,8 @@ func ValidateCandidateCapabilities(capabilities []CandidateCapability) error {
 	return nil
 }
 
-// ValidateCandidateCorrectionSelection checks authoring metadata before actual
-// changed areas are known. Revision creation also enforces their semantic minimum.
+// ValidateCandidateCorrectionSelection checks authoring input before the
+// changed areas are known; revision creation also enforces their minimum.
 func ValidateCandidateCorrectionSelection(summary string, capabilities []CandidateCapability) error {
 	if !validCandidateCorrectionSummary(summary) || len(capabilities) == 0 {
 		return invalidModelError("ValidateCandidateCorrectionSelection", "exam_correction", "", "invalid Candidate Correction selection", "")
@@ -58,8 +58,8 @@ func ValidateCandidateCorrectionSelection(summary string, capabilities []Candida
 	return ValidateCandidateCapabilities(capabilities)
 }
 
-// MinimumCorrectionCapabilities returns the sorted union required by actual
-// semantic changes. A browser-only correction has no workspace or submission gate.
+// MinimumCorrectionCapabilities returns the sorted union the actual changes
+// require. A browser-only correction gates neither workspace nor submission.
 func MinimumCorrectionCapabilities(areas []ExamCorrectionChangedArea) []CandidateCapability {
 	result := make([]CandidateCapability, 0, 3)
 	if slices.Contains(areas, ExamCorrectionChangedBrowserPolicy) {
@@ -71,8 +71,8 @@ func MinimumCorrectionCapabilities(areas []ExamCorrectionChangedArea) []Candidat
 	return result
 }
 
-// PendingCorrectionCapabilities derives a projection from validated immutable
-// notices. Acknowledging one notice cannot remove another notice's gate.
+// PendingCorrectionCapabilities derives the gates still pending from validated
+// notices. Acknowledging one notice cannot lift another notice's gate.
 func PendingCorrectionCapabilities(corrections []CandidateLiveCorrection) []CandidateCapability {
 	pending := make([]CandidateCapability, 0, 3)
 	for _, capability := range []CandidateCapability{CandidateCapabilityBrowser, CandidateCapabilitySubmission, CandidateCapabilityWorkspace} {
@@ -98,9 +98,9 @@ func (a ExamCorrectionChangedArea) IsValid() bool {
 	return a == ExamCorrectionChangedInstructions || a == ExamCorrectionChangedResources || a == ExamCorrectionChangedBrowserPolicy
 }
 
-// CandidateCorrectionNotice is immutable candidate-visible metadata owned by
-// one live-correction Exam Revision. The manager's private reason is retained
-// separately and must never be projected through this value.
+// CandidateCorrectionNotice is immutable candidate-visible metadata of one
+// live-correction revision. The manager's private reason is kept elsewhere and
+// must never be exposed through this value.
 type CandidateCorrectionNotice struct {
 	Summary                 string
 	ChangedAreas            []ExamCorrectionChangedArea

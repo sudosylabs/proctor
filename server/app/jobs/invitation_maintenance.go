@@ -22,13 +22,15 @@ const invitationMaintenancePageSize = 500
 const invitationMaintenanceMaximumPages = 20
 const onboardingImportOrphanSafetyWindow = time.Hour
 
-// InvitationMaintenanceCommand is the immutable command of the invitation maintenance Job.
+// InvitationMaintenanceCommand is the immutable command of the invitation
+// maintenance job.
 type InvitationMaintenanceCommand struct {
 	PageSize int `json:"page_size"`
 	MaxPages int `json:"max_pages"`
 }
 
-// InvitationMaintenanceResult is the safe result of the invitation maintenance Job.
+// InvitationMaintenanceResult is the result of the invitation maintenance
+// job.
 type InvitationMaintenanceResult struct {
 	Expired          int `json:"expired"`
 	Purged           int `json:"purged"`
@@ -172,8 +174,8 @@ func invitationMaintenanceDescriptor(handler job.Handler) job.Descriptor {
 	return descriptor
 }
 
-// NewInvitationMaintenance registers the expiry of Invitations and the
-// cleanup of onboarding import files, proposed daily.
+// NewInvitationMaintenance registers the daily expiry of invitations and
+// cleanup of onboarding import files.
 func NewInvitationMaintenance(
 	invitations store.InvitationStore,
 	imports store.OnboardingImportStore,

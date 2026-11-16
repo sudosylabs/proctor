@@ -20,9 +20,8 @@ const (
 	HealthQueueDelayed = "mail.queue_delayed"
 )
 
-// Health is the current mail health code of this node. The delivery Jobs and
-// the MaintenanceMonitor set it; Access Policy capabilities and the metrics
-// read it.
+// Health is this node's mail health. Delivery jobs and the maintenance
+// monitor set it; access policy capabilities and metrics read it.
 type Health struct{ code atomic.Value }
 
 // NewHealth starts healthy when mail is enabled and disabled otherwise.

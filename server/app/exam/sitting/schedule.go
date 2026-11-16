@@ -39,9 +39,8 @@ type UpdateScheduleCommand struct {
 	IdempotencyKey   string
 }
 
-// ScheduleExamSitting idempotently schedules a Sitting delivering one Exam
-// Revision to one Class between ScheduledStartAt and ScheduledEndAt, together
-// with its lifecycle Jobs.
+// ScheduleExamSitting idempotently schedules one exam revision for one class
+// between ScheduledStartAt and ScheduledEndAt, with its lifecycle jobs.
 func (s *Service) ScheduleExamSitting(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -167,9 +166,9 @@ func (s *Service) ScheduleExamSitting(
 	return value, nil
 }
 
-// UpdateExamSittingSchedule idempotently changes a Sitting's Exam Revision,
-// Class, start, or end, fenced by ExpectedRevision. A nil field is left
-// unchanged, but at least one must be set.
+// UpdateExamSittingSchedule idempotently changes the exam revision, class,
+// start or end, fenced by ExpectedRevision. A nil field is left unchanged, but
+// at least one must be set.
 func (s *Service) UpdateExamSittingSchedule(
 	ctx context.Context,
 	inv invocation.Invocation,

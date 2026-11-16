@@ -12,8 +12,8 @@ import (
 	"time"
 )
 
-// NativeRuleTracker holds one rule's reported status over time. Getting
-// worse is immediate. Recovering to met waits until the facts have stayed met
+// NativeRuleTracker holds one rule's reported status over time. Getting worse
+// takes effect at once; recovering to met waits until the facts have stayed met
 // for the capability's stability time.
 type NativeRuleTracker struct {
 	result   NativeRuleResult
@@ -27,8 +27,8 @@ type NativeRuleTracker struct {
 func (t *NativeRuleTracker) Status() NativeRuleResult { return t.result }
 
 // Observe records an evaluation made at a fact's time and reports whether the
-// rule's status changed. The first observation, at activation, sets the
-// status directly.
+// status changed. The first observation, at activation, sets the status
+// directly.
 func (t *NativeRuleTracker) Observe(evaluation NativeRuleResult, at time.Time, stability time.Duration) bool {
 	if !t.observed {
 		t.observed, t.result = true, evaluation
@@ -55,8 +55,8 @@ func (t *NativeRuleTracker) Observe(evaluation NativeRuleResult, at time.Time, s
 	return true
 }
 
-// Settle applies the stability time when no new fact arrives: a rule whose
-// facts have stayed met long enough recovers at now.
+// Settle applies the stability time when no new fact arrives, recovering a
+// rule whose facts have stayed met long enough; it reports a change.
 func (t *NativeRuleTracker) Settle(now time.Time, stability time.Duration) bool {
 	if !t.observed || t.result.Status == NativeRuleMet || t.metSince.IsZero() || now.Sub(t.metSince) < stability {
 		return false

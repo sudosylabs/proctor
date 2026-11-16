@@ -20,15 +20,14 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// AuthenticationMethodView lists how the current User can sign in: whether
-// they hold a local password, and each linked External Identity.
+// AuthenticationMethodView lists how the current user can sign in.
 type AuthenticationMethodView struct {
 	Password  bool
 	Providers []AuthenticationProviderMethodView
 }
 
-// AuthenticationProviderMethodView is one linked External Identity and the
-// provider it signs in with.
+// AuthenticationProviderMethodView is one linked external identity and its
+// provider.
 type AuthenticationProviderMethodView struct {
 	IdentityID  model.ExternalIdentityID
 	ProviderID  string
@@ -36,14 +35,13 @@ type AuthenticationProviderMethodView struct {
 	Type        string
 }
 
-// ChangePasswordCommand replaces the current User's existing local password.
+// ChangePasswordCommand replaces the current user's existing local password.
 type ChangePasswordCommand struct {
 	Password string
 }
 
-// requireAuthenticationMethods refuses a Service whose authentication method
-// management collaborators are incomplete. New calls it once, after external
-// authentication is set up.
+// requireAuthenticationMethods must run after external authentication is set
+// up, since it checks the provider registry.
 func (s *Service) requireAuthenticationMethods() error {
 	if s.users == nil ||
 		s.mail == nil ||
@@ -52,7 +50,6 @@ func (s *Service) requireAuthenticationMethods() error {
 		s.externalProviders == nil ||
 		s.capabilities == nil ||
 		s.hasher == nil ||
-		s.auditor == nil ||
 		s.publisher == nil ||
 		s.recentAuthenticationTTL <= 0 ||
 		s.now == nil {
@@ -62,14 +59,12 @@ func (s *Service) requireAuthenticationMethods() error {
 	return nil
 }
 
-// requireAuthenticationMethodSession admits a change to the caller's own
-// authentication methods only from a strong, recently authenticated Session.
 func (s *Service) requireAuthenticationMethodSession(inv invocation.Invocation) error {
 	return access.RequireStrongRecentSession(inv.Principal(), s.now(), s.recentAuthenticationTTL)
 }
 
-// AuthenticationMethods lists the current User's local password and linked
-// External Identities, ordered by identity.
+// AuthenticationMethods lists the current user's sign-in methods, ordered by
+// identity ID.
 func (s *Service) AuthenticationMethods(ctx context.Context, inv invocation.Invocation) (AuthenticationMethodView, error) {
 	if inv.Principal().Validate() != nil {
 		return AuthenticationMethodView{}, access.InvalidTokenAppError()
@@ -113,8 +108,8 @@ func (s *Service) AuthenticationMethods(ctx context.Context, inv invocation.Invo
 	return view, nil
 }
 
-// EnrollPassword adds a local password to the current User after strong
-// recent authentication.
+// EnrollPassword adds a local password; it requires strong recent
+// authentication.
 func (s *Service) EnrollPassword(ctx context.Context, inv invocation.Invocation, password string) error {
 	if err := s.requireAuthenticationMethodSession(inv); err != nil {
 		return err
@@ -159,10 +154,10 @@ func (s *Service) EnrollPassword(ctx context.Context, inv invocation.Invocation,
 	return appErr
 }
 
-// ChangePassword replaces the current User's existing local password after
-// strong recent authentication. The calling Session stays live; every other
-// Session of the User is revoked, outstanding password-reset links stop
-// working, and the account address receives the password-changed notice.
+// ChangePassword replaces the local password; it requires strong recent
+// authentication. The calling session stays live, every other session is
+// revoked, outstanding reset links stop working, and the user is mailed a
+// notice.
 func (s *Service) ChangePassword(ctx context.Context, inv invocation.Invocation, command ChangePasswordCommand) error {
 	if err := s.requireAuthenticationMethodSession(inv); err != nil {
 		return err
@@ -221,9 +216,8 @@ func (s *Service) ChangePassword(ctx context.Context, inv invocation.Invocation,
 	return appErr
 }
 
-// RemovePassword removes the current User's local password after strong
-// recent authentication and publishes the Session revocations the Store
-// reports.
+// RemovePassword removes the local password; it requires strong recent
+// authentication and fails if it is the last usable method.
 func (s *Service) RemovePassword(ctx context.Context, inv invocation.Invocation) error {
 	if err := s.requireAuthenticationMethodSession(inv); err != nil {
 		return err
@@ -260,9 +254,8 @@ func (s *Service) RemovePassword(ctx context.Context, inv invocation.Invocation)
 	return appErr
 }
 
-// UnlinkExternalIdentity removes one of the current User's linked External
-// Identities after strong recent authentication and publishes the Session
-// revocations the Store reports.
+// UnlinkExternalIdentity removes one linked external identity; it requires
+// strong recent authentication and fails if it is the last usable method.
 func (s *Service) UnlinkExternalIdentity(ctx context.Context, inv invocation.Invocation, id model.ExternalIdentityID) error {
 	if err := s.requireAuthenticationMethodSession(inv); err != nil {
 		return err

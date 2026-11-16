@@ -27,8 +27,8 @@ func (c *Content) IsOnboardingImportTooLarge(err error) bool {
 	return errors.Is(err, ErrOnboardingImportTooLarge)
 }
 
-// StageOnboardingImport streams one private immutable CSV object. Callers must
-// provide the domain limit; an over-limit object is removed before returning.
+// StageOnboardingImport streams one CSV upload to a new object. The caller
+// supplies the size limit; an object over it is removed before returning.
 func (c *Content) StageOnboardingImport(
 	ctx context.Context,
 	id model.OnboardingImportID,
@@ -81,9 +81,9 @@ func (c *Content) RemoveOnboardingImport(ctx context.Context, id model.Onboardin
 	return sanitize("remove onboarding import", err)
 }
 
-// ListOnboardingImportFiles pages private staged objects old enough for
-// orphan reconciliation. The caller checks PostgreSQL ownership before any
-// removal, so ordinary active uploads remain untouched.
+// ListOnboardingImportFiles pages staged objects old enough to be orphans. The
+// caller must check PostgreSQL ownership before removing any, so active
+// uploads survive.
 func (c *Content) ListOnboardingImportFiles(
 	ctx context.Context,
 	cursor string,

@@ -212,8 +212,8 @@ func TestPasswordResetSerializesWithPasswordRemoval(t *testing.T) {
 	}
 	resetDone := make(chan resetOutcome, 1)
 	go func() {
-		result, err := persistence.UserToken().ConsumePasswordReset(ctx, completion)
-		resetDone <- resetOutcome{result: result, err: err}
+		result, resetErr := persistence.UserToken().ConsumePasswordReset(ctx, completion)
+		resetDone <- resetOutcome{result: result, err: resetErr}
 	}()
 	resetPID := waitForBlockedMailQuery(t, ctx, persistence, controllerPID, "UPDATE password_credentials")
 	removal := &store.PasswordCredentialRemoval{
@@ -227,8 +227,8 @@ func TestPasswordResetSerializesWithPasswordRemoval(t *testing.T) {
 	}
 	removed := make(chan removalOutcome, 1)
 	go func() {
-		result, err := persistence.PasswordCredential().Remove(ctx, removal)
-		removed <- removalOutcome{result: result, err: err}
+		result, removeErr := persistence.PasswordCredential().Remove(ctx, removal)
+		removed <- removalOutcome{result: result, err: removeErr}
 	}()
 	// The old reset order held the User row before acquiring this Session
 	// fence: removal would own the fence and block on the User instead.
@@ -514,7 +514,7 @@ func TestUserTokenReissueFencesConcurrentDeliveryStart(t *testing.T) {
 	user := saveIntegrationUser(t, ctx, persistence, &model.User{Username: "token-mail-fence", Email: "token-mail-fence@example.edu"})
 	first := &model.UserToken{UserID: user.ID, Purpose: model.UserTokenEmailVerification,
 		TokenHash: model.HashToken(model.NewCredentialToken()), Target: user.Email, ExpiresAt: model.NowUTC().Add(time.Hour)}
-	first, err = authenticationPolicyTestIssue(t, ctx, persistence, first,
+	_, err = authenticationPolicyTestIssue(t, ctx, persistence, first,
 		authenticationPolicyTestAudit("authentication.email_verification.request", user.ID.String(), institution.ID.String()))
 	require.NoError(t, err)
 	deliveries, err := persistence.Mail().ListDeliveries(ctx, store.MailDeliveryListOptions{TemplateKeys: []model.MailTemplateKey{model.MailTemplateIdentityVerifyEmail}, Limit: 10})

@@ -27,8 +27,8 @@ func TestGetAuthorizesExactSittingResource(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, got.Sitting)
 	require.Equal(t, fixture.sittingID, got.Sitting.ID)
-	require.Equal(t, model.ActionExamSittingView, fixture.authorizer.action, "authorization")
-	require.Equal(t, model.Resource{Type: model.ResourceExamSitting, ID: fixture.sittingID.String()}, fixture.authorizer.resource, "authorization")
+	fixture.requireDecision(t, model.ActionExamSittingView,
+		model.Resource{Type: model.ResourceExamSitting, ID: fixture.sittingID.String()}, model.AuditStatusSuccess)
 	require.Equal(t, fixture.examID, fixture.persistence.getExamID, "store Get() ids")
 	require.Equal(t, fixture.sittingID, fixture.persistence.getSittingID, "store Get() ids")
 }
@@ -63,8 +63,8 @@ func TestListAppliesBoundedFiltersAndLookAhead(t *testing.T) {
 	require.Len(t, page.Items, 1)
 	require.True(t, page.HasMore)
 	require.Equal(t, first.ID, page.Items[0].Sitting.ID)
-	require.Equal(t, model.ActionExamView, fixture.authorizer.action, "authorization")
-	require.Equal(t, model.Resource{Type: model.ResourceExam, ID: fixture.examID.String()}, fixture.authorizer.resource, "authorization")
+	fixture.requireDecision(t, model.ActionExamView,
+		model.Resource{Type: model.ResourceExam, ID: fixture.examID.String()}, model.AuditStatusSuccess)
 	want := store.ExamSittingListOptions{ExamID: fixture.examID, ClassID: fixture.classID,
 		States: []model.ExamSittingState{model.ExamSittingScheduled}, OverlapStartAt: overlapStart,
 		OverlapEndAt: overlapEnd, Limit: 2}

@@ -17,22 +17,21 @@ import (
 	"unicode/utf8"
 )
 
-// Invitation lifetimes are whole days chosen by the inviter within bounds.
-// InvitationLifetime is the default when none is chosen, and the fixed
-// lifetime of batch and onboarding import Invitations.
+// Invitation lifetimes are whole days the inviter picks within these bounds.
+// InvitationLifetime is the default, and the fixed lifetime of batch and
+// onboarding import invitations.
 const (
 	InvitationLifetime        = 7 * 24 * time.Hour
 	MinimumInvitationLifetime = 24 * time.Hour
 	MaximumInvitationLifetime = 30 * 24 * time.Hour
 )
 
-// IsValidInvitationLifetime reports whether lifetime lies within the
-// inclusive Invitation lifetime bounds.
+// IsValidInvitationLifetime reports whether lifetime lies within the inclusive
+// bounds.
 func IsValidInvitationLifetime(lifetime time.Duration) bool {
 	return lifetime >= MinimumInvitationLifetime && lifetime <= MaximumInvitationLifetime
 }
 
-// invitationLifetimeOrDefault selects the default lifetime for a zero input.
 func invitationLifetimeOrDefault(lifetime time.Duration) time.Duration {
 	if lifetime == 0 {
 		return InvitationLifetime
@@ -42,9 +41,9 @@ func invitationLifetimeOrDefault(lifetime time.Duration) time.Duration {
 
 const invitationClaimHashDomain = "proctor.invitation_claim\x00"
 
-// InvitationPurpose identifies the immutable relationship package carried by
-// an Invitation. Each purpose is implemented as its own application command;
-// there is no empty or arbitrary package.
+// InvitationPurpose is the relationship package an invitation carries. Each
+// purpose has its own application command; there is no empty or arbitrary
+// package.
 type InvitationPurpose string
 
 const (
@@ -54,7 +53,8 @@ const (
 	InvitationPurposeInstitutionRole     InvitationPurpose = "institution_role"
 )
 
-// InvitationState is the closed lifecycle of a pre-User Invitation.
+// InvitationState is the closed lifecycle of an invitation, which exists before
+// its user does.
 type InvitationState string
 
 const (
@@ -65,9 +65,9 @@ const (
 	InvitationSuperseded InvitationState = "superseded"
 )
 
-// InvitationProfileSuggestions carries bounded, non-authoritative profile
-// defaults. Acceptance may use them when creating an account, but they never
-// identify a person or grant a relationship by themselves.
+// InvitationProfileSuggestions are bounded profile defaults. Acceptance may use
+// them to create an account, but they never identify a person or grant a
+// relationship.
 type InvitationProfileSuggestions struct {
 	Username    string
 	DisplayName string
@@ -77,9 +77,9 @@ type InvitationProfileSuggestions struct {
 	Timezone    string
 }
 
-// Invitation is the durable pre-User credential and frozen relationship
-// package. ClaimHash is deliberately omitted from JSON; raw claims never enter
-// this model or durable state.
+// Invitation is the stored claim credential and its frozen relationship
+// package. ClaimHash is never in JSON; raw claims never enter this model or
+// storage.
 type Invitation struct {
 	ID                           InvitationID
 	CreatedAt                    time.Time
@@ -109,8 +109,8 @@ type Invitation struct {
 	AcceptedRoleBindingID        RoleBindingID
 }
 
-// StudentClassInvitationInput is the complete immutable package selected by
-// the application after authorization and authoritative Class resolution.
+// StudentClassInvitationInput is the package app chose after authorization and
+// resolving the class.
 type StudentClassInvitationInput struct {
 	ID               InvitationID
 	TargetEmail      string
@@ -128,8 +128,8 @@ type StudentClassInvitationInput struct {
 	Lifetime time.Duration
 }
 
-// TeacherAcademicUnitInvitationInput freezes the exact organizational and
-// delegable Role package selected by an authorized inviter.
+// TeacherAcademicUnitInvitationInput freezes the exact unit and delegable role
+// package an authorized inviter chose.
 type TeacherAcademicUnitInvitationInput struct {
 	ID               InvitationID
 	TargetEmail      string
@@ -148,8 +148,8 @@ type TeacherAcademicUnitInvitationInput struct {
 	Lifetime time.Duration
 }
 
-// ScopedRoleInvitationInput freezes one Role assignment for an existing User
-// at either one exact Academic Unit or the Institution.
+// ScopedRoleInvitationInput freezes one role assignment for an existing user,
+// at one academic unit or the institution.
 type ScopedRoleInvitationInput struct {
 	ID               InvitationID
 	Purpose          InvitationPurpose
@@ -168,9 +168,9 @@ type ScopedRoleInvitationInput struct {
 	Lifetime time.Duration
 }
 
-// NewStudentClassInvitation constructs the one exact package implemented by
-// the first Invitation slice. Expiry is derived here from the bounded lifetime
-// so callers cannot widen the credential lifetime accidentally.
+// NewStudentClassInvitation builds a student class invitation. Expiry is
+// derived here from the bounded lifetime so callers cannot widen it by
+// accident.
 func NewStudentClassInvitation(input StudentClassInvitationInput) (*Invitation, error) {
 	issuedAt := TimeUTC(input.IssuedAt)
 	invitation := &Invitation{
@@ -199,9 +199,9 @@ func NewStudentClassInvitation(input StudentClassInvitationInput) (*Invitation, 
 	return invitation, nil
 }
 
-// NewTeacherAcademicUnitInvitation constructs one immutable teacher
-// relationship package. RoleActions is an owned, canonical snapshot so later
-// Role changes cannot silently broaden an unclaimed Invitation.
+// NewTeacherAcademicUnitInvitation builds one teacher package. RoleActions is
+// copied and canonicalized so later role changes cannot broaden an unclaimed
+// invitation.
 func NewTeacherAcademicUnitInvitation(input TeacherAcademicUnitInvitationInput) (*Invitation, error) {
 	issuedAt := TimeUTC(input.IssuedAt)
 	invitation := &Invitation{
@@ -231,9 +231,9 @@ func NewTeacherAcademicUnitInvitation(input TeacherAcademicUnitInvitationInput) 
 	return invitation, nil
 }
 
-// NewScopedRoleInvitation constructs one immutable Role-only package for an
-// already authenticated User. The claim proves control of the invited mailbox;
-// acceptance never changes the User's canonical email or profile.
+// NewScopedRoleInvitation builds a role-only package for an existing user. The
+// claim proves control of the invited mailbox; acceptance never changes the
+// user's email or profile.
 func NewScopedRoleInvitation(input ScopedRoleInvitationInput) (*Invitation, error) {
 	issuedAt := TimeUTC(input.IssuedAt)
 	invitation := &Invitation{
@@ -262,14 +262,15 @@ func NewScopedRoleInvitation(input ScopedRoleInvitationInput) (*Invitation, erro
 	return invitation, nil
 }
 
-// HashInvitationClaim returns the domain-separated persistent digest of a
-// random Invitation claim. Human-entered secrets must not use this function.
+// HashInvitationClaim returns the domain-separated stored digest of a random
+// claim. Never use it for human-entered secrets.
 func HashInvitationClaim(rawClaim string) string {
 	sum := sha256.Sum256([]byte(invitationClaimHashDomain + rawClaim))
 	return hex.EncodeToString(sum[:])
 }
 
-// Validate checks rehydrated Invitation state and its frozen package.
+// Validate checks the invitation's fields and its frozen package, for new and
+// stored values alike.
 func (i *Invitation) Validate() error {
 	const where = "Invitation.Validate"
 	if i == nil {
@@ -317,7 +318,6 @@ func (i *Invitation) Validate() error {
 	return i.validateAcceptance(details)
 }
 
-// validatePackage checks the frozen package fields required by the Invitation purpose.
 func (i *Invitation) validatePackage(details string) error {
 	const where = "Invitation.Validate"
 	if i.Purpose == InvitationPurposeStudentClass {
@@ -390,7 +390,6 @@ func (i *Invitation) validatePackage(details string) error {
 	return nil
 }
 
-// validateAcceptance checks that acceptance fields are present exactly in the accepted state.
 func (i *Invitation) validateAcceptance(details string) error {
 	const where = "Invitation.Validate"
 	if i.State == InvitationAccepted {
@@ -436,8 +435,8 @@ func (i *Invitation) validateAcceptance(details string) error {
 	return nil
 }
 
-// Accept applies the sole successful claim transition. Store transactions
-// remain responsible for authoritative policy and relationship rechecks.
+// Accept applies the one successful claim transition. The store transaction
+// still rechecks policy and relationships.
 func (i *Invitation) Accept(userID UserID, affiliationID AffiliationID, classMemberID ClassMemberID, at time.Time) error {
 	if i == nil ||
 		i.Purpose != InvitationPurposeStudentClass ||
@@ -469,9 +468,8 @@ func (i *Invitation) Accept(userID UserID, affiliationID AffiliationID, classMem
 	return nil
 }
 
-// AcceptTeacherAcademicUnit records the exact immutable outcome of applying a
-// teacher package. Replay reads these retained identities rather than mutable
-// latest relationship rows.
+// AcceptTeacherAcademicUnit records the outcome of applying a teacher package.
+// Replay reads these kept IDs, not the latest relationship rows.
 func (i *Invitation) AcceptTeacherAcademicUnit(
 	userID UserID,
 	affiliationID AffiliationID,
@@ -519,8 +517,8 @@ func (i *Invitation) AcceptTeacherAcademicUnit(
 	return i.Validate()
 }
 
-// AcceptScopedRole records the exact existing User and compatible Role Binding
-// selected by the authoritative acceptance transaction.
+// AcceptScopedRole records the existing user and the role binding the
+// acceptance transaction chose.
 func (i *Invitation) AcceptScopedRole(userID UserID, bindingID RoleBindingID, at time.Time) error {
 	if i == nil ||
 		(i.Purpose != InvitationPurposeAcademicUnitRole && i.Purpose != InvitationPurposeInstitutionRole) ||
@@ -563,8 +561,8 @@ func invitationScopedRoleTargetIsValid(invitation *Invitation) bool {
 	}
 }
 
-// Expire terminalizes a pending Invitation only after its claim lifetime or
-// packaged relationship interval has elapsed at authoritative database time.
+// Expire closes a pending invitation, only once its claim lifetime or packaged
+// relationship interval has passed at database time.
 func (i *Invitation) Expire(at time.Time) error {
 	if i == nil || i.State != InvitationPending {
 		return invalidModelError("Invitation.Expire", "invitation", "", "invitation cannot be expired", "")
@@ -580,9 +578,9 @@ func (i *Invitation) Expire(at time.Time) error {
 	return i.Validate()
 }
 
-// Resend rotates the bearer claim for an otherwise unchanged pending
-// Invitation. Resend deliberately preserves the original creation time and
-// expiry; extending an Invitation requires an explicit replacement package.
+// Resend rotates the claim of an otherwise unchanged pending invitation. It
+// keeps the creation time and expiry; extending one needs an explicit
+// replacement.
 func (i *Invitation) Resend(claimHash string, at time.Time) error {
 	if i == nil || i.State != InvitationPending || !IsValidTokenHash(claimHash) || claimHash == i.ClaimHash {
 		return invalidModelError("Invitation.Resend", "invitation", "", "invitation cannot be resent", "")
@@ -601,22 +599,20 @@ func (i *Invitation) Resend(claimHash string, at time.Time) error {
 	return i.Validate()
 }
 
-// Revoke makes a pending Invitation immediately unusable. Delivery cleanup
-// and any notice for a previously accepted SMTP delivery remain part of the
-// authoritative Store transaction.
+// Revoke makes a pending invitation unusable at once. Delivery cleanup and any
+// notice for mail already handed to SMTP belong to the store transaction.
 func (i *Invitation) Revoke(at time.Time) error {
 	return i.terminalizeAdministratively(InvitationRevoked, at)
 }
 
-// Supersede terminalizes a pending Invitation immediately before its explicit
-// replacement is inserted by the same aggregate transaction.
+// Supersede closes a pending invitation just before the same transaction
+// inserts its replacement.
 func (i *Invitation) Supersede(at time.Time) error {
 	return i.terminalizeAdministratively(InvitationSuperseded, at)
 }
 
-// HasSamePackage reports whether another Invitation carries exactly the same
-// immutable recipient and grant package. Identity, claim, lifecycle,
-// timestamps, and inviter provenance are deliberately excluded.
+// HasSamePackage reports whether other carries exactly the same recipient and
+// grant package, ignoring identity, claim, lifecycle, timestamps and inviter.
 func (i *Invitation) HasSamePackage(other *Invitation) bool {
 	return i != nil &&
 		other != nil &&
@@ -668,8 +664,8 @@ func (i *Invitation) terminalizeAdministratively(state InvitationState, at time.
 	return i.Validate()
 }
 
-// EffectiveStartsAt prevents acceptance from granting a backdated
-// relationship while preserving an intended future start.
+// EffectiveStartsAt returns when an accepted relationship starts: never before
+// acceptedAt, but a future start is kept.
 func (i *Invitation) EffectiveStartsAt(acceptedAt time.Time) time.Time {
 	acceptedAt = TimeUTC(acceptedAt)
 	if i == nil || i.IntendedStartsAt.Before(acceptedAt) {
@@ -678,14 +674,14 @@ func (i *Invitation) EffectiveStartsAt(acceptedAt time.Time) time.Time {
 	return i.IntendedStartsAt
 }
 
-// IsPendingAt reports whether a claim may still be evaluated at the supplied
-// authoritative time. It does not replace policy or package reauthorization.
+// IsPendingAt reports whether a claim may still be evaluated at database time
+// at. It does not replace rechecking policy or the package.
 func (i *Invitation) IsPendingAt(at time.Time) bool {
 	return i != nil && i.State == InvitationPending && TimeUTC(at).Before(i.ExpiresAt)
 }
 
-// Auditable returns the safe relationship-package projection. Recipient and
-// claim material are intentionally absent.
+// Auditable returns the relationship package; recipient and claim material
+// are left out.
 func (i *Invitation) Auditable() map[string]any {
 	if i == nil {
 		return map[string]any{}

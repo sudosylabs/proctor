@@ -1,47 +1,54 @@
 ---
 name: git-workflow
-description: Maintain coherent Git history when planning or performing commits, branch or history edits, pushes, tags, or pull requests.
+description: Plan or make commits, branches, history edits, pushes, tags or pull requests in the Proctor repository.
 ---
 
-# Maintain coherent Git history
+# Working with Git in Proctor
 
-## Workflow
+The working tree is shared with the owner and sometimes with other agents.
+Treat it as someone else's desk.
 
-1. Establish the exact repository state and authority for the requested
-   operation. Inspect the working tree, current branch, relevant refs, remotes,
-   and the smallest useful diff or log range. Distinguish the user's existing
-   work from changes made for the current task. Completion: the base, target,
-   owned changes, and authorized mutation are unambiguous.
-2. Partition the work into coherent review units before staging or publishing
-   it. Assign every selected hunk to exactly one intent; keep the implementation,
-   tests, contracts, documentation, and generated artifacts for that intent
-   together. Order dependent units so each leaves the repository in a useful,
-   verifiable state. Completion: every selected change has one logical group
-   and unrelated changes remain outside it.
-3. Read the reference for each operation before executing it:
-   - For staging, committing, amending, fixups, or squashing, read
-     [commit construction](references/commits.md).
-   - For opening, updating, or preparing a pull request, read
-     [pull requests](references/pull-requests.md).
-   - For branches, rebases, merges, restores, pushes, tags, or other ref and
-     remote work, read [history and remotes](references/history-and-remotes.md).
-   Completion: every applicable reference has been applied to the exact diff
-   and refs in scope.
-4. Verify the resulting state. Re-read the staged or published diff, run the
-   checks appropriate to each logical group, and inspect the final status and
-   concise history. Completion: the result contains only intended changes,
-   names the verification actually run, and reports any remaining local or
-   remote work without mutating it.
+## Permission
 
-## Operating boundaries
+- Looking at the repository is not permission to commit, rewrite, push, tag
+  or open a pull request. Each of those needs its own go-ahead.
+- A fetch authorizes nothing.
 
-- Treat read-only inspection as permission to inspect, not permission to
-  commit, rewrite, push, tag, open a pull request, or otherwise change shared
-  history. Perform the mutation the user requested and leave adjacent Git
-  operations for separate authorization.
-- Preserve local modifications, untracked files, staged state, refs, and
-  reflog recovery paths that are outside the requested operation.
-- Use explicit pathspecs, hunks, branches, commits, and remotes. Resolve each
-  target from repository evidence before changing it.
-- Respect repository hooks and signing configuration. Report a failing gate;
-  bypass it only when the user explicitly requests that tradeoff.
+## Hygiene
+
+- Preserve changes you didn't make: unrelated modifications, untracked files
+  and staged state.
+- Stage by explicit path or hunk, never with a blanket add over a tree you
+  didn't inspect.
+- Never commit `go.work.sum`.
+- Never use a bare `git stash` in a shared tree.
+
+## Commits
+
+- **One commit, one reason.** Code, tests, OpenAPI, docs, migrations and
+  generated output for that reason travel together. Partition by intent, not
+  by file type. If two changes can't be separated safely, say so rather than
+  forcing it.
+- **Subject:** `<type>[(<scope>)]: <imperative outcome>`, lowercase, with no
+  period and at most 72 characters.
+  - Types: `feat`, `fix`, `refactor`, `docs`, `test`, `perf`, `build`, `ci`,
+    `chore`.
+  - Scopes: `server`, `webapp`, `docs`, `cache`, `mail`, `vfs`, `tooling`.
+- **Body:** say why, and any non-obvious mechanism, compatibility, security or
+  migration effect. Don't list the files.
+- **Breaking changes** use `!` in the subject and a `BREAKING CHANGE:` footer.
+- **Every commit is signed off** (`git commit -s`, the DCO trailer). Run
+  `git diff --cached --check` before committing.
+
+## History and remotes
+
+- Prefer a new commit to fix shared history.
+- Rewrite only when asked, and then push with `--force-with-lease` after
+  refreshing the remote tip.
+
+## Pull requests
+
+- One outcome per pull request, titled for the net result.
+- Follow `.github/pull_request_template.md`. Write the description from the
+  whole `<base>...HEAD` diff and the checks you actually ran.
+- Add reviewers, labels or auto-merge only when asked.

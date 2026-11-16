@@ -21,10 +21,12 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/operational"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// LoginCommand is the local-password login use-case input.
+// LoginCommand is a local password sign-in; MFACode is empty when no second
+// factor is offered.
 type LoginCommand struct {
 	LoginID    string
 	Password   string
@@ -35,22 +37,22 @@ type LoginCommand struct {
 	Source     string
 }
 
-// LoginResult is the transport-neutral successful login outcome.
+// LoginResult carries the raw tokens of the new session.
 type LoginResult struct {
 	User    *model.User
 	Session *model.Session
 	Tokens  *model.AuthenticationTokens
 }
 
-// Login proves a local password, and a second factor when one is required, and
-// issues a Session. Every admitted attempt is audited; Desktop sign-in uses
-// Desktop authorization instead.
+// Login proves a local password, and a second factor when required, and
+// issues a session. Every attempt past the rate limit is audited. Desktop
+// clients are refused; they sign in through desktop authorization.
 func (s *Service) Login(
 	ctx context.Context,
 	inv invocation.Invocation,
 	command LoginCommand,
 ) (_ *LoginResult, resultErr error) {
-	defer func() { recordOperational(s.operational, "authentication", "login", resultErr) }()
+	defer func() { operational.Record(s.operational, "authentication", "login", resultErr) }()
 	if command.ClientType == model.SessionClientDesktop || !command.ClientType.IsValid() {
 		return nil, apperror.New("authentication.client_type.invalid").WithField("field", "client_type")
 	}
@@ -114,10 +116,8 @@ func (s *Service) Login(
 	return &LoginResult{User: proof.User, Session: savedSession, Tokens: tokens}, nil
 }
 
-// beginLocalLogin, completeLocalLogin and recordLocalLoginFailure durably
-// record every admitted local-password login outcome. Attempts rejected
-// before rate-limit admission are not audited so an unauthenticated flood
-// cannot grow the audit table without bound.
+// Attempts refused by the rate limit are not audited, so an unauthenticated
+// flood cannot grow the audit table without bound.
 func (s *Service) beginLocalLogin(
 	ctx context.Context,
 	inv invocation.Invocation,

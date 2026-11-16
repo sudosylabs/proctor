@@ -192,7 +192,7 @@ func testBrowserPendingRepairReservation(t *testing.T, ss store.Store) {
 		require.NoError(t, budgetErr)
 		return value
 	}
-	// The rounds outlast one initial Participation lease on a loaded
+	// The rounds outlast one initial participation lease on a loaded
 	// database, so the fixture renews it as a live client would.
 	renewal := &store.ExamAttemptParticipationRenewal{DesktopCompatibilityPolicyRevision: 1, AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID, ConnectionID: connected.Connection.ID, CandidateUserID: f.candidate.ID, SessionID: f.session.ID, Generation: connected.Participation.Generation, DesktopRegistrationID: f.session.DesktopRegistrationID, DPoPKeyThumbprint: f.session.DPoPKeyThumbprint, ContinuityCredentialHash: access.ContinuityCredentialHash}
 	prepareParticipationSecurityControl(t, ctx, ss, renewal)
@@ -244,7 +244,7 @@ func testBrowserPendingRepairReservation(t *testing.T, ss store.Store) {
 }
 
 // TestBrowserRetainedRepairReservation exercises durable byte-limit boundaries.
-// prime sets only fixture counters; the actual admission and repair use the Store.
+// prime sets only fixture counters; the actual admission and repair use the store.
 func TestBrowserRetainedRepairReservation(t *testing.T, ss store.Store, prime func(context.Context, model.ExamAttemptID, model.AttemptParticipationID, int64, int64) error) {
 	for index, scope := range []string{"participation", "attempt"} {
 		t.Run(scope, func(t *testing.T) {

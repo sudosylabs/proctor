@@ -63,8 +63,8 @@ func (v BrowserActivitySourceStart) Declaration() model.BrowserSourceStart {
 	}
 }
 
-// BrowserSourceRefusal represents an already committed predecessor closure.
-// Current capabilities are loaded after commit by the application.
+// BrowserSourceRefusal is a refused source start. The predecessor's closure
+// has already committed; the application loads Capabilities after commit.
 type BrowserSourceRefusal struct {
 	Capabilities *CandidateRuntimeCapabilities
 	Code         string
@@ -120,48 +120,44 @@ type BrowserActivityRecord struct {
 	Event           model.BrowserActivityEvent
 }
 
-// BrowserDeliveryStore persists the Browser Activity a Candidate's Desktop
-// delivers for one Participation: its sources, the events appended live or
-// after the Connection ended, their receipts, declared gaps, the final
-// declaration, and the summary of what was not retained.
+// BrowserDeliveryStore persists the browser activity a candidate's Desktop
+// delivers for one participation: sources, events sent live or after the
+// connection ended, receipts, declared gaps, the final declaration and the
+// summary of what was not retained.
 type BrowserDeliveryStore interface {
-	// StartBrowserActivity starts the declared source for the Candidate's
-	// active Participation and returns its status. A refused start is a
-	// *BrowserSourceRefusal.
+	// StartBrowserActivity returns a *BrowserSourceRefusal for a refused start.
 	StartBrowserActivity(context.Context, *BrowserActivitySourceStart) (*model.BrowserSourceStatus, error)
-	// BrowserSourceStatus returns the delivery status of one source.
 	BrowserSourceStatus(context.Context, BrowserDeliveryAccess) (*model.BrowserSourceStatus, error)
-	// BrowserSourceList returns the delivery status of every source of the
-	// Participation, in start order.
+	// BrowserSourceList returns every source of the participation in start
+	// order.
 	BrowserSourceList(context.Context, BrowserDeliveryAccess) ([]model.BrowserSourceStatus, error)
 	// AppendBrowserActivity appends events from a live source over the
-	// Candidate's open Connection and returns their acknowledgement.
+	// candidate's open connection.
 	AppendBrowserActivity(context.Context, *BrowserActivityAppend) (*model.BrowserActivityAcknowledgement, error)
-	// ListBrowserActivity returns one page of an Attempt's Browser Activity
-	// events for an Exam Manager, ordered by receipt time, source and sequence.
+	// ListBrowserActivity returns one page for a manager, ordered by receipt
+	// time, source and sequence.
 	ListBrowserActivity(context.Context, BrowserActivityListOptions) ([]BrowserActivityRecord, error)
 
-	// ResolveBrowserDeliveryTarget returns the Sitting and Class that own the
-	// source's Attempt.
+	// ResolveBrowserDeliveryTarget returns the sitting and class that own the
+	// source's attempt.
 	ResolveBrowserDeliveryTarget(context.Context, BrowserDeliveryAccess) (*DeliveryOwnerTarget, error)
-	// BrowserDeliveryReceipts returns a bounded page of the source's stored
-	// event receipts from the given sequence onward.
+	// BrowserDeliveryReceipts returns a bounded page of receipts from the given
+	// sequence onward.
 	BrowserDeliveryReceipts(context.Context, BrowserDeliveryAccess, int64, int) (*model.BrowserReceiptPage, error)
-	// AppendHistoricalBrowserDelivery appends events a source delivers after
-	// its live Connection ended and returns their acknowledgement.
+	// AppendHistoricalBrowserDelivery appends events delivered after the live
+	// connection ended.
 	AppendHistoricalBrowserDelivery(
 		context.Context,
 		*BrowserActivityAppend,
 		*CommandIdempotency,
 	) (*model.BrowserActivityAcknowledgement, error)
-	// DeclareBrowserDeliveryGaps records the gaps the source declares in what
-	// it delivered. A refused declaration is a *BrowserDeliveryRefusal.
+	// DeclareBrowserDeliveryGaps returns a *BrowserDeliveryRefusal for a
+	// refused declaration.
 	DeclareBrowserDeliveryGaps(context.Context, *BrowserDeliveryGapDeclaration, *CommandIdempotency) (*model.BrowserDeliveryGapResult, error)
-	// SealBrowserDelivery records the source's final declaration and returns
-	// the resulting source status.
+	// SealBrowserDelivery records the source's final declaration.
 	SealBrowserDelivery(context.Context, *BrowserDeliveryFinalDeclaration, *CommandIdempotency) (*model.BrowserSourceStatus, error)
-	// UpdateBrowserDeliverySummary records the source's summary of delivery it
-	// did not retain.
+	// UpdateBrowserDeliverySummary records the source's summary of what it did
+	// not retain.
 	UpdateBrowserDeliverySummary(
 		context.Context,
 		*BrowserDeliverySummaryUpdate,

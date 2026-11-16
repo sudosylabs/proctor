@@ -17,15 +17,14 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Opened is one Exam Resource with an open stream of its selected rendition.
-// The caller closes Body.
+// Opened is a resource with an open stream of its selected rendition. The
+// caller closes Body.
 type Opened struct {
 	Record store.ExamResourceRecord
 	Body   io.ReadCloser
 }
 
-// ListExamResources returns the Exam Draft's Exam Resources to a caller
-// authorized to view the Exam.
+// ListExamResources requires permission to view the exam, not manage it.
 func (s *Service) ListExamResources(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -47,8 +46,8 @@ func (s *Service) ListExamResources(
 	return items, nil
 }
 
-// OpenExamResource opens the selected content of one Exam Draft Exam Resource
-// for a caller authorized to view the Exam. The caller must close the body.
+// OpenExamResource requires permission to view the exam. The caller closes
+// Opened.Body.
 func (s *Service) OpenExamResource(
 	ctx context.Context,
 	inv invocation.Invocation,

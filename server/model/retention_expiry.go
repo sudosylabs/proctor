@@ -35,8 +35,8 @@ const (
 	RetentionExpirySourceProtected RetentionExpiryBlocker = "export_in_progress"
 )
 
-// RetentionExpiryCounts partitions audit and receipt history by the first
-// applicable blocker. Counts never include audit projections or private reasons.
+// RetentionExpiryCounts splits audit and receipt history by the first blocker
+// that applies. Counts never include audit projections or private reasons.
 type RetentionExpiryCounts struct {
 	Total            int64
 	Eligible         int64
@@ -67,9 +67,9 @@ func (c RetentionExpiryCounts) Validate() error {
 }
 
 // RetentionExpiryRecord is a content-free lifecycle projection. EventAt is the
-// audit's terminal event or the receipt's retirement/cancellation event. An
-// attached completed recovery or released hold can extend its own evidence age.
-// Grace starts only when all current dependencies permit expiry.
+// audit's final event or the receipt's retirement or cancellation. An attached
+// completed recovery or released hold can extend its own evidence age; grace
+// starts only when every current dependency allows expiry.
 type RetentionExpiryRecord struct {
 	Kind         RetentionExpiryKind
 	ID           string

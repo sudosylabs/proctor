@@ -11,8 +11,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 )
 
-// publicFailures presents every Starter Workspace use-case failure: unexpected errors
-// become exam.starter_workspace.unavailable, and protected targets conceal denial and absence.
+// publicFailures turns unexpected errors into exam.starter_workspace.unavailable
+// and reports denial and absence alike as resource.not_found.
 var publicFailures = apperror.Concealment{
 	Unavailable: "exam.starter_workspace.unavailable",
 	Concealed:   []apperror.Code{"exam.starter_workspace.not_found"},

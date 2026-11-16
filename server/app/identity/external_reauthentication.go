@@ -25,7 +25,8 @@ type BeginExternalReauthenticationCommand struct {
 }
 
 // BeginExternalReauthentication starts fresh provider proof for the current
-// external Session, returning to the closed task the command names.
+// external session. Task must be "security" or "connect-provider", so the
+// return target is never caller-chosen.
 func (s *Service) BeginExternalReauthentication(
 	ctx context.Context,
 	inv invocation.Invocation,

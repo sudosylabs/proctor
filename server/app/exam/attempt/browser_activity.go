@@ -40,11 +40,9 @@ type AppendBrowserActivityCommand struct {
 	Events          []model.BrowserActivityEvent
 }
 
-// StartExamAttemptBrowserActivity registers or transitions a Browser Activity
-// source session for the candidate's live Attempt Participation, fenced by
-// participation generation and the frozen policy revision and digest. The
-// candidate's Attempt Connection credentials are required, and the call is
-// audited against the Sitting's Class.
+// StartExamAttemptBrowserActivity registers or transitions a source session,
+// fenced by participation generation and the frozen policy revision and
+// digest. It requires the candidate's connection credentials.
 func (s *Service) StartExamAttemptBrowserActivity(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -121,10 +119,8 @@ func (s *Service) StartExamAttemptBrowserActivity(
 	return *status, nil
 }
 
-// AppendExamAttemptBrowserActivity appends a bounded batch of Browser
-// Activity events from a started source session of the candidate's live
-// Attempt Participation and returns the acknowledgement. Delivery refusals
-// are reported without marking the audit failed.
+// AppendExamAttemptBrowserActivity appends a bounded batch from a started
+// source session. Delivery refusals do not mark the audit failed.
 func (s *Service) AppendExamAttemptBrowserActivity(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -265,17 +261,15 @@ type BrowserActivityPageQuery struct {
 	Limit           int
 }
 
-// BrowserActivityPage is one page of an Attempt's Browser Activity in cursor
-// order; HasMore says another page follows the last item.
+// BrowserActivityPage is one page in cursor order; HasMore says another page
+// follows.
 type BrowserActivityPage struct {
 	Items   []store.BrowserActivityRecord
 	HasMore bool
 }
 
-// ListExamAttemptBrowserActivity returns one page of an Attempt's Browser
-// Activity for a reviewer. It authorizes Browser Activity view on the exact
-// Sitting before reading the Attempt so existence is not probeable, and
-// reports the candidate's own Attempt as not found.
+// ListExamAttemptBrowserActivity returns one page for a reviewer, and reports
+// the reviewer's own attempt as not found.
 func (s *Service) ListExamAttemptBrowserActivity(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -292,8 +286,8 @@ func (s *Service) ListExamAttemptBrowserActivity(
 		return BrowserActivityPage{}, apperror.Invalid("exam.attempt.invalid", "browser_activity_list")
 	}
 
-	// Authorize the exact Sitting before reading the Attempt so existence is
-	// not probeable; later exits complete the audit attempt as failed.
+	// Authorize the exact sitting before reading the attempt so existence is
+	// not probeable.
 	browserActivity, err := s.managers.AuthorizeBrowserActivityView(ctx, inv, query.SittingID)
 	unitID := browserActivity.AcademicUnitID
 	if err != nil {
@@ -390,9 +384,8 @@ func browserSourceSelector(inv invocation.Invocation, query BrowserSourceQuery) 
 	}, nil
 }
 
-// BrowserSourceStatus returns the delivery status of one Browser Activity
-// source session of the candidate's Attempt, as seen from a registered
-// desktop.
+// BrowserSourceStatus returns one source session's delivery status, as seen
+// from a registered desktop.
 func (s *Service) BrowserSourceStatus(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -421,9 +414,9 @@ func (s *Service) BrowserSourceStatus(
 	return value, nil
 }
 
-// BrowserSourceList returns the delivery status of every Browser Activity
-// source session within one Attempt Participation. The query must name the
-// participation and must not name a source session.
+// BrowserSourceList returns the delivery status of every source session in
+// one participation. The query must name the participation and no source
+// session.
 func (s *Service) BrowserSourceList(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -462,8 +455,8 @@ func (s *Service) BrowserSourceList(
 	return values, nil
 }
 
-// browserSourceRefusalCode presents the bounded refusal reason that the Store
-// persisted with a committed predecessor closure.
+// browserSourceRefusalCode presents the refusal reason the store persisted
+// with a committed predecessor closure.
 func browserSourceRefusalCode(reason string) apperror.Code {
 	switch reason {
 	case "exam.delivery.metadata_capacity":

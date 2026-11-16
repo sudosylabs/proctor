@@ -107,7 +107,7 @@ func (r attemptEnvironmentRow) model() (*model.AttemptEnvironment, error) {
 	return environment, nil
 }
 
-// Get returns one Attempt's environment.
+// Get returns one attempt's environment.
 func (s SQLAttemptEnvironmentStore) Get(ctx context.Context, attemptID model.ExamAttemptID) (*model.AttemptEnvironment, error) {
 	if !attemptID.IsValid() {
 		return nil, store.NewErrInvalidInput("attempt_environment", "attempt_id", nil)
@@ -123,7 +123,7 @@ func (s SQLAttemptEnvironmentStore) Get(ctx context.Context, attemptID model.Exa
 	return row.model()
 }
 
-// ApplyFact applies one committed Attempt or Sitting fact.
+// ApplyFact applies one committed attempt or sitting fact.
 func (s SQLAttemptEnvironmentStore) ApplyFact(
 	ctx context.Context,
 	fact model.AttemptEnvironmentFact,
@@ -209,7 +209,7 @@ func (s SQLAttemptEnvironmentStore) ApplyFact(
 	})
 }
 
-// createAttemptEnvironment creates the environment of an Attempt admitted to
+// createAttemptEnvironment creates the environment of an attempt admitted to
 // a Revision whose execution policy is enabled, copying the profile it names.
 func createAttemptEnvironment(
 	ctx context.Context,
@@ -434,7 +434,7 @@ func nullableEnvironmentTime(at time.Time) sql.NullTime {
 	return sql.NullTime{Time: at, Valid: !at.IsZero()}
 }
 
-// RequestSettle asks the Attempt's environment for one more settle.
+// RequestSettle asks the attempt's environment for one more settle.
 func (s SQLAttemptEnvironmentStore) RequestSettle(ctx context.Context, attemptID model.ExamAttemptID) (int64, error) {
 	if !attemptID.IsValid() {
 		return 0, store.NewErrInvalidInput("attempt_environment", "attempt_id", nil)
@@ -480,7 +480,7 @@ func (s SQLAttemptEnvironmentStore) RecordSettleIncomplete(ctx context.Context, 
 		ctx context.Context,
 		tx *sqlxTxWrapper,
 	) (struct{}, error) {
-		// The Attempt row first, as the seal and the environment's writes
+		// The attempt row first, as the seal and the environment's writes
 		// take it, so no seal interleaves.
 		var attemptState string
 		if err := tx.Get(ctx, &attemptState, `SELECT state FROM exam_attempts WHERE id = ? FOR UPDATE`,

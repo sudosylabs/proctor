@@ -18,8 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// OpenedContent is an open stream of protected bytes with the metadata a
-// transport needs to serve it. The caller closes Body.
+// OpenedContent is an open stream of protected bytes. The caller closes Body.
 type OpenedContent struct {
 	Body           io.ReadCloser
 	MediaType      string
@@ -28,9 +27,8 @@ type OpenedContent struct {
 	ContentVersion model.WorkspaceContentVersion
 }
 
-// WorkspaceQuery selects one page of the candidate's Attempt Workspace
-// manifest at ExpectedCursor, after AfterEntryID; ExpectedCursor -1 starts at
-// the current cursor.
+// WorkspaceQuery selects one manifest page at ExpectedCursor, after
+// AfterEntryID; ExpectedCursor -1 starts at the current cursor.
 type WorkspaceQuery struct {
 	Access         CandidateAccess
 	ExpectedCursor int64
@@ -38,9 +36,9 @@ type WorkspaceQuery struct {
 	Limit          int
 }
 
-// WorkspacePage is one page of the Attempt Workspace manifest at Cursor.
-// RefreshRequired reports that the workspace changed since the expected
-// cursor, and HasMore that a later page exists.
+// WorkspacePage is one manifest page at Cursor. RefreshRequired reports that
+// the workspace changed since the expected cursor, and HasMore that a later
+// page exists.
 type WorkspacePage struct {
 	WorkspaceID     model.ExamAttemptWorkspaceID
 	Cursor          int64
@@ -49,10 +47,8 @@ type WorkspacePage struct {
 	RefreshRequired bool
 }
 
-// ListCandidateExamWorkspace returns one page of the candidate's Attempt
-// Workspace manifest. ExpectedCursor -1 starts a first page at the current
-// cursor; RefreshRequired reports that the workspace changed since that
-// cursor.
+// ListCandidateExamWorkspace returns one page of the candidate's workspace
+// manifest.
 func (s *Service) ListCandidateExamWorkspace(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -67,8 +63,6 @@ func (s *Service) ListCandidateExamWorkspace(
 	return s.listWorkspace(ctx, selector, query.ExpectedCursor, query.AfterEntryID, query.Limit)
 }
 
-// listWorkspace reads one manifest page through a candidate's or an
-// environment's read access.
 func (s *Service) listWorkspace(
 	ctx context.Context,
 	readAccess store.ExamAttemptWorkspaceReadAccess,
@@ -102,16 +96,15 @@ func (s *Service) listWorkspace(
 	}, nil
 }
 
-// OpenWorkspaceFileQuery names one Workspace file through the candidate's
-// Attempt access.
+// OpenWorkspaceFileQuery names one workspace file through the candidate's
+// access.
 type OpenWorkspaceFileQuery struct {
 	Access  CandidateAccess
 	EntryID model.AttemptWorkspaceEntryID
 }
 
-// OpenCandidateExamWorkspaceFile opens the current content of one file in the
-// candidate's Attempt Workspace, whether it is still the Starter Workspace
-// copy or Attempt-written content.
+// OpenCandidateExamWorkspaceFile opens a file's current content, whether it
+// is still the starter copy or content the attempt wrote.
 func (s *Service) OpenCandidateExamWorkspaceFile(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -126,8 +119,6 @@ func (s *Service) OpenCandidateExamWorkspaceFile(
 	return s.openWorkspaceFile(ctx, selector, query.EntryID)
 }
 
-// openWorkspaceFile opens one file through a candidate's or an environment's
-// read access.
 func (s *Service) openWorkspaceFile(
 	ctx context.Context,
 	readAccess store.ExamAttemptWorkspaceReadAccess,

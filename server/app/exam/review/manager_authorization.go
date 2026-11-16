@@ -12,34 +12,25 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// SittingAuthorizer is the current Exam Manager decision the Sitting area
-// makes for one Submission of an Exam. *sitting.Service satisfies it; this
-// package cannot import the Sitting area.
-type SittingAuthorizer interface {
-	AuthorizeSubmissionView(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) error
-	AuthorizeSubmissionReview(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) (access.ManagerAuthorization, error)
-	AuthorizeSubmissionRelease(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) (access.ManagerAuthorization, error)
-}
-
-// SittingManagerAuthorizer is the Authorizer the application runs. Every
-// decision first resolves the canonical Submission, because a caller names a
-// Submission without the Exam the Sitting area decides against. The candidate
-// who made the Submission never reviews it: that denial is recorded at the
-// Submission's Academic Unit and concealed as not found, whatever Role the
-// candidate holds, before the current Exam Manager decision is asked.
+// SittingManagerAuthorizer resolves the submission first, because callers
+// name a submission without the exam the manager check needs. The candidate
+// who made the submission never reviews it, whatever role they hold: that
+// denial is audited at the submission's academic unit and reported as not
+// found, before any manager check runs.
 type SittingManagerAuthorizer struct {
 	Reviews  store.ExamIntegrityReviewStore
-	Sittings SittingAuthorizer
-	Audit    access.DecisionAudit
+	Sittings *sitting.Service
+	Audit    *access.Auditor
 }
 
-// AuthorizeSubmissionView authorizes reading a Submission's flags, evidence
-// and Review.
+// AuthorizeSubmissionView authorizes reading a submission's flags, evidence
+// and review.
 func (a SittingManagerAuthorizer) AuthorizeSubmissionView(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -62,7 +53,7 @@ func (a SittingManagerAuthorizer) AuthorizeSubmissionView(
 }
 
 // AuthorizeSubmissionReview authorizes draft decisions and finalization, and
-// reports whether the decision rested on the override Action.
+// reports whether the override action was used.
 func (a SittingManagerAuthorizer) AuthorizeSubmissionReview(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -90,7 +81,7 @@ func (a SittingManagerAuthorizer) AuthorizeSubmissionReview(
 }
 
 // AuthorizeSubmissionRelease authorizes releasing a finalized result to the
-// candidate, and reports whether the decision rested on the override Action.
+// candidate, and reports whether the override action was used.
 func (a SittingManagerAuthorizer) AuthorizeSubmissionRelease(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -133,8 +124,8 @@ func (a SittingManagerAuthorizer) resolve(
 		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(err)
 	}
 
-	// Callers deny the Submission's Candidate, so the projection must be the
-	// requested Submission's, whatever the Store returned.
+	// Callers deny the submission's candidate from this projection, so it must
+	// be the requested submission's, whatever the store returned.
 	if !authorization.ConsistentWith(submissionID) {
 		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("Review authorization projection is incomplete"))
 	}

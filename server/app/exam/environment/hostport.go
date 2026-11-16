@@ -19,36 +19,36 @@ import (
 // The failures a host port reports. An adapter wraps one of them, and only
 // names the operation that failed: host detail never reaches the owner.
 var (
-	// ErrHostCapacity: the host cannot fit the machine now; try another.
+	// ErrHostCapacity means the host cannot fit the machine now; try another.
 	ErrHostCapacity = errors.New("execution host has no capacity")
-	// ErrHostUnavailable: the host cannot be reached or will not place a
+	// ErrHostUnavailable means the host cannot be reached or will not place a
 	// machine now (draining, no such image or network, no isolation).
 	ErrHostUnavailable = errors.New("execution host unavailable")
-	// ErrMachineLost: the machine ended without a revoke. Revoke
+	// ErrMachineLost means the machine ended without a revoke; Revoke
 	// acknowledges the loss; a new incarnation follows.
 	ErrMachineLost = errors.New("execution machine lost")
-	// ErrMachineRevoked: the machine no longer exists.
+	// ErrMachineRevoked means the machine no longer exists.
 	ErrMachineRevoked = errors.New("execution machine revoked")
-	// ErrMachineConflict: the call disagrees with the machine's state, such
+	// ErrMachineConflict means the call disagrees with the machine's state, such
 	// as a stale fence, another spec under the same grant, or a projection
 	// over a guest change nobody confirmed.
 	ErrMachineConflict = errors.New("execution machine conflict")
-	// ErrMachineFrozen: the call needs a running machine.
+	// ErrMachineFrozen means the call needs a running machine.
 	ErrMachineFrozen = errors.New("execution machine frozen")
-	// ErrMachineStale: observed content changed after it was observed; a
+	// ErrMachineStale means observed content changed after it was observed; a
 	// later observation carries the change.
 	ErrMachineStale = errors.New("execution observation stale")
-	// ErrMachineLagged: the machine can no longer report guest changes from
+	// ErrMachineLagged means the machine can no longer report guest changes from
 	// the position asked for; the projection must start again.
 	ErrMachineLagged = errors.New("execution observation lagged")
-	// ErrMachineNotFound: no such grant, transfer or content.
+	// ErrMachineNotFound means there is no such grant, transfer or content.
 	ErrMachineNotFound = errors.New("execution machine not found")
-	// ErrMachineTooLarge: metadata over its bound, or the machine's disk is
-	// full.
+	// ErrMachineTooLarge means metadata is over its bound, or the machine's
+	// disk is full.
 	ErrMachineTooLarge = errors.New("execution machine too large")
-	// ErrMachineBusy: the machine runs as many processes as it may.
+	// ErrMachineBusy means the machine runs as many processes as it may.
 	ErrMachineBusy = errors.New("execution machine busy")
-	// ErrProcessExited: the process has exited and takes no more input,
+	// ErrProcessExited means the process has exited and takes no more input,
 	// size or signal.
 	ErrProcessExited = errors.New("execution process exited")
 )
@@ -133,10 +133,9 @@ type Hosts interface {
 	// Revoke ends a machine, and acknowledges a lost one. Revoking an
 	// unknown grant succeeds.
 	Revoke(ctx context.Context, grant GrantRef) error
-	// WatchGrant follows one machine.
 	WatchGrant(ctx context.Context, grant GrantRef) (GrantWatch, error)
 	// IgnoreRules compiles the ignore rules every projection starts with:
-	// the Workspace file that holds them and the patterns that apply while
+	// the workspace file that holds them and the patterns that apply while
 	// it is missing or does not parse.
 	IgnoreRules(file string, fallback []string) (IgnoreRules, error)
 }
@@ -144,16 +143,16 @@ type Hosts interface {
 // IgnoreRules decide which new guest paths stay on the machine.
 type IgnoreRules interface {
 	// Policy is the decision for the ignore file's current body; present
-	// is false while the Workspace has no such file.
+	// is false while the workspace has no such file.
 	Policy(body []byte, present bool) IgnorePolicy
 }
 
 // IgnorePolicy is one decision of the ignore rules.
 type IgnorePolicy interface {
-	// Observed reports whether a path the Workspace does not hold is kept.
+	// Observed reports whether a path the workspace does not hold is kept.
 	Observed(name string, directory bool) bool
 	// Fallback reports whether the default patterns decide, because the
-	// Workspace has no ignore file or one that does not parse.
+	// workspace has no ignore file or one that does not parse.
 	Fallback() bool
 }
 
@@ -200,7 +199,7 @@ const (
 	ProjectionDelete ProjectionOperation = "delete"
 )
 
-// ProjectionMutation is one Workspace journal entry as the machine applies
+// ProjectionMutation is one workspace journal entry as the machine applies
 // it. Cursor is its journal cursor.
 type ProjectionMutation struct {
 	Cursor           int64
@@ -221,7 +220,7 @@ type ProjectionMutation struct {
 	Overwrite bool
 }
 
-// ProjectionEntry is one Workspace entry a projection starts with.
+// ProjectionEntry is one workspace entry a projection starts with.
 type ProjectionEntry struct {
 	EntryID model.AttemptWorkspaceEntryID
 	Kind    model.StarterWorkspaceEntryKind
@@ -230,7 +229,7 @@ type ProjectionEntry struct {
 	Content *ContentRef
 }
 
-// ProjectionInit installs the Workspace into a new machine, once.
+// ProjectionInit installs the workspace into a new machine, once.
 type ProjectionInit struct {
 	Fence          Fence
 	MutationID     string
@@ -359,8 +358,7 @@ const (
 )
 
 // Machine is one placed machine for one epoch. Every call but Revoke names
-// the current fence; the projection and observation
-// calls need it running.
+// the current fence; the projection and observation calls need it running.
 type Machine interface {
 	GrantID() string
 	Epoch() string

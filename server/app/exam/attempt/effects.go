@@ -17,8 +17,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// publishCandidateActivityChanged tells the candidate's clients to refetch
-// their Exam activity.
 func (s *Service) publishCandidateActivityChanged(ctx context.Context,
 	candidateID model.UserID,
 ) error {
@@ -29,9 +27,9 @@ func (s *Service) publishCandidateActivityChanged(ctx context.Context,
 	return s.publisher.Publish(ctx, event)
 }
 
-// publishOperationalInvalidations follows a change to what an Attempt may do,
-// in this order: the candidate's Exam activity, the Sitting board, and the
-// candidate's current-user context. A failure never stops the ones after it.
+// publishOperationalInvalidations publishes in order: the candidate's exam
+// activity, the sitting board, then the current-user context. A failure never
+// stops the ones after it.
 func (s *Service) publishOperationalInvalidations(
 	ctx context.Context,
 	examID model.ExamID,
@@ -45,10 +43,8 @@ func (s *Service) publishOperationalInvalidations(
 	)
 }
 
-// publishConnectionOpened first closes the Sessions and drops the cached
-// access tokens that admission revoked, when there are any, and only then
-// announces the opened Attempt Connection to managers, followed by the
-// operational invalidations.
+// publishConnectionOpened closes the sessions and drops the cached access
+// tokens that admission revoked before it announces the opened connection.
 func (s *Service) publishConnectionOpened(ctx context.Context, result ConnectionResult) error {
 	if len(result.RevokedSessionIDs) > 0 || len(result.RevokedAccessTokenDigests) > 0 {
 		s.publisher.SessionsRevoked(ctx, result.Attempt.CandidateUserID, result.RevokedSessionIDs, result.RevokedAccessTokenDigests)
@@ -73,8 +69,6 @@ func (s *Service) publishConnectionOpened(ctx context.Context, result Connection
 	))
 }
 
-// publishConnectionClosed tells managers which Attempt Connection closed and
-// why, then invalidates the Sitting board.
 func (s *Service) publishConnectionClosed(ctx context.Context, result ConnectionClosedResult) error {
 	event, err := realtime.NewExamAttemptConnectionClosedEvent(
 		result.SittingID,
@@ -92,13 +86,10 @@ func (s *Service) publishConnectionClosed(ctx context.Context, result Connection
 		realtime.PublishSittingBoardChanged(ctx, s.publisher, result.ExamID, result.SittingID))
 }
 
-// publishParticipationExpired announces a Participation whose lease ran out
-// and the policy Suspension it caused. When the expiry itself closed the
-// Attempt Connection, managers learn of the close before the Suspension, and
-// the Connection is unbound on every node only after every event and
-// invalidation has been attempted, so the Desktop client still receives its
-// Suspension. When the transport had already closed the Connection, there is
-// no second close and nothing to unbind. Nothing is published unless every
+// publishParticipationExpired announces a lapsed lease and the suspension it
+// caused. When the expiry closed the connection, managers hear of the close
+// before the suspension, and the connection is unbound last so the Desktop
+// client still receives its suspension. Nothing is published unless every
 // event can be built.
 func (s *Service) publishParticipationExpired(ctx context.Context, result ParticipationExpiry) error {
 	effects := integrityEffects{
@@ -123,8 +114,6 @@ func (s *Service) publishParticipationExpired(ctx context.Context, result Partic
 	return s.publishIntegrityOutcome(ctx, effects)
 }
 
-// publishAttemptReallowed tells managers and then the candidate that a
-// suspended Attempt may continue, followed by the operational invalidations.
 func (s *Service) publishAttemptReallowed(ctx context.Context, result ReallowResult) error {
 	managerEvent, err := realtime.NewExamAttemptReallowedEvent(
 		result.SittingID,
@@ -155,9 +144,8 @@ func (s *Service) publishAttemptReallowed(ctx context.Context, result ReallowRes
 	)
 }
 
-// publishAttemptSuspendedByManager publishes a committed kick: the closed live
-// Connection, if any, the manager and candidate suspension facts, operational
-// invalidations, and removal of the exact live Connection binding.
+// publishAttemptSuspendedByManager unbinds the kicked live connection only
+// after the suspension facts and invalidations are published.
 func (s *Service) publishAttemptSuspendedByManager(ctx context.Context, result ManualSuspensionResult) error {
 	var connectionID model.AttemptConnectionID
 	if result.Connection != nil {
@@ -223,8 +211,8 @@ func (s *Service) publishAttemptSuspendedByManager(ctx context.Context, result M
 	)
 }
 
-// publishWorkspaceChanged tells the candidate's other clients, once per batch,
-// which journal cursors the batch took. The event carries no path or content.
+// publishWorkspaceChanged publishes once per batch. The event carries journal
+// cursors only, never a path or content.
 func (s *Service) publishWorkspaceChanged(ctx context.Context, result WorkspaceBatchResult) error {
 	first, last := result.Changes[0], result.Changes[len(result.Changes)-1]
 	event, err := realtime.NewCandidateExamAttemptWorkspaceChangedEvent(
@@ -242,11 +230,8 @@ func (s *Service) publishWorkspaceChanged(ctx context.Context, result WorkspaceB
 	return errors.Join(s.publisher.Publish(ctx, event))
 }
 
-// publishFocusLossEvaluated announces what one Focus Loss report caused. A
-// late report against a sealed Submission publishes only the recorded
-// discrepancy and a Sitting board invalidation. Otherwise it publishes the
-// integrity outcome; its invalidations are the Sitting board and the
-// candidate's Exam activity.
+// publishFocusLossEvaluated publishes only the recorded discrepancy and a
+// sitting board invalidation for a late report against a sealed submission.
 func (s *Service) publishFocusLossEvaluated(ctx context.Context, result FocusLossEvaluation) error {
 	if result.DiscrepancyRecorded {
 		event, err := realtime.NewExamIntegrityDiscrepancyRecordedEvent(
@@ -306,23 +291,20 @@ func (s *Service) publishFocusLossEvaluated(ctx context.Context, result FocusLos
 	return s.publishIntegrityOutcome(ctx, effects)
 }
 
-// integrityEffects are the realtime effects of one integrity policy
-// decision, which every policy publishes the same way.
+// integrityEffects are the realtime effects of one integrity policy decision;
+// every policy publishes them the same way.
 type integrityEffects struct {
-	SittingID       model.ExamSittingID
-	AttemptID       model.ExamAttemptID
-	CandidateUserID model.UserID
-	At              time.Time
-	// ClosedConnection is the Connection this decision closed, or nil.
+	SittingID        model.ExamSittingID
+	AttemptID        model.ExamAttemptID
+	CandidateUserID  model.UserID
+	At               time.Time
 	ClosedConnection *store.ExamAttemptManagerConnection
-	// Flagged tells managers of the Flag, or is nil when they are not told.
-	Flagged *integrityFlagNotice
-	// Suspension is the policy Suspension this decision opened, or nil.
+	// Flagged is nil when managers are not told of the flag.
+	Flagged    *integrityFlagNotice
 	Suspension *integritySuspensionNotice
-	// Warning is whether the candidate is warned.
-	Warning bool
-	// Invalidate publishes the policy's own invalidations, after the events
-	// and before the closed Connection is unbound.
+	Warning    bool
+	// Invalidate runs after the events and before the closed connection is
+	// unbound.
 	Invalidate func() error
 }
 
@@ -341,13 +323,11 @@ type integritySuspensionNotice struct {
 	AttemptRevision int64
 }
 
-// publishIntegrityOutcome publishes what an integrity decision caused, each
-// event only when it applies and always in this order: the closed Attempt
-// Connection, the Integrity Flag to managers, the policy Suspension to
-// managers and then to the candidate, and the candidate's warning. The
-// policy's invalidations follow, and the closed Connection is unbound on
-// every node last, so the Desktop client still receives its Suspension.
-// Nothing is published unless every event that applies can be built.
+// publishIntegrityOutcome publishes, in this order and only when they apply:
+// the closed connection, the flag, the suspension to managers then to the
+// candidate, the warning, and the policy's invalidations. The closed
+// connection is unbound last so the Desktop client still receives its
+// suspension. Nothing is published unless every event can be built.
 func (s *Service) publishIntegrityOutcome(ctx context.Context, effects integrityEffects) error {
 	events := make([]realtime.Event, 0, 5)
 	if connection := effects.ClosedConnection; connection != nil {
@@ -443,9 +423,8 @@ func (s *Service) publishIntegrityOutcome(ctx context.Context, effects integrity
 	return joined
 }
 
-// publishAttemptSubmitted announces a sealed Submission to managers and to
-// the candidate, follows with the operational invalidations, and last
-// unbinds the Attempt Connection that submitted.
+// publishAttemptSubmitted unbinds the submitting connection last, after the
+// submission facts and invalidations.
 func (s *Service) publishAttemptSubmitted(ctx context.Context, result SubmissionResult) error {
 	publishErr, constructionErr := s.publishSubmittedFacts(ctx, result)
 	if constructionErr != nil {
@@ -460,9 +439,8 @@ func (s *Service) publishAttemptSubmitted(ctx context.Context, result Submission
 	), s.publisher.UnbindExamAttemptConnection(ctx, result.ConnectionID))
 }
 
-// publishSubmittedFacts publishes the manager and candidate Submission facts,
-// managers first. constructionErr reports an event that could not be built,
-// in which case nothing was published.
+// publishSubmittedFacts publishes to managers first. constructionErr reports
+// an event that could not be built, in which case nothing was published.
 func (s *Service) publishSubmittedFacts(ctx context.Context,
 	result SubmissionResult,
 ) (publishErr, constructionErr error) {
@@ -497,10 +475,8 @@ func (s *Service) publishSubmittedFacts(ctx context.Context,
 	return errors.Join(s.publisher.Publish(ctx, managerEvent), s.publisher.Publish(ctx, candidateEvent)), nil
 }
 
-// publishAttemptSealedForSittingClose announces a Submission sealed because
-// its Sitting closed: the manager and candidate Submission facts, the closed
-// Attempt Connection when sealing closed one, the operational invalidations,
-// and last the unbinding of that Connection.
+// publishAttemptSealedForSittingClose unbinds the connection the seal closed
+// last, after every fact and invalidation.
 func (s *Service) publishAttemptSealedForSittingClose(ctx context.Context, result AutomaticSubmissionResult) error {
 	publishErr, constructionErr := s.publishSubmittedFacts(ctx, result.SubmissionResult)
 	if constructionErr != nil {

@@ -14,8 +14,8 @@ import (
 
 const DeliveryExpireOperation = "exam.delivery.expire"
 
-// DeliveryExpiryDue is a bounded maintenance selector, not candidate authority.
-// The named mutation rechecks the owner and its database-time deadline.
+// DeliveryExpiryDue selects a source for maintenance and grants nothing:
+// ExpireDelivery rechecks the owner and the deadline on the database clock.
 type DeliveryExpiryDue struct {
 	Family          string
 	SourceID        string

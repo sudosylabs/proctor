@@ -381,12 +381,14 @@ func TestExternalIdentityStore(t *testing.T, ss store.Store) {
 	})
 }
 
-// TestExternalIdentityAdmissionMode verifies the terminal admission decision
-// against a Store whose authoritative Access Policy is seeded with mode.
+// ExternalIdentityAdmissionSQLProbe backdates a login state so it reads as
+// expired.
 type ExternalIdentityAdmissionSQLProbe struct {
 	BackdateState func(*testing.T, model.ExternalLoginStateID, time.Time)
 }
 
+// TestExternalIdentityAdmissionMode verifies the terminal admission decision
+// against a store whose access policy is seeded with mode.
 func TestExternalIdentityAdmissionMode(t *testing.T, ss store.Store, mode model.ProviderAdmissionMode, probes ...ExternalIdentityAdmissionSQLProbe) {
 	t.Helper()
 	var probe ExternalIdentityAdmissionSQLProbe

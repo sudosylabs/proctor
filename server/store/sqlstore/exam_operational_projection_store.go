@@ -20,9 +20,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ListSessionRevocationInvalidationTargets returns the distinct Exams and
-// Sittings of the Candidate's Attempts suspended in place, by policy or by an
-// Exam Manager's kick, through a Participation bound to one of sessionIDs
+// ListSessionRevocationInvalidationTargets returns the distinct exams and
+// sittings of the candidate's Attempts suspended in place, by policy or by an
+// exam manager's kick, through a participation bound to one of sessionIDs
 // (1..1000).
 func (s *SQLExamAttemptStore) ListSessionRevocationInvalidationTargets(
 	ctx context.Context,
@@ -117,8 +117,8 @@ type candidateExamActivityRow struct {
 	ReleasedAt              sql.NullTime   `db:"released_at"`
 }
 
-// ListCandidateActivity returns one page of the Candidate's Sittings with their
-// Attempt state and desktop eligibility, evaluated at database time. Limit is
+// ListCandidateActivity returns one page of the candidate's sittings with their
+// attempt state and desktop eligibility, evaluated at database time. Limit is
 // 1..201, the Before cursor fields must be set together, and the desktop
 // selector fields must be all set or all empty.
 func (s *SQLExamAttemptStore) ListCandidateActivity(ctx context.Context,
@@ -142,8 +142,6 @@ func (s *SQLExamAttemptStore) ListCandidateActivity(ctx context.Context,
 	})
 }
 
-// listCandidateActivity reads one page of Candidate activity rows at
-// statement time inside the caller's transaction.
 func listCandidateActivity(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -174,8 +172,6 @@ func listCandidateActivity(
 	return page, nil
 }
 
-// candidateActivityQuery builds the Candidate activity page query and its
-// arguments evaluated at serverTime.
 func candidateActivityQuery(options store.CandidateExamActivityListOptions, serverTime time.Time) (string, []any) {
 	query := `WITH RECURSIVE ` + unitAncestorsByRootCTE + `
 		SELECT ?::timestamptz AS server_time,
@@ -607,8 +603,8 @@ type sittingCandidateStatusRow struct {
 	EnvironmentWaitingSince  sql.NullTime   `db:"environment_waiting_since"`
 }
 
-// ListSittingCandidateStatuses returns one page of the Sitting's Candidates,
-// ordered by User ID after AfterCandidateUserID, with their Attempt, presence,
+// ListSittingCandidateStatuses returns one page of the sitting's candidates,
+// ordered by user ID after AfterCandidateUserID, with their attempt, presence,
 // suspension, and integrity state at database time. Limit is 1..201.
 func (s *SQLExamAttemptStore) ListSittingCandidateStatuses(ctx context.Context,
 	options store.SittingCandidateStatusListOptions,
@@ -629,8 +625,6 @@ func (s *SQLExamAttemptStore) ListSittingCandidateStatuses(ctx context.Context,
 	})
 }
 
-// listSittingCandidateStatuses reads the Sitting header and one page of
-// Candidate status rows inside the caller's transaction.
 func listSittingCandidateStatuses(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -690,8 +684,6 @@ func listSittingCandidateStatuses(
 	return page, nil
 }
 
-// sittingCandidateStatusQuery builds the Candidate status page query and its
-// arguments for the Sitting header read at serverTime.
 func sittingCandidateStatusQuery(
 	options store.SittingCandidateStatusListOptions,
 	header sittingCandidateStatusHeaderRow,

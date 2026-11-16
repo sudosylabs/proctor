@@ -9,21 +9,20 @@ package model
 
 import "time"
 
-// InstallationState is the durable one-time bootstrap marker for a logical
-// Proctor installation. It is deliberately distinct from process/node state:
-// every application node sharing the database observes the same marker.
+// InstallationState is the one-time bootstrap marker of an installation. It is
+// stored in the database, not per process, so every node sees the same marker.
 type InstallationState struct {
 	InitializedAt       time.Time
 	InstitutionID       InstitutionID
 	AdministratorUserID UserID
 }
 
-// InstallationStatus is the public bootstrap readiness projection.
+// InstallationStatus is the public view of bootstrap readiness.
 type InstallationStatus struct {
 	Initialized bool
 }
 
-// Validate checks rehydrated installation-marker state.
+// Validate checks the marker's fields, for new and stored values alike.
 func (is *InstallationState) Validate() error {
 	const where = "InstallationState.Validate"
 	if is == nil {
@@ -41,7 +40,7 @@ func (is *InstallationState) Validate() error {
 	return nil
 }
 
-// Auditable returns a deliberately safe audit projection.
+// Auditable returns the fields that are safe to record in the audit log.
 func (is *InstallationState) Auditable() map[string]any {
 	if is == nil {
 		return map[string]any{}
@@ -53,8 +52,8 @@ func (is *InstallationState) Auditable() map[string]any {
 	}
 }
 
-// InstallationBootstrapResult contains the public, non-secret records created
-// by the atomic bootstrap aggregate.
+// InstallationBootstrapResult holds the public, non-secret records the atomic
+// bootstrap created.
 type InstallationBootstrapResult struct {
 	State                      *InstallationState
 	Institution                *Institution

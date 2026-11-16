@@ -21,14 +21,11 @@ import (
 	"github.com/sudosylabs/proctor/server/plugin"
 )
 
-// This file is the sign-in plugins' support: what the built-in protocol
-// plugins share to read and check their own provider settings. Only those
-// plugins call it; the application never reads a provider's settings or
-// secrets.
+// Only the built-in protocol plugins call these helpers; the application
+// never reads a provider's settings or secrets.
 
 // ClaimMapping names the released attributes a protocol plugin reads from
-// its provider's response. The plugin normalizes its protocol's
-// representation before applying it.
+// its provider's response, after normalizing its protocol's representation.
 type ClaimMapping struct {
 	Subject                  string   `json:"Subject"`
 	Username                 string   `json:"Username"`

@@ -11,7 +11,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -31,10 +30,9 @@ func TestConnectionRuntimeRejectsMissingOrUnknownFocusLossSchemaBeforeApplicatio
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			application := &inboundTestApplication{}
-			runtime := newInboundRuntime(application, newInboundTestSocket(), newRuntimeTestClock(time.Now()))
-			runtime.attempt = &examAttemptBinding{attemptID: model.NewExamAttemptID(),
-				participationID: model.NewAttemptParticipationID(), connectionID: model.NewAttemptConnectionID(), generation: 1}
+			f := newAttemptFixture(t)
+			runtime, _ := newInboundRuntime(t, newAdmissionWorld(t, admissionOptions{}), f.service)
+			f.admit(runtime, 1)
 
 			runtime.handleRequest(context.Background(), &Request{Sequence: 1, Action: examAttemptFocusLossAction, Data: test.body})
 
@@ -42,9 +40,7 @@ func TestConnectionRuntimeRejectsMissingOrUnknownFocusLossSchemaBeforeApplicatio
 			require.Equal(t, "error", response.Status)
 			require.NotNil(t, response.Error)
 			require.Equal(t, "websocket.request.invalid", response.Error.Code)
-			application.mu.Lock()
-			defer application.mu.Unlock()
-			require.Empty(t, application.focusLossCalls)
+			require.Empty(t, f.store.log().focusSignals)
 		})
 	}
 }

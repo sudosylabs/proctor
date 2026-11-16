@@ -20,7 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// TestAcademicLifecycleRevisionConformance exercises legacy and audited writes
+// TestAcademicLifecycleRevisionConformance exercises unaudited and audited writes
 // against the same revision fence, including concurrent editors and rollback.
 func TestAcademicLifecycleRevisionConformance(t *testing.T, ss store.Store) {
 	for _, kind := range []model.ResourceType{model.ResourceAcademicUnit, model.ResourceProgramme, model.ResourceProgrammeLevel, model.ResourceAcademicPeriod, model.ResourceClass} {

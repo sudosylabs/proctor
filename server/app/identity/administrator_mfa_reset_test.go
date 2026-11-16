@@ -36,7 +36,7 @@ func TestAdministratorMFAResetRequiresEnabledServiceAndExactTargetBeforeMutation
 		t.Run(test.name, func(t *testing.T) {
 			events := []string{}
 			persistence := &installationStoreFake{events: &events}
-			service := &Service{installations: persistence, capabilities: &accessPolicyCapabilitiesFake{},
+			service := &Service{installations: persistence, capabilities: noCapabilities(),
 				mfa: &mfaMechanics{deps: mfaMechanicsDependencies{Settings: MFAPolicy{Enabled: test.enabled}}}}
 			result, err := service.ResetAdministratorMFA(context.Background(), invocation.Task("host-operator-test"), model.InstitutionID(test.institution), model.UserID(test.user))
 			require.Nil(t, result, "result=%#v error=%v events", result, err)
@@ -53,9 +53,9 @@ func TestAdministratorMFAResetPassesCurrentDeploymentAndRequiresDurableEvidence(
 	valid := &store.AdministratorMFAResetResult{RecordID: model.NewAdministratorRecoveryRecordID(), Recovery: &model.UserMFARecovery{
 		UserID: userID, Generation: 2, ResetAt: model.OptionalTimeFrom(at), UpdatedAt: at, ReenrollmentRequired: true,
 	}}
-	capabilities := &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{
+	capabilities := deploymentCapabilities(AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{
 		{Descriptor: model.ExternalAuthenticationProvider{ID: "existing-provider"}},
-	}}}
+	}})
 	for _, test := range []struct {
 		name   string
 		result *store.AdministratorMFAResetResult
@@ -70,7 +70,7 @@ func TestAdministratorMFAResetPassesCurrentDeploymentAndRequiresDurableEvidence(
 		t.Run(test.name, func(t *testing.T) {
 			events := []string{}
 			persistence := &installationStoreFake{events: &events, mfaResetResult: test.result, mfaResetErr: test.err}
-			service := bootstrapTestService(&Service{installations: persistence, hasher: &passwordHasherFake{events: &events}, nodeID: "offline", now: time.Now,
+			service := bootstrapTestService(&Service{installations: persistence, hasher: fixedPasswordHasher(t, &events, "", nil), nodeID: "offline", now: time.Now,
 				capabilities: capabilities, mfa: &mfaMechanics{deps: mfaMechanicsDependencies{Settings: MFAPolicy{Enabled: true}}}},
 				LoginRateLimitPolicy{}, BootstrapProtectionPolicy{})
 			result, err := service.ResetAdministratorMFA(context.Background(), invocation.Task("host-operator-test"), model.InstitutionID(" "+institutionID.String()+" "), userID)

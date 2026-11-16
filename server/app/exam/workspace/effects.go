@@ -15,11 +15,10 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// ChangeOperation is what a Starter Workspace change event says happened to
-// its entry.
+// ChangeOperation is the operation a starter workspace change event reports.
 type ChangeOperation string
 
-// The operations a Starter Workspace change event may carry.
+// Change operations; their string values are sent to clients.
 const (
 	ChangeDirectoryCreated ChangeOperation = "directory_created"
 	ChangeFileCreated      ChangeOperation = "file_created"
@@ -28,9 +27,8 @@ const (
 	ChangeEntryRemoved     ChangeOperation = "entry_removed"
 )
 
-// publishChanged tells everyone who may view the Exam which Starter Workspace
-// entry changed, how, at which Draft revision and when. The event carries no
-// path, content or checksum.
+// publishChanged deliberately sends no path, content or checksum, only which
+// entry changed and how.
 func (s *Service) publishChanged(
 	ctx context.Context,
 	examID model.ExamID,

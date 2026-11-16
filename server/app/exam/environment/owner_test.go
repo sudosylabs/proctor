@@ -21,6 +21,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam/environment"
 	"github.com/sudosylabs/proctor/server/config"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform/executionhost"
 	"github.com/sudosylabs/proctor/server/store"
@@ -31,8 +32,9 @@ const (
 	tick       = 5 * time.Millisecond
 )
 
-// rig is one owner over a real in-memory execution host and fakes of the
-// environment row, the Workspace and evidence.
+// rig is one owner over a real in-memory execution host, the node's real
+// settle signals, and fakes of the environment row, the Workspace and
+// evidence.
 type rig struct {
 	t            *testing.T
 	attemptID    model.ExamAttemptID
@@ -41,26 +43,14 @@ type rig struct {
 	environments *environmentsFake
 	workspace    *workspaceFake
 	evidence     *evidenceFake
+	peers        *transportFake
+	settled      <-chan struct{}
 	wake         chan struct{}
 	done         chan error
 	cancel       context.CancelFunc
 
 	mu      sync.Mutex
 	reports []error
-	settled []model.ExamAttemptID
-}
-
-// Settled records the owner's settle signals.
-func (r *rig) Settled(attemptID model.ExamAttemptID) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.settled = append(r.settled, attemptID)
-}
-
-func (r *rig) settleSignals() []model.ExamAttemptID {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return slices.Clone(r.settled)
 }
 
 func newRig(t *testing.T, timing environment.OwnerTiming, wrap ...func(environment.Hosts) environment.Hosts) *rig {
@@ -102,8 +92,21 @@ func newSeededRig(t *testing.T, timing environment.OwnerTiming, seed func(*works
 	for _, wrapped := range wrap {
 		ported = wrapped(ported)
 	}
+	// The settle signals are the ones a node builds; they broadcast to the
+	// peers this transport records.
+	logger, err := logging.New()
+	require.NoError(t, err)
+	r.peers = &transportFake{}
+	node, err := environment.NewNode(environment.NodeDependencies{Cluster: r.peers, Logger: logger})
+	require.NoError(t, err)
+	settles := node.Settles()
+	require.NoError(t, settles.Start(context.Background()))
+	t.Cleanup(func() { _ = settles.Close(context.Background()) })
+	settled, unsubscribe := settles.SubscribeSettled(r.attemptID)
+	t.Cleanup(unsubscribe)
+	r.settled = settled
 	factory, err := environment.NewOwners(environment.OwnerDependencies{
-		Environments: r.environments, Evidence: r.evidence, Workspace: r.workspace, Hosts: ported, Timing: timing, Settled: r,
+		Environments: r.environments, Evidence: r.evidence, Workspace: r.workspace, Hosts: ported, Timing: timing, Settled: settles,
 		Report: func(_ model.ExamAttemptID, err error) {
 			r.mu.Lock()
 			defer r.mu.Unlock()
@@ -113,8 +116,17 @@ func newSeededRig(t *testing.T, timing environment.OwnerTiming, seed func(*works
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 	r.cancel = cancel
+	// The owner may still be creating the grant's directory when the test
+	// ends, so cleanup waits for it to stop before the work directory is
+	// removed.
+	stopped := make(chan struct{})
 	t.Cleanup(func() {
 		cancel()
+		select {
+		case <-stopped:
+		case <-time.After(10 * time.Second):
+			t.Error("the owner did not stop after cancellation")
+		}
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		for _, report := range r.reports {
@@ -127,6 +139,7 @@ func newSeededRig(t *testing.T, timing environment.OwnerTiming, seed func(*works
 		seed(r.workspace)
 	}
 	go func() {
+		defer close(stopped)
 		r.done <- factory(r.attemptID).Run(ctx, store.AttemptRuntimeLease{AttemptID: r.attemptID, NodeID: "node-a", Fence: 7,
 			ExpiresAt: time.Now().Add(time.Minute)}, r.wake)
 	}()
@@ -352,8 +365,14 @@ func TestOwnerSignalsACompletedSettle(t *testing.T) {
 	r.environments.row.Revision++
 	r.environments.mu.Unlock()
 	r.poke()
-	require.Eventually(t, func() bool { return len(r.settleSignals()) == 1 }, eventually, tick)
-	require.Equal(t, []model.ExamAttemptID{r.attemptID}, r.settleSignals())
+	select {
+	case <-r.settled:
+	case <-time.After(eventually):
+		t.Fatal("the owner never signaled the settle's waiter on this node")
+	}
+	require.Eventually(t, func() bool { return len(r.peers.sent(settledEvent)) == 1 }, eventually, tick)
+	require.Equal(t, []string{r.attemptID.String()}, r.peers.sent(settledEvent),
+		"the peers are told once, naming the Attempt")
 	row := r.environments.snapshot()
 	require.Equal(t, row.SettleRequested, row.SettleCompleted, "the signal follows the recorded completion")
 	held, _ := r.workspace.file("src/last.txt")

@@ -33,7 +33,7 @@ type ListQuery struct {
 	Limit           int
 }
 
-// CatalogPage is one page of visible Exams; HasMore reports that another
+// CatalogPage is one page of visible exams; HasMore reports that another
 // page follows the last item.
 type CatalogPage struct {
 	Items   []store.ExamSummary
@@ -46,9 +46,8 @@ type ArchiveCommand struct {
 	IdempotencyKey       string
 }
 
-// ListExams returns one page of the Exams the caller may see, filtered by
-// Academic Unit, text, archive state, and Sitting state or window. Limit
-// defaults to 50 and the archive filter to active Exams.
+// ListExams returns one page of the exams the caller may see. Limit defaults
+// to 50 and the archive filter to active exams.
 func (a *Authoring) ListExams(ctx context.Context, inv invocation.Invocation, query ListQuery) (_ CatalogPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Present(resultErr) }()
 	if query.Limit == 0 {
@@ -120,7 +119,7 @@ func (a *Authoring) ListExams(ctx context.Context, inv invocation.Invocation, qu
 	return page, nil
 }
 
-// ArchiveExam idempotently archives an Exam, fenced by ExpectedExamRevision.
+// ArchiveExam idempotently archives an exam, fenced by ExpectedExamRevision.
 func (a *Authoring) ArchiveExam(
 	ctx context.Context,
 	inv invocation.Invocation,

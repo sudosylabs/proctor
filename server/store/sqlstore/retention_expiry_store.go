@@ -144,7 +144,7 @@ const auditExpiryFacts = `SELECT a.id, a.created_at AS scan_at, (` + terminalCle
 // auditExpiryCountFacts classifies every audit event with the same facts as
 // auditExpiryFacts, but set-based: each side table is read once and joined
 // instead of probed by correlated subqueries per audit event, so a preview
-// stays a linear audit scan. Exam, Sitting and Submission blockers are
+// stays a linear audit scan. Exam, sitting and submission blockers are
 // resolved once per distinct audited resource through semi-joins. An
 // integration test keeps the two definitions in agreement.
 const auditExpiryCountFacts = `audited_resources AS (
@@ -767,7 +767,7 @@ func expireRetentionRecord(
 		}
 
 		// FK-owned notices have the same lifetime as their receipt. All immutable
-		// Submission identities and category markers survive this history deletion.
+		// submission identities and category markers survive this history deletion.
 		if _, err := tx.Exec(ctx, `DELETE FROM retention_retirements WHERE id = ? AND state IN ('canceled', 'retired')`, id); err != nil {
 			return err
 		}
@@ -779,7 +779,7 @@ func expireRetentionRecord(
 
 // expiryCountQuery classifies every record of one kind into its first
 // blocker. Audit facts use the set-based definition; receipts are bounded by
-// Submissions and keep the per-record facts.
+// submissions and keep the per-record facts.
 func expiryCountQuery(kind model.RetentionExpiryKind) string {
 	if kind == model.RetentionExpiryAudit {
 		return expiryClassificationQuery(auditExpiryCountFacts)
@@ -861,7 +861,7 @@ func countRetentionExpiry(
 	return result[0], result[1], nil
 }
 
-// Called only while the owning Exam/Sitting is already locked by a hold or a
+// Called only while the owning exam/Sitting is already locked by a hold or a
 // newly accepted integrity event. It takes no policy lock in reverse order.
 func cancelScopeExpirySchedules(ctx context.Context, tx *sqlxTxWrapper, scope model.RetentionHoldScope) error {
 	_, err := tx.Exec(

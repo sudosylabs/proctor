@@ -15,9 +15,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/internal/batchitem"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -65,18 +67,30 @@ func (s *sessionAdministrationStoreFake) RevokeAllForUser(_ context.Context, inp
 	return s.revokeAllResult, s.revokeAllErr
 }
 
-type sessionAdministrationAuthorizerFake struct {
-	resourceAuthorizer
-	events *[]string
+// sessionAdministrationTest is a Service built for Session administration,
+// the invocation of an administrator who holds session.view and
+// session.manage Institution-wide, the real auditor's fixture and what the
+// real mail Composer rendered.
+type sessionAdministrationTest struct {
+	service *Service
+	inv     invocation.Invocation
+	access  *accesstest.Fixture
+	renders *mailtest.Renders
 }
 
-func (a *sessionAdministrationAuthorizerFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, _ model.Resource) error {
-	event := "authorize-view"
-	if action == model.ActionSessionManage {
-		event = "authorize-manage"
-	}
-	*a.events = append(*a.events, event)
-	return nil
+// newSessionAdministrationTest builds it. The authorizer's reads and
+// decisions and the audit attempt and outcome join events next to the other
+// fakes' entries.
+func newSessionAdministrationTest(t *testing.T, events *[]string, sessions store.SessionStore, users store.UserStore, now func() time.Time) sessionAdministrationTest {
+	t.Helper()
+	principal := userSettingsSessionPrincipal(time.Now())
+	fixture := accessWith(t, events, accesstest.Options{
+		Grants: []accesstest.Grant{institutionGrant(principal.UserID, model.ActionSessionView, model.ActionSessionManage)},
+		Users:  accountStateResolvedUsers{},
+	})
+	composer, _, renders := accountStateMail(t, events)
+	service := withAccess(&Service{sessions: sessions, users: users, mail: composer, publisher: sessionAdministrationPublisher(events), now: now}, fixture)
+	return sessionAdministrationTest{service: service, inv: invocation.New(principal, model.RequestMetadata{}), access: fixture, renders: renders}
 }
 
 // sessionAdministrationPublisher returns a recording Publisher that also
@@ -110,7 +124,8 @@ func (s *sessionAdministrationUserStoreFake) Get(context.Context, model.UserID) 
 
 func sessionAdministrationTestUser(id string) *model.User {
 	return &model.User{ID: model.UserID(id), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), Revision: 1,
-		Username: "student", Email: "student@example.edu", DisplayName: "Student", Locale: "en", Timezone: "UTC"}
+		Username: "student", Email: "student@example.edu", DisplayName: "Student", Locale: "en", Timezone: "UTC",
+		DefaultProfilePictureSeed: accountStateTestSeed}
 }
 
 func TestAdminSessionListAuthorizesThenReads(t *testing.T) {
@@ -120,14 +135,15 @@ func TestAdminSessionListAuthorizesThenReads(t *testing.T) {
 	session := &model.Session{ID: model.NewSessionID(), UserID: model.UserID(userID)}
 	at := time.Date(2026, 8, 12, 9, 30, 0, 123_456_789, time.FixedZone("offset", 7200))
 	persistence := &sessionAdministrationStoreFake{events: &events, list: []*model.Session{session}}
-	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events}, mail: &securityNoticeMailerFake{events: &events}, publisher: sessionAdministrationPublisher(&events), now: func() time.Time { return at }}
-	got, err := service.ListUserSessions(context.Background(), invocation.Invocation{}, ListUserSessionsQuery{UserID: model.UserID(userID), Limit: 50})
+	test := newSessionAdministrationTest(t, &events, persistence, &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, func() time.Time { return at })
+	service := test.service
+	got, err := service.ListUserSessions(context.Background(), test.inv, ListUserSessionsQuery{UserID: model.UserID(userID), Limit: 50})
 	require.NoError(t, err)
 	require.Len(t, got.Items, 1)
 	require.Equal(t, session.ID.String(), got.Items[0].ID.String())
 	require.False(t, got.HasMore)
 	// Contract: authorization precedes the read.
-	require.Equal(t, []string{"authorize-view", "list"}, events)
+	require.Equal(t, []string{"grants", "decision:session.view:success", "list"}, events)
 	require.Equal(t, 51, persistence.listedPage.Limit, "the read probes one past the page")
 	require.True(t, persistence.listedPage.ActiveAt.Equal(model.TimeUTC(at)), "active Session listing time = %v", persistence.listedPage.ActiveAt)
 	require.Same(t, time.UTC, persistence.listedPage.ActiveAt.Location(), "active Session listing time = %v", persistence.listedPage.ActiveAt)
@@ -139,10 +155,11 @@ func TestAdminSessionHistoryIsPaged(t *testing.T) {
 	userID := model.NewUserID()
 	rows := []*model.Session{{ID: model.NewSessionID()}, {ID: model.NewSessionID()}, {ID: model.NewSessionID()}}
 	persistence := &sessionAdministrationStoreFake{events: &events, list: rows}
-	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID.String())}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events}, mail: &securityNoticeMailerFake{events: &events}, publisher: sessionAdministrationPublisher(&events), now: time.Now}
+	test := newSessionAdministrationTest(t, &events, persistence, &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID.String())}, time.Now)
+	service := test.service
 	before := time.Date(2026, 8, 12, 9, 30, 0, 0, time.UTC)
 	beforeID := model.NewSessionID()
-	page, err := service.ListUserSessions(context.Background(), invocation.Invocation{}, ListUserSessionsQuery{
+	page, err := service.ListUserSessions(context.Background(), test.inv, ListUserSessionsQuery{
 		UserID: userID, IncludeRevoked: true, Limit: 2, BeforeCreatedAt: before, BeforeID: beforeID,
 	})
 	require.NoError(t, err)
@@ -152,7 +169,7 @@ func TestAdminSessionHistoryIsPaged(t *testing.T) {
 	require.True(t, page.HasMore)
 
 	persistence.list = rows[:2]
-	page, err = service.ListUserSessions(context.Background(), invocation.Invocation{}, ListUserSessionsQuery{UserID: userID, IncludeRevoked: true, Limit: 2})
+	page, err = service.ListUserSessions(context.Background(), test.inv, ListUserSessionsQuery{UserID: userID, IncludeRevoked: true, Limit: 2})
 	require.NoError(t, err)
 	require.Equal(t, rows[:2], page.Items)
 	require.False(t, page.HasMore, "an exactly full final page has no successor")
@@ -162,7 +179,7 @@ func TestAdminSessionHistoryIsPaged(t *testing.T) {
 		{UserID: userID, Limit: 201},
 		{UserID: userID, Limit: 10, BeforeID: beforeID},
 	} {
-		_, err = service.ListUserSessions(context.Background(), invocation.Invocation{}, query)
+		_, err = service.ListUserSessions(context.Background(), test.inv, query)
 		require.True(t, apperror.Is(err, "request.invalid"), "query %#v: err = %v", query, err)
 	}
 }
@@ -184,19 +201,22 @@ func TestAdminSessionRevokeCommitsBeforePublishing(t *testing.T) {
 			Session: &revoked, TokenHashes: []string{"hash"},
 		},
 	}
-	mailer := &securityNoticeMailerFake{events: &events}
-	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: mailer, publisher: sessionAdministrationPublisher(&events), now: func() time.Time { return time.UnixMilli(500) }}
-	require.NoError(t, service.RevokeUserSession(context.Background(), invocation.Invocation{}, model.UserID(userID), session.ID))
+	test := newSessionAdministrationTest(t, &events, persistence, &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, func() time.Time { return time.UnixMilli(500) })
+	service := test.service
+	require.NoError(t, service.RevokeUserSession(context.Background(), test.inv, model.UserID(userID), session.ID))
 	require.Equal(t, session.ID, persistence.revokeInput.SessionID)
 	require.NotEmpty(t, persistence.revokeInput.AuditEventID)
-	require.Len(t, mailer.requests, 1, "mail request/input = %#v / %#v", mailer.requests, persistence.revokeInput)
-	require.Equal(t, model.MailTemplateIdentitySessionsRevokedByAdmin, mailer.requests[0].TemplateKey, "mail request/input = %#v / %#v", mailer.requests, persistence.revokeInput)
-	require.NotNil(t, persistence.revokeInput.Occurrence, "mail request/input = %#v / %#v", mailer.requests, persistence.revokeInput)
-	require.NotNil(t, persistence.revokeInput.Delivery, "mail request/input = %#v / %#v", mailer.requests, persistence.revokeInput)
-	require.NotNil(t, persistence.revokeInput.DeliveryJob, "mail request/input = %#v / %#v", mailer.requests, persistence.revokeInput)
+	require.Equal(t, 1, test.renders.Count(), "mail input = %#v", persistence.revokeInput)
+	require.NotNil(t, persistence.revokeInput.Occurrence, "mail input = %#v", persistence.revokeInput)
+	require.NotNil(t, persistence.revokeInput.Delivery, "mail input = %#v", persistence.revokeInput)
+	require.Equal(t, model.MailTemplateIdentitySessionsRevokedByAdmin, persistence.revokeInput.Delivery.TemplateKey, "mail input = %#v", persistence.revokeInput)
+	require.NotNil(t, persistence.revokeInput.DeliveryJob, "mail input = %#v", persistence.revokeInput)
+	attempts := recordedAttempts(t, test.access)
+	require.Len(t, attempts, 1)
+	require.Equal(t, attempts[0].ID, persistence.revokeInput.AuditEventID)
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
-	require.Equal(t, []string{"authorize-manage", "get-session", "get-user", "prepare-mail", "audit-begin", "store-revoke", "publish-revocation"}, events)
+	require.Equal(t, []string{"grants", "decision:session.manage:success", "get-session", "get-user", "prepare-mail", "audit-begin:session.manage", "store-revoke", "publish-revocation"}, events)
 }
 
 func TestAdminSessionRevokeFailurePublishesNoEffect(t *testing.T) {
@@ -207,16 +227,17 @@ func TestAdminSessionRevokeFailurePublishesNoEffect(t *testing.T) {
 		ID: model.NewSessionID(), UserID: model.UserID(userID),
 		CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100),
 	}
-	service := &Service{sessions: &sessionAdministrationStoreFake{
+	test := newSessionAdministrationTest(t, &events, &sessionAdministrationStoreFake{
 		events:    &events,
 		session:   session,
 		revokeErr: store.NewErrConflict("session", "busy", errors.New("busy")),
-	}, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: &securityNoticeMailerFake{events: &events}, publisher: sessionAdministrationPublisher(&events), now: time.Now}
-	err := service.RevokeUserSession(context.Background(), invocation.Invocation{}, model.UserID(userID), session.ID)
+	}, &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, time.Now)
+	service := test.service
+	err := service.RevokeUserSession(context.Background(), test.inv, model.UserID(userID), session.ID)
 	require.True(t, apperror.Is(err, "administration.unavailable"), "error = %v", err)
 	// Contract (guardrail 8): authorization precedes the audit, the audit begins
 	// before the durable write, and the audit outcome follows the write.
-	require.Equal(t, []string{"authorize-manage", "get-session", "get-user", "prepare-mail", "audit-begin", "store-revoke", "audit-fail"}, events)
+	require.Equal(t, []string{"grants", "decision:session.manage:success", "get-session", "get-user", "prepare-mail", "audit-begin:session.manage", "store-revoke", "audit-fail"}, events)
 }
 
 func TestAdminSessionRevokeAllCommitsBeforePublishing(t *testing.T) {
@@ -230,14 +251,15 @@ func TestAdminSessionRevokeAllCommitsBeforePublishing(t *testing.T) {
 			Sessions: []*model.Session{session}, TokenHashes: []string{"hash"},
 		},
 	}
-	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: &securityNoticeMailerFake{events: &events}, publisher: sessionAdministrationPublisher(&events), now: func() time.Time { return time.UnixMilli(500) }}
-	require.NoError(t, service.RevokeUserSessions(context.Background(), invocation.Invocation{}, RevokeUserSessionsCommand{UserID: model.UserID(userID)}))
+	test := newSessionAdministrationTest(t, &events, persistence, &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, func() time.Time { return time.UnixMilli(500) })
+	service := test.service
+	require.NoError(t, service.RevokeUserSessions(context.Background(), test.inv, RevokeUserSessionsCommand{UserID: model.UserID(userID)}))
 	require.Equal(t, model.UserID(userID), persistence.revokeAllInput.UserID)
 	require.NotEmpty(t, persistence.revokeAllInput.AuditEventID)
 	require.NotNil(t, persistence.revokeAllInput.Occurrence)
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
-	require.Equal(t, []string{"authorize-manage", "get-user", "prepare-mail", "audit-begin", "store-revoke-all", "publish-revocation"}, events)
+	require.Equal(t, []string{"grants", "decision:session.manage:success", "get-user", "prepare-mail", "audit-begin:session.manage", "store-revoke-all", "publish-revocation"}, events)
 }
 
 func TestAdminSessionIdempotentNoOpPreparesNoticeForAuthoritativeRace(t *testing.T) {
@@ -246,11 +268,11 @@ func TestAdminSessionIdempotentNoOpPreparesNoticeForAuthoritativeRace(t *testing
 	userID := model.NewUserID().String()
 	persistence := &sessionAdministrationStoreFake{events: &events, list: []*model.Session{},
 		revokeAllResult: &store.UserSessionsRevocationResult{Sessions: []*model.Session{}, TokenHashes: []string{}}}
-	mailer := &securityNoticeMailerFake{events: &events}
-	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: mailer, publisher: sessionAdministrationPublisher(&events), now: time.Now}
-	inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+	test := newSessionAdministrationTest(t, &events, persistence, &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, time.Now)
+	service := test.service
+	inv := test.inv
 	require.NoError(t, service.RevokeUserSessions(context.Background(), inv, RevokeUserSessionsCommand{UserID: model.UserID(userID), IdempotencyKey: "row"}))
-	require.Len(t, mailer.requests, 1, "idempotent no-op mail")
+	require.Equal(t, 1, test.renders.Count(), "idempotent no-op mail")
 	require.NotNil(t, persistence.revokeAllInput, "idempotent no-op mail")
 	require.NotNil(t, persistence.revokeAllInput.Occurrence, "idempotent no-op mail")
 }
@@ -262,12 +284,12 @@ func TestAdminSessionRetainedOutcomeBypassesMailAfterNewSession(t *testing.T) {
 	persistence := &sessionAdministrationStoreFake{events: &events,
 		list:            []*model.Session{{ID: model.NewSessionID(), UserID: model.UserID(userID)}},
 		revokeAllResult: &store.UserSessionsRevocationResult{Sessions: []*model.Session{}, TokenHashes: []string{}}}
-	mailer := &securityNoticeMailerFake{events: &events, err: errors.New("mail unavailable")}
-	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: mailer, publisher: sessionAdministrationPublisher(&events), now: time.Now}
-	inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+	test := newSessionAdministrationTest(t, &events, persistence, &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, time.Now)
+	service := test.service
+	inv := test.inv
 	require.NoError(t, service.RevokeUserSessions(context.Background(), inv, RevokeUserSessionsCommand{UserID: model.UserID(userID), IdempotencyKey: "row", Batch: batchitem.New(batchitem.Fields{RetainedOutcome: true})}))
-	require.Empty(t, mailer.requests, "retained mail")
-	require.Equal(t, []string{"authorize-manage", "get-user", "audit-begin", "store-revoke-all"}, events)
+	require.Zero(t, test.renders.Count(), "retained mail")
+	require.Equal(t, []string{"grants", "decision:session.manage:success", "get-user", "audit-begin:session.manage", "store-revoke-all"}, events)
 }
 
 func TestAdminSessionCrossUserNotFound(t *testing.T) {
@@ -275,10 +297,11 @@ func TestAdminSessionCrossUserNotFound(t *testing.T) {
 	events := []string{}
 	userID := model.NewID()
 	session := &model.Session{ID: model.NewSessionID(), UserID: model.NewUserID()}
-	service := &Service{sessions: &sessionAdministrationStoreFake{events: &events, session: session}, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events}, mail: &securityNoticeMailerFake{events: &events}, publisher: sessionAdministrationPublisher(&events), now: time.Now}
-	err := service.RevokeUserSession(context.Background(), invocation.Invocation{}, model.UserID(userID), session.ID)
+	test := newSessionAdministrationTest(t, &events, &sessionAdministrationStoreFake{events: &events, session: session}, &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, time.Now)
+	service := test.service
+	err := service.RevokeUserSession(context.Background(), test.inv, model.UserID(userID), session.ID)
 	require.True(t, apperror.Is(err, "session.not_found"), "error = %v", err)
-	require.Equal(t, []string{"authorize-manage", "get-session"}, events)
+	require.Equal(t, []string{"grants", "decision:session.manage:success", "get-session"}, events)
 }
 
 func TestAdminSessionRevocationOutcomesPreserveAuditAndBatchResult(t *testing.T) {
@@ -288,29 +311,30 @@ func TestAdminSessionRevocationOutcomesPreserveAuditAndBatchResult(t *testing.T)
 			now := time.UnixMilli(500)
 			userID := model.NewUserID().String()
 			events := []string{}
-			audit := &mutationAttemptAuditorFake{events: &events, beginID: model.NewID()}
 			persistence := &sessionAdministrationStoreFake{events: &events,
 				revokeAllResult: &store.UserSessionsRevocationResult{Sessions: []*model.Session{
 					{ID: model.NewSessionID(), UserID: model.UserID(userID)},
 					{ID: model.NewSessionID(), UserID: model.UserID(userID)},
 				}, TokenHashes: []string{"first-hash", "second-hash"}}}
 			unchanged := false
+			effects := sessionAdministrationPublisher(&events)
+			test := newSessionAdministrationTest(t, &events, persistence, &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, func() time.Time { return now })
+			service := test.service
+			service.publisher = effects
 			switch outcome {
 			case "empty", "replay":
 				persistence.revokeAllResult = &store.UserSessionsRevocationResult{}
 				persistence.noOp, persistence.replayed = outcome == "empty", outcome == "replay"
 			case "attempt unavailable":
-				audit.beginErr = apperror.New("audit.unavailable")
+				test.access.Audits.FailAttempts(errors.New("audit store unavailable"))
 				unchanged = true // An unattempted mutation does not replace the caller's value.
 			case "commit unavailable", "failure audit unavailable":
 				persistence.revokeAllErr = errors.New("atomic revocation failed")
 				if outcome == "failure audit unavailable" {
-					audit.failErr = apperror.New("audit.unavailable")
+					test.access.Audits.FailCompletions(errors.New("audit store unavailable"))
 				}
 			}
-			effects := sessionAdministrationPublisher(&events)
-			service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: audit, mail: &securityNoticeMailerFake{events: &events}, publisher: effects, now: func() time.Time { return now }}
-			inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+			inv := test.inv
 			err := service.RevokeUserSessions(context.Background(), inv, RevokeUserSessionsCommand{
 				UserID: model.UserID(userID), IdempotencyKey: "repeat-command", Batch: batchitem.New(batchitem.Fields{Replayed: &unchanged}),
 			})
@@ -329,13 +353,15 @@ func TestAdminSessionRevocationOutcomesPreserveAuditAndBatchResult(t *testing.T)
 			// audit begins before the durable revocation, and only a committed
 			// change publishes. The exact sequence also proves that no other write,
 			// effect, or audit completion ran.
-			want := []string{"authorize-manage", "get-user", "prepare-mail", "begin"}
+			want := []string{"grants", "decision:session.manage:success", "get-user", "prepare-mail", "audit-begin:session.manage"}
+			attempts := recordedAttempts(t, test.access)
 			if outcome == "attempt unavailable" {
 				require.Nil(t, persistence.revokeAllInput, "revoked without a durable audit attempt")
 			} else {
 				want = append(want, "store-revoke-all")
 				input := persistence.revokeAllInput
-				require.Equal(t, model.AuditEventID(audit.beginID), input.AuditEventID)
+				require.Len(t, attempts, 1)
+				require.Equal(t, attempts[0].ID, input.AuditEventID)
 				require.True(t, model.TimeUTC(now).Equal(input.AuditAt))
 				require.True(t, model.TimeUTC(now).Equal(input.RevokedAt))
 				require.NotNil(t, input.Command)
@@ -352,14 +378,25 @@ func TestAdminSessionRevocationOutcomesPreserveAuditAndBatchResult(t *testing.T)
 				}}, effects.Calls())
 			}
 			if outcome == "commit unavailable" || outcome == "failure audit unavailable" {
-				want = append(want, "fail")
-				require.Equal(t, audit.beginID, audit.failID)
-				require.Equal(t, "administration.unavailable", audit.failCode)
+				want = append(want, "audit-fail")
+				if outcome == "commit unavailable" {
+					require.Equal(t, model.AuditStatusFail, attempts[0].Status)
+					require.Equal(t, "administration.unavailable", attempts[0].ErrorCode)
+				} else {
+					// The audit store refused the failure completion, so the
+					// attempt stays open for operator reconciliation.
+					require.Equal(t, model.AuditStatusAttempt, attempts[0].Status)
+				}
 			}
 			require.Equal(t, want, events)
-			require.Equal(t, model.ActionSessionManage, audit.attempt.Action)
-			require.Equal(t, userID, audit.attempt.Resource.ID)
-			require.Equal(t, "revoke_sessions", audit.attempt.Operation)
+			if outcome != "attempt unavailable" {
+				// An attempt the audit store refused is never kept, so only a
+				// saved attempt can show what it recorded; the begin entry in
+				// events shows the refused one named session.manage.
+				require.Equal(t, string(model.ActionSessionManage), attempts[0].Action)
+				require.Equal(t, userID, attempts[0].Resource.ID)
+				require.Equal(t, "revoke_sessions", attempts[0].parameters["operation"])
+			}
 		})
 	}
 }

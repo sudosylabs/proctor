@@ -14,9 +14,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// UserSettingsStore owns the exact current User Settings Document. Mutations
-// are added only through named atomic contracts; it is not a generic file or
-// configuration store.
+// UserSettingsStore persists each user's settings document. It is not a
+// generic file or configuration store.
 type UserSettingsStore interface {
 	Get(context.Context, model.UserID) (*model.UserSettingsDocument, error)
 	Replace(context.Context, *UserSettingsReplacement, *CommandIdempotency) (*UserSettingsReplacementResult, error)

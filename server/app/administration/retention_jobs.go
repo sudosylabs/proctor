@@ -19,16 +19,16 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// RetentionJobs are the retention Jobs' system audit and candidate notice
-// dispatcher, for the Job catalog.
+// RetentionJobs are the retention jobs' system audit and candidate notice
+// dispatcher.
 type RetentionJobs struct {
 	Audit       jobs.RetentionSystemAuditor
 	ExpiryAudit jobs.RetentionExpirySystemAuditor
 	Notices     jobs.RetentionNoticeDispatcher
 }
 
-// NewRetentionJobs builds the retention Jobs' ports. Only composition can
-// build working ones, because it alone holds the Auditor.
+// NewRetentionJobs is called only by composition, which alone holds the
+// auditor.
 func NewRetentionJobs(
 	audit *access.Auditor,
 	records store.RetentionStore,

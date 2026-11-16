@@ -32,6 +32,11 @@ const ProductThemeContext = createContext<ResolvedProductTheme | undefined>(
   undefined,
 );
 
+/**
+ * The single source of the effective theme. Pages must not infer it from
+ * `prefers-color-scheme` themselves. Under `system`, `rootTheme` stays unset so
+ * CSS follows the media query.
+ */
 export function resolveProductTheme(
   preference: ThemePreference,
   systemColorScheme: ProductColorScheme,

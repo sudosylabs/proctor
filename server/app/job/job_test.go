@@ -163,43 +163,33 @@ func (f handlerFunc) Run(ctx context.Context, execution Execution) Outcome {
 	return f(ctx, execution)
 }
 
-type manualClock struct {
-	mu     sync.Mutex
-	now    time.Time
-	timers chan *manualTimer
+// settableClock is a clock the test moves by hand.
+type settableClock struct {
+	mu  sync.Mutex
+	now time.Time
 }
 
-func newManualClock(at time.Time) *manualClock {
-	return &manualClock{now: at, timers: make(chan *manualTimer, 8)}
-}
+func newSettableClock(at time.Time) *settableClock { return &settableClock{now: at} }
 
-func (c *manualClock) Now() time.Time {
+func (c *settableClock) Now() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.now
 }
 
-func (c *manualClock) NewTimer(delay time.Duration) Timer {
-	timer := &manualTimer{delay: delay, ch: make(chan time.Time, 1)}
-	c.timers <- timer
-	return timer
-}
-
-func (c *manualClock) advance(timer *manualTimer, at time.Time) {
+func (c *settableClock) set(at time.Time) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.now = at
-	c.mu.Unlock()
-	timer.ch <- at
 }
 
-type manualTimer struct {
-	delay time.Duration
-	ch    chan time.Time
+// bubbleClock reads at plus the time elapsed in the test's synctest bubble
+// since it was made, so an engine started in the bubble begins at a chosen
+// instant and its real timers move it forward.
+func bubbleClock(at time.Time) func() time.Time {
+	start := time.Now()
+	return func() time.Time { return at.Add(time.Since(start)) }
 }
-
-func (t *manualTimer) C() <-chan time.Time { return t.ch }
-
-func (*manualTimer) Stop() bool { return true }
 
 // newTestLogger returns a real logger writing JSON records to a buffer the
 // test may read.

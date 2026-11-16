@@ -14,9 +14,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -26,17 +27,20 @@ func TestInvitationBatchRunsIndependentRowsAndRecoversCommittedItems(t *testing.
 	class := &model.Class{ID: classID, AcademicPeriodID: periodID}
 	period := &model.AcademicPeriod{ID: periodID, StartsAt: now.Add(time.Hour), EndsAt: now.Add(90 * 24 * time.Hour)}
 	persistence := &invitationStoreFake{}
-	authorizer := &authorizerFake{}
-	composer := &mailFake{}
-	auditEvents := []string{}
-	service := &Service{invitations: persistence, classes: invitationClassStoreFake{class: class}, periods: invitationPeriodStoreFake{period: period}, academicUnits: invitationAcademicUnitStoreFake{}, roles: invitationRoleStoreFake{}, authorizer: authorizer, mail: composer, hasher: passwordHasherFake{}, auditor: &mutationAttemptAuditorFake{events: &auditEvents}, attempts: testAttempts(t), rateLimit: testRateLimit, publisher: &realtimetest.Publisher{}, nodeID: "node-a", publicURL: "https://proctor.example.edu", recentAuthenticationTTL: time.Hour, newToken: model.NewCredentialToken, now: func() time.Time { return now }}
+	authorization := permissiveAccess(t, accesstest.Options{}, []model.UserID{actorID})
+	composer, _ := newTestMail(t, true)
+	service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{}, authorization, composer, now)
+	service.classes, service.periods = invitationClassStoreFake{class: class}, invitationPeriodStoreFake{period: period}
+	service.nodeID, service.recentAuthenticationTTL = "node-a", time.Hour
 	command := RunInvitationBatchCommand{Operation: InvitationBatchStudentClassCreate, ScopeType: model.RoleScopeClass,
 		ScopeID: classID.String(), IdempotencyKey: "batch-once", Items: []InvitationBatchItemCommand{
 			{IdempotencyKey: "row-1", TargetEmail: "first@example.edu"},
 			{IdempotencyKey: "row-2", TargetEmail: "invalid@example.edu", RoleID: model.NewRoleID()},
 			{IdempotencyKey: "row-3", TargetEmail: " FIRST@example.edu "},
 		}}
-	inv := invocation.New(model.Principal{UserID: actorID}, model.RequestMetadata{RequestID: "request-1"})
+	principal := sessionPrincipal(model.AuthenticationSingleFactor, now)
+	principal.UserID = actorID
+	inv := invocation.New(principal, model.RequestMetadata{RequestID: "request-1"})
 	first, err := service.RunInvitationBatch(context.Background(), inv, command)
 	require.NoError(t, err)
 	require.Equal(t, 1, first.Succeeded, "first batch result=%#v executions", first)
@@ -48,13 +52,12 @@ func TestInvitationBatchRunsIndependentRowsAndRecoversCommittedItems(t *testing.
 	require.Equal(t, "request.invalid", first.Items[1].ErrorCode, "first batch result=%#v executions", first)
 	require.Equal(t, "onboarding_batch.duplicate", first.Items[2].ErrorCode, "first batch result=%#v executions", first)
 	require.Equal(t, 1, persistence.issueExecutions, "first batch result=%#v executions", first)
-	require.GreaterOrEqual(t, len(authorizer.actions), 3)
-	require.Equal(t, model.ActionOnboardingBatchManage, authorizer.actions[0])
-	require.Equal(t, model.ActionInvitationCreate, authorizer.actions[1])
-	require.Equal(t, model.ActionClassMembersManage, authorizer.actions[2])
+	actions := decidedActions(authorization)
+	require.GreaterOrEqual(t, len(actions), 3)
+	require.Equal(t, []model.Action{model.ActionOnboardingBatchManage, model.ActionInvitationCreate, model.ActionClassMembersManage}, actions[:3])
 
 	command.Items = []InvitationBatchItemCommand{command.Items[2], command.Items[1], command.Items[0]}
-	composer.disabled = true
+	service.mail, _ = newTestMail(t, false)
 	second, err := service.RunInvitationBatch(context.Background(), inv, command)
 	require.NoError(t, err)
 	require.Equal(t, 0, second.Succeeded, "replayed batch result=%#v executions", second)
@@ -68,30 +71,36 @@ func TestInvitationBatchRunsIndependentRowsAndRecoversCommittedItems(t *testing.
 
 func TestInvitationBatchAuthorizesBeforeRowsAndRestrictsRoleWorkToInteractiveSessions(t *testing.T) {
 	now := model.TimeFromMillis(1_800_000_000_000)
-	unitID := model.NewAcademicUnitID()
-	authorizer := &authorizerFake{err: apperror.New("authorization.denied")}
+	unitID, deniedID, callerID := model.NewAcademicUnitID(), model.NewUserID(), model.NewUserID()
+	authorization := permissiveAccess(t, accesstest.Options{}, []model.UserID{callerID}, unitID)
 	service := newInvitationServiceForTest(t, &invitationStoreFake{}, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{},
-		authorizer, &mailFake{}, now)
+		authorization, newTestComposer(t), now)
 	command := RunInvitationBatchCommand{Operation: InvitationBatchTeacherAcademicUnitCreate, ScopeType: model.RoleScopeAcademicUnit,
 		ScopeID: unitID.String(), IdempotencyKey: "authorize-first", Items: []InvitationBatchItemCommand{{IdempotencyKey: "row-1", RoleID: "not-an-id"}}}
-	_, err := service.RunInvitationBatch(context.Background(), invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{}), command)
-	require.True(t, apperror.Is(err, "authorization.denied"), "batch authorization-before-row error/actions = %v / %v", err, authorizer.actions)
-	require.True(t, slices.Equal(authorizer.actions, []model.Action{model.ActionOnboardingBatchManage}), "batch authorization-before-row error/actions = %v / %v", err, authorizer.actions)
+	_, err := service.RunInvitationBatch(context.Background(), sessionCaller(deniedID, now), command)
+	actions := decidedActions(authorization)
+	require.True(t, apperror.Is(err, "authorization.denied"), "batch authorization-before-row error/actions = %v / %v", err, actions)
+	require.True(t, slices.Equal(actions, []model.Action{model.ActionOnboardingBatchManage}), "batch authorization-before-row error/actions = %v / %v", err, actions)
 
-	authorizer.err = nil
-	authorizer.actions = nil
+	// A Personal Access Token holding the batch Action passes the batch
+	// authorization; Role work then refuses it as not interactive.
+	token := model.Principal{UserID: callerID, CredentialID: model.PrincipalCredentialID(model.NewID()),
+		CredentialType: model.CredentialPersonalAccessToken, AuthenticationMethod: "personal_access_token", ClientType: model.SessionClientCLI,
+		CredentialScopes: []string{string(model.ActionOnboardingBatchManage)}}
+	before := len(authorization.Audits.Decisions())
 	command.Operation = InvitationBatchAcademicUnitRoleCreate
 	command.Items = []InvitationBatchItemCommand{{IdempotencyKey: "row-1", TargetEmail: "existing@example.edu", RoleID: model.NewRoleID()}}
-	_, err = service.RunInvitationBatch(context.Background(), invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{}), command)
-	require.True(t, apperror.Is(err, "authentication.token_invalid"), "Role batch assurance error/actions = %v / %v", err, authorizer.actions)
-	require.True(t, slices.Equal(authorizer.actions, []model.Action{model.ActionOnboardingBatchManage}), "Role batch assurance error/actions = %v / %v", err, authorizer.actions)
+	_, err = service.RunInvitationBatch(context.Background(), invocation.New(token, model.RequestMetadata{}), command)
+	actions = decidedActions(authorization)[before:]
+	require.True(t, apperror.Is(err, "authentication.token_invalid"), "Role batch assurance error/actions = %v / %v", err, actions)
+	require.True(t, slices.Equal(actions, []model.Action{model.ActionOnboardingBatchManage}), "Role batch assurance error/actions = %v / %v", err, actions)
 
-	authorizer.actions = nil
+	before = len(authorization.Audits.Decisions())
 	command.Operation = InvitationBatchTeacherAcademicUnitCreate
 	command.Items = make([]InvitationBatchItemCommand, MaximumInvitationBatchItems+1)
-	_, err = service.RunInvitationBatch(context.Background(), invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{}), command)
+	_, err = service.RunInvitationBatch(context.Background(), sessionCaller(callerID, now), command)
 	require.True(t, apperror.Is(err, "request.invalid"), "oversized batch error/actions = %v", err)
-	require.Empty(t, authorizer.actions, "oversized batch error/actions = %v", err)
+	require.Len(t, authorization.Audits.Decisions(), before, "oversized batch error/actions = %v", err)
 }
 
 func TestInvitationBatchItemIdempotencyKeyUnambiguouslyEncodesTheTuple(t *testing.T) {
@@ -103,11 +112,12 @@ func TestInvitationBatchDuplicatesRetainPerItemAuthorization(t *testing.T) {
 	now := model.TimeFromMillis(1_800_000_000_000)
 	classID, periodID := model.NewClassID(), model.NewAcademicPeriodID()
 	persistence := &invitationStoreFake{}
-	authorizer := &authorizerFake{actionErrors: map[model.Action]error{
-		model.ActionInvitationCreate: apperror.New("authorization.denied"),
-	}}
+	callerID := model.NewUserID()
+	// The caller may run the batch but not create Invitations.
+	authorization := permissiveAccess(t, accesstest.Options{Grants: []accesstest.Grant{{UserID: callerID,
+		Actions: allActionsExcept(model.ActionInvitationCreate)}}}, nil)
 	service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{},
-		authorizer, &mailFake{}, now)
+		authorization, newTestComposer(t), now)
 	service.classes = invitationClassStoreFake{class: &model.Class{ID: classID, AcademicPeriodID: periodID}}
 	service.periods = invitationPeriodStoreFake{period: &model.AcademicPeriod{ID: periodID, StartsAt: now.Add(time.Hour)}}
 	command := RunInvitationBatchCommand{Operation: InvitationBatchStudentClassCreate, ScopeType: model.RoleScopeClass,
@@ -116,8 +126,7 @@ func TestInvitationBatchDuplicatesRetainPerItemAuthorization(t *testing.T) {
 			{IdempotencyKey: "duplicate", TargetEmail: " SAME@example.edu "},
 		}}
 
-	result, err := service.RunInvitationBatch(context.Background(),
-		invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{}), command)
+	result, err := service.RunInvitationBatch(context.Background(), sessionCaller(callerID, now), command)
 	require.NoError(t, err)
 	require.Equal(t, 2, result.Failed, "duplicate row authorization result=%#v durable duplicates", result)
 	require.Equal(t, "authorization.denied", result.Items[0].ErrorCode, "duplicate row authorization result=%#v durable duplicates", result)
@@ -142,9 +151,9 @@ func TestInvitationBatchDuplicateStillValidatesItsDomainPackage(t *testing.T) {
 	now := model.TimeFromMillis(1_800_000_000_000)
 	classID, periodID := model.NewClassID(), model.NewAcademicPeriodID()
 	period := &model.AcademicPeriod{ID: periodID, StartsAt: now.Add(time.Hour), EndsAt: now.Add(90 * 24 * time.Hour)}
-	persistence := &invitationStoreFake{}
+	persistence, callerID := &invitationStoreFake{}, model.NewUserID()
 	service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{},
-		&authorizerFake{}, &mailFake{}, now)
+		permissiveAccess(t, accesstest.Options{}, []model.UserID{callerID}), newTestComposer(t), now)
 	service.classes = invitationClassStoreFake{class: &model.Class{ID: classID, AcademicPeriodID: periodID}}
 	service.periods = invitationPeriodStoreFake{period: period}
 	command := RunInvitationBatchCommand{Operation: InvitationBatchStudentClassCreate, ScopeType: model.RoleScopeClass,
@@ -153,8 +162,7 @@ func TestInvitationBatchDuplicateStillValidatesItsDomainPackage(t *testing.T) {
 			{IdempotencyKey: "duplicate", TargetEmail: " SAME@example.edu ", IntendedEndsAt: model.MillisFromTime(now)},
 		}}
 
-	result, err := service.RunInvitationBatch(context.Background(),
-		invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{}), command)
+	result, err := service.RunInvitationBatch(context.Background(), sessionCaller(callerID, now), command)
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Succeeded, "invalid duplicate package result=%#v durable duplicates", result)
 	require.Equal(t, 1, result.Failed, "invalid duplicate package result=%#v durable duplicates", result)
@@ -173,11 +181,10 @@ func TestInvitationBatchFreshResendDuplicateRequiresMailAvailability(t *testing.
 	})
 	require.NoError(t, err)
 	persistence := &invitationStoreFake{invitation: invitation}
-	composer := &mailFake{disabled: true}
+	composer, _ := newTestMail(t, false)
 	service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{},
-		&authorizerFake{}, composer, now.Add(time.Minute))
-	_, err = service.ResendInvitation(context.Background(),
-		invocation.New(model.Principal{UserID: actorID}, model.RequestMetadata{}),
+		permissiveAccess(t, accesstest.Options{}, []model.UserID{actorID}), composer, now.Add(time.Minute))
+	_, err = service.ResendInvitation(context.Background(), sessionCaller(actorID, now),
 		ResendInvitationCommand{ID: invitation.ID, ExpectedRevision: invitation.Revision,
 			IdempotencyKey: invitationBatchItemIdempotencyKey("mail-disabled", "duplicate"),
 			BatchScopeType: model.RoleScopeClass, BatchScopeID: classID.String(), batchDuplicate: true,
@@ -189,9 +196,9 @@ func TestInvitationBatchFreshResendDuplicateRequiresMailAvailability(t *testing.
 func TestInvitationBatchRejectsEveryRowWithARepeatedItemKey(t *testing.T) {
 	now := model.TimeFromMillis(1_800_000_000_000)
 	classID, periodID := model.NewClassID(), model.NewAcademicPeriodID()
-	persistence := &invitationStoreFake{}
+	persistence, callerID := &invitationStoreFake{}, model.NewUserID()
 	service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{},
-		&authorizerFake{}, &mailFake{}, now)
+		permissiveAccess(t, accesstest.Options{}, []model.UserID{callerID}), newTestComposer(t), now)
 	service.classes = invitationClassStoreFake{class: &model.Class{ID: classID, AcademicPeriodID: periodID}}
 	service.periods = invitationPeriodStoreFake{period: &model.AcademicPeriod{ID: periodID, StartsAt: now.Add(time.Hour)}}
 	command := RunInvitationBatchCommand{Operation: InvitationBatchStudentClassCreate, ScopeType: model.RoleScopeClass,
@@ -201,8 +208,7 @@ func TestInvitationBatchRejectsEveryRowWithARepeatedItemKey(t *testing.T) {
 			{IdempotencyKey: "unique-key", TargetEmail: " FIRST@example.edu "},
 		}}
 
-	result, err := service.RunInvitationBatch(context.Background(),
-		invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{}), command)
+	result, err := service.RunInvitationBatch(context.Background(), sessionCaller(callerID, now), command)
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Succeeded, "repeated-key result=%#v executions", result)
 	require.Equal(t, 2, result.Failed, "repeated-key result=%#v executions", result)

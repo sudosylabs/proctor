@@ -58,13 +58,12 @@ type Manifest struct {
 	// ID is the plugin's stable identifier and its key in the Plugins
 	// configuration section: 1 to 64 lowercase letters, digits, dots or
 	// hyphens, starting with a letter, for example "oidc".
-	ID string
-	// Name is a short human-readable name, for example "OpenID Connect".
+	ID   string
 	Name string
 	// EnabledByDefault turns the plugin on when the configuration does not
 	// say otherwise.
 	EnabledByDefault bool
-	// Required marks a plugin the server always runs, such as the Exam
+	// Required marks a plugin the server always runs, such as the exam
 	// export format. An administrator cannot turn it off; if it fails to
 	// activate, the server still starts without it.
 	Required bool
@@ -78,7 +77,6 @@ type Manifest struct {
 // ErrInvalidManifest is returned by Manifest.Validate.
 var ErrInvalidManifest = errors.New("plugin manifest is invalid")
 
-// maxSettingsSchemaBytes bounds a manifest's SettingsSchema.
 const maxSettingsSchemaBytes = 64 << 10
 
 // Validate reports whether m has a valid ID, a name, and a SettingsSchema
@@ -96,8 +94,8 @@ func (m Manifest) Validate() error {
 	return nil
 }
 
-// reservedID reports whether the core owns id: native, and anything under
-// native., name the integrity policies of Desktop native capabilities.
+// reservedID reports whether the core owns id: "native" and "native.*" name
+// the integrity policies of Desktop native capabilities.
 func reservedID(id string) bool {
 	return id == "native" || strings.HasPrefix(id, "native.")
 }
@@ -142,7 +140,7 @@ type Host interface {
 	// another plugin already offers the same Type, or after Activate has
 	// returned.
 	AddIdentityProviderType(IdentityProviderType) error
-	// AddExportFormat offers an encoding for Exam exports. It fails when
+	// AddExportFormat offers an encoding for exam exports. It fails when
 	// another plugin already offers the same media type, or after Activate
 	// has returned.
 	AddExportFormat(ExportFormat) error

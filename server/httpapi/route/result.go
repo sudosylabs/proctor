@@ -313,7 +313,7 @@ func validateProtocolResult(expected ProtocolKind, result ProtocolResult) error 
 	return nil
 }
 
-// Status returns the HTTP status the result answers with.
+// Status returns the result's HTTP status.
 func (r Result) Status() int { return r.status }
 
 // Body returns the value a JSON result encodes, or nil for an empty result

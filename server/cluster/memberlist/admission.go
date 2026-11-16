@@ -44,9 +44,9 @@ func (t *Transport) validateAdmissionPeerSet(
 ) error {
 	seen := make(map[string]struct{}, len(peers))
 	for _, peer := range peers {
-		// Pointer identity excludes only the current local node. A distinct
-		// same-name incarnation still has to carry valid metadata before
-		// Memberlist decides whether its address is stale or conflicting.
+		// Compare pointers, not names: another incarnation with this node's
+		// name must still carry valid metadata before memberlist decides
+		// whether its address is stale or conflicting.
 		if peer == excluded {
 			continue
 		}
@@ -55,9 +55,8 @@ func (t *Transport) validateAdmissionPeerSet(
 			return err
 		}
 		if meta.NodeID == t.cfg.NodeID {
-			// A peer may briefly gossip this node's previous address during an
-			// immediate restart. Memberlist's incarnation and name-conflict logic
-			// decides whether that address is stale or live.
+			// After a quick restart a peer may still gossip this node's old
+			// address; memberlist's conflict logic decides whether it is stale.
 			continue
 		}
 		if _, exists := seen[meta.NodeID]; exists {
@@ -96,9 +95,8 @@ func (t *Transport) validateAdmissionPeer(member *hashimemberlist.Node) (nodeMet
 	return meta, nil
 }
 
-// admissionDelegate applies the same peer contract to initial joins, later
-// gossip, and cluster merges. Memberlist itself owns duplicate-name conflict
-// resolution; the conflict callback adds bounded diagnostics.
+// admissionDelegate applies the same peer checks to joins, gossip and merges.
+// Memberlist resolves duplicate names itself; NotifyConflict only records it.
 type admissionDelegate struct {
 	transport *Transport
 

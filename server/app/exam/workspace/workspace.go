@@ -14,28 +14,13 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Authorizer is the part of *access.Authorizer the Starter Workspace use
-// cases call.
-type Authorizer interface {
-	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
-}
-
-// Auditor records the attempt and failure of each audited Starter Workspace
-// command; the Store completes the audit event with the change it commits.
-type Auditor interface {
-	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
-	Fail(context.Context, model.AuditEventID, string) error
-}
-
-// Content stages and opens the bytes of a Starter Workspace object. The
-// object is opaque to the file store: paths and entries live only in the
-// Store.
+// Content stages and opens object bytes. Objects are opaque to the file
+// store: paths and entries live only in the database.
 type Content interface {
 	StageStarterWorkspaceObject(
 		context.Context,
@@ -47,15 +32,16 @@ type Content interface {
 	OpenStarterWorkspaceObject(context.Context, model.StarterWorkspaceObjectID) (io.ReadCloser, error)
 }
 
-// Service manages the Starter Workspace of an Exam Draft.
+// Service manages exam draft starter workspaces; build it with New.
 type Service struct {
-	workspaces store.ExamStarterWorkspaceStore
-	// exams reads the Exam ownership a command is authorized against.
+	workspaces          store.ExamStarterWorkspaceStore
 	exams               store.ExamAuthoringStore
 	academicUnitMembers store.AcademicUnitMemberStore
 
-	authorizer  Authorizer
-	auditor     Auditor
+	authorizer *access.Authorizer
+	// auditor only begins and fails audits; the store completes them in the
+	// same transaction as the change.
+	auditor     access.MutationAuditAdapter
 	content     Content
 	publisher   realtime.Publisher
 	now         func() time.Time
@@ -64,14 +50,13 @@ type Service struct {
 	newVersion  func() model.WorkspaceContentVersion
 }
 
-// Dependencies are the collaborators New validates once and distributes to
-// the Service.
+// Dependencies are the Service's collaborators; New requires every field.
 type Dependencies struct {
 	Persistence store.ExamStarterWorkspaceStore
 	Access      store.ExamAuthoringStore
 	Memberships store.AcademicUnitMemberStore
-	Authorizer  Authorizer
-	Auditor     Auditor
+	Authorizer  *access.Authorizer
+	Auditor     *access.Auditor
 	Content     Content
 	Publisher   realtime.Publisher
 	Now         func() time.Time
@@ -80,8 +65,7 @@ type Dependencies struct {
 	NewVersion  func() model.WorkspaceContentVersion
 }
 
-// New returns a Starter Workspace Service, or an error when a required
-// dependency is missing.
+// New returns an error when any dependency is nil.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Persistence == nil ||
 		deps.Access == nil ||
@@ -102,7 +86,7 @@ func New(deps Dependencies) (*Service, error) {
 		exams:               deps.Access,
 		academicUnitMembers: deps.Memberships,
 		authorizer:          deps.Authorizer,
-		auditor:             deps.Auditor,
+		auditor:             deps.Auditor.MutationAudit(),
 		content:             deps.Content,
 		publisher:           deps.Publisher,
 		now:                 deps.Now,

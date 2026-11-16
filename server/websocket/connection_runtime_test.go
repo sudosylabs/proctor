@@ -9,219 +9,75 @@ package websocket
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"io"
-	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
+	gorilla "github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type runtimeTestApplication struct {
-	validated chan model.Principal
-}
-
-func (a *runtimeTestApplication) AuthorizeWebSocketSubscription(
-	context.Context,
-	invocation.Invocation,
-	model.Action,
-	model.Resource,
-) error {
-	return nil
-}
-
-func (a *runtimeTestApplication) ValidateWebSocketPrincipal(
-	_ context.Context,
-	principal model.Principal,
-) error {
-	a.validated <- principal
-	return nil
-}
-
-type runtimeTestTicker struct {
-	ticks chan time.Time
-}
-
-func (t *runtimeTestTicker) Chan() <-chan time.Time { return t.ticks }
-func (t *runtimeTestTicker) Stop()                  {}
-
-type runtimeTestClock struct {
-	mu      sync.Mutex
-	now     time.Time
-	tickers map[time.Duration]chan *runtimeTestTicker
-}
-
-func newRuntimeTestClock(now time.Time) *runtimeTestClock {
-	return &runtimeTestClock{
-		now: now,
-		tickers: map[time.Duration]chan *runtimeTestTicker{
-			pingInterval: make(chan *runtimeTestTicker, 1),
-			sessionCheck: make(chan *runtimeTestTicker, 1),
-		},
-	}
-}
-
-func (c *runtimeTestClock) Now() time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.now
-}
-
-func (c *runtimeTestClock) NewTicker(interval time.Duration) runtimeTicker {
-	ticker := &runtimeTestTicker{ticks: make(chan time.Time, 1)}
-	c.tickers[interval] <- ticker
-	return ticker
-}
-
-func (c *runtimeTestClock) waitTicker(t *testing.T, interval time.Duration) *runtimeTestTicker {
-	t.Helper()
-	select {
-	case ticker := <-c.tickers[interval]:
-		return ticker
-	case <-time.After(time.Second):
-		require.FailNow(t, fmt.Sprintf("runtime did not create %s ticker", interval))
-		return nil
-	}
-}
-
-type runtimeTestSocket struct {
-	readResults   chan error
-	readDeadline  chan time.Time
-	writeDeadline chan time.Time
-	pingWrites    chan struct{}
-	closed        chan struct{}
-	closeOnce     sync.Once
-
-	mu          sync.Mutex
-	readLimit   int64
-	pongHandler func(string) error
-}
-
-func newRuntimeTestSocket() *runtimeTestSocket {
-	return &runtimeTestSocket{
-		readResults:   make(chan error, 1),
-		readDeadline:  make(chan time.Time, 4),
-		writeDeadline: make(chan time.Time, 4),
-		pingWrites:    make(chan struct{}, 1),
-		closed:        make(chan struct{}),
-	}
-}
-
-func (s *runtimeTestSocket) SetReadLimit(limit int64) {
-	s.mu.Lock()
-	s.readLimit = limit
-	s.mu.Unlock()
-}
-
-func (s *runtimeTestSocket) SetReadDeadline(deadline time.Time) error {
-	s.readDeadline <- deadline
-	return nil
-}
-
-func (s *runtimeTestSocket) SetPongHandler(handler func(string) error) {
-	s.mu.Lock()
-	s.pongHandler = handler
-	s.mu.Unlock()
-}
-
-func (s *runtimeTestSocket) ReadJSON(any) error {
-	select {
-	case err := <-s.readResults:
-		return err
-	case <-s.closed:
-		return io.EOF
-	}
-}
-
-func (s *runtimeTestSocket) SetWriteDeadline(deadline time.Time) error {
-	s.writeDeadline <- deadline
-	return nil
-}
-
-func (s *runtimeTestSocket) WriteJSON(any) error { return nil }
-
-func (s *runtimeTestSocket) WriteMessage(messageType int, _ []byte) error {
-	if messageType != websocketPingMessage {
-		return errors.New("unexpected WebSocket message type")
-	}
-	s.pingWrites <- struct{}{}
-	return nil
-}
-
-func (s *runtimeTestSocket) WriteControl(int, []byte, time.Time) error { return nil }
-
-func (s *runtimeTestSocket) Close() error {
-	s.closeOnce.Do(func() { close(s.closed) })
-	return nil
-}
-
+// TestConnectionRuntimeUsesDeterministicLivenessAndValidation runs a
+// connection on the bubble's clock: it pings once a pingInterval,
+// revalidates its principal once a sessionCheck, and ends when a peer that
+// never answers a ping lets the read deadline of pongWait pass.
 func TestConnectionRuntimeUsesDeterministicLivenessAndValidation(t *testing.T) {
 	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		socket, peer := newSocketPair(t)
+		peer.listen()
+		principal := model.Principal{
+			UserID:                 model.NewUserID(),
+			SessionID:              model.NewSessionID(),
+			CredentialID:           model.PrincipalCredentialID(model.NewID()),
+			CredentialType:         model.CredentialSessionAccess,
+			AuthenticationMethod:   "password",
+			AuthenticationStrength: model.AuthenticationSingleFactor,
+			ClientType:             model.SessionClientWeb,
+			AuthenticatedAt:        time.Now(),
+		}
+		world := newAdmissionWorld(t, admissionOptions{principal: principal})
+		runtime := &connectionRuntime{
+			admission:     world.admission,
+			socket:        socket,
+			principal:     principal,
+			subscriptions: make(map[string]Subscription),
+			send:          make(chan outboundMessage, 1),
+		}
+		started := time.Now()
+		done := make(chan struct{})
+		go func() {
+			runtime.run(context.Background())
+			close(done)
+		}()
 
-	now := time.Date(2026, time.August, 12, 10, 30, 0, 0, time.UTC)
-	clock := newRuntimeTestClock(now)
-	socket := newRuntimeTestSocket()
-	application := &runtimeTestApplication{validated: make(chan model.Principal, 1)}
-	principal := model.Principal{
-		UserID:         model.NewUserID(),
-		SessionID:      model.NewSessionID(),
-		CredentialID:   model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess,
-	}
-	runtime := &connectionRuntime{
-		application:   application,
-		socket:        socket,
-		clock:         clock,
-		principal:     principal,
-		subscriptions: make(map[string]Subscription),
-		send:          make(chan outboundMessage, 1),
-	}
+		time.Sleep(pingInterval)
+		synctest.Wait()
+		pings := peer.received(gorilla.PingMessage)
+		require.Len(t, pings, 1, "pings after one ping interval")
+		require.Equal(t, started.Add(pingInterval), pings[0].at, "ping time")
+		// Each revalidation reads the principal's Session from the store.
+		validations := world.sessions.read()
+		require.Len(t, validations, int(pingInterval/sessionCheck), "principal revalidations after one ping interval")
+		require.Equal(t, started.Add(sessionCheck), validations[0].at, "first revalidation time")
+		require.Equal(t, principal.SessionID, validations[0].id, "validated session")
 
-	done := make(chan struct{})
-	go func() {
-		runtime.run(context.Background())
-		close(done)
-	}()
-
-	select {
-	case deadline := <-socket.readDeadline:
-		require.True(t, deadline.Equal(now.Add(pongWait)), "initial read deadline = %s", deadline)
-	case <-time.After(time.Second):
-		require.FailNow(t, "runtime did not establish initial read deadline")
-	}
-
-	pingTicker := clock.waitTicker(t, pingInterval)
-	validationTicker := clock.waitTicker(t, sessionCheck)
-	pingTicker.ticks <- now.Add(pingInterval)
-	select {
-	case <-socket.pingWrites:
-	case <-time.After(time.Second):
-		require.FailNow(t, "ping tick did not write a ping control message")
-	}
-	select {
-	case deadline := <-socket.writeDeadline:
-		require.True(t, deadline.Equal(now.Add(writeWait)), "ping write deadline = %s", deadline)
-	case <-time.After(time.Second):
-		require.FailNow(t, "ping tick did not establish a write deadline")
-	}
-
-	validationTicker.ticks <- now.Add(sessionCheck)
-	select {
-	case got := <-application.validated:
-		require.Equal(t, principal.SessionID, got.SessionID, "validated session")
-	case <-time.After(time.Second):
-		require.FailNow(t, "validation tick did not validate the principal")
-	}
-
-	socket.readResults <- io.EOF
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		require.FailNow(t, "runtime did not stop after the read pump ended")
-	}
+		time.Sleep(pongWait - pingInterval - time.Nanosecond)
+		synctest.Wait()
+		select {
+		case <-done:
+			require.FailNow(t, "runtime stopped before the read deadline")
+		default:
+		}
+		time.Sleep(time.Nanosecond)
+		synctest.Wait()
+		select {
+		case <-done:
+		default:
+			require.FailNow(t, "runtime did not stop at the read deadline")
+		}
+		require.True(t, peer.ended(), "the transport outlived the runtime")
+	})
 }

@@ -9,7 +9,6 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,7 +17,6 @@ import (
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/exam/resource"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -27,22 +25,8 @@ import (
 const examResourceUploadBodyLimit = model.ExamResourceMaximumBytes + 64*1024
 const examResourceMetadataLimit = 32 * 1024
 
-// ExamResourceApplication is the application port its handlers call; it
-// creates, replaces, edits, orders, removes and opens a Draft's Exam
-// Resources.
-type ExamResourceApplication interface {
-	CreateExamResource(context.Context, invocation.Invocation, resource.CreateCommand) (store.ExamResourceRecord, error)
-	ReplaceExamResourceContent(context.Context, invocation.Invocation, resource.ReplaceContentCommand) (store.ExamResourceRecord, error)
-	EditExamResourceMetadata(context.Context, invocation.Invocation, resource.EditMetadataCommand) (store.ExamResourceRecord, error)
-	ReorderExamResources(context.Context, invocation.Invocation, resource.ReorderCommand) ([]store.ExamResourceRecord, error)
-	RemoveExamResource(context.Context, invocation.Invocation, resource.RemoveCommand) (store.ExamResourceRecord, error)
-	ListExamResources(context.Context, invocation.Invocation, model.ExamID) ([]store.ExamResourceRecord, error)
-	OpenExamResource(context.Context, invocation.Invocation, model.ExamID, model.ExamResourceID) (resource.Opened, error)
-}
-
-// examResourceHandlers serves the Exam Resource routes: the files attached to
-// an Exam draft. The Exam routes themselves are examHandlers.
-type examResourceHandlers struct{ app ExamResourceApplication }
+// examResourceHandlers serves the files attached to an exam draft.
+type examResourceHandlers struct{ app *resource.Service }
 type examResourceUploadMetadata struct {
 	ExpectedDraftRevision int64  `json:"expected_revision"`
 	DisplayName           string `json:"display_name"`
@@ -82,9 +66,9 @@ type examResourceResponse struct {
 	DraftRevision       int64  `json:"draft_revision"`
 }
 
-// examResourceResource is the HTTP resource of the Exam Resource entity, hence
-// the doubled word; examResource is the Exam's.
-func examResourceResource(app ExamResourceApplication) route.Resource {
+// examResourceResource is the HTTP resource of the exam resource entity, hence
+// the doubled word; examResource is the exam's.
+func examResourceResource(app *resource.Service) route.Resource {
 	h := examResourceHandlers{app: app}
 	collection := "/exams/{exam_id}/draft/resources"
 	member := "/exams/{exam_id}/draft/resources/{exam_resource_id}"
@@ -271,7 +255,7 @@ func (h examResourceHandlers) list(request route.Request) (route.Result, error) 
 		return route.Result{}, err
 	}
 
-	// The Exam Capacity Policy bounds the Draft's Resources, so the complete
+	// The exam capacity policy bounds the draft's resources, so the complete
 	// ordered set is paged by position.
 	response, err := route.BoundedList(
 		request,
@@ -410,7 +394,7 @@ func (h examResourceHandlers) reorder(request route.Request) (route.Result, erro
 		return route.Result{}, err
 	}
 
-	// The new order is the complete Resource set, presented in the
+	// The new order is the complete resource set, presented in the
 	// collection envelope without a continuation.
 	response, err := route.NewList(items, false, examResourceResponseFromRecord, nil)
 	if err != nil {

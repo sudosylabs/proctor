@@ -32,13 +32,24 @@ func TestSaveDecisionAuthorizesAuditsAtomicallyAndSuppressesPrivateRationale(t *
 	// Contract: a fresh decision tells managers the Review changed, then
 	// invalidates the Sitting board.
 	require.Equal(t, reviewCalls(t, realtime.NewExamIntegrityReviewChangedEvent, result), f.publisher.Calls())
-	require.Equal(t, f.submissionID, f.authorizer.reviewSubmission, "authorization=%#v mutation=%#v", f.authorizer, f.persistence.decision)
-	require.False(t, f.persistence.decision.ManagerOverride, "authorization=%#v mutation=%#v", f.authorizer, f.persistence.decision)
-	require.Equal(t, f.userID, f.persistence.decision.ActorUserID, "authorization=%#v mutation=%#v", f.authorizer, f.persistence.decision)
-	require.NotEmpty(t, f.persistence.decision.AuditEventID, "authorization=%#v mutation=%#v", f.authorizer, f.persistence.decision)
+	// The Sitting area decided the review of this Submission, on the
+	// ordinary Action a current manager holds.
+	var reviewDecision *model.AuditEvent
+	for _, decision := range f.control.Audits.Decisions() {
+		if decision.Action == string(model.ActionSubmissionReview) {
+			reviewDecision = decision
+		}
+	}
+	require.NotNil(t, reviewDecision, "decisions=%#v", f.control.Audits.Decisions())
+	require.Equal(t, model.Resource{Type: model.ResourceSubmission, ID: f.submissionID.String()}, reviewDecision.Resource)
+	require.Equal(t, model.AuditStatusSuccess, reviewDecision.Status)
+	require.False(t, f.persistence.decision.ManagerOverride, "mutation=%#v", f.persistence.decision)
+	require.Equal(t, f.userID, f.persistence.decision.ActorUserID, "mutation=%#v", f.persistence.decision)
+	require.NotEmpty(t, f.persistence.decision.AuditEventID, "mutation=%#v", f.persistence.decision)
+	audited := f.auditedValue(t)
 	for _, forbidden := range []string{"private_rationale", "manager_notes", "student_remarks_markdown"} {
-		_, exists := f.auditor.value[forbidden]
-		require.False(t, exists, "private field %q in audit %#v", forbidden, f.auditor.value)
+		_, exists := audited[forbidden]
+		require.False(t, exists, "private field %q in audit %#v", forbidden, audited)
 	}
 	wantIdempotency, prepareErr := prepareDecisionIdempotency(f.inv, SaveDecisionCommand{
 		SubmissionID: f.submissionID, FlagID: f.flagID, ExpectedReviewRevision: 0,

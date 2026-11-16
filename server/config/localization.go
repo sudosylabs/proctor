@@ -11,8 +11,8 @@ import (
 	"strings"
 )
 
-// Localization selects the installation-wide fallback locale. Catalog
-// availability is validated by the i18n module during root composition.
+// Localization selects the fallback locale. Whether a catalog exists for it is
+// checked by i18n at startup, not by Validate.
 type Localization struct {
 	DefaultLocale string `json:"DefaultLocale"`
 }

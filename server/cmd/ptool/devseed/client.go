@@ -35,10 +35,9 @@ func decode(raw json.RawMessage) object {
 func str(value object, key string) string   { text, _ := value[key].(string); return text }
 func number(value object, key string) int64 { n, _ := value[key].(float64); return int64(n) }
 
-// stamp formats an instant in the API's RFC 3339 timestamp form.
 func stamp(value time.Time) string { return value.UTC().Format(time.RFC3339Nano) }
 
-// instant parses an RFC 3339 API timestamp; a missing or malformed value is zero.
+// instant returns the zero time for a missing or malformed value.
 func instant(value object, key string) time.Time {
 	parsed, _ := time.Parse(time.RFC3339Nano, str(value, key))
 	return parsed
@@ -74,6 +73,8 @@ func loopbackOrigin(raw string) (string, error) {
 	return "http://" + net.JoinHostPort(host, strconv.Itoa(port)), nil
 }
 
+// localHTTPClient ignores environment proxies, follows no redirects and dials
+// only loopback addresses, so fixture bearer tokens never leave the machine.
 func localHTTPClient() *http.Client {
 	dialer := &net.Dialer{Timeout: 5 * time.Second}
 	return &http.Client{
@@ -178,7 +179,7 @@ func (r *runner) send(
 	var payload io.Reader
 	contentType := "application/json"
 	if content != nil && body == nil {
-		// Profile pictures stream source bytes; Exam uploads include JSON metadata.
+		// Profile pictures send raw bytes; exam uploads also carry JSON metadata.
 		payload, contentType = bytes.NewReader(content), "image/png"
 	} else if content != nil {
 		var buffer bytes.Buffer

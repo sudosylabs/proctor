@@ -34,9 +34,9 @@ const (
 	ExamExportExpired ExamExportState = "expired"
 )
 
-// ExamExport is an independent temporary archive of an exact category selection.
-// Its advertised expiry starts at request creation and is never extended by
-// construction, access, retries, preservation holds, or later policy changes.
+// ExamExport is a temporary archive of an exact category selection. Its
+// expiry counts from the request and nothing extends it: not access, retries,
+// preservation holds or later policy changes.
 type ExamExport struct {
 	ID               ExamExportID
 	Scope            RetentionHoldScope

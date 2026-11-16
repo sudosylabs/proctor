@@ -18,8 +18,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// TerminalCommand names one Submission Review at an expected revision for a
-// terminal step: finalization, or release of the student result.
+// TerminalCommand names one review at an expected revision, for finalization
+// or release.
 type TerminalCommand struct {
 	SubmissionID           model.SubmissionID
 	ReviewID               model.SubmissionReviewID
@@ -34,9 +34,8 @@ const (
 	terminalRelease
 )
 
-// FinalizeExamIntegrityReview idempotently finalizes a Submission Review,
-// fenced by ExpectedReviewRevision, for a caller authorized to review the
-// Submission.
+// FinalizeExamIntegrityReview idempotently finalizes a review, fenced by
+// ExpectedReviewRevision.
 func (s *Service) FinalizeExamIntegrityReview(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -55,8 +54,8 @@ func (s *Service) FinalizeExamIntegrityReview(
 }
 
 // ReleaseStudentExamResult idempotently and irreversibly releases a finalized
-// Submission Review's student result to the candidate, fenced by
-// ExpectedReviewRevision, for a caller authorized to release results.
+// review's result to the candidate, fenced by ExpectedReviewRevision. Release
+// is a separate permission from review.
 func (s *Service) ReleaseStudentExamResult(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -142,8 +141,8 @@ func (s *Service) terminalMutation(
 	at := model.TimeUTC(s.now())
 	var releasePreparation *store.ExamIntegrityReviewReleasePreparation
 	if kind == terminalRelease {
-		// The release-time reservation is durable, so it follows the audit
-		// attempt like every other examination write.
+		// The release-time reservation is a durable write, so it comes after
+		// the audit begins, like every other write.
 		releasePreparation, err = s.reviews.PrepareRelease(ctx, &store.ExamIntegrityReviewReleasePrepare{
 			SubmissionID:     submissionID,
 			ReviewID:         reviewID,

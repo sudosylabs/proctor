@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package configtest provides reusable configuration-backing conformance tests.
+// Package configtest holds conformance tests every config.BackingStore must pass.
 package configtest
 
 import (

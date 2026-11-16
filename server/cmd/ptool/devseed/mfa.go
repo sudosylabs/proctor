@@ -76,8 +76,8 @@ func (r *runner) enrollMFA(key string, a *account) error {
 		return r.save()
 	}
 
-	// A pending enrollment can be replaced through the public setup operation.
-	// Persist the returned secret before activation so its unknown outcome is safe.
+	// Setup replaces a pending enrollment. Save the returned secret before
+	// activating, so an unknown activation outcome is recoverable.
 	raw, _, err = r.request(r.state.Server, "POST", "/api/v1/users/me/mfa/setup", a.Token, "", json.RawMessage(`{}`), nil)
 	if err != nil {
 		return err

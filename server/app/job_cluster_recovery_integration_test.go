@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
@@ -63,9 +63,13 @@ func TestJobRunnerRecoversNodeLossAroundADurableDomainCommit(t *testing.T) {
 				publishEntered:  publishEntered,
 				continuePublish: continuePublish,
 			}
+			// The generation job authorizes nothing, so the in-memory
+			// authorizer is never asked.
+			authorization := accesstest.New(t, accesstest.Options{})
 			pictures, err := user.New(user.Dependencies{
-				Store: recoveryCatalog{Catalog: persistence, files: files}, SettingsAuditor: access.UserSettingsAuditAdapter{},
-				Publisher: &realtimetest.Publisher{}, Defaults: recoveryDefaultPictures{}, Now: time.Now,
+				Store:      recoveryCatalog{Catalog: persistence, files: files},
+				Authorizer: authorization.Authorizer, Auditor: authorization.Auditor,
+				Publisher: &realtimetest.Publisher{}, Pictures: recoveryDefaultPictures{}, Now: time.Now,
 			})
 			require.NoError(t, err)
 			realHandler := jobs.NewDefaultProfilePicture(pictures).Descriptor.Handler
@@ -170,7 +174,7 @@ func (c recoveryCatalog) File() store.FileStore { return c.files }
 
 // recoveryDefaultPictures generates the default rendition set without image
 // work, since recovery evidence concerns the commit, not the pixels.
-type recoveryDefaultPictures struct{}
+type recoveryDefaultPictures struct{ user.PictureFiles }
 
 func (recoveryDefaultPictures) GenerateAndStoreDefaultProfilePicture(_ context.Context, revisionID model.FileRevisionID, _ string, at time.Time) ([]model.FileRendition, error) {
 	result := make([]model.FileRendition, 0, 3)

@@ -36,22 +36,23 @@ var DefaultTerminalWindow = Window{Cols: 80, Rows: 24}
 
 // The refusals of the terminal use cases.
 var (
-	// ErrNoEnvironment: the Attempt's Revision does not enable execution.
+	// ErrNoEnvironment means the attempt's revision does not enable execution.
 	ErrNoEnvironment = errors.New("the Attempt has no execution environment")
-	// ErrEnvironmentNotRunning: the environment has no running machine
+	// ErrEnvironmentNotRunning means the environment has no running machine
 	// this node can reach now.
 	ErrEnvironmentNotRunning = errors.New("the execution environment is not running")
-	// ErrTerminalLimit: the candidate has as many terminals open as the
+	// ErrTerminalLimit means the candidate has as many terminals open as the
 	// policy allows, or the machine opened as many as it may.
 	ErrTerminalLimit = errors.New("the terminal limit is reached")
-	// ErrTerminalNotFound: no terminal has that tag on the current machine.
+	// ErrTerminalNotFound means no terminal has that tag on the current
+	// machine.
 	ErrTerminalNotFound = errors.New("no such terminal")
-	// ErrTerminalExited: the terminal has exited.
+	// ErrTerminalExited means the terminal has exited.
 	ErrTerminalExited = errors.New("the terminal has exited")
-	// ErrTerminalNotAuthor: the caller is not the terminal's author and may
-	// only read it.
+	// ErrTerminalNotAuthor means the caller is not the terminal's author and
+	// may only read it.
 	ErrTerminalNotAuthor = errors.New("only the terminal's author writes to it")
-	// ErrTerminalEnded: the machine the terminal ran on has ended or been
+	// ErrTerminalEnded means the machine the terminal ran on has ended or been
 	// replaced; nothing more comes from it.
 	ErrTerminalEnded = errors.New("the terminal's machine has ended")
 )
@@ -104,7 +105,8 @@ func terminalOf(info ProcessInfo) Terminal {
 		ExitSignal: info.ExitSignal, Output: info.Output, Input: info.Input}
 }
 
-// TerminalsDependencies is what NewTerminals needs.
+// TerminalsDependencies configures NewTerminals; Environments, Evidence,
+// Hosts and Candidates are required.
 type TerminalsDependencies struct {
 	Environments store.AttemptEnvironmentStore
 	// Evidence stores recorded terminal input.
@@ -131,15 +133,15 @@ const (
 )
 
 // Terminals serves candidates' terminals from any node. It holds no lease:
-// it reads the environment row, reaches the machine the row names itself,
-// and writes under the row's current control fence. Terminal bytes never
-// travel over cluster peer delivery. A nil Terminals is an installation
-// that runs no execution environments, and answers every use case so.
+// it reaches the machine the environment row names itself and writes under
+// the row's current control fence. Terminal bytes never travel over cluster
+// peer delivery. A nil Terminals means the installation runs no execution
+// environments.
 type Terminals struct {
 	deps TerminalsDependencies
 }
 
-// NewTerminals validates its dependencies.
+// NewTerminals returns Terminals, defaulting Now and the input bounds.
 func NewTerminals(deps TerminalsDependencies) (*Terminals, error) {
 	if deps.Environments == nil || deps.Evidence == nil || deps.Hosts == nil || deps.Candidates == nil {
 		return nil, errors.New("terminals need the environments, evidence, hosts and candidate verification")
@@ -222,7 +224,6 @@ func (t *Terminals) fenced(ctx context.Context, at *reached, call func(Fence) er
 	return call(at.fence())
 }
 
-// terminalError turns a machine failure into a terminal refusal.
 func terminalError(err error) error {
 	switch {
 	case err == nil:
@@ -239,7 +240,7 @@ func terminalError(err error) error {
 	return err
 }
 
-// terminals lists the candidate's terminals on a machine.
+// terminals lists a machine's candidate terminals in tag order.
 func terminals(ctx context.Context, machine Machine) ([]ProcessInfo, error) {
 	processes, err := machine.ListProcesses(ctx)
 	if err != nil {
@@ -318,7 +319,6 @@ type TerminalList struct {
 	Limit     int
 }
 
-// list returns the candidate's terminals on the current machine.
 func (t *Terminals) list(ctx context.Context, candidate CandidateAttempt) (TerminalList, error) {
 	at, err := t.reach(ctx, candidate.AttemptID)
 	if err != nil {
@@ -335,7 +335,7 @@ func (t *Terminals) list(ctx context.Context, candidate CandidateAttempt) (Termi
 	return result, nil
 }
 
-// signal sends a terminal a signal. A candidate may only interrupt.
+// signal sends a terminal a signal; a candidate may only interrupt.
 func (t *Terminals) signal(
 	ctx context.Context,
 	candidate CandidateAttempt,
@@ -394,9 +394,8 @@ type terminalSession struct {
 	terminals *Terminals
 	at        reached
 	tag       model.AttemptEnvironmentProcessTag
-	// author is set when the session writes as the terminal's author.
-	author   bool
-	recorder *inputRecorder
+	author    bool
+	recorder  *inputRecorder
 	// inv and access are the candidate's, rechecked by Check.
 	inv    invocation.Invocation
 	access CandidateAccess
@@ -468,7 +467,6 @@ func (s *terminalSession) Write(ctx context.Context, offset uint64, data []byte)
 	return next, nil
 }
 
-// input is where the terminal's input stands.
 func (s *terminalSession) input(ctx context.Context) (uint64, error) {
 	open, err := terminals(ctx, s.at.machine)
 	if err != nil {

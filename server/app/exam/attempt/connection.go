@@ -18,10 +18,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ConnectCommand asks to admit the caller's registered desktop to a Sitting
-// and open a new Attempt Participation. It carries the desktop's security
-// posture, continuity credential, and configuration manifest fingerprint, and
-// is idempotent by IdempotencyKey.
+// ConnectCommand asks to admit the caller's registered desktop to a sitting.
+// It is idempotent by IdempotencyKey.
 type ConnectCommand struct {
 	Security                         model.ConnectSecurity
 	SittingID                        model.ExamSittingID
@@ -31,10 +29,8 @@ type ConnectCommand struct {
 	IdempotencyKey                   string
 }
 
-// ConnectionResult is the admitted Attempt with its Attempt Workspace, current
-// Attempt Participation, and open Attempt Connection, plus the configuration
-// and candidate runtime policy the desktop applies. It also reports whether
-// this was the first admission and which Sessions the admission revoked.
+// ConnectionResult is the admitted attempt and what the desktop applies; it
+// also reports which sessions the admission revoked.
 type ConnectionResult struct {
 	Security                  model.AdmittedSecurity
 	Attempt                   model.ExamAttempt
@@ -54,37 +50,11 @@ type ConnectionResult struct {
 }
 
 // ConnectExamAttempt idempotently admits the caller's registered, compatible
-// desktop to a Sitting: it creates the Attempt and its Attempt Workspace on
-// first admission, or resumes the existing Attempt, and opens a new Attempt
-// Participation and Attempt Connection.
-//
-// Who may be admitted is decided in two places. This method checks what the
-// request itself carries:
-//   - a well-formed preflight or resume proof;
-//   - a desktop Session access credential bound to a registered desktop key;
-//   - a released, compatible desktop build;
-//   - a valid idempotency key.
-//
-// It then records audit for model.ActionExamSittingParticipate.
-//
-// The Store's Connect re-decides everything that depends on current rows,
-// inside one transaction that locks those rows, against PostgreSQL time. See
-// lockExamAttemptEligibility in store/sqlstore/exam_attempt_admission_store.go.
-// The Sitting state, deadline, Academic Period and management-authority
-// rules are decided by model.CheckAttemptAdmissionSitting and
-// model.CheckAttemptAdmissionCandidate; the rest are SQL predicates over the
-// locked rows. Admission requires all of the following:
-//   - the Sitting is Open (an exact replay may also find it Paused), and its
-//     scheduled end has not passed;
-//   - the candidate User is active;
-//   - the Session is unrevoked, unexpired and bound to the same desktop
-//     registration, DPoP key and build;
-//   - the candidate is a current member of the Sitting's Class in its
-//     Academic Period, and nothing in the academic lineage is archived;
-//   - the candidate holds no effective management authority over the Exam.
-//
-// The security preflight is evaluated against the frozen native policy in
-// the same transaction (store/sqlstore/connect_security.go).
+// desktop, creating the attempt on first admission or resuming it, and opens
+// a new participation and connection. It checks only what the request
+// carries; the store re-decides everything that depends on current rows,
+// including the security preflight, in one locking transaction against
+// database time.
 func (s *Service) ConnectExamAttempt(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -221,8 +191,8 @@ func cloneAttemptConfigurationPointer(value *model.AttemptConfigurationCandidate
 	return &clone
 }
 
-// CloseConnectionCommand names one of the caller's Attempt Connections, with
-// its Attempt, Sitting, and Class scope, and the reason it is closing.
+// CloseConnectionCommand names one of the caller's connections and why it is
+// closing.
 type CloseConnectionCommand struct {
 	AttemptID    model.ExamAttemptID
 	SittingID    model.ExamSittingID
@@ -231,9 +201,8 @@ type CloseConnectionCommand struct {
 	Reason       model.AttemptConnectionCloseReason
 }
 
-// ConnectionClosedResult is the closed Attempt Connection and the Attempt,
-// Exam, Sitting, and candidate it belongs to. Changed reports whether this
-// close changed state rather than finding the Connection already closed.
+// ConnectionClosedResult reports in Changed whether this close changed state
+// rather than finding the connection already closed.
 type ConnectionClosedResult struct {
 	AttemptID       model.ExamAttemptID
 	ExamID          model.ExamID
@@ -243,9 +212,8 @@ type ConnectionClosedResult struct {
 	Changed         bool
 }
 
-// CloseExamAttemptConnection closes the caller's Attempt Connection with the
-// given reason; post-commit effects are published only when the close changed
-// state.
+// CloseExamAttemptConnection publishes post-commit effects only when the
+// close changed state.
 func (s *Service) CloseExamAttemptConnection(
 	ctx context.Context,
 	inv invocation.Invocation,

@@ -11,12 +11,8 @@ import (
 	"time"
 )
 
-// Institution is the university or school represented by one logical Proctor
-// installation. Its academic organization begins at its root AcademicUnit
-// records; programmes and classes are reached through those units.
-//
-// Domain time is UTC time.Time. Optional archive uses OptionalTime. Revision
-// supports optimistic concurrency on profile updates.
+// Institution is the university or school one installation serves. Its
+// academic structure starts at its root academic units.
 type Institution struct {
 	ID           InstitutionID
 	CreatedAt    time.Time
@@ -29,8 +25,8 @@ type Institution struct {
 	ExamCapacity ExamCapacityPolicy
 }
 
-// NewInstitution constructs a new institution with application-supplied identity
-// and clock. It does not persist.
+// NewInstitution builds an institution at revision 1 and validates it; it does
+// not persist.
 func NewInstitution(
 	id InstitutionID,
 	name, displayName, description string,
@@ -60,7 +56,8 @@ func NewInstitution(
 	return institution, nil
 }
 
-// UpdateProfile applies a profile change with the expected revision and clock.
+// UpdateProfile replaces the names and bumps the revision. A non-zero
+// expectedRevision must match, and an archived institution cannot be updated.
 func (i *Institution) UpdateProfile(
 	expectedRevision int64,
 	name, displayName, description string,
@@ -95,8 +92,8 @@ func (i *Institution) UpdateProfile(
 	return i.Validate()
 }
 
-// PrepareUpdate is a transitional helper for application code still patching
-// fields before a full command rewrite. Prefer UpdateProfile.
+// PrepareUpdate stamps the update time and bumps the revision for callers that
+// patch fields directly; prefer UpdateProfile.
 func (i *Institution) PrepareUpdate(at time.Time) {
 	if i == nil {
 		return
@@ -109,8 +106,8 @@ func (i *Institution) PrepareUpdate(at time.Time) {
 	sanitizeNamed(&i.Name, &i.DisplayName, &i.Description)
 }
 
-// Archive marks the institution archived. Installations normally do not archive
-// the singleton institution; the method exists for domain completeness.
+// Archive sets ArchivedAt and bumps the revision. Installations do not
+// normally archive their only institution.
 func (i *Institution) Archive(at time.Time) error {
 	if i == nil {
 		return invalidModelError("Institution.Archive", "institution", "", "institution is nil", "")
@@ -128,12 +125,13 @@ func (i *Institution) Archive(at time.Time) error {
 	return i.Validate()
 }
 
-// IsArchived reports whether the institution is archived.
+// IsArchived reports whether ArchivedAt is set; a nil institution is not
+// archived.
 func (i *Institution) IsArchived() bool {
 	return i != nil && i.ArchivedAt.Valid
 }
 
-// Validate checks rehydrated institution state.
+// Validate checks the institution's fields, for new and stored values alike.
 func (i *Institution) Validate() error {
 	const where = "Institution.Validate"
 	if i == nil {
@@ -164,7 +162,7 @@ func (i *Institution) Validate() error {
 	return validateNamed(where, "institution", i.ID.String(), i.Name, i.DisplayName, i.Description)
 }
 
-// Auditable returns a deliberately safe audit projection.
+// Auditable returns the fields that are safe to record in the audit log.
 func (i *Institution) Auditable() map[string]any {
 	if i == nil {
 		return map[string]any{}
@@ -182,7 +180,7 @@ func (i *Institution) Auditable() map[string]any {
 	return fields
 }
 
-// ResourceID returns the string form used by authorization Resource contracts.
+// ResourceID returns the ID in the form authorization resources use.
 func (i *Institution) ResourceID() string {
 	if i == nil {
 		return ""

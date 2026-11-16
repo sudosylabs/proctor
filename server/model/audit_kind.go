@@ -11,24 +11,23 @@ package model
 // changing something, so an audit reader can ask for changes only.
 type AuditKind string
 
-// The audit kinds. A read only looks: a view, a search, a list, or an export
-// that copies records out without changing them. A change mutates state,
-// authenticates someone, issues or revokes a credential, or sends mail.
+// A read only looks, including an export that copies records out. A change
+// mutates state, authenticates someone, issues or revokes a credential, or
+// sends mail.
 const (
 	AuditKindRead   AuditKind = "read"
 	AuditKindChange AuditKind = "change"
 )
 
-// IsValid reports whether the kind belongs to the closed vocabulary.
+// IsValid reports whether k is AuditKindRead or AuditKindChange.
 func (k AuditKind) IsValid() bool {
 	return k == AuditKindRead || k == AuditKindChange
 }
 
-// auditActionKinds classifies every audit action, permission and event-only
-// alike. A test pins it to AuditActions, so a new action cannot be listed
-// before it is classified.
+// A test pins auditActionKinds to AuditActions, so a new action cannot be
+// listed before it is classified.
 var auditActionKinds = map[Action]AuditKind{
-	// Reads: views, searches and exports that copy records out.
+	// Reads.
 	ActionAcademicAuditView:              AuditKindRead,
 	ActionAcademicPeriodView:             AuditKindRead,
 	ActionAcademicUnitMembersView:        AuditKindRead,
@@ -38,7 +37,7 @@ var auditActionKinds = map[Action]AuditKind{
 	ActionClassMembersView:               AuditKindRead,
 	ActionClassView:                      AuditKindRead,
 	ActionExamAttemptBrowserActivityView: AuditKindRead,
-	// An export writes nothing back; it is a read of the records it copies.
+	// An export writes nothing back, so it is a read.
 	ActionExamRecordsExport:         AuditKindRead,
 	ActionExamRecordsExportOverride: AuditKindRead,
 	ActionExamSittingView:           AuditKindRead,
@@ -60,7 +59,7 @@ var auditActionKinds = map[Action]AuditKind{
 	ActionUserSearch:                AuditKindRead,
 	ActionUserView:                  AuditKindRead,
 
-	// Changes to academic structure, Exams, records and policy.
+	// Changes to academic structure, exams, records and policy.
 	ActionAcademicPeriodManage:             AuditKindChange,
 	ActionAcademicProgressionManage:        AuditKindChange,
 	ActionAcademicUnitManage:               AuditKindChange,
@@ -83,7 +82,7 @@ var auditActionKinds = map[Action]AuditKind{
 	ActionExamSittingCreateOverride:        AuditKindChange,
 	ActionExamSittingManage:                AuditKindChange,
 	ActionExamSittingManageOverride:        AuditKindChange,
-	// Taking part in a Sitting starts and submits Attempts.
+	// Taking part in a sitting starts and submits attempts.
 	ActionExamSittingParticipate:    AuditKindChange,
 	ActionInstallationBootstrap:     AuditKindChange,
 	ActionInstitutionManage:         AuditKindChange,
@@ -106,17 +105,16 @@ var auditActionKinds = map[Action]AuditKind{
 	ActionRoleSystemAdminReconcile:  AuditKindChange,
 	ActionSubmissionRelease:         AuditKindChange,
 	ActionSubmissionReleaseOverride: AuditKindChange,
-	// A review records a decision about a Submission.
+	// A review records a decision about a submission.
 	ActionSubmissionReview:         AuditKindChange,
 	ActionSubmissionReviewOverride: AuditKindChange,
 	ActionUserManage:               AuditKindChange,
 	ActionUserProfilePictureManage: AuditKindChange,
 	ActionUserSettingsReplace:      AuditKindChange,
 
-	// Authentication is a change even when it fails: a sign-in, a second
-	// factor, or a reauthentication issues or raises a Session, and a failure
-	// counts against the account. Requests for a verification or reset link
-	// issue a token and send mail.
+	// Authentication is a change even when it fails: success issues or raises a
+	// session and failure counts against the account. Verification and reset
+	// requests issue a token and send mail.
 	ActionAuthenticationAdministratorMFAReset:     AuditKindChange,
 	ActionAuthenticationAdministratorRecovery:     AuditKindChange,
 	ActionAuthenticationDesktopAuthorization:      AuditKindChange,
@@ -133,7 +131,7 @@ var auditActionKinds = map[Action]AuditKind{
 	ActionAuthenticationReauthenticate:            AuditKindChange,
 	ActionMFAChallenge:                            AuditKindChange,
 
-	// Credentials, Sessions and devices issued, changed or revoked.
+	// Credentials, sessions and devices issued, changed or revoked.
 	ActionDesktopRegistrationRename:  AuditKindChange,
 	ActionDesktopRegistrationRevoke:  AuditKindChange,
 	ActionExternalIdentityManage:     AuditKindChange,
@@ -150,8 +148,8 @@ var auditActionKinds = map[Action]AuditKind{
 	ActionUserMFAReset:               AuditKindChange,
 }
 
-// AuditActionKind classifies one audit action, or reports that the action is
-// not in the audit action catalog.
+// AuditActionKind classifies one audit action; false means it is not an audit
+// action.
 func AuditActionKind(action string) (AuditKind, bool) {
 	kind, known := auditActionKinds[Action(action)]
 	return kind, known

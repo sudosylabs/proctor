@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -36,9 +35,8 @@ func testExamSittingLifecycleDueBoundedPlan(t *testing.T, persistence *SQLStore)
 	base := model.NowUTC().Add(-2 * time.Hour)
 	tx, err := persistence.GetMaster().DB().BeginTxx(ctx, nil)
 	require.NoError(t, err)
-	copyRows, err := tx.Prepare(pq.CopyIn("exam_sittings", "id", "exam_id", "exam_revision_id", "class_id",
-		"scheduled_start_at", "scheduled_end_at", "state", "created_at", "updated_at", "opened_at", "paused_at",
-		"closing_at", "closed_at", "canceled_at", "reason_code", "revision"))
+	copyRows, err := tx.PrepareContext(ctx, `COPY exam_sittings (id, exam_id, exam_revision_id, class_id,
+		scheduled_start_at, scheduled_end_at, state, created_at, updated_at, opened_at, paused_at, closing_at, closed_at, canceled_at, reason_code, revision) FROM STDIN`)
 	if err != nil {
 		_ = tx.Rollback()
 		require.NoError(t, err)
@@ -58,7 +56,7 @@ func testExamSittingLifecycleDueBoundedPlan(t *testing.T, persistence *SQLStore)
 		case model.ExamSittingClosing:
 			openedAt, closingAt, reason = startAt, dueAt, model.ExamSittingReasonScheduledEndReached
 		}
-		if _, copyErr := copyRows.Exec(model.NewExamSittingID().String(), lineage.ExamID, lineage.ExamRevisionID, lineage.ClassID,
+		if _, copyErr := copyRows.ExecContext(ctx, model.NewExamSittingID().String(), lineage.ExamID, lineage.ExamRevisionID, lineage.ClassID,
 			startAt, endAt, state, createdAt, dueAt, openedAt, pausedAt, closingAt, nil, nil, reason, 1); copyErr != nil {
 			_ = copyRows.Close()
 			_ = tx.Rollback()
@@ -75,7 +73,7 @@ func testExamSittingLifecycleDueBoundedPlan(t *testing.T, persistence *SQLStore)
 		}
 		insert(model.ExamSittingClosing, dueAt)
 	}
-	if _, err = copyRows.Exec(); err != nil {
+	if _, err = copyRows.ExecContext(ctx); err != nil {
 		_ = copyRows.Close()
 		_ = tx.Rollback()
 		require.NoError(t, err)

@@ -16,16 +16,15 @@ import (
 	"github.com/sudosylabs/proctor/packages/cache"
 )
 
-// ByteCache is the reusable cache contract required by CacheAdapter. Concrete
-// backend selection remains in the module-root composition package.
+// ByteCache is the packages/cache contract NewCacheAdapter wraps.
 type ByteCache interface {
 	Get(context.Context, string) ([]byte, error)
 	Set(context.Context, string, []byte, cache.SetOptions) error
 	Delete(context.Context, string) error
 }
 
-// NewCacheAdapter translates the reusable cache contract into the store
-// layer's hit/miss contract without owning the backend lifecycle.
+// NewCacheAdapter adapts a ByteCache to Cache. It does not own the backend's
+// lifecycle.
 func NewCacheAdapter(store ByteCache) (Cache, error) {
 	if store == nil {
 		return nil, errors.New("local store byte cache is nil")

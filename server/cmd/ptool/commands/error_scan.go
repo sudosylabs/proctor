@@ -46,12 +46,9 @@ type listedPackage struct {
 	Module     *struct{ Path string }
 }
 
-// scanMintedErrorCodes type-checks every production package that uses the
-// application error vocabulary and returns each constant of type
-// apperror.Code. Because codes are typed, every code reaching an
-// application error is such a constant unless it is converted from a
-// non-constant string, which is reported as an error so the inventory stays
-// complete.
+// scanMintedErrorCodes returns every apperror.Code constant in production
+// packages. Because codes are typed, a conversion from a non-constant string is
+// the only way past the inventory, so it is reported as an error.
 func scanMintedErrorCodes(ctx context.Context, moduleDir string) ([]errorcatalog.Mint, error) {
 	command := exec.CommandContext(ctx, "go", "list", "-export", "-deps", "-json=ImportPath,Dir,GoFiles,Export,Imports,Module", "./...")
 	command.Dir = moduleDir
@@ -168,9 +165,8 @@ func scanPackage(fset *token.FileSet, imports types.Importer, target listedPacka
 	return mints, problems, nil
 }
 
-// comparedExpressions returns the operands of equality comparisons and the
-// expressions of switch cases. Matching a code against a constant inspects a
-// failure; it never mints one.
+// comparedExpressions returns the operands of == and != and of switch cases:
+// comparing a code against a constant inspects a failure, it never mints one.
 func comparedExpressions(files []*ast.File) map[ast.Expr]bool {
 	compared := make(map[ast.Expr]bool)
 	for _, file := range files {

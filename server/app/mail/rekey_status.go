@@ -20,14 +20,14 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// RekeyProgressView is how far a running rekey Job has read.
+// RekeyProgressView is how far a running rekey job has read.
 type RekeyProgressView struct {
 	Current int64
 	Total   int64
 	Stage   string
 }
 
-// RekeyProofView is a finished rekey Job's proof that no active payload
+// RekeyProofView is a finished rekey job's proof that no active payload
 // references the retiring key.
 type RekeyProofView struct {
 	NonPrimaryReferences int64
@@ -35,9 +35,9 @@ type RekeyProofView struct {
 	RetirementSafe       bool
 }
 
-// RekeyStatusView is the safe, typed operator projection for one rekey
-// Job. It deliberately excludes the raw command, checkpoint, result, payload
-// identities, ciphertext, recipients, and key material.
+// RekeyStatusView is the operator projection of one rekey job. It
+// deliberately excludes the raw command, checkpoint, result, payload
+// identities, ciphertext, recipients and key material.
 type RekeyStatusView struct {
 	JobID           model.JobID
 	Status          model.JobStatus
@@ -55,7 +55,7 @@ type RekeyStatusView struct {
 	Proof           *RekeyProofView
 }
 
-// GetMailRekeyStatus reports the progress of one mail rekey Job.
+// GetMailRekeyStatus reports the progress of one mail rekey job.
 func (s *Operations) GetMailRekeyStatus(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -82,8 +82,8 @@ func (s *Operations) GetMailRekeyStatus(
 		return RekeyStatusView{}, apperror.New("mail.unavailable").Wrap(err)
 	}
 
-	// Job identities are shared across domains. A caller with mail.rekey must
-	// not learn whether a valid identifier belongs to some unrelated Job type.
+	// Job IDs are shared across types. A caller with mail.rekey must not
+	// learn whether a valid ID belongs to some unrelated job type.
 	if job == nil {
 		return RekeyStatusView{}, apperror.New("mail.unavailable").Wrap(errors.New("mail rekey persistence returned no Job"))
 	}

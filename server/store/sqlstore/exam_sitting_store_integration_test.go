@@ -297,7 +297,7 @@ func TestInvitationAcceptanceAndAuthenticationMethodMutationUseGlobalUserOrder(t
 	enrollResult := make(chan enrollmentOutcome, 1)
 	go func() {
 		result, enrollErr := secondary.PasswordCredential().Enroll(ctx, &store.PasswordCredentialEnrollment{
-			Credential: &model.PasswordCredential{UserID: userID, PasswordHash: "$argon2id$concurrent-enrollment"},
+			Credential: &model.PasswordCredential{UserID: userID, PasswordHash: "$argon2id$concurrent-enrollment"}, //nolint:gosec // G101: placeholder password hash fixture, not a real credential
 			Capabilities: store.AccessDeploymentCapabilities{
 				Providers: map[string]store.AccessProviderCapability{},
 			},

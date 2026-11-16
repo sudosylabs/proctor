@@ -66,58 +66,81 @@ func (s *classStoreFake) Archive(_ context.Context, input *store.ClassArchive) (
 func TestClassGetAuthorizesExactScopeBeforeReading(t *testing.T) {
 	t.Parallel()
 	events := []string{}
-	service := mustNew(Dependencies{Store: &catalogFake{class: &classStoreFake{events: &events}}, Authorizer: &programmeAuthorizerFake{events: &events, err: apperror.New("authorization.denied")}, Auditor: &institutionAuditorFake{events: &events}, Now: time.Now, NewID: model.NewID})
-	_, err := service.GetClass(context.Background(), invocation.Invocation{}, model.NewClassID())
+	principal, caller := newCaller()
+	world := newClassWorld(1)
+	current := world.class()
+	persistence := &classStoreFake{events: &events, current: current, unitID: world.unitID.String()}
+	// class.view in another unit does not reach this Class.
+	access := world.access(t, &events, persistence, unitGrant(principal.UserID, model.NewAcademicUnitID(), model.ActionClassView))
+	service := mustNew(Dependencies{Store: &catalogFake{class: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID})
+	_, err := service.GetClass(context.Background(), caller, current.ID)
 	require.True(t, apperror.Is(err, "authorization.denied"), "Get() error = %v", err)
-	require.Equal(t, []string{"authorize"}, events)
+	// The authorizer resolves the Class's scope; the service never reads it.
+	require.Equal(t, []string{"get-class", "get-unit", "grants", "decision:class.view:fail"}, events)
 }
 
 func TestClassUpdateMoveAuthorizesCurrentAndDestinationOwners(t *testing.T) {
 	t.Parallel()
 	events := []string{}
-	oldUnitID, newLevelID := model.NewID(), model.NewProgrammeLevelID()
+	principal, caller := newCaller()
+	world := newClassWorld(2)
+	newLevelID := world.levels[1].ID
 	current := &model.Class{
 		ID:               model.ClassID(model.NewID()),
 		CreatedAt:        model.TimeFromMillis(100),
 		UpdatedAt:        model.TimeFromMillis(100),
 		Revision:         7,
-		ProgrammeLevelID: model.ProgrammeLevelID(model.NewID()),
-		AcademicPeriodID: model.AcademicPeriodID(model.NewID()),
+		ProgrammeLevelID: world.levels[0].ID,
+		AcademicPeriodID: world.period.ID,
 		Name:             "class-a",
 		DisplayName:      "Class A",
 	}
-	persistence := &classStoreFake{events: &events, current: current, unitID: oldUnitID}
-	service := mustNew(Dependencies{Store: &catalogFake{class: persistence}, Authorizer: &programmeAuthorizerFake{events: &events}, Auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID})
-	updated, err := service.UpdateClass(context.Background(), invocation.Invocation{}, UpdateClassCommand{ID: current.ID, ProgrammeLevelID: &newLevelID})
+	persistence := &classStoreFake{events: &events, current: current, unitID: world.unitID.String()}
+	access := world.access(t, &events, persistence, unitGrant(principal.UserID, world.unitID, model.ActionClassManage))
+	service := mustNew(Dependencies{Store: &catalogFake{class: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID})
+	updated, err := service.UpdateClass(context.Background(), caller, UpdateClassCommand{ID: current.ID, ProgrammeLevelID: &newLevelID})
 	require.NoError(t, err)
 	require.Equal(t, newLevelID, updated.ProgrammeLevelID)
 	require.Equal(t, current.AcademicPeriodID, persistence.updateInput.Class.AcademicPeriodID)
-	require.Equal(t, model.AcademicUnitID(oldUnitID), persistence.updateInput.ExpectedAcademicUnitID)
+	require.Equal(t, world.unitID, persistence.updateInput.ExpectedAcademicUnitID)
 	require.Equal(t, current.Revision, persistence.updateInput.ExpectedRevision)
+	require.Equal(t, []string{
+		"class.manage class:" + current.ID.String() + " success",
+		"class.manage programme_level:" + newLevelID.String() + " success",
+	}, decisions(access), "the current and destination owners are authorized")
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
-	// begins before the durable write.
-	require.Equal(t, []string{"authorize", "get-unit", "get-class", "authorize", "audit-begin", "store-update"}, events)
+	// begins before the durable write. The first get-class and get-unit
+	// resolve the Class's scope for the decision.
+	require.Equal(t, []string{
+		"get-class", "get-unit", "grants", "decision:class.manage:success",
+		"get-unit", "get-class", "grants", "decision:class.manage:success",
+		"audit-begin:class.manage", "store-update",
+	}, events)
 }
 
 func TestClassMutationMissingClassUsesClassResource(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
 		name string
-		run  func(*Service) error
+		run  func(*Service, invocation.Invocation) error
 	}{
-		{name: "update", run: func(service *Service) error {
-			_, err := service.UpdateClass(context.Background(), invocation.Invocation{}, UpdateClassCommand{ID: model.NewClassID()})
+		{name: "update", run: func(service *Service, caller invocation.Invocation) error {
+			_, err := service.UpdateClass(context.Background(), caller, UpdateClassCommand{ID: model.NewClassID()})
 			return err
 		}},
-		{name: "archive", run: func(service *Service) error {
-			return service.ArchiveClass(context.Background(), invocation.Invocation{}, ArchiveClassCommand{ID: model.NewClassID()})
+		{name: "archive", run: func(service *Service, caller invocation.Invocation) error {
+			return service.ArchiveClass(context.Background(), caller, ArchiveClassCommand{ID: model.NewClassID()})
 		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			events := []string{}
-			service := mustNew(Dependencies{Store: &catalogFake{class: &classStoreFake{events: &events, getUnitErr: store.NewErrNotFound("class", model.NewID())}}, Authorizer: &programmeAuthorizerFake{events: &events}, Auditor: &institutionAuditorFake{events: &events}, Now: time.Now, NewID: model.NewID})
-			err := test.run(service)
+			principal, caller := newCaller()
+			world := newClassWorld(1)
+			persistence := &classStoreFake{events: &events, getUnitErr: store.NewErrNotFound("class", model.NewID())}
+			access := world.access(t, &events, persistence, unitGrant(principal.UserID, world.unitID, model.ActionClassManage))
+			service := mustNew(Dependencies{Store: &catalogFake{class: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID})
+			err := test.run(service, caller)
 			appErr, ok := apperror.As(err)
 			require.True(t, ok)
 			require.Equal(t, "resource.not_found", appErr.Code())
@@ -129,29 +152,34 @@ func TestClassMutationMissingClassUsesClassResource(t *testing.T) {
 func TestClassCreateConflictCompletesFailedAttempt(t *testing.T) {
 	t.Parallel()
 	events := []string{}
-	levelID := model.NewID()
-	auditor := &institutionAuditorFake{events: &events, beginID: model.NewID()}
-	service := mustNew(Dependencies{Store: &catalogFake{class: &classStoreFake{events: &events, createErr: store.NewErrConflict("class", "classes_programme_level_id_academic_period_id_name_key", nil)}}, Authorizer: &programmeAuthorizerFake{events: &events}, Auditor: auditor, Now: time.Now, NewID: model.NewID})
-	_, err := service.CreateClass(context.Background(), invocation.Invocation{}, CreateClassCommand{ProgrammeLevelID: model.ProgrammeLevelID(levelID), AcademicPeriodID: model.AcademicPeriodID(model.NewID()), Name: "class-a", DisplayName: "Class A"})
+	principal, caller := newCaller()
+	world := newClassWorld(1)
+	persistence := &classStoreFake{events: &events, createErr: store.NewErrConflict("class", "classes_programme_level_id_academic_period_id_name_key", nil)}
+	access := world.access(t, &events, persistence, unitGrant(principal.UserID, world.unitID, model.ActionClassManage))
+	service := mustNew(Dependencies{Store: &catalogFake{class: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID})
+	_, err := service.CreateClass(context.Background(), caller, CreateClassCommand{ProgrammeLevelID: world.levels[0].ID, AcademicPeriodID: world.period.ID, Name: "class-a", DisplayName: "Class A"})
 	require.True(t, apperror.Is(err, "class.conflict"), "Create() error = %v, audit", err)
-	require.Equal(t, "class.conflict", auditor.failCode, "Create() error = %v, audit", err)
+	require.Equal(t, "class.conflict", onlyAttempt(t, access).ErrorCode, "Create() error = %v, audit", err)
 }
 
 func TestClassCreatePreservesBothParentsAndAtomicAudit(t *testing.T) {
 	t.Parallel()
 	events := []string{}
-	levelID, periodID, classID, auditID := model.NewID(), model.NewID(), model.NewID(), model.NewID()
+	principal, caller := newCaller()
+	world := newClassWorld(1)
+	levelID, periodID, classID := world.levels[0].ID.String(), world.period.ID.String(), model.NewID()
 	created := &model.Class{ID: model.ClassID(classID), ProgrammeLevelID: model.ProgrammeLevelID(levelID), AcademicPeriodID: model.AcademicPeriodID(periodID)}
 	persistence := &classStoreFake{events: &events, created: created}
-	service := mustNew(Dependencies{Store: &catalogFake{class: persistence}, Authorizer: &programmeAuthorizerFake{events: &events}, Auditor: &institutionAuditorFake{events: &events, beginID: auditID}, Now: func() time.Time { return time.UnixMilli(500) }, NewID: func() string { return classID }})
-	got, err := service.CreateClass(context.Background(), invocation.Invocation{}, CreateClassCommand{ProgrammeLevelID: model.ProgrammeLevelID(levelID), AcademicPeriodID: model.AcademicPeriodID(periodID), Name: "class-a", DisplayName: "Class A"})
+	access := world.access(t, &events, persistence, unitGrant(principal.UserID, world.unitID, model.ActionClassManage))
+	service := mustNew(Dependencies{Store: &catalogFake{class: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: func() string { return classID }})
+	got, err := service.CreateClass(context.Background(), caller, CreateClassCommand{ProgrammeLevelID: model.ProgrammeLevelID(levelID), AcademicPeriodID: model.AcademicPeriodID(periodID), Name: "class-a", DisplayName: "Class A"})
 	require.NoError(t, err, "Create()")
 	require.Same(t, created, got, "Create()")
 	require.NotNil(t, persistence.createInput)
 	require.Equal(t, levelID, persistence.createInput.Class.ProgrammeLevelID.String())
 	require.Equal(t, periodID, persistence.createInput.Class.AcademicPeriodID.String())
-	require.Equal(t, model.AuditEventID(auditID), persistence.createInput.AuditEventID)
+	require.Equal(t, onlyAttempt(t, access).ID, persistence.createInput.AuditEventID)
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
 	// begins before the durable write.
-	require.Equal(t, []string{"authorize", "audit-begin", "store-create"}, events)
+	require.Equal(t, []string{"grants", "decision:class.manage:success", "audit-begin:class.manage", "store-create"}, events)
 }

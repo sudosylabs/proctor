@@ -20,9 +20,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// AcceptExternalIdentity consumes the Invitation admitted by a consumed
+// AcceptExternalIdentity consumes the invitation admitted by a consumed
 // external login state, linking the external identity and granting what the
-// Invitation's purpose promises.
+// invitation's purpose promises.
 func (s SQLInvitationStore) AcceptExternalIdentity(
 	ctx context.Context,
 	input *store.ExternalIdentityInvitationAcceptance,
@@ -39,7 +39,6 @@ func (s SQLInvitationStore) AcceptExternalIdentity(
 	})
 }
 
-// validateExternalIdentityInvitationAcceptance checks the prepared acceptance package and returns its normalized provider.
 func validateExternalIdentityInvitationAcceptance(input *store.ExternalIdentityInvitationAcceptance) (string, error) {
 	if input == nil ||
 		!input.ExternalStateID.IsValid() ||
@@ -65,7 +64,7 @@ func validateExternalIdentityInvitationAcceptance(input *store.ExternalIdentityI
 	return provider, nil
 }
 
-// externalInvitationLoginState is the consumed external login state that admits an Invitation.
+// externalInvitationLoginState is the consumed external login state that admits an invitation.
 type externalInvitationLoginState struct {
 	CreatedAt    time.Time    `db:"created_at"`
 	InvitationID string       `db:"invitation_id"`
@@ -75,7 +74,6 @@ type externalInvitationLoginState struct {
 	ConsumedAt   sql.NullTime `db:"consumed_at"`
 }
 
-// acceptExternalIdentityInvitation consumes the Invitation an external login admitted inside the acceptance transaction.
 func acceptExternalIdentityInvitation(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -141,7 +139,7 @@ func acceptExternalIdentityInvitation(
 	return result, nil
 }
 
-// lockExternalInvitationLoginState locks the consumed external login state and checks it admits an Invitation through provider.
+// lockExternalInvitationLoginState locks the consumed external login state and checks it admits an invitation through provider.
 func lockExternalInvitationLoginState(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -174,7 +172,7 @@ func lockExternalInvitationLoginState(
 	return state, databaseNow, nil
 }
 
-// lockExternalInvitation locks the admitted Invitation and checks the prepared audit event and its pending window.
+// lockExternalInvitation locks the admitted invitation and checks the prepared audit event and its pending window.
 func lockExternalInvitation(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -199,7 +197,6 @@ func lockExternalInvitation(
 	return invitation, nil
 }
 
-// requireExternalInvitationAdmission requires the provider to be configured and the Access Policy to admit invitations through it.
 func requireExternalInvitationAdmission(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -244,7 +241,7 @@ func lockExternalInvitationParticipants(
 	return lockExternalIdentitySubject(ctx, tx, provider, input.Identity.Subject)
 }
 
-// requireExternalInvitationAuthenticationGeneration rejects a User awaiting MFA re-enrollment or reset after the login state began.
+// requireExternalInvitationAuthenticationGeneration rejects a user awaiting MFA re-enrollment or reset after the login state began.
 func requireExternalInvitationAuthenticationGeneration(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -264,7 +261,6 @@ func requireExternalInvitationAuthenticationGeneration(
 	return nil
 }
 
-// acceptExternalInvitationPurpose grants the relationships the Invitation's purpose promises and accepts it in memory.
 func acceptExternalInvitationPurpose(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -287,7 +283,6 @@ func acceptExternalInvitationPurpose(
 	}
 }
 
-// acceptExternalStudentClassInvitation grants the student Affiliation and Class membership an external acceptance promises.
 func acceptExternalStudentClassInvitation(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -322,7 +317,6 @@ func acceptExternalStudentClassInvitation(
 	return err
 }
 
-// acceptExternalTeacherAcademicUnitInvitation grants the teacher Affiliation, membership and Role Binding an external acceptance promises.
 func acceptExternalTeacherAcademicUnitInvitation(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -378,7 +372,6 @@ func acceptExternalTeacherAcademicUnitInvitation(
 	return err
 }
 
-// acceptExternalScopedRoleInvitation grants the scoped Role Binding an existing User's external acceptance promises.
 func acceptExternalScopedRoleInvitation(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -409,7 +402,6 @@ func acceptExternalScopedRoleInvitation(
 	return err
 }
 
-// insertExternalInvitationAcceptanceNotice queues the acceptance notice for a User the external acceptance created.
 func insertExternalInvitationAcceptanceNotice(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -490,7 +482,7 @@ func resolveExternalInvitationUser(
 				return nil, false, revisionErr
 			}
 
-			// at is PostgreSQL time while the User may carry a leading node clock.
+			// at is PostgreSQL time while the user may carry a leading node clock.
 			if _, updateErr := tx.Exec(
 				ctx,
 				`UPDATE users

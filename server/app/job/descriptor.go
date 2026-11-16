@@ -14,10 +14,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// Descriptor is the policy one Job type runs under: its Handler, how long an
-// attempt may run, how many run at once on each node, the lease and its
-// heartbeat, the retry backoff, what an operator may see and do, and how long
-// finished Jobs are kept. NewDescriptor fills the usual values.
+// Descriptor is the policy one job type runs under. NewDescriptor fills the
+// usual values.
 type Descriptor struct {
 	Type model.JobType
 	// Checkpoints reports whether the handler records resumable checkpoints.
@@ -38,9 +36,8 @@ type Descriptor struct {
 	Handler               Handler
 }
 
-// Visibility says whether operators see Jobs of a type. The engine's list,
-// get, attempts, cancel and retry answer only for VisibilityOperator types
-// and treat a VisibilityDomain Job as not found.
+// Visibility says whether operators see jobs of a type. Operator list, get,
+// attempts, cancel and retry treat a VisibilityDomain job as not found.
 type Visibility string
 
 // The two visibilities a Descriptor may declare.
@@ -49,10 +46,8 @@ const (
 	VisibilityDomain   Visibility = "domain"
 )
 
-// NewDescriptor returns the descriptor of an ordinary Job: one that runs one
-// at a time and is visible to operators only. A Job
-// that differs sets the fields that differ on the result, so its handler file
-// shows only what is particular to it. The defaults are:
+// NewDescriptor returns the descriptor of an ordinary job; a job that differs
+// sets those fields on the result. The defaults are:
 //
 //	Timeout            10 minutes
 //	Concurrency        1
@@ -83,8 +78,8 @@ func NewDescriptor(jobType model.JobType, handler Handler) Descriptor {
 }
 
 // SupportsProgressStage reports whether stage is one of ProgressStages. It
-// searches the sorted list NewRegistry stores, so it answers correctly only
-// for a descriptor read back from a Registry or Engine.
+// searches the sorted list NewRegistry stores, so it is correct only for a
+// descriptor read back from a Registry or Engine.
 func (d Descriptor) SupportsProgressStage(stage string) bool {
 	_, ok := slices.BinarySearch(d.ProgressStages, stage)
 	return ok
@@ -104,23 +99,21 @@ func (d Descriptor) SupportsPublicErrorCode(code string) bool {
 	return ok
 }
 
-// SupportsExplicitRetry reports whether an operator may retry a Job of this
+// SupportsExplicitRetry reports whether an operator may retry a job of this
 // type that ended in status.
 func (d Descriptor) SupportsExplicitRetry(status model.JobStatus) bool {
 	return slices.Contains(d.ExplicitRetryStatuses, status)
 }
 
-// Registration is everything one Job contributes to the engine: the
-// Descriptor that says how it runs and, when the Job is proposed on a
-// schedule, the Recurrence that proposes it. Recurrence is nil for a Job
-// that only other code enqueues.
+// Registration is what one job contributes to the engine. Recurrence is nil
+// for a job that only other code enqueues.
 type Registration struct {
 	Descriptor Descriptor
 	Recurrence *Recurrence
 }
 
-// SplitRegistrations returns the descriptors and the recurrences of
-// registrations, each in registration order, as Dependencies takes them.
+// SplitRegistrations returns the descriptors and recurrences of
+// registrations, each in registration order.
 func SplitRegistrations(registrations []Registration) ([]Descriptor, []Recurrence) {
 	descriptors := make([]Descriptor, 0, len(registrations))
 	var recurrences []Recurrence

@@ -20,17 +20,17 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// CreateExportCommand requests an Examination Export of the given retention
-// categories for a Sitting or one of its Submissions.
+// CreateExportCommand requests an export of the given retention categories for
+// a sitting or one of its submissions.
 type CreateExportCommand struct {
 	Scope          model.RetentionHoldScope
 	Categories     []model.RetentionCategory
 	IdempotencyKey string
 }
 
-// CreateExamExport idempotently queues an Examination Export for the caller
-// and its build Job, after authorizing records export for the scope and
-// access to every selected source category.
+// CreateExamExport idempotently queues an export and its build job. The
+// caller needs records export on the scope and access to every selected
+// category.
 func (s *Exports) CreateExamExport(
 	ctx context.Context,
 	inv invocation.Invocation,

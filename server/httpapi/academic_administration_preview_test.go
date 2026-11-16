@@ -8,7 +8,7 @@
 package httpapi
 
 import (
-	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -18,62 +18,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type academicAdministrationPreviewApplicationFake struct {
-	view     onboarding.AcademicAdministrationPreviewView
-	create   *onboarding.CreateAcademicAdministrationPreviewCommand
-	commit   *onboarding.CommitAcademicAdministrationPreviewCommand
-	rowQuery *onboarding.ListAcademicAdministrationPreviewRowsQuery
-	rows     paging.Page[store.AcademicAdministrationPreviewRow]
-}
-
-func (f *academicAdministrationPreviewApplicationFake) CreateAcademicAdministrationPreview(_ context.Context, _ invocation.Invocation,
-	command onboarding.CreateAcademicAdministrationPreviewCommand,
-) (onboarding.AcademicAdministrationPreviewView, error) {
-	f.create = &command
-	return f.view, nil
-}
-
-func (f *academicAdministrationPreviewApplicationFake) GetAcademicAdministrationPreview(context.Context, invocation.Invocation, model.OnboardingImportID) (onboarding.AcademicAdministrationPreviewView, error) {
-	return f.view, nil
-}
-
-func (f *academicAdministrationPreviewApplicationFake) ListAcademicAdministrationPreviewRows(_ context.Context, _ invocation.Invocation,
-	query onboarding.ListAcademicAdministrationPreviewRowsQuery,
-) (paging.Page[store.AcademicAdministrationPreviewRow], error) {
-	f.rowQuery = &query
-	return f.rows, nil
-}
-
-func (f *academicAdministrationPreviewApplicationFake) CommitAcademicAdministrationPreview(_ context.Context, _ invocation.Invocation,
-	command onboarding.CommitAcademicAdministrationPreviewCommand,
-) (onboarding.AcademicAdministrationPreviewView, error) {
-	f.commit = &command
-	return f.view, nil
-}
-
-func (f *academicAdministrationPreviewApplicationFake) CancelAcademicAdministrationPreview(context.Context, invocation.Invocation, model.OnboardingImportID) (onboarding.AcademicAdministrationPreviewView, error) {
-	return f.view, nil
-}
-
-func academicAdministrationPreviewAPI(t *testing.T, strength model.AuthenticationStrength, fake *academicAdministrationPreviewApplicationFake) *route.API {
+// academicAdministrationPreviewAPI serves the filter preview resource over
+// the fixture's real service as the caller's web Session at strength.
+func academicAdministrationPreviewAPI(t *testing.T, fixture *onboardingFixture, strength model.AuthenticationStrength) *route.API {
 	t.Helper()
-	now := time.Now().UTC()
-	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: strength,
-		AuthenticatedAt: now, ClientType: model.SessionClientWeb}
-	if strength == model.AuthenticationMultiFactor {
-		principal.MFACompletedAt = model.OptionalTimeFrom(now)
-	}
-	return newResourceAPI(t, principal, academicAdministrationPreviewResource(fake))
+	return newResourceAPI(t, fixture.principal(strength), academicAdministrationPreviewResource(fixture.service))
 }
 
 func previewHTTPRequest(method, path, body string) *http.Request {
@@ -87,10 +43,9 @@ func previewHTTPRequest(method, path, body string) *http.Request {
 
 func TestAcademicAdministrationPreviewForwardsTheExactFilter(t *testing.T) {
 	t.Parallel()
-	fake := &academicAdministrationPreviewApplicationFake{view: onboarding.AcademicAdministrationPreviewView{
-		Import: onboarding.OnboardingImportView{ID: model.NewOnboardingImportID(), State: model.OnboardingImportParsing}}}
-	api := academicAdministrationPreviewAPI(t, model.AuthenticationMultiFactor, fake)
-	unitID, roleID, institutionID := model.NewAcademicUnitID(), model.NewRoleID(), model.NewInstitutionID().String()
+	fixture := newOnboardingFixture(t)
+	api := academicAdministrationPreviewAPI(t, fixture, model.AuthenticationMultiFactor)
+	unitID, roleID, institutionID := model.NewAcademicUnitID(), fixture.addDelegableRole().ID, fixture.access.Institution.ID.String()
 	body := `{"operation":"user.disable","scope_type":"institution","scope_id":"` + institutionID + `","filter":{"q":"smith",` +
 		`"affiliation":["student","staff"],"academic_unit_id":"` + unitID.String() + `","role_id":["` + roleID.String() + `"],` +
 		`"state":"active","last_active_after":"2026-09-01T08:00:00Z","last_active_before":"2026-09-02T10:00:00+02:00"}}`
@@ -98,12 +53,18 @@ func TestAcademicAdministrationPreviewForwardsTheExactFilter(t *testing.T) {
 	api.ServeHTTP(response, previewHTTPRequest(http.MethodPost, "/api/v1/academic-administration-previews", body))
 	require.Equal(t, http.StatusAccepted, response.Code, response.Body.String())
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
-	require.Equal(t, onboarding.CreateAcademicAdministrationPreviewCommand{
-		Operation: onboarding.AcademicAdministrationUserDisable, ScopeType: model.RoleScopeInstitution, ScopeID: institutionID,
-		Filter: onboarding.AcademicAdministrationUserFilter{Query: "smith", Affiliations: []model.AffiliationKind{model.AffiliationStudent, model.AffiliationStaff},
-			AcademicUnitID: unitID, RoleIDs: []model.RoleID{roleID}, State: user.AccountStateActive,
-			LastActiveAfter: time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC), LastActiveBefore: time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC)},
-	}, *fake.create)
+	created := fixture.imports.lastCreation(t).Import
+	require.Equal(t, model.OnboardingImportAcademicAdministrationFilter, created.Mode)
+	require.Equal(t, model.RoleScopeInstitution, created.ScopeType)
+	require.Equal(t, institutionID, created.ScopeID)
+	require.Equal(t, store.AcademicAdministrationFilter{
+		Operation: string(onboarding.AcademicAdministrationUserDisable), Query: "smith",
+		Affiliations:   []model.AffiliationKind{model.AffiliationStudent, model.AffiliationStaff},
+		AcademicUnitID: unitID, RoleIDs: []model.RoleID{roleID}, State: string(user.AccountStateActive),
+		LastActiveAfter: time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC), LastActiveBefore: time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC),
+	}, *created.Filter)
+	require.NotEmpty(t, fixture.users.listOptions, "the caller's directory was asked whether it admits the filter")
+	require.Equal(t, "smith", fixture.users.listOptions[0].Query)
 	require.NotContains(t, response.Body.String(), `"summary"`, "a preview that is not ready has no summary")
 
 	for name, invalid := range map[string]string{
@@ -115,18 +76,19 @@ func TestAcademicAdministrationPreviewForwardsTheExactFilter(t *testing.T) {
 			rejected := httptest.NewRecorder()
 			api.ServeHTTP(rejected, previewHTTPRequest(http.MethodPost, "/api/v1/academic-administration-previews", invalid))
 			require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
+			require.Len(t, fixture.imports.creations, 1, "a refused preview reached the Store")
 		})
 	}
 }
 
 func TestAcademicAdministrationPreviewRequiresAStrongSessionToPreviewAndCommit(t *testing.T) {
 	t.Parallel()
-	fake := &academicAdministrationPreviewApplicationFake{}
-	api := academicAdministrationPreviewAPI(t, model.AuthenticationSingleFactor, fake)
-	id := model.NewOnboardingImportID().String()
+	fixture := newOnboardingFixture(t)
+	api := academicAdministrationPreviewAPI(t, fixture, model.AuthenticationSingleFactor)
+	id := fixture.storedFilterPreview(model.OnboardingImportPreviewReady).ID.String()
 	for path, body := range map[string]string{
 		"/api/v1/academic-administration-previews": `{"operation":"user.disable","scope_type":"institution","scope_id":"` +
-			model.NewInstitutionID().String() + `","filter":{}}`,
+			fixture.access.Institution.ID.String() + `","filter":{}}`,
 		"/api/v1/academic-administration-previews/" + id + "/commit": `{"expected_revision":1,"preview_digest":"` + strings.Repeat("a", 64) + `"}`,
 	} {
 		t.Run(path, func(t *testing.T) {
@@ -138,46 +100,66 @@ func TestAcademicAdministrationPreviewRequiresAStrongSessionToPreviewAndCommit(t
 			require.Contains(t, response.Body.String(), "authentication.strong_required")
 		})
 	}
-	require.Nil(t, fake.create)
-	require.Nil(t, fake.commit)
+	require.Empty(t, fixture.imports.creations, "a single-factor preview reached the Store")
+	require.Empty(t, fixture.imports.commits, "a single-factor commit reached the Store")
 }
 
 func TestAcademicAdministrationPreviewCommitForwardsTheFenceAndKey(t *testing.T) {
 	t.Parallel()
-	fake := &academicAdministrationPreviewApplicationFake{}
-	api := academicAdministrationPreviewAPI(t, model.AuthenticationMultiFactor, fake)
-	id := model.NewOnboardingImportID()
+	fixture := newOnboardingFixture(t)
+	api := academicAdministrationPreviewAPI(t, fixture, model.AuthenticationMultiFactor)
+	preview := fixture.storedFilterPreview(model.OnboardingImportPreviewReady)
+	id := preview.ID
 	digest := strings.Repeat("b", 64)
+	preview.PreviewDigest = digest
 	request := previewHTTPRequest(http.MethodPost, "/api/v1/academic-administration-previews/"+id.String()+"/commit",
 		`{"expected_revision":3,"preview_digest":"`+digest+`"}`)
 	request.Header.Set("Idempotency-Key", "preview-commit")
 	response := httptest.NewRecorder()
 	api.ServeHTTP(response, request)
 	require.Equal(t, http.StatusAccepted, response.Code, response.Body.String())
-	require.Equal(t, onboarding.CommitAcademicAdministrationPreviewCommand{ID: id, ExpectedRevision: 3, PreviewDigest: digest, IdempotencyKey: "preview-commit"}, *fake.commit)
+	require.Len(t, fixture.imports.commits, 1, "the commit reached the Store")
+	commit := fixture.imports.commits[0]
+	require.Equal(t, id, commit.ID)
+	require.Equal(t, int64(3), commit.ExpectedRevision)
+	require.Equal(t, digest, commit.PreviewDigest)
+	require.Equal(t, sha256.Sum256([]byte("preview-commit")), commit.IdempotencyKey)
+	require.Equal(t, fixture.callerID, commit.ActorUserID)
+	require.NotNil(t, commit.BatchAuditEvent, "the first commit carries the batch-level audit entry")
 
 	missingKey := httptest.NewRecorder()
 	api.ServeHTTP(missingKey, previewHTTPRequest(http.MethodPost, "/api/v1/academic-administration-previews/"+id.String()+"/commit",
 		`{"expected_revision":3,"preview_digest":"`+digest+`"}`))
 	require.Equal(t, http.StatusBadRequest, missingKey.Code, missingKey.Body.String())
+	require.Len(t, fixture.imports.commits, 1, "a commit without a key reached the Store")
 }
 
 func TestAcademicAdministrationPreviewRowsPageOneGroupWithABoundCursor(t *testing.T) {
 	t.Parallel()
+	fixture := newOnboardingFixture(t)
 	userID := model.NewUserID()
-	fake := &academicAdministrationPreviewApplicationFake{rows: paging.Page[store.AcademicAdministrationPreviewRow]{HasMore: true,
-		Items: []store.AcademicAdministrationPreviewRow{{RowNumber: 4, UserID: userID, Username: "ada", DisplayName: "Ada",
-			Class: store.AcademicAdministrationPreviewSkipped, Reason: "academic_administration_preview.self", Status: model.OnboardingImportRowSkipped}}}}
-	api := academicAdministrationPreviewAPI(t, model.AuthenticationMultiFactor, fake)
-	path := "/api/v1/academic-administration-previews/" + model.NewOnboardingImportID().String() + "/rows"
+	// The Store reads one past the page, which tells the page another follows.
+	fixture.imports.previewRows = []store.AcademicAdministrationPreviewRow{
+		{RowNumber: 4, UserID: userID, Username: "ada", DisplayName: "Ada",
+			Class: store.AcademicAdministrationPreviewSkipped, Reason: "academic_administration_preview.self", Status: model.OnboardingImportRowSkipped},
+		{RowNumber: 5, UserID: model.NewUserID(), Username: "bea", DisplayName: "Bea",
+			Class: store.AcademicAdministrationPreviewSkipped, Reason: "academic_administration_preview.self", Status: model.OnboardingImportRowSkipped},
+	}
+	api := academicAdministrationPreviewAPI(t, fixture, model.AuthenticationMultiFactor)
+	preview := fixture.storedFilterPreview(model.OnboardingImportPreviewReady)
+	path := "/api/v1/academic-administration-previews/" + preview.ID.String() + "/rows"
 
 	response := httptest.NewRecorder()
 	api.ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, path+"?group=skipped&reason=academic_administration_preview.self&limit=1"))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	require.Equal(t, store.AcademicAdministrationPreviewSkipped, fake.rowQuery.Class)
-	require.Equal(t, "academic_administration_preview.self", fake.rowQuery.Reason)
-	require.Equal(t, 1, fake.rowQuery.Limit)
-	require.Equal(t, 0, fake.rowQuery.AfterRowNumber)
+	require.Len(t, fixture.imports.previewRowOptions, 1, "the rows read reached the Store")
+	options := fixture.imports.previewRowOptions[0]
+	require.Equal(t, preview.ID, options.ImportID)
+	require.Equal(t, store.AcademicAdministrationPreviewSkipped, options.Class)
+	require.Equal(t, "academic_administration_preview.self", options.Reason)
+	require.Equal(t, 2, options.Limit, "a page of one reads one more to learn whether another follows")
+	require.Equal(t, 0, options.AfterRowNumber)
+	require.True(t, options.Visibility.InstitutionWide, "the caller's directory visibility reached the Store")
 	var page struct {
 		Items      []academicAdministrationPreviewRowResponse `json:"items"`
 		NextCursor string                                     `json:"next_cursor"`
@@ -192,7 +174,8 @@ func TestAcademicAdministrationPreviewRowsPageOneGroupWithABoundCursor(t *testin
 	api.ServeHTTP(continued, authenticatedCatalogRequest(http.MethodGet,
 		path+"?group=skipped&reason=academic_administration_preview.self&cursor="+page.NextCursor))
 	require.Equal(t, http.StatusOK, continued.Code, continued.Body.String())
-	require.Equal(t, 4, fake.rowQuery.AfterRowNumber)
+	require.Len(t, fixture.imports.previewRowOptions, 2, "the continued read reached the Store")
+	require.Equal(t, 4, fixture.imports.previewRowOptions[1].AfterRowNumber)
 
 	for name, query := range map[string]string{
 		"no group":            "",
@@ -206,6 +189,7 @@ func TestAcademicAdministrationPreviewRowsPageOneGroupWithABoundCursor(t *testin
 			rejected := httptest.NewRecorder()
 			api.ServeHTTP(rejected, authenticatedCatalogRequest(http.MethodGet, path+query))
 			require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
+			require.Len(t, fixture.imports.previewRowOptions, 2, "a refused rows read reached the Store")
 		})
 	}
 }

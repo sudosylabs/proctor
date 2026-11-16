@@ -16,8 +16,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// refusePasswordReuse compares the new password with the User's Limit most
-// recent password hashes. Callers hold the per-User Session lock and the
+// refusePasswordReuse compares the new password with the user's Limit most
+// recent password hashes. Callers hold the per-user session lock and the
 // credential row, so no concurrent change can add a hash between this check
 // and the write.
 func refusePasswordReuse(ctx context.Context, tx *sqlxTxWrapper, userID model.UserID, check store.PasswordReuseCheck) error {
@@ -64,7 +64,7 @@ func passwordChangeInstant(at, previousChange time.Time) time.Time {
 }
 
 // retainSupersededPassword moves a password hash replaced in place into the
-// User's history and prunes the history to limit entries, newest first, with
+// user's history and prunes the history to limit entries, newest first, with
 // the same tie order as refusePasswordReuse. Limit zero discards the history
 // entirely.
 func retainSupersededPassword(

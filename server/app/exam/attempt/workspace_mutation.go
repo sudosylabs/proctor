@@ -42,8 +42,8 @@ func workspaceMutationSelector(
 	}, nil
 }
 
-// validWorkspaceTarget checks the resolved target, and that it names the
-// writer's candidate when the writer names one.
+// validWorkspaceTarget checks that the resolved target names the writer's
+// candidate when the writer names one.
 func validWorkspaceTarget(target *store.ExamAttemptWorkspaceMutationTarget, candidate model.UserID) bool {
 	return target != nil &&
 		target.ExamID.IsValid() &&

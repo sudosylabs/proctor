@@ -26,15 +26,10 @@ const (
 
 var submissionReceiptCodeEncoding = base32.NewEncoding(SubmissionReceiptCodeAlphabet).WithPadding(base32.NoPadding)
 
-// SubmissionReceiptCode is the short human-readable code a candidate can
-// quote for one sealed Submission. It carries 80 random bits as 16 uppercase
-// Crockford base32 characters. It is minted once when the Submission seals,
-// is unique across Submissions, and is not an entity identifier: it must not
-// be used as a persistence relationship or an authorization selector.
-//
-// The canonical form (String) is the 16 characters; Display groups them in
-// fours with hyphens. ParseSubmissionReceiptCode accepts either form as typed
-// by a person.
+// SubmissionReceiptCode is the short code a candidate can quote for one sealed
+// submission: 80 random bits as 16 uppercase Crockford base32 characters,
+// minted once at the seal and unique across submissions. It is not an entity
+// ID and must never be used as a relationship or an authorization selector.
 type SubmissionReceiptCode string
 
 // NewSubmissionReceiptCode returns a fresh random receipt code. It panics
@@ -47,10 +42,9 @@ func NewSubmissionReceiptCode() SubmissionReceiptCode {
 	return SubmissionReceiptCode(submissionReceiptCodeEncoding.EncodeToString(value))
 }
 
-// ParseSubmissionReceiptCode normalizes human input to the canonical form. It
-// trims surrounding whitespace, uppercases ASCII letters, removes hyphens and
-// spaces, and reads I and L as 1 and O as 0. U and every other character
-// outside the alphabet are rejected.
+// ParseSubmissionReceiptCode normalizes typed input to the canonical form: it
+// trims, uppercases, drops hyphens and spaces, and reads I and L as 1 and O as
+// 0. U and anything else outside the alphabet is rejected.
 func ParseSubmissionReceiptCode(value string) (SubmissionReceiptCode, error) {
 	value = strings.TrimSpace(value)
 	var canonical strings.Builder
@@ -97,7 +91,7 @@ func (c SubmissionReceiptCode) IsValid() bool {
 	return true
 }
 
-// IsZero reports whether c is absent.
+// IsZero reports whether c is empty.
 func (c SubmissionReceiptCode) IsZero() bool { return c == "" }
 
 // String returns the canonical 16-character form.

@@ -21,8 +21,8 @@ import (
 )
 
 // SQLExamAttemptStore is the PostgreSQL store.ExamAttemptStore, which owns
-// Attempt admission, Participation leases, suspension and re-allow, correction
-// acknowledgement, and the manager and candidate projections of the Attempt.
+// attempt admission, participation leases, suspension and re-allow, correction
+// acknowledgement, and the manager and candidate projections of the attempt.
 type SQLExamAttemptStore struct{ *SQLStore }
 
 func newSQLExamAttemptStore(sqlStore *SQLStore) store.ExamAttemptStore {
@@ -112,7 +112,7 @@ const examAttemptManagerSelect = `SELECT a.id AS attempt_id, a.exam_id, a.exam_s
 		LIMIT 1
 	) su ON true`
 
-// Get returns the Exam Manager's snapshot of the Attempt within examID, or a
+// Get returns the exam manager's snapshot of the attempt within examID, or a
 // not-found error.
 func (s *SQLExamAttemptStore) Get(
 	ctx context.Context,
@@ -132,7 +132,7 @@ func (s *SQLExamAttemptStore) Get(
 	return row.snapshot()
 }
 
-// List returns one page of the Sitting's Attempts for an Exam Manager, newest
+// List returns one page of the sitting's Attempts for an exam manager, newest
 // first, excluding ExcludeCandidateUserID and optionally filtered by state.
 // Limit is 1..201 and the Before cursor fields must be set together.
 func (s *SQLExamAttemptStore) List(
@@ -522,9 +522,9 @@ func lockCandidateGuard(
 	return row.candidateAttemptGuard, nil
 }
 
-// GetCandidatePresentation returns the sealed Exam content, policies, capacity
-// limits, and frozen Attempt Configuration the Candidate sees for the live
-// Attempt named by access.
+// GetCandidatePresentation returns the sealed exam content, policies, capacity
+// limits, and frozen attempt configuration the candidate sees for the live
+// attempt named by access.
 func (s *SQLExamAttemptStore) GetCandidatePresentation(
 	ctx context.Context,
 	access store.CandidateAttemptAccess,
@@ -819,7 +819,7 @@ func listCandidateWorkspaceSnapshot(
 	return &store.CandidateAttemptWorkspacePage{WorkspaceID: workspaceID, Cursor: workspace.Cursor, Items: result, HasMore: hasMore}, nil
 }
 
-// ResolveCandidateAccess verifies the Candidate's live Attempt access under
+// ResolveCandidateAccess verifies the candidate's live attempt access under
 // the same locked checks as the presentation read and returns what it
 // resolves to.
 func (s *SQLExamAttemptStore) ResolveCandidateAccess(
@@ -858,7 +858,7 @@ func (s *SQLExamAttemptStore) ResolveCandidateAccess(
 }
 
 // ResolveCandidateResource returns the metadata and stored file rendition of an
-// Exam Resource in the Candidate's admitted Exam Revision, or a not-found
+// exam resource in the candidate's admitted exam revision, or a not-found
 // error.
 func (s *SQLExamAttemptStore) ResolveCandidateResource(
 	ctx context.Context,
@@ -997,9 +997,9 @@ func boundedParticipationLease(now, end time.Time) time.Time {
 }
 
 // suspensionProvenance validates the source-specific links of one persisted
-// Suspension episode without loading any private reason: a policy episode
-// links exactly one Integrity Flag, and a manual episode links its suspending
-// Exam Manager instead.
+// suspension episode without loading any private reason: a policy episode
+// links exactly one integrity flag, and a manual episode links its suspending
+// exam manager instead.
 func suspensionProvenance(
 	source model.AttemptSuspensionSource,
 	reason model.AttemptSuspensionCandidateReason,

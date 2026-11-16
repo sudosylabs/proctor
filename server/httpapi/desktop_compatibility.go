@@ -8,42 +8,15 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 	"slices"
 	"strings"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-type unavailableDesktopCompatibilityApplication struct{}
-
-func (unavailableDesktopCompatibilityApplication) EvaluateDesktopCompatibility(
-	context.Context,
-	invocation.Invocation,
-	identity.DesktopCompatibilityQuery,
-) (identity.DesktopCompatibilityResult, error) {
-	return identity.DesktopCompatibilityResult{}, route.ErrUnpresentable
-}
-
-func (unavailableDesktopCompatibilityApplication) GetDesktopCompatibilityPolicy(
-	context.Context,
-	invocation.Invocation,
-) (*model.DesktopCompatibilityPolicy, error) {
-	return nil, route.ErrUnpresentable
-}
-
-func (unavailableDesktopCompatibilityApplication) ReplaceDesktopCompatibilityPolicy(
-	context.Context,
-	invocation.Invocation,
-	identity.ReplaceDesktopCompatibilityPolicyCommand,
-) (*model.DesktopCompatibilityPolicy, error) {
-	return nil, route.ErrUnpresentable
-}
 
 type desktopCompatibilityPolicyRequest struct {
 	ExpectedRevision       int64                    `json:"expected_revision"`
@@ -66,10 +39,10 @@ type desktopCompatibilityPolicyResponse struct {
 }
 
 type desktopCompatibilityPolicyHandlers struct {
-	app DesktopCompatibilityApplication
+	app *identity.Service
 }
 
-func desktopCompatibilityPolicyResource(app DesktopCompatibilityApplication) route.Resource {
+func desktopCompatibilityPolicyResource(app *identity.Service) route.Resource {
 	h := desktopCompatibilityPolicyHandlers{app: app}
 	replace := route.Endpoint{
 		Method:      http.MethodPut,
@@ -239,23 +212,4 @@ func desktopCompatibilityPolicyResponseFromModel(
 	response.CreatedAt = model.FormatRFC3339(policy.CreatedAt)
 	response.UpdatedAt = model.FormatRFC3339(policy.UpdatedAt)
 	return response
-}
-
-// DesktopCompatibilityApplication is the Desktop compatibility policy use
-// cases. It serves this resource and the system routes in system.go.
-type DesktopCompatibilityApplication interface {
-	EvaluateDesktopCompatibility(
-		context.Context,
-		invocation.Invocation,
-		identity.DesktopCompatibilityQuery,
-	) (identity.DesktopCompatibilityResult, error)
-	GetDesktopCompatibilityPolicy(
-		context.Context,
-		invocation.Invocation,
-	) (*model.DesktopCompatibilityPolicy, error)
-	ReplaceDesktopCompatibilityPolicy(
-		context.Context,
-		invocation.Invocation,
-		identity.ReplaceDesktopCompatibilityPolicyCommand,
-	) (*model.DesktopCompatibilityPolicy, error)
 }

@@ -24,9 +24,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// SessionPolicy is the immutable session-lifetime policy consumed by
-// authentication. Composition translates deployment configuration into this
-// value so authentication does not depend on config.Config.
+// SessionPolicy is the session-lifetime configuration, kept apart so
+// authentication does not depend on config.Config.
 type SessionPolicy struct {
 	AccessTTL              time.Duration
 	RefreshTTL             time.Duration
@@ -35,7 +34,7 @@ type SessionPolicy struct {
 	ActivityUpdateInterval time.Duration
 	MaximumPerUser         int
 	// RetiredRetention is how long maintenance keeps a revoked or expired
-	// Session, or a superseded credential, before deleting it.
+	// session, or a superseded credential, before deleting it.
 	RetiredRetention time.Duration
 }
 
@@ -54,13 +53,10 @@ type sessionIssuance struct {
 	AuthenticationStrength   model.AuthenticationStrength
 	AuthenticatedAt          int64
 	MFACompletedAt           int64
-	// AuditEventID is the login attempt that Session creation completes
-	// atomically with the Session.
+	// AuditEventID is the login attempt completed atomically with the session.
 	AuditEventID model.AuditEventID
 }
 
-// requireSessionAuthentication refuses a Service whose sign-in and Session
-// collaborators are incomplete. New calls it once, after setting them.
 func (s *Service) requireSessionAuthentication() error {
 	if s.personalAccessTokens == nil {
 		return errors.New("personal access token store is required")
@@ -91,9 +87,6 @@ func (s *Service) requireSessionAuthentication() error {
 	}
 	if s.publisher == nil {
 		return errors.New("authentication security effects are required")
-	}
-	if s.auditor == nil {
-		return errors.New("authentication audit is required")
 	}
 	if s.hasher == nil {
 		return errors.New("password hasher is required")
@@ -221,8 +214,8 @@ func (s *Service) createSession(
 	}, nil
 }
 
-// sessionLifetimes returns the idle and absolute lengths a Session gets now:
-// the deployment lifetimes, shortened by the current Access Policy.
+// sessionLifetimes returns the deployment lifetimes, shortened by the current
+// access policy.
 func (s *Service) sessionLifetimes(ctx context.Context) (sessionLifetimes, error) {
 	lifetimes, err := s.accessPolicy.SessionLifetimes(ctx, s.sessionPolicy)
 	if err != nil {
@@ -231,10 +224,9 @@ func (s *Service) sessionLifetimes(ctx context.Context) (sessionLifetimes, error
 	return lifetimes, nil
 }
 
-// mfaEnrollmentRequired decides whether a new single-factor Session of the
-// User must be restricted to MFA enrollment because the Access Policy
-// requires role holders to use two-step verification. Only a Web Session can carry
-// the restriction; any other client is refused and sent to the browser.
+// mfaEnrollmentRequired reports whether a new single-factor session must be
+// restricted to MFA enrollment. Only a web session can carry the restriction;
+// any other client is refused and sent to the browser.
 func (s *Service) mfaEnrollmentRequired(
 	ctx context.Context,
 	userID model.UserID,
@@ -256,7 +248,6 @@ func (s *Service) mfaEnrollmentRequired(
 	return required, nil
 }
 
-// sessionCreationError maps a Session persistence failure to the public authentication error.
 func sessionCreationError(command sessionIssuance, saveErr error) error {
 	if errors.Is(saveErr, store.ErrAuthenticationMethodDisabled) ||
 		errors.Is(saveErr, store.ErrPasswordCredentialChanged) ||
@@ -281,7 +272,6 @@ func sessionCreationError(command sessionIssuance, saveErr error) error {
 	return authenticationUnavailable(saveErr)
 }
 
-// hasAccessCredential reports whether the saved Session credentials include an access credential.
 func hasAccessCredential(credentials []*model.SessionCredential) bool {
 	for _, savedCredential := range credentials {
 		if savedCredential.Kind == model.SessionCredentialAccess {

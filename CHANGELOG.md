@@ -705,6 +705,17 @@ module when a change is not server-only. No module has been released yet.
 
 ### Fixed
 
+- Server: Class listings (`GET /api/v1/academic-units/{id}/classes` and
+  `GET /api/v1/programme-levels/{id}/classes`) failed with
+  `authorization.request.invalid` whenever they returned a Class, because the
+  student-count check asked `class.members.view` about the listing's unit or
+  Level. The caller's `class.members.view` grant is now read once per page,
+  and `student_count` appears only on the listed Classes it covers.
+- Server: an outsider asking for an Attempt's Browser Activity got
+  `exam.sitting.not_found`, while the other Sitting routes answer
+  `resource.not_found`. The route now answers `resource.not_found` for a
+  refusal and a missing Sitting alike, and no longer lists
+  `exam.sitting.not_found`.
 - Server: every `affiliation.end`, `academic_unit_member.end`, `class.end`
   and `role_binding.end` row of an `academic_administration` CSV import
   failed with `request.invalid` when it executed, because the row's batch

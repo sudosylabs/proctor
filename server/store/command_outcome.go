@@ -19,9 +19,8 @@ const (
 	CommandOutcomeMaxBytes = 64 * 1024
 )
 
-// CommandIdempotency is the bounded, transport-neutral identity of one
-// retryable application command. Raw client keys and commands never cross the
-// Store boundary.
+// CommandIdempotency identifies one retryable command. Only digests of the
+// client key and command cross the store boundary, never the raw values.
 type CommandIdempotency struct {
 	UserID      model.UserID
 	Operation   string
@@ -29,47 +28,45 @@ type CommandIdempotency struct {
 	Fingerprint [sha256.Size]byte
 	Retention   time.Duration
 	Wait        time.Duration
-	// OnboardingImportID and OnboardingImportRowNumber bind an administrative
-	// import or progression command to the parent/row fence that must commit
-	// with its ordinary mutation. They are absent for other commands.
+	// OnboardingImportID and OnboardingImportRowNumber are set only for an
+	// import or progression row, whose row fence must commit with the
+	// mutation.
 	OnboardingImportID        model.OnboardingImportID
 	OnboardingImportRowNumber int
-	// Authorization is present only for closed academic-administration batch
-	// commands. PostgreSQL rechecks these current permissions in the same
-	// transaction as the ordinary aggregate mutation.
+	// Authorization is set only for academic-administration batch commands;
+	// the store rechecks it in the mutation's transaction.
 	Authorization *CommandAuthorization
 	Batch         *CommandBatch
 }
 
-// CommandBatch binds one retained item outcome to its semantic duplicate
-// group. DuplicateOfKeyDigest is absent for the canonical item. Duplicate is
-// set by the Store when the retained disposition is non-canonical.
+// CommandBatch ties one batch item's outcome to its duplicate group.
+// DuplicateOfKeyDigest is zero for the canonical item; the store sets
+// Duplicate when the retained outcome is not the canonical one.
 type CommandBatch struct {
 	GroupDigest          [sha256.Size]byte
 	DuplicateOfKeyDigest [sha256.Size]byte
 	Duplicate            bool
 }
 
-// CommandAuthorization is the bounded terminal authority required by one
-// academic-administration batch row. It contains no derived Role state;
-// PostgreSQL resolves every action from current durable bindings and Roles.
+// CommandAuthorization is the authority one academic-administration batch row
+// needs. It carries no role state: the store resolves every action from
+// current bindings and roles.
 type CommandAuthorization struct {
 	Principal        model.Principal
 	ScopeType        model.RoleScopeType
 	ScopeID          string
 	Actions          []model.Action
 	DelegatedActions []model.Action
-	// ClassMemberID binds a Class end or transfer to its relationship so
-	// PostgreSQL can lock the affected User before hierarchy state, then resolve
-	// and authorize the relationship's current Class.
+	// ClassMemberID lets a class end or transfer lock the user before the
+	// hierarchy, then authorize against the membership's current class.
 	ClassMemberID model.ClassMemberID
-	// RecipientUserID lets PostgreSQL preserve the canonical User-before-
-	// hierarchy lock order for Class enrollment.
+	// RecipientUserID keeps the user-before-hierarchy lock order for an
+	// enrollment.
 	RecipientUserID model.UserID
 }
 
-// CommandOutcomeStore owns bounded retention of completed client-command
-// outcomes. Creation and replay remain part of each named aggregate mutation.
+// CommandOutcomeStore expires retained command outcomes. Recording and
+// replaying an outcome happen inside each mutation, not here.
 type CommandOutcomeStore interface {
 	Has(context.Context, *CommandIdempotency) (bool, error)
 	DeleteExpired(context.Context, int) (int64, error)

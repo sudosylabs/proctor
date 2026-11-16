@@ -20,18 +20,17 @@ const (
 	ExamSubmissionAutomaticSealOperation = "exam.attempt.seal_for_sitting_close"
 )
 
-// ExamSubmissionSealAccess is the complete hash-only causal selector for a
-// voluntary candidate seal. Persistence rechecks the current exact-Class
-// membership, Open Sitting, active Attempt, exact active Participation and
-// generation, owning Session-bound open Connection, expected acknowledged
-// Workspace Cursor, and final client Focus Loss high-water under its locks.
-// Sequence zero is valid when the client has emitted no Focus Loss claim.
+// ExamSubmissionSealAccess selects a candidate's own seal by credential hash.
+// Under its locks the store rechecks class membership, an open sitting, the
+// active attempt, participation and generation, the session's open
+// connection, the workspace cursor and the final focus loss sequence (zero
+// when the client sent no focus loss claim).
 //
 // ExpectedWorkspaceCursor fences only the candidate's own changes: the seal
 // conflicts with attempt_workspace_cursor when a candidate-authored change
 // follows it, or when the changes after it are no longer all journaled.
 // Changes by the execution environment after it are accepted and sealed, so
-// the Submission's cursor may be later than the expected one.
+// the submission's cursor may be later than the expected one.
 type ExamSubmissionSealAccess struct {
 	AttemptID                 model.ExamAttemptID
 	ParticipationID           model.AttemptParticipationID
@@ -45,9 +44,8 @@ type ExamSubmissionSealAccess struct {
 	FinalFocusLossSequence    int64
 }
 
-// ExamSubmissionSealTarget is the bounded preflight projection used to begin
-// the candidate's Class-scoped audit attempt and address post-commit effects.
-// It exposes no path, content, credential, Session, policy, or evidence.
+// ExamSubmissionSealTarget is the scope a seal is audited under and its
+// post-commit effects are addressed to.
 type ExamSubmissionSealTarget struct {
 	ExamID            model.ExamID
 	SittingID         model.ExamSittingID
@@ -59,13 +57,11 @@ type ExamSubmissionSealTarget struct {
 	SealAt            time.Time
 }
 
-// ExamSubmissionSeal supplies the server-proposed identity, receipt code, and
-// safe audit attempt to the named atomic transition. SubmissionID and
-// ReceiptCode are not part of the semantic command fingerprint: an
-// outcome-unknown retry returns the single retained Submission and its
-// original receipt code rather than creating or minting a second one.
+// ExamSubmissionSeal carries the proposed identities for a candidate seal.
+// SubmissionID and ReceiptCode are not part of the command fingerprint: a
+// retry returns the retained submission and its original receipt code.
 // DomainEventID and DomainEventJobID name the exam.attempt.submitted outbox
-// row and its dispatch Job that a fresh seal inserts; a replay ignores them.
+// row and dispatch job a fresh seal inserts; a replay ignores them.
 type ExamSubmissionSeal struct {
 	SubmissionID              model.SubmissionID
 	ReceiptCode               model.SubmissionReceiptCode
@@ -78,10 +74,8 @@ type ExamSubmissionSeal struct {
 	DomainEventJobID          model.JobID
 }
 
-// ExamSubmissionReceipt combines immutable content identity with current, bounded
-// Browser delivery settlement. It
-// intentionally omits the manifest, paths, content selectors, source signals,
-// integrity gaps, credential, Session, and private review state.
+// ExamSubmissionReceipt is what the candidate may see of a submission: no
+// manifest, paths, integrity gaps or review state.
 type ExamSubmissionReceipt struct {
 	BrowserActivity model.BrowserSubmissionSettlement
 	SubmissionID    model.SubmissionID
@@ -94,9 +88,8 @@ type ExamSubmissionReceipt struct {
 	SubmittedAt     time.Time
 }
 
-// ExamSubmissionSealResult combines the safe receipt with exact safe scope
-// needed for post-commit unbinding and targeted effects. Transport serializers
-// expose Receipt only. Replayed suppresses duplicate effects.
+// ExamSubmissionSealResult is the receipt plus the scope post-commit effects
+// need. Only Receipt is ever serialized. Replayed suppresses duplicate effects.
 type ExamSubmissionSealResult struct {
 	Receipt         ExamSubmissionReceipt
 	ExamID          model.ExamID
@@ -109,15 +102,12 @@ type ExamSubmissionSealResult struct {
 	Replayed        bool
 }
 
-// ConsistentWith reports whether the outcome carries a complete Submission
-// receipt for the sealed Attempt at the acknowledged workspace cursor and
-// expected Exam Revision, names the resolved target's Exam, Sitting, Class and
-// candidate and the seal's Participation, generation and Connection, and uses
-// the proposed Submission ID and receipt code unless it replays an earlier
-// seal. It reads target, which the caller has already checked.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the outcome carries a complete submission
+// receipt for the sealed attempt at the acknowledged workspace cursor and
+// expected exam revision, names the resolved target's exam, sitting, class and
+// candidate and the seal's participation, generation and connection, and uses
+// the proposed submission ID and receipt code unless it replays an earlier
+// seal. The caller has already checked target.
 func (r *ExamSubmissionSealResult) ConsistentWith(
 	target *ExamSubmissionSealTarget,
 	sealAccess ExamSubmissionSealAccess,
@@ -144,26 +134,23 @@ func (r *ExamSubmissionSealResult) ConsistentWith(
 		(!r.Replayed && (r.Receipt.SubmissionID != proposedID || r.Receipt.ReceiptCode != proposedCode)))
 }
 
-// Sealed is the application's postcondition on a seal: the Attempt is now
+// Sealed is the application's postcondition on a seal: the attempt is now
 // submitted.
 func (r *ExamSubmissionSealResult) Sealed() bool {
 	return r.Receipt.State == model.ExamAttemptSubmitted
 }
 
-// ExamSubmissionAutomaticSealListOptions selects one deterministic bounded
-// page of unfinished Attempts for a Closing Sitting. AttemptID is the complete
-// keyset cursor; paths, credentials, and candidate-authored content never
-// leave persistence.
+// ExamSubmissionAutomaticSealListOptions pages the unfinished attempts of a
+// closing sitting, keyed by attempt ID.
 type ExamSubmissionAutomaticSealListOptions struct {
 	SittingID      model.ExamSittingID
 	AfterAttemptID model.ExamAttemptID
 	Limit          int
 }
 
-// ExamSubmissionAutomaticSealTarget is the safe system-work identity for one
-// already-created Attempt. Persistence resolves the latest Participation and
-// Connection so active and previously suspended/disconnected work share the
-// same terminal sealing operation.
+// ExamSubmissionAutomaticSealTarget is one attempt to seal at sitting close.
+// It names the latest participation and connection, so active, suspended and
+// disconnected attempts are sealed the same way.
 type ExamSubmissionAutomaticSealTarget struct {
 	ExamID            model.ExamID
 	SittingID         model.ExamSittingID
@@ -178,13 +165,12 @@ type ExamSubmissionAutomaticSealTarget struct {
 	ConnectionID      model.AttemptConnectionID
 }
 
-// ExamSubmissionAutomaticSeal supplies a server-proposed Submission identity,
-// receipt code, and actor-less audit attempt. AttemptID is the natural
-// idempotency key: a concurrent or crash replay returns the one retained
-// Submission with its original receipt code and completes the new audit
-// without duplicating the immutable manifest. DomainEventID and
-// DomainEventJobID name the exam.attempt.submitted outbox row and its dispatch
-// Job that a fresh seal inserts; a replay ignores them.
+// ExamSubmissionAutomaticSeal carries the proposed identities for a system
+// seal. The attempt is the idempotency key: a concurrent or post-crash replay
+// returns the retained submission and original receipt code and completes the
+// new audit without another manifest. DomainEventID and DomainEventJobID name
+// the exam.attempt.submitted outbox row and dispatch job a fresh seal
+// inserts; a replay ignores them.
 type ExamSubmissionAutomaticSeal struct {
 	Target                    ExamSubmissionAutomaticSealTarget
 	SubmissionID              model.SubmissionID
@@ -197,21 +183,18 @@ type ExamSubmissionAutomaticSeal struct {
 	DomainEventJobID          model.JobID
 }
 
-// ExamSubmissionAutomaticSealResult is the safe post-commit projection used
-// for progress, realtime publication, and exact Connection unbinding.
+// ExamSubmissionAutomaticSealResult adds whether the seal closed the
+// connection.
 type ExamSubmissionAutomaticSealResult struct {
 	ExamSubmissionSealResult
 	ConnectionClosed bool
 }
 
-// ConsistentWith reports whether the outcome carries a complete Submission
-// receipt for the target Attempt at its current Exam Revision, names the
-// target's Exam, Sitting, Class, candidate, Participation, generation and
-// Connection, uses the proposed Submission ID and receipt code unless it
-// replays an earlier seal, and a replay closed no Connection.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the outcome carries a complete submission
+// receipt for the target attempt at its current exam revision, names the
+// target's exam, sitting, class, candidate, participation, generation and
+// connection, uses the proposed submission ID and receipt code unless it
+// replays an earlier seal, and a replay closed no connection.
 func (r *ExamSubmissionAutomaticSealResult) ConsistentWith(
 	target ExamSubmissionAutomaticSealTarget,
 	proposed model.SubmissionID,
@@ -236,16 +219,15 @@ func (r *ExamSubmissionAutomaticSealResult) ConsistentWith(
 		(!r.Replayed && (r.Receipt.SubmissionID != proposed || r.Receipt.ReceiptCode != proposedCode)))
 }
 
-// Sealed is the application's postcondition on an automatic seal: the Attempt
-// is now submitted, and a replay closed no Connection.
+// Sealed is the application's postcondition on an automatic seal: the attempt
+// is now submitted, and a replay closed no connection.
 func (r *ExamSubmissionAutomaticSealResult) Sealed() bool {
 	return r.ExamSubmissionSealResult.Sealed() && !(r.Replayed && r.ConnectionClosed)
 }
 
-// ExamSubmissionManagerEndPreparation is the exact preflight projection for
-// an authorized manager seal. The target is safe application identity; SealAt
-// is reserved by PostgreSQL and Replayed means the same manager-ended terminal
-// aggregate already exists and mail preparation can be skipped.
+// ExamSubmissionManagerEndPreparation is the preflight for a manager seal.
+// SealAt comes from PostgreSQL. Replayed means the manager-ended submission
+// already exists, so mail preparation can be skipped.
 type ExamSubmissionManagerEndPreparation struct {
 	Target                  ExamSubmissionAutomaticSealTarget
 	ExpectedAttemptRevision int64
@@ -263,11 +245,9 @@ type ExamSubmissionManagerEndRequest struct {
 	PrivateReason           string
 }
 
-// ExamSubmissionManagerEnd supplies the server-proposed Submission identity,
-// receipt code, audit attempt and receipt to an authorized manager seal.
-// DomainEventID and DomainEventJobID name the exam.attempt.submitted outbox
-// row and its dispatch Job that a fresh manager seal inserts; a replay
-// ignores them.
+// ExamSubmissionManagerEnd carries the proposed identities for a manager
+// seal. DomainEventID and DomainEventJobID name the exam.attempt.submitted
+// outbox row and dispatch job a fresh seal inserts; a replay ignores them.
 type ExamSubmissionManagerEnd struct {
 	Request                   ExamSubmissionManagerEndRequest
 	Target                    ExamSubmissionAutomaticSealTarget
@@ -286,14 +266,11 @@ type ExamSubmissionManagerEndResult struct {
 	ConnectionClosed bool
 }
 
-// ConsistentWith reports whether the outcome carries a complete Submission
-// receipt for the Attempt the manager ended, names the commanded Exam and
-// Sitting and the prepared target's Class, candidate, Participation,
-// generation and Connection, uses the proposed Submission ID and receipt code
-// unless it replays an earlier end, and a replay closed no Connection.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the outcome carries a complete submission
+// receipt for the attempt the manager ended, names the commanded exam and
+// sitting and the prepared target's class, candidate, participation,
+// generation and connection, uses the proposed submission ID and receipt code
+// unless it replays an earlier end, and a replay closed no connection.
 func (r *ExamSubmissionManagerEndResult) ConsistentWith(
 	attemptID model.ExamAttemptID,
 	examID model.ExamID,
@@ -321,23 +298,22 @@ func (r *ExamSubmissionManagerEndResult) ConsistentWith(
 		(!r.Replayed && (r.Receipt.SubmissionID != proposed || r.Receipt.ReceiptCode != proposedCode)))
 }
 
-// Ended is the application's postcondition on a manager end: the Attempt is
-// now submitted, and a replay closed no Connection.
+// Ended is the application's postcondition on a manager end: the attempt is
+// now submitted, and a replay closed no connection.
 func (r *ExamSubmissionManagerEndResult) Ended() bool {
 	return r.Sealed() && !(r.Replayed && r.ConnectionClosed)
 }
 
-// ExamSubmissionAutomaticSealPreparation reserves the PostgreSQL action time
-// used by a fresh automatic receipt and reports whether the terminal aggregate
-// already exists. The terminal mutation still rechecks all lifecycle state.
+// ExamSubmissionAutomaticSealPreparation carries the PostgreSQL time a fresh
+// automatic seal will use, and whether the submission already exists. The
+// seal itself still rechecks all lifecycle state.
 type ExamSubmissionAutomaticSealPreparation struct {
 	Replayed bool
 	SealAt   time.Time
 }
 
-// ExamSubmissionAuthorization is the minimal immutable ownership projection
-// required to authorize one Submission resource without hydrating its
-// protected manifest.
+// ExamSubmissionAuthorization is what authorizing a submission needs,
+// without loading its manifest.
 type ExamSubmissionAuthorization struct {
 	SubmissionID    model.SubmissionID
 	ExamID          model.ExamID
@@ -347,12 +323,9 @@ type ExamSubmissionAuthorization struct {
 	AcademicUnitID  model.AcademicUnitID
 }
 
-// ConsistentWith reports whether the projection is for the Submission that was
-// asked for and names its Exam, Sitting, Attempt, candidate and owning
-// Academic Unit.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the projection is for the submission that was
+// asked for and names its exam, sitting, attempt, candidate and owning
+// academic unit.
 func (a *ExamSubmissionAuthorization) ConsistentWith(submissionID model.SubmissionID) bool {
 	return !(a == nil ||
 		a.SubmissionID != submissionID ||
@@ -363,10 +336,9 @@ func (a *ExamSubmissionAuthorization) ConsistentWith(submissionID model.Submissi
 		!a.AcademicUnitID.IsValid())
 }
 
-// ExamSubmissionManifestItem is manager-visible protected metadata for one
-// sealed logical Entry. It deliberately omits opaque VFS object selectors.
-// Author is who made the entry's last change, zero when it is unchanged since
-// the Starter Workspace.
+// ExamSubmissionManifestItem is one sealed entry as a manager sees it,
+// without its VFS object selectors. Author made the entry's last change and
+// is zero when the entry is unchanged since the starter workspace.
 type ExamSubmissionManifestItem struct {
 	EntryID        model.AttemptWorkspaceEntryID
 	Kind           model.StarterWorkspaceEntryKind
@@ -378,10 +350,10 @@ type ExamSubmissionManifestItem struct {
 	Author         model.AttemptWorkspaceAuthor
 }
 
-// ExamSubmissionManifestListOptions requests one immutable Entry-ID-keyset
-// page. Limit is 1..model.ExamSubmissionManifestReadMaximum. The opaque public
-// cursor contains AfterEntryID only; a protected Workspace Path never enters a
-// URL, cursor, access log, or audit.
+// ExamSubmissionManifestListOptions pages a manifest by entry ID. Limit is
+// 1..model.ExamSubmissionManifestReadMaximum. The public cursor holds only
+// AfterEntryID; a workspace path never enters a URL, cursor, access log or
+// audit.
 type ExamSubmissionManifestListOptions struct {
 	SubmissionID model.SubmissionID
 	AfterEntryID model.AttemptWorkspaceEntryID
@@ -396,9 +368,9 @@ type ExamSubmissionManifestPage struct {
 	HasMore         bool
 }
 
-// ExamSubmissionFileSelector is an internal post-authorization selector for
-// protected in-application rendering. Exactly one origin ID is present. No API
-// serializer or realtime event may expose either opaque identifier.
+// ExamSubmissionFileSelector locates a sealed file for in-application
+// rendering after authorization. Exactly one of the object IDs is set, and no
+// API response or realtime event may expose either.
 type ExamSubmissionFileSelector struct {
 	Entry           ExamSubmissionManifestItem
 	StorageOrigin   model.AttemptWorkspaceObjectStorage
@@ -407,66 +379,39 @@ type ExamSubmissionFileSelector struct {
 	ContentVersion  model.WorkspaceContentVersion
 }
 
-// ExamSubmissionStore is the deep seam for voluntary sealing and immutable
-// manager inspection.
+// ExamSubmissionStore seals attempts and lets managers inspect the result.
 //
-// ResolveSealTarget performs no transition. It validates the full active
-// selector for fresh work and also resolves only the exact retained causal
-// selector of a committed Submission for replay-audit preflight. It cannot
-// authorize a different command through terminal state.
+// ResolveSealTarget changes nothing and reserves a millisecond PostgreSQL
+// action time. Besides a live selector it resolves the retained selector of
+// a committed submission, only so a replay can be audited.
 //
-// ResolveSealTarget reserves one millisecond PostgreSQL action time for the
-// command. Seal is one named atomic operation. It first locks and revalidates
-// the receipt User, including the expected recipient revision and active or
-// ineligible lifecycle represented by the prepared notice, then follows the
-// canonical Class/Attempt/Workspace order so no new mutation can pass. Under
-// those locks it rechecks the Open Sitting, active Attempt, current exact-Class
-// membership, active unexpired Participation generation, owning open
-// Connection and credential, exact Workspace Cursor, and final Focus Loss
-// high-water. It reconciles accepted Workspace and integrity tails; builds the
-// canonical manifest from authoritative current Entry/object rows, never a
-// client list; creates the sole Submission, under the proposed unique receipt
-// code, and its retained content references at the reserved action time; marks the Attempt Submitted; ends Participation
-// and Connection; terminates integrity collection as Settled or Gapped;
-// completes the supplied audit; inserts exactly one semantic receipt
-// occurrence and queued or terminally suppressed delivery; inserts exactly one
-// exam.attempt.submitted domain event, at the transaction's PostgreSQL time,
-// and its queued dispatch Job; and retains the
-// bounded command outcome in the same transaction. Encrypted receipt payloads
-// hold the durable primary-key fence through commit. A failed transaction
-// changes none of those facts.
+// Seal locks the receipt user first (checking the expected recipient revision
+// and the lifecycle the prepared notice assumed), then class, attempt and
+// workspace in the canonical order. Under those locks it rechecks everything
+// in ExamSubmissionSealAccess, reconciles the workspace and integrity tails,
+// builds the manifest from current entry rows (never a client list), creates
+// the submission, ends the participation and connection, settles or gaps
+// integrity collection, completes the audit, and inserts one receipt mail,
+// one exam.attempt.submitted event with its dispatch job, and the command
+// outcome, all in one transaction. Encrypted receipt payloads hold the
+// primary-key fence through commit.
 //
-// An exact outcome replay rechecks the exact retained causal Access selector
-// and returns the original receipt, including its original receipt code and
-// ignoring the newly proposed one, even though the committed transition is
-// terminal. A changed selector or semantic input conflicts and can neither
-// reopen the Attempt nor create another Submission. Expected cursor, final
-// high-water, and the command idempotency fingerprint are nonnegative/bounded;
-// credentials and raw idempotency keys never persist. Stable conflicts reuse
+// An exact replay rechecks the retained selector and returns the original
+// receipt and code, inserting nothing. A changed selector or input conflicts
+// and never reopens the attempt or creates a second submission. Conflicts use
 // attempt_workspace_cursor, focus_loss_sequence, exam_attempt_state,
 // exam_sitting_state, attempt_participation_credential,
-// attempt_participation_generation, attempt_participation_expired, and
-// attempt_connection_closed.
-// Fresh voluntary and automatic seals require the matching prepared notice
-// and expected recipient revision, and the proposed domain event and dispatch
-// Job identities; exact replay requires none of them and never inserts another
-// occurrence, delivery, domain event, or Job. PrepareAutomaticSeal performs
-// no transition: it locks and resolves the exact automatic target, reports a
-// retained replay, and reserves the PostgreSQL action time used by a fresh
-// automatic seal. SealForSittingClose repeats the User-first recipient and
-// lifecycle checks before the Attempt/Workspace transition, uses that same
-// action time for Submission, audit, and receipt, and otherwise has the same
-// atomic mail, audit, rollback, rekey-fence, and replay guarantees as Seal.
-// EndByManager likewise commits exactly one exam.attempt.submitted domain
-// event and its dispatch Job with a fresh manager-ended Submission, and none
-// on replay.
+// attempt_participation_generation, attempt_participation_expired and
+// attempt_connection_closed. Credentials and raw idempotency keys are never
+// stored.
 //
-// Manager callers authorize externally through Resolve before Get,
-// ListManifest, or ResolveFile. Get returns only the immutable aggregate
-// header. ListManifest sorts ascending by EntryID and is bounded by the model
-// manifest read maximum.
-// ResolveFile accepts only a sealed file Entry and returns an internal opaque
-// selector; no method creates a public or signed object URL.
+// PrepareAutomaticSeal changes nothing: it locks the target, reports a
+// replay and reserves the action time. SealForSittingClose uses that time and
+// otherwise gives Seal's lock order and guarantees, as does EndByManager.
+//
+// Managers authorize through Resolve before Get, ListManifest or
+// ResolveFile. ListManifest is ascending by entry ID. ResolveFile accepts
+// only a sealed file entry; no method creates a public or signed object URL.
 type ExamSubmissionStore interface {
 	ResolveSealTarget(context.Context, ExamSubmissionSealAccess) (*ExamSubmissionSealTarget, error)
 	Seal(context.Context, *ExamSubmissionSeal, *CommandIdempotency) (*ExamSubmissionSealResult, error)
@@ -476,7 +421,7 @@ type ExamSubmissionStore interface {
 	PrepareAutomaticSeal(context.Context, ExamSubmissionAutomaticSealTarget) (*ExamSubmissionAutomaticSealPreparation, error)
 	SealForSittingClose(context.Context, *ExamSubmissionAutomaticSeal) (*ExamSubmissionAutomaticSealResult, error)
 	Resolve(context.Context, model.SubmissionID) (*ExamSubmissionAuthorization, error)
-	// ResolveAttempt is Resolve for the sealed Submission of an Attempt.
+	// ResolveAttempt is Resolve for the sealed submission of an attempt.
 	ResolveAttempt(context.Context, model.ExamAttemptID) (*ExamSubmissionAuthorization, error)
 	Get(context.Context, model.SubmissionID) (*model.ExamSubmission, error)
 	ListManifest(context.Context, ExamSubmissionManifestListOptions) (*ExamSubmissionManifestPage, error)

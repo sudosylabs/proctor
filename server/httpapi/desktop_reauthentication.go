@@ -8,52 +8,13 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-// DesktopReauthentication lets a Desktop Session confirm its own User again
-// in the system browser and redeem that proof as recent authentication.
-type DesktopReauthentication interface {
-	StartDesktopReauthentication(
-		context.Context,
-		invocation.Invocation,
-		identity.StartDesktopReauthenticationCommand,
-	) (*identity.DesktopReauthenticationStart, error)
-	BindDesktopReauthentication(
-		context.Context,
-		invocation.Invocation,
-		identity.BindDesktopAuthorizationCommand,
-	) (*identity.DesktopAuthorizationBinding, error)
-	DesktopReauthenticationContext(context.Context, invocation.Invocation, string) (*identity.DesktopReauthenticationBrowserContext, error)
-	AuthenticateDesktopReauthenticationPassword(
-		context.Context,
-		invocation.Invocation,
-		identity.AuthenticateDesktopReauthenticationPasswordCommand,
-	) (*identity.DesktopReauthenticationBrowserContext, error)
-	BeginDesktopReauthenticationExternalAuthentication(
-		context.Context,
-		invocation.Invocation,
-		identity.BeginDesktopReauthenticationExternalAuthenticationCommand,
-	) (*model.ExternalAuthenticationStart, error)
-	ApproveDesktopReauthentication(
-		context.Context,
-		invocation.Invocation,
-		identity.ApproveDesktopAuthorizationCommand,
-	) (*identity.DesktopAuthorizationApproval, error)
-	CancelDesktopReauthentication(context.Context, invocation.Invocation, identity.ApproveDesktopAuthorizationCommand) error
-	CompleteDesktopReauthentication(
-		context.Context,
-		invocation.Invocation,
-		identity.CompleteDesktopReauthenticationCommand,
-	) (*identity.DesktopReauthenticationResult, error)
-}
 
 type desktopReauthenticationStartRequest struct {
 	CallbackURL   string `json:"callback_url"`
@@ -84,11 +45,11 @@ type desktopReauthenticationContextResponse struct {
 }
 
 type desktopReauthenticationHandlers struct {
-	app     DesktopReauthentication
+	app     *identity.Service
 	cookies route.Cookies
 }
 
-func desktopReauthenticationResource(app DesktopReauthentication, cookies route.Cookies) route.Resource {
+func desktopReauthenticationResource(app *identity.Service, cookies route.Cookies) route.Resource {
 	h := desktopReauthenticationHandlers{app: app, cookies: cookies}
 	base := "/auth/desktop/reauthentications"
 	return route.NewResource("desktop_reauthentication",

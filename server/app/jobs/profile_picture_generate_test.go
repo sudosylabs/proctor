@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/app/user"
@@ -57,11 +58,13 @@ func (defaultPictureCatalogFake) UserSettings() store.UserSettingsStore {
 // Service reaches only the User Store on these paths.
 func defaultPictureService(t *testing.T, users *defaultPictureUsersFake) *user.Service {
 	t.Helper()
+	authorization := accesstest.New(t, accesstest.Options{})
 	service, err := user.New(user.Dependencies{
-		Store:           defaultPictureCatalogFake{users: users},
-		SettingsAuditor: struct{ user.SettingsAuditor }{},
-		Publisher:       &realtimetest.Publisher{},
-		Now:             time.Now,
+		Store:      defaultPictureCatalogFake{users: users},
+		Authorizer: authorization.Authorizer,
+		Auditor:    authorization.Auditor,
+		Publisher:  &realtimetest.Publisher{},
+		Now:        time.Now,
 	})
 	require.NoError(t, err)
 	return service

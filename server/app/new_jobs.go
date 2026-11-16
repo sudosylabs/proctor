@@ -27,18 +27,14 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// jobRuntime is the durable Job engine and the operator services built on
-// it. Every member is nil in a lifecycle-only graph that has no Job store,
-// and mail is nil when the graph has no mail store.
+// jobRuntime's fields are all nil in a graph without a job store, and mail
+// is nil without a mail store.
 type jobRuntime struct {
 	engine     *job.Engine
 	operations *job.Operations
 	mail       *mail.Operations
 }
 
-// newJobRuntime builds the Job engine over every application Job definition,
-// connects the wakes that services built earlier hold, and builds the
-// operator Job and mail services on it.
 func newJobRuntime(
 	deps Dependencies,
 	shared sharedMechanics,
@@ -56,9 +52,9 @@ func newJobRuntime(
 		return jobRuntime{}, errors.New("Examination lifecycle use cases are required when Jobs are enabled")
 	}
 
-	// Enabled workers must be able to open every active payload before runtime
-	// construction. Disabled workers suppress payloads before decryption, so a
-	// deliberately absent or retired ring must not prevent that convergence.
+	// Enabled workers must be able to open every active payload before the
+	// runtime starts. Disabled workers suppress payloads before decryption,
+	// so an absent or retired ring must not block that convergence.
 	if deps.Store.Mail() != nil && deps.MailDeliverySender != nil && deps.MailDeliverySender.Enabled() {
 		if err := validateActiveMailPayloadKeys(context.Background(), deps.Store.Mail(), deps.MailSecretSealer); err != nil {
 			return jobRuntime{}, err
@@ -102,7 +98,7 @@ func newJobRuntime(
 			Mail:                    deps.Store.Mail(),
 			Users:                   deps.Store.User(),
 			Authorization:           mail.InstitutionAuthorization{Authorizer: authorizer, Institutions: deps.Store.Institution()},
-			Audit:                   shared.audit.MailAudit(),
+			Audit:                   shared.audit,
 			Attempts:                shared.attempts,
 			Renderer:                deps.MailTemplateRenderer,
 			Sender:                  deps.MailDeliverySender,
@@ -112,7 +108,6 @@ func newJobRuntime(
 			Now:                     time.Now,
 			InstitutionName:         newInstitutionName(deps),
 			RekeyJobs:               deps.Store.Job(),
-			RekeyAudit:              shared.audit.MutationAudit(),
 			Wake:                    engine.Wake,
 		})
 		if err != nil {
@@ -123,7 +118,7 @@ func newJobRuntime(
 	operations, err := job.NewOperations(job.OperationsDependencies{
 		Jobs:          engine,
 		Authorization: job.InstitutionAuthorization{Authorizer: authorizer, Institutions: deps.Store.Institution()},
-		Audit:         shared.audit.MutationAudit(),
+		Audit:         shared.audit,
 		Users:         deps.Store.User(),
 		ExamExports:   deps.Store.ExamExport(),
 		Now:           time.Now,
@@ -185,9 +180,8 @@ type applicationJobDefinitions struct {
 	periodicTasks []job.PeriodicTask
 }
 
-// buildApplicationJobDefinitions keeps the complete durable-work recipe
-// inspectable without constructing or starting the runtime. Composition tests
-// use the same definition graph that production passes to the Job engine.
+// buildApplicationJobDefinitions is separate from newJobRuntime so
+// composition tests inspect the same definitions production runs.
 func buildApplicationJobDefinitions(
 	deps Dependencies,
 	shared sharedMechanics,
@@ -213,9 +207,7 @@ func buildApplicationJobDefinitions(
 	}
 	retentionJobs := administration.NewRetentionJobs(shared.audit, deps.Store.Retention(), deps.Store.User(), shared.mail, time.Now)
 	jobStore, now := deps.Store.Job(), time.Now
-	// This is the one place that lists every enabled Job, one line per Job.
-	// Each line names the collaborators that Job uses; a Job proposed on a
-	// schedule carries its recurrence with it.
+	// The one list of every enabled job.
 	registrations := []job.Registration{
 		jobs.NewDefaultProfilePicture(users),
 		jobs.NewDefaultProfilePictureReconciliation(deps.Store.User(), defaultPictureJobs, jobStore, now),
@@ -260,9 +252,9 @@ func buildApplicationJobDefinitions(
 	}
 	descriptors, recurrences := job.SplitRegistrations(registrations)
 
-	// Job history cleanup keeps each Job type for the retention its
-	// descriptor declares, so it is built after the rest. The engine runs
-	// each recurrence on its own, so their order carries no meaning.
+	// History cleanup needs every descriptor's retention, so it is built
+	// last. The engine runs each recurrence on its own; order carries no
+	// meaning.
 	historyCleanup := jobs.NewJobHistoryCleanup(jobStore, jobStore, now, descriptors)
 	descriptors = append(descriptors, historyCleanup.Descriptor)
 	recurrences = append(recurrences, *historyCleanup.Recurrence)
@@ -287,9 +279,8 @@ func buildApplicationJobDefinitions(
 	return applicationJobDefinitions{descriptors: descriptors, recurrences: recurrences, periodicTasks: periodicTasks}
 }
 
-// administrationCountsDependencies projects the summary's counters from the
-// services that exist; a reduced lifecycle test graph may lack some, and
-// their counts are then left out.
+// administrationCountsDependencies leaves out the counts of services a
+// reduced test graph lacks.
 func administrationCountsDependencies(onboardingPorts onboarding.Ports, runtime jobRuntime) administration.CountsDependencies {
 	deps := administration.CountsDependencies{
 		PendingInvitations:    onboardingPorts.CountPendingInvitations,
@@ -304,8 +295,8 @@ func administrationCountsDependencies(onboardingPorts onboarding.Ports, runtime 
 	return deps
 }
 
-// domainEventSubscriptions are the core's domain-event handlers: the Attempt
-// Environment facts, when the Store keeps environments.
+// domainEventSubscriptions subscribes the attempt environment facts only when
+// the store keeps environments.
 func domainEventSubscriptions(deps Dependencies) []events.Subscription {
 	if deps.Store.AttemptEnvironment() == nil {
 		return nil
@@ -317,7 +308,7 @@ func domainEventSubscriptions(deps Dependencies) []events.Subscription {
 	topics := environment.Topics()
 	subscriptions := make([]events.Subscription, len(topics))
 	for index, topic := range topics {
-		subscriptions[index] = events.Subscription{Key: "attempt_environment:" + string(topic), Topic: topic, Handler: facts}
+		subscriptions[index] = events.Subscription{Key: "attempt_environment:" + string(topic), Topic: topic, Handle: facts.HandleEvent}
 	}
 	return subscriptions
 }

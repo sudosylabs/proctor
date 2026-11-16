@@ -5,8 +5,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package retrylayer retries only explicitly allowlisted, idempotent store
-// operations after adapter-classified transient failures.
+// Package retrylayer retries an allowlist of idempotent store operations
+// after a failure the adapter classifies as transient. Every other method,
+// including every transaction, runs exactly once.
 //
-//go:generate go run ../storetest/layergen -layer retry -source .. -output forwarding_gen.go
+//go:generate go run ../storetest/layergen -layer retry -source .. -allowlist allowlist.txt -output forwarding_gen.go
 package retrylayer

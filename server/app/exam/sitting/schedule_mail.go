@@ -16,20 +16,17 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ScheduleMail is the ScheduleMailPreparer the application runs: it reads the
-// published Exam title and the Class names a schedule notice shows, then has
-// the Sitting mail composer freeze the notice as one fan-out. It selects no
-// recipient.
+// ScheduleMail prepares the notice for a schedule change. The service passes
+// only schedule facts; recipients, delivery and encryption are the composer's.
 type ScheduleMail struct {
 	Composer  *mail.SittingComposer
 	Revisions store.ExamRevisionStore
 	Classes   store.ClassStore
 }
 
-// Prepare builds the fan-out for one schedule change from the request's own
-// schedule facts. A notice names the prior Class only when the request moves
-// the Sitting to another one, and a canceled change is presented as a manager
-// cancellation.
+// Prepare builds the fan-out for one schedule change. The notice names the
+// prior class only when the sitting moves to another one, and presents a
+// cancellation as a manager cancellation.
 func (m ScheduleMail) Prepare(ctx context.Context, request ScheduleMailRequest) (*store.ExamSittingMailFanout, error) {
 	if m.Composer == nil || m.Revisions == nil || m.Classes == nil {
 		return nil, errors.New("sitting schedule mail preparation is unavailable")

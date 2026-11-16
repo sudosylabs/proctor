@@ -9,7 +9,6 @@ package identity
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"strconv"
 	"strings"
@@ -64,7 +63,7 @@ func TestAccountTokenServiceRequiresDependencies(t *testing.T) {
 			t.Parallel()
 			args := validAccountTokenConstructorArgs(t)
 			test.remove(&args)
-			require.Error(t, args.build().requireAccountTokens(), "constructor accepted missing dependency")
+			require.Error(t, args.build(t).requireAccountTokens(), "constructor accepted missing dependency")
 		})
 	}
 }
@@ -200,7 +199,6 @@ func TestAccountTokenCompletionConcealsTerminalTokenStates(t *testing.T) {
 				users: &accountTokenUserStoreFake{}, passwords: &accountTokenPasswordStoreFake{},
 				tokens:      &accountTokenStoreFake{consumeVerificationErr: store.NewErrNotFound("user_token", state)},
 				institution: &model.Institution{ID: model.NewInstitutionID()},
-				mailer:      &accountTokenMailerFake{enabled: true},
 			})
 			_, err := app.CompleteEmailVerification(
 				context.Background(), invocation.Invocation{},
@@ -220,7 +218,6 @@ func TestAccountTokenCompletionRejectsMalformedCredentialGenerically(t *testing.
 		users: &accountTokenUserStoreFake{}, passwords: &accountTokenPasswordStoreFake{},
 		tokens:      &accountTokenStoreFake{},
 		institution: &model.Institution{ID: model.NewInstitutionID()},
-		mailer:      &accountTokenMailerFake{enabled: true},
 	})
 	_, err := app.CompleteEmailVerification(
 		context.Background(), invocation.Invocation{},
@@ -232,17 +229,21 @@ func TestAccountTokenCompletionRejectsMalformedCredentialGenerically(t *testing.
 const accountTokenTestRawToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 type accountTokenTestDependencies struct {
-	users        store.UserStore
-	passwords    store.PasswordCredentialStore
-	tokens       store.UserTokenStore
-	institution  *model.Institution
-	mailer       mailComposer
-	effects      realtime.Publisher
-	hasher       passwordHasher
+	users       store.UserStore
+	passwords   store.PasswordCredentialStore
+	tokens      store.UserTokenStore
+	institution *model.Institution
+	// mailer is the mail Composer; nil means an enabled one whose renders
+	// the test does not read.
+	mailer  *mail.Composer
+	effects realtime.Publisher
+	// hasher is the password hasher; nil means one that encodes every
+	// password as "encoded-password".
+	hasher       *PasswordHasher
 	attempts     *AttemptAccounting
 	rateLimit    LoginRateLimitPolicy
 	now          func() time.Time
-	accessPolicy authenticationAccessPolicy
+	accessPolicy *currentAuthenticationAccessPolicy
 }
 
 func newAccountTokenTestApp(t *testing.T, deps accountTokenTestDependencies) *Service {
@@ -250,8 +251,11 @@ func newAccountTokenTestApp(t *testing.T, deps accountTokenTestDependencies) *Se
 	if deps.effects == nil {
 		deps.effects = &realtimetest.Publisher{}
 	}
+	if deps.mailer == nil {
+		deps.mailer, _ = newTestMail(t, true)
+	}
 	if deps.hasher == nil {
-		deps.hasher = accountTokenHasherFake{hash: "encoded-password"}
+		deps.hasher = fixedPasswordHasher(t, nil, "encoded-password", nil)
 	}
 	if deps.attempts == nil {
 		deps.attempts = mustAuthenticationAttemptAccounting(
@@ -267,7 +271,7 @@ func newAccountTokenTestApp(t *testing.T, deps accountTokenTestDependencies) *Se
 		deps.now = func() time.Time { return time.UnixMilli(1) }
 	}
 	if deps.accessPolicy == nil {
-		deps.accessPolicy = allowAllAuthenticationAccessPolicy()
+		deps.accessPolicy = allowAllAuthenticationAccessPolicy(t)
 	}
 	service := &Service{users: deps.users, passwords: deps.passwords, userTokens: deps.tokens, accessPolicy: deps.accessPolicy,
 		institutions: &accountTokenInstitutionStoreFake{institution: deps.institution}, mail: deps.mailer, attempts: deps.attempts,
@@ -384,79 +388,22 @@ func (s *accountTokenInstitutionStoreFake) GetSingleton(context.Context) (*model
 	return s.institution, s.err
 }
 
-type accountTokenMailerFake struct {
-	mailComposer
-	enabled  bool
-	messages []string
-	err      error
+// accountTokenTestUser is an active local User the real mail Composer can
+// address at email.
+func accountTokenTestUser(email string) *model.User {
+	user := &model.User{Username: strings.Split(email, "@")[0], Email: email, DisplayName: "Student", EmailVerified: true, Locale: "en", Timezone: "UTC"}
+	user.PrepareCreate(model.NewUserID(), time.UnixMilli(1))
+	return user
 }
 
-func (m *accountTokenMailerFake) Enabled() bool { return m.enabled }
-
-func (m *accountTokenMailerFake) prepareAccountToken(request mail.AccountTokenPreparation, key model.MailTemplateKey) (*store.PreparedMail, error) {
-	m.messages = append(m.messages, request.ActionURL)
-	if m.err != nil {
-		return nil, m.err
-	}
-	return &store.PreparedMail{
-		Occurrence: &model.MailOccurrence{ID: request.OccurrenceID, Kind: model.MailOccurrenceAccountToken, TemplateKey: key, CreatedAt: request.At},
-		Delivery:   &model.MailDelivery{Deadline: request.Deadline},
-		Job:        &model.Job{Type: model.JobTypeMailDeliverCredential},
-	}, nil
-}
-
-func (m *accountTokenMailerFake) PrepareEmailVerification(request mail.AccountTokenPreparation) (*store.PreparedMail, error) {
-	return m.prepareAccountToken(request, model.MailTemplateIdentityVerifyEmail)
-}
-
-func (m *accountTokenMailerFake) PreparePasswordReset(request mail.AccountTokenPreparation) (*store.PreparedMail, error) {
-	return m.prepareAccountToken(request, model.MailTemplateIdentityPasswordReset)
-}
-
-func (m *accountTokenMailerFake) PreparePasswordChanged(request mail.NoticePreparation) (*store.PreparedMail, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return &store.PreparedMail{Occurrence: &model.MailOccurrence{ID: model.NewMailOccurrenceID(), Kind: model.MailOccurrenceSecurityNotice,
-		TemplateKey: model.MailTemplateIdentityPasswordChanged, CreatedAt: request.At}, Delivery: &model.MailDelivery{Deadline: request.At.Add(24 * time.Hour)},
-		Job: &model.Job{Type: model.JobTypeMailDeliver}}, nil
-}
-
-func (m *accountTokenMailerFake) PrepareEmailChangeWarning(mail.AccountTokenPreparation) (*store.PreparedMail, error) {
-	return nil, errors.New("unexpected email change warning")
-}
-
-func (m *accountTokenMailerFake) PrepareEmailChangeVerification(mail.AccountTokenPreparation) (*store.PreparedMail, error) {
-	return nil, errors.New("unexpected email change verification")
-}
-
-func (m *accountTokenMailerFake) PrepareEmailVerifiedByAdministrator(mail.NoticePreparation) (*store.PreparedMail, error) {
-	return nil, errors.New("unexpected privileged email verification")
-}
-
-// accountTokenHasherFake stands in for the shared password hasher in account
-// recovery. It records each password it is asked to hash and returns hash and
-// err, or what hashFunc returns.
-type accountTokenHasherFake struct {
-	passwordHasher
-	hash      string
-	err       error
-	hashFunc  func(context.Context, string) (string, error)
-	passwords *[]string
-}
-
-func (f accountTokenHasherFake) Hash(ctx context.Context, password string) (string, error) {
-	if f.passwords != nil {
-		*f.passwords = append(*f.passwords, password)
-	}
-	if f.hashFunc != nil {
-		return f.hashFunc(ctx, password)
-	}
-	return f.hash, f.err
-}
-
-func (accountTokenHasherFake) ReuseCheck(string) store.PasswordReuseCheck {
-	return store.PasswordReuseCheck{}
+// accountTokenTestHasher encodes every password as encoded and appends each
+// password it is asked to hash to passwords.
+func accountTokenTestHasher(t testing.TB, encoded string, passwords *[]string) *PasswordHasher {
+	t.Helper()
+	return hookedPasswordHasher(t, func(_ context.Context, password string) (string, error) {
+		*passwords = append(*passwords, password)
+		return encoded, nil
+	})
 }
 
 type accountTokenConstructorArgs struct {
@@ -464,9 +411,9 @@ type accountTokenConstructorArgs struct {
 	passwords    store.PasswordCredentialStore
 	tokens       store.UserTokenStore
 	institutions store.InstitutionStore
-	mailer       mailComposer
+	mailer       *mail.Composer
 	attempts     *AttemptAccounting
-	hasher       passwordHasher
+	hasher       *PasswordHasher
 	nodeID       string
 	effects      realtime.Publisher
 	diagnostics  *logging.Logger
@@ -474,14 +421,17 @@ type accountTokenConstructorArgs struct {
 }
 
 func validAccountTokenConstructorArgs(t testing.TB) accountTokenConstructorArgs {
+	composer, _ := newTestMail(t, true)
+	hasher, err := NewPasswordHasher(PasswordHasherDependencies{Settings: testPasswordPolicy()})
+	require.NoError(t, err)
 	return accountTokenConstructorArgs{
 		users:        &accountTokenUserStoreFake{},
 		passwords:    &accountTokenPasswordStoreFake{},
 		tokens:       &accountTokenStoreFake{},
 		institutions: &accountTokenInstitutionStoreFake{},
-		mailer:       &accountTokenMailerFake{enabled: true},
+		mailer:       composer,
 		attempts:     &AttemptAccounting{deps: AttemptAccountingDependencies{Cache: newExpiringAuthenticationAttemptCache(time.Now)}},
-		hasher:       accountTokenHasherFake{},
+		hasher:       hasher,
 		nodeID:       "node-1",
 		effects:      &realtimetest.Publisher{},
 		diagnostics:  newDiscardLogger(t),
@@ -489,17 +439,13 @@ func validAccountTokenConstructorArgs(t testing.TB) accountTokenConstructorArgs 
 	}
 }
 
-func (a accountTokenConstructorArgs) build() *Service {
-	service := &Service{users: a.users, passwords: a.passwords, userTokens: a.tokens, accessPolicy: allowAllAuthenticationAccessPolicy(),
+func (a accountTokenConstructorArgs) build(t testing.TB) *Service {
+	service := &Service{users: a.users, passwords: a.passwords, userTokens: a.tokens, accessPolicy: allowAllAuthenticationAccessPolicy(t),
 		institutions: a.institutions, attempts: a.attempts, nodeID: a.nodeID, recoveryDiagnostics: a.diagnostics,
-		publicURL: "https://proctor.example.edu", newCredential: a.newToken, now: time.Now}
-	// Interfaces are set only when present, as composition sets them.
-	if a.mailer != nil {
-		service.mail = a.mailer
-	}
-	if a.hasher != nil {
-		service.hasher = a.hasher
-	}
+		publicURL: "https://proctor.example.edu", newCredential: a.newToken, now: time.Now,
+		mail: a.mailer, hasher: a.hasher}
+	// The publisher is an interface, so it is set only when present, as
+	// composition sets it; a nil one would otherwise read as configured.
 	if a.effects != nil {
 		service.publisher = a.effects
 	}

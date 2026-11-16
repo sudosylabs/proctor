@@ -104,7 +104,7 @@ func (row retentionRetirementRow) retirement() (*model.RetentionRetirement, erro
 }
 
 // ReconcileSubmission cancels, schedules or commits the retention retirements
-// of one Submission's records under the current policy and control, and
+// of one submission's records under the current policy and control, and
 // completes the input audit.
 func (s *SQLRetentionStore) ReconcileSubmission(
 	ctx context.Context,
@@ -121,8 +121,8 @@ func (s *SQLRetentionStore) ReconcileSubmission(
 	})
 }
 
-// reconcileSubmissionRetention locks the retention fence and the Submission's
-// Exam, Sitting and row, settles retiring deliveries, and reconciles each
+// reconcileSubmissionRetention locks the retention fence and the submission's
+// exam, sitting and row, settles retiring deliveries, and reconciles each
 // record, integrity first.
 func reconcileSubmissionRetention(
 	ctx context.Context,
@@ -154,7 +154,7 @@ func reconcileSubmissionRetention(
 	if err != nil {
 		return nil, err
 	}
-	// Re-read after the same Exam/Sitting fences used by holds, completion,
+	// Re-read after the same exam/Sitting fences used by holds, completion,
 	// late evidence, and export source selection.
 	if err = tx.Get(
 		ctx,
@@ -194,8 +194,8 @@ func reconcileSubmissionRetention(
 	return result, nil
 }
 
-// lockRetentionSubmission reads the Submission's retention facts and locks
-// its Exam, Sitting and Submission rows in that order.
+// lockRetentionSubmission reads the submission's retention facts and locks
+// its exam, sitting and submission rows in that order.
 func lockRetentionSubmission(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -403,7 +403,7 @@ func scheduleRetention(
 
 	// The notice is a durable product record, independent of SMTP availability.
 	// Managers and operators are resolved at schedule time. Candidate inclusion
-	// is a deliberate Institution policy option, initially false.
+	// is a deliberate institution policy option, initially false.
 	_, err = tx.Exec(
 		ctx,
 		`INSERT INTO retention_notices(retirement_id, recipient_user_id, created_at)
@@ -491,13 +491,11 @@ func commitRetention(ctx context.Context, tx *sqlxTxWrapper, retirement *model.R
 }
 
 func retireSubmissionIntegrity(ctx context.Context, tx *sqlxTxWrapper, id model.SubmissionID, at time.Time) error {
-	// Private Review text and derived inventories expire with their source
-	// evidence. Delete children first while the retirement receipt is visible
-	// to the database's immutable-record guards.
-	// Export creation retains only an Export ID; its independently expiring
-	// archive and exact retry survive source retirement without copying content.
-	// Screen clips are integrity evidence. Their chunk keys are reserved for
-	// File Content's purge before their rows go.
+	// Private review text and derived inventories expire with their evidence.
+	// Delete children first, while the retirement receipt is visible to the
+	// immutable-record guards. An export keeps only its ID, so its archive and
+	// exact retry survive source retirement. Screen clip chunk keys are
+	// reserved for the file content purge before their rows go.
 	if _, err := tx.Exec(ctx, `INSERT INTO retention_purge_screen_clips(retirement_id, screen_clip_id, chunk_count)
 		SELECT r.id, c.id, cardinality(c.chunk_sha256)
 		FROM exam_attempt_screen_clips c
@@ -573,9 +571,9 @@ func retireSubmissionIntegrity(ctx context.Context, tx *sqlxTxWrapper, id model.
 }
 
 // workOutcomeRetirement removes the retry outcomes that cite a retired
-// Submission's work. Every disjunct is served by an audit index, so
+// submission's work. Every disjunct is served by an audit index, so
 // PostgreSQL combines them with a bitmap OR instead of scanning every audit
-// event for each retired Submission.
+// event for each retired submission.
 const workOutcomeRetirement = `DELETE FROM command_outcomes
 		WHERE operation <> '` + store.ExamExportCreateOperation + `'
 			AND original_audit_event_id IN (

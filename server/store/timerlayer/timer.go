@@ -15,16 +15,15 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Operation is a closed, low-cardinality store operation label. The layer
-// creates every value internally; callers can inspect only its stable name.
+// Operation is a store metric label; only this package creates them.
 type Operation struct {
 	name string
 }
 
-// String returns the stable aggregate.operation metric label.
+// String returns the label as aggregate.operation.
 func (o Operation) String() string { return o.name }
 
-// Outcome is the bounded result category recorded for an operation.
+// Outcome is whether an operation returned an error.
 type Outcome string
 
 const (
@@ -32,9 +31,8 @@ const (
 	OutcomeError   Outcome = "error"
 )
 
-// Recorder consumes bounded store timing observations. It deliberately
-// receives no store arguments, results, context values, or error details.
-// Implementations must return quickly; a panic is isolated from store callers.
+// Recorder receives operation timings, never arguments, results, context or
+// error details. It must return quickly; a panic is recovered.
 type Recorder interface {
 	Observe(Operation, Outcome, time.Duration)
 }
@@ -51,25 +49,22 @@ type NopRecorder struct{}
 
 func (NopRecorder) Observe(Operation, Outcome, time.Duration) {}
 
-// SlowRecorder receives the operations that took at least the configured slow
-// threshold. Like Recorder it receives only the closed operation name and its
-// duration; the context is the caller's, for log correlation only, and must
-// not be inspected for store arguments. A panic is isolated from store callers.
+// SlowRecorder receives operations that took at least the slow threshold.
+// The context is the caller's, for log correlation only; it must not be
+// inspected for store arguments. A panic is recovered.
 type SlowRecorder interface {
 	ObserveSlow(context.Context, Operation, time.Duration)
 }
 
-// Tracer starts one span per store operation. It receives only the closed
-// operation name, and the returned context is handed to the forwarded call so
-// nested work joins the span. finish receives the bounded outcome; a panic
-// in either is isolated from store callers.
+// Tracer starts one span per store operation. The returned context is passed
+// to the forwarded call so nested work joins the span. A panic in either
+// function is recovered.
 type Tracer interface {
 	StartOperation(ctx context.Context, operation Operation) (spanCtx context.Context, finish func(Outcome))
 }
 
-// Options selects the optional observers of a Layer beyond its Recorder.
+// Options holds a Layer's optional observers; the zero value adds none.
 type Options struct {
-	// Tracer, when set, encloses every operation in a span.
 	Tracer Tracer
 	// SlowThreshold, when positive, reports every operation lasting at least
 	// this long to Slow. Zero disables slow-operation reporting.
@@ -77,8 +72,7 @@ type Options struct {
 	Slow          SlowRecorder
 }
 
-// Layer is a semantics-preserving timing decorator for the complete root
-// persistence store and every per-model store it exposes.
+// Layer times the root store and every store it exposes.
 type Layer struct {
 	next     store.Store
 	recorder Recorder
@@ -87,7 +81,7 @@ type Layer struct {
 	stores   timedStores
 }
 
-// New constructs a transparent timing layer around next.
+// New wraps next. Options.Slow is required when SlowThreshold is positive.
 func New(next store.Store, recorder Recorder, options Options) (*Layer, error) {
 	if next == nil {
 		return nil, errors.New("timed store is nil")
@@ -139,8 +133,7 @@ func timeStoreCall2[T, U any](
 	return first, second, err
 }
 
-// begin starts the operation's optional span and clock. The returned context
-// is the one the forwarded call receives; finish records every observation.
+// begin returns the context the forwarded call must receive.
 func (l *Layer) begin(ctx context.Context, operation Operation) (context.Context, func(error)) {
 	endSpan := func(Outcome) {}
 	if l.options.Tracer != nil {

@@ -32,10 +32,10 @@ const (
 type NativeRuleMode string
 
 const (
-	// NativeRuleEnforce contains on not met and on unknown, and blocks Start.
+	// NativeRuleEnforce contains on not met and on unknown, and blocks start.
 	NativeRuleEnforce NativeRuleMode = "enforce"
 	// NativeRuleObserve is evaluated and reported, never contains and never
-	// blocks Start.
+	// blocks start.
 	NativeRuleObserve NativeRuleMode = "observe"
 )
 
@@ -51,7 +51,7 @@ const (
 	NativeRuleBoth          NativeRulePhase = "both"
 )
 
-// IsValid reports whether the phase is a known one.
+// IsValid reports whether p is readiness, participation or both.
 func (p NativeRulePhase) IsValid() bool {
 	return p == NativeRuleReadiness || p == NativeRuleParticipation || p == NativeRuleBoth
 }
@@ -91,7 +91,7 @@ type NativeScalar struct {
 	Boolean bool
 }
 
-// NativeCount, NativeEnum and NativeBoolean build scalars.
+// NativeCount, NativeEnum and NativeBoolean build scalars of each type.
 func NativeCount(value int64) NativeScalar { return NativeScalar{Type: NativeFieldCount, Count: value} }
 func NativeEnum(value string) NativeScalar { return NativeScalar{Type: NativeFieldEnum, Enum: value} }
 func NativeBoolean(value bool) NativeScalar {
@@ -131,20 +131,15 @@ type NativeRule struct {
 
 var errNativeRule = errors.New("native rule is invalid")
 
-// NativeRuleCatalog is the application catalog rules name: whether an
-// application is registered, and whether a policy may allow it. The release
-// registry is the catalog; baseline rules are checked against none.
-type NativeRuleCatalog interface {
-	Application(id string) (allowable, known bool)
-}
-
-// ValidateNativeRules checks a rule list against the registry, the activated
-// capabilities and the application catalog.
+// ValidateNativeRules checks rules against the registry, the activated
+// capabilities and the application catalog. Policy rules pass the release
+// registry as catalog; baseline rules pass nil, so no application condition
+// is valid in them.
 func ValidateNativeRules(
 	rules []NativeRule,
 	registry *NativeCapabilityRegistry,
 	activated map[NativeCapabilityID]bool,
-	catalog NativeRuleCatalog,
+	catalog *NativeCapabilityRegistry,
 ) error {
 	if len(rules) > NativeRuleLimit {
 		return errNativeRule
@@ -162,7 +157,7 @@ func ValidateNativeRules(
 func (r NativeRule) validate(
 	registry *NativeCapabilityRegistry,
 	activated map[NativeCapabilityID]bool,
-	catalog NativeRuleCatalog,
+	catalog *NativeCapabilityRegistry,
 ) error {
 	capability, ok := registry.Capability(r.Capability)
 	if !ok || !activated[r.Capability] || !isNativeRuleID(r.RuleID) ||
@@ -209,7 +204,7 @@ func (c NativeCondition) members() int {
 func (c NativeCondition) valid(
 	registry *NativeCapabilityRegistry,
 	capability NativeCapabilityDefinition,
-	catalog NativeRuleCatalog,
+	catalog *NativeCapabilityRegistry,
 	depth int,
 	comparisons *int,
 ) bool {
@@ -277,7 +272,7 @@ func (s NativeScalar) fits(field NativeFieldDefinition) bool {
 
 // validNativeAppIDs checks an application list: sorted, unique, every ID
 // registered, and, for an allowlist, every application allowable.
-func validNativeAppIDs(ids []string, catalog NativeRuleCatalog, allowlist bool) bool {
+func validNativeAppIDs(ids []string, catalog *NativeCapabilityRegistry, allowlist bool) bool {
 	if len(ids) == 0 || len(ids) > NativeRuleAppIDLimit || !slices.IsSorted(ids) {
 		return false
 	}
@@ -293,9 +288,9 @@ func validNativeAppIDs(ids []string, catalog NativeRuleCatalog, allowlist bool) 
 // isNativeRuleID accepts r1 or baseline.single_display.
 func isNativeRuleID(value string) bool { return isNativeIdentifier(value) || isNativeReasonID(value) }
 
-// Wire forms. They follow Desktop's rule grammar exactly; decoding rejects
-// unknown members, duplicate or aliased keys, and anything that does not
-// re-encode to the same canonical bytes.
+// Wire forms follow Desktop's rule grammar exactly; decoding rejects unknown
+// members, duplicate or aliased keys, and anything that does not re-encode to
+// the same canonical bytes.
 
 type nativeRuleWire struct {
 	RuleID      string              `json:"rule_id"`

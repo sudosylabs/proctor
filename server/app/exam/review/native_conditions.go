@@ -18,7 +18,7 @@ import (
 )
 
 // ListNativeConditions returns one page of native condition evidence for a
-// Submission to a caller authorized to view its Submission Review.
+// submission to a caller allowed to view its review.
 func (s *Service) ListNativeConditions(
 	ctx context.Context,
 	inv invocation.Invocation,

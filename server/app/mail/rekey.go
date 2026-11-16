@@ -20,7 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// RekeyView identifies a started mail rekey Job and the keys it moves
+// RekeyView identifies a started mail rekey job and the keys it moves
 // payloads between.
 type RekeyView struct {
 	JobID         model.JobID
@@ -43,8 +43,8 @@ type KeyStateView struct {
 	Active               []PayloadKeyUsageView
 }
 
-// GetMailKeyState reports the configured and required primary mail payload
-// keys and the keys still referenced by active payloads.
+// GetMailKeyState needs a strong, recent session. It reports the configured
+// and required primary keys and the keys active payloads still reference.
 func (s *Operations) GetMailKeyState(ctx context.Context, inv invocation.Invocation) (KeyStateView, error) {
 	if s == nil {
 		return KeyStateView{}, apperror.New("mail.unavailable")
@@ -80,8 +80,8 @@ func (s *Operations) GetMailKeyState(ctx context.Context, inv invocation.Invocat
 	return view, nil
 }
 
-// StartMailRekey starts the Job that re-encrypts active mail payloads away
-// from a retiring key to the configured primary key.
+// StartMailRekey starts the job that re-encrypts active payloads from a
+// retiring key to the configured primary key.
 func (s *Operations) StartMailRekey(ctx context.Context, inv invocation.Invocation, retiringKeyID string) (RekeyView, error) {
 	if s == nil {
 		return RekeyView{}, apperror.New("mail.unavailable")
@@ -94,7 +94,7 @@ func (s *Operations) StartMailRekey(ctx context.Context, inv invocation.Invocati
 	if err != nil {
 		return RekeyView{}, err
 	}
-	if s.deps.Mail == nil || s.rekeyAudit == nil || s.deps.Sealer == nil || s.wake == nil {
+	if s.deps.Mail == nil || s.deps.Sealer == nil || s.wake == nil {
 		return RekeyView{}, apperror.New("mail.unavailable")
 	}
 

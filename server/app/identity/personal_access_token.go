@@ -29,9 +29,7 @@ import (
 
 const (
 	personalAccessTokenMutationPreparationLifetime = 5 * time.Minute
-	// personalAccessTokenGrantableAcademicUnitLimit bounds the delegable
-	// Academic Unit roots listed in the grantable-scope catalogue.
-	personalAccessTokenGrantableAcademicUnitLimit = 50
+	personalAccessTokenGrantableAcademicUnitLimit  = 50
 )
 
 // CreatePersonalAccessTokenCommand creates a new PAT for the interactive caller.
@@ -48,8 +46,6 @@ type SetPersonalAccessTokenDisabledCommand struct {
 	Disabled bool
 }
 
-// requirePersonalAccessTokenAdministration checks the collaborators of
-// personal access token administration.
 func (s *Service) requirePersonalAccessTokenAdministration() error {
 	if s.personalAccessTokens == nil {
 		return errors.New("personal access token administration store is required")
@@ -78,8 +74,8 @@ func (s *Service) requirePersonalAccessTokenAdministration() error {
 	return nil
 }
 
-// CreatePersonalAccessToken creates a PAT for the interactive caller within
-// the actions the caller may delegate, and returns its credential once.
+// CreatePersonalAccessToken limits the PAT to actions the caller may delegate
+// and returns its credential once.
 func (s *Service) CreatePersonalAccessToken(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -303,8 +299,7 @@ func (s *Service) RevokePersonalAccessToken(
 	return result.Token, nil
 }
 
-// SetPersonalAccessTokenDisabled disables or enables one of the caller's
-// PATs.
+// SetPersonalAccessTokenDisabled disables or enables one of the caller's PATs.
 func (s *Service) SetPersonalAccessTokenDisabled(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -505,8 +500,6 @@ func (s *Service) failPersonalAccessTokenMutation(
 	return mapped
 }
 
-// preparePersonalAccessTokenAudit builds the bounded audit draft a durable
-// token mutation preparation owns.
 func (s *Service) preparePersonalAccessTokenAudit(
 	ctx context.Context,
 	principal model.Principal,
@@ -532,10 +525,9 @@ func invalidPersonalAccessTokenRequest(field string) error {
 	return apperror.New("personal_access_token.invalid").WithField("field", field)
 }
 
-// personalAccessTokenFailure presents a failed token operation. Application
-// errors from notice preparation and delegation checks are not the caller's
-// concern, so they are presented as token unavailability like any other
-// non-Store failure.
+// personalAccessTokenFailure reports application errors from notice
+// preparation and delegation checks as unavailability: they are not the
+// caller's concern.
 func personalAccessTokenFailure(resource string, err error) error {
 	if _, ok := apperror.As(err); ok {
 		return apperror.New("personal_access_token.unavailable").WithField("resource", resource).Wrap(err)
@@ -553,8 +545,8 @@ func personalAccessTokenFailure(resource string, err error) error {
 	}.Translate(err)
 }
 
-// PersonalAccessTokenPolicy controls PAT lifetime bounds, per-user limits, and
-// last-used write debouncing during bearer resolution.
+// PersonalAccessTokenPolicy bounds PAT lifetimes and count per user;
+// LastUsedUpdateInterval debounces last-used writes during bearer resolution.
 type PersonalAccessTokenPolicy struct {
 	MinimumLifetime        time.Duration
 	MaximumLifetime        time.Duration

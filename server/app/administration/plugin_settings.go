@@ -22,14 +22,12 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// PluginCatalog is what the plugin administration use cases need from the
-// plugins compiled into the server. The composition root adapts the plugin
-// host to it.
+// PluginCatalog is what plugin administration needs from the compiled-in
+// plugins; composition adapts the plugin host to it.
 type PluginCatalog interface {
 	// Plugins describes every compiled-in plugin, in activation order.
 	Plugins() []PluginDescriptor
-	// ValidatePluginSettings asks the plugin whether settings are
-	// acceptable. An error refuses them.
+	// ValidatePluginSettings returns an error to refuse settings.
 	ValidatePluginSettings(ctx context.Context, id model.PluginID, settings json.RawMessage) error
 	// PluginSettingsChanged asks this node to apply saved settings now
 	// rather than at its next check. It does not wait.
@@ -47,22 +45,21 @@ type PluginDescriptor struct {
 	SettingsSchema json.RawMessage
 }
 
-// PluginView is one plugin as an administrator sees it: what it is, its
-// state on this node, and the settings saved for it.
+// PluginView is one plugin as an administrator sees it, with its saved
+// settings.
 type PluginView struct {
 	PluginDescriptor
-	// Enabled is whether the plugin should run: the saved choice, or its
-	// default when nothing is saved. A required plugin is always enabled.
+	// Enabled is the saved choice, or the default when nothing is saved. A
+	// required plugin is always enabled.
 	Enabled bool
-	// Settings is the saved settings document, or an empty object.
+	// Settings is an empty object when nothing is saved.
 	Settings json.RawMessage
-	// Revision is the saved settings revision, 0 when nothing is saved.
+	// Revision is 0 when nothing is saved.
 	Revision int64
 }
 
-// ReplacePluginSettingsCommand saves one plugin's settings behind
-// optimistic revision and idempotency fences. ExpectedRevision is 0 when
-// nothing is saved yet.
+// ReplacePluginSettingsCommand saves one plugin's settings. ExpectedRevision
+// is 0 when nothing is saved yet.
 type ReplacePluginSettingsCommand struct {
 	PluginID         model.PluginID
 	ExpectedRevision int64
@@ -88,8 +85,8 @@ func (s *Service) ListPlugins(ctx context.Context, inv invocation.Invocation) ([
 	return views, nil
 }
 
-// ReplacePluginSettings saves one plugin's settings and has them applied on
-// every node.
+// ReplacePluginSettings saves one plugin's settings and has every node apply
+// them.
 func (s *Service) ReplacePluginSettings(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -172,8 +169,8 @@ func (s *Service) ReplacePluginSettings(
 	return pluginView(descriptor, stored.Settings), nil
 }
 
-// publishPluginSettingsChanged tells administrators' clients to refetch. A
-// failure is reported, not returned: the change is already saved.
+// publishPluginSettingsChanged reports a failure rather than returning it:
+// the change is already saved.
 func (s *Service) publishPluginSettingsChanged(ctx context.Context, institutionID model.InstitutionID, settings *model.PluginSettings) {
 	event, err := realtime.NewPluginSettingsChangedEvent(institutionID, settings.PluginID, settings.Revision)
 	if err == nil {
@@ -184,7 +181,6 @@ func (s *Service) publishPluginSettingsChanged(ctx context.Context, institutionI
 	}
 }
 
-// authorizePlugins authorizes plugin administration on the Institution.
 func (s *Service) authorizePlugins(ctx context.Context, inv invocation.Invocation) (*model.Institution, model.Resource, error) {
 	if s.plugins == nil || s.pluginSettings == nil {
 		return nil, model.Resource{}, apperror.New("plugin.unavailable")

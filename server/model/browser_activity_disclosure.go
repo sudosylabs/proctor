@@ -7,9 +7,10 @@
 
 package model
 
-// BrowserActivityDisclosure explains collection. It confers no history access
-// and is neither consent nor a correction acknowledgement. Zero days denotes
-// no configured automatic expiry; holds and completion gates still apply.
+// BrowserActivityDisclosure explains what is collected. It grants no access to
+// history and is neither consent nor an acknowledgement. Zero retention days
+// means no automatic expiry is configured; holds and completion gates still
+// apply.
 type BrowserActivityDisclosure struct {
 	NoticeID                     string `json:"notice_id"`
 	Audience                     string `json:"audience"`

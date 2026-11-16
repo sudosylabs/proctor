@@ -144,7 +144,6 @@ type NativeApplication struct {
 	Allowable bool
 }
 
-// withApplications returns the registry with its application catalog.
 func (r *NativeCapabilityRegistry) withApplications(applications []NativeApplication) (*NativeCapabilityRegistry, error) {
 	if len(applications) > NativeApplicationCatalogLimit {
 		return nil, errNativeRegistry
@@ -250,7 +249,7 @@ func NewNativeCapabilityRegistry(definitions []NativeCapabilityDefinition) (*Nat
 	return registry, nil
 }
 
-// Capability returns a registered capability.
+// Capability returns a registered capability; false means id is unknown.
 func (r *NativeCapabilityRegistry) Capability(id NativeCapabilityID) (NativeCapabilityDefinition, bool) {
 	if r == nil {
 		return NativeCapabilityDefinition{}, false
@@ -263,7 +262,8 @@ func (r *NativeCapabilityRegistry) Capability(id NativeCapabilityID) (NativeCapa
 	return NativeCapabilityDefinition{}, false
 }
 
-// Field returns a registered field and the capability it belongs to.
+// Field returns a registered field and its capability; false means name is
+// unknown.
 func (r *NativeCapabilityRegistry) Field(name string) (NativeFieldDefinition, NativeCapabilityID, bool) {
 	if r == nil {
 		return NativeFieldDefinition{}, "", false

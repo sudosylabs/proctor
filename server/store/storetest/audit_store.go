@@ -593,9 +593,9 @@ func testAuditSelfHistory(t *testing.T, ctx context.Context, ss store.Store, ins
 }
 
 // testAuditNames proves ListNames names each record only inside its
-// visibility: Users as the User directory sees them (a scoped visibility
-// never names a disabled User), Academic Units through their subtrees, and
-// Classes as a Class search sees them; archived records are never named.
+// visibility: users as the user directory sees them (a scoped visibility
+// never names a disabled user), academic units through their subtrees, and
+// classes as a class search sees them; archived records are never named.
 func testAuditNames(t *testing.T, ctx context.Context, ss store.Store, institutionID string) {
 	t.Helper()
 	root := saveAcademicUnit(t, ctx, ss, institutionID, "", "audit-names-root")

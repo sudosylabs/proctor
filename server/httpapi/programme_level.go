@@ -8,12 +8,9 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -44,10 +41,10 @@ type updateProgrammeLevelRequest struct {
 }
 
 type programmeLevelHandlers struct {
-	app ProgrammeLevelApplication
+	app *academic.Service
 }
 
-func programmeLevelResource(app ProgrammeLevelApplication) route.Resource {
+func programmeLevelResource(app *academic.Service) route.Resource {
 	h := programmeLevelHandlers{app: app}
 	collection := "/programmes/{programme_id}/levels"
 	member := "/programme-levels/{programme_level_id}"
@@ -229,13 +226,4 @@ func programmeLevelResponseFromModel(level *model.ProgrammeLevel) programmeLevel
 		DisplayName: level.DisplayName,
 		Description: level.Description,
 	}
-}
-
-// ProgrammeLevelApplication is the application port its handlers call; it reads and changes Programme Levels.
-type ProgrammeLevelApplication interface {
-	GetProgrammeLevel(context.Context, invocation.Invocation, model.ProgrammeLevelID) (*model.ProgrammeLevel, error)
-	ListProgrammeLevels(context.Context, invocation.Invocation, academic.ListProgrammeLevelsQuery) (paging.Counted[*model.ProgrammeLevel], error)
-	CreateProgrammeLevel(context.Context, invocation.Invocation, academic.CreateProgrammeLevelCommand) (*model.ProgrammeLevel, error)
-	UpdateProgrammeLevel(context.Context, invocation.Invocation, academic.UpdateProgrammeLevelCommand) (*model.ProgrammeLevel, error)
-	ArchiveProgrammeLevel(context.Context, invocation.Invocation, academic.ArchiveProgrammeLevelCommand) error
 }

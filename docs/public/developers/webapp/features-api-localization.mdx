@@ -14,25 +14,12 @@ policy. It doesn't hand raw transport results to visual components. And it
 doesn't create abstractions before a second consumer shows it needs the same
 behavior.
 
-## Start with the feature contract
+## Start with the feature code
 
-Read the feature's own `CONTRACT.md` before the code. A useful contract
-names:
-
-- the hosted route and its purpose
-- the cleaned-up bootstrap input and how long it lives
-- the API operations and the success responses the feature accepts
-- the fixed set of feature states
-- what happens on validation, while pending, on failure, on retry and at the
-  end
-- which fields or credentials must never be rendered, stored or logged
-- how focus and announcements behave
-- the shared component contracts that apply
-- behavior the feature deliberately leaves to others
-
-The contract records behavior that is stable and not obvious. It doesn't
-list every function, CSS class, message key or test name, which a
-contributor can find in the tree.
+Read the feature's API module and page before you change them. Comments on
+the exported actions record what the code alone doesn't show: how long a
+credential lives, which response counts as success, and what must never be
+rendered, stored or logged.
 
 ## Keep the route page thin
 
@@ -77,7 +64,7 @@ the base URL to save effort.
 
 ## Turn transport into meaningful results
 
-An API action accepts only the response the feature contract declares. A
+An API action accepts only the response its OpenAPI operation declares. A
 200 can't stand in for a declared 204 just because both are successful HTTP
 statuses.
 
@@ -148,7 +135,7 @@ Layouts must cope with longer translations, and with right-to-left text in
 the future. Use logical CSS properties, let text wrap, and don't let an
 English button label set a fixed control width.
 
-## Reuse components by their contract
+## Reuse components for their purpose
 
 Use a shared component only when its purpose and its states match the
 feature. The access pages have a deliberately narrow set:
@@ -171,7 +158,7 @@ Start a new visual pattern inside the first feature that needs it. Promote it
 only once a second real consumer needs the same behavior. Then, in one
 change, add:
 
-- a narrow component contract
+- a narrow component interface, with comments for the rules it can't show
 - focused tests
 - evidence in both themes
 - evidence that it copes with longer content
@@ -204,15 +191,13 @@ deserve a token. Copying a palette is never an acceptable local exception.
 
 ## Review the feature boundary
 
-- Does the contract describe real behavior, without turning into a list of
-  files?
 - Does the route page wire up dependencies without taking on feature state?
 - Does the API action use the generated same-origin client?
 - Are the accepted successes exact, and do unknown failures land in a known
   result?
 - Does presentation get meaningful results rather than transport values?
 - Is every visible message generated from the server catalog?
-- Does reuse of a component follow its existing contract?
+- Does reuse of a component fit what it was built for?
 - Are new styles local, semantic, complete in every theme and safe for
   focus?
 

@@ -29,7 +29,7 @@ type AcademicArchiveState struct {
 }
 
 // AcademicArchiveProbe reads retained state that ordinary active-only Get
-// operations deliberately hide. It does not add an archived read to the Store.
+// operations deliberately hide. It does not add an archived read to the store.
 type AcademicArchiveProbe func(context.Context, model.Resource) (AcademicArchiveState, error)
 
 // TestAcademicArchiveTimestamps checks ordinary and audited archive outcomes

@@ -12,9 +12,8 @@ import (
 	"strings"
 )
 
-// PreferredLocale selects the best supported locale from an HTTP
-// Accept-Language value. An empty result asks Resolve to use installation and
-// English fallback.
+// PreferredLocale picks the best supported locale from an Accept-Language
+// value. An empty result makes Resolve fall back to the default and English.
 func PreferredLocale(acceptLanguage string, supported []string) string {
 	type preference struct {
 		locale  string

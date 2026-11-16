@@ -21,6 +21,7 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>(
     },
     ref,
   ) {
+    // Visibility is local state only; it never reaches the URL or a payload.
     const [visible, setVisible] = useState(false);
     const toggleLabel = visible ? hidePasswordLabel : showPasswordLabel;
 

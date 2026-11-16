@@ -9,7 +9,7 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -23,34 +23,41 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/exam/sitting"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// newSittingAPI serves the Sitting routes over a fresh fixture, as its caller.
+func newSittingAPI(t *testing.T) (*sittingFixture, http.Handler) {
+	t.Helper()
+	logger, _ := routetest.NewLogger(t)
+	principal := testExamHTTPPrincipal()
+	f := newSittingFixture(t, principal)
+	return f, newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, examSittingResource(f.sittingService))
+}
+
 func TestExamSittingHTTPScheduleUsesStrictIdempotentCommandAndSafeResponse(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	fake := newExamSittingHTTPFake(t)
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
-	body := `{"exam_revision_id":"` + fake.sitting.ExamRevisionID.String() + `","class_id":"` + fake.sitting.ClassID.String() + `","scheduled_start_at":"2026-08-15T12:30:00+02:00","scheduled_end_at":"2026-08-15T14:30:00+02:00"}`
-	request := newJSONRequest(http.MethodPost, examSittingCollectionPath(fake.sitting.ExamID), strings.NewReader(body))
+	f, httpAPI := newSittingAPI(t)
+	body := `{"exam_revision_id":"` + f.sitting.ExamRevisionID.String() + `","class_id":"` + f.sitting.ClassID.String() + `","scheduled_start_at":"2026-08-15T12:30:00+02:00","scheduled_end_at":"2026-08-15T14:30:00+02:00"}`
+	request := newJSONRequest(http.MethodPost, examSittingCollectionPath(f.examID), strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Idempotency-Key", "schedule-once")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 
 	require.Equal(t, http.StatusCreated, response.Code, "status = %d, body = %s", response.Code, response.Body.String())
-	require.Equal(t, fake.sitting.ExamID, fake.schedule.ExamID)
-	require.Equal(t, fake.sitting.ExamRevisionID, fake.schedule.ExamRevisionID)
-	require.Equal(t, fake.sitting.ClassID, fake.schedule.ClassID)
-	require.Equal(t, "schedule-once", fake.schedule.IdempotencyKey)
-	require.Same(t, time.UTC, fake.schedule.ScheduledStartAt.Location())
-	require.Equal(t, 10, fake.schedule.ScheduledStartAt.Hour())
-	require.Same(t, time.UTC, fake.schedule.ScheduledEndAt.Location())
-	require.Equal(t, 12, fake.schedule.ScheduledEndAt.Hour())
+	require.Len(t, f.sittingStore.schedules, 1, "the schedule never reached the Sitting Store")
+	scheduled := f.sittingStore.schedules[0].Sitting
+	require.Equal(t, f.examID, scheduled.ExamID)
+	require.Equal(t, f.sitting.ExamRevisionID, scheduled.ExamRevisionID)
+	require.Equal(t, f.sitting.ClassID, scheduled.ClassID)
+	require.Equal(t, sha256.Sum256([]byte("schedule-once")), f.sittingStore.lastCommand(t).KeyDigest)
+	require.Same(t, time.UTC, scheduled.ScheduledStartAt.Location())
+	require.Equal(t, 10, scheduled.ScheduledStartAt.Hour())
+	require.Same(t, time.UTC, scheduled.ScheduledEndAt.Location())
+	require.Equal(t, 12, scheduled.ScheduledEndAt.Hour())
 	var payload map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &payload))
 	wantKeys := []string{"id", "exam_id", "exam_revision_id", "class_id", "scheduled_start_at", "scheduled_end_at", "state", "created_at", "updated_at", "revision"}
@@ -69,44 +76,46 @@ func TestExamSittingHTTPMutationBodiesAreClosedDuplicateFreeAndPresenceAware(t *
 	t.Parallel()
 	for _, test := range []struct {
 		name string
-		body func(*examSittingHTTPFake) string
+		body func(*sittingFixture) string
 	}{
-		{name: "unknown create field", body: func(fake *examSittingHTTPFake) string {
-			return `{"exam_revision_id":"` + fake.sitting.ExamRevisionID.String() + `","class_id":"` + fake.sitting.ClassID.String() + `","scheduled_start_at":"2026-08-15T10:00:00Z","scheduled_end_at":"2026-08-15T11:00:00Z","extra":true}`
+		{name: "unknown create field", body: func(f *sittingFixture) string {
+			return `{"exam_revision_id":"` + f.sitting.ExamRevisionID.String() + `","class_id":"` + f.sitting.ClassID.String() + `","scheduled_start_at":"2026-08-15T10:00:00Z","scheduled_end_at":"2026-08-15T11:00:00Z","extra":true}`
 		}},
-		{name: "duplicate create field", body: func(fake *examSittingHTTPFake) string {
-			return `{"exam_revision_id":"` + fake.sitting.ExamRevisionID.String() + `","exam_revision_id":"` + fake.sitting.ExamRevisionID.String() + `","class_id":"` + fake.sitting.ClassID.String() + `","scheduled_start_at":"2026-08-15T10:00:00Z","scheduled_end_at":"2026-08-15T11:00:00Z"}`
+		{name: "duplicate create field", body: func(f *sittingFixture) string {
+			return `{"exam_revision_id":"` + f.sitting.ExamRevisionID.String() + `","exam_revision_id":"` + f.sitting.ExamRevisionID.String() + `","class_id":"` + f.sitting.ClassID.String() + `","scheduled_start_at":"2026-08-15T10:00:00Z","scheduled_end_at":"2026-08-15T11:00:00Z"}`
 		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			logger, _ := routetest.NewLogger(t)
-			fake := newExamSittingHTTPFake(t)
-			httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
-			request := newJSONRequest(http.MethodPost, examSittingCollectionPath(fake.sitting.ExamID), strings.NewReader(test.body(fake)))
+			f, httpAPI := newSittingAPI(t)
+			request := newJSONRequest(http.MethodPost, examSittingCollectionPath(f.examID), strings.NewReader(test.body(f)))
 			request.Header.Set("Authorization", "Bearer credential")
 			request.Header.Set("Idempotency-Key", "schedule-once")
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
-			require.Equal(t, http.StatusBadRequest, response.Code, "status = %d command = %#v body = %s", response.Code, fake.schedule, response.Body.String())
-			require.False(t, fake.schedule.ExamID.IsValid(), "status = %d command = %#v body = %s", response.Code, fake.schedule, response.Body.String())
+			require.Equal(t, http.StatusBadRequest, response.Code, "status = %d body = %s", response.Code, response.Body.String())
+			require.Empty(t, f.sittingStore.schedules, "a rejected body reached the Sitting Store")
 		})
 	}
 
-	logger, _ := routetest.NewLogger(t)
-	fake := newExamSittingHTTPFake(t)
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
-	path := examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)
-	patch := `{"expected_revision":1,"class_id":"` + model.NewClassID().String() + `","scheduled_start_at":"2026-08-16T09:00:00Z"}`
+	f, httpAPI := newSittingAPI(t)
+	path := examSittingMemberPath(f.examID, f.sitting.ID)
+	seeded := *f.sitting
+	classID := model.NewClassID()
+	patch := `{"expected_revision":1,"class_id":"` + classID.String() + `","scheduled_start_at":"2026-08-15T10:00:00Z"}`
 	request := newJSONRequest(http.MethodPatch, path, strings.NewReader(patch))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Idempotency-Key", "reschedule-once")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
-	require.Equal(t, http.StatusOK, response.Code, "status = %d command = %#v body = %s", response.Code, fake.update, response.Body.String())
-	require.NotNil(t, fake.update.ClassID, "status = %d command = %#v body = %s", response.Code, fake.update, response.Body.String())
-	require.NotNil(t, fake.update.ScheduledStartAt, "status = %d command = %#v body = %s", response.Code, fake.update, response.Body.String())
-	require.Nil(t, fake.update.ExamRevisionID, "status = %d command = %#v body = %s", response.Code, fake.update, response.Body.String())
-	require.Nil(t, fake.update.ScheduledEndAt, "status = %d command = %#v body = %s", response.Code, fake.update, response.Body.String())
+	require.Equal(t, http.StatusOK, response.Code, "status = %d body = %s", response.Code, response.Body.String())
+	require.Len(t, f.sittingStore.updates, 1, "the reschedule never reached the Sitting Store")
+	// The fields the patch named change; the omitted ones keep the values the
+	// Sitting already had.
+	update := f.sittingStore.updates[0]
+	require.Equal(t, classID, update.ClassID)
+	require.Equal(t, time.Date(2026, 8, 15, 10, 0, 0, 0, time.UTC), update.ScheduledStartAt)
+	require.Equal(t, seeded.ExamRevisionID, update.ExamRevisionID)
+	require.Equal(t, seeded.ScheduledEndAt, update.ScheduledEndAt)
 	for name, body := range map[string]string{
 		"no change":     `{"expected_revision":1}`,
 		"explicit null": `{"expected_revision":1,"class_id":null}`,
@@ -116,32 +125,24 @@ func TestExamSittingHTTPMutationBodiesAreClosedDuplicateFreeAndPresenceAware(t *
 			bad.Header = request.Header.Clone()
 			got := httptest.NewRecorder()
 			httpAPI.ServeHTTP(got, bad)
-			require.Equal(t, http.StatusBadRequest, got.Code, "status = %d calls = %d body = %s", got.Code, fake.updateCalls, got.Body.String())
-			require.Equal(t, 1, fake.updateCalls, "status = %d calls = %d body = %s", got.Code, fake.updateCalls, got.Body.String())
+			require.Equal(t, http.StatusBadRequest, got.Code, "status = %d body = %s", got.Code, got.Body.String())
+			require.Len(t, f.sittingStore.updates, 1, "a rejected patch reached the Sitting Store")
 		})
 	}
 }
 
 func TestExamSittingHTTPCancelKeepsPrivateReasonOutOfResponse(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	fake := newExamSittingHTTPFake(t)
-	canceled := *fake.sitting
-	canceled.State = model.ExamSittingCanceled
-	canceled.CanceledAt = model.OptionalTimeFrom(canceled.UpdatedAt.Add(time.Minute))
-	canceled.UpdatedAt = canceled.CanceledAt.Time
-	canceled.ReasonCode = model.ExamSittingReasonManagerCanceled
-	canceled.Revision = 2
-	fake.cancelResult = store.ExamSittingSnapshot{Sitting: &canceled}
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
-	request := newJSONRequest(http.MethodPost, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/cancel", strings.NewReader(`{"expected_revision":1,"reason":"Suspected identity substitution"}`))
+	f, httpAPI := newSittingAPI(t)
+	request := newJSONRequest(http.MethodPost, examSittingMemberPath(f.examID, f.sitting.ID)+"/cancel", strings.NewReader(`{"expected_revision":1,"reason":"Suspected identity substitution"}`))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Idempotency-Key", "cancel-once")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
-	require.Equal(t, http.StatusOK, response.Code, "status = %d command = %#v body = %s", response.Code, fake.cancel, response.Body.String())
-	require.Equal(t, "Suspected identity substitution", fake.cancel.PrivateReason, "status = %d command = %#v body = %s", response.Code, fake.cancel, response.Body.String())
-	require.Equal(t, "cancel-once", fake.cancel.IdempotencyKey, "status = %d command = %#v body = %s", response.Code, fake.cancel, response.Body.String())
+	require.Equal(t, http.StatusOK, response.Code, "status = %d body = %s", response.Code, response.Body.String())
+	require.Len(t, f.sittingStore.cancels, 1, "the cancellation never reached the Sitting Store")
+	require.Equal(t, "Suspected identity substitution", f.sittingStore.cancels[0].PrivateReason)
+	require.Equal(t, sha256.Sum256([]byte("cancel-once")), f.sittingStore.lastCommand(t).KeyDigest)
 	require.False(t, bytes.Contains(response.Body.Bytes(), []byte("Suspected identity substitution")))
 	require.True(t, bytes.Contains(response.Body.Bytes(), []byte(`"reason_code":"manager_canceled"`)))
 }
@@ -150,44 +151,49 @@ func TestExamSittingHTTPLifecycleCommandsAreStrictIdempotentAndKeepReasonsPrivat
 	t.Parallel()
 	for _, test := range []struct {
 		name, suffix, body, key string
-		assert                  func(*testing.T, *examSittingHTTPFake)
+		// state and revision are where the Sitting stands before the command.
+		state    model.ExamSittingState
+		revision int64
+		assert   func(*testing.T, *sittingLedger)
 	}{
-		{"pause", "/pause", `{"expected_revision":1,"reason":"Investigating candidate access"}`, "pause-once", func(t *testing.T, fake *examSittingHTTPFake) {
-			require.Equal(t, int64(1), fake.pause.ExpectedRevision)
-			require.Equal(t, "Investigating candidate access", fake.pause.PrivateReason)
-			require.Equal(t, "pause-once", fake.pause.IdempotencyKey)
+		{"pause", "/pause", `{"expected_revision":1,"reason":"Investigating candidate access"}`, "pause-once", model.ExamSittingOpen, 1, func(t *testing.T, ledger *sittingLedger) {
+			require.Len(t, ledger.pauses, 1)
+			require.Equal(t, int64(1), ledger.pauses[0].ExpectedRevision)
+			require.Equal(t, "Investigating candidate access", ledger.pauses[0].PrivateReason)
+			require.Equal(t, sha256.Sum256([]byte("pause-once")), ledger.lastCommand(t).KeyDigest)
 		}},
-		{"resume", "/resume", `{"expected_revision":2,"reason":"Investigation completed"}`, "resume-once", func(t *testing.T, fake *examSittingHTTPFake) {
-			require.Equal(t, int64(2), fake.resume.ExpectedRevision)
-			require.Equal(t, "Investigation completed", fake.resume.PrivateReason)
-			require.Equal(t, "resume-once", fake.resume.IdempotencyKey)
+		{"resume", "/resume", `{"expected_revision":2,"reason":"Investigation completed"}`, "resume-once", model.ExamSittingPaused, 2, func(t *testing.T, ledger *sittingLedger) {
+			require.Len(t, ledger.resumes, 1)
+			require.Equal(t, int64(2), ledger.resumes[0].ExpectedRevision)
+			require.Equal(t, "Investigation completed", ledger.resumes[0].PrivateReason)
+			require.Equal(t, sha256.Sum256([]byte("resume-once")), ledger.lastCommand(t).KeyDigest)
 		}},
-		{"extend", "/extend", `{"expected_revision":3,"scheduled_end_at":"2026-08-15T15:30:00+02:00","reason":"Compensating for disruption"}`, "extend-once", func(t *testing.T, fake *examSittingHTTPFake) {
-			require.Equal(t, int64(3), fake.extend.ExpectedRevision)
-			require.Equal(t, "Compensating for disruption", fake.extend.PrivateReason)
-			require.Equal(t, "extend-once", fake.extend.IdempotencyKey)
-			require.Same(t, time.UTC, fake.extend.ScheduledEndAt.Location())
-			require.Equal(t, 13, fake.extend.ScheduledEndAt.Hour())
+		{"extend", "/extend", `{"expected_revision":3,"scheduled_end_at":"2026-08-15T15:30:00+02:00","reason":"Compensating for disruption"}`, "extend-once", model.ExamSittingOpen, 3, func(t *testing.T, ledger *sittingLedger) {
+			require.Len(t, ledger.extensions, 1)
+			require.Equal(t, int64(3), ledger.extensions[0].ExpectedRevision)
+			require.Equal(t, "Compensating for disruption", ledger.extensions[0].PrivateReason)
+			require.Equal(t, sha256.Sum256([]byte("extend-once")), ledger.lastCommand(t).KeyDigest)
+			require.Same(t, time.UTC, ledger.extensions[0].ScheduledEndAt.Location())
+			require.Equal(t, 13, ledger.extensions[0].ScheduledEndAt.Hour())
 		}},
-		{"close", "/close", `{"expected_revision":4,"reason":"Authorized early close"}`, "close-once", func(t *testing.T, fake *examSittingHTTPFake) {
-			require.Equal(t, int64(4), fake.close.ExpectedRevision)
-			require.Equal(t, "Authorized early close", fake.close.PrivateReason)
-			require.Equal(t, "close-once", fake.close.IdempotencyKey)
+		{"close", "/close", `{"expected_revision":4,"reason":"Authorized early close"}`, "close-once", model.ExamSittingOpen, 4, func(t *testing.T, ledger *sittingLedger) {
+			require.Len(t, ledger.closes, 1)
+			require.Equal(t, int64(4), ledger.closes[0].ExpectedRevision)
+			require.Equal(t, "Authorized early close", ledger.closes[0].PrivateReason)
+			require.Equal(t, sha256.Sum256([]byte("close-once")), ledger.lastCommand(t).KeyDigest)
 		}},
 	} {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			logger, _ := routetest.NewLogger(t)
-			fake := newExamSittingHTTPFake(t)
-			httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
-			request := newJSONRequest(http.MethodPost, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+test.suffix, strings.NewReader(test.body))
+			f, httpAPI := newSittingAPI(t)
+			f.moveSittingTo(t, test.state, test.revision)
+			request := newJSONRequest(http.MethodPost, examSittingMemberPath(f.examID, f.sitting.ID)+test.suffix, strings.NewReader(test.body))
 			request.Header.Set("Authorization", "Bearer credential")
 			request.Header.Set("Idempotency-Key", test.key)
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
 			require.Equal(t, http.StatusOK, response.Code, "status = %d body = %s", response.Code, response.Body.String())
-			test.assert(t, fake)
+			test.assert(t, f.sittingStore)
 			require.False(t, bytes.Contains(response.Body.Bytes(), []byte(`"reason"`)))
 			require.False(t, bytes.Contains(response.Body.Bytes(), []byte("disruption")))
 		})
@@ -203,38 +209,38 @@ func TestExamSittingHTTPLifecycleBodiesRejectUnknownDuplicateAndInvalidValues(t 
 		"padded reason": `{"expected_revision":1,"reason":" padded "}`,
 		"long reason":   `{"expected_revision":1,"reason":"` + strings.Repeat("x", 1001) + `"}`,
 	} {
-		name, body := name, body
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			logger, _ := routetest.NewLogger(t)
-			fake := newExamSittingHTTPFake(t)
-			httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
-			request := newJSONRequest(http.MethodPost, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/pause", strings.NewReader(body))
+			f, httpAPI := newSittingAPI(t)
+			request := newJSONRequest(http.MethodPost, examSittingMemberPath(f.examID, f.sitting.ID)+"/pause", strings.NewReader(body))
 			request.Header.Set("Authorization", "Bearer credential")
 			request.Header.Set("Idempotency-Key", "invalid-once")
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
-			require.Equal(t, http.StatusBadRequest, response.Code, "status=%d command=%#v body=%s", response.Code, fake.pause, response.Body.String())
-			require.False(t, fake.pause.ExamID.IsValid(), "status=%d command=%#v body=%s", response.Code, fake.pause, response.Body.String())
+			require.Equal(t, http.StatusBadRequest, response.Code, "status=%d body=%s", response.Code, response.Body.String())
+			require.Empty(t, f.sittingStore.pauses, "a rejected body reached the Sitting Store")
 		})
 	}
 }
 
 func TestExamSittingHTTPListNormalizesFiltersAndUsesVersionedDescendingTupleCursor(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	fake := newExamSittingHTTPFake(t)
-	older := *fake.sitting
+	f, httpAPI := newSittingAPI(t)
+	older, oldest := *f.sitting, *f.sitting
 	older.ID = model.NewExamSittingID()
 	older.ScheduledStartAt = older.ScheduledStartAt.Add(-time.Hour)
 	older.ScheduledEndAt = older.ScheduledEndAt.Add(-time.Hour)
-	fake.page = sitting.Page{Items: []store.ExamSittingSnapshot{{Sitting: fake.sitting}, {Sitting: &older}}, HasMore: true}
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
+	oldest.ID = model.NewExamSittingID()
+	oldest.ScheduledStartAt = oldest.ScheduledStartAt.Add(-2 * time.Hour)
+	oldest.ScheduledEndAt = oldest.ScheduledEndAt.Add(-2 * time.Hour)
+	// The listing reads one past the limit of two, so a third Sitting says
+	// another page follows.
+	f.sittingStore.listed = []store.ExamSittingSnapshot{{Sitting: f.sitting}, {Sitting: &older}, {Sitting: &oldest}}
 	beforeSittingID := model.NewExamSittingID()
-	cursor, err := encodeExamSittingCursor(examSittingCursor{StartAt: fake.sitting.ScheduledStartAt, ID: beforeSittingID})
+	cursor, err := encodeExamSittingCursor(examSittingCursor{StartAt: f.sitting.ScheduledStartAt, ID: beforeSittingID})
 	require.NoError(t, err)
 	query := url.Values{}
-	query.Set("class_id", fake.sitting.ClassID.String())
+	query.Set("class_id", f.sitting.ClassID.String())
 	query.Add("state", "scheduled")
 	query.Add("state", "scheduled")
 	query.Add("state", "paused")
@@ -242,36 +248,45 @@ func TestExamSittingHTTPListNormalizesFiltersAndUsesVersionedDescendingTupleCurs
 	query.Set("starts_before", "2026-08-15T18:00:00+02:00")
 	query.Set("limit", "2")
 	query.Set("cursor", cursor)
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingCollectionPath(fake.sitting.ExamID)+"?"+query.Encode(), nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingCollectionPath(f.examID)+"?"+query.Encode(), nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
-	require.Equal(t, http.StatusOK, response.Code, "status = %d query = %#v body = %s", response.Code, fake.list, response.Body.String())
-	require.Equal(t, 2, fake.list.Limit, "status = %d query = %#v body = %s", response.Code, fake.list, response.Body.String())
-	require.Equal(t, fake.sitting.ClassID, fake.list.ClassID, "status = %d query = %#v body = %s", response.Code, fake.list, response.Body.String())
-	require.Len(t, fake.list.States, 2, "status = %d query = %#v body = %s", response.Code, fake.list, response.Body.String())
-	require.Equal(t, 7, fake.list.OverlapStartAt.Hour(), "status = %d query = %#v body = %s", response.Code, fake.list, response.Body.String())
-	require.Equal(t, 16, fake.list.OverlapEndAt.Hour(), "status = %d query = %#v body = %s", response.Code, fake.list, response.Body.String())
-	require.Equal(t, fake.sitting.ScheduledStartAt, fake.list.BeforeScheduledStartAt, "status = %d query = %#v body = %s", response.Code, fake.list, response.Body.String())
-	require.Equal(t, beforeSittingID, fake.list.BeforeSittingID, "status = %d query = %#v body = %s", response.Code, fake.list, response.Body.String())
+	require.Equal(t, http.StatusOK, response.Code, "status = %d body = %s", response.Code, response.Body.String())
+	require.Len(t, f.sittingStore.lists, 1, "the listing never reached the Sitting Store")
+	options := f.sittingStore.lists[0]
+	require.Equal(t, 3, options.Limit, "the Store reads one past the requested limit of two")
+	require.Equal(t, f.examID, options.ExamID)
+	require.Equal(t, f.sitting.ClassID, options.ClassID)
+	require.Equal(t, []model.ExamSittingState{model.ExamSittingScheduled, model.ExamSittingPaused}, options.States)
+	require.Equal(t, 7, options.OverlapStartAt.Hour())
+	require.Equal(t, 16, options.OverlapEndAt.Hour())
+	require.Equal(t, f.sitting.ScheduledStartAt, options.BeforeScheduledStartAt)
+	require.Equal(t, beforeSittingID, options.BeforeSittingID)
 	var page examSittingListResponse
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+	require.Len(t, page.Items, 2)
 	decoded, err := decodeExamSittingCursor(page.NextCursor)
 	require.NoError(t, err, "cursor = %#v err", decoded)
 	require.Equal(t, older.ScheduledStartAt, decoded.StartAt, "cursor = %#v err", decoded)
 	require.Equal(t, older.ID, decoded.ID, "cursor = %#v err", decoded)
-	fake.page = sitting.Page{HasMore: true}
-	noProgress := httptest.NewRecorder()
-	httpAPI.ServeHTTP(noProgress, request.Clone(request.Context()))
-	require.Equal(t, http.StatusInternalServerError, noProgress.Code, "no-progress status = %d body = %s", noProgress.Code, noProgress.Body.String())
+
+	// The service reports more only when the Store returns a row past the
+	// limit, so an empty Store answers a last page without a cursor.
+	f.sittingStore.listed = nil
+	empty := httptest.NewRecorder()
+	httpAPI.ServeHTTP(empty, request.Clone(request.Context()))
+	require.Equal(t, http.StatusOK, empty.Code, "empty status = %d body = %s", empty.Code, empty.Body.String())
+	var emptyPage examSittingListResponse
+	require.NoError(t, json.Unmarshal(empty.Body.Bytes(), &emptyPage))
+	require.Empty(t, emptyPage.Items)
+	require.Empty(t, emptyPage.NextCursor)
 }
 
 func TestExamSittingHTTPListRejectsPartialOverlapAndMalformedCursor(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	fake := newExamSittingHTTPFake(t)
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
-	unsupported, _ := json.Marshal(map[string]any{"version": 2, "start_at": fake.sitting.ScheduledStartAt.Format(time.RFC3339Nano), "id": fake.sitting.ID.String()})
+	f, httpAPI := newSittingAPI(t)
+	unsupported, _ := json.Marshal(map[string]any{"version": 2, "start_at": f.sitting.ScheduledStartAt.Format(time.RFC3339Nano), "id": f.sitting.ID.String()})
 	for name, query := range map[string]string{
 		"partial overlap":         "ends_after=2026-08-15T09%3A00%3A00Z",
 		"bad interval":            "ends_after=2026-08-15T12%3A00%3A00Z&starts_before=2026-08-15T11%3A00%3A00Z",
@@ -281,46 +296,48 @@ func TestExamSittingHTTPListRejectsPartialOverlapAndMalformedCursor(t *testing.T
 		"cursor version":          "cursor=" + url.QueryEscape(base64.RawURLEncoding.EncodeToString(unsupported)),
 	} {
 		t.Run(name, func(t *testing.T) {
-			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingCollectionPath(fake.sitting.ExamID)+"?"+query, nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingCollectionPath(f.examID)+"?"+query, nil)
 			request.Header.Set("Authorization", "Bearer credential")
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
 			assertHTTPProblem(t, response, http.StatusBadRequest, "request.invalid")
 		})
 	}
+	require.Empty(t, f.sittingStore.lists, "a rejected listing reached the Sitting Store")
 }
 
 func TestExamSittingHTTPGetUsesBothExactIdentities(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	fake := newExamSittingHTTPFake(t)
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID), nil)
+	f, httpAPI := newSittingAPI(t)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingMemberPath(f.examID, f.sitting.ID), nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
-	require.Equal(t, http.StatusOK, response.Code, "status = %d query = %#v body = %s", response.Code, fake.get, response.Body.String())
-	require.Equal(t, fake.sitting.ExamID, fake.get.ExamID, "status = %d query = %#v body = %s", response.Code, fake.get, response.Body.String())
-	require.Equal(t, fake.sitting.ID, fake.get.SittingID, "status = %d query = %#v body = %s", response.Code, fake.get, response.Body.String())
+	require.Equal(t, http.StatusOK, response.Code, "status = %d reads = %#v body = %s", response.Code, f.sittingStore.gets, response.Body.String())
+	require.Equal(t, []sittingIdentity{{ExamID: f.examID, SittingID: f.sitting.ID}}, f.sittingStore.gets)
 }
 
 func TestExamSittingHTTPListsNoShowsWithOpaqueUserCursor(t *testing.T) {
 	t.Parallel()
-	logger, _ := routetest.NewLogger(t)
-	fake := newExamSittingHTTPFake(t)
-	first, second := model.NewUserID(), model.NewUserID()
-	fake.noShowPage = sitting.NoShowPage{Items: []store.ExamSittingNoShow{
-		{CandidateUserID: first}, {CandidateUserID: second}}, HasMore: true}
-	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/no-shows?limit=2", nil)
+	f, httpAPI := newSittingAPI(t)
+	// No-shows are listed only once a Sitting has closed.
+	f.moveSittingTo(t, model.ExamSittingClosed, 4)
+	candidates := []model.UserID{model.NewUserID(), model.NewUserID(), model.NewUserID()}
+	slices.SortFunc(candidates, func(a, b model.UserID) int { return strings.Compare(a.String(), b.String()) })
+	first, second := candidates[0], candidates[1]
+	// The listing reads one past the limit of two, so a third no-show says
+	// another page follows.
+	f.sittingStore.noShows = []store.ExamSittingNoShow{{CandidateUserID: first}, {CandidateUserID: second}, {CandidateUserID: candidates[2]}}
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingMemberPath(f.examID, f.sitting.ID)+"/no-shows?limit=2", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
-	require.Equal(t, http.StatusOK, response.Code, "status=%d query=%#v body=%s", response.Code, fake.noShows, response.Body.String())
-	require.Equal(t, "no-store", response.Header().Get("Cache-Control"), "status=%d query=%#v body=%s", response.Code, fake.noShows, response.Body.String())
-	require.Equal(t, fake.sitting.ExamID, fake.noShows.ExamID, "status=%d query=%#v body=%s", response.Code, fake.noShows, response.Body.String())
-	require.Equal(t, fake.sitting.ID, fake.noShows.SittingID, "status=%d query=%#v body=%s", response.Code, fake.noShows, response.Body.String())
-	require.Equal(t, 2, fake.noShows.Limit, "status=%d query=%#v body=%s", response.Code, fake.noShows, response.Body.String())
+	require.Equal(t, http.StatusOK, response.Code, "status=%d body=%s", response.Code, response.Body.String())
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	require.Equal(t, []sittingIdentity{{ExamID: f.examID, SittingID: f.sitting.ID}}, f.sittingStore.gets)
+	require.Len(t, f.sittingStore.noShowLists, 1, "the no-show listing never reached the Sitting Store")
+	require.Equal(t, f.sitting.ID, f.sittingStore.noShowLists[0].SittingID)
+	require.Equal(t, 3, f.sittingStore.noShowLists[0].Limit, "the Store reads one past the requested limit of two")
 	var body examSittingNoShowListResponse
 	err := json.Unmarshal(response.Body.Bytes(), &body)
 	require.NoError(t, err, "body=%#v err", body)
@@ -331,22 +348,26 @@ func TestExamSittingHTTPListsNoShowsWithOpaqueUserCursor(t *testing.T) {
 	require.NoError(t, err, "cursor")
 	require.Equal(t, second, decoded, "cursor")
 	require.NotContains(t, body.NextCursor, second.String(), "cursor")
-	fake.noShowPage = sitting.NoShowPage{}
-	secondRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/no-shows?cursor="+url.QueryEscape(body.NextCursor), nil)
+	f.sittingStore.noShows = nil
+	secondRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingMemberPath(f.examID, f.sitting.ID)+"/no-shows?cursor="+url.QueryEscape(body.NextCursor), nil)
 	secondRequest.Header.Set("Authorization", "Bearer credential")
 	secondResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(secondResponse, secondRequest)
-	require.Equal(t, http.StatusOK, secondResponse.Code, "no-show cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.noShows, secondResponse.Body.String())
-	require.Equal(t, second, fake.noShows.AfterCandidateUserID, "no-show cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.noShows, secondResponse.Body.String())
-	malformedRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/no-shows?cursor=not-a-cursor", nil)
+	require.Equal(t, http.StatusOK, secondResponse.Code, "no-show cursor forwarding = %d body=%s", secondResponse.Code, secondResponse.Body.String())
+	require.Len(t, f.sittingStore.noShowLists, 2)
+	require.Equal(t, second, f.sittingStore.noShowLists[1].AfterCandidateUserID, "the cursor reached the Store as the last listed candidate")
+	// The service reports more only when the Store returns a row past the
+	// limit, so an empty Store answers a last page without a cursor.
+	var lastPage examSittingNoShowListResponse
+	require.NoError(t, json.Unmarshal(secondResponse.Body.Bytes(), &lastPage))
+	require.Empty(t, lastPage.Items)
+	require.Empty(t, lastPage.NextCursor)
+	malformedRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingMemberPath(f.examID, f.sitting.ID)+"/no-shows?cursor=not-a-cursor", nil)
 	malformedRequest.Header.Set("Authorization", "Bearer credential")
 	malformedResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(malformedResponse, malformedRequest)
 	assertHTTPProblem(t, malformedResponse, http.StatusBadRequest, "request.invalid")
-	fake.noShowPage = sitting.NoShowPage{HasMore: true}
-	noProgress := httptest.NewRecorder()
-	httpAPI.ServeHTTP(noProgress, request.Clone(request.Context()))
-	require.Equal(t, http.StatusInternalServerError, noProgress.Code, "no-progress status=%d body=%s", noProgress.Code, noProgress.Body.String())
+	require.Len(t, f.sittingStore.noShowLists, 2, "a malformed cursor reached the Sitting Store")
 	invalid := []string{
 		"not-base64",
 		base64.RawURLEncoding.EncodeToString([]byte(`{"version":1,"candidate_user_id":"` + second.String() + `"}`)),
@@ -358,103 +379,6 @@ func TestExamSittingHTTPListsNoShowsWithOpaqueUserCursor(t *testing.T) {
 		_, decodeErr := decodeExamSittingNoShowCursor(raw)
 		assert.Error(t, decodeErr, "decodeExamSittingNoShowCursor(%q) succeeded", raw)
 	}
-}
-
-type examSittingHTTPFake struct {
-	principal model.Principal
-	sitting   *model.ExamSitting
-	schedule  sitting.ScheduleCommand
-	get       struct {
-		ExamID    model.ExamID
-		SittingID model.ExamSittingID
-	}
-	list         sitting.ListQuery
-	page         sitting.Page
-	update       sitting.UpdateScheduleCommand
-	updateCalls  int
-	cancel       sitting.CancelCommand
-	cancelResult store.ExamSittingSnapshot
-	pause        sitting.ManagerTransitionCommand
-	resume       sitting.ManagerTransitionCommand
-	extend       sitting.ExtendCommand
-	close        sitting.ManagerTransitionCommand
-	noShows      sitting.ListNoShowsQuery
-	noShowPage   sitting.NoShowPage
-}
-
-func newExamSittingHTTPFake(t *testing.T) *examSittingHTTPFake {
-	t.Helper()
-	at := time.Date(2026, time.August, 15, 9, 30, 0, 123456789, time.UTC)
-	record, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(), at.Add(time.Hour), at.Add(3*time.Hour), at)
-	require.NoError(t, err)
-	return &examSittingHTTPFake{principal: testExamHTTPPrincipal(), sitting: record, cancelResult: store.ExamSittingSnapshot{Sitting: record}}
-}
-
-func (f *examSittingHTTPFake) AuthenticateAccess(context.Context, string) (*model.Principal, error) {
-	principal := f.principal
-	return &principal, nil
-}
-
-func (f *examSittingHTTPFake) AuthenticateBearer(context.Context, string) (*model.Principal, error) {
-	principal := f.principal
-	return &principal, nil
-}
-
-func (f *examSittingHTTPFake) ScheduleExamSitting(_ context.Context, _ invocation.Invocation, command sitting.ScheduleCommand) (store.ExamSittingSnapshot, error) {
-	f.schedule = command
-	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
-}
-
-func (f *examSittingHTTPFake) GetExamSitting(
-	_ context.Context,
-	_ invocation.Invocation,
-	examID model.ExamID,
-	sittingID model.ExamSittingID,
-) (store.ExamSittingSnapshot, error) {
-	f.get.ExamID, f.get.SittingID = examID, sittingID
-	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
-}
-
-func (f *examSittingHTTPFake) ListExamSittings(_ context.Context, _ invocation.Invocation, query sitting.ListQuery) (sitting.Page, error) {
-	f.list = query
-	return f.page, nil
-}
-
-func (f *examSittingHTTPFake) UpdateExamSittingSchedule(_ context.Context, _ invocation.Invocation, command sitting.UpdateScheduleCommand) (store.ExamSittingSnapshot, error) {
-	f.update, f.updateCalls = command, f.updateCalls+1
-	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
-}
-
-func (f *examSittingHTTPFake) CancelExamSitting(_ context.Context, _ invocation.Invocation, command sitting.CancelCommand) (store.ExamSittingSnapshot, error) {
-	f.cancel = command
-	return f.cancelResult, nil
-}
-
-func (f *examSittingHTTPFake) PauseExamSitting(_ context.Context, _ invocation.Invocation, command sitting.ManagerTransitionCommand) (store.ExamSittingSnapshot, error) {
-	f.pause = command
-	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
-}
-
-func (f *examSittingHTTPFake) ResumeExamSitting(_ context.Context, _ invocation.Invocation, command sitting.ManagerTransitionCommand) (store.ExamSittingSnapshot, error) {
-	f.resume = command
-	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
-}
-
-func (f *examSittingHTTPFake) ExtendExamSitting(_ context.Context, _ invocation.Invocation, command sitting.ExtendCommand) (store.ExamSittingSnapshot, error) {
-	f.extend = command
-	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
-}
-
-func (f *examSittingHTTPFake) CloseExamSitting(_ context.Context, _ invocation.Invocation, command sitting.ManagerTransitionCommand) (store.ExamSittingSnapshot, error) {
-	f.close = command
-	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
-}
-
-func (f *examSittingHTTPFake) ListExamSittingNoShows(_ context.Context, _ invocation.Invocation,
-	query sitting.ListNoShowsQuery,
-) (sitting.NoShowPage, error) {
-	f.noShows = query
-	return f.noShowPage, nil
 }
 
 func examSittingCollectionPath(examID model.ExamID) string {

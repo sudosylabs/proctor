@@ -30,19 +30,9 @@ type examAttemptReallowOutcome struct {
 
 func (examAttemptReallowOutcome) outcomeDocument() {}
 
-// ReallowAttempt implements store.ExamAttemptStore: it closes the Attempt's
-// active Suspension and returns the Attempt to active under an
-// ExamAttemptReallowOperation command. Exact retries return the retained result
-// after rechecking authority.
-//
-// It locks the exact active Suspension and Attempt revision, rechecks current
-// Exam management authority unless an authorized override is explicit, closes
-// only that episode, returns the Attempt to active, and commits audit and the
-// idempotent outcome atomically. It preserves all evidence and creates no
-// Participation or credential. Exact retries return the retained result
-// without a second revision change after current authority is rechecked.
-// Stable conflicts are exam_attempt_revision, attempt_suspension_active,
-// exam_attempt_state, and exam_sitting_state.
+// ReallowAttempt closes the attempt's active suspension and returns it to
+// active under command. It keeps all evidence and creates no participation or
+// credential; a retry returns the retained result after rechecking authority.
 func (s *SQLExamAttemptStore) ReallowAttempt(
 	ctx context.Context,
 	input *store.ExamAttemptReallow,
@@ -117,10 +107,10 @@ func guardExamAttemptReallowAuthority(
 			AND a.exam_id = ?
 			AND a.exam_sitting_id = ?`
 	if lock {
-		// The Sitting row is only fenced against state changes: FOR SHARE
-		// still conflicts with Sitting transitions but not with the FOR SHARE
-		// that every renewal in the Sitting takes, so a kick or re-allow of
-		// one Attempt never queues the others' renewals. FOR NO KEY UPDATE
+		// The sitting row is only fenced against state changes: FOR SHARE
+		// still conflicts with sitting transitions but not with the FOR SHARE
+		// that every renewal in the sitting takes, so a kick or re-allow of
+		// one attempt never queues the others' renewals. FOR NO KEY UPDATE
 		// would still conflict with that FOR SHARE.
 		query += ` FOR UPDATE OF a FOR SHARE OF s`
 	}
@@ -142,8 +132,6 @@ func guardExamAttemptReallowAuthority(
 	return nil
 }
 
-// examAttemptReallowRow is the locked Suspension with its Attempt that a
-// re-allow transitions.
 type examAttemptReallowRow struct {
 	ExamID              string         `db:"exam_id"`
 	SittingID           string         `db:"exam_sitting_id"`
@@ -169,8 +157,6 @@ type examAttemptReallowRow struct {
 	SuspensionReason    sql.NullString `db:"suspension_private_reason"`
 }
 
-// reallowExamAttempt checks authority, closes the active Suspension, returns
-// the Attempt to ready, and completes the audit event inside tx.
 func reallowExamAttempt(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAttemptReallow) (examAttemptReallowOutcome, error) {
 	var zero examAttemptReallowOutcome
 	if err := guardExamAttemptReallowAuthority(ctx, tx, input, true); err != nil {
@@ -208,8 +194,8 @@ func reallowExamAttempt(ctx context.Context, tx *sqlxTxWrapper, input *store.Exa
 	return value, nil
 }
 
-// lockExamAttemptReallowSuspension locks the Suspension and requires it to be
-// active on a suspended Attempt at the expected revision.
+// lockExamAttemptReallowSuspension locks the suspension and requires it to be
+// active on a suspended attempt at the expected revision.
 func lockExamAttemptReallowSuspension(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -254,8 +240,6 @@ func lockExamAttemptReallowSuspension(
 	return row, nil
 }
 
-// examAttemptReallowDomain builds and validates the Attempt and Suspension
-// from row and validates the re-allow private reason.
 func examAttemptReallowDomain(
 	input *store.ExamAttemptReallow,
 	row examAttemptReallowRow,
@@ -325,9 +309,9 @@ func examAttemptReallowDomain(
 	return attempt, suspension, nil
 }
 
-// applyExamAttemptReallow transitions the Suspension and Attempt at database
-// time, writes both, and resets the causal Focus Loss window when the Focus
-// Loss policy caused the Suspension; it reports whether it reset the window.
+// applyExamAttemptReallow transitions the suspension and attempt at database
+// time, writes both, and resets the causal focus loss window when the focus
+// loss policy caused the suspension; it reports whether it reset the window.
 func applyExamAttemptReallow(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -429,8 +413,6 @@ func completeExamAttemptReallowAudit(
 	return nil
 }
 
-// examAttemptReallowResultRow is the Attempt with the re-allowed Suspension a
-// re-allow result reports.
 type examAttemptReallowResultRow struct {
 	ExamID              string       `db:"exam_id"`
 	SittingID           string       `db:"exam_sitting_id"`
@@ -458,7 +440,7 @@ type examAttemptReallowResultRow struct {
 	SuspensionReason    string       `db:"suspension_private_reason"`
 }
 
-// loadExamAttemptReallowResult reads the re-allowed Attempt and Suspension
+// loadExamAttemptReallowResult reads the re-allowed attempt and suspension
 // named by value outside the command transaction.
 func (s *SQLExamAttemptStore) loadExamAttemptReallowResult(
 	ctx context.Context,

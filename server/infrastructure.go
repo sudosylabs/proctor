@@ -60,15 +60,10 @@ const (
 	schemaRequireCurrent
 )
 
-type schemaPersistence interface {
-	ApplyPendingMigrations(context.Context) (sqlstore.MigrationResult, error)
-	ValidateSchema(context.Context) error
-}
-
 // prepareSchema converges or verifies the schema. A required-current check
 // never writes: it reports a behind or ahead schema and points the operator
 // at the explicit migrate command.
-func prepareSchema(ctx context.Context, persistence schemaPersistence, policy schemaPolicy) (*sqlstore.MigrationResult, error) {
+func prepareSchema(ctx context.Context, persistence *sqlstore.SQLStore, policy schemaPolicy) (*sqlstore.MigrationResult, error) {
 	if policy == schemaRequireCurrent {
 		if err := persistence.ValidateSchema(ctx); err != nil {
 			return nil, fmt.Errorf(
@@ -88,34 +83,30 @@ func prepareSchema(ctx context.Context, persistence schemaPersistence, policy sc
 	return &migration, nil
 }
 
-// ownedInfrastructure is the sole owner of infrastructure while the root is
-// acquiring and decorating it. resources is exactly what transfers to the
-// Platform boundary, as one unit; the metrics and tracing modules stay with
-// the root, which closes them itself. Before the transfer, release is the
-// only cleanup path.
+// ownedInfrastructure is the sole owner of infrastructure until
+// acceptPlatform. resources moves to the platform as one unit; metrics and
+// tracing stay with the root, which closes them itself. Before the transfer,
+// release is the only cleanup path.
 type ownedInfrastructure struct {
 	resources platform.OwnedResources
 	migration *sqlstore.MigrationResult
 	metrics   *metrics.Module
 	tracing   *tracing.Module
-	// plugins are activated once persistence and telemetry exist, so that
-	// what they register is ready before anything that uses it is built.
-	plugins *pluginhost.Host
+	plugins   *pluginhost.Host
 	// pluginSettingsCount is the saved-settings change count the plugins
 	// were activated with; the reconciler continues from it.
 	pluginSettingsCount int64
 }
 
-// constructionCapabilities is a short-lived, non-owning projection used only
-// while the root assembles consumers. It has no lifecycle operations and must
-// not escape composeNode; Platform owns every referenced capability after
-// acceptance.
+// constructionCapabilities is a non-owning view used only while the root
+// builds consumers. It must not escape composeNode; after acceptance the
+// platform owns everything it references.
 type constructionCapabilities struct {
 	logger                 *logging.Logger
 	persistence            store.Catalog
-	cache                  borrowedCache
-	cluster                borrowedCluster
-	mailer                 borrowedMailer
+	cache                  platform.Cache
+	cluster                cluster.Transport
+	mailer                 platform.Mailer
 	filesystem             vfs.FileSystem
 	externalAuthentication *externalauth.Registry
 	nodeID                 string
@@ -126,25 +117,6 @@ type constructionCapabilities struct {
 	// then to the Server, which deactivates it.
 	plugins             *pluginhost.Host
 	pluginSettingsCount int64
-}
-
-type borrowedCache interface {
-	Get(context.Context, string) ([]byte, error)
-	Set(context.Context, string, []byte, time.Duration, platform.CacheCondition) error
-	Delete(context.Context, string) error
-	Add(context.Context, string, int64, time.Duration) (int64, error)
-}
-
-type borrowedMailer interface {
-	Enabled() bool
-	From() mail.Address
-	Send(context.Context, mail.Message) (mail.Receipt, error)
-	Test(context.Context) error
-}
-
-type borrowedCluster interface {
-	RegisterHandler(cluster.Event, cluster.Handler) error
-	Broadcast(context.Context, *cluster.Message) error
 }
 
 func openRuntimeInfrastructure(
@@ -196,18 +168,22 @@ func openRuntimeInfrastructure(
 	}
 	// Plugins activate once metrics exist, so their first calls are
 	// recorded, and before anything that consumes what they register.
-	result.plugins, result.pluginSettingsCount, err = activatePlugins(
+	var pluginMetrics pluginhost.Recorder
+	if metricsModule.Enabled() {
+		pluginMetrics = metricsModule
+	}
+	result.plugins, result.pluginSettingsCount, err = pluginhost.ActivateBuiltin(
 		ctx, cfg, result.resources.Persistence.PluginSettings(), result.resources.Logger,
-		pluginRecorder(metricsModule), overrides.Plugins,
+		pluginMetrics, overrides.Plugins,
 	)
 	if err != nil {
 		return result, err
 	}
-	externalAuthentication, err := newExternalAuthenticationRegistry(result.plugins)
+	externalAuthentication, err := pluginhost.NewIdentityProviderRegistry(result.plugins)
 	if err != nil {
 		return result, fmt.Errorf("construct external authentication registry: %w", err)
 	}
-	followSignInPlugins(result.plugins, externalAuthentication, result.resources.Configuration, result.resources.Logger)
+	pluginhost.FollowSignInPlugins(result.plugins, externalAuthentication, result.resources.Configuration, result.resources.Logger)
 	result.resources.ExternalAuthentication = externalAuthentication
 	if err := checkAcquisitionContext(ctx, "acquire external authentication registry"); err != nil {
 		return result, err
@@ -215,7 +191,6 @@ func openRuntimeInfrastructure(
 	return result, nil
 }
 
-// acquireConfigurationAndLogger opens the configuration and then the logger unless overrides supplied them.
 func (i *ownedInfrastructure) acquireConfigurationAndLogger(ctx context.Context, configPath string) error {
 	if i.resources.Configuration == nil {
 		configuration, err := config.Open(ctx, configPath)
@@ -239,7 +214,6 @@ func (i *ownedInfrastructure) acquireConfigurationAndLogger(ctx context.Context,
 	return checkAcquisitionContext(ctx, "acquire logger")
 }
 
-// acquirePersistence opens the SQL store and prepares its schema unless overrides supplied a store.
 func (i *ownedInfrastructure) acquirePersistence(ctx context.Context, cfg config.Config, schema schemaPolicy) error {
 	if i.resources.Persistence == nil {
 		persistence, err := sqlstore.New(ctx, sqlstore.SettingsFromConfig(cfg.Database))
@@ -256,7 +230,6 @@ func (i *ownedInfrastructure) acquirePersistence(ctx context.Context, cfg config
 	return checkAcquisitionContext(ctx, "acquire persistence")
 }
 
-// constructTelemetry builds the metrics and then the tracing module over the acquired store and logger and records each for release.
 func (i *ownedInfrastructure) constructTelemetry(cfg config.Config) (*metrics.Module, *tracing.Module, error) {
 	var databaseStats func() sql.DBStats
 	if source, ok := i.resources.Persistence.(interface{ Stats() sql.DBStats }); ok {
@@ -293,7 +266,6 @@ func (i *ownedInfrastructure) constructTelemetry(cfg config.Config) (*metrics.Mo
 	return metricsModule, tracingModule, nil
 }
 
-// decoratePersistenceWithRetryAndTiming wraps the store in the retry layer and then the timing layer.
 func (i *ownedInfrastructure) decoratePersistenceWithRetryAndTiming(
 	ctx context.Context,
 	cfg config.Config,
@@ -332,10 +304,10 @@ func (i *ownedInfrastructure) decoratePersistenceWithRetryAndTiming(
 
 	timerOptions := timerlayer.Options{
 		SlowThreshold: cfg.Database.SlowOperationThreshold.Duration,
-		Slow:          slowStoreOperationLog{logger: i.resources.Logger},
+		Slow:          i.resources.Logger,
 	}
 	if tracingModule.Enabled() {
-		timerOptions.Tracer = storeTracing{tracing: tracingModule}
+		timerOptions.Tracer = tracingModule
 	}
 
 	timedPersistence, err := timerlayer.New(i.resources.Persistence, storeMetrics, timerOptions)
@@ -347,7 +319,6 @@ func (i *ownedInfrastructure) decoratePersistenceWithRetryAndTiming(
 	return checkAcquisitionContext(ctx, "decorate persistence with timing")
 }
 
-// acquireCacheMailerAndVFS opens the cache, mail transport and VFS in order, measuring each when metrics are enabled.
 func (i *ownedInfrastructure) acquireCacheMailerAndVFS(ctx context.Context, cfg config.Config, metricsModule *metrics.Module) error {
 	if i.resources.Cache == nil {
 		cache, err := newCache(cfg.Cache)
@@ -397,7 +368,6 @@ func (i *ownedInfrastructure) acquireCacheMailerAndVFS(ctx context.Context, cfg 
 	return checkAcquisitionContext(ctx, "acquire VFS")
 }
 
-// acquireCluster opens the cluster transport unless overrides supplied one, measuring it when metrics are enabled.
 func (i *ownedInfrastructure) acquireCluster(ctx context.Context, cfg config.Config, metricsModule *metrics.Module) error {
 	if i.resources.Cluster == nil {
 		var discovery store.ClusterDiscoveryStore
@@ -423,7 +393,6 @@ func (i *ownedInfrastructure) acquireCluster(ctx context.Context, cfg config.Con
 	return checkAcquisitionContext(ctx, "acquire cluster transport")
 }
 
-// decoratePersistenceWithLocalCache wraps the store in the cluster-invalidated local cache layer.
 func (i *ownedInfrastructure) decoratePersistenceWithLocalCache(
 	ctx context.Context,
 	overrides TestingOverrides,
@@ -452,7 +421,7 @@ func (i *ownedInfrastructure) decoratePersistenceWithLocalCache(
 		}
 	}
 
-	cacheInvalidation, err := newLocalCacheClusterAdapter(i.resources.Cluster)
+	cacheInvalidation, err := localcachelayer.NewClusterInvalidation(i.resources.Cluster)
 	if err != nil {
 		return fmt.Errorf("construct local-cache invalidation adapter: %w", err)
 	}
@@ -791,31 +760,4 @@ func newCluster(
 	default:
 		return nil, fmt.Errorf("unsupported cluster backend %q", settings.Backend)
 	}
-}
-
-// newExternalAuthenticationRegistry builds the provider registry on the
-// sign-in protocols the active plugins offer.
-func newExternalAuthenticationRegistry(plugins *pluginhost.Host) (*externalauth.Registry, error) {
-	return externalauth.NewRegistry(plugins.IdentityProviderTypes()...)
-}
-
-// followSignInPlugins rebuilds the configured providers whenever plugins
-// change, so turning a sign-in plugin on or off applies without a restart.
-// A failure keeps the previous providers and is logged.
-func followSignInPlugins(
-	plugins *pluginhost.Host,
-	registry *externalauth.Registry,
-	configuration *config.Store,
-	logger *logging.Logger,
-) {
-	plugins.AddChangeListener(func() {
-		if err := registry.Reload(configuration.Get().Authentication.External, plugins.IdentityProviderTypes()...); err != nil {
-			logger.Error("could not rebuild external authentication providers after a plugin change", logging.Err(err))
-			return
-		}
-		for _, id := range registry.Unavailable() {
-			logger.Warn("external authentication provider is unavailable: its sign-in plugin is turned off or has failed",
-				logging.String("provider_id", id))
-		}
-	})
 }

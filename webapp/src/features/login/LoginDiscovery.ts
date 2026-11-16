@@ -31,6 +31,8 @@ export function resolveLoginDiscovery(
   return { kind: "ready", discovery };
 }
 
+// Discovery is the only initial source for login methods; also fetching the
+// provider list on render would race it.
 export async function requestLoginDiscovery(
   servingOrigin: string,
 ): Promise<LoginDiscoveryState> {

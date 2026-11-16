@@ -5,15 +5,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package desktoprelease checks that a packaged Proctor Desktop release is one
-// this server build trusts. Verify compares the release's artifacts with the
-// pinned Expectation byte for byte, checks the Ed25519 signature on its
-// certification list against the admitted keys, and returns the verified
-// build.
-//
-// The keys and expectations are supplied when the node is built. No request,
-// Institution setting or client upload can add to them. README.md describes
-// the artifacts.
+// Package desktoprelease checks that a packaged Desktop release is one this
+// server build trusts: its artifacts match the pinned Expectation byte for byte
+// and its certification list carries a valid Ed25519 signature from an
+// admitted key. Keys and expectations are compiled in; no request, institution
+// setting or upload can add to them.
 package desktoprelease
 
 import (
@@ -35,17 +31,17 @@ const (
 
 var ErrInvalidArtifact = errors.New("desktop release artifact is invalid")
 
-// SignedMatrix is the release's certification list: the exact canonical
-// UTF-8 bytes signed using an admitted Ed25519 release key. Signature is the
-// raw 64-byte signature, not a DPoP proof.
+// SignedMatrix is the release's certification list as the exact canonical
+// bytes that were signed. Signature is the raw 64-byte Ed25519 signature, not a
+// DPoP proof.
 type SignedMatrix struct {
 	Payload   []byte
 	Signature []byte
 	KeyID     string
 }
 
-// Expectation is compiled release admission data, never a received DTO: the
-// exact digests of the release's capability registry and certification list.
+// Expectation is compiled into the server, never decoded from a request: the
+// exact digests the release's registry and certification list must match.
 type Expectation struct {
 	Build                model.DesktopBuildTuple
 	ApplicationReleaseID string
@@ -54,16 +50,15 @@ type Expectation struct {
 }
 
 type Artifacts struct {
-	// Registry is Desktop's capability registry document, fact schemas and
-	// application catalog included.
+	// Registry includes the fact schemas and application catalog.
 	Registry              []byte
 	ConfigurationManifest []byte
 	Matrix                SignedMatrix
 }
 
-// Verify admits only an exact signed certification list and its pinned
-// registry and configuration manifest. Returned model values own defensive
-// copies and cannot be altered through caller-owned buffers.
+// Verify returns the build only when every artifact matches expected exactly
+// and the signature checks out; any mismatch is ErrInvalidArtifact. The result
+// does not alias the caller's buffers.
 func Verify(expected Expectation, artifacts Artifacts, admittedKeys map[string]ed25519.PublicKey) (model.DesktopBuildTuple, error) {
 	if expected.Build.Validate() != nil ||
 		!model.IsValidAgreementID(expected.ApplicationReleaseID) ||

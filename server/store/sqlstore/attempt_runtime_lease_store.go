@@ -64,7 +64,7 @@ func validLeaseClaim(nodeID string, lifetime time.Duration) bool {
 	return nodeID != "" && len(nodeID) <= 128 && lifetime >= time.Second && lifetime <= 10*time.Minute
 }
 
-// Claim takes one Attempt's lease when it is free or expired.
+// Claim takes one attempt's lease when it is free or expired.
 func (s SQLAttemptRuntimeLeaseStore) Claim(
 	ctx context.Context,
 	claim *store.AttemptRuntimeLeaseClaim,

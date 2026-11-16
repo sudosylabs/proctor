@@ -19,10 +19,10 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Reset performs a System Administrator's identity-verified MFA reset of
-// another User: it retires the User's MFA material, requires re-enrollment,
-// revokes Sessions and personal access tokens, and enqueues the security Notice
-// mail. It refuses to remove the last System Administrator authentication path.
+// Reset performs a system administrator's identity-verified MFA reset of
+// another user: it retires the user's MFA material, requires re-enrollment,
+// revokes sessions and personal access tokens, and enqueues the security notice
+// mail. It refuses to remove the last system administrator authentication path.
 func (s SQLMFAStore) Reset(ctx context.Context, input *store.MFAAssistedReset) (*store.MFAResetResult, error) {
 	if input == nil ||
 		input.Principal.Validate() != nil ||
@@ -134,8 +134,8 @@ func (s SQLMFAStore) Reset(ctx context.Context, input *store.MFAAssistedReset) (
 }
 
 // resetMFAUserAccess is the complete credential/recovery portion of the online
-// and separately fenced offline reset aggregates. The caller holds this User's
-// Session, MFA and PAT fences and commits its required audit/notice evidence in
+// and separately fenced offline reset aggregates. The caller holds this user's
+// session, MFA and PAT fences and commits its required audit/notice evidence in
 // the same transaction. No primary credential is created or changed here.
 func resetMFAUserAccess(ctx context.Context, tx *sqlxTxWrapper, userID model.UserID, at time.Time) (*store.MFAResetResult, error) {
 	prior, err := getMFARecoveryState(ctx, tx, userID)

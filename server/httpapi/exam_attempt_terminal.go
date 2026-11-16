@@ -16,10 +16,10 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/environment"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/websocket"
 )
 
 const (
@@ -31,26 +31,12 @@ const (
 	terminalOpenBytes = 1 << 10
 )
 
-// terminalApplication is what the terminal routes call: the candidate's
-// access is proved by each call. *environment.Terminals implements it, and
-// a nil one, for an installation that runs no execution environments,
+// examAttemptTerminalHandlers prove the candidate's access on each call. A nil
+// Terminals, for an installation that runs no execution environments,
 // answers every call with exam.attempt.environment_unavailable.
-type terminalApplication interface {
-	GetEnvironment(context.Context, invocation.Invocation, environment.CandidateAccess) (model.AttemptEnvironment, error)
-	OpenTerminal(context.Context, invocation.Invocation, environment.CandidateAccess, environment.Window) (environment.Terminal, error)
-	ListTerminals(context.Context, invocation.Invocation, environment.CandidateAccess) (environment.TerminalList, error)
-	InterruptTerminal(context.Context, invocation.Invocation, environment.CandidateAccess, model.AttemptEnvironmentProcessTag) error
-	AttachTerminal(
-		context.Context,
-		invocation.Invocation,
-		environment.CandidateAccess,
-		model.AttemptEnvironmentProcessTag,
-	) (environment.TerminalAttachment, error)
-}
-
 type examAttemptTerminalHandlers struct {
-	app     terminalApplication
-	sockets BinarySocketTransport
+	app     *environment.Terminals
+	sockets *websocket.Hub
 	logger  *logging.Logger
 }
 
@@ -88,7 +74,7 @@ func withCandidateAccessErrors(codes ...string) []string {
 	return append(slices.Clone(candidateAccessErrors), codes...)
 }
 
-func examAttemptTerminalResource(application terminalApplication, sockets BinarySocketTransport, logger *logging.Logger) route.Resource {
+func examAttemptTerminalResource(application *environment.Terminals, sockets *websocket.Hub, logger *logging.Logger) route.Resource {
 	h := examAttemptTerminalHandlers{app: application, sockets: sockets, logger: logger}
 	return route.NewResource("exam_attempt_terminals",
 		route.Endpoint{
@@ -140,7 +126,7 @@ type openTerminalRequest struct {
 	Rows int `json:"rows,omitempty"`
 }
 
-// terminalResponse describes one terminal on the Attempt's current machine.
+// terminalResponse describes one terminal on the attempt's current machine.
 type terminalResponse struct {
 	Number       int                                `json:"number"`
 	Tag          model.AttemptEnvironmentProcessTag `json:"tag"`
@@ -192,7 +178,6 @@ func terminalTag(request route.Request) (model.AttemptEnvironmentProcessTag, err
 	return environment.TerminalTag(number), nil
 }
 
-// terminalAccess is the candidate access a terminal route presents.
 func terminalAccess(request route.Request) (environment.CandidateAccess, error) {
 	access, err := candidateAccess(request)
 	if err != nil {
@@ -234,9 +219,9 @@ func (h examAttemptTerminalHandlers) open(request route.Request) (route.Result, 
 }
 
 // candidateEnvironmentResponse is the candidate's execution environment.
-// A Workspace entry whose last change is past projection_cursor is not in
+// A workspace entry whose last change is past projection_cursor is not in
 // the machine yet; paths lists the guest paths that are not in the
-// Workspace.
+// workspace.
 type candidateEnvironmentResponse struct {
 	State            model.AttemptEnvironmentState   `json:"state"`
 	Desired          model.AttemptEnvironmentDesired `json:"desired"`
@@ -334,8 +319,8 @@ func (h examAttemptTerminalHandlers) socket(writer http.ResponseWriter, request 
 		return err
 	}
 	allowMissingOrigin := route.CredentialSourceOf(request.Context) == route.CredentialBearer
-	err = h.sockets.ServeBinarySocket(writer, request.HTTP, allowMissingOrigin, maxTerminalClientMessage,
-		func(ctx context.Context, socket BinarySocket) BinarySocketOutcome {
+	err = h.sockets.ServeBinary(writer, request.HTTP, allowMissingOrigin, maxTerminalClientMessage,
+		func(ctx context.Context, socket *websocket.BinarySocket) websocket.BinarySocketOutcome {
 			return serveTerminal(ctx, socket, session, h.logger, terminalRecheck)
 		})
 	if err != nil {

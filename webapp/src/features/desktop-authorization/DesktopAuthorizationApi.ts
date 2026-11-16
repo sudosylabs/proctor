@@ -79,6 +79,9 @@ export type DesktopAccountResetResult =
   | { kind: "reset" }
   | Exclude<DesktopContextResult, { kind: "ready" }>;
 
+// Trades the one-use handle and fragment proof for a route-scoped HttpOnly
+// cookie. Those values are never rendered, logged or stored; every later call
+// relies on the cookie alone.
 export async function bindDesktopAuthorization(
   proof: DesktopAuthorizationProof,
 ): Promise<DesktopBindingResult> {
@@ -157,6 +160,7 @@ export async function authenticateDesktopAuthorizationSession(
   }
 }
 
+// Proves the account for this transaction only; it must not create a Web Session.
 export async function authenticateDesktopAuthorizationLocally(
   installation: string,
   submission: DesktopLocalAuthenticationSubmission,

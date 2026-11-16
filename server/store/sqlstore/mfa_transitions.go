@@ -17,7 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// MFA mutations take the User Session fence before the factor fence, matching
+// MFA mutations take the user session fence before the factor fence, matching
 // assisted reset. Every operation then uses a post-lock database instant.
 func lockMFASessionUser(ctx context.Context, tx *sqlxTxWrapper, userID string) error {
 	if err := lockUserSessions(ctx, tx, userID); err != nil {
@@ -76,7 +76,7 @@ func currentMFASession(
 	if err != nil {
 		return nil, at, err
 	}
-	// Other operations can hold the Session row without taking the MFA fence.
+	// Other operations can hold the session row without taking the MFA fence.
 	// Its lock may have waited past any of the deadlines used by the SELECT.
 	if err = tx.Get(ctx, &at, `SELECT clock_timestamp()`); err != nil {
 		return nil, at, err
@@ -134,8 +134,8 @@ func currentMFASession(
 }
 
 // SavePending replaces any pending MFA credential of the recently authenticated
-// User with input.Credential, expiring after input.Lifetime (at most an hour)
-// from database time. A User with active MFA gets an mfa_already_enabled
+// user with input.Credential, expiring after input.Lifetime (at most an hour)
+// from database time. A user with active MFA gets an mfa_already_enabled
 // conflict.
 func (s SQLMFAStore) SavePending(ctx context.Context, input *store.MFAPendingEnrollment) (*model.MFACredential, error) {
 	if input == nil ||
@@ -219,8 +219,8 @@ func (s SQLMFAStore) SavePending(ctx context.Context, input *store.MFAPendingEnr
 }
 
 // Challenge verifies and consumes exactly one TOTP time step or recovery code
-// of the active MFA credential, upgrades the caller's Session to multi-factor,
-// and returns the Session with its active access token hashes. VerifiedAt more
+// of the active MFA credential, upgrades the caller's session to multi-factor,
+// and returns the session with its active access token hashes. VerifiedAt more
 // than a minute from database time is a verification_expired conflict.
 func (s SQLMFAStore) Challenge(ctx context.Context, input *store.MFAChallenge) (*store.SessionReauthenticationResult, error) {
 	if input == nil ||

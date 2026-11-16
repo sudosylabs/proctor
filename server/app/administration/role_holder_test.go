@@ -14,18 +14,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// roleHolderService builds a Service over the Role and Role Binding fakes,
-// sharing one event log, at a fixed clock.
+// roleHolderService builds a Service over the Role and Role Binding fakes and
+// the real authorizer and auditor, sharing one event log, at a fixed clock.
 func roleHolderService(
 	events *[]string,
-	authorizer *roleAuthorizerFake,
+	fixture *accesstest.Fixture,
 	bindings *roleBindingStoreFake,
 	roles store.RoleStore,
 	institutions *institutionStoreFake,
@@ -34,8 +34,8 @@ func roleHolderService(
 		roleBindings: bindings,
 		roles:        roles,
 		institutions: institutions,
-		authorizer:   authorizer,
-		auditor:      &institutionAuditorFake{events: events},
+		authorizer:   fixture.Authorizer,
+		auditor:      fixture.Auditor.MutationAudit(),
 		publisher:    publisherIn(events),
 		now:          func() time.Time { return time.UnixMilli(5_000) },
 	}
@@ -50,11 +50,13 @@ func TestRoleBindingListByRolesPagesCurrentHoldersInsideTheViewScope(t *testing.
 	middle := &model.RoleBinding{ID: model.NewRoleBindingID(), RoleID: marker.ID, CreatedAt: model.TimeFromMillis(200)}
 	probe := &model.RoleBinding{ID: model.NewRoleBindingID(), RoleID: reader.ID, CreatedAt: model.TimeFromMillis(100)}
 	bindings := &roleBindingStoreFake{events: &events, list: []*model.RoleBinding{newest, middle, probe}, countTotal: 7}
-	authorizer := &roleAuthorizerFake{events: &events, bindingScope: store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{unitID}}}
-	service := roleHolderService(&events, authorizer, bindings,
+	caller, inv := newCaller()
+	fixture := grantedAccess(t, &events,
+		unitGrant(caller.UserID, unitID, model.ActionRoleBindingView), institutionGrant(caller.UserID, model.ActionRoleView))
+	service := roleHolderService(&events, fixture, bindings,
 		&roleBindingRoleStoreFake{events: &events, found: []*model.Role{marker, reader}}, anyInstitution())
 
-	got, err := service.ListRoleBindings(context.Background(), invocation.Invocation{}, ListRoleBindingsQuery{
+	got, err := service.ListRoleBindings(context.Background(), inv, ListRoleBindingsQuery{
 		RoleIDs: []model.RoleID{reader.ID, marker.ID, reader.ID}, Limit: 2,
 	})
 	require.NoError(t, err)
@@ -64,7 +66,10 @@ func TestRoleBindingListByRolesPagesCurrentHoldersInsideTheViewScope(t *testing.
 	}, got, "the first page holds the limit, reports more, and carries its total")
 	// Contract: role_binding.view is authorized and recorded first, then the
 	// Roles are admitted through role.view, then the bindings are read.
-	require.Equal(t, []string{"authorize-binding-list", "can-view-roles", "get-roles", "list-current-by-roles", "count-current-by-roles"}, events)
+	require.Equal(t, []string{
+		"grants", "decision:role_binding.view:success", "grants",
+		"get-roles", "list-current-by-roles", "count-current-by-roles",
+	}, events)
 	want := store.RoleBindingRoleListOptions{
 		RoleIDs: []model.RoleID{reader.ID, marker.ID},
 		Visibility: store.UserVisibilityScope{
@@ -79,7 +84,7 @@ func TestRoleBindingListByRolesPagesCurrentHoldersInsideTheViewScope(t *testing.
 	require.Equal(t, []recordedDecision{{
 		action: model.ActionRoleBindingView, resource: model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()},
 		scopeType: model.RoleScopeAcademicUnit, scopeID: unitID.String(), allowed: true,
-	}}, authorizer.decisions, "the listing records one role_binding.view decision")
+	}}, recordedDecisions(fixture), "the listing records one role_binding.view decision")
 }
 
 func TestRoleBindingListByRolesContinuesWithoutCounting(t *testing.T) {
@@ -88,17 +93,19 @@ func TestRoleBindingListByRolesContinuesWithoutCounting(t *testing.T) {
 	role := &model.Role{ID: model.NewRoleID(), Name: "reader"}
 	last := &model.RoleBinding{ID: model.NewRoleBindingID(), RoleID: role.ID, CreatedAt: model.TimeFromMillis(100)}
 	bindings := &roleBindingStoreFake{events: &events, list: []*model.RoleBinding{last}}
-	service := roleHolderService(&events, &roleAuthorizerFake{events: &events}, bindings,
+	caller, inv := newCaller()
+	fixture := grantedAccess(t, &events, institutionGrant(caller.UserID, model.ActionRoleBindingView, model.ActionRoleView))
+	service := roleHolderService(&events, fixture, bindings,
 		&roleBindingRoleStoreFake{events: &events, found: []*model.Role{role}}, anyInstitution())
 	beforeID := model.NewRoleBindingID()
 
-	got, err := service.ListRoleBindings(context.Background(), invocation.Invocation{}, ListRoleBindingsQuery{
+	got, err := service.ListRoleBindings(context.Background(), inv, ListRoleBindingsQuery{
 		RoleIDs: []model.RoleID{role.ID}, BeforeCreatedAt: model.TimeFromMillis(200), BeforeID: beforeID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, paging.Counted[*model.RoleBinding]{Page: paging.Page[*model.RoleBinding]{Items: []*model.RoleBinding{last}}}, got,
 		"a later page carries no total")
-	require.Equal(t, []string{"authorize-binding-list", "can-view-roles", "get-roles", "list-current-by-roles"}, events)
+	require.Equal(t, []string{"grants", "decision:role_binding.view:success", "grants", "get-roles", "list-current-by-roles"}, events)
 	require.Equal(t, []store.RoleBindingRoleListOptions{{
 		RoleIDs:         []model.RoleID{role.ID},
 		Visibility:      store.UserVisibilityScope{InstitutionWide: true, ActiveAt: model.TimeFromMillis(5_000)},
@@ -116,12 +123,16 @@ func TestRoleBindingListByRolesRefusals(t *testing.T) {
 		tooMany = append(tooMany, model.NewRoleID())
 	}
 	for name, test := range map[string]struct {
-		query      ListRoleBindingsQuery
-		authorizer roleAuthorizerFake
-		found      []*model.Role
-		code       string
-		field      string
-		events     []string
+		query ListRoleBindingsQuery
+		// withoutBindingView and withoutRoleView withhold role_binding.view
+		// and role.view from the caller, who otherwise holds both
+		// Institution-wide.
+		withoutBindingView bool
+		withoutRoleView    bool
+		found              []*model.Role
+		code               string
+		field              string
+		events             []string
 	}{
 		"beside a User": {
 			query: ListRoleBindingsQuery{RoleIDs: []model.RoleID{role.ID}, UserID: model.NewUserID()},
@@ -156,33 +167,40 @@ func TestRoleBindingListByRolesRefusals(t *testing.T) {
 			code:  "request.invalid", field: "cursor", events: []string{},
 		},
 		"no role_binding.view anywhere": {
-			query:      ListRoleBindingsQuery{RoleIDs: []model.RoleID{role.ID}},
-			authorizer: roleAuthorizerFake{noBindingScope: true},
-			found:      []*model.Role{role},
-			code:       "authorization.denied", events: []string{"authorize-binding-list"},
+			query:              ListRoleBindingsQuery{RoleIDs: []model.RoleID{role.ID}},
+			withoutBindingView: true,
+			found:              []*model.Role{role},
+			code:               "authorization.denied", events: []string{"grants", "decision:role_binding.view:fail"},
 		},
 		"no Institution-wide role.view": {
-			query:      ListRoleBindingsQuery{RoleIDs: []model.RoleID{role.ID}},
-			authorizer: roleAuthorizerFake{roleViewDenied: true},
-			found:      []*model.Role{role},
-			code:       "request.invalid", field: "role_id", events: []string{"authorize-binding-list", "can-view-roles"},
+			query:           ListRoleBindingsQuery{RoleIDs: []model.RoleID{role.ID}},
+			withoutRoleView: true,
+			found:           []*model.Role{role},
+			code:            "request.invalid", field: "role_id", events: []string{"grants", "decision:role_binding.view:success", "grants"},
 		},
 		"an unknown or archived Role": {
 			query: ListRoleBindingsQuery{RoleIDs: []model.RoleID{role.ID, model.NewRoleID()}},
 			found: []*model.Role{role},
-			code:  "request.invalid", field: "role_id", events: []string{"authorize-binding-list", "can-view-roles", "get-roles"},
+			code:  "request.invalid", field: "role_id", events: []string{"grants", "decision:role_binding.view:success", "grants", "get-roles"},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			events := []string{}
-			authorizer := test.authorizer
-			authorizer.events = &events
+			caller, inv := newCaller()
+			var actions []model.Action
+			if !test.withoutBindingView {
+				actions = append(actions, model.ActionRoleBindingView)
+			}
+			if !test.withoutRoleView {
+				actions = append(actions, model.ActionRoleView)
+			}
+			fixture := grantedAccess(t, &events, institutionGrant(caller.UserID, actions...))
 			bindings := &roleBindingStoreFake{events: &events}
-			service := roleHolderService(&events, &authorizer, bindings,
+			service := roleHolderService(&events, fixture, bindings,
 				&roleBindingRoleStoreFake{events: &events, found: test.found}, anyInstitution())
 
-			_, err := service.ListRoleBindings(context.Background(), invocation.Invocation{}, test.query)
+			_, err := service.ListRoleBindings(context.Background(), inv, test.query)
 			require.True(t, apperror.Is(err, apperror.Code(test.code)), "error = %v", err)
 			if test.field != "" {
 				var appErr *apperror.Error
@@ -202,16 +220,20 @@ func TestRoleListPagesByNameWithHoldersCountedOnce(t *testing.T) {
 	beta := &model.Role{ID: model.NewRoleID(), Name: "beta"}
 	gamma := &model.Role{ID: model.NewRoleID(), Name: "gamma"}
 	delta := &model.Role{ID: model.NewRoleID(), Name: "delta"}
-	classID := model.NewClassID()
+	world := newClassWorld()
+	classID := world.class.ID
 	bindings := &roleBindingStoreFake{events: &events, holders: []store.RoleHolderCount{
 		{RoleID: gamma.ID, Bindings: store.MaximumListCount, Users: 40, Scopes: 3},
 		{RoleID: beta.ID, Bindings: 5, Users: 4, Scopes: 2},
 	}}
-	authorizer := &roleAuthorizerFake{events: &events, bindingScope: store.UserVisibilityScope{ClassIDs: []model.ClassID{classID}}}
-	service := roleHolderService(&events, authorizer, bindings,
-		&roleStoreFake{events: &events, list: []*model.Role{gamma, delta, alpha, beta}}, anyInstitution())
+	caller, inv := newCaller()
+	fixture := accessWith(t, &events, world.options(
+		institutionGrant(caller.UserID, model.ActionRoleView), classGrant(caller.UserID, classID, model.ActionRoleBindingView)))
+	institutions := &institutionStoreFake{institution: fixture.Institution}
+	service := roleHolderService(&events, fixture, bindings,
+		&roleStoreFake{events: &events, list: []*model.Role{gamma, delta, alpha, beta}}, institutions)
 
-	got, err := service.ListRoles(context.Background(), invocation.Invocation{}, ListRolesQuery{
+	got, err := service.ListRoles(context.Background(), inv, ListRolesQuery{
 		NameQuery: paging.NameQuery{AfterName: alpha.Name, AfterID: alpha.ID.String(), Limit: 2},
 	})
 	require.NoError(t, err)
@@ -221,15 +243,19 @@ func TestRoleListPagesByNameWithHoldersCountedOnce(t *testing.T) {
 	}, HasMore: true}, got, "the page continues after alpha by name; a Role without visible holders counts zero")
 	// Contract: role.view is authorized before the read; the holders of the
 	// whole page are counted in one read.
-	require.Equal(t, []string{"authorize-view", "list-roles", "authorize-binding-list", "count-holders-by-roles"}, events)
+	require.Equal(t, []string{"grants", "decision:role.view:success", "list-roles", "grants", "count-holders-by-roles"}, events)
 	require.Equal(t, &store.RoleHolderCountOptions{
 		RoleIDs:    []model.RoleID{beta.ID, delta.ID},
 		Visibility: store.UserVisibilityScope{ClassIDs: []model.ClassID{classID}, ActiveAt: model.TimeFromMillis(5_000)},
 		Maximum:    store.MaximumListCount,
 	}, bindings.holderInput, "holders are counted only within the caller's role_binding.view scope")
-	require.Empty(t, authorizer.decisions, "the holder scope narrows the authorized Role read and records no decision of its own")
+	institutionID := institutions.institution.ID.String()
+	require.Equal(t, []recordedDecision{{
+		action: model.ActionRoleView, resource: model.Resource{Type: model.ResourceInstitution, ID: institutionID},
+		scopeType: model.RoleScopeInstitution, scopeID: institutionID, allowed: true,
+	}}, recordedDecisions(fixture), "the holder scope narrows the authorized Role read and records no decision of its own")
 
-	last, err := service.ListRoles(context.Background(), invocation.Invocation{}, ListRolesQuery{
+	last, err := service.ListRoles(context.Background(), inv, ListRolesQuery{
 		NameQuery: paging.NameQuery{AfterName: delta.Name, AfterID: delta.ID.String(), Limit: 2},
 	})
 	require.NoError(t, err)
@@ -244,16 +270,21 @@ func TestRoleReadsOmitHoldersWithoutRoleBindingView(t *testing.T) {
 	events := []string{}
 	role := &model.Role{ID: model.NewRoleID(), Name: "reader"}
 	bindings := &roleBindingStoreFake{events: &events}
-	service := roleHolderService(&events, &roleAuthorizerFake{events: &events, noBindingScope: true}, bindings,
+	caller, inv := newCaller()
+	fixture := grantedAccess(t, &events, institutionGrant(caller.UserID, model.ActionRoleView))
+	service := roleHolderService(&events, fixture, bindings,
 		&roleStoreFake{events: &events, role: role, list: []*model.Role{role}}, anyInstitution())
 
-	page, err := service.ListRoles(context.Background(), invocation.Invocation{}, ListRolesQuery{})
+	page, err := service.ListRoles(context.Background(), inv, ListRolesQuery{})
 	require.NoError(t, err)
 	require.Equal(t, paging.Page[RoleResult]{Items: []RoleResult{{Role: role}}}, page)
-	one, err := service.GetRole(context.Background(), invocation.Invocation{}, role.ID)
+	one, err := service.GetRole(context.Background(), inv, role.ID)
 	require.NoError(t, err)
 	require.Equal(t, RoleResult{Role: role}, one)
-	require.Equal(t, []string{"authorize-view", "list-roles", "authorize-binding-list", "authorize-view", "get-role", "authorize-binding-list"}, events,
+	require.Equal(t, []string{
+		"grants", "decision:role.view:success", "list-roles", "grants",
+		"grants", "decision:role.view:success", "get-role", "grants",
+	}, events,
 		"without role_binding.view anywhere no holder is counted")
 	require.Nil(t, bindings.holderInput)
 }
@@ -263,10 +294,12 @@ func TestRoleGetCountsItsHolders(t *testing.T) {
 	events := []string{}
 	role := &model.Role{ID: model.NewRoleID(), Name: "reader"}
 	bindings := &roleBindingStoreFake{events: &events, holders: []store.RoleHolderCount{{RoleID: role.ID, Bindings: 3, Users: 2, Scopes: 1}}}
-	service := roleHolderService(&events, &roleAuthorizerFake{events: &events}, bindings,
+	caller, inv := newCaller()
+	fixture := grantedAccess(t, &events, institutionGrant(caller.UserID, model.ActionRoleView, model.ActionRoleBindingView))
+	service := roleHolderService(&events, fixture, bindings,
 		&roleStoreFake{events: &events, role: role}, anyInstitution())
 
-	got, err := service.GetRole(context.Background(), invocation.Invocation{}, role.ID)
+	got, err := service.GetRole(context.Background(), inv, role.ID)
 	require.NoError(t, err)
 	require.Equal(t, RoleResult{Role: role, Holders: &RoleHolders{Bindings: 3, Users: 2, Scopes: 1}}, got)
 	require.Equal(t, &store.RoleHolderCountOptions{
@@ -286,9 +319,11 @@ func TestRoleListRejectsAnIncoherentPage(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			events := []string{}
-			service := roleHolderService(&events, &roleAuthorizerFake{events: &events}, &roleBindingStoreFake{events: &events},
+			caller, inv := newCaller()
+			fixture := grantedAccess(t, &events, institutionGrant(caller.UserID, model.ActionRoleView))
+			service := roleHolderService(&events, fixture, &roleBindingStoreFake{events: &events},
 				&roleStoreFake{events: &events}, anyInstitution())
-			_, err := service.ListRoles(context.Background(), invocation.Invocation{}, query)
+			_, err := service.ListRoles(context.Background(), inv, query)
 			require.True(t, apperror.Is(err, "request.invalid"), "error = %v", err)
 			require.Empty(t, events)
 		})

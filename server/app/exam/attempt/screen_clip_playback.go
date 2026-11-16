@@ -22,7 +22,7 @@ import (
 // ScreenClipPlaybackOperation names a clip playback in the audit log.
 const ScreenClipPlaybackOperation = "exam.attempt.screen_clip.play"
 
-// ScreenClipQuery names one of an Attempt's clips for those who may see it.
+// ScreenClipQuery names one of an attempt's clips.
 type ScreenClipQuery struct {
 	ExamID    model.ExamID
 	SittingID model.ExamSittingID
@@ -34,19 +34,17 @@ func (q ScreenClipQuery) clips() store.ExamAttemptClips {
 	return store.ExamAttemptClips{ExamID: q.ExamID, SittingID: q.SittingID, AttemptID: q.AttemptID}
 }
 
-// PlayScreenClipResult is a ready clip a viewer may play: its media type
-// and size, from which the transport reads a Range header, and Open, which
-// returns a byte range of it. Length is the number of bytes from start; a
-// range past the clip's end is refused. Opening from the first byte is a
-// playback, and audited; the ranges a player then reads are not.
+// PlayScreenClipResult is a ready clip. Open takes a start and a length in
+// bytes and refuses a range past the clip's end. Opening from the first byte
+// is audited as a playback; the ranges a player then reads are not.
 type PlayScreenClipResult struct {
 	MediaType string
 	SizeBytes int64
 	Open      func(start, length int64) (io.ReadCloser, error)
 }
 
-// ListScreenClips returns every clip requested for an Attempt, for the
-// Sitting's Exam Managers, without private reasons.
+// ListScreenClips returns every clip requested for an attempt, without
+// private reasons.
 func (s *Service) ListScreenClips(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -69,8 +67,8 @@ func (s *Service) ListScreenClips(
 	return clips, nil
 }
 
-// PlayScreenClip authorizes the caller and loads a ready clip once, so a
-// range request is decided by one authorization.
+// PlayScreenClip authorizes once, so every range read of the result rests on
+// that one decision.
 func (s *Service) PlayScreenClip(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -100,8 +98,6 @@ func (s *Service) PlayScreenClip(
 	}, nil
 }
 
-// auditScreenClipPlayback records one playback under the decision that
-// allowed it.
 func (s *Service) auditScreenClipPlayback(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -149,9 +145,6 @@ func (s *Service) readyScreenClip(
 	return clip, viewer, nil
 }
 
-// authorizeScreenClipView asks whether the caller may see the Attempt's
-// clips: as one of the Sitting's Exam Managers, or as a reviewer of its
-// Submission.
 func (s *Service) authorizeScreenClipView(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -174,8 +167,7 @@ func (s *Service) authorizeScreenClipView(
 	return viewer, nil
 }
 
-// screenClipReader reads a byte range across a clip's chunks, opening each
-// chunk only when the range reaches it.
+// screenClipReader opens each chunk only when the range reaches it.
 type screenClipReader struct {
 	ctx       context.Context
 	content   Content
@@ -184,8 +176,7 @@ type screenClipReader struct {
 	offset    int64
 	remaining int64
 	current   io.ReadCloser
-	// unread is how many bytes of the open chunk the range still expects.
-	unread int64
+	unread    int64
 }
 
 func (r *screenClipReader) Read(buffer []byte) (int, error) {

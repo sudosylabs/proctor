@@ -14,7 +14,7 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-func deliveryBudgetResource(app ExamAttemptApplication) route.Resource {
+func deliveryBudgetResource(app *attempt.Service) route.Resource {
 	h := examAttemptHandlers{app: app}
 	return route.NewResource(
 		"delivery-budget",

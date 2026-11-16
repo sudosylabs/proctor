@@ -22,10 +22,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/mailtest"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 
 	"github.com/sudosylabs/proctor/server/app/job"
@@ -37,7 +39,6 @@ import (
 type constructionCatalogStub struct{ store.Catalog }
 type constructionCacheStub struct{ identity.AuthenticationCache }
 type constructionMailDeliverySenderStub struct{ mail.Sender }
-type constructionMailTemplateRendererStub struct{ mail.Renderer }
 type constructionRegistryStub struct {
 	identity.ExternalProviderSource
 }
@@ -92,7 +93,7 @@ func TestApplicationDependencyValidationIsFailFastAndOrdered(t *testing.T) {
 		Store:                     constructionCatalogStub{},
 		Cache:                     constructionCacheStub{},
 		MailDeliverySender:        constructionMailDeliverySenderStub{},
-		MailTemplateRenderer:      constructionMailTemplateRendererStub{},
+		MailTemplateRenderer:      mailtest.NewRenderer(t),
 		Registry:                  constructionRegistryStub{},
 		FileContent:               constructionFileContentStub{},
 		NodeID:                    "node-a",
@@ -263,6 +264,9 @@ func TestJobRecipeConnectsRuntimeOperationsAndProfileWake(t *testing.T) {
 
 	defaultJobs := jobs.NewDefaultProfilePictureJobs(jobs.DefaultProfilePictureJobsDependencies{Jobs: constructionEnqueueJobStoreStub{}})
 	wake := &jobWake{}
+	// The operator Job service is built over the composition's authorizer
+	// and auditor, which production always has.
+	control := accesstest.New(t, accesstest.Options{})
 	runtime, err := newJobRuntime(
 		Dependencies{
 			Store: constructionCatalogWithJobs{
@@ -275,8 +279,8 @@ func TestJobRecipeConnectsRuntimeOperationsAndProfileWake(t *testing.T) {
 			},
 			NodeID: "node-a", RecoveryDiagnostics: newDiscardLogger(t),
 		},
-		sharedMechanics{},
-		nil,
+		sharedMechanics{audit: control.Auditor},
+		control.Authorizer,
 		examServices{sittings: &sitting.Service{}, attempts: &attempt.Service{}},
 		nil,
 		defaultJobs,

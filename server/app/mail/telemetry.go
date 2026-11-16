@@ -56,16 +56,16 @@ type DeliveryMetricAggregate struct {
 	MaximumProcessingLatency time.Duration
 }
 
-// MetricsSnapshot is what the operator mail metrics use case returns.
+// MetricsSnapshot is what GetMailMetrics returns.
 type MetricsSnapshot struct {
 	Deliveries []DeliveryMetricAggregate
 	Queues     []QueueMetric
 	HealthCode string
 }
 
-// DeliveryRecorder is a bounded telemetry event sink. The contracts omit
-// delivery IDs and every recipient or content-bearing value, keeping metric
-// cardinality and operational logs safe.
+// DeliveryRecorder is a bounded telemetry sink. Its contracts omit delivery
+// IDs and every recipient or content value, keeping metric cardinality and
+// logs safe.
 type DeliveryRecorder interface {
 	RecordMailDelivery(context.Context, DeliveryMetric)
 	RecordMailAttempt(context.Context, AttemptMetric)
@@ -73,9 +73,8 @@ type DeliveryRecorder interface {
 	RecordMailHealth(context.Context, HealthMetric)
 }
 
-// MetricsReader exposes the bounded in-process snapshot used by the
-// authorized operational API. Export-only recorders do not need to implement
-// this query contract.
+// MetricsReader exposes the in-process snapshot behind GetMailMetrics. An
+// export-only recorder need not implement it.
 type MetricsReader interface {
 	Snapshot() MetricsSnapshot
 }

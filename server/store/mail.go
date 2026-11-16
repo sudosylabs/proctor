@@ -14,9 +14,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// MailTestEnqueue is the named aggregate that commits one controlled test
-// occurrence, its encrypted recipient delivery, its delivery Job, and the
-// successful operator audit as one PostgreSQL transaction.
+// MailTestEnqueue commits a test mail, its encrypted delivery, its Job and
+// the operator audit in one transaction.
 type MailTestEnqueue struct {
 	Occurrence *model.MailOccurrence
 	Delivery   *model.MailDelivery
@@ -42,12 +41,10 @@ type MailDeliveryCompletion struct {
 	At                time.Time
 }
 
-// MailDeliveryListOptions is a bounded, server-side operator query, newest
-// first by Order's instant (creation when Order is empty) then ID, or oldest
-// first when Ascending. The (BeforeAt, BeforeID) pair is the decoded opaque
-// keyset cursor: the previous page's last delivery, its instant in Order.
-// RecipientUserID keeps the deliveries addressed to that User; a delivery to
-// an Invitation has no recipient User and never matches it.
+// MailDeliveryListOptions lists deliveries newest first by Order's instant
+// (creation when empty) then ID, or oldest first when Ascending. BeforeAt and
+// BeforeID are the previous page's last delivery. A delivery for an
+// invitation has no recipient user, so RecipientUserID never matches it.
 type MailDeliveryListOptions struct {
 	States          []model.MailDeliveryState
 	TemplateKeys    []model.MailTemplateKey
@@ -75,8 +72,8 @@ func (o MailDeliveryOrder) IsValid() bool {
 	return o == "" || o == MailDeliveryOrderCreated || o == MailDeliveryOrderUpdated
 }
 
-// MailDeliveryMutation fences an audited operator transition against the
-// delivery revision observed after authorization.
+// MailDeliveryMutation is an audited operator transition; ExpectedRevision is
+// the revision read after authorization.
 type MailDeliveryMutation struct {
 	ID               model.MailDeliveryID
 	ExpectedRevision int64
@@ -96,15 +93,16 @@ type MailSendPermit struct {
 	RetryAfter time.Duration
 }
 
-// MailMaintenanceResult reports one bounded, convergent maintenance page.
+// MailMaintenanceResult is one bounded maintenance page; repeating it
+// converges.
 type MailMaintenanceResult struct {
 	Affected   int
 	More       bool
 	Deliveries []MailMaintenanceDelivery
 }
 
-// MailMaintenanceDelivery is the bounded, identifier-free observation for a
-// delivery transitioned by maintenance rather than the ordinary worker.
+// MailMaintenanceDelivery describes, without identifiers, a delivery that
+// maintenance rather than the worker moved.
 type MailMaintenanceDelivery struct {
 	TemplateKey       model.MailTemplateKey
 	State             model.MailDeliveryState
@@ -121,23 +119,23 @@ type MailQueueCount struct {
 	OldestObservedAt  time.Time
 }
 
-// MailQueueSnapshot contains only bounded operational metadata. It never
-// includes recipients, rendered content, payloads, or provider responses.
+// MailQueueSnapshot never includes recipients, rendered content, payloads or
+// provider responses.
 type MailQueueSnapshot struct {
 	Counts         []MailQueueCount
 	OldestQueuedAt time.Time
 	More           bool
 }
 
-// MailStore owns durable mail-domain state. It deliberately exposes named
-// lifecycle operations rather than a raw transaction callback.
+// MailStore persists mail deliveries, their send limits and payload key
+// rotation.
 type MailStore interface {
 	EnqueueTest(context.Context, *MailTestEnqueue) (*model.MailDelivery, error)
 	GetDelivery(context.Context, model.MailDeliveryID) (*model.MailDelivery, error)
 	ListDeliveries(context.Context, MailDeliveryListOptions) ([]*model.MailDelivery, error)
-	// CountDeliveries counts the deliveries ListDeliveries would return
-	// across every page for the same filters, ignoring the keyset and limit,
-	// and stops at maximum (see MaximumListCount).
+	// CountDeliveries counts what ListDeliveries would return across every
+	// page, ignoring the keyset and limit, capped at maximum (see
+	// MaximumListCount).
 	CountDeliveries(context.Context, MailDeliveryListOptions, int) (int, error)
 	StartDelivery(context.Context, *MailDeliveryStart) (*model.MailDelivery, error)
 	CompleteDelivery(context.Context, *MailDeliveryCompletion) (*model.MailDelivery, error)
@@ -156,8 +154,9 @@ type MailStore interface {
 	ProveRekey(context.Context, *MailRekeyProofRequest) (*MailRekeyProof, error)
 }
 
-// PreparedMail groups one already-rendered direct occurrence and its work.
-// Named aggregate inputs use it only where the mail is conditionally applied.
+// PreparedMail is a rendered mail with its delivery and Job. Inputs use it
+// where the mail is sent only if the store decides it applies; nil means no
+// mail.
 type PreparedMail struct {
 	Occurrence *model.MailOccurrence
 	Delivery   *model.MailDelivery

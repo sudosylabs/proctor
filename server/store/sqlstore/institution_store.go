@@ -139,7 +139,7 @@ func (s SQLInstitutionStore) Save(ctx context.Context, institution *model.Instit
 	})
 }
 
-// Get returns the unarchived Institution with id, or a not-found error.
+// Get returns the unarchived institution with id, or a not-found error.
 func (s SQLInstitutionStore) Get(ctx context.Context, id model.InstitutionID) (*model.Institution, error) {
 	var row institutionRow
 	query := s.institutionsQuery.Where(sq.Eq{
@@ -246,7 +246,7 @@ func (s SQLInstitutionStore) updateInstitution(
 	})
 }
 
-// Archive archives the Institution at archiveAt, or returns
+// Archive archives the institution at archiveAt, or returns
 // a not-found error when it is absent or already archived.
 func (s SQLInstitutionStore) Archive(ctx context.Context, input *store.InstitutionArchive) error {
 	id := input.ID

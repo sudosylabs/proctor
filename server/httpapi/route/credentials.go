@@ -118,9 +118,8 @@ func CookieValue(
 	return value, nil
 }
 
-// Principal returns the Principal the kernel authenticated for the request. It
-// reports false on a public route, and for a Principal whose MFA recovery
-// restriction is inconsistent.
+// Principal returns the authenticated principal. It reports false on a public
+// route, and for a principal whose MFA recovery restriction is inconsistent.
 func Principal(ctx context.Context) (model.Principal, bool) {
 	principal, ok := ctx.Value(principalContextKey{}).(model.Principal)
 	return principal, ok && principal.ValidateMFARecovery() == nil

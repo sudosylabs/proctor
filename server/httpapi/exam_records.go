@@ -8,42 +8,18 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/exam"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ExamRecordsApplication is the application port its handlers call; it
-// completes a Sitting's records, waives Submission reviews and places or
-// releases retention holds.
-type ExamRecordsApplication interface {
-	GetExamSittingRecords(
-		context.Context,
-		invocation.Invocation,
-		model.ExamID,
-		model.ExamSittingID,
-	) (*store.ExamRecordsCompletionSnapshot, error)
-	GetSubmissionReviewWaiver(context.Context, invocation.Invocation, model.RetentionHoldScope) (*model.SubmissionReviewWaiver, error)
-	CompleteExamSittingRecords(
-		context.Context,
-		invocation.Invocation,
-		exam.CompleteRecordsCommand,
-	) (*model.ExamSittingRecordsCompletion, error)
-	WaiveSubmissionReview(context.Context, invocation.Invocation, exam.WaiveReviewCommand) (*model.SubmissionReviewWaiver, error)
-	ListRetentionHolds(context.Context, invocation.Invocation, store.ExamRecordsHoldListOptions) (*store.ExamRecordsHoldPage, error)
-	CreateRetentionHold(context.Context, invocation.Invocation, exam.CreateRetentionHoldCommand) (*model.RetentionHold, error)
-	ReleaseRetentionHold(context.Context, invocation.Invocation, exam.ReleaseRetentionHoldCommand) (*model.RetentionHold, error)
-}
+type examRecordsHandlers struct{ app *exam.Records }
 
-type examRecordsHandlers struct{ app ExamRecordsApplication }
-
-func examRecordsResource(app ExamRecordsApplication) route.Resource {
+func examRecordsResource(app *exam.Records) route.Resource {
 	h := examRecordsHandlers{app: app}
 	completion := "/exams/{exam_id}/sittings/{exam_sitting_id}/records-completion"
 	waiver := "/exams/{exam_id}/sittings/{exam_sitting_id}/submissions/{submission_id}/review-waiver"

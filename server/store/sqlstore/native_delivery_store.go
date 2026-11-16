@@ -19,13 +19,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// SQLNativeDeliveryStore is the PostgreSQL store.NativeDeliveryStore.
-//
-// Every operation rechecks current User and registered-key ownership before
-// replay. Live owners additionally require exact Connection continuity.
-// Gap and final declaration revisions, position and metadata charges, semantic
-// receipts, successful audit and the command outcome commit atomically. Status
-// expires closed owners using their original immutable upload deadline.
+// SQLNativeDeliveryStore implements store.NativeDeliveryStore. Every operation
+// rechecks user and registered-key ownership before replay, and live owners
+// also need exact connection continuity.
 type SQLNativeDeliveryStore struct{ *SQLStore }
 
 func newSQLNativeDeliveryStore(sqlStore *SQLStore) store.NativeDeliveryStore {
@@ -50,7 +46,7 @@ type nativeDeliveryOwner struct {
 	Closure             model.DeliveryClosure
 }
 
-// Lifecycle owners call this under their existing Attempt/Participation locks.
+// Lifecycle owners call this under their existing attempt/Participation locks.
 // The fixed closure slot has already been reserved at admission.
 func closeNativeDelivery(
 	ctx context.Context,
@@ -228,8 +224,8 @@ func (s *SQLNativeDeliveryStore) nativeDeliveryOwner(
 	return owner, nil
 }
 
-// lockNativeDeliveryAccess validates the access and locks the Sitting,
-// Attempt, Session and delivery budget, refusing a retired Attempt.
+// lockNativeDeliveryAccess validates the access and locks the sitting,
+// attempt, session and delivery budget, refusing a retired attempt.
 func lockNativeDeliveryAccess(ctx context.Context, tx *sqlxTxWrapper, access store.NativeDeliveryAccess) error {
 	a := access.Access
 	if !a.AttemptID.IsValid() ||
@@ -329,8 +325,8 @@ func lockNativeDeliveryAccess(ctx context.Context, tx *sqlxTxWrapper, access sto
 	return nil
 }
 
-// closeEndedNativeDelivery closes an open owner whose Participation ended or
-// whose lease expired, or otherwise locks the Candidate guard.
+// closeEndedNativeDelivery closes an open owner whose participation ended or
+// whose lease expired, or otherwise locks the candidate guard.
 func (s *SQLNativeDeliveryStore) closeEndedNativeDelivery(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -781,7 +777,7 @@ type nativeDeclarationRequest struct {
 	record        deliveryDeclarationRecord
 }
 
-// nativeDeclarationBudget is the Attempt budget a native declaration charges.
+// nativeDeclarationBudget is the attempt budget a native declaration charges.
 type nativeDeclarationBudget struct {
 	Metadata  int64 `db:"control_metadata_bytes"`
 	Positions int64 `db:"native_allocated_positions"`
@@ -1241,7 +1237,7 @@ func (s *SQLNativeDeliveryStore) UpdateNativeDeliverySummary(
 	return result.Value, nil
 }
 
-// ResolveNativeDeliveryTarget returns the Sitting, Class, and admitted security
+// ResolveNativeDeliveryTarget returns the sitting, class, and admitted security
 // binding that own the native delivery stream, after verifying ownership.
 func (s *SQLNativeDeliveryStore) ResolveNativeDeliveryTarget(
 	ctx context.Context,

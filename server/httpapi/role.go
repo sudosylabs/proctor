@@ -14,13 +14,11 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
@@ -33,6 +31,9 @@ type createRoleRequest struct {
 	Permissions []string `json:"permissions"`
 }
 
+// updateRoleRequest is a frozen v1 shape: omitted and null both leave a field
+// unchanged, while an empty string or array is present and validated. New
+// PATCH requests use route.Optional where omission and null differ.
 type updateRoleRequest struct {
 	DisplayName *string   `json:"display_name,omitempty"`
 	Description *string   `json:"description,omitempty"`
@@ -54,7 +55,7 @@ type roleResponse struct {
 	Holders *roleHoldersResponse `json:"holders,omitempty"`
 }
 
-// roleHoldersResponse counts a Role's current Role Bindings the caller can
+// roleHoldersResponse counts a role's current role bindings the caller can
 // see, each stopped at 10,000 with its lower-bound flag.
 type roleHoldersResponse struct {
 	Bindings             int  `json:"bindings"`
@@ -65,7 +66,7 @@ type roleHoldersResponse struct {
 	ScopesIsLowerBound   bool `json:"scopes_is_lower_bound"`
 }
 
-// roleResponseFromResult presents a read Role with its holders, when the
+// roleResponseFromResult presents a read role with its holders, when the
 // application counted them.
 func roleResponseFromResult(request *http.Request, result administration.RoleResult) roleResponse {
 	response := roleResponseFromModel(request, result.Role)
@@ -108,10 +109,10 @@ func roleResponseFromModel(request *http.Request, role *model.Role) roleResponse
 }
 
 type roleHandlers struct {
-	app RoleApplication
+	app *administration.Service
 }
 
-func roleResource(app RoleApplication) route.Resource {
+func roleResource(app *administration.Service) route.Resource {
 	h := roleHandlers{app: app}
 	return route.NewResource(
 		"roles",
@@ -235,7 +236,7 @@ func (h roleHandlers) list(request route.Request) (route.Result, error) {
 	return route.JSON(http.StatusOK, response), nil
 }
 
-// roleCursor continues the Role listing after the Role with Name and ID.
+// roleCursor continues the role listing after the role with Name and ID.
 type roleCursor struct {
 	Name string `json:"name"`
 	ID   string `json:"id"`
@@ -335,13 +336,4 @@ func (h roleHandlers) archive(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 	return route.NoContent(), nil
-}
-
-// RoleApplication is the application port its handlers call; it reads and changes Roles.
-type RoleApplication interface {
-	ListRoles(context.Context, invocation.Invocation, administration.ListRolesQuery) (paging.Page[administration.RoleResult], error)
-	GetRole(context.Context, invocation.Invocation, model.RoleID) (administration.RoleResult, error)
-	CreateRole(context.Context, invocation.Invocation, administration.CreateRoleCommand) (*model.Role, error)
-	UpdateRole(context.Context, invocation.Invocation, administration.UpdateRoleCommand) (*model.Role, error)
-	ArchiveRole(context.Context, invocation.Invocation, model.RoleID) error
 }

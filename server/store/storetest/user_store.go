@@ -653,7 +653,7 @@ func testUserStoreListAndDisable(t *testing.T, ss store.Store) {
 }
 
 // testUserListAffiliationAndAcademicUnitFilters proves the directory filters:
-// a current Affiliation of any listed kind, a current membership in the unit
+// a current affiliation of any listed kind, a current membership in the unit
 // or a descendant, both evaluated at the visibility instant and narrowing the
 // visibility rather than widening it.
 func testUserListAffiliationAndAcademicUnitFilters(t *testing.T, ss store.Store) {
@@ -688,8 +688,8 @@ func testUserListAffiliationAndAcademicUnitFilters(t *testing.T, ss store.Store)
 	rootStudent := named("root-student")
 	affiliate(rootStudent, model.AffiliationStudent, model.OptionalTime{})
 	member(rootStudent, root, model.OptionalTime{})
-	// siblingStaff is visible to the root scope only through its root Class
-	// enrollment, which requires a student Affiliation; its unit membership
+	// siblingStaff is visible to the root scope only through its root class
+	// enrollment, which requires a student affiliation; its unit membership
 	// lies outside that scope.
 	siblingStaff := named("sibling-staff")
 	affiliate(siblingStaff, model.AffiliationStaff, model.OptionalTime{})
@@ -794,9 +794,9 @@ func testUserListAffiliationAndAcademicUnitFilters(t *testing.T, ss store.Store)
 }
 
 // testUserListStateActivityAndRoleFilters proves the account filters: only
-// disabled Users, never signed in, and the last-activity range (after
-// inclusive, before exclusive) read Institution-wide only, and the Role filter
-// matches current bindings of unarchived Roles inside the role_binding.view
+// disabled users, never signed in, and the last-activity range (after
+// inclusive, before exclusive) read institution-wide only, and the role filter
+// matches current bindings of unarchived roles inside the role_binding.view
 // scope while still narrowing the user.view visibility.
 func testUserListStateActivityAndRoleFilters(t *testing.T, ss store.Store) {
 	ctx := context.Background()
@@ -1341,8 +1341,8 @@ func testUserStoreUpdate(t *testing.T, ss store.Store) {
 	})
 	require.True(t, store.IsConflict(err), "stale UpdateProfile() error")
 	missingID := model.UserID(model.NewID())
-	// An attempt cannot name a User that does not exist as its subject, so
-	// this fixture records the missing target against the Institution.
+	// An attempt cannot name a user that does not exist as its subject, so
+	// this fixture records the missing target against the institution.
 	missingAttempt, err := ss.Audit().Save(ctx, &model.AuditEvent{
 		Action: string(model.ActionUserManage), Resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()},
 		ScopeType: model.RoleScopeInstitution, ScopeID: model.NewID(), Status: model.AuditStatusAttempt, NodeID: "test-node",
@@ -1392,7 +1392,7 @@ func testUserStoreListDisplayNames(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	expected := []store.UserDisplayName{{UserID: named.ID, DisplayName: named.DisplayName}, {UserID: unnamed.ID, DisplayName: unnamed.Username}}
 	slices.SortFunc(expected, func(a, b store.UserDisplayName) int { return strings.Compare(a.UserID.String(), b.UserID.String()) })
-	// A missing User is absent, a repeated one is read once, and a User with no
+	// A missing user is absent, a repeated one is read once, and a user with no
 	// display name is presented by username.
 	require.Equal(t, expected, names)
 	empty, err := ss.User().ListDisplayNames(ctx, nil)
@@ -1410,9 +1410,9 @@ func testUserStoreListDisplayNames(t *testing.T, ss store.Store) {
 }
 
 // testUserStoreListVisibleDisplayNames proves that the visible-name read
-// applies the User directory's visibility: a zero visibility names nobody, a
+// applies the user directory's visibility: a zero visibility names nobody, a
 // scoped one names only its subtree's current members and never a disabled
-// one, and Institution-wide visibility names every unarchived User.
+// one, and institution-wide visibility names every unarchived user.
 func testUserStoreListVisibleDisplayNames(t *testing.T, ss store.Store) {
 	ctx := context.Background()
 	institution := saveInstitution(t, ctx, ss)
@@ -1558,8 +1558,8 @@ func defaultProfilePictureCommand(userID model.UserID) json.RawMessage {
 }
 
 // testUserStoreListOrders pages every directory order in both directions one
-// User at a time and requires exactly the order each key defines: the folded
-// presented name, creation, or last activity (a never-active User is the
+// user at a time and requires exactly the order each key defines: the folded
+// presented name, creation, or last activity (a never-active user is the
 // least recent), each then by ID.
 func testUserStoreListOrders(t *testing.T, ss store.Store) {
 	ctx := context.Background()

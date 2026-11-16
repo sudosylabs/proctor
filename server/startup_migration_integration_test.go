@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/operator"
 )
@@ -62,7 +63,7 @@ func TestNewAutomaticallyMigratesAnEmptyDatabase(t *testing.T) {
 func createStartupMigrationWebapp(t *testing.T) string {
 	t.Helper()
 	directory := t.TempDir()
-	build := CurrentBuildInfo()
+	build := app.CurrentBuildInfo()
 	manifest, err := json.Marshal(struct {
 		Version string `json:"version"`
 		Commit  string `json:"commit"`

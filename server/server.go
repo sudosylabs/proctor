@@ -26,15 +26,15 @@ import (
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/pluginhost"
 )
 
 type options struct {
 	configPath       string
 	readyNotifier    ReadyNotifier
 	stoppingNotifier StoppingNotifier
-	// schema is schemaRequireCurrent when construction must refuse an
-	// out-of-date schema instead of migrating it; offline host commands must
-	// not converge schema as a side effect.
+	// schema is schemaRequireCurrent for offline host commands, which must
+	// not migrate as a side effect.
 	schema schemaPolicy
 }
 
@@ -47,8 +47,7 @@ func withCurrentSchemaRequired() Option {
 	}
 }
 
-// Option configures construction without exposing infrastructure or transport
-// implementation types.
+// Option configures New; an option that fails to apply fails construction.
 type Option func(*options) error
 
 // ReadyNotifier observes the single transition from startup to serving
@@ -61,9 +60,8 @@ type ReadyNotifier func(context.Context) error
 // logged and never delay or alter the shutdown sequence.
 type StoppingNotifier func(context.Context) error
 
-// WithConfigPath selects the deployment configuration file used to construct
-// the server. Applying the option fails when path is empty; loading and
-// validating the file occurs in New.
+// WithConfigPath selects the configuration file New loads. An empty path
+// fails.
 func WithConfigPath(path string) Option {
 	return func(settings *options) error {
 		if path == "" {
@@ -74,9 +72,9 @@ func WithConfigPath(path string) Option {
 	}
 }
 
-// WithReadyNotifier attaches a host-process readiness notification. The
-// notifier runs exactly once after every required runtime dependency and HTTP
-// serving are ready. It is not called when startup fails or is canceled.
+// WithReadyNotifier attaches a host-process readiness notification. It runs
+// once, after every required dependency and HTTP serving are ready, and never
+// when startup fails or is canceled.
 func WithReadyNotifier(notify ReadyNotifier) Option {
 	return func(settings *options) error {
 		if notify == nil {
@@ -101,13 +99,11 @@ func WithStoppingNotifier(notify StoppingNotifier) Option {
 	}
 }
 
-// runtimeComponent is the lifecycle shape of Platform, durable Jobs, and the
-// WebSocket transport. Construction is inert; Start enters runtime work and
-// Close drains it until ctx, the remainder of the shared shutdown budget,
-// ends. Platform, the infrastructure owner, starts first and closes last.
-// Jobs start only after the authoritative store is ready and drain before
-// transports and infrastructure close, so handlers never outlive their VFS or
-// persistence dependencies while the budget lasts.
+// runtimeComponent is the lifecycle of the platform, durable jobs and the
+// WebSocket transport. Construction is inert; Close drains until ctx, the rest
+// of the shutdown budget, ends. The platform starts first and closes last, and
+// jobs drain before transports and infrastructure close, so a handler never
+// outlives its VFS or store while the budget lasts.
 type runtimeComponent interface {
 	Start(context.Context) error
 	Close(context.Context) error
@@ -134,18 +130,17 @@ type runtimeMetrics interface {
 	SetReady(bool)
 }
 
-// startupReconciliation names the actorless startup convergence work.
 var startupReconciliation = invocation.Task("startup-reconciliation")
 
-// runtimeReconciler owns bounded durable startup convergence that must complete
-// after infrastructure is ready and before any worker or transport can serve.
+// runtimeReconciler runs startup convergence that must finish after
+// infrastructure is ready and before any worker or transport serves.
 type runtimeReconciler interface {
 	ReconcileSystemAdministratorRole(context.Context, invocation.System) error
 	ReconcileAdministratorRecovery(context.Context, invocation.System) error
 }
 
-// runtimeAdministratorRecovery is borrowed only by the inert Server facade;
-// it is never projected into HTTP or another transport.
+// runtimeAdministratorRecovery is used only by an inert Server; it is never
+// exposed over HTTP or any other transport.
 type runtimeAdministratorRecovery interface {
 	RecoverAdministratorAccess(
 		context.Context,
@@ -180,24 +175,30 @@ type httpRuntime interface {
 
 // ownershipListener transfers the bound listener at the first HTTP accept.
 // Until then Server remains responsible for closing it on cancellation.
+// A Close that arrives before the first accept is remembered: the accept
+// then refuses instead of taking ownership, because nothing would close the
+// listener it would block on and shutdown would wait forever.
 type ownershipListener struct {
 	net.Listener
 	accept func() bool
 	mu     sync.Mutex
 	once   sync.Once
 	owned  bool
+	closed bool
 }
 
 func (l *ownershipListener) Accept() (net.Conn, error) {
 	l.once.Do(func() {
 		l.mu.Lock()
-		l.owned = l.accept()
+		if !l.closed {
+			l.owned = l.accept()
+		}
 		l.mu.Unlock()
 	})
 	l.mu.Lock()
-	owned := l.owned
+	owned, closed := l.owned, l.closed
 	l.mu.Unlock()
-	if !owned {
+	if !owned || closed {
 		return nil, net.ErrClosed
 	}
 	return l.Listener.Accept()
@@ -205,6 +206,7 @@ func (l *ownershipListener) Accept() (net.Conn, error) {
 
 func (l *ownershipListener) Close() error {
 	l.mu.Lock()
+	l.closed = true
 	owned := l.owned
 	l.mu.Unlock()
 	if !owned {
@@ -306,7 +308,7 @@ type runtimeComponents struct {
 	plugins interface{ Close(context.Context) error }
 	// pluginReconciler keeps the plugins in step with saved settings; nil
 	// without persistence.
-	pluginReconciler *pluginReconciler
+	pluginReconciler *pluginhost.Reconciler
 	metrics          runtimeMetrics
 	// tracing flushes and stops span export; nil when tracing was never built.
 	tracing   runtimeTracing
@@ -318,8 +320,8 @@ type runtimeComponents struct {
 }
 
 // lifecycleMilestones records only stages that the node successfully entered.
-// It is private because callers need behavioral lifecycle operations, not a
-// second state-machine API.
+// It is private because callers need lifecycle operations, not a second
+// state-machine API.
 type lifecycleMilestones struct {
 	platformStarted  bool
 	jobsStarted      bool
@@ -339,12 +341,12 @@ const (
 	nodeClosed
 )
 
-// Server is the lifecycle owner for one assembled Proctor node.
+// Server owns the lifecycle of one Proctor node. It is single-use: Run may be
+// called once, and Close is idempotent.
 type Server struct {
 	components runtimeComponents
-	// readyNotifier and stoppingNotifier are borrowed host-process observers,
-	// not owned runtime components. They have no lifecycle; readyNotifier runs
-	// only after readiness and stoppingNotifier only when shutdown begins.
+	// readyNotifier and stoppingNotifier belong to the host process; the
+	// server only calls them and never closes them.
 	readyNotifier    ReadyNotifier
 	stoppingNotifier StoppingNotifier
 
@@ -368,12 +370,8 @@ type Server struct {
 	closeErr  error
 }
 
-// New constructs one Proctor server. It validates options and returns
-// configuration or infrastructure construction failures without a partially
-// usable Server.
-//
-// New does not start network listeners or WebSocket background work. Call
-// Run to begin serving and Close to drain transports and infrastructure.
+// New builds a node without binding a listener or starting background work.
+// On failure it returns no Server.
 func New(ctx context.Context, optionValues ...Option) (*Server, error) {
 	settings := options{}
 	for _, option := range optionValues {
@@ -404,11 +402,10 @@ func New(ctx context.Context, optionValues ...Option) (*Server, error) {
 	return result.server, nil
 }
 
-// Run starts shared infrastructure and HTTP serving in dependency order,
-// marks the node ready only after both have started, and blocks until
-// cancellation or serving failure. It returns an error when the server is
-// closed, was already run, cannot start a dependency or listener, or stops
-// unexpectedly. Every exit path goes through the one shutdown sequence.
+// Run starts the node in dependency order, marks it ready only once HTTP is
+// serving, and blocks until cancellation or a failure. Every exit goes through
+// the one shutdown sequence. It fails at once on a closed or already-run
+// server.
 func (s *Server) Run(ctx context.Context) (resultErr error) {
 	runCtx, endRun, err := s.beginRun(ctx)
 	if err != nil {
@@ -669,9 +666,8 @@ func (s *Server) startHTTP(runCtx context.Context, listener net.Listener) httpSe
 	return httpServe{exit: exit, handoff: handoff}
 }
 
-// awaitHandoff waits until HTTP accepts the listener. The listener is bound
-// and every mandatory runtime dependency is running; an HTTP runtime that
-// rejects the listener reports that error instead of acknowledging it.
+// awaitHandoff waits until HTTP accepts the listener. An HTTP runtime that
+// rejects it reports the error on exit instead of acknowledging the handoff.
 func (s *Server) awaitHandoff(runCtx context.Context, serving httpServe) (stopPlan, bool) {
 	select {
 	case serveErr := <-serving.exit:
@@ -788,13 +784,12 @@ func (s *Server) Ready() bool {
 	return s.components.readiness.Ready()
 }
 
-// Reload re-reads the operator-owned configuration file, applying it to the
-// dynamically reconfigurable consumers as one change, and reloads static TLS
-// certificate files for a serving node's HTTP and metrics listeners. Each step is independent: a failure
-// keeps that step's current state in force, is logged, and is returned
-// joined. Changed settings that apply only at startup keep their running
-// values and are named in a warning. The host process invokes Reload on
-// SIGHUP.
+// Reload re-reads the configuration file and applies it as one change, then
+// reloads the static TLS certificates of the HTTP and metrics listeners. The
+// host process calls it on SIGHUP. Each step is independent: a failure keeps
+// that step's current state, is logged, and is returned joined. Changed
+// settings that apply only at startup keep their running values and are
+// named in a warning.
 func (s *Server) Reload(ctx context.Context) error {
 	var result error
 	if reloader, ok := s.components.platform.(configurationReloader); ok {

@@ -20,7 +20,7 @@ import (
 
 type ExamRecordsSQLProbe struct{ ConcurrentPeer store.ExamRecordsStore }
 
-// TestExamRecordsStore uses the real delivery and Review aggregates to verify
+// TestExamRecordsStore uses the real delivery and review aggregates to verify
 // post-closure completion, private waivers, late-data staleness and manual holds.
 func TestExamRecordsStore(t *testing.T, ss store.Store, probes ...ExamRecordsSQLProbe) {
 	t.Helper()
@@ -268,9 +268,9 @@ func testRecordsHolds(t *testing.T, ctx context.Context, ss store.Store, f examA
 	release := &store.ExamRecordsHoldRelease{ExamRecordsMutation: recordsMutation(t, ctx, ss, f.unitID, submissionScope, weakAdmin, model.ActionRetentionHoldRelease), HoldID: submissionHold.ID, ExpectedRevision: 1, ReasonCode: "case_closed", PrivateReason: "Private release rationale.", RecentAuthenticationTTL: 5 * time.Minute}
 	_, err = records.ReleaseHold(ctx, release, examCommand(admin.ID, store.ExamRecordsReleaseHoldOperation, "hold-release-weak", "hold-release-weak"))
 	require.True(t, store.IsConflict(err), "weak admin release accepted")
-	// An in-flight request can retain its original strong Principal after an
-	// MFA disablement has downgraded the authoritative Session. The aggregate
-	// must use the Session's current assurance even for an otherwise valid key.
+	// An in-flight request can retain its original strong principal after an
+	// MFA disablement has downgraded the authoritative session. The aggregate
+	// must use the session's current assurance even for an otherwise valid key.
 	staleStrong := weakAdmin
 	staleStrong.AuthenticationStrength = model.AuthenticationMultiFactor
 	staleStrong.MFACompletedAt = model.OptionalTimeFrom(staleStrong.AuthenticatedAt)

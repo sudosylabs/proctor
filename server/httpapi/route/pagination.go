@@ -29,7 +29,7 @@ const (
 	maximumPageLimit = 200
 )
 
-// List is the one collection envelope.
+// List is the envelope of every collection response.
 type List[T any] struct {
 	Items      []T    `json:"items"`
 	NextCursor string `json:"next_cursor,omitempty"`
@@ -69,7 +69,7 @@ func WithPageTotal[T any](envelope List[T], total paging.Total, continued bool) 
 	return CountedList[T]{Items: envelope.Items, NextCursor: envelope.NextCursor, Total: count, TotalIsLowerBound: lowerBound}, nil
 }
 
-// PageRequest is the parsed `limit` and raw `cursor` of a collection read.
+// PageRequest is the parsed `limit` and the still-encoded `cursor`.
 type PageRequest struct {
 	Limit  int
 	Cursor string
@@ -138,9 +138,8 @@ func NewList[I, T any](items []I, hasMore bool, present func(I) T, next func(I) 
 	return response, nil
 }
 
-// BoundedKey is one item's position in a complete bounded collection (a User's
-// Sessions, the Institution's Roles) that the application returns whole. Such a
-// collection is still paged on the wire, as keyset slices of its stable order:
+// BoundedKey is one item's position in a bounded collection the application
+// returns whole, such as a user's sessions. The wire still pages it by keyset:
 // newest first by At then ID, or ascending by Name then ID.
 type BoundedKey struct {
 	At   time.Time
@@ -148,7 +147,6 @@ type BoundedKey struct {
 	ID   string
 }
 
-// boundedPageCursor is the continuation of a bounded collection page.
 type boundedPageCursor struct {
 	At   string `json:"at,omitempty"`
 	Name string `json:"name,omitempty"`

@@ -14,31 +14,24 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// ExamSittingSnapshot is the exact bounded application projection for one
-// Sitting. It contains no Class roster, authored Revision content, private
-// cancellation rationale, or authorization intermediate.
+// ExamSittingSnapshot is a sitting without its class roster, revision
+// content or private cancellation reason.
 type ExamSittingSnapshot struct {
 	Sitting        *model.ExamSitting
 	AcademicUnitID model.AcademicUnitID
 }
 
-// ConsistentAndValid reports whether the snapshot carries a Sitting that
-// passes its own validation. It does not ask which Sitting that is.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentAndValid reports whether the snapshot carries a sitting that
+// passes its own validation. It does not ask which sitting that is.
 func (s *ExamSittingSnapshot) ConsistentAndValid() bool {
 	return !(s == nil ||
 		s.Sitting == nil ||
 		s.Sitting.Validate() != nil)
 }
 
-// ConsistentAndValidWith reports whether the snapshot carries a Sitting that
+// ConsistentAndValidWith reports whether the snapshot carries a sitting that
 // passes its own validation, is the one asked for, and belongs to the given
-// Exam.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// exam.
 func (s *ExamSittingSnapshot) ConsistentAndValidWith(sittingID model.ExamSittingID, examID model.ExamID) bool {
 	return !(s == nil ||
 		s.Sitting == nil ||
@@ -47,12 +40,9 @@ func (s *ExamSittingSnapshot) ConsistentAndValidWith(sittingID model.ExamSitting
 		s.Sitting.ExamID != examID)
 }
 
-// ConsistentWithOwningClass reports whether the snapshot carries the Sitting
-// that was asked for and that Sitting names the Class it belongs to. It does
-// not validate the Sitting or ask for its Academic Unit.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWithOwningClass reports whether the snapshot carries the sitting
+// that was asked for and that sitting names its class. It does not validate
+// the sitting or ask for its academic unit.
 func (s *ExamSittingSnapshot) ConsistentWithOwningClass(sittingID model.ExamSittingID) bool {
 	return !(s == nil ||
 		s.Sitting == nil ||
@@ -60,12 +50,9 @@ func (s *ExamSittingSnapshot) ConsistentWithOwningClass(sittingID model.ExamSitt
 		!s.Sitting.ClassID.IsValid())
 }
 
-// ConsistentWithOwningUnit reports whether the snapshot carries the Sitting
-// that was asked for and names the Academic Unit that owns it. It does not
-// validate the Sitting or ask for its Class.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWithOwningUnit reports whether the snapshot carries the sitting
+// that was asked for and names the academic unit that owns it. It does not
+// validate the sitting or ask for its class.
 func (s *ExamSittingSnapshot) ConsistentWithOwningUnit(sittingID model.ExamSittingID) bool {
 	return !(s == nil ||
 		s.Sitting == nil ||
@@ -73,18 +60,17 @@ func (s *ExamSittingSnapshot) ConsistentWithOwningUnit(sittingID model.ExamSitti
 		!s.AcademicUnitID.IsValid())
 }
 
-// ExamSittingInvalidationTarget is the minimal selector needed to invalidate
-// manager Sitting boards after a Class- or Exam-scoped change.
+// ExamSittingInvalidationTarget names a manager sitting board to invalidate
+// after a class or exam change.
 type ExamSittingInvalidationTarget struct {
 	ExamID    model.ExamID
 	SittingID model.ExamSittingID
 }
 
-// ExamSittingListOptions defines the bounded Exam-scoped catalog query.
-// ClassID and States are optional filters. OverlapStartAt and OverlapEndAt are
-// either both zero or one nonempty half-open interval matched against the
-// Sitting's scheduled start and scheduled end. The complete keyset cursor is
-// (BeforeScheduledStartAt, BeforeSittingID), both descending.
+// ExamSittingListOptions filters an exam's sittings. ClassID and States are
+// optional. OverlapStartAt and OverlapEndAt are both zero or a nonempty
+// half-open interval matched against the scheduled start and end. The keyset
+// cursor is (BeforeScheduledStartAt, BeforeSittingID), both descending.
 type ExamSittingListOptions struct {
 	ExamID                 model.ExamID
 	ClassID                model.ClassID
@@ -96,10 +82,10 @@ type ExamSittingListOptions struct {
 	Limit                  int
 }
 
-// ExamSittingSchedule is the complete new Sitting plus the already-authorized
-// actor and durable audit attempt. Persistence rechecks active Exam, current
-// Manager unless override is explicit, same-Exam published Revision, exact
-// active Class lineage, and Academic Period containment atomically.
+// ExamSittingSchedule creates a sitting. The store rechecks, in the same
+// transaction, the active exam, the current manager unless ManagerOverride is
+// set, a published revision of the same exam, the active class lineage and
+// containment in the academic period.
 type ExamSittingSchedule struct {
 	Sitting         *model.ExamSitting
 	OpenJob         *model.Job
@@ -111,9 +97,9 @@ type ExamSittingSchedule struct {
 	Mail            *ExamSittingMailFanout
 }
 
-// ExamSittingScheduleUpdate replaces the complete Scheduled-only selection
-// behind one optimistic Sitting revision fence. PostgreSQL statement time
-// stamps the change.
+// ExamSittingScheduleUpdate replaces a scheduled sitting's revision, class
+// and times, fenced by ExpectedRevision. PostgreSQL's statement time stamps
+// the change.
 type ExamSittingScheduleUpdate struct {
 	ExamID           model.ExamID
 	SittingID        model.ExamSittingID
@@ -131,10 +117,9 @@ type ExamSittingScheduleUpdate struct {
 	Mail             *ExamSittingMailFanout
 }
 
-// ExamSittingManagerTransition is the common revision-fenced manager command
-// for Pause, Resume, and EarlyClose. PrivateReason is retained only in the
-// append-only private action provenance, never in the returned snapshot,
-// ordinary audit, command outcome, or realtime event.
+// ExamSittingManagerTransition is the revision-fenced command for Pause,
+// Resume and EarlyClose. PrivateReason is kept only in private action
+// provenance, never in the snapshot, audit, command outcome or realtime events.
 type ExamSittingManagerTransition struct {
 	ExamID           model.ExamID
 	SittingID        model.ExamSittingID
@@ -202,9 +187,9 @@ type ExamSittingDueAdvance struct {
 	AuditAt      time.Time
 }
 
-// ExamSittingFinishSealing closes only when every created Attempt is terminal
-// and owns a sealed Submission. It is safe to invoke after every bounded pass;
-// incomplete work leaves the Sitting visibly Closing.
+// ExamSittingFinishSealing closes the sitting only when every attempt is
+// terminal and has a sealed submission. It is safe after every pass;
+// unfinished work leaves the sitting closing.
 type ExamSittingFinishSealing struct {
 	SittingID    model.ExamSittingID
 	AuditEventID model.AuditEventID
@@ -217,17 +202,16 @@ type ExamSittingNoShowListOptions struct {
 	Limit                int
 }
 
-// ExamSittingNoShow is derived from Class membership active at the Sitting's
-// actual OpenedAt and absence of an Attempt. It contains no profile data.
+// ExamSittingNoShow is a class member at the sitting's actual OpenedAt who
+// has no attempt.
 type ExamSittingNoShow struct {
 	CandidateUserID model.UserID
 }
 
-// ExamSittingCancellation cancels one Scheduled Sitting. PrivateReason is
-// normalized, bounded manager-only material retained in dedicated private
-// persistence/provenance. It must never enter ordinary audit fields. The
-// returned Sitting contains only model.ExamSittingReasonManagerCanceled.
-// PostgreSQL statement time is the cancellation time.
+// ExamSittingCancellation cancels a scheduled sitting. PrivateReason is
+// manager-only and stored privately; it must never enter audit fields. The
+// returned sitting carries only model.ExamSittingReasonManagerCanceled.
+// PostgreSQL's statement time is the cancellation time.
 type ExamSittingCancellation struct {
 	ExamID           model.ExamID
 	SittingID        model.ExamSittingID
@@ -249,9 +233,9 @@ const (
 	ExamSittingMailReconciled  ExamSittingMailChangeKind = "reconciled"
 )
 
-// ExamSittingMailFanout is the bounded, prepared mail intent committed by a
-// Sitting transition. Persistence rebases every lifecycle timestamp from one
-// PostgreSQL clock sample. Bundle is nil only for disabled-mail suppression.
+// ExamSittingMailFanout is the mail a sitting transition commits. The store
+// rebases every timestamp on one PostgreSQL clock sample. Bundle is nil only
+// when mail is disabled.
 type ExamSittingMailFanout struct {
 	Occurrence       *model.MailOccurrence
 	Bundle           *model.MailFanoutBundle
@@ -306,8 +290,8 @@ type ExamSittingMailExpansionCompletion struct {
 	OccurrenceID model.MailOccurrenceID
 }
 
-// ExamSittingMailMaintenanceResult reports one bounded database-authoritative
-// pass over expansion fan-outs that can no longer make progress.
+// ExamSittingMailMaintenanceResult reports one pass over fan-outs that can
+// no longer make progress.
 type ExamSittingMailMaintenanceResult struct {
 	FanoutsTerminalized  int
 	DeliveriesSuppressed int
@@ -337,36 +321,29 @@ type ExamSittingCommandResult struct {
 	Replayed bool
 }
 
-// ExamSittingStore owns bounded Sitting discovery and atomic scheduling
-// mutations. Every fresh mutation locks and rechecks the active Exam, current
-// Manager relationship unless override is explicit, same-Exam sealed Revision,
-// active Class lineage in the Exam's exact Academic Unit, and complete interval
-// containment in the Class's Academic Period. The Sitting transition, audit
-// completion, and idempotent outcome commit together. Exact replays return the
-// committed snapshot before stale, state, archive, or relationship checks.
+// ExamSittingStore lists and schedules sittings. Every fresh mutation locks
+// and rechecks the active exam, the manager unless override is set, a sealed
+// revision of the same exam, the active class lineage in the exam's academic
+// unit, and containment in the class's academic period. The transition, audit
+// and idempotent outcome commit together. An exact replay returns the
+// committed snapshot before any stale, state, archive or relationship check.
 type ExamSittingStore interface {
-	// Resolve returns the minimal exact Sitting needed to map an authorization
-	// resource to its owning Exam. It never returns private cancellation
-	// rationale or authored Revision content.
+	// Resolve maps a sitting to its exam for authorization.
 	Resolve(context.Context, model.ExamSittingID) (*ExamSittingSnapshot, error)
 	Get(context.Context, model.ExamID, model.ExamSittingID) (*ExamSittingSnapshot, error)
-	// List returns at most Limit snapshots in descending
-	// (ScheduledStartAt, SittingID) order. Limit accepts at most 201 so the
-	// application can request one bounded look-ahead row for a public page of 200.
+	// List returns snapshots in descending (ScheduledStartAt, SittingID)
+	// order. Limit is at most 201: a page of 200 plus one look-ahead row.
 	List(context.Context, ExamSittingListOptions) ([]ExamSittingSnapshot, error)
-	// ListInvalidationTargetsByClass returns at most Limit targets ordered by
-	// SittingID. AfterSittingID is the exclusive keyset cursor and Limit is
-	// bounded to 1..201.
+	// ListInvalidationTargetsByClass orders by sitting ID after the exclusive
+	// cursor; the limit is 1..201.
 	ListInvalidationTargetsByClass(context.Context, model.ClassID, model.ExamSittingID, int) ([]ExamSittingInvalidationTarget, error)
-	// ListInvalidationTargetsByExam returns at most Limit Sitting selectors
-	// ordered by SittingID. AfterSittingID is the exclusive keyset cursor and
-	// Limit is bounded to 1..201.
+	// ListInvalidationTargetsByExam orders by sitting ID after the exclusive
+	// cursor; the limit is 1..201.
 	ListInvalidationTargetsByExam(context.Context, model.ExamID, model.ExamSittingID, int) ([]ExamSittingInvalidationTarget, error)
-	// ListCandidateInvalidationTargetsBySitting returns every User whose
-	// candidate-activity collection can contain the Sitting, including
-	// historical Class Members and candidates with an Attempt. Results are
-	// distinct and ordered by UserID; AfterUserID is the exclusive keyset
-	// cursor and Limit is bounded to 1..201.
+	// ListCandidateInvalidationTargetsBySitting returns every user whose
+	// candidate activity can show the sitting, including former class members
+	// and candidates with an attempt. Results are distinct, ordered by user ID
+	// after the exclusive cursor; the limit is 1..201.
 	ListCandidateInvalidationTargetsBySitting(context.Context, model.ExamSittingID, model.UserID, int) ([]model.UserID, error)
 	ListLifecycleDue(context.Context, ExamSittingLifecycleDueOptions) ([]ExamSittingLifecycleDue, error)
 	Schedule(context.Context, *ExamSittingSchedule, *CommandIdempotency) (*ExamSittingCommandResult, error)

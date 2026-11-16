@@ -95,8 +95,8 @@ func (h retentionNoticeHandler) Run(ctx context.Context, e job.Execution) job.Ou
 	return finish.finish(ctx, e.Job, command, cp)
 }
 
-// NewRetentionNotice registers the dispatch of pending retention notices,
-// proposed every ten minutes.
+// NewRetentionNotice registers the dispatch of pending retention notices
+// every ten minutes.
 func NewRetentionNotice(
 	notices store.RetentionStore,
 	dispatcher RetentionNoticeDispatcher,

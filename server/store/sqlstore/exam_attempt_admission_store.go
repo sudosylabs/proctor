@@ -43,9 +43,9 @@ type examAttemptStarterRow struct {
 }
 
 // lockExamAttemptEligibility serializes every admission for one candidate and
-// locks the candidate User, then current membership, before the Exam/Sitting
+// locks the candidate user, then current membership, before the exam/Sitting
 // lineage. allowPaused is reserved for exact replay recovery; every fresh
-// Connection still requires Open.
+// connection still requires Open.
 func lockExamAttemptEligibility(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -70,8 +70,8 @@ func lockExamAttemptEligibility(
 		return zero, translateError("exam_sitting", input.SittingID.String(), err)
 	}
 
-	// These rules need only the Sitting and its Class, so they are decided
-	// before the Session is locked and a refusal takes no further locks.
+	// These rules need only the sitting and its class, so they are decided
+	// before the session is locked and a refusal takes no further locks.
 	if err = model.CheckAttemptAdmissionSitting(model.AttemptAdmissionSitting{
 		PeriodMatches: guard.PeriodID == initial.PeriodID,
 		State:         model.ExamSittingState(guard.State),
@@ -131,16 +131,16 @@ func examAttemptAdmissionConflict(err error) error {
 	}
 }
 
-// examAttemptAdmissionLineage is the Sitting's Exam and Academic Period read
+// examAttemptAdmissionLineage is the sitting's exam and academic period read
 // before the admission locks the rest of the lineage.
 type examAttemptAdmissionLineage struct {
 	ExamID   string `db:"exam_id"`
 	PeriodID string `db:"academic_period_id"`
 }
 
-// lockExamAttemptAdmissionLineage locks the candidate User and admission
-// advisory lock, then the candidate's Class enrollment in the Sitting's
-// Academic Period, then shares the unarchived Exam.
+// lockExamAttemptAdmissionLineage locks the candidate user and admission
+// advisory lock, then the candidate's class enrollment in the sitting's
+// academic period, then shares the unarchived exam.
 func lockExamAttemptAdmissionLineage(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -179,19 +179,13 @@ func lockExamAttemptAdmissionLineage(
 	return initial, nil
 }
 
-// Attempt eligibility is one join, used twice during admission: first to
-// lock the rows it reads, then, once the decision time is known, to recheck
-// the windows that depend on that time. Both uses require the candidate User
-// to be active, the Desktop Session and its Registration to be the unrevoked
-// ones the input Desktop build and DPoP key name, the candidate to hold a
-// membership of the Sitting's Class, and the Class lineage (Class, Programme
-// Level, Programme, Academic Unit, Academic Period) to be unarchived and
-// consistent. The three fragments below are that join in order; the two
-// statements differ only in what they put around and between them.
+// Attempt eligibility is one join used twice during admission: first to lock
+// the rows it reads, then, once the decision time is known, to recheck the
+// time-dependent windows. The three fragments below are that join in order.
 
-// examAttemptEligibilitySessionSQL joins the candidate User to the Desktop
-// Session, its Registration, the Class membership and the Class lineage, and
-// requires the User, Session and Registration to be current for the input
+// examAttemptEligibilitySessionSQL joins the candidate user to the desktop
+// session, its registration, the class membership and the class lineage, and
+// requires the user, session and registration to be current for the input
 // Desktop build. Placeholders are bound by examAttemptEligibilityArgs.
 const examAttemptEligibilitySessionSQL = `
 	FROM users u
@@ -224,12 +218,12 @@ const examAttemptEligibilitySessionSQL = `
 		AND dr.revoked_at IS NULL
 		AND dr.key_thumbprint = ?`
 
-// examAttemptEligibilityMembershipSQL requires the Class membership to be
+// examAttemptEligibilityMembershipSQL requires the class membership to be
 // unarchived.
 const examAttemptEligibilityMembershipSQL = `
 		AND cm.archived_at IS NULL`
 
-// examAttemptEligibilityLineageSQL requires the Class and everything above it
+// examAttemptEligibilityLineageSQL requires the class and everything above it
 // to be unarchived.
 const examAttemptEligibilityLineageSQL = `
 		AND c.archived_at IS NULL
@@ -247,8 +241,8 @@ const lockExamAttemptEligibilitySQL = `SELECT true` +
 	examAttemptEligibilityLineageSQL + `
 	FOR SHARE OF u, se, dr, cm, c, pl, p, au, ap`
 
-// examAttemptEligibilityAtDecisionTimeSQL is the same join with the Session
-// expiry and Class membership window compared against the decision time,
+// examAttemptEligibilityAtDecisionTimeSQL is the same join with the session
+// expiry and class membership window compared against the decision time,
 // bound four times after examAttemptEligibilityArgs. It takes no locks: the
 // rows are already shared by lockExamAttemptEligibilitySQL.
 const examAttemptEligibilityAtDecisionTimeSQL = `SELECT EXISTS (
@@ -280,8 +274,8 @@ func examAttemptEligibilityArgs(input *store.ExamAttemptConnect, classID string)
 	}
 }
 
-// lockExamAttemptSessionEligibility shares the candidate's User, Desktop
-// Session and Registration, Class membership and academic lineage, requiring
+// lockExamAttemptSessionEligibility shares the candidate's user, desktop
+// session and registration, class membership and academic lineage, requiring
 // each to be current for the input Desktop build.
 func lockExamAttemptSessionEligibility(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAttemptConnect, classID string) error {
 	var eligible bool
@@ -299,8 +293,8 @@ func lockExamAttemptSessionEligibility(ctx context.Context, tx *sqlxTxWrapper, i
 	return nil
 }
 
-// requireExamAttemptEligibilityAtDecisionTime rechecks the Session expiry and
-// Class membership window against the guard's decision time.
+// requireExamAttemptEligibilityAtDecisionTime rechecks the session expiry and
+// class membership window against the guard's decision time.
 func requireExamAttemptEligibilityAtDecisionTime(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -326,9 +320,9 @@ func requireExamAttemptEligibilityAtDecisionTime(
 	return nil
 }
 
-// firstAdmission freezes the Attempt Configuration and creates the Attempt,
-// its Workspace, the first Participation and Connection, revoking the
-// candidate's other interactive Sessions.
+// firstAdmission freezes the attempt configuration and creates the attempt,
+// its workspace, the first participation and connection, revoking the
+// candidate's other interactive sessions.
 func (s *SQLExamAttemptStore) firstAdmission(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -486,8 +480,8 @@ func (s *SQLExamAttemptStore) firstAdmission(
 	return outcome, nil
 }
 
-// insertAttemptWorkspaceFromStarter inserts the first-admission Attempt
-// Workspace and copies each frozen Starter Workspace entry, with its object
+// insertAttemptWorkspaceFromStarter inserts the first-admission attempt
+// workspace and copies each frozen starter workspace entry, with its object
 // for a file, into it.
 func insertAttemptWorkspaceFromStarter(
 	ctx context.Context,
@@ -564,8 +558,8 @@ func insertAttemptWorkspaceFromStarter(
 	return nil
 }
 
-// reconnectParticipation is the active Participation generation a reconnect
-// resumes, or the next generation it starts for a ready Attempt.
+// reconnectParticipation is the active participation generation a reconnect
+// resumes, or the next generation it starts for a ready attempt.
 type reconnectParticipation struct {
 	ID             string    `db:"id"`
 	SessionID      string    `db:"session_id"`
@@ -574,9 +568,9 @@ type reconnectParticipation struct {
 	LeaseExpiresAt time.Time `db:"lease_expires_at"`
 }
 
-// reconnect resumes the existing Attempt's active Participation, or starts
-// its next generation when a re-allowed Attempt is ready, and opens or reuses
-// the Attempt Connection.
+// reconnect resumes the existing attempt's active participation, or starts
+// its next generation when a re-allowed attempt is ready, and opens or reuses
+// the attempt connection.
 func (s *SQLExamAttemptStore) reconnect(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -652,8 +646,8 @@ func (s *SQLExamAttemptStore) reconnect(
 	return outcome, nil
 }
 
-// lockReconnectParticipation locks the Attempt's active Participation; for a
-// ready Attempt, which must have none, it starts the next generation instead.
+// lockReconnectParticipation locks the attempt's active participation; for a
+// ready attempt, which must have none, it starts the next generation instead.
 func (s *SQLExamAttemptStore) lockReconnectParticipation(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -688,7 +682,7 @@ func (s *SQLExamAttemptStore) lockReconnectParticipation(
 }
 
 // startNextAttemptParticipation prepares connect security for the next
-// Participation generation of a ready Attempt and inserts that generation.
+// participation generation of a ready attempt and inserts that generation.
 func (s *SQLExamAttemptStore) startNextAttemptParticipation(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -743,9 +737,9 @@ func (s *SQLExamAttemptStore) startNextAttemptParticipation(
 	return participation, nil
 }
 
-// openReconnectConnection reuses the Attempt's open Connection when it belongs
-// to this Participation and Session, or opens the input Connection when none
-// is open; it returns the Connection ID and whether it opened one.
+// openReconnectConnection reuses the attempt's open connection when it belongs
+// to this participation and session, or opens the input connection when none
+// is open; it returns the connection ID and whether it opened one.
 func openReconnectConnection(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -791,8 +785,8 @@ func openReconnectConnection(
 	}
 }
 
-// activateReadyExamAttempt returns a ready Attempt to active and revokes the
-// candidate's other interactive Sessions.
+// activateReadyExamAttempt returns a ready attempt to active and revokes the
+// candidate's other interactive sessions.
 func activateReadyExamAttempt(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -800,7 +794,7 @@ func activateReadyExamAttempt(
 	guard examAttemptAdmissionGuard,
 	attemptID string,
 ) ([]string, []string, error) {
-	// guard.DatabaseNow is read before this Attempt is locked, so a re-allow
+	// guard.DatabaseNow is read before this attempt is locked, so a re-allow
 	// committed while Connect waited may already carry a later instant.
 	result, updateErr := tx.Exec(ctx, `UPDATE exam_attempts
 		SET state = 'active', updated_at = GREATEST(updated_at, ?), revision = revision+1
@@ -863,7 +857,7 @@ func revokeOtherInteractiveSessionsForAttempt(
 		return nil, nil, fmt.Errorf("lock other interactive Session credentials for Exam Attempt: %w", err)
 	}
 
-	// at is PostgreSQL time while Sessions carry the creating node's clock; a
+	// at is PostgreSQL time while sessions carry the creating node's clock; a
 	// revocation never precedes the revoked row's creation.
 	if _, err := tx.Exec(ctx, `UPDATE session_credentials
 		SET updated_at = GREATEST(updated_at, ?), revoked_at = GREATEST(created_at, ?)

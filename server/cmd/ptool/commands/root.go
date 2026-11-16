@@ -5,8 +5,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package commands is the ptool command tree, one file per subcommand: errors,
-// openapi, i18n, dev and release.
+// Package commands is the ptool command tree, one file per subcommand.
 package commands
 
 import (
@@ -16,7 +15,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Execute runs ptool with explicit process dependencies for testability.
+// Execute runs ptool on args, writing to stdout and stderr rather than the
+// process streams.
 func Execute(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	command := NewRootCommand()
 	command.SetArgs(args)
@@ -25,7 +25,8 @@ func Execute(ctx context.Context, args []string, stdout, stderr io.Writer) error
 	return command.ExecuteContext(ctx)
 }
 
-// NewRootCommand constructs a fresh ptool command tree.
+// NewRootCommand returns a new ptool command tree; cobra commands keep parsed
+// flag state, so build one per run.
 func NewRootCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "ptool",

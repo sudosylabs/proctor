@@ -40,8 +40,8 @@ type retentionPolicyRow struct {
 	UpdatedAt                        time.Time `db:"updated_at"`
 }
 
-// retentionPolicyReplacementOutcome is the committed result of a Retention
-// Policy replacement.
+// retentionPolicyReplacementOutcome is the committed result of a retention
+// policy replacement.
 type retentionPolicyReplacementOutcome struct {
 	Policy  *model.RetentionPolicy
 	Changed bool

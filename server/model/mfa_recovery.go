@@ -9,10 +9,10 @@ package model
 
 import "time"
 
-// UserMFARecovery is the durable authority fence created by assisted MFA reset.
-// Generation zero is the initial unrestricted state. A completed reenrollment
-// clears only the restriction; its generation and reset instant remain forever
-// to reject previously collected primary proof and unfinished provider flows.
+// UserMFARecovery is the authority fence an assisted MFA reset creates.
+// Generation zero is the initial unrestricted state. Re-enrollment clears only
+// the restriction; the generation and reset time stay, so earlier primary
+// proof and unfinished provider flows are still refused.
 type UserMFARecovery struct {
 	UserID               UserID
 	Generation           int64

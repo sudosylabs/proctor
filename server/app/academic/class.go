@@ -9,6 +9,7 @@ package academic
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -59,7 +60,7 @@ type ArchiveClassCommand struct {
 	ID               model.ClassID
 }
 
-// GetClass reads one Class after authorizing the caller.
+// GetClass needs class.view.
 func (s *Service) GetClass(ctx context.Context, inv invocation.Invocation, id model.ClassID) (*model.Class, error) {
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "class_id")
@@ -82,17 +83,17 @@ func (s *Service) GetClass(ctx context.Context, inv invocation.Invocation, id mo
 	return class, nil
 }
 
-// ClassPage is one page of Classes. The first page also counts every Class
-// the listing matches. StudentCounts holds each listed Class's current member
-// count, stopped at store.MaximumListCount and absent for a Class with none;
-// it is nil when the caller lacks class.members.view on the listing's scope.
+// ClassPage is one page of classes; only the first page is counted.
+// StudentCounts holds the current member count, capped at
+// store.MaximumListCount, of each listed class the caller holds
+// class.members.view on; a class outside that grant has no entry.
 type ClassPage struct {
 	paging.Counted[*model.Class]
 	StudentCounts map[model.ClassID]int
 }
 
-// ListClasses lists a Programme Level's Classes by name after authorizing the
-// caller.
+// ListClasses lists a programme level's classes by name; it needs
+// class.view.
 func (s *Service) ListClasses(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -124,13 +125,16 @@ func (s *Service) ListClasses(
 		return ClassPage{}, classStoreErrors.Translate(err)
 	}
 
-	return s.classPage(ctx, inv, resource, paging.New(classes, limit), query.AfterID == "", func(maximum int) (int, error) {
+	// Every class of one level shares its owning unit.
+	owningUnit := func(class model.ClassID) (model.AcademicUnitID, error) {
+		return s.classes.GetAcademicUnitID(ctx, class)
+	}
+	return s.classPage(ctx, inv, owningUnit, paging.New(classes, limit), query.AfterID == "", func(maximum int) (int, error) {
 		return s.classes.CountByProgrammeLevel(ctx, levelID, options, maximum)
 	})
 }
 
-// SearchClasses searches an Academic Unit's Classes by name after
-// authorizing the caller.
+// SearchClasses searches a unit's classes by name; it needs class.view.
 func (s *Service) SearchClasses(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -163,18 +167,21 @@ func (s *Service) SearchClasses(
 		return ClassPage{}, classStoreErrors.Translate(err)
 	}
 
-	return s.classPage(ctx, inv, resource, paging.New(classes, limit), query.AfterID == "", func(maximum int) (int, error) {
+	owningUnit := func(model.ClassID) (model.AcademicUnitID, error) { return unitID, nil }
+	return s.classPage(ctx, inv, owningUnit, paging.New(classes, limit), query.AfterID == "", func(maximum int) (int, error) {
 		return s.classes.CountByAcademicUnit(ctx, unitID, options, maximum)
 	})
 }
 
-// classPage counts the first page of a Class listing and, for a caller
-// holding class.members.view on the listing's scope, each listed Class's
-// current students in one grouped read.
+// classPage counts students only in the listed classes the caller holds
+// class.members.view on. The grant is read once for the page and records no
+// decision, since the listing's class.view decision is already recorded.
+// owningUnit reports the academic unit of a listed class; every class on one
+// page shares it.
 func (s *Service) classPage(
 	ctx context.Context,
 	inv invocation.Invocation,
-	scope model.Resource,
+	owningUnit func(model.ClassID) (model.AcademicUnitID, error),
 	page paging.Page[*model.Class],
 	first bool,
 	count func(int) (int, error),
@@ -192,30 +199,74 @@ func (s *Service) classPage(
 		return result, nil
 	}
 
-	visible, err := s.authorizer.CanViewClassMembers(ctx, inv, scope)
-	if err != nil || !visible {
-		return result, err
+	at := model.TimeUTC(s.now())
+	grant, err := s.authorizer.GrantedScopesAt(ctx, inv.Principal(), model.ActionClassMembersView, model.ResourceClass, at)
+	if err != nil {
+		return ClassPage{}, err
+	}
+
+	wholePage := grant.InstitutionWide
+	if !wholePage && len(grant.AcademicUnitRootIDs) > 0 {
+		wholePage, err = s.unitWithinRoots(ctx, owningUnit, page.Items[0].ID, grant.AcademicUnitRootIDs)
+		if err != nil {
+			return ClassPage{}, err
+		}
 	}
 
 	classIDs := make([]model.ClassID, 0, len(page.Items))
 	for _, class := range page.Items {
-		classIDs = append(classIDs, class.ID)
+		if wholePage || slices.Contains(grant.ClassIDs, class.ID) {
+			classIDs = append(classIDs, class.ID)
+		}
+	}
+	if len(classIDs) == 0 {
+		return result, nil
 	}
 
-	counts, err := s.classMembers.CountCurrentByClasses(ctx, classIDs, model.TimeUTC(s.now()), store.MaximumListCount)
+	counts, err := s.classMembers.CountCurrentByClasses(ctx, classIDs, at, store.MaximumListCount)
 	if err != nil {
 		return ClassPage{}, ClassMemberStoreErrors.Translate(err)
 	}
 
-	result.StudentCounts = make(map[model.ClassID]int, len(counts))
+	// A visible class with no current member counts zero.
+	result.StudentCounts = make(map[model.ClassID]int, len(classIDs))
+	for _, id := range classIDs {
+		result.StudentCounts[id] = 0
+	}
 	for _, counted := range counts {
-		result.StudentCounts[counted.ClassID] = counted.Count
+		if _, visible := result.StudentCounts[counted.ClassID]; visible {
+			result.StudentCounts[counted.ClassID] = counted.Count
+		}
 	}
 
 	return result, nil
 }
 
-// CreateClass creates a Class after authorizing the caller.
+// unitWithinRoots reports whether the class's owning unit lies inside one of
+// the granted unit subtrees.
+func (s *Service) unitWithinRoots(
+	ctx context.Context,
+	owningUnit func(model.ClassID) (model.AcademicUnitID, error),
+	classID model.ClassID,
+	roots []model.AcademicUnitID,
+) (bool, error) {
+	unitID, err := owningUnit(classID)
+	if err != nil {
+		return false, classStoreErrors.Translate(err)
+	}
+	ancestors, err := s.academicUnits.ListAncestors(ctx, unitID)
+	if err != nil {
+		return false, academicUnitStoreErrors.Translate(err)
+	}
+	for _, unit := range ancestors {
+		if slices.Contains(roots, unit.ID) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// CreateClass needs class.manage.
 func (s *Service) CreateClass(ctx context.Context, inv invocation.Invocation, command CreateClassCommand) (*model.Class, error) {
 	levelID := command.ProgrammeLevelID
 	if !levelID.IsValid() {
@@ -275,7 +326,7 @@ func (s *Service) CreateClass(ctx context.Context, inv invocation.Invocation, co
 	)
 }
 
-// UpdateClass updates a Class after authorizing the caller.
+// UpdateClass needs class.manage.
 func (s *Service) UpdateClass(ctx context.Context, inv invocation.Invocation, command UpdateClassCommand) (*model.Class, error) {
 	id := command.ID
 	if !id.IsValid() {
@@ -371,7 +422,7 @@ func (s *Service) UpdateClass(ctx context.Context, inv invocation.Invocation, co
 	)
 }
 
-// ArchiveClass archives a Class after authorizing the caller.
+// ArchiveClass needs class.manage.
 func (s *Service) ArchiveClass(ctx context.Context, inv invocation.Invocation, command ArchiveClassCommand) error {
 	id := command.ID
 	if !id.IsValid() {

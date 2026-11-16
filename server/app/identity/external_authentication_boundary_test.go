@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
@@ -48,7 +50,7 @@ func TestExternalAuthenticationBeginUsesControlledCredentials(t *testing.T) {
 	states := &externalLoginStateStoreFake{storeNow: databaseAt}
 	attempts, err := NewAttemptAccounting(AttemptAccountingDependencies{Cache: newAuthenticationCacheFake()})
 	require.NoError(t, err)
-	service := &Service{externalProviders: externalProviderSourceFake{provider: externalProviderFake{}}, externalLoginStates: states, accessPolicy: allowAllAuthenticationAccessPolicy(), attempts: attempts, externalAuthenticationPolicy: ExternalAuthenticationPolicy{
+	service := &Service{externalProviders: externalProviderSourceFake{provider: externalProviderFake{}}, externalLoginStates: states, accessPolicy: allowAllAuthenticationAccessPolicy(t), attempts: attempts, externalAuthenticationPolicy: ExternalAuthenticationPolicy{
 		PublicURL: "https://proctor.example.test", LoginStateTTL: 10 * time.Minute,
 		LoginRateLimit: LoginRateLimitPolicy{Window: time.Minute, MaximumSourceAttempts: 10},
 	}, newCredential: func() string { value := generated[next]; next++; return value }, now: func() time.Time { return at }}
@@ -76,8 +78,8 @@ func TestInvitationRequiredBeginHashesClaimIntoPurposeBoundState(t *testing.T) {
 		provider: &recordingExternalProvider{}, ids: map[string]bool{"campus": true},
 	}, newAuthenticationCacheFake(), 10)
 	service.externalLoginStates = states
-	service.accessPolicy = authenticationAccessPolicyFake{providers: map[string]bool{"campus": true},
-		providerModes: map[string]model.ProviderAdmissionMode{"campus": model.ProviderAdmissionInvitationRequired}}
+	service.accessPolicy = accessPolicyTerms{providers: map[string]bool{"campus": true},
+		providerModes: map[string]model.ProviderAdmissionMode{"campus": model.ProviderAdmissionInvitationRequired}}.reader(t)
 
 	result, err := service.beginWithInvitationClaim(context.Background(), "campus", "/join", model.SessionClientWeb,
 		"", "", "127.0.0.1", claim)
@@ -97,11 +99,11 @@ func TestInvitationRequiredBeginRejectsWhenInvitationAdmissionIsDisabled(t *test
 	service := externalAuthenticationBeginService(t, externalProviderSourceSet{
 		provider: provider, ids: map[string]bool{"campus": true},
 	}, newAuthenticationCacheFake(), 10)
-	service.accessPolicy = authenticationAccessPolicyFake{
+	service.accessPolicy = accessPolicyTerms{
 		providers:                   map[string]bool{"campus": true},
 		providerModes:               map[string]model.ProviderAdmissionMode{"campus": model.ProviderAdmissionInvitationRequired},
 		invitationAdmissionDisabled: true,
-	}
+	}.reader(t)
 
 	result, err := service.beginWithInvitationClaim(
 		context.Background(), "campus", "/join", model.SessionClientWeb,
@@ -136,7 +138,7 @@ func TestExternalAuthenticationBeginHidesProviderDisabledByCurrentPolicy(t *test
 	service := externalAuthenticationBeginService(t, externalProviderSourceSet{
 		provider: provider, ids: map[string]bool{"campus": true},
 	}, newAuthenticationCacheFake(), 10)
-	service.accessPolicy = authenticationAccessPolicyFake{providers: map[string]bool{}}
+	service.accessPolicy = accessPolicyTerms{providers: map[string]bool{}}.reader(t)
 	result, err := service.beginExternalLogin(context.Background(), "campus", "/", model.SessionClientWeb, "", "", "192.0.2.9")
 	require.Nil(t, result, "result=%#v err=%v", result, err)
 	require.True(t, apperror.Is(err, "authentication.external.provider_not_found"), "result=%#v err=%v", result, err)
@@ -150,7 +152,7 @@ func TestExternalAuthenticationProviderListIncludesOnlyCurrentPolicySelections(t
 		{ID: "campus-a", DisplayName: "Campus A", Type: "oidc"},
 		{ID: "campus-b", DisplayName: "Campus B", Type: "cas"},
 	}
-	service := &Service{externalProviders: externalProviderSourceSet{descriptors: configured}, accessPolicy: authenticationAccessPolicyFake{providers: map[string]bool{"campus-b": true}}}
+	service := &Service{externalProviders: externalProviderSourceSet{descriptors: configured}, accessPolicy: accessPolicyTerms{providers: map[string]bool{"campus-b": true}}.reader(t)}
 	providers, err := service.ExternalAuthenticationProviders(context.Background(), invocation.Invocation{})
 	require.NoError(t, err)
 	require.Equal(t, configured[1:], providers, "available providers")
@@ -164,12 +166,12 @@ func TestExternalAuthenticationRequiresFocusedDependencies(t *testing.T) {
 		loginStates: &externalLoginStateStoreFake{}, institutions: externalInstitutionStoreFake{},
 		identities: externalIdentityStoreFake{}, sessions: &externalSessionStoreFake{},
 		attempts:    newExternalAuthenticationAttempts(t, newAuthenticationCacheFake()),
-		invalidator: externalInvalidatorFake{}, audit: &securityAuditorFake{},
+		invalidator: externalInvalidatorFake{}, audit: newSecurityAuditLog(t, nil).auditor,
 		diagnostics: newDiscardLogger(t), newCredential: model.NewCredentialToken,
 		acceptor: &externalInvitationAcceptorFake{},
 		now:      time.Now,
 	}
-	_, err := valid.build()
+	_, err := valid.build(t)
 	require.NoError(t, err)
 	tests := []struct {
 		name  string
@@ -187,7 +189,7 @@ func TestExternalAuthenticationRequiresFocusedDependencies(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			candidate := valid
 			test.clear(&candidate)
-			_, err := candidate.build()
+			_, err := candidate.build(t)
 			require.Error(t, err, "missing %s accepted", test.name)
 		})
 	}
@@ -201,7 +203,7 @@ type externalAuthenticationConstructorArgs struct {
 	sessions      store.SessionStore
 	attempts      *AttemptAccounting
 	invalidator   realtime.AuthenticationInvalidator
-	audit         securityAuditor
+	audit         *access.Auditor
 	diagnostics   *logging.Logger
 	acceptor      InvitationAcceptor
 	newCredential func() string
@@ -209,13 +211,12 @@ type externalAuthenticationConstructorArgs struct {
 }
 
 // build sets the arguments on a Service and checks it as New does.
-func (a externalAuthenticationConstructorArgs) build() (*Service, error) {
-	events := []string{}
+func (a externalAuthenticationConstructorArgs) build(t testing.TB) (*Service, error) {
 	service := &Service{externalProviders: a.registry, externalLoginStates: a.loginStates, institutions: a.institutions,
-		externalIdentities: a.identities, sessions: a.sessions, accessPolicy: allowAllAuthenticationAccessPolicy(), attempts: a.attempts,
+		externalIdentities: a.identities, sessions: a.sessions, accessPolicy: allowAllAuthenticationAccessPolicy(t), attempts: a.attempts,
 		invalidator: a.invalidator, securityAudit: a.audit,
-		auditor:      &mutationAttemptAuditorFake{events: &events, beginID: model.NewAuditEventID().String()},
-		capabilities: &accessPolicyCapabilitiesFake{}, invitations: a.acceptor, recentAuthenticationTTL: 15 * time.Minute,
+		auditor:      grantedAccess(t, nil).Auditor.MutationAudit(),
+		capabilities: noCapabilities(), invitations: a.acceptor, recentAuthenticationTTL: 15 * time.Minute,
 		diagnostics: a.diagnostics, newCredential: a.newCredential, now: a.now}
 	return service, service.requireExternalAuthentication()
 }
@@ -329,7 +330,7 @@ func externalAuthenticationBeginService(
 ) *Service {
 	t.Helper()
 	attempts := newExternalAuthenticationAttempts(t, cache)
-	return &Service{externalProviders: registry, externalLoginStates: &externalLoginStateStoreFake{}, accessPolicy: allowAllAuthenticationAccessPolicy(), attempts: attempts, externalAuthenticationPolicy: ExternalAuthenticationPolicy{
+	return &Service{externalProviders: registry, externalLoginStates: &externalLoginStateStoreFake{}, accessPolicy: allowAllAuthenticationAccessPolicy(t), attempts: attempts, externalAuthenticationPolicy: ExternalAuthenticationPolicy{
 		PublicURL:     "https://proctor.example.test",
 		LoginStateTTL: 10 * time.Minute,
 		LoginRateLimit: LoginRateLimitPolicy{

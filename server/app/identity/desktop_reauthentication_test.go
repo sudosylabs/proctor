@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -75,8 +76,8 @@ func (s *desktopReauthenticationStoreFake) CompleteDesktopReauthentication(_ con
 type desktopReauthenticationTestHarness struct {
 	service       *Service
 	transactions  *desktopReauthenticationStoreFake
-	audit         *securityAuditorFake
-	mutations     *mutationAttemptAuditorFake
+	audit         *securityAuditLog
+	mutations     *accesstest.Fixture
 	user          *model.User
 	institutionID model.InstitutionID
 }
@@ -89,17 +90,16 @@ func newDesktopReauthenticationTestHarness(t *testing.T) desktopReauthentication
 		User: &model.User{Username: "desktop-reauthentication", Email: "desktop-reauthentication@example.edu", DisplayName: "Ada Candidate"}, Password: desktopReauthenticationTestPassword,
 	})
 	require.NoError(t, err)
-	events := []string{}
-	mutations := &mutationAttemptAuditorFake{events: &events, beginID: model.NewID()}
-	service.auditor = mutations
+	mutations := grantedAccess(t, nil)
+	service.auditor = mutations.Auditor.MutationAudit()
 	transactions := &desktopReauthenticationStoreFake{}
-	audit := &securityAuditorFake{}
+	audit := newSecurityAuditLog(t, nil)
 	institutionID := model.NewInstitutionID()
-	service.browserAuthentications, service.securityAudit = transactions, audit
+	service.browserAuthentications, service.securityAudit = transactions, audit.auditor
 	service.institutions = desktopAuthorizationInstitutionStoreFake{institution: &model.Institution{ID: institutionID}}
-	service.capabilities = &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{
+	service.capabilities = deploymentCapabilities(AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{
 		{Descriptor: model.ExternalAuthenticationProvider{ID: "campus", DisplayName: "Campus sign-in", Type: "oidc"}},
-	}}}
+	}})
 	service.desktopPolicy = DesktopAuthorizationPolicy{Issuer: "https://proctor.example.edu"}
 	service.recentAuthenticationTTL = 15 * time.Minute
 	require.NoError(t, service.requireDesktopReauthentication())
@@ -216,8 +216,8 @@ func TestDesktopReauthenticationDeniesAndAuditsAnotherAccount(t *testing.T) {
 		model.NewBrowserAuthenticationTransactionID(), identity, "oidc",
 		&model.ExternalAuthenticationAssertion{ProviderID: "campus", AuthenticatedAt: time.Now().UnixMilli()})
 	require.True(t, apperror.Is(err, "authentication.desktop_reauthentication.denied"), "mismatch error = %v", err)
-	require.Len(t, harness.audit.terminal, 1)
-	rejection := harness.audit.terminal[0]
+	require.Len(t, harness.audit.terminal(), 1)
+	rejection := harness.audit.terminal()[0]
 	require.Equal(t, harness.user.ID, rejection.actor)
 	require.Equal(t, owner, rejection.target)
 	require.Equal(t, model.ActionAuthenticationReauthenticate, rejection.action)
@@ -252,8 +252,10 @@ func TestDesktopReauthenticationCompletesFromTheSameDesktopSession(t *testing.T)
 	require.Equal(t, desktop.DesktopRegistrationID, completion.DesktopRegistrationID, "completion was not bound to the calling Session and key")
 	require.Equal(t, desktop.DPoPKeyThumbprint, completion.KeyThumbprint, "completion was not bound to the calling Session and key")
 	require.Equal(t, model.PKCES256Challenge(command.CodeVerifier), completion.CodeChallenge)
-	require.Equal(t, "desktop_password", harness.mutations.attempt.Operation)
-	require.Equal(t, model.ActionAuthenticationReauthenticate, harness.mutations.attempt.Action)
+	attempts := recordedAttempts(t, harness.mutations)
+	require.Len(t, attempts, 1)
+	require.Equal(t, "desktop_password", attempts[0].parameters["operation"])
+	require.Equal(t, string(model.ActionAuthenticationReauthenticate), attempts[0].Action)
 
 	harness.transactions.completeErr = store.NewErrNotFound("browser_authentication_transaction", "desktop_reauthentication_code")
 	_, err = harness.service.CompleteDesktopReauthentication(context.Background(), invocation.New(desktop, model.RequestMetadata{}), command)

@@ -32,15 +32,14 @@ const (
 	maximumJoinCandidates     = 64
 	maximumJoinAttemptsPerRun = 3
 	maxWireBytes              = cluster.MaxMessageBytes + 4096
-	// packetOverheadBytes reserves room inside Memberlist's UDP buffer for
-	// its user-message tag, label, compound header, and keyring encryption.
+	// packetOverheadBytes leaves room in memberlist's UDP buffer for its
+	// message tag, label, compound header and encryption.
 	packetOverheadBytes = 128
 )
 
-// Config configures the Memberlist transport. EncryptionKey is the primary
-// encryption key; DecryptionKeys are bounded fallback keys used during a
-// rolling rotation. Every key must be 16, 24, or 32 bytes. BindAddress and
-// AdvertiseAddress are host:port values.
+// Config configures the transport. EncryptionKey encrypts; DecryptionKeys are
+// fallbacks accepted during a key rotation. Every key is 16, 24 or 32 bytes.
+// BindAddress and AdvertiseAddress are host:port.
 type Config struct {
 	NodeID             string
 	BindAddress        string
@@ -80,7 +79,7 @@ type wireEnvelope struct {
 	Message *cluster.Message `json:"message"`
 }
 
-// Transport is the Memberlist-backed multi-node cluster adapter.
+// Transport implements cluster.Transport for more than one node.
 type Transport struct {
 	cfg       Config
 	discovery *discoveryMaintenance
@@ -91,17 +90,16 @@ type Transport struct {
 	state    state
 	handlers map[cluster.Event]cluster.Handler
 	list     *hashimemberlist.Memberlist
-	// packetLimit is the largest wire envelope sent as one best-effort UDP
-	// packet; larger envelopes use Memberlist's reliable TCP stream.
+	// packetLimit is the largest envelope sent as one UDP packet; larger ones
+	// go through reliable over TCP.
 	packetLimit int
-	// reliable owns per-peer delivery of envelopes above packetLimit.
+	// reliable is nil until Start.
 	reliable *reliableDelivery
 	cancel   context.CancelFunc
 	done     chan struct{}
 }
 
-// New constructs an inert Memberlist transport. Start creates the gossip
-// memberlist, registers discovery, and joins seeds.
+// New validates cfg and copies its keys and seeds; it opens no sockets.
 func New(cfg Config) (*Transport, error) {
 	if err := validateConfig(cfg); err != nil {
 		return nil, err
@@ -259,13 +257,12 @@ func rejectPublicBind(bindAddress string) error {
 	return errors.New("binding the cluster transport to a public interface is rejected by default")
 }
 
-// NodeID returns this node's stable identity.
+// NodeID returns cfg.NodeID.
 func (t *Transport) NodeID() string {
 	return t.cfg.NodeID
 }
 
-// PeerCount reports the current node-local mesh view without exposing member
-// identity or metadata.
+// PeerCount reports how many peers this node currently sees; 0 before Start.
 func (t *Transport) PeerCount() int {
 	t.mu.RLock()
 	list := t.list
@@ -276,8 +273,8 @@ func (t *Transport) PeerCount() int {
 	return max(list.NumMembers()-1, 0)
 }
 
-// Start creates Memberlist, advertises discovery, joins seeds, and starts
-// heartbeat maintenance. It is idempotent while running.
+// Start joins the cluster and starts the discovery loop. It is idempotent
+// while running and fails if any joined peer is not admitted.
 func (t *Transport) Start(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -339,7 +336,6 @@ func (t *Transport) Start(ctx context.Context) error {
 	return nil
 }
 
-// memberlistConfig resolves the bind and advertise addresses and builds the keyed memberlist configuration with its admission delegate.
 func (t *Transport) memberlistConfig(ctx context.Context) (*hashimemberlist.Config, *admissionDelegate, error) {
 	bindHost, bindPort, err := net.SplitHostPort(t.cfg.BindAddress)
 	if err != nil {
@@ -363,10 +359,8 @@ func (t *Transport) memberlistConfig(ctx context.Context) (*hashimemberlist.Conf
 	}
 
 	config := hashimemberlist.DefaultLANConfig()
-	// A crashed process cannot announce StateLeft. Once peers have declared it
-	// dead, wait one full discovery lease before allowing the stable name to
-	// move to another address; periodic rediscovery keeps retrying during that
-	// safety window.
+	// A crashed node never announces it left. Wait one discovery lease after
+	// it is declared dead before its name may move to another address.
 	config.DeadNodeReclaimTime = t.cfg.DiscoveryTTL
 	config.Name = t.cfg.NodeID
 	config.BindAddr = bindHost
@@ -391,7 +385,7 @@ func (t *Transport) memberlistConfig(ctx context.Context) (*hashimemberlist.Conf
 	return config, admission, nil
 }
 
-// joinInitialSeeds joins the discovered seeds, logging an incomplete join and recording the initial-join outcome.
+// joinInitialSeeds only logs a failed join: the discovery loop keeps retrying.
 func (t *Transport) joinInitialSeeds(ctx context.Context, list *hashimemberlist.Memberlist, seeds []string) {
 	if len(seeds) > 0 {
 		if _, err := list.Join(seeds); err != nil {
@@ -407,10 +401,8 @@ func (t *Transport) joinInitialSeeds(ctx context.Context, list *hashimemberlist.
 	}
 }
 
-// resolveAdvertiseHost translates a stable service name into the concrete IP
-// required by Memberlist while preserving the configured hostname in durable
-// discovery. This lets orchestrators assign container IPs without making those
-// disposable addresses part of Proctor's configuration contract.
+// resolveAdvertiseHost resolves a hostname to the IP memberlist needs, while
+// discovery keeps the hostname, so orchestrators can reassign container IPs.
 func (t *Transport) resolveAdvertiseHost(ctx context.Context, host string) (string, error) {
 	if ip := net.ParseIP(host); ip != nil {
 		return ip.String(), nil
@@ -432,7 +424,8 @@ func (t *Transport) resolveAdvertiseHost(ctx context.Context, host string) (stri
 	return "", fmt.Errorf("resolve cluster advertise host %q: no IP addresses returned", host)
 }
 
-// Stop leaves the gossip mesh, removes discovery, and is idempotent.
+// Stop leaves the cluster and withdraws the advertisement. It is idempotent and
+// waits for the discovery goroutine even past ctx's deadline.
 func (t *Transport) Stop(ctx context.Context) error {
 	t.stopMu.Lock()
 	defer t.stopMu.Unlock()
@@ -460,9 +453,8 @@ func (t *Transport) Stop(ctx context.Context) error {
 		cancel()
 	}
 	if done != nil {
-		// DiscoveryStore operations receive the canceled maintenance context and
-		// must release it. Wait for the owned goroutine even when the caller's
-		// deadline expires so Platform can safely close persistence afterwards.
+		// Wait even past the caller's deadline: the goroutine may still be in a
+		// DiscoveryStore call, and persistence closes after Stop returns.
 		<-done
 		t.mu.Lock()
 		if t.done == done {
@@ -489,8 +481,7 @@ func (t *Transport) Stop(ctx context.Context) error {
 		t.mu.Unlock()
 	}
 	if reliable != nil {
-		// Shutdown makes a reliable send still inside Memberlist fail; the
-		// stop context bounds waiting for its goroutine.
+		// Shutdown makes a send still inside memberlist fail; ctx bounds the wait.
 		_ = reliable.wait(ctx)
 	}
 	if ctx.Err() == nil {
@@ -522,9 +513,7 @@ func memberlistLeaveTimeout(ctx context.Context) (time.Duration, bool) {
 	return timeout, true
 }
 
-// Ping reports whether the transport is still usable. Construction-time
-// dependency checks run before Start, so an unstarted transport is healthy;
-// only a permanently stopped transport fails.
+// Ping fails only once Stop has begun; an unstarted transport is healthy.
 func (t *Transport) Ping(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -537,7 +526,7 @@ func (t *Transport) Ping(ctx context.Context) error {
 	return nil
 }
 
-// RegisterHandler registers the sole handler for an event on this node.
+// RegisterHandler fails with cluster.ErrHandlerExists if the event already has a handler.
 func (t *Transport) RegisterHandler(event cluster.Event, handler cluster.Handler) error {
 	if handler == nil {
 		return errors.New("cluster message handler is nil")
@@ -558,7 +547,7 @@ func (t *Transport) RegisterHandler(event cluster.Event, handler cluster.Handler
 	return nil
 }
 
-// Broadcast sends a best-effort message to peer nodes only.
+// Broadcast sends to every peer, never to this node; per-peer failures are joined.
 func (t *Transport) Broadcast(ctx context.Context, message *cluster.Message) error {
 	if err := t.validateSend(ctx, message); err != nil {
 		return err
@@ -586,9 +575,8 @@ func (t *Transport) Broadcast(ctx context.Context, message *cluster.Message) err
 	return t.fanOut(ctx, list, members, payload, packetLimit, message.Event)
 }
 
-// fanOut sends one encoded envelope to every peer in members. A packet-sized
-// envelope is sent synchronously as one UDP datagram; a larger one is queued
-// for each peer's reliable stream and its outcome is observed later.
+// fanOut sends a packet-sized envelope synchronously over UDP; a larger one is
+// queued per peer and its result is only observed later.
 func (t *Transport) fanOut(
 	ctx context.Context,
 	sender memberSender,
@@ -610,8 +598,6 @@ func (t *Transport) fanOut(
 	)
 }
 
-// queueReliable returns a send function that hands an envelope to the peer's
-// reliable queue and observes its eventual outcome.
 func (t *Transport) queueReliable(event cluster.Event) func(*hashimemberlist.Node, []byte) error {
 	return func(member *hashimemberlist.Node, payload []byte) error {
 		t.reliable.enqueue(member, payload, func(err error) { t.observeSentMessage(event, payload, err) })
@@ -654,8 +640,8 @@ func broadcastMembers(
 	return result
 }
 
-// SendToNode delivers a best-effort message to one node. Self-target invokes
-// the local handler synchronously.
+// SendToNode sends to one node; targeting this node runs its handler
+// synchronously.
 func (t *Transport) SendToNode(ctx context.Context, nodeID string, message *cluster.Message) error {
 	if err := t.validateSend(ctx, message); err != nil {
 		return err
@@ -697,7 +683,7 @@ func (t *Transport) SendToNode(ctx context.Context, nodeID string, message *clus
 	return fmt.Errorf("%w: %s", cluster.ErrNodeUnavailable, nodeID)
 }
 
-// sendToMember sends one envelope to one peer with the same routing as fanOut.
+// sendToMember routes by size the same way as fanOut.
 func (t *Transport) sendToMember(
 	sender memberSender,
 	member *hashimemberlist.Node,
@@ -728,8 +714,8 @@ func (t *Transport) observeSentMessage(event cluster.Event, payload []byte, err 
 	t.cfg.Metrics.ObserveClusterMessage("send", t.metricEvent(event), result, len(payload))
 }
 
-// metricEvent exposes only startup-registered event names. Message validation
-// bounds syntax and size, but registration is what closes metric cardinality.
+// metricEvent labels unregistered events as "unregistered": peers choose event
+// names, and only registration bounds metric cardinality.
 func (t *Transport) metricEvent(event cluster.Event) string {
 	t.mu.RLock()
 	_, registered := t.handlers[event]
@@ -816,7 +802,7 @@ func decodeNodeMeta(raw []byte) (nodeMeta, error) {
 	return meta, nil
 }
 
-// DecodeEncryptionKey parses a base64-encoded Memberlist secret key.
+// DecodeEncryptionKey decodes standard base64 and requires 16, 24 or 32 bytes.
 func DecodeEncryptionKey(encoded string) ([]byte, error) {
 	key, err := base64.StdEncoding.DecodeString(strings.TrimSpace(encoded))
 	if err != nil {
@@ -828,7 +814,7 @@ func DecodeEncryptionKey(encoded string) ([]byte, error) {
 	return key, nil
 }
 
-// DecodeEncryptionKeyring parses the primary key and bounded fallback keys.
+// DecodeEncryptionKeyring also rejects duplicate keys and too many fallbacks.
 func DecodeEncryptionKeyring(primary string, fallbacks []string) ([]byte, [][]byte, error) {
 	primaryKey, err := DecodeEncryptionKey(primary)
 	if err != nil {

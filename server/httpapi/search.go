@@ -8,13 +8,11 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/search"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 )
@@ -70,10 +68,10 @@ type searchUserItemResponse struct {
 }
 
 type searchHandlers struct {
-	app SearchApplication
+	app *search.Service
 }
 
-func searchResource(application SearchApplication) route.Resource {
+func searchResource(application *search.Service) route.Resource {
 	h := searchHandlers{app: application}
 	return route.NewResource(
 		"search",
@@ -158,10 +156,4 @@ func searchResponseFromResult(result search.Result) searchResponse {
 	}
 
 	return response
-}
-
-// SearchApplication finds Exams, Classes and Users within the caller's own
-// list visibility for each type.
-type SearchApplication interface {
-	Search(context.Context, invocation.Invocation, search.Query) (search.Result, error)
 }

@@ -20,10 +20,10 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// roleHolderFixture is a small tree of scopes and Role Bindings: current
-// holders at the Institution, a unit subtree, a Class in it and a sibling
+// roleHolderFixture is a small tree of scopes and role bindings: current
+// holders at the institution, a unit subtree, a class in it and a sibling
 // unit, beside bindings that are not current (ended, future, or of an
-// archived Role) and a binding of an unrequested Role.
+// archived role) and a binding of an unrequested role.
 type roleHolderFixture struct {
 	root, child, sibling        *model.AcademicUnit
 	class                       *model.Class
@@ -80,7 +80,7 @@ func newRoleHolderFixture(t *testing.T, ctx context.Context, ss store.Store) rol
 	return f
 }
 
-// newestFirst orders bindings as a Role listing pages them.
+// newestFirst orders bindings as a role listing pages them.
 func newestFirst(bindings ...*model.RoleBinding) []model.RoleBindingID {
 	ordered := slices.Clone(bindings)
 	slices.SortFunc(ordered, func(a, b *model.RoleBinding) int {

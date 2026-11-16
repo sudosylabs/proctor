@@ -14,9 +14,9 @@ import (
 	"io"
 )
 
-// DecodeStrictJobDocument decodes one Job command, checkpoint or result
-// into target. The document must be a single JSON object with no duplicate
-// member, no member target does not declare, and nothing after it.
+// DecodeStrictJobDocument decodes one job command, checkpoint or result into
+// target. It must be a single JSON object with no duplicate or undeclared
+// member and nothing after it.
 func DecodeStrictJobDocument(document json.RawMessage, target any) error {
 	decoder := json.NewDecoder(bytes.NewReader(document))
 	token, err := decoder.Token()

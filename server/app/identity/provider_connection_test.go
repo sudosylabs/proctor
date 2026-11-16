@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -22,12 +23,11 @@ import (
 func TestProviderConnectionStartRequiresStrongRecentAndBindsExactUser(t *testing.T) {
 	now := time.UnixMilli(30_000)
 	states := &externalLoginStateStoreFake{}
-	events := []string{}
-	auditor := &mutationAttemptAuditorFake{events: &events, beginID: model.NewAuditEventID().String()}
+	audits := grantedAccess(t, nil)
 	provider := &recordingExternalProvider{}
 	service := externalAuthenticationBeginService(t, externalProviderSourceSet{provider: provider, ids: map[string]bool{"campus": true}}, newAuthenticationCacheFake(), 10)
-	service.externalLoginStates, service.auditor = states, auditor
-	service.capabilities = &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{{Descriptor: provider.Descriptor()}}}}
+	service.externalLoginStates, service.auditor = states, audits.Auditor.MutationAudit()
+	service.capabilities = deploymentCapabilities(AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{{Descriptor: provider.Descriptor()}}})
 	service.recentAuthenticationTTL, service.now = 15*time.Minute, func() time.Time { return now }
 	application := service
 	principal := userSettingsSessionPrincipal(now)
@@ -38,7 +38,10 @@ func TestProviderConnectionStartRequiresStrongRecentAndBindsExactUser(t *testing
 	require.NotNil(t, states.saved)
 	require.Equal(t, model.ExternalAuthenticationPurposeConnect, states.saved.Purpose)
 	require.Equal(t, principal.UserID, states.saved.TargetUserID)
-	require.Equal(t, auditor.beginID, states.saved.AuditEventID)
+	attempts := recordedAttempts(t, audits)
+	require.Len(t, attempts, 1)
+	require.Equal(t, "connect_provider", attempts[0].parameters["operation"])
+	require.Equal(t, attempts[0].ID.String(), states.saved.AuditEventID, "the login state carries the connection attempt")
 	weak := principal
 	weak.AuthenticationStrength = model.AuthenticationSingleFactor
 	weak.MFACompletedAt = model.OptionalTime{}
@@ -65,7 +68,7 @@ func TestProviderConnectionCallbackLinksOnlyTransactionUserWithoutSession(t *tes
 			require.NoError(t, err)
 			sessions := &externalSessionStoreFake{saveErr: errors.New("provider connection must not create a session")}
 			provider := providerConnectionProvider{state: stateToken, assertion: &model.ExternalAuthenticationAssertion{ProviderID: "campus", Subject: "opaque-subject-never-exposed"}}
-			service := &Service{externalProviders: externalProviderSourceFake{provider: provider}, externalLoginStates: states, institutions: providerConnectionInstitutionStoreFake{institution: institution}, externalIdentities: identities, accessPolicy: allowAllAuthenticationAccessPolicy(), sessions: sessions, auditor: &accessPolicyAuditFake{}, capabilities: &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{{Descriptor: provider.Descriptor()}}}}, externalAuthenticationPolicy: ExternalAuthenticationPolicy{PublicURL: "https://proctor.example.test"}, now: func() time.Time { return nodeNow }}
+			service := &Service{externalProviders: externalProviderSourceFake{provider: provider}, externalLoginStates: states, institutions: providerConnectionInstitutionStoreFake{institution: institution}, externalIdentities: identities, accessPolicy: allowAllAuthenticationAccessPolicy(t), sessions: sessions, auditor: grantedAccess(t, nil).Auditor.MutationAudit(), capabilities: deploymentCapabilities(AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{{Descriptor: provider.Descriptor()}}}), externalAuthenticationPolicy: ExternalAuthenticationPolicy{PublicURL: "https://proctor.example.test"}, now: func() time.Time { return nodeNow }}
 			completion, err := service.completeExternalCallback(context.Background(), "campus", bindingToken, model.ExternalAuthenticationCallback{}, model.RequestMetadata{})
 			require.NoError(t, err)
 			require.NotNil(t, identities.linked)
@@ -87,21 +90,32 @@ func TestProviderConnectionCallbackLinksOnlyTransactionUserWithoutSession(t *tes
 func TestProviderConnectionCallbackTerminalizesAttemptWhenProviderRejectsAfterConsumption(t *testing.T) {
 	now := time.UnixMilli(45_000)
 	stateToken, bindingToken := model.NewCredentialToken(), model.NewCredentialToken()
-	auditID := model.NewAuditEventID().String()
+	// The connection attempt is begun when the connection starts, as
+	// BeginProviderConnection does, so the callback has a real attempt to end.
+	audits := grantedAccess(t, nil)
+	target := userSettingsSessionPrincipal(now)
+	begun, err := audits.Auditor.MutationAudit().Begin(context.Background(), access.Mutation{
+		Invocation: invocation.New(target, model.RequestMetadata{}), Action: model.ActionExternalIdentityManage,
+		Resource:  model.Resource{Type: model.ResourceUser, ID: target.UserID.String()},
+		Operation: "connect_provider", Value: map[string]any{"provider": "campus"},
+	})
+	require.NoError(t, err)
+	auditID := begun.String()
 	state := &model.ExternalLoginState{Provider: "campus", Purpose: model.ExternalAuthenticationPurposeConnect,
-		TargetUserID: model.NewUserID(), AuditEventID: auditID, StateHash: model.HashToken(stateToken),
+		TargetUserID: target.UserID, AuditEventID: auditID, StateHash: model.HashToken(stateToken),
 		BindingHash: model.HashToken(bindingToken), ReturnTo: "/account/security", ClientType: model.SessionClientWeb,
 		ExpiresAt: now.Add(time.Minute)}
-	events := []string{}
-	auditor := &mutationAttemptAuditorFake{events: &events}
 	institution, err := model.NewInstitution(model.NewInstitutionID(), "northbridge", "Northbridge", "", now)
 	require.NoError(t, err)
 	provider := providerConnectionProvider{state: stateToken, completeErr: ErrExternalAuthenticationRejected}
-	service := &Service{externalProviders: externalProviderSourceFake{provider: provider}, externalLoginStates: &externalLoginStateStoreFake{get: state, consumeResult: state}, institutions: providerConnectionInstitutionStoreFake{institution: institution}, accessPolicy: allowAllAuthenticationAccessPolicy(), securityAudit: &securityAuditorFake{}, auditor: auditor, externalAuthenticationPolicy: ExternalAuthenticationPolicy{PublicURL: "https://proctor.example.test"}, now: func() time.Time { return now }}
+	service := &Service{externalProviders: externalProviderSourceFake{provider: provider}, externalLoginStates: &externalLoginStateStoreFake{get: state, consumeResult: state}, institutions: providerConnectionInstitutionStoreFake{institution: institution}, accessPolicy: allowAllAuthenticationAccessPolicy(t), securityAudit: newSecurityAuditLog(t, nil).auditor, auditor: audits.Auditor.MutationAudit(), externalAuthenticationPolicy: ExternalAuthenticationPolicy{PublicURL: "https://proctor.example.test"}, now: func() time.Time { return now }}
 
 	result, err := service.completeExternalCallback(context.Background(), "campus", bindingToken, model.ExternalAuthenticationCallback{}, model.RequestMetadata{})
 	require.Nil(t, result, "completion result=%#v err=%v", result, err)
 	require.True(t, apperror.Is(err, "authentication.external.rejected"), "completion result=%#v err=%v", result, err)
-	require.Equal(t, auditID, auditor.failID, "terminal audit id")
-	require.Equal(t, "authentication.external.rejected", auditor.failCode, "terminal audit id")
+	attempts := recordedAttempts(t, audits)
+	require.Len(t, attempts, 1)
+	require.Equal(t, auditID, attempts[0].ID.String(), "terminal audit id")
+	require.Equal(t, model.AuditStatusFail, attempts[0].Status, "terminal audit id")
+	require.Equal(t, "authentication.external.rejected", attempts[0].ErrorCode, "terminal audit id")
 }

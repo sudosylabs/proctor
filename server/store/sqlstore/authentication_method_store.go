@@ -21,9 +21,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Link links a new external identity to an active User when its provider is
+// Link links a new external identity to an active user when its provider is
 // enabled and current, rejecting the link when MFA re-enrollment is pending or
-// the external login state predates the User's last MFA reset.
+// the external login state predates the user's last MFA reset.
 func (s SQLExternalIdentityStore) Link(
 	ctx context.Context,
 	input *store.ExternalIdentityLink,
@@ -120,9 +120,9 @@ func (s SQLExternalIdentityStore) Link(
 	})
 }
 
-// Unlink archives the User's external identity and revokes the Sessions it
+// Unlink archives the user's external identity and revokes the sessions it
 // authenticated, using the database clock. It refuses with
-// store.ErrLastUsableAuthenticationMethod when the identity is the User's last
+// store.ErrLastUsableAuthenticationMethod when the identity is the user's last
 // usable authentication path.
 func (s SQLExternalIdentityStore) Unlink(
 	ctx context.Context,
@@ -229,7 +229,7 @@ func (s SQLExternalIdentityStore) Unlink(
 	})
 }
 
-// Enroll creates the first password credential for an active User when local
+// Enroll creates the first password credential for an active user when local
 // login is enabled, completing the audit event in the same transaction.
 func (s SQLPasswordCredentialStore) Enroll(
 	ctx context.Context,
@@ -289,9 +289,9 @@ func (s SQLPasswordCredentialStore) Enroll(
 	})
 }
 
-// Remove archives the User's password credential at input.ChangedAt,
+// Remove archives the user's password credential at input.ChangedAt,
 // invalidates outstanding password-reset tokens, and revokes
-// password-authenticated Sessions. It refuses with
+// password-authenticated sessions. It refuses with
 // store.ErrLastUsableAuthenticationMethod when no other usable authentication
 // path remains.
 func (s SQLPasswordCredentialStore) Remove(
@@ -399,8 +399,8 @@ func (s SQLPasswordCredentialStore) Remove(
 	})
 }
 
-// Change replaces the active User's password, invalidates outstanding
-// password-reset tokens, revokes the User's other Sessions, and queues the
+// Change replaces the active user's password, invalidates outstanding
+// password-reset tokens, revokes the user's other sessions, and queues the
 // password-changed notice in one transaction at one database instant.
 func (s SQLPasswordCredentialStore) Change(
 	ctx context.Context,

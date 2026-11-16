@@ -19,7 +19,7 @@ import (
 )
 
 // SQLExamResourceStore implements store.ExamResourceStore. A finalized upload
-// publishes its file revision, selects it on the Draft and records the outcome
+// publishes its file revision, selects it on the draft and records the outcome
 // in one transaction.
 type SQLExamResourceStore struct{ *SQLStore }
 
@@ -50,7 +50,7 @@ type examResourceRow struct {
 	SHA256              string       `db:"sha256"`
 }
 
-// examResourceDocument spells one Exam Resource record inside persisted
+// examResourceDocument spells one exam resource record inside persisted
 // command outcomes.
 type examResourceDocument struct {
 	ID                  string             `json:"id"`
@@ -130,7 +130,7 @@ func (d examResourceDocument) record() (*store.ExamResourceRecord, error) {
 	}.record()
 }
 
-// examResourceOutcome is the persisted outcome of an Exam Resource upload
+// examResourceOutcome is the persisted outcome of an exam resource upload
 // finalization, metadata update, or removal.
 type examResourceOutcome struct {
 	Resource examResourceDocument `json:"resource"`
@@ -138,7 +138,7 @@ type examResourceOutcome struct {
 
 func (examResourceOutcome) outcomeDocument() {}
 
-// examResourceReorderOutcome is the persisted outcome of an Exam Resource
+// examResourceReorderOutcome is the persisted outcome of an exam resource
 // reorder: every active resource in its new order.
 type examResourceReorderOutcome struct {
 	Resources     []examResourceDocument `json:"resources"`
@@ -621,7 +621,7 @@ func finalizeExamResourceUpload(
 }
 
 // lockExamResourceUploadLease locks the unconsumed, unexpired upload lease
-// and its pending Exam Resource file revision created by the actor.
+// and its pending exam resource file revision created by the actor.
 func lockExamResourceUploadLease(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamResourceUploadFinalization) error {
 	var lease struct {
 		EntryID      string       `db:"file_entry_id"`

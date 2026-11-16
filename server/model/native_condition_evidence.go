@@ -13,13 +13,13 @@ import (
 	"time"
 )
 
-// NativeConditionEvidenceMaxBytes includes a full bounded batch record and its server provenance.
+// NativeConditionEvidenceMaxBytes fits a full bounded batch record and its
+// server provenance.
 const NativeConditionEvidenceMaxBytes = 256*1024 + 2048
 
-// NativeConditionEvidence preserves one change of a native rule's status as
-// the server evaluated it, with the delivery position of the record that
-// caused it: batch 0 is the state Desktop reported at Start. Raw platform
-// identity is excluded.
+// NativeConditionEvidence keeps one change of a native rule's status as the
+// server evaluated it, with the delivery position of the record that caused it
+// (batch 0 is the state reported at start). Raw platform identity is left out.
 type NativeConditionEvidence struct {
 	ID                   IntegrityEvidenceID    `json:"id"`
 	AttemptID            ExamAttemptID          `json:"attempt_id"`
@@ -75,8 +75,8 @@ func (v NativeConditionEvidence) Clone() NativeConditionEvidence {
 	return v
 }
 
-// A fixed digest commits every immutable transition without retaining a second
-// unbounded inventory of identities in each finalization.
+// NativeConditionInventory commits every transition with one fixed digest, so
+// finalization does not keep a second unbounded list of IDs.
 type NativeConditionInventory struct {
 	Records int64  `json:"records"`
 	Digest  string `json:"digest"`

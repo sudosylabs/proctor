@@ -294,8 +294,8 @@ func (c DeliveryClosure) Clone() DeliveryClosure {
 	return c
 }
 
-// Close is called by the authoritative lifecycle transaction, never by a client
-// seal request. An earlier retirement deadline may already have elapsed.
+// Close is called by the authoritative lifecycle transaction, never by a
+// client seal request. An earlier retirement deadline may already have passed.
 func (c DeliveryClosure) Close(
 	native bool,
 	reason DeliveryCloseReason,
@@ -323,8 +323,8 @@ func (c DeliveryClosure) Close(
 	return DeliveryClosure{ClosedAt: &at, CloseReason: &reason, KnownAtClose: &known, UnknownTail: true, UploadExpiresAt: &expiry}, nil
 }
 
-// DeclareFinal returns the position delta which the aggregate must reserve
-// atomically. Semantic declaration-ID replay is resolved by its receipt first.
+// DeclareFinal returns the position delta the aggregate must reserve in the
+// same transaction. A replayed declaration ID is resolved by its receipt first.
 func (c DeliveryClosure) DeclareFinal(
 	native bool,
 	revision, allocated int64,
@@ -373,8 +373,8 @@ func (c DeliveryClosure) DeclareFinal(
 	return next, final - allocated, nil
 }
 
-// Expire fixes an absent declaration using the frozen server-known boundary.
-// Missing receipt positions then settle terminally; no content receipt is made.
+// Expire fixes a missing declaration at the frozen server-known boundary.
+// Missing positions then settle for good; no content receipt is made.
 func (c DeliveryClosure) Expire(native bool, at time.Time) (DeliveryClosure, error) {
 	if c.Validate(native) != nil || !securityInstant(at) {
 		return c, ErrDeliveryInvalid
@@ -393,9 +393,9 @@ func (c DeliveryClosure) Expire(native bool, at time.Time) (DeliveryClosure, err
 	return next, nil
 }
 
-// DeliveryProgress separates actual receipts from settlement. Its input ranges
-// are bounded projections of the receipt and declaration owners, not a second
-// persisted ledger. Expiry supplies a terminal cutoff without allocating gap rows.
+// DeliveryProgress separates actual receipts from settlement. Its ranges are
+// bounded projections of the receipt and declaration owners, not a second
+// ledger. Expiry gives a final cutoff without allocating gap rows.
 type DeliveryProgress struct {
 	HighestContiguous int64
 	SettledThrough    int64
@@ -488,8 +488,8 @@ func ResolveDeliveryProgress(allocated int64, received, missing []SequenceRange,
 func (p DeliveryProgress) WindowBase() int64 { return max(p.HighestContiguous, p.SettledThrough) }
 
 // ValidateDeliveryGapPlacement checks the current window and actual receipts.
-// The aggregate resolves declaration replay, increments its revision and charges
-// positions/metadata in the same transaction that persists the missing intervals.
+// The aggregate resolves declaration replay, bumps its revision and charges
+// positions in the same transaction that stores the missing intervals.
 func ValidateDeliveryGapPlacement(
 	native bool,
 	progress DeliveryProgress,

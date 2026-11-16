@@ -15,15 +15,14 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// RetentionNoticePage is one page of the caller's own retention notices;
-// HasMore says another page follows the last item.
+// RetentionNoticePage is one page of the caller's own retention notices.
 type RetentionNoticePage struct {
 	Items   []model.RetentionNotice
 	HasMore bool
 }
 
-// ListRetentionNotices returns only the current recipient's durable notices.
-// It grants no underlying record access and has no read-acknowledgement effect.
+// ListRetentionNotices returns only the caller's own notices. It grants no
+// access to the underlying records and does not mark anything read.
 func (s *Service) ListRetentionNotices(
 	ctx context.Context,
 	inv invocation.Invocation,

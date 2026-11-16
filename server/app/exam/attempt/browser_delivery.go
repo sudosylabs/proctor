@@ -65,9 +65,8 @@ func (s *Service) beginBrowserDeliveryAudit(
 	})
 }
 
-// DeclareBrowserDeliveryGaps idempotently records Browser Activity the client
-// declares it can no longer deliver for one source session, so the gaps are
-// known rather than silently missing.
+// DeclareBrowserDeliveryGaps idempotently records activity the client can no
+// longer deliver, so the gaps are known rather than silently missing.
 func (s *Service) DeclareBrowserDeliveryGaps(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -133,9 +132,8 @@ func (s *Service) DeclareBrowserDeliveryGaps(
 	return value, nil
 }
 
-// SealBrowserDelivery idempotently records the final delivered sequence for
-// one Browser Activity source session, fenced by the declaration's expected
-// revision.
+// SealBrowserDelivery idempotently records a source session's final delivered
+// sequence, fenced by the declaration's expected revision.
 func (s *Service) SealBrowserDelivery(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -197,7 +195,7 @@ func (s *Service) SealBrowserDelivery(
 }
 
 // UpdateBrowserDeliverySummary idempotently records the client's summary of
-// Browser Activity it did not retain for one source session.
+// activity it did not retain.
 func (s *Service) UpdateBrowserDeliverySummary(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -252,8 +250,8 @@ func (s *Service) UpdateBrowserDeliverySummary(
 }
 
 // BrowserDeliveryReceipts returns up to limit (at most 64) acknowledged
-// receipts for one Browser Activity source session, starting at sequence
-// first, with NextSequence set when another page follows.
+// receipts from sequence first, with NextSequence set when another page
+// follows.
 func (s *Service) BrowserDeliveryReceipts(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -301,10 +299,9 @@ func (s *Service) BrowserDeliveryReceipts(
 	return value, nil
 }
 
-// AppendHistoricalBrowserDelivery idempotently delivers a Browser Activity
-// batch outside a live Attempt Connection, so the access must carry no
-// connection or continuity credential. Delivery refusals are reported without
-// marking the audit failed.
+// AppendHistoricalBrowserDelivery idempotently delivers a batch outside a live
+// connection, so the access must carry no connection or continuity credential.
+// Delivery refusals do not mark the audit failed.
 func (s *Service) AppendHistoricalBrowserDelivery(
 	ctx context.Context,
 	inv invocation.Invocation,

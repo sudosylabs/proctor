@@ -19,15 +19,15 @@ type PersonalAccessTokenResolution struct {
 	User  *model.User
 }
 
-// PersonalAccessTokenSecurityNotice is the complete ordinary-mail intent for
-// one successful PAT transition. It deliberately carries neither the
-// one-time credential nor the persisted token hash or complete scope list.
+// PersonalAccessTokenSecurityNotice is the mail sent with a successful token
+// change. It deliberately carries neither the token, its hash nor the full
+// scope list.
 type PersonalAccessTokenSecurityNotice struct {
 	Occurrence *model.MailOccurrence
 	Delivery   *model.MailDelivery
 	Job        *model.Job
-	// ExpiresAt is the bounded safe expiry rendered into the frozen payload.
-	// Persistence verifies it equals the committed token deadline.
+	// ExpiresAt is the expiry rendered into the mail; the store checks it
+	// equals the committed token deadline.
 	ExpiresAt time.Time
 }
 
@@ -40,10 +40,9 @@ const (
 	PersonalAccessTokenMutationRevoke  PersonalAccessTokenMutationKind = "revoke"
 )
 
-// PersonalAccessTokenMutationPreparation is the bounded durable attempt that
-// precedes rendering. PostgreSQL assigns its ActionAt. The Audit draft contains
-// only safe bounded metadata and is inserted as one terminal event only when
-// the preparation succeeds, explicitly fails, or is reconciled after expiry.
+// PersonalAccessTokenMutationPreparation is recorded before the notice is
+// rendered; the store sets ActionAt. AuditEvent holds no secret and is written
+// once, when the preparation succeeds, fails, or is reconciled after expiry.
 type PersonalAccessTokenMutationPreparation struct {
 	UserID     model.UserID
 	TokenID    model.PersonalAccessTokenID
@@ -73,8 +72,8 @@ type PersonalAccessTokenMutationResult struct {
 	Fresh bool
 }
 
-// PersonalAccessTokenCreationMutation couples the new hashed credential,
-// terminal audit, and security notice in one transaction.
+// PersonalAccessTokenCreationMutation stores the hashed token, its audit and
+// its notice in one transaction.
 type PersonalAccessTokenCreationMutation struct {
 	Token           *model.PersonalAccessToken
 	MaximumActive   int
@@ -84,8 +83,8 @@ type PersonalAccessTokenCreationMutation struct {
 	Notice          PersonalAccessTokenSecurityNotice
 }
 
-// PersonalAccessTokenStateMutation couples one fresh enable/disable state
-// change, terminal audit, and matching security notice in one transaction.
+// PersonalAccessTokenStateMutation enables or disables a token with its audit
+// and notice in one transaction.
 type PersonalAccessTokenStateMutation struct {
 	ID            model.PersonalAccessTokenID
 	UserID        model.UserID
@@ -95,8 +94,8 @@ type PersonalAccessTokenStateMutation struct {
 	Notice        PersonalAccessTokenSecurityNotice
 }
 
-// PersonalAccessTokenRevocation couples one fresh revocation, terminal audit,
-// and matching security notice in one transaction.
+// PersonalAccessTokenRevocation revokes a token with its audit and notice in
+// one transaction.
 type PersonalAccessTokenRevocation struct {
 	ID            model.PersonalAccessTokenID
 	UserID        model.UserID
@@ -104,9 +103,9 @@ type PersonalAccessTokenRevocation struct {
 	Notice        PersonalAccessTokenSecurityNotice
 }
 
-// PersonalAccessTokenStore persists hashed, explicitly scoped credentials.
-// Resolve is authoritative and also performs the debounced last-used update.
-// Decision instants use UTC microsecond precision; expiry is exclusive.
+// PersonalAccessTokenStore persists hashed, scoped tokens. Resolve also
+// updates last-used, debounced. Times compare at UTC microsecond precision and
+// expiry is exclusive.
 type PersonalAccessTokenStore interface {
 	PrepareMutation(context.Context, *PersonalAccessTokenMutationPreparation) (*PreparedPersonalAccessTokenMutation, error)
 	FailMutation(context.Context, *PersonalAccessTokenMutationFailure) error

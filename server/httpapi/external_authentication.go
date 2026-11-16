@@ -8,7 +8,6 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
 
@@ -47,27 +46,13 @@ func externalAuthenticationProviderResponses(
 	return responses
 }
 
-type externalAuthenticationEntryApplication interface {
-	ExternalAuthenticationProviders(context.Context, invocation.Invocation) ([]model.ExternalAuthenticationProvider, error)
-	BeginExternalAuthentication(
-		context.Context,
-		invocation.Invocation,
-		identity.BeginExternalAuthenticationCommand,
-	) (*model.ExternalAuthenticationStart, error)
-	CompleteExternalAuthentication(
-		context.Context,
-		invocation.Invocation,
-		identity.CompleteExternalAuthenticationCommand,
-	) (*model.ExternalAuthenticationCompletion, error)
-}
-
 type externalAuthenticationHandlers struct {
-	app     externalAuthenticationEntryApplication
+	app     *identity.Service
 	cookies route.Cookies
 }
 
 func externalAuthenticationResource(
-	app externalAuthenticationEntryApplication,
+	app *identity.Service,
 	cookies route.Cookies,
 ) route.Resource {
 	h := externalAuthenticationHandlers{app: app, cookies: cookies}
@@ -154,6 +139,9 @@ func externalAuthenticationResource(
 	)
 }
 
+// beginFromBody is the only start that takes an invitation claim. The claim is
+// a bearer secret, so it is read from the body alone, never from the query,
+// and must not reach provider state, logs, audit or a response.
 func (h externalAuthenticationHandlers) beginFromBody(request route.Request) (route.ProtocolResult, error) {
 	providerID, appErr := route.PathProviderID(request, "provider_id")
 	if appErr != nil {

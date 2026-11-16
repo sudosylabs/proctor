@@ -9,6 +9,12 @@ export interface FormFeedbackProps {
   message?: ReactNode;
 }
 
+/**
+ * The live region stays mounted while empty so a new message is announced
+ * without moving focus. Features must not repeat the message in another live
+ * region or focus this one to make it speak. Failures tied to one field belong
+ * on that field, not here.
+ */
 export function FormFeedback({ className, id, message }: FormFeedbackProps) {
   return (
     <div

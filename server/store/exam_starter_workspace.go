@@ -14,8 +14,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// ExamStarterWorkspaceItem is one bounded visible Draft entry and, for files,
-// the exact current opaque content metadata selected by PostgreSQL.
+// ExamStarterWorkspaceItem is one visible draft entry; Object is set only for
+// a file.
 type ExamStarterWorkspaceItem struct {
 	Entry  model.StarterWorkspaceEntry
 	Object *model.StarterWorkspaceObject
@@ -25,9 +25,8 @@ type ExamStarterWorkspaceReservation struct {
 	Object *model.StarterWorkspaceObject
 }
 
-// ExamStarterWorkspaceMutation is the common authorization, optimistic
-// concurrency, audit, and timing envelope for a hierarchy mutation. ChangedAt
-// preserves UTC microsecond precision through reservation and finalization.
+// ExamStarterWorkspaceMutation is the input of every hierarchy mutation.
+// ChangedAt keeps UTC microsecond precision from reservation to finalization.
 type ExamStarterWorkspaceMutation struct {
 	ExamID                 model.ExamID
 	ActorUserID            model.UserID
@@ -55,20 +54,17 @@ type ExamStarterWorkspaceMutationResult struct {
 	Replayed          bool
 }
 
-// ExamStarterWorkspaceStore owns the complete bounded Draft hierarchy.
-// Object reservation creates only invisible, expiring opaque state and makes
-// no authorization or Draft-currentness decision. Mutations lock and recheck
-// the active Exam, current manager relationship
-// unless override is explicit, and expected Draft revision. Successful
-// hierarchy changes, Draft revision, audit completion, and command outcome
-// commit atomically. File finalization additionally consumes one unexpired
-// staged object and publishes its verified metadata. Replacements make the
-// prior object reclaimable only after the safety window. Exact replays return
-// the committed result without repeating mutation or changing cleanup state.
-// RemoveEntry rejects non-empty directories unless Recursive is explicit. A
-// recursive removal archives the complete subtree under the expected Draft
-// revision, advances that revision once, and retires owned objects atomically.
-// Retained outcomes and published or admitted content pins prevent cleanup.
+// ExamStarterWorkspaceStore persists a draft's starter workspace tree.
+// ReserveObject creates only invisible, expiring state and checks neither
+// authorization nor the draft. Mutations lock and recheck the active exam,
+// the manager relationship (unless overridden) and the draft revision, and
+// commit the change, revision, audit and outcome atomically; a file write also
+// consumes one unexpired staged object. A replaced object becomes reclaimable
+// only after the safety window, and a replay changes no cleanup state.
+// RemoveEntry rejects a non-empty directory unless Recursive is set; a
+// recursive removal archives the whole subtree and advances the revision once.
+// Retained outcomes and published or admitted content keep objects from
+// cleanup.
 type ExamStarterWorkspaceStore interface {
 	List(context.Context, model.ExamID) ([]ExamStarterWorkspaceItem, error)
 	GetFile(context.Context, model.ExamID, model.StarterWorkspaceEntryID) (*ExamStarterWorkspaceItem, error)

@@ -16,9 +16,8 @@ import (
 
 const ExamCorrectionResourceStageOperation = "exam.sitting.correction.resource.stage"
 
-// ExamCorrectionResourceStageTarget says whether a purpose-bound stage
-// allocates a new stable resource identity or replaces the content behind an
-// identity already present in the correction's exact base Revision.
+// ExamCorrectionResourceStageTarget says whether a stage adds a new resource
+// or replaces the content of one already in the base revision.
 type ExamCorrectionResourceStageTarget string
 
 const (
@@ -38,9 +37,8 @@ const (
 	ExamCorrectionResourceStageConsumed ExamCorrectionResourceStageState = "consumed"
 )
 
-// ExamCorrectionResourceStage is the complete bounded result of reserving or
-// completing one staged resource. Storage keys never cross this boundary.
-// Rendition is present only after exact bytes and metadata have been staged.
+// ExamCorrectionResourceStage is one staged resource. Storage keys never cross
+// this boundary. Rendition is nil until the bytes and metadata are staged.
 type ExamCorrectionResourceStage struct {
 	ID              model.ExamCorrectionResourceStageID
 	ExamID          model.ExamID
@@ -61,14 +59,9 @@ type ExamCorrectionResourceStage struct {
 	Rendition       *model.FileRendition
 }
 
-// ConsistentWith reports whether the stage is identified, belongs to the
-// commanded Exam, Sitting and base Revision with the commanded target, names
-// its Resource, file entry, File Revision, upload lease and rendition, was
-// created by the acting User, carries an expiry, and, for a replacement, names
-// the Resource being replaced.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the stage belongs to the commanded exam,
+// sitting, base revision, target and actor, names every identity it needs and
+// an expiry, and, for a replacement, names the replaced resource.
 func (s *ExamCorrectionResourceStage) ConsistentWith(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -93,10 +86,8 @@ func (s *ExamCorrectionResourceStage) ConsistentWith(
 		(target == ExamCorrectionResourceReplacement && s.ResourceID != resourceID))
 }
 
-// RenditionConsistent reports whether a stage that has left pending carries
-// the valid rendition it names, for the File Revision it names. A pending
-// stage has no rendition yet and is consistent. ConsistentWith asks about the
-// stage's identity; this asks only about its rendition.
+// RenditionConsistent reports whether a stage past pending carries the valid
+// rendition it names, for its file revision. A pending stage is consistent.
 func (s *ExamCorrectionResourceStage) RenditionConsistent() bool {
 	return !(s == nil ||
 		(s.State != ExamCorrectionResourceStagePending &&
@@ -106,10 +97,10 @@ func (s *ExamCorrectionResourceStage) RenditionConsistent() bool {
 				s.Rendition.Validate() != nil)))
 }
 
-// ExamCorrectionResourceStageReservation preallocates every opaque identity
-// before a VFS write. Addition carries a pristine File Entry; replacement
-// names the stable File Entry pinned by the base Revision. Revision and Lease
-// remain pending/invisible until Apply consumes a Ready stage.
+// ExamCorrectionResourceStageReservation allocates every identity before the
+// VFS write. An addition carries a new Entry; a replacement names the
+// FileEntryID pinned by the base revision. Revision and Lease stay invisible
+// until Apply consumes the ready stage.
 type ExamCorrectionResourceStageReservation struct {
 	StageID         model.ExamCorrectionResourceStageID
 	ExamID          model.ExamID
@@ -136,9 +127,9 @@ type ExamCorrectionResourceStageReadiness struct {
 	ReadyAt     time.Time
 }
 
-// ExamCorrectionResourceManifestItem is one entry in the complete desired
-// ordered resource manifest. A zero StageID retains the exact base rendition;
-// a StageID replaces or adds content according to that bound Ready stage.
+// ExamCorrectionResourceManifestItem is one entry of the full, ordered
+// resource manifest. A zero StageID keeps the base rendition; otherwise the
+// ready stage adds or replaces the content.
 type ExamCorrectionResourceManifestItem struct {
 	ResourceID          model.ExamResourceID
 	DisplayName         string
@@ -147,7 +138,8 @@ type ExamCorrectionResourceManifestItem struct {
 }
 
 type ExamCorrectionApplication struct {
-	// InstitutionOrigin is installation configuration supplied by the application, never request data.
+	// InstitutionOrigin comes from installation configuration, never from the
+	// request.
 	InstitutionOrigin       string
 	RevisionID              model.ExamRevisionID
 	ExamID                  model.ExamID
@@ -168,8 +160,8 @@ type ExamCorrectionApplication struct {
 	AuditAt                 time.Time
 }
 
-// ExamCorrectionResult is intentionally bounded. Full authored snapshot
-// content remains available only through ExamRevisionStore.GetSnapshot.
+// ExamCorrectionResult deliberately omits the authored content; read it with
+// ExamRevisionStore.GetSnapshot.
 type ExamCorrectionResult struct {
 	Revision           *ExamRevisionSummary
 	Sitting            *ExamSittingSnapshot
@@ -178,12 +170,8 @@ type ExamCorrectionResult struct {
 	Replayed           bool
 }
 
-// Consistent reports whether the outcome carries the correction Revision and
-// the corrected Sitting's snapshot. It is the presence check; ConsistentWith
-// compares what they hold against the command.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// Consistent reports whether the revision and sitting snapshot are present;
+// ConsistentWith compares them with the command.
 func (r *ExamCorrectionResult) Consistent() bool {
 	return !(r == nil ||
 		r.Revision == nil ||
@@ -191,15 +179,8 @@ func (r *ExamCorrectionResult) Consistent() bool {
 		r.Sitting.Sitting == nil)
 }
 
-// ConsistentWith reports whether the outcome's Revision is a new, numbered
-// live-correction Revision of the commanded Exam that follows the expected
-// current Revision, its Sitting is the commanded one, now on that Revision at
-// the next Sitting revision and still open or paused, and the correction took
-// effect at the instant the Revision was published. An outcome without its
-// Revision or Sitting is inconsistent.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the result belongs to the commanded exam and
+// sitting, follows the expected current revision, and satisfies Applied.
 func (r *ExamCorrectionResult) ConsistentWith(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -220,10 +201,9 @@ func (r *ExamCorrectionResult) ConsistentWith(
 		!r.Applied(expectedCurrentRevisionID, expectedSittingRevision))
 }
 
-// Applied is the application's postcondition on a live correction: its
-// Revision is a new live-correction Revision, the Sitting is now on it at the
-// next Sitting revision and still open or paused, and the correction took
-// effect at the instant the Revision was published.
+// Applied is the application's postcondition: a new live-correction revision,
+// the sitting on it at the next sitting revision and still open or paused,
+// and the correction effective at the revision's publication instant.
 func (r *ExamCorrectionResult) Applied(expectedCurrentRevisionID model.ExamRevisionID, expectedSittingRevision int64) bool {
 	return r.Revision.ID != expectedCurrentRevisionID &&
 		r.Revision.Kind == model.ExamRevisionPublicationLiveCorrection &&
@@ -233,15 +213,13 @@ func (r *ExamCorrectionResult) Applied(expectedCurrentRevisionID model.ExamRevis
 		model.TimeUTC(r.EffectiveAt).Equal(model.TimeUTC(r.Revision.PublishedAt))
 }
 
-// ExamCorrectionStore is the narrow durable core for live correction. Reserve
-// resolves an exact committed command before current-state checks and returns
-// the stage's current Pending/Ready/Consumed state. Apply is the sole atomic
-// visibility mutation: it resolves replay first, locks and revalidates the
-// Exam/Sitting/base/stages, creates one sealed immutable Revision, consumes
-// referenced stages, retargets only that Sitting, appends private provenance,
-// completes safe audit, and stores a bounded outcome. The immutable affected
-// selection must cover the actual semantic change. Its required acknowledgement
-// gates only selected capabilities; no-op content cannot allocate a notice.
+// ExamCorrectionStore persists live corrections. ReserveResourceStage
+// resolves a replayed command before checking current state. Apply is the
+// only write that makes a correction visible: after replay it locks and
+// revalidates the exam, sitting, base and stages, creates one sealed
+// revision, consumes the stages, retargets only that sitting and completes
+// the audit, atomically. AffectedCapabilities must cover the actual change;
+// the acknowledgement gates only those, and a no-op change gets no notice.
 type ExamCorrectionStore interface {
 	ReserveResourceStage(context.Context, *ExamCorrectionResourceStageReservation, *CommandIdempotency) (*ExamCorrectionResourceStage, error)
 	MarkResourceStageReady(context.Context, *ExamCorrectionResourceStageReadiness) (*ExamCorrectionResourceStage, error)

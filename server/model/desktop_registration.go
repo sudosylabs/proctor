@@ -27,8 +27,8 @@ const (
 
 var rawBase64URL = base64.RawURLEncoding
 
-// DesktopPublicJWK is the single public-key shape accepted by the current
-// Desktop protocol. Private JWK members are deliberately absent.
+// DesktopPublicJWK is the one public-key shape the desktop protocol accepts.
+// It has no private JWK members on purpose.
 type DesktopPublicJWK struct {
 	Kty string `json:"kty"`
 	Crv string `json:"crv"`
@@ -57,7 +57,7 @@ func (j DesktopPublicJWK) Validate() error {
 	return nil
 }
 
-// PublicKey returns the validated ES256 verification key.
+// PublicKey returns the ES256 verification key, failing if the JWK is invalid.
 func (j DesktopPublicJWK) PublicKey() (*ecdsa.PublicKey, error) {
 	if err := j.Validate(); err != nil {
 		return nil, err
@@ -124,8 +124,8 @@ func IsValidDPoPKeyThumbprint(value string) bool {
 	return err == nil && len(decoded) == sha256.Size && rawBase64URL.EncodeToString(decoded) == value
 }
 
-// DesktopRegistration is one User's public Desktop proof key for the current
-// Institution. It is irreversible security history once revoked.
+// DesktopRegistration is one user's public desktop proof key for the
+// institution. Once revoked it is permanent security history.
 type DesktopRegistration struct {
 	ID               DesktopRegistrationID
 	CreatedAt        time.Time
@@ -141,9 +141,9 @@ type DesktopRegistration struct {
 	Architecture     DesktopArchitecture
 	RealtimeProtocol int
 	LastUsedAt       time.Time
-	// RenamedAt is when the User last chose DisplayName. Once set, a later
-	// Desktop sign-in with the same key keeps the chosen name instead of the
-	// device name the Desktop reports.
+	// RenamedAt is when the user last chose DisplayName. Once set, a later
+	// desktop sign-in with the same key keeps that name instead of the device
+	// name the desktop reports.
 	RenamedAt OptionalTime
 	RevokedAt OptionalTime
 }
@@ -208,19 +208,17 @@ func (r *DesktopRegistration) Validate() error {
 	return nil
 }
 
-// NormalizeDesktopRegistrationDisplayName returns the name a User chose for
-// one of their Desktop Registrations as it is stored: trimmed and stripped of
-// the same bidirectional and invisible code points every stored label loses.
-// A blank name, a control character, or more than
+// NormalizeDesktopRegistrationDisplayName returns a user-chosen registration
+// name as stored: trimmed and stripped of bidirectional and invisible code
+// points. A blank name, a control character, or more than
 // DesktopRegistrationDisplayNameMaxRunes runes is invalid.
 func NormalizeDesktopRegistrationDisplayName(value string) (string, error) {
 	return normalizeDeviceLabel("desktop_registration", "display_name", value, DesktopRegistrationDisplayNameMaxRunes)
 }
 
-// NormalizeSessionDeviceName returns the name a User chose for one of their
-// browser or CLI Sessions as it is stored, under the same rules as
-// NormalizeDesktopRegistrationDisplayName and the SessionDeviceNameMaxRunes
-// bound.
+// NormalizeSessionDeviceName returns a user-chosen session name as stored,
+// under the same rules as NormalizeDesktopRegistrationDisplayName with the
+// SessionDeviceNameMaxRunes bound.
 func NormalizeSessionDeviceName(value string) (string, error) {
 	return normalizeDeviceLabel("session", "device_name", value, SessionDeviceNameMaxRunes)
 }
@@ -247,7 +245,8 @@ func (r *DesktopRegistration) IsActive() bool {
 	return r != nil && !r.RevokedAt.Valid
 }
 
-// Auditable deliberately excludes the public key and thumbprint.
+// Auditable returns the fields safe to audit, leaving out the public key and
+// thumbprint.
 func (r *DesktopRegistration) Auditable() map[string]any {
 	if r == nil {
 		return nil

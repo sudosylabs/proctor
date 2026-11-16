@@ -15,7 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
@@ -66,131 +66,67 @@ func (s *programmeStoreFake) Archive(_ context.Context, input *store.ProgrammeAr
 	return s.current, nil
 }
 
-type programmeAuthorizerFake struct {
-	Authorizer
-	events       *[]string
-	action       model.Action
-	resource     model.Resource
-	scopeType    model.RoleScopeType
-	scopeID      string
-	err          error
-	preflightErr error
-	// institutionUsers and roleBindings answer the unaudited membership
-	// listing predicates.
-	institutionUsers bool
-	roleBindings     bool
-	classMembers     bool
-}
-
-func (a *programmeAuthorizerFake) CanViewClassMembers(_ context.Context, _ invocation.Invocation, resource model.Resource) (bool, error) {
-	*a.events = append(*a.events, "can-view-class-members:"+string(resource.Type)+":"+resource.ID)
-	return a.classMembers, nil
-}
-
-func (a *programmeAuthorizerFake) CanViewInstitutionUsers(context.Context, invocation.Invocation) (bool, error) {
-	*a.events = append(*a.events, "can-view-institution-users")
-	return a.institutionUsers, nil
-}
-
-func (a *programmeAuthorizerFake) CanViewRoleBindings(_ context.Context, _ invocation.Invocation, resource model.Resource) (bool, error) {
-	*a.events = append(*a.events, "can-view-role-bindings:"+string(resource.Type)+":"+resource.ID)
-	return a.roleBindings, nil
-}
-
-func (a *programmeAuthorizerFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource) error {
-	*a.events = append(*a.events, "authorize")
-	a.action, a.resource = action, resource
-	return a.err
-}
-
-func (a *programmeAuthorizerFake) AuthorizeUserRead(_ context.Context, _ invocation.Invocation, userID model.UserID) error {
-	*a.events = append(*a.events, "authorize")
-	a.action = model.ActionUserView
-	a.resource = model.Resource{Type: model.ResourceUser, ID: userID.String()}
-	return a.err
-}
-
-func (a *programmeAuthorizerFake) AuthorizePreflight(_ context.Context, _ invocation.Invocation, action model.Action, resourceType model.ResourceType) error {
-	*a.events = append(*a.events, "authorize-preflight")
-	a.action = action
-	a.resource = model.Resource{Type: resourceType}
-	return a.preflightErr
-}
-
-func (a *programmeAuthorizerFake) AuthorizeWithScope(
-	ctx context.Context,
-	inv invocation.Invocation,
-	action model.Action,
-	resource model.Resource,
-) (access.AuthorizationScope, error) {
-	if err := a.Authorize(ctx, inv, action, resource); err != nil {
-		return access.AuthorizationScope{}, err
-	}
-	if resource.Type == model.ResourceClass {
-		return access.AuthorizationScope{ScopeType: model.RoleScopeClass, ScopeID: resource.ID}, nil
-	}
-	if a.scopeType.IsValid() && model.IsValidOpaqueID(a.scopeID) {
-		return access.AuthorizationScope{ScopeType: a.scopeType, ScopeID: a.scopeID}, nil
-	}
-	return access.AuthorizationScope{ScopeType: model.RoleScopeAcademicUnit, ScopeID: resource.ID}, nil
+// programmeAccess grants the caller the actions in the Academic Unit and
+// resolves Programmes through the test's own store.
+func programmeAccess(t *testing.T, events *[]string, programmes store.ProgrammeStore, unitID model.AcademicUnitID, actions ...model.Action) (*accesstest.Fixture, invocation.Invocation) {
+	t.Helper()
+	principal, caller := newCaller()
+	return accessWith(t, events, accesstest.Options{
+		Grants:     []accesstest.Grant{unitGrant(principal.UserID, unitID, actions...)},
+		Programmes: programmes,
+	}), caller
 }
 
 func TestProgrammeCreateAuthorizationDenialStopsBeforeAuditAndStore(t *testing.T) {
 	t.Parallel()
 	events := []string{}
-	denied := apperror.New("authorization.denied")
-	service := mustNew(Dependencies{Store: &catalogFake{programme: &programmeStoreFake{events: &events}}, Authorizer: &programmeAuthorizerFake{events: &events, err: denied}, Auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, Now: time.Now, NewID: model.NewID})
-	_, err := service.CreateProgramme(context.Background(), invocation.Invocation{}, CreateProgrammeCommand{
-		AcademicUnitID: model.NewAcademicUnitID(), Name: "computer-science", DisplayName: "Computer Science",
+	unitID := model.NewAcademicUnitID()
+	access, caller := programmeAccess(t, &events, nil, unitID, model.ActionProgrammeView)
+	service := mustNew(Dependencies{Store: &catalogFake{programme: &programmeStoreFake{events: &events}}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID})
+	_, err := service.CreateProgramme(context.Background(), caller, CreateProgrammeCommand{
+		AcademicUnitID: unitID, Name: "computer-science", DisplayName: "Computer Science",
 	})
 	require.True(t, apperror.Is(err, "authorization.denied"), "Create() error = %v", err)
-	require.Equal(t, []string{"authorize"}, events)
+	require.Equal(t, []string{"grants", "decision:programme.manage:fail"}, events)
 }
 
 func TestProgrammeCreateConflictCompletesFailedAttempt(t *testing.T) {
 	t.Parallel()
 	events := []string{}
-	auditor := &institutionAuditorFake{events: &events, beginID: model.NewID()}
-	service := mustNew(Dependencies{Store: &catalogFake{programme: &programmeStoreFake{events: &events, createErr: store.NewErrConflict("programme", "programmes_academic_unit_id_name_key", nil)}}, Authorizer: &programmeAuthorizerFake{events: &events}, Auditor: auditor, Now: time.Now, NewID: model.NewID})
-	_, err := service.CreateProgramme(context.Background(), invocation.Invocation{}, CreateProgrammeCommand{
-		AcademicUnitID: model.NewAcademicUnitID(), Name: "computer-science", DisplayName: "Computer Science",
+	unitID := model.NewAcademicUnitID()
+	access, caller := programmeAccess(t, &events, nil, unitID, model.ActionProgrammeManage)
+	service := mustNew(Dependencies{Store: &catalogFake{programme: &programmeStoreFake{events: &events, createErr: store.NewErrConflict("programme", "programmes_academic_unit_id_name_key", nil)}}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID})
+	_, err := service.CreateProgramme(context.Background(), caller, CreateProgrammeCommand{
+		AcademicUnitID: unitID, Name: "computer-science", DisplayName: "Computer Science",
 	})
 	require.True(t, apperror.Is(err, "programme.conflict"), "Create() error = %v, audit code", err)
-	require.Equal(t, "programme.conflict", auditor.failCode, "Create() error = %v, audit code", err)
+	require.Equal(t, "programme.conflict", onlyAttempt(t, access).ErrorCode, "Create() error = %v, audit code", err)
 	// Contract (guardrail 8): authorization precedes the audit, the audit begins
 	// before the durable write, and the audit outcome follows the write.
-	require.Equal(t, []string{"authorize", "audit-begin", "store-create", "audit-fail"}, events)
-}
-func (*programmeAuthorizerFake) Installation(context.Context) (model.Resource, error) {
-	return model.Resource{}, nil
-}
-func (*programmeAuthorizerFake) AuthorizeInstallation(context.Context, invocation.Invocation, model.Action) (model.Resource, error) {
-	return model.Resource{}, nil
+	require.Equal(t, []string{"grants", "decision:programme.manage:success", "audit-begin:programme.manage", "store-create", "audit-fail"}, events)
 }
 
 func TestProgrammeCreatePreservesAcademicUnitOwnershipAndAtomicAudit(t *testing.T) {
 	t.Parallel()
 	events := []string{}
-	unitID, auditID, programmeID := model.NewID(), model.NewID(), model.NewID()
+	unitID, programmeID := model.NewID(), model.NewID()
+	access, caller := programmeAccess(t, &events, nil, model.AcademicUnitID(unitID), model.ActionProgrammeManage)
 	created := &model.Programme{ID: model.ProgrammeID(programmeID), AcademicUnitID: model.AcademicUnitID(unitID)}
 	persistence := &programmeStoreFake{events: &events, created: created}
-	authorizer := &programmeAuthorizerFake{events: &events}
-	auditor := &institutionAuditorFake{events: &events, beginID: auditID}
-	service := mustNew(Dependencies{Store: &catalogFake{programme: persistence}, Authorizer: authorizer, Auditor: auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: func() string { return programmeID }})
-	got, err := service.CreateProgramme(context.Background(), invocation.Invocation{}, CreateProgrammeCommand{
+	service := mustNew(Dependencies{Store: &catalogFake{programme: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: func() string { return programmeID }})
+	got, err := service.CreateProgramme(context.Background(), caller, CreateProgrammeCommand{
 		AcademicUnitID: model.AcademicUnitID(unitID), Name: "computer-science", DisplayName: "Computer Science",
 	})
 	require.NoError(t, err, "Create()")
 	require.Same(t, created, got, "Create()")
-	require.Equal(t, model.ActionProgrammeManage, authorizer.action, "authorization")
-	require.Equal(t, model.Resource{Type: model.ResourceAcademicUnit, ID: unitID}, authorizer.resource, "authorization")
+	require.Equal(t, []string{"programme.manage academic_unit:" + unitID + " success"}, decisions(access), "authorization")
 	require.NotNil(t, persistence.createInput)
 	require.Equal(t, unitID, persistence.createInput.Programme.AcademicUnitID.String())
 	require.Equal(t, programmeID, persistence.createInput.Programme.ID.String())
-	require.Equal(t, model.AuditEventID(auditID), persistence.createInput.AuditEventID)
+	require.Equal(t, onlyAttempt(t, access).ID, persistence.createInput.AuditEventID)
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
 	// begins before the durable write.
-	require.Equal(t, []string{"authorize", "audit-begin", "store-create"}, events)
+	require.Equal(t, []string{"grants", "decision:programme.manage:success", "audit-begin:programme.manage", "store-create"}, events)
 }
 
 func TestProgrammeUpdateCannotMoveOwnership(t *testing.T) {
@@ -203,15 +139,17 @@ func TestProgrammeUpdateCannotMoveOwnership(t *testing.T) {
 		Name:           "computer-science", DisplayName: "Computer Science",
 	}
 	persistence := &programmeStoreFake{events: &events, current: current}
-	service := mustNew(Dependencies{Store: &catalogFake{programme: persistence}, Authorizer: &programmeAuthorizerFake{events: &events}, Auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID})
+	access, caller := programmeAccess(t, &events, persistence, current.AcademicUnitID, model.ActionProgrammeManage)
+	service := mustNew(Dependencies{Store: &catalogFake{programme: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID})
 	name := "computing"
-	updated, err := service.UpdateProgramme(context.Background(), invocation.Invocation{}, UpdateProgrammeCommand{ID: current.ID, Name: &name})
+	updated, err := service.UpdateProgramme(context.Background(), caller, UpdateProgrammeCommand{ID: current.ID, Name: &name})
 	require.NoError(t, err)
 	require.Equal(t, current.AcademicUnitID, updated.AcademicUnitID)
 	require.Equal(t, current.AcademicUnitID, persistence.updateInput.Programme.AcademicUnitID)
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
-	// begins before the durable write.
-	require.Equal(t, []string{"authorize", "get", "audit-begin", "store-update"}, events)
+	// begins before the durable write. The first get resolves the Programme's
+	// owning unit for the decision.
+	require.Equal(t, []string{"get", "grants", "decision:programme.manage:success", "get", "audit-begin:programme.manage", "store-update"}, events)
 }
 
 func TestProgrammeArchiveUsesAtomicStoreSeam(t *testing.T) {
@@ -219,12 +157,12 @@ func TestProgrammeArchiveUsesAtomicStoreSeam(t *testing.T) {
 	events := []string{}
 	current := &model.Programme{ID: model.ProgrammeID(model.NewID()), AcademicUnitID: model.AcademicUnitID(model.NewID())}
 	persistence := &programmeStoreFake{events: &events, current: current}
-	auditID := model.NewID()
-	service := mustNew(Dependencies{Store: &catalogFake{programme: persistence}, Authorizer: &programmeAuthorizerFake{events: &events}, Auditor: &institutionAuditorFake{events: &events, beginID: auditID}, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID})
-	require.NoError(t, service.ArchiveProgramme(context.Background(), invocation.Invocation{}, ArchiveProgrammeCommand{ID: current.ID}))
+	access, caller := programmeAccess(t, &events, persistence, current.AcademicUnitID, model.ActionProgrammeManage)
+	service := mustNew(Dependencies{Store: &catalogFake{programme: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID})
+	require.NoError(t, service.ArchiveProgramme(context.Background(), caller, ArchiveProgrammeCommand{ID: current.ID}))
 	require.NotNil(t, persistence.archiveInput)
 	require.Equal(t, current.ID, persistence.archiveInput.ID)
-	require.Equal(t, model.AuditEventID(auditID), persistence.archiveInput.AuditEventID)
+	require.Equal(t, onlyAttempt(t, access).ID, persistence.archiveInput.AuditEventID)
 }
 
 func TestProgrammeListPreservesLimitWithoutSearch(t *testing.T) {
@@ -233,14 +171,16 @@ func TestProgrammeListPreservesLimitWithoutSearch(t *testing.T) {
 		t.Run(term, func(t *testing.T) {
 			t.Parallel()
 			events := []string{}
+			unitID := model.NewAcademicUnitID()
+			access, caller := programmeAccess(t, &events, nil, unitID, model.ActionProgrammeView)
 			first := &model.Programme{ID: model.NewProgrammeID()}
 			persistence := &programmeStoreFake{
 				events: &events,
 				listed: []*model.Programme{first, {ID: model.NewProgrammeID()}},
 			}
-			service := mustNew(Dependencies{Store: &catalogFake{programme: persistence}, Authorizer: &programmeAuthorizerFake{events: &events}, Auditor: &institutionAuditorFake{events: &events}, Now: time.Now, NewID: model.NewID})
-			got, err := service.ListProgrammes(context.Background(), invocation.Invocation{}, ListProgrammesQuery{
-				AcademicUnitID: model.NewAcademicUnitID(), Query: term, NameQuery: paging.NameQuery{Limit: 1},
+			service := mustNew(Dependencies{Store: &catalogFake{programme: persistence}, Authorizer: access.Authorizer, Auditor: access.Auditor, Now: time.Now, NewID: model.NewID})
+			got, err := service.ListProgrammes(context.Background(), caller, ListProgrammesQuery{
+				AcademicUnitID: unitID, Query: term, NameQuery: paging.NameQuery{Limit: 1},
 			})
 			require.NoError(t, err)
 			require.Len(t, got.Items, 1, "List(limit=1, q=%q)", term)

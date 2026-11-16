@@ -114,7 +114,7 @@ func TestAffiliationStore(t *testing.T, ss store.Store) {
 	require.True(t, store.IsConflict(err), "End() with active enrollment error")
 }
 
-// testAffiliationEndBeforeModification ends a backdated Affiliation at an
+// testAffiliationEndBeforeModification ends a backdated affiliation at an
 // effective instant earlier than the row's creation, as a millisecond
 // mutation instant or a trailing peer clock can.
 func testAffiliationEndBeforeModification(t *testing.T, ss store.Store) {

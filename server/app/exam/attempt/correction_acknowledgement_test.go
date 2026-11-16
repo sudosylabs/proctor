@@ -82,10 +82,14 @@ func TestAcknowledgeCorrectionUsesExactParticipationFenceAndSemanticIdempotency(
 		}{f.attemptID.String(), participationID.String(), 4, correctionRevisionID.String(), currentRevisionID.String()})
 	require.NoError(t, prepareErr)
 	require.Equal(t, wantIdempotency, f.persistence.idempotency)
-	// Contract (guardrail 8): the authorization decision and the prepared audit
-	// precede the durable acknowledgement.
-	require.Equal(t, []string{"correction.acknowledgement.resolve", "audit.authorization", "audit.prepare", "correction.acknowledgement.commit"}, f.order)
-	auditCapture := fmt.Sprintf("%#v", f.audit.values)
+	// Contract (guardrail 8): the authorization decision is recorded before
+	// the durable acknowledgement, which inserts the audit prepared for it.
+	require.Equal(t, []string{"correction.acknowledgement.resolve", "decision:exam.sitting.participate:success", "correction.acknowledgement.commit"}, f.order)
+	prepared := decodeAuditRecord(t, input.AuditEvent)
+	require.Equal(t, model.ActionExamSittingParticipate, prepared.action)
+	require.Equal(t, store.ExamAttemptCorrectionAcknowledgementOperation, prepared.operation)
+	require.NotEmpty(t, prepared.values, "the prepared audit records the acknowledgement")
+	auditCapture := fmt.Sprintf("%#v", prepared.values)
 	require.NotContains(t, auditCapture, credential)
 	require.NotContains(t, auditCapture, model.HashToken(credential))
 	require.NotContains(t, auditCapture, participationID.String())
@@ -119,9 +123,9 @@ func TestAcknowledgeCorrectionReplayReturnsRetainedResultAfterFreshAuthorization
 	require.NoError(t, err)
 	require.Equal(t, f.at.Add(-time.Minute), result.AcknowledgedAt.Time, "result=%#v calls=%d order=%v", result, f.persistence.correctionAcknowledgementCalls, f.order)
 	require.Equal(t, 1, f.persistence.correctionAcknowledgementCalls, "result=%#v calls=%d order=%v", result, f.persistence.correctionAcknowledgementCalls, f.order)
-	// Contract (guardrail 8): the authorization decision and the prepared audit
-	// precede the durable acknowledgement.
-	require.Equal(t, []string{"correction.acknowledgement.resolve", "audit.authorization", "audit.prepare", "correction.acknowledgement.commit"}, f.order)
+	// Contract (guardrail 8): the authorization decision is recorded before
+	// the durable acknowledgement, which inserts the audit prepared for it.
+	require.Equal(t, []string{"correction.acknowledgement.resolve", "decision:exam.sitting.participate:success", "correction.acknowledgement.commit"}, f.order)
 	// An exact replay retains its acknowledgement time while a later correction
 	// controls the fresh capability response.
 	laterRevisionID := model.NewExamRevisionID()

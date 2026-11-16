@@ -9,7 +9,7 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -20,42 +20,27 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
-type userSettingsHTTPApplication struct {
-	result         user.UserSettingsView
-	err            error
-	inv            invocation.Invocation
-	calls          int
-	replaceResult  user.UserSettingsReplacementResult
-	replaceErr     error
-	replaceCommand user.ReplaceOwnUserSettingsCommand
-	replaceCalls   int
+// settingsFixture is the real settings use cases over the caller's stored
+// document.
+func settingsFixture(t *testing.T, document *model.UserSettingsDocument) *userFixture {
+	t.Helper()
+	fixture := newUserFixture(t)
+	fixture.settings.document = document
+	return fixture
 }
 
-func (a *userSettingsHTTPApplication) ReplaceOwnUserSettings(
-	_ context.Context,
-	inv invocation.Invocation,
-	command user.ReplaceOwnUserSettingsCommand,
-) (user.UserSettingsReplacementResult, error) {
-	a.replaceCalls++
-	a.inv = inv
-	a.replaceCommand = command
-	return a.replaceResult, a.replaceErr
-}
-
-func (a *userSettingsHTTPApplication) ReadOwnUserSettings(
-	_ context.Context,
-	inv invocation.Invocation,
-) (user.UserSettingsView, error) {
-	a.calls++
-	a.inv = inv
-	return a.result, a.err
+// settingsDocument is a stored version 1 document of the User.
+func settingsDocument(userID model.UserID, source string, revision model.UserSettingsRevision, at time.Time) *model.UserSettingsDocument {
+	return &model.UserSettingsDocument{
+		UserID: userID, Source: source, FormatVersion: model.UserSettingsFormatVersion1,
+		Revision: revision, CreatedAt: at.Add(-time.Hour), UpdatedAt: at.Add(-time.Minute),
+	}
 }
 
 func TestUserSettingsHTTPReplacesWithoutEchoingSource(t *testing.T) {
@@ -71,10 +56,9 @@ func TestUserSettingsHTTPReplacesWithoutEchoingSource(t *testing.T) {
 	revision := model.NewUserSettingsRevision()
 	next := model.NewUserSettingsRevision()
 	source := "{\n  // exact\n  \"workbench.colorTheme\": \"Proctor Dark\",\n}\n"
-	applicationFake := &userSettingsHTTPApplication{replaceResult: user.UserSettingsReplacementResult{
-		Revision: next, FormatVersion: 1, UpdatedAt: at, Changed: true,
-	}}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userSettingsResource(applicationFake))
+	fixture := settingsFixture(t, settingsDocument(principal.UserID, "{}\n", revision, at))
+	fixture.settings.result = &store.UserSettingsReplacementResult{Revision: next, FormatVersion: 1, UpdatedAt: at, Changed: true}
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userSettingsResource(fixture.service))
 	body, err := json.Marshal(map[string]any{
 		"source": source, "format_version": 1, "expected_revision": revision.String(),
 	})
@@ -87,11 +71,14 @@ func TestUserSettingsHTTPReplacesWithoutEchoingSource(t *testing.T) {
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
 	require.Equal(t, "private, no-store", response.Header().Get("Cache-Control"))
-	require.Equal(t, 1, applicationFake.replaceCalls)
-	require.Equal(t, source, applicationFake.replaceCommand.Source)
-	require.Equal(t, 1, applicationFake.replaceCommand.FormatVersion)
-	require.Equal(t, revision, applicationFake.replaceCommand.ExpectedRevision)
-	require.Equal(t, "settings-save-1", applicationFake.replaceCommand.IdempotencyKey)
+	replacement := fixture.settings.replacement
+	require.NotNil(t, replacement, "the replacement reached the settings Store")
+	require.Equal(t, principal.UserID, replacement.UserID)
+	require.Equal(t, source, replacement.Source)
+	require.Equal(t, 1, replacement.FormatVersion)
+	require.Equal(t, revision, replacement.ExpectedRevision)
+	require.NotNil(t, fixture.settings.idempotency)
+	require.Equal(t, sha256.Sum256([]byte("settings-save-1")), fixture.settings.idempotency.KeyDigest, "the Idempotency-Key reached the Store")
 	var result map[string]any
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
 	_, exposed := result["source"]
@@ -110,11 +97,10 @@ func TestUserSettingsHTTPReplacementIsStrictBoundedAndIdempotent(t *testing.T) {
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now(),
 	}
 	revision := model.NewUserSettingsRevision()
-	applicationFake := &userSettingsHTTPApplication{replaceResult: user.UserSettingsReplacementResult{
-		Revision: revision, FormatVersion: 1, UpdatedAt: time.Now(),
-	}}
+	fixture := settingsFixture(t, settingsDocument(principal.UserID, "{}\n", revision, time.Now()))
+	fixture.settings.result = &store.UserSettingsReplacementResult{Revision: model.NewUserSettingsRevision(), FormatVersion: 1, UpdatedAt: time.Now(), Changed: true}
 	newAPI := func() *route.API {
-		return newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userSettingsResource(applicationFake))
+		return newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userSettingsResource(fixture.service))
 	}
 	for name, configure := range map[string]func(*http.Request){
 		"missing idempotency": func(request *http.Request) {},
@@ -142,7 +128,8 @@ func TestUserSettingsHTTPReplacementIsStrictBoundedAndIdempotent(t *testing.T) {
 			require.Equal(t, http.StatusBadRequest, response.Code, "status = %d: %s", response.Code, response.Body.String())
 		})
 	}
-	require.Equal(t, 0, applicationFake.replaceCalls, "invalid requests reached application")
+	require.Zero(t, fixture.settings.reads, "invalid requests reached the application")
+	require.Nil(t, fixture.settings.replacement, "invalid requests reached the settings Store")
 
 	maxSource := strings.Repeat(" ", model.UserSettingsSourceMaxBytes-3) + "{}\n"
 	body, err := json.Marshal(userSettingsReplaceRequest{
@@ -155,8 +142,9 @@ func TestUserSettingsHTTPReplacementIsStrictBoundedAndIdempotent(t *testing.T) {
 	request.Header.Set("Idempotency-Key", "maximum-save")
 	response := httptest.NewRecorder()
 	newAPI().ServeHTTP(response, request)
-	require.Equal(t, http.StatusOK, response.Code, "maximum source status/size = %d/%d: %s", response.Code, len(applicationFake.replaceCommand.Source), response.Body.String())
-	require.Equal(t, maxSource, applicationFake.replaceCommand.Source, "maximum source status/size = %d/%d: %s", response.Code, len(applicationFake.replaceCommand.Source), response.Body.String())
+	require.Equal(t, http.StatusOK, response.Code, "maximum source status = %d: %s", response.Code, response.Body.String())
+	require.NotNil(t, fixture.settings.replacement, "the maximum source reached the settings Store")
+	require.Equal(t, maxSource, fixture.settings.replacement.Source)
 }
 
 func TestUserSettingsHTTPReadsExactSelfDocumentWithoutCaching(t *testing.T) {
@@ -171,15 +159,14 @@ func TestUserSettingsHTTPReadsExactSelfDocumentWithoutCaching(t *testing.T) {
 		ClientType: model.SessionClientDesktop, AuthenticatedAt: at,
 	}
 	source := "{\n  // exact\n  \"workbench.colorTheme\": \"Proctor Dark\",\n}\n"
-	applicationFake := &userSettingsHTTPApplication{result: user.UserSettingsView{
-		Source: source, FormatVersion: 1, Revision: model.NewUserSettingsRevision(),
-		Writable: true, UpdatedAt: at,
-	}}
+	stored := settingsDocument(principal.UserID, source, model.NewUserSettingsRevision(), at)
+	stored.UpdatedAt = at
+	fixture := settingsFixture(t, stored)
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
 		routetest.Authenticator{Principal: principal},
-		userSettingsResource(applicationFake),
+		userSettingsResource(fixture.service),
 	)
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/settings", nil)
 	request.Header.Set("Authorization", "Bearer session-credential")
@@ -187,13 +174,12 @@ func TestUserSettingsHTTPReadsExactSelfDocumentWithoutCaching(t *testing.T) {
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
 	require.Equal(t, "private, no-store", response.Header().Get("Cache-Control"))
-	require.Equal(t, 1, applicationFake.calls, "calls/invocation = %d/%#v", applicationFake.calls, applicationFake.inv)
-	require.Equal(t, principal.UserID, applicationFake.inv.Principal().UserID, "calls/invocation = %d/%#v", applicationFake.calls, applicationFake.inv)
+	require.Equal(t, 1, fixture.settings.reads, "the caller's own document is read once")
 	var body userSettingsResponse
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	require.Equal(t, source, body.Source)
 	require.Equal(t, 1, body.FormatVersion)
-	require.Equal(t, applicationFake.result.Revision.String(), body.Revision)
+	require.Equal(t, stored.Revision.String(), body.Revision)
 	require.True(t, body.Writable)
 	require.Equal(t, model.FormatRFC3339(at), body.UpdatedAt)
 }
@@ -210,15 +196,14 @@ func TestUserSettingsHTTPReadsUnsupportedFormatAsExactReadOnlySource(t *testing.
 		ClientType: model.SessionClientDesktop, AuthenticatedAt: at,
 	}
 	const source = "future-format(source => remains.exact);\n"
-	applicationFake := &userSettingsHTTPApplication{result: user.UserSettingsView{
-		Source: source, FormatVersion: 2, Revision: model.NewUserSettingsRevision(),
-		Writable: false, UpdatedAt: at,
-	}}
+	stored := settingsDocument(principal.UserID, source, model.NewUserSettingsRevision(), at)
+	stored.FormatVersion, stored.UpdatedAt = 2, at
+	fixture := settingsFixture(t, stored)
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
 		routetest.Authenticator{Principal: principal},
-		userSettingsResource(applicationFake),
+		userSettingsResource(fixture.service),
 	)
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/settings", nil)
 	request.Header.Set("Authorization", "Bearer session-credential")
@@ -230,19 +215,19 @@ func TestUserSettingsHTTPReadsUnsupportedFormatAsExactReadOnlySource(t *testing.
 	require.Equal(t, source, body.Source)
 	require.Equal(t, 2, body.FormatVersion)
 	require.False(t, body.Writable)
-	require.Equal(t, applicationFake.result.Revision.String(), body.Revision)
+	require.Equal(t, stored.Revision.String(), body.Revision)
 	require.Equal(t, model.FormatRFC3339(at), body.UpdatedAt)
 }
 
 func TestUserSettingsHTTPRejectsNonSessionAndArbitraryUserPaths(t *testing.T) {
 	t.Parallel()
 	logger, _ := routetest.NewLogger(t)
-	applicationFake := &userSettingsHTTPApplication{}
+	fixture := settingsFixture(t, nil)
 	patAPI := newFocusedResourceAPI(
 		t,
 		logger,
 		routetest.Authenticator{Err: apperror.New("authentication.token_invalid")},
-		userSettingsResource(applicationFake),
+		userSettingsResource(fixture.service),
 	)
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/settings", nil)
 	request.Header.Set("Authorization", "Bearer personal-access-token")
@@ -256,7 +241,7 @@ func TestUserSettingsHTTPRejectsNonSessionAndArbitraryUserPaths(t *testing.T) {
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now(),
 	}
-	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userSettingsResource(applicationFake))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userSettingsResource(fixture.service))
 	for name, path := range map[string]string{
 		"arbitrary user":   "/api/v1/users/" + model.NewUserID().String() + "/settings",
 		"settings listing": "/api/v1/users/settings",
@@ -276,7 +261,7 @@ func TestUserSettingsHTTPRejectsNonSessionAndArbitraryUserPaths(t *testing.T) {
 		httpAPI.ServeHTTP(response, request)
 		require.Equal(t, http.StatusMethodNotAllowed, response.Code, "%s status = %d: %s", method, response.Code, response.Body.String())
 	}
-	require.Equal(t, 0, applicationFake.calls, "rejected requests reached application")
+	require.Zero(t, fixture.settings.reads, "rejected requests reached the application")
 }
 
 func TestUserSettingsOpenAPIDocument(t *testing.T) {

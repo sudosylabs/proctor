@@ -18,9 +18,9 @@ const (
 	FocusLossMaximumEvidenceEpisodes     = 100
 )
 
-// FocusLossSource is an optional closed classification emitted by a trusted
-// client adapter. It contains no free-form native event, application content,
-// severity, outcome, or accusation.
+// FocusLossSource is an optional closed classification from a trusted client
+// adapter. It carries no free-form native event, application content,
+// severity, outcome or accusation.
 type FocusLossSource string
 
 const (
@@ -43,8 +43,9 @@ func (s FocusLossSource) IsValid() bool {
 	}
 }
 
-// FocusLossSignal is one accepted, server-identified observation. ReceivedAt
-// is authoritative server receipt time; clients never supply it or an outcome.
+// FocusLossSignal is one accepted observation with a server-assigned ID.
+// ReceivedAt is the server's receipt time; clients never supply it or an
+// outcome.
 type FocusLossSignal struct {
 	ID                   FocusLossSignalID
 	AttemptID            ExamAttemptID
@@ -98,9 +99,9 @@ func (s *FocusLossSignal) Validate() error {
 	return nil
 }
 
-// Qualifies applies only the enabled duration boundary. FocusLossEvaluation
-// owns the remaining policy decision while persistence applies its result
-// atomically under the retained sequence and window locks.
+// Qualifies applies only the enabled duration threshold. FocusLossEvaluation
+// makes the rest of the decision, and persistence applies it under the
+// sequence and window locks.
 func (s *FocusLossSignal) Qualifies(policy FocusLossPolicy) bool {
 	return s != nil &&
 		s.Validate() == nil &&
@@ -109,9 +110,8 @@ func (s *FocusLossSignal) Qualifies(policy FocusLossPolicy) bool {
 		time.Duration(s.DurationMilliseconds)*time.Millisecond >= policy.MinimumDuration
 }
 
-// SameClaim compares only the client-controlled idempotency semantics. A fresh
-// server-proposed identity or receipt time cannot turn changed client input
-// into a duplicate.
+// SameClaim compares only the client-controlled fields, so a fresh server ID
+// or receipt time cannot turn changed client input into a duplicate.
 func (s *FocusLossSignal) SameClaim(other FocusLossSignal) bool {
 	return s != nil &&
 		s.AttemptID == other.AttemptID &&
@@ -122,10 +122,9 @@ func (s *FocusLossSignal) SameClaim(other FocusLossSignal) bool {
 		s.Source == other.Source
 }
 
-// FocusLossEvaluationState is the locked retained state supplied to one pure
-// policy decision. WindowIncidentCount includes the current signal when
-// RetainInWindow reports true; persistence remains responsible for pruning,
-// retaining, counting, and locking those rows.
+// FocusLossEvaluationState is the locked state one decision reads.
+// WindowIncidentCount includes the current signal when RetainInWindow is true;
+// persistence prunes, counts and locks those rows.
 type FocusLossEvaluationState struct {
 	AcceptedSequence        int64
 	WindowIncidentCount     int
@@ -135,9 +134,9 @@ type FocusLossEvaluationState struct {
 	CandidateWarningCreated bool
 }
 
-// FocusLossEvaluationDecision is the complete domain decision for one newly
-// accepted sequence. Persistence applies it atomically; callers publish only
-// the post-commit effects selected here.
+// FocusLossEvaluationDecision is the whole decision for one newly accepted
+// sequence. Persistence applies it atomically; callers publish only the
+// post-commit effects it selects.
 type FocusLossEvaluationDecision struct {
 	CollectionEnabled      bool
 	Qualified              bool
@@ -154,8 +153,8 @@ type FocusLossEvaluationDecision struct {
 	Suspend                bool
 }
 
-// FocusLossEvaluation binds one valid frozen policy to one valid accepted
-// signal. It is immutable and contains no persistence or transport mechanics.
+// FocusLossEvaluation pairs one valid frozen policy with one accepted signal.
+// It is immutable.
 type FocusLossEvaluation struct {
 	policy    FocusLossPolicy
 	signal    FocusLossSignal
@@ -172,8 +171,8 @@ func NewFocusLossEvaluation(policy FocusLossPolicy, signal FocusLossSignal) (Foc
 	return FocusLossEvaluation{policy: policy, signal: signal, qualified: signal.Qualifies(policy)}, nil
 }
 
-// WindowStartsAt returns the inclusive receipt-time boundary for the current
-// rolling window. Persistence removes observations strictly before it.
+// WindowStartsAt returns the inclusive receipt-time start of the rolling
+// window; persistence removes observations before it.
 func (e FocusLossEvaluation) WindowStartsAt() time.Time {
 	return e.signal.ReceivedAt.Add(-e.policy.Window)
 }
@@ -275,11 +274,9 @@ func (e FocusLossEvaluation) Decide(state FocusLossEvaluationState) (FocusLossEv
 	return decision, nil
 }
 
-// SuspendExamAttemptForFocusLoss applies the coordinated local lifecycle
-// transition selected by a Focus Loss policy decision. It mutates the three
-// domain values only after every ownership check and transition succeeds;
-// persistence remains responsible for committing them with the causal Flag,
-// Suspension, evidence, and audit record atomically.
+// SuspendExamAttemptForFocusLoss applies the suspension a focus loss decision
+// selected, mutating the three values only if every check passes. Persistence
+// commits them atomically with the flag, suspension, evidence and audit.
 func SuspendExamAttemptForFocusLoss(
 	attempt *ExamAttempt,
 	participation *AttemptParticipation,
@@ -313,17 +310,16 @@ func SuspendExamAttemptForFocusLoss(
 	return nil
 }
 
-// Validate checks a standalone Focus Loss policy without weakening the full
-// Exam Policy Set validation used for publication.
+// Validate checks a focus loss policy on its own; publication still runs the
+// full policy set validation.
 func (p FocusLossPolicy) Validate() error {
 	set := DefaultExamPolicySet()
 	set.FocusLoss = p
 	return set.Validate()
 }
 
-// FocusLossEvidenceOverflow is the fixed-size summary used after the retained
-// per-kind/per-generation episode limit. Count is aggregate metadata, not a
-// collection of client payloads.
+// FocusLossEvidenceOverflow is the fixed-size summary used past the per-kind,
+// per-generation episode limit. Count is metadata, not client payloads.
 type FocusLossEvidenceOverflow struct {
 	AttemptID                   ExamAttemptID
 	ParticipationID             AttemptParticipationID

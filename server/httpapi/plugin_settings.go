@@ -8,30 +8,17 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// PluginAdministrationApplication is the transport's plugin administration
-// capability.
-type PluginAdministrationApplication interface {
-	ListPlugins(context.Context, invocation.Invocation) ([]administration.PluginView, error)
-	ReplacePluginSettings(
-		context.Context,
-		invocation.Invocation,
-		administration.ReplacePluginSettingsCommand,
-	) (administration.PluginView, error)
-}
-
 // pluginSettingsRequest carries the settings document as JSON text, as the
-// User Settings API carries its source, so the server receives it exactly.
+// user settings API carries its source, so the server receives it exactly.
 type pluginSettingsRequest struct {
 	ExpectedRevision int64                  `json:"expected_revision"`
 	Enabled          route.Optional[bool]   `json:"enabled"`
@@ -51,7 +38,7 @@ type pluginResponse struct {
 }
 
 type pluginAdministrationHandlers struct {
-	app PluginAdministrationApplication
+	app *administration.Service
 }
 
 var pluginAdministrationReadErrors = []string{
@@ -63,7 +50,7 @@ var pluginAdministrationReadErrors = []string{
 	"resource.not_found",
 }
 
-func pluginAdministrationResource(app PluginAdministrationApplication) route.Resource {
+func pluginAdministrationResource(app *administration.Service) route.Resource {
 	h := pluginAdministrationHandlers{app: app}
 	return route.NewResource(
 		"plugins",

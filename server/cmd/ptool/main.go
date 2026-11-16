@@ -5,10 +5,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Command ptool is the repository's developer tool. It generates and checks
-// the error catalog and the OpenAPI artifact, checks translation catalogs,
-// seeds a development installation and builds release artifacts. The Makefile
-// targets call it; it is not shipped to operators.
+// Command ptool is the repository's developer tool, run by the Makefile
+// targets. It is not shipped to operators.
 package main
 
 import (

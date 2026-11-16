@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// The bounds of an environment profile.
+// Bounds on environment profiles.
 const (
 	EnvironmentProfileMinimumCPUMillis   = 100
 	EnvironmentProfileMaximumCPUMillis   = 64_000
@@ -22,11 +22,11 @@ const (
 	EnvironmentProfileMaximumDiskBytes   = 256 << 30
 	EnvironmentProfileMinimumIdleWindow  = time.Minute
 	EnvironmentProfileMaximumIdleWindow  = 24 * time.Hour
-	// EnvironmentProfileMaximumTerminals bounds the terminals one Attempt
-	// may open, whatever a profile allows.
+	// EnvironmentProfileMaximumTerminals bounds the terminals one attempt may
+	// open, whatever a profile allows.
 	EnvironmentProfileMaximumTerminals = 8
-	// EnvironmentProfileListMaximum bounds how many profiles an
-	// installation keeps that are not retired.
+	// EnvironmentProfileListMaximum bounds the unretired profiles one
+	// installation keeps.
 	EnvironmentProfileListMaximum = 200
 )
 
@@ -35,7 +35,7 @@ var (
 	environmentProfileImagePattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,64}$`)
 )
 
-// EnvironmentNetwork is what network an Attempt Environment gets.
+// EnvironmentNetwork is the network an attempt environment gets.
 type EnvironmentNetwork string
 
 const (
@@ -50,7 +50,7 @@ func (n EnvironmentNetwork) IsValid() bool {
 	return n == EnvironmentNetworkNone || n == EnvironmentNetworkAllowlist
 }
 
-// EnvironmentResources is what one Attempt Environment reserves on its host.
+// EnvironmentResources is what one attempt environment reserves on its host.
 type EnvironmentResources struct {
 	CPUMillis   int64
 	MemoryBytes int64
@@ -64,13 +64,10 @@ func (r EnvironmentResources) Valid() bool {
 		r.DiskBytes >= EnvironmentProfileMinimumDiskBytes && r.DiskBytes <= EnvironmentProfileMaximumDiskBytes
 }
 
-// EnvironmentProfile is an installation-level, administrator-managed recipe
-// for Attempt Environments: the execution image, the resources, the network,
-// how long an environment may stay frozen before it is suspended, and the
-// most terminals one Attempt may open. A profile is never edited: a change
-// is a new profile, and the old one is retired. An Exam's execution policy
-// names one profile, and Revisions published before a retirement keep using
-// it.
+// EnvironmentProfile is an administrator-managed recipe for attempt
+// environments: image, resources, network, idle window and terminal limit. A
+// profile is never edited; a change is a new profile and the old one is
+// retired. Revisions published before a retirement keep using it.
 type EnvironmentProfile struct {
 	ID              EnvironmentProfileID
 	Name            string
@@ -81,11 +78,11 @@ type EnvironmentProfile struct {
 	MaxTerminals    int
 	CreatedByUserID UserID
 	CreatedAt       time.Time
-	// RetiredAt is zero while new Exam Revisions may name the profile.
+	// RetiredAt is zero while new exam revisions may name the profile.
 	RetiredAt time.Time
 }
 
-// EnvironmentProfileSpecification is what an administrator gives for a new
+// EnvironmentProfileSpecification is an administrator's input for a new
 // profile.
 type EnvironmentProfileSpecification struct {
 	Name         string
@@ -96,7 +93,7 @@ type EnvironmentProfileSpecification struct {
 	MaxTerminals int
 }
 
-// NewEnvironmentProfile validates spec and returns the profile it makes.
+// NewEnvironmentProfile validates spec and returns an unretired profile.
 func NewEnvironmentProfile(
 	id EnvironmentProfileID,
 	spec EnvironmentProfileSpecification,
@@ -120,7 +117,7 @@ func NewEnvironmentProfile(
 	return profile, nil
 }
 
-// Validate checks every field.
+// Validate checks every field against the profile bounds.
 func (p *EnvironmentProfile) Validate() error {
 	const where = "EnvironmentProfile.Validate"
 	switch {
@@ -150,5 +147,5 @@ func (p *EnvironmentProfile) Validate() error {
 	return nil
 }
 
-// Retired reports whether new Exam Revisions may no longer name the profile.
+// Retired reports whether new exam revisions may no longer name the profile.
 func (p *EnvironmentProfile) Retired() bool { return !p.RetiredAt.IsZero() }

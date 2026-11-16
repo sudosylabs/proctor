@@ -27,9 +27,8 @@ type SubmitCommand struct {
 	IdempotencyKey            string
 }
 
-// SubmissionResult is a sealed Submission's receipt and provenance together
-// with the Attempt identity it was sealed from. Replayed is true when an exact
-// retry returned the stored result.
+// SubmissionResult is a sealed submission's receipt and provenance. Replayed
+// is true when an exact retry returned the stored result.
 type SubmissionResult struct {
 	Receipt         store.ExamSubmissionReceipt
 	Provenance      model.ExamSubmissionProvenance
@@ -50,8 +49,8 @@ type GetSubmissionQuery struct {
 	SubmissionID model.SubmissionID
 }
 
-// ManagedSubmission is a Submission returned to a caller with Submission view,
-// with the authorization projection that granted it.
+// ManagedSubmission carries the authorization projection that granted the
+// view.
 type ManagedSubmission struct {
 	Authorization store.ExamSubmissionAuthorization
 	Submission    model.ExamSubmission
@@ -63,8 +62,8 @@ type ListSubmissionManifestQuery struct {
 	Limit        int
 }
 
-// SubmissionManifestPage is one page of a sealed Submission's manifest. The
-// cursor and digest describe the whole manifest, not just this page.
+// SubmissionManifestPage is one page of a sealed manifest. The cursor and
+// digest describe the whole manifest, not just this page.
 type SubmissionManifestPage struct {
 	SubmissionID    model.SubmissionID
 	WorkspaceCursor int64
@@ -78,8 +77,7 @@ type OpenSubmissionFileQuery struct {
 	EntryID model.AttemptWorkspaceEntryID
 }
 
-// OpenExamSubmissionFile opens one file sealed in a Submission for a caller
-// with Submission view.
+// OpenExamSubmissionFile requires submission view.
 func (s *Service) OpenExamSubmissionFile(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -145,8 +143,7 @@ func validSubmissionFileSelector(selector *store.ExamSubmissionFileSelector,
 	}
 }
 
-// ListExamSubmissionManifest returns one page of a Submission's sealed
-// manifest for a caller with Submission view.
+// ListExamSubmissionManifest requires submission view.
 func (s *Service) ListExamSubmissionManifest(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -229,9 +226,8 @@ func validSubmissionManifestItem(item store.ExamSubmissionManifestItem) bool {
 	}
 }
 
-// GetExamSubmission returns a Submission and its authorization projection for
-// a caller with Submission view. A Submission that does not belong to the
-// named Exam, Sitting, and Attempt is reported as not found.
+// GetExamSubmission reports a submission that does not belong to the named
+// exam, sitting and attempt as not found.
 func (s *Service) GetExamSubmission(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -284,10 +280,9 @@ func (s *Service) resolveManagedSubmission(
 	return authorization, nil
 }
 
-// SubmitExamAttempt idempotently seals the candidate's Submission from the
-// acknowledged Attempt Workspace state, fenced by participation generation,
-// the expected current Exam Revision, the expected workspace cursor, and the
-// final Focus Loss sequence.
+// SubmitExamAttempt idempotently seals the acknowledged workspace state,
+// fenced by participation generation, the expected exam revision, the
+// expected workspace cursor and the final focus-loss sequence.
 func (s *Service) SubmitExamAttempt(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -334,8 +329,8 @@ func (s *Service) SubmitExamAttempt(
 	if !validSubmissionTarget(target, sealAccess) {
 		return store.ExamSubmissionReceipt{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Submission seal target"))
 	}
-	// The environment's last changes join the Workspace before the seal;
-	// the seal's expected cursor fences only the candidate's own changes.
+	// The environment's last changes join the workspace before the seal; the
+	// seal's expected cursor fences only the candidate's own changes.
 	if !target.Replayed && s.settler != nil {
 		s.settler.Settle(ctx, sealAccess.AttemptID)
 	}

@@ -8,12 +8,10 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -21,26 +19,8 @@ import (
 
 const examStarterWorkspaceUploadBodyLimit = model.StarterWorkspaceMaximumFileBytes + 64*1024
 
-// ExamStarterWorkspaceApplication is the application port its handlers call;
-// it lists, opens and edits the files and directories of an Exam's Starter
-// Workspace.
-type ExamStarterWorkspaceApplication interface {
-	ListExamStarterWorkspace(context.Context, invocation.Invocation, model.ExamID) ([]store.ExamStarterWorkspaceItem, error)
-	OpenExamStarterWorkspaceFile(
-		context.Context,
-		invocation.Invocation,
-		model.ExamID,
-		model.StarterWorkspaceEntryID,
-	) (workspace.OpenedFile, error)
-	CreateExamStarterWorkspaceDirectory(context.Context, invocation.Invocation, workspace.CreateDirectoryCommand) (workspace.Result, error)
-	CreateExamStarterWorkspaceFile(context.Context, invocation.Invocation, workspace.CreateFileCommand) (workspace.Result, error)
-	MoveExamStarterWorkspaceEntry(context.Context, invocation.Invocation, workspace.MoveEntryCommand) (workspace.Result, error)
-	ReplaceExamStarterWorkspaceFile(context.Context, invocation.Invocation, workspace.ReplaceFileCommand) (workspace.Result, error)
-	RemoveExamStarterWorkspaceEntry(context.Context, invocation.Invocation, workspace.RemoveEntryCommand) (workspace.Result, error)
-}
-
 type examStarterWorkspaceHandlers struct {
-	app ExamStarterWorkspaceApplication
+	app *workspace.Service
 }
 
 type createExamStarterWorkspaceDirectoryRequest struct {
@@ -93,7 +73,7 @@ type examStarterWorkspaceListItemResponse struct {
 	UpdatedAt      string `json:"updated_at"`
 }
 
-func examStarterWorkspaceResource(app ExamStarterWorkspaceApplication) route.Resource {
+func examStarterWorkspaceResource(app *workspace.Service) route.Resource {
 	h := examStarterWorkspaceHandlers{app: app}
 	collection := "/exams/{exam_id}/draft/starter-workspace"
 	directories := "/exams/{exam_id}/draft/starter-workspace/directories"
@@ -285,7 +265,7 @@ func (h examStarterWorkspaceHandlers) list(request route.Request) (route.Result,
 		return route.Result{}, err
 	}
 
-	// The Exam Capacity Policy bounds the Starter Workspace, so the complete
+	// The exam capacity policy bounds the starter workspace, so the complete
 	// set is paged in canonical path order.
 	response, err := route.BoundedList(
 		request,

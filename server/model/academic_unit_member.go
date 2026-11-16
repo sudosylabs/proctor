@@ -16,10 +16,9 @@ import (
 	"time"
 )
 
-// AcademicUnitMember records that a User belongs to one AcademicUnit during a
-// time range. It does not contain roles: a teacher may hold different
-// RoleBinding values in different units, and membership alone grants no
-// permission.
+// AcademicUnitMember records that a user belongs to one academic unit for a
+// time range. Membership grants no permission; access comes from role
+// bindings, which can differ per unit.
 type AcademicUnitMember struct {
 	ID             AcademicUnitMemberID
 	CreatedAt      time.Time
@@ -32,7 +31,8 @@ type AcademicUnitMember struct {
 	EndsAt         OptionalTime
 }
 
-// PrepareCreate applies application-owned lifecycle fields before validation.
+// PrepareCreate stamps the ID and creation time and defaults StartsAt to it;
+// it does nothing on nil.
 func (m *AcademicUnitMember) PrepareCreate(id AcademicUnitMemberID, at time.Time) {
 	if m == nil {
 		return
@@ -52,7 +52,7 @@ func (m *AcademicUnitMember) PrepareCreate(id AcademicUnitMemberID, at time.Time
 	}
 }
 
-// PrepareUpdate applies the application-selected transition time.
+// PrepareUpdate stamps the update time and bumps the revision.
 func (m *AcademicUnitMember) PrepareUpdate(at time.Time) {
 	if m == nil {
 		return
@@ -64,7 +64,7 @@ func (m *AcademicUnitMember) PrepareUpdate(at time.Time) {
 	m.Revision++
 }
 
-// Validate checks rehydrated membership state.
+// Validate checks the membership's fields, for new and stored values alike.
 func (m *AcademicUnitMember) Validate() error {
 	const where = "AcademicUnitMember.Validate"
 	if m == nil {
@@ -92,7 +92,8 @@ func (m *AcademicUnitMember) Validate() error {
 	return validateEffectiveInterval(where, "academic_unit_member", details, m.StartsAt, m.EndsAt)
 }
 
-// IsActiveAt reports whether the membership covers the given instant.
+// IsActiveAt reports whether now falls in [StartsAt, EndsAt) of an unarchived
+// membership.
 func (m *AcademicUnitMember) IsActiveAt(now time.Time) bool {
 	if m == nil || m.IsArchived() {
 		return false
@@ -107,12 +108,14 @@ func (m *AcademicUnitMember) IsActiveAt(now time.Time) bool {
 	return true
 }
 
-// IsArchived reports soft archive state.
+// IsArchived reports whether ArchivedAt is set; a nil membership is not
+// archived.
 func (m *AcademicUnitMember) IsArchived() bool {
 	return m != nil && m.ArchivedAt.Valid
 }
 
-// End closes an open-ended membership at the exclusive end time.
+// End sets the exclusive end time of an open-ended membership; ending it twice
+// fails.
 func (m *AcademicUnitMember) End(at time.Time) error {
 	if m == nil {
 		return invalidModelError("AcademicUnitMember.End", "academic_unit_member", "", "academic unit member is nil", "")
@@ -127,7 +130,7 @@ func (m *AcademicUnitMember) End(at time.Time) error {
 	return m.Validate()
 }
 
-// Auditable returns a deliberately safe audit projection.
+// Auditable returns the fields that are safe to record in the audit log.
 func (m *AcademicUnitMember) Auditable() map[string]any {
 	if m == nil {
 		return map[string]any{}

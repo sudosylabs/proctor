@@ -20,9 +20,9 @@ import (
 const (
 	IntegrityReviewPrivateRationaleMaximumRunes = 1000
 	IntegrityReviewPrivateRationaleMaximumBytes = 4000
-	// The combined private Review projection is retained as one bounded
-	// idempotency outcome. Keep both fields comfortably below that Store
-	// envelope, including JSON framing and safe aggregate metadata.
+	// The private review projection is kept as one bounded idempotency
+	// outcome; keep both fields well below that store envelope, including
+	// JSON framing and aggregate metadata.
 	SubmissionReviewPrivateNotesMaximumRunes   = 3000
 	SubmissionReviewPrivateNotesMaximumBytes   = 12000
 	SubmissionReviewStudentRemarksMaximumRunes = 8192
@@ -32,9 +32,9 @@ const (
 	SubmissionReviewMaximumDiscrepancies       = 200
 )
 
-// IntegrityDiscrepancyKind identifies a bounded uncertainty record associated
-// with a sealed Submission. A discrepancy is never reinterpreted as evidence
-// and never mutates the sealed Submission.
+// IntegrityDiscrepancyKind is a bounded uncertainty record on a sealed
+// submission. A discrepancy is never reinterpreted as evidence and never
+// changes the submission.
 type IntegrityDiscrepancyKind string
 
 const (
@@ -67,8 +67,8 @@ func (r IntegrityDiscrepancyBrowserActivityGapReason) IsValid() bool {
 		BrowserActivitySubmissionGapReason(r).IsValid()
 }
 
-// IntegrityDiscrepancySpecification contains the complete immutable value for
-// one late record. ReceivedAt is authoritative database receipt time.
+// IntegrityDiscrepancySpecification is the whole immutable value of one late
+// record. ReceivedAt is the authoritative database receipt time.
 type IntegrityDiscrepancySpecification struct {
 	ID                     IntegrityDiscrepancyID
 	SubmissionID           SubmissionID
@@ -89,8 +89,8 @@ type IntegrityDiscrepancySpecification struct {
 	ReceivedAt             time.Time
 }
 
-// IntegrityDiscrepancy is an immutable, bounded post-collection diagnostic.
-// It is manager-visible only through the Submission Review capability.
+// IntegrityDiscrepancy is an immutable, bounded diagnostic recorded after
+// collection. Managers see it only through submission review.
 type IntegrityDiscrepancy struct {
 	IntegrityDiscrepancySpecification
 }
@@ -205,7 +205,7 @@ func (v *IntegrityDiscrepancy) Validate() error {
 }
 
 // IntegrityReviewOutcome is a manager's non-academic disposition of one
-// Integrity Flag. It is deliberately not a grade, score, or guilt verdict.
+// integrity flag. It is not a grade, a score or a verdict of guilt.
 type IntegrityReviewOutcome string
 
 const (
@@ -218,8 +218,8 @@ func (o IntegrityReviewOutcome) IsValid() bool {
 	return o == IntegrityReviewConfirmed || o == IntegrityReviewDismissed || o == IntegrityReviewInconclusive
 }
 
-// IntegrityReviewDecision is the sole current revision-fenced disposition of
-// one Flag within a draft Submission Review. PrivateRationale is manager-only.
+// IntegrityReviewDecision is the one current disposition of a flag within a
+// draft review, fenced by revision. PrivateRationale is manager-only.
 type IntegrityReviewDecision struct {
 	InventoryStale   bool
 	ID               IntegrityReviewDecisionID
@@ -325,9 +325,9 @@ const (
 	SubmissionReviewReleased SubmissionReviewReleaseState = "released"
 )
 
-// SubmissionReview is the one revision-fenced integrity Review associated
-// with a sealed Submission. Finalization freezes its text, decisions, and
-// inventory digest. Release is a later one-way transition.
+// SubmissionReview is the one integrity review of a sealed submission, fenced
+// by revision. Finalization freezes its text, decisions and inventory digest;
+// release is a later one-way step.
 type SubmissionReview struct {
 	ID                      SubmissionReviewID
 	SubmissionID            SubmissionID
@@ -449,8 +449,8 @@ func (r *SubmissionReview) UpdateDraft(expectedRevision int64, managerNotes, stu
 	return nil
 }
 
-// TouchDraft advances the aggregate revision when a child Flag decision is
-// created or revised without changing Review text.
+// TouchDraft bumps the review's revision when a flag decision is created or
+// revised without changing the review text.
 func (r *SubmissionReview) TouchDraft(expectedRevision int64, at time.Time) error {
 	if r == nil || r.Validate() != nil || r.State != SubmissionReviewDraft || r.Revision != expectedRevision {
 		return invalidModelError("SubmissionReview.TouchDraft", "submission_review", "", "Submission Review cannot advance", "")
@@ -511,8 +511,8 @@ func (r *SubmissionReview) Release(expectedRevision int64, actorID UserID, at ti
 	return nil
 }
 
-// StudentResult is the entire candidate-visible release projection. It omits
-// evidence, decisions, private rationale, manager notes, and sealed content.
+// StudentResult is everything the candidate sees on release. It leaves out
+// evidence, decisions, private rationale, manager notes and sealed content.
 type StudentResult struct {
 	ReviewID               SubmissionReviewID
 	SubmissionID           SubmissionID
@@ -565,9 +565,9 @@ type IntegrityReviewInventoryDiscrepancy struct {
 	DiscrepancyID IntegrityDiscrepancyID
 }
 
-// IntegrityReviewInventoryDigest returns the canonical version-1 digest used
-// to freeze the exact Flag, decision revision, and Evidence identities seen by
-// finalization. Input order is irrelevant and caller slices are not mutated.
+// IntegrityReviewInventoryDigest returns the version-1 digest that freezes the
+// exact flag, decision revision and evidence IDs finalization saw. Input order
+// does not matter and the slices are not mutated.
 func IntegrityReviewInventoryDigest(
 	flags []IntegrityReviewInventoryFlag,
 	evidence []IntegrityReviewInventoryEvidence,
@@ -638,8 +638,8 @@ func writeReviewInventoryCount(writer reviewInventoryWriter, count int) {
 	_, _ = writer.Write(encoded[:])
 }
 
-// IntegrityReviewDeliveryDigest binds the immutable identity inventory to the
-// current delivery revision, including count-only overflow and settlement.
+// IntegrityReviewDeliveryDigest binds the inventory digest to the current
+// delivery revision, including count-only overflow and settlement.
 func IntegrityReviewDeliveryDigest(base string, browser BrowserSubmissionSettlement, deliveryRevision int64) (string, error) {
 	if !validLowerSHA256(base) || browser.Validate() != nil || !securitySafeInt(deliveryRevision) {
 		return "", ErrDeliveryInvalid

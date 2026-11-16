@@ -13,18 +13,18 @@ import (
 	"strings"
 )
 
-// NativeCapabilityCertification says whether a release proved a capability
-// can enforce on one target. A capability that is not certified may still be
-// observed: its rules record but never block Start or suspend anyone.
+// NativeCapabilityCertification says whether a release proved a capability can
+// enforce on one target. An uncertified capability may still observe: its
+// rules record but never block start or suspend anyone.
 type NativeCapabilityCertification struct {
 	Capability       NativeCapabilityID `json:"capability"`
 	EnforceCertified bool               `json:"enforce_certified"`
 }
 
 // NativeCapabilityMatrix is a release's signed certification list for one
-// target: one entry for every registered capability, in capability order.
-// The release-evidence step produces it from packaged verification on
-// certification rigs; nothing is certified that was not proved there.
+// target, one entry per registered capability in capability order. Nothing is
+// certified that packaged verification on the certification rigs did not
+// prove.
 type NativeCapabilityMatrix struct {
 	RegistryDigest string                          `json:"registry_digest"`
 	MatrixID       string                          `json:"matrix_id"`
@@ -33,15 +33,15 @@ type NativeCapabilityMatrix struct {
 	Capabilities   []NativeCapabilityCertification `json:"capabilities"`
 }
 
-// DesktopNativeAgreement is immutable verified-release meaning: the
-// release's capability registry and its certification list. Signature and
-// exact artifact-byte verification belong to the packaging adapter.
+// DesktopNativeAgreement is the immutable meaning of a verified release: its
+// capability registry and certification list. Signature and artifact-byte
+// verification belong to the packaging adapter.
 type DesktopNativeAgreement struct {
 	registryDigest string
 	matrixDigest   string
 	matrix         NativeCapabilityMatrix
-	// capabilities is the release's parsed capability registry: the
-	// capabilities, fields and reasons its rules may name, and its baseline.
+	// capabilities is the release's parsed registry: the capabilities, fields
+	// and reasons its rules may name, and its baseline.
 	capabilities *NativeCapabilityRegistry
 }
 
@@ -75,7 +75,7 @@ func NewDesktopNativeAgreement(
 	}, nil
 }
 
-// CapabilityRegistry is the release's parsed capability registry.
+// CapabilityRegistry returns the release's parsed capability registry.
 func (a *DesktopNativeAgreement) CapabilityRegistry() *NativeCapabilityRegistry {
 	if a == nil {
 		return nil

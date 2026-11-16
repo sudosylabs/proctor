@@ -20,28 +20,28 @@ import (
 
 const retentionJobMaximumBatch = 100
 
-// RetentionContentPurger removes the stored content of an Attempt Workspace
-// object or a screen clip whose retention has ended.
+// RetentionContentPurger removes the content of an attempt workspace object
+// or a screen clip whose retention has ended.
 type RetentionContentPurger interface {
 	PurgeRetiredAttemptWorkspaceObject(context.Context, model.AttemptWorkspaceObjectID) error
 	PurgeRetiredScreenClip(context.Context, model.ScreenClipID, int) error
 }
 
-// RetentionSystemAuditor opens the durable audit attempt of one Submission's
-// retention reconciliation and marks it failed when the reconciliation does
-// not commit.
+// RetentionSystemAuditor opens the audit attempt of one submission's
+// retention reconciliation and fails it when the reconciliation does not
+// commit.
 type RetentionSystemAuditor interface {
 	BeginRetention(context.Context, model.InstitutionID, model.SubmissionID) (model.AuditEventID, error)
 	FailRetention(context.Context, model.AuditEventID) error
 }
 
-// RetentionCommand is the immutable command of the retention Job.
+// RetentionCommand is the immutable command of the retention job.
 type RetentionCommand struct {
 	BatchSize         int                `json:"batch_size"`
 	AfterSubmissionID model.SubmissionID `json:"after_submission_id,omitempty"`
 }
 
-// RetentionCheckpoint is the resumable checkpoint of the retention Job.
+// RetentionCheckpoint is the resumable checkpoint of the retention job.
 type RetentionCheckpoint struct {
 	AfterSubmissionID model.SubmissionID `json:"after_submission_id,omitempty"`
 	Examined          int                `json:"examined"`
@@ -222,8 +222,8 @@ func (h retentionHandler) purgePage(
 	cp *RetentionCheckpoint,
 	limit int,
 ) error {
-	// Beginning a batch is itself a durable mutation. Reserve its complete
-	// bounded cost first; an unknown result cannot reset this Job's budget.
+	// Beginning a batch is itself a durable mutation, so reserve its whole
+	// bounded cost first; an unknown result cannot reset this job's budget.
 	reserved, err := e.ReserveWork(ctx, limit, command.BatchSize)
 	if err != nil {
 		return err
@@ -300,11 +300,11 @@ func saveRetentionCheckpoint(ctx context.Context, e job.Execution, cp RetentionC
 }
 
 func (h retentionHandler) finish(ctx context.Context, parent *model.Job, command RetentionCommand, cp RetentionCheckpoint) job.Outcome {
-	// A failed or uncheckpointed purge batch must remain visibly failed. Its
-	// exact keys are already deferred and will be revisited by hourly work.
-	// Only a fully completed, nonempty batch can create an immediate successor;
-	// otherwise repeated failures saving an empty checkpoint could spawn an
-	// unbounded chain of fresh Jobs with fresh work budgets.
+	// A failed or uncheckpointed purge batch must stay visibly failed; its
+	// keys are already deferred to hourly work. Only a completed, nonempty
+	// batch may create an immediate successor, or repeated failures saving an
+	// empty checkpoint could spawn an unbounded chain of jobs with fresh
+	// budgets.
 	if h.purge && (cp.Changed != cp.Examined || (!cp.Done && cp.Examined != command.BatchSize)) {
 		return job.PermanentFailure("retention.unavailable", errors.New("retention purge batch did not complete"))
 	}
@@ -317,8 +317,8 @@ func (h retentionHandler) finish(ctx context.Context, parent *model.Job, command
 		}
 
 		at := model.TimeUTC(h.now())
-		// A short delay avoids an unbounded tight retry chain after repeated
-		// uncertainty, while each permanent dedupe key has one successor.
+		// A short delay avoids a tight retry chain after repeated uncertainty,
+		// and each permanent dedupe key has one successor.
 		successor, err := model.NewJobWithDedupePolicy(
 			model.NewJobID(),
 			parent.Type,
@@ -384,8 +384,8 @@ func retentionDescriptor(jobType model.JobType, handler job.Handler) job.Descrip
 	return descriptor
 }
 
-// NewRetentionReconcile registers the reconciliation of retention state
-// against current policy, proposed hourly.
+// NewRetentionReconcile registers the hourly reconciliation of retention
+// state against current policy.
 func NewRetentionReconcile(
 	records store.RetentionStore,
 	audit RetentionSystemAuditor,
@@ -403,8 +403,8 @@ func NewRetentionReconcile(
 	}
 }
 
-// NewRetentionPurge registers the purge of content whose retention has
-// ended, proposed hourly.
+// NewRetentionPurge registers the hourly purge of content whose retention has
+// ended.
 func NewRetentionPurge(
 	records store.RetentionStore,
 	content RetentionContentPurger,

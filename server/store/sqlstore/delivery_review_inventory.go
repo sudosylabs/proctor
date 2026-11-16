@@ -15,7 +15,7 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// Accepted delivery mutations hold Sitting then Attempt. A late inventory
+// Accepted delivery mutations hold sitting then attempt. A late inventory
 // change never edits a historical finalization or inherits its release. The
 // current aggregate becomes a new draft revision; exact retries do not enter.
 func invalidateDeliveryReviewInventory(ctx context.Context, tx *sqlxTxWrapper, attempt model.ExamAttemptID) error {

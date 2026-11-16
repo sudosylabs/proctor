@@ -14,12 +14,10 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -66,10 +64,10 @@ type mfaStatusResponse struct {
 }
 
 type mfaHandlers struct {
-	app MFA
+	app *identity.Service
 }
 
-func mfaResource(app MFA) route.Resource {
+func mfaResource(app *identity.Service) route.Resource {
 	h := mfaHandlers{app: app}
 	base := "/users/me/mfa"
 	return route.NewResource(
@@ -278,14 +276,4 @@ func mfaCode(request route.Request) (string, error) {
 		return "", err
 	}
 	return input.Code, nil
-}
-
-// MFA is the application port its handlers call; it manages the caller's multi-factor authentication.
-type MFA interface {
-	GetMFAStatus(context.Context, invocation.Invocation) (*identity.MFAStatus, error)
-	SetupMFA(context.Context, invocation.Invocation, identity.SetupMFACommand) (*identity.MFASetup, error)
-	ActivateMFA(context.Context, invocation.Invocation, identity.ActivateMFACommand) (*identity.MFAActivation, error)
-	ChallengeMFA(context.Context, invocation.Invocation, identity.ChallengeMFACommand) (*model.Session, error)
-	RegenerateMFARecoveryCodes(context.Context, invocation.Invocation) ([]string, error)
-	DisableMFA(context.Context, invocation.Invocation) error
 }

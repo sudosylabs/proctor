@@ -26,9 +26,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// This fixture certifies synthetic baseline adapters only inside conformance.
 // syntheticNativeAgreement is a release agreement for build on Desktop's
-// published registry, certifying every capability to enforce.
+// published registry, certifying every capability to enforce. It is valid
+// only inside conformance.
 func syntheticNativeAgreement(t *testing.T, build model.DesktopBuildTuple) *model.DesktopNativeAgreement {
 	t.Helper()
 	return nativetest.NativeAgreement(t, build)
@@ -198,8 +198,8 @@ func TestSecurityPreflightStore(t *testing.T, ss store.Store, probes ...Security
 	}
 }
 
-// TestSecureConnectStore exercises real named aggregate transactions. The
-// synthetic release certifies only this test's mandatory baseline adapters.
+// SecureConnectProbe corrupts, ages and observes what TestSecureConnectStore
+// cannot reach through the public contract.
 type SecureConnectProbe struct {
 	CorruptReport   func(string) func()
 	CorruptPrepared func(string, string) func()
@@ -208,11 +208,13 @@ type SecureConnectProbe struct {
 	FillMetadata    func(model.ExamAttemptID)
 	Totals          func(model.ExamAttemptID) (int64, int64)
 	Consumed        func(string) bool
-	// RefreshLease renews one Participation in database time between phases
+	// RefreshLease renews one participation in database time between phases
 	// that together can outlast an initial lease on a loaded database.
 	RefreshLease func(model.AttemptParticipationID)
 }
 
+// TestSecureConnectStore exercises the real secure connect transactions. The
+// synthetic release certifies only this test's mandatory baseline adapters.
 func TestSecureConnectStore(t *testing.T, ss store.Store, probes ...SecureConnectProbe) {
 	ctx := context.Background()
 	fixture := newExamAttemptFixture(t, ctx, ss)
@@ -563,7 +565,7 @@ func testClosedNativeDelivery(t *testing.T, ctx context.Context, ss store.Store,
 	}
 }
 
-// testScreenRecordingDisclosure checks that a recording Exam's overview and
+// testScreenRecordingDisclosure checks that a recording exam's overview and
 // prepared preflight both carry the recorder notice, with the integrity
 // retention period its clips follow, and that a replay keeps it.
 func testScreenRecordingDisclosure(t *testing.T, ctx context.Context, ss store.Store) {

@@ -35,7 +35,6 @@ func WireTimeFromMillis(millis int64) string {
 	return optionalWireTime(model.TimeFromMillis(millis))
 }
 
-// parseWireTime parses a required RFC 3339 request timestamp named field.
 func parseWireTime(field, raw string) (time.Time, error) {
 	parsed, err := model.ParseRFC3339(raw)
 	if err != nil || parsed.IsZero() {

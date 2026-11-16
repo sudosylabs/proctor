@@ -80,10 +80,8 @@ func WithCluster(cluster platform.Cluster) Option {
 	}
 }
 
-// WithConfiguredMailer keeps the production configuration-selected mail
-// adapter instead of replacing it with testlib's captured in-memory sender.
-// Integration tests use this to exercise the real SMTP adapter while keeping
-// the rest of the production graph assembled through the same root.
+// WithConfiguredMailer keeps the configured mail adapter, such as real SMTP,
+// instead of testlib's captured in-memory sender.
 func WithConfiguredMailer() Option {
 	return func(options *setupOptions) {
 		options.configuredMailer = true
@@ -97,16 +95,14 @@ func WithBuildInfo(buildInfo httpapi.BuildInfo) Option {
 	}
 }
 
-// WithDesktopBuildCatalog supplies exact verified Desktop build tuples to the
-// test-only composition seam. Production catalog ownership remains compiled.
+// WithDesktopBuildCatalog sets the verified Desktop build tuples; production
+// compiles its catalog in.
 func WithDesktopBuildCatalog(builds ...model.DesktopBuildTuple) Option {
 	return func(options *setupOptions) {
 		options.desktopBuilds = append([]model.DesktopBuildTuple(nil), builds...)
 	}
 }
 
-// WithPlugins activates plugins as if they were compiled in: one with a
-// built-in plugin's ID replaces it, and the others follow the built-in ones.
 // WithExecutionHostDial makes the node reach its configured execution hosts
 // through dial, such as in-process hosts.
 func WithExecutionHostDial(dial executionhost.Dialer) Option {
@@ -115,37 +111,35 @@ func WithExecutionHostDial(dial executionhost.Dialer) Option {
 	}
 }
 
+// WithPlugins activates plugins as if they were compiled in: one with a
+// built-in plugin's ID replaces it, and the others follow the built-in ones.
 func WithPlugins(plugins ...plugin.Plugin) Option {
 	return func(options *setupOptions) {
 		options.plugins = append(options.plugins, plugins...)
 	}
 }
 
-// Helper exposes the runtime's public behaviors and retains the test adapters
-// it supplied for lifecycle assertions.
+// Helper is an assembled runtime plus the test adapters testlib supplied.
 type Helper struct {
 	Server      *server.Server
 	App         *app.App
 	ConfigStore *config.Store
 	Logs        *logging.Buffer
-	// Persistence and Cluster are the exact adapters supplied by testlib. A nil
-	// Cluster means the production selector constructed a non-local configured
-	// adapter such as Memberlist.
+	// Persistence and Cluster are the adapters testlib supplied. A nil Cluster
+	// means configuration selected a non-local one, such as memberlist.
 	Persistence store.Store
 	Cluster     platform.Cluster
-	// PersistenceClose tracks close of the default lifecycle-only persistence
-	// stub. It is nil when the graph was constructed with WithStore.
+	// PersistenceClose is nil when the graph was built WithStore.
 	PersistenceClose *LifecycleStore
 	Cache            *Cache
-	// Mailer is the captured in-memory sender when testlib supplied it. It is
-	// nil when WithConfiguredMailer selects the production-configured adapter.
+	// Mailer is nil with WithConfiguredMailer.
 	Mailer  *Mailer
 	VFS     *memory.FS
 	handler http.Handler
 }
 
-// BootstrapSecret is the explicit deployment-owned value used by real-graph
-// tests. Production never has a compiled-in bootstrap secret.
+// BootstrapSecret is the bootstrap secret Setup configures. Production never
+// has a compiled-in one.
 const BootstrapSecret = "proctor-test-bootstrap-secret-32-bytes"
 
 // Handler returns the HTTP transport of the assembled graph.
@@ -153,10 +147,9 @@ func (h *Helper) Handler() http.Handler {
 	return h.handler
 }
 
-// Setup constructs the production runtime graph through the module-root
-// composition path with memory configuration, captured logs, and disposable
-// memory capabilities. Environment variables never influence the test
-// configuration.
+// Setup builds the production graph through the module root with in-memory
+// configuration and infrastructure and captured logs. Environment variables
+// are ignored.
 func Setup(tb testing.TB, options ...Option) *Helper {
 	tb.Helper()
 
@@ -264,16 +257,14 @@ type testClusterLogger struct{}
 
 func (testClusterLogger) ErrorContext(context.Context, string, error) {}
 
-// LifecycleStore is the lifecycle-only persistence seam for ordinary unit
-// tests that never exercise durable model stores. Identity accessors return
-// non-nil panic-on-use contracts so focused constructors can validate the real
-// graph; capability tests must supply WithStore or a focused consumer-owned
-// fake.
+// LifecycleStore is the default persistence for tests that never touch
+// stored data. Most accessors return non-nil stores that panic on use, so
+// constructors still validate; tests that need data use WithStore.
 type LifecycleStore struct {
 	closed atomic.Bool
 }
 
-// NewLifecycleStore constructs the lifecycle-only persistence stub.
+// NewLifecycleStore returns an open LifecycleStore.
 func NewLifecycleStore() *LifecycleStore {
 	return &LifecycleStore{}
 }
@@ -399,8 +390,7 @@ func (s *LifecycleStore) Installation() store.InstallationStore {
 	return lifecycleInstallationStore{}
 }
 func (s *LifecycleStore) ClusterDiscovery() store.ClusterDiscoveryStore {
-	// Composition always requests discovery while constructing the cluster
-	// transport. Local-mode unit tests only need a no-op implementation.
+	// Composition always asks for discovery; local-mode tests need a no-op.
 	return noopClusterDiscovery{}
 }
 func (s *LifecycleStore) ServingNodeLease() store.ServingNodeLeaseStore {
@@ -452,10 +442,8 @@ func (s *LifecycleStore) Closed() bool { return s.closed.Load() }
 
 var _ store.Store = (*LifecycleStore)(nil)
 
-// These non-nil lifecycle-only contracts intentionally panic if a capability
-// test invokes persistence without supplying WithStore. They allow the real
-// composition graph to validate focused service dependencies while keeping
-// lifecycle tests free of unrelated persistence behavior.
+// These embed a nil interface, so any call panics: a test that reaches
+// persistence without WithStore fails loudly.
 type lifecycleUserStore struct{ store.UserStore }
 type lifecycleOnboardingImportStore struct{ store.OnboardingImportStore }
 type lifecycleAccessPolicyStore struct{ store.AccessPolicyStore }

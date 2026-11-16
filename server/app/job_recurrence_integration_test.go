@@ -44,18 +44,6 @@ type recurrenceProposalResult struct {
 	err        error
 }
 
-type fixedRealtimeClock struct{ at time.Time }
-
-func (c fixedRealtimeClock) Now() time.Time { return c.at }
-func (fixedRealtimeClock) NewTimer(delay time.Duration) job.Timer {
-	return realtimeTimer{timer: time.NewTimer(delay)}
-}
-
-type realtimeTimer struct{ timer *time.Timer }
-
-func (t realtimeTimer) C() <-chan time.Time { return t.timer.C }
-func (t realtimeTimer) Stop() bool          { return t.timer.Stop() }
-
 func (p *signalingCleanupProposer) Propose(ctx context.Context, occurrence time.Time) error {
 	p.mu.Lock()
 	if p.remainingFail > 0 {
@@ -132,7 +120,7 @@ func newRecurrenceIntegrationEngine(t *testing.T, persistence *sqlstore.SQLStore
 		Store: persistence.Job(), Descriptors: []job.Descriptor{descriptor},
 		NodeID: nodeID, Diagnostics: newDiscardLogger(t),
 		Policy: job.Policy{PollInterval: 5 * time.Millisecond, ProposalRetryDelay: 5 * time.Millisecond},
-		Clock:  fixedRealtimeClock{at: occurrence}, Recurrences: []job.Recurrence{{Name: "job-history-cleanup", Proposer: proposer}},
+		Now:    func() time.Time { return occurrence }, Recurrences: []job.Recurrence{{Name: "job-history-cleanup", Proposer: proposer}},
 	})
 	require.NoError(t, err)
 	return engine

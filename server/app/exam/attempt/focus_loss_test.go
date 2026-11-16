@@ -90,14 +90,14 @@ func TestEvaluateFocusLossHashesCredentialAuditsSafeScopeAndPublishesCommittedWa
 	require.Equal(t, flagID, f.persistence.focusSignal.FlagID, "access")
 	require.True(t, f.persistence.focusSignal.FlagID.IsValid(), "access")
 	require.True(t, f.persistence.focusSignal.SuspensionID.IsValid(), "access")
-	capture := fmt.Sprintf("%#v", f.audit.values)
+	capture := fmt.Sprintf("%#v", f.audit().values)
 	for _, forbidden := range []string{credential, model.HashToken(credential), principal.SessionID.String(),
 		string(model.FocusLossSourceDocumentHidden), "2500"} {
 		require.NotContains(t, capture, forbidden, "Focus Loss audit exposed")
 	}
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
 	// and the write commits before its effect.
-	require.Equal(t, []string{"focus.resolve", "audit", "focus.record", "effects"}, f.order)
+	require.Equal(t, []string{"focus.resolve", "audit-begin:exam.sitting.participate", "focus.record", "effects"}, f.order)
 }
 
 func TestEvaluateFocusLossRetainsExplicitLateDiscrepancyAfterSubmission(t *testing.T) {
@@ -147,7 +147,7 @@ func TestEvaluateFocusLossRetainsExplicitLateDiscrepancyAfterSubmission(t *testi
 	require.Equal(t, int64(2100), f.persistence.lateFocusInput.DurationMilliseconds)
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
 	// and the write commits before its effect.
-	require.Equal(t, []string{"focus.resolve", "focus.late.resolve", "audit", "focus.late.record", "effects"}, f.order)
+	require.Equal(t, []string{"focus.resolve", "focus.late.resolve", "audit-begin:exam.sitting.participate", "focus.late.record", "effects"}, f.order)
 }
 
 func TestEvaluateFocusLossRejectsMissingOrUnknownClaimSchemaBeforePersistence(t *testing.T) {

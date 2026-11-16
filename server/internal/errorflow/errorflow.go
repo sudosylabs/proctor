@@ -5,27 +5,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package errorflow computes, for every function of a module, which
-// application error codes it can return. It exists for tests: httpapi checks
-// each route's declared error table against what its operation can return,
-// and the architecture tests prove the check on planted fixtures.
+// Package errorflow computes, from SSA and a VTA call graph, which
+// apperror.Code values each function of a module can return. It exists for
+// tests: httpapi checks each route's declared error table against it.
 //
-// Every code is a constant of type apperror.Code, so two sets are computed
-// from SSA and a VTA call graph:
-//
-//   - Possible over-approximates: every code constant in the function or
-//     anything it can call, and every code in a package-level table it reads.
-//     A declared code outside Possible can never be returned.
-//   - Definite under-approximates: codes minted by apperror.New or Invalid,
-//     or reported by a callee, whose error value flows to the function's
-//     return, plus the Unavailable code of a StoreTable.Translate or
-//     Concealment.Present whose result is returned. A Definite code that is
-//     not declared would reach the client as an internal error.
-//
-// The apperror API is modeled rather than analyzed: Concealment.Conceal and
-// Present (also when deferred), StoreTable.Translate, and the *Error
-// decorators. A Code parameter passed to New is substituted with the
-// constant each caller passes.
+// The apperror API (Concealment, StoreTable.Translate, the *Error decorators)
+// is modeled rather than analyzed, so a change there must be mirrored here.
 package errorflow
 
 import (
@@ -221,10 +206,14 @@ func (a *Analysis) closure(outer *ssa.Function, path []string) *ssa.Function {
 	return current
 }
 
-// Possible returns the codes fn can possibly return, sorted.
+// Possible returns, sorted, an over-approximation of the codes fn can return:
+// every code constant it or its callees mention, and every code in a
+// package-level table it reads. A declared code outside it is dead.
 func (a *Analysis) Possible(fn *ssa.Function) []string { return a.possible[fn].sorted() }
 
-// Definite returns the codes fn certainly can return, sorted.
+// Definite returns, sorted, an under-approximation: codes whose error value
+// provably flows to fn's return. An undeclared one would reach the client as
+// an internal error.
 func (a *Analysis) Definite(fn *ssa.Function) []string { return a.definite[fn].sorted() }
 
 func (a *Analysis) inModule(path string) bool {
@@ -677,7 +666,6 @@ func (a *Analysis) summarize(function *ssa.Function, functions map[*ssa.Function
 	return result
 }
 
-// callCodes returns the codes a call's result carries.
 func (a *Analysis) callCodes(
 	function *ssa.Function,
 	common *ssa.CallCommon,
@@ -789,7 +777,6 @@ func (a *Analysis) receiverField(receiver ssa.Value, field string) []string {
 	return nil
 }
 
-// present applies Concealment.Present or Conceal to codes.
 func (a *Analysis) present(codes codeSet, concealment ssa.Value, conceal bool) {
 	for _, code := range a.receiverField(concealment, "Unavailable") {
 		codes.add(code)

@@ -35,14 +35,15 @@ func TestEditDraftTextOwnsAuthorizationAuditPersistenceAndSafeEffect(t *testing.
 	require.Equal(t, "Distributed Systems", view.Draft.Title)
 	require.Equal(t, instructions, view.Draft.InstructionsMarkdown)
 	require.Equal(t, int64(2), view.Draft.Revision)
-	require.Equal(t, model.ActionExamManage, fixture.authorizer.action, "authorization/update")
+	require.Equal(t, []string{decided(model.ActionExamManage, fixture.examResource(), model.AuditStatusSuccess)}, fixture.decisions(), "authorization/update")
 	require.NotNil(t, fixture.persistence.textUpdate, "authorization/update")
 	require.NotNil(t, fixture.persistence.idempotency, "authorization/update")
 	require.Equal(t, "exam.draft.text.edit", fixture.persistence.idempotency.Operation, "authorization/update")
-	require.Nil(t, fixture.auditor.value["title"], "unsafe audit/scope/effect = %#v / %s:%s", fixture.auditor.value, fixture.auditor.scopeType, fixture.auditor.scopeID)
-	require.Nil(t, fixture.auditor.value["instructions_markdown"], "unsafe audit/scope/effect = %#v / %s:%s", fixture.auditor.value, fixture.auditor.scopeType, fixture.auditor.scopeID)
-	require.Equal(t, model.RoleScopeAcademicUnit, fixture.auditor.scopeType, "unsafe audit/scope/effect = %#v / %s:%s", fixture.auditor.value, fixture.auditor.scopeType, fixture.auditor.scopeID)
-	require.Equal(t, fixture.unitID.String(), fixture.auditor.scopeID, "unsafe audit/scope/effect = %#v / %s:%s", fixture.auditor.value, fixture.auditor.scopeType, fixture.auditor.scopeID)
+	value, attempt := fixture.attemptValue(t), fixture.onlyAttempt(t)
+	require.Nil(t, value["title"], "unsafe audit/scope/effect = %#v / %s:%s", value, attempt.ScopeType, attempt.ScopeID)
+	require.Nil(t, value["instructions_markdown"], "unsafe audit/scope/effect = %#v / %s:%s", value, attempt.ScopeType, attempt.ScopeID)
+	require.Equal(t, model.RoleScopeAcademicUnit, attempt.ScopeType, "unsafe audit/scope/effect = %#v / %s:%s", value, attempt.ScopeType, attempt.ScopeID)
+	require.Equal(t, fixture.unitID.String(), attempt.ScopeID, "unsafe audit/scope/effect = %#v / %s:%s", value, attempt.ScopeType, attempt.ScopeID)
 	// Contract: the committed edit publishes exactly one Draft update, at the
 	// committed revision.
 	require.Equal(t, []realtimetest.Call{draftUpdated(t, fixture.examID, 2)}, fixture.publisher.Calls())
@@ -50,7 +51,7 @@ func TestEditDraftTextOwnsAuthorizationAuditPersistenceAndSafeEffect(t *testing.
 		fmt.Sprintf(`{"exam_id":%q,"expected_draft_revision":1,"title":"Distributed Systems","instructions_markdown":"Use **Go** and submit all files."}`, fixture.examID))
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
-	require.Equal(t, []string{"store.access", "membership", "authorize", "store.get", "audit.begin", "store.update_text", "effect.updated"}, *fixture.order)
+	require.Equal(t, []string{"store.access", "membership", "grants", "decision:exam.manage:success", "store.get", "audit-begin:exam.manage", "store.update_text", "effect.updated"}, *fixture.order)
 }
 
 func TestEditDraftTextNoChangeSkipsAuditPersistenceAndEffect(t *testing.T) {
@@ -67,7 +68,7 @@ func TestEditDraftTextNoChangeSkipsAuditPersistenceAndEffect(t *testing.T) {
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.draft.no_changes", fault.Code())
 	// A no-op edit is authorized but never audited, persisted, or published.
-	require.Nil(t, fixture.auditor.value, "no-op edit was audited")
+	require.Empty(t, fixture.access.Audits.Attempts(), "no-op edit was audited")
 	require.Nil(t, fixture.persistence.textUpdate, "no-op edit was persisted")
 	require.Empty(t, fixture.publisher.Calls(), "no-op edit was published")
 }
@@ -98,10 +99,10 @@ func TestEditDraftTextRejectsArchivedAndStaleDraftsWithoutPublishing(t *testing.
 			var fault *apperror.Error
 			require.ErrorAs(t, err, &fault)
 			require.Equal(t, test.want, fault.Code())
-			require.NotNil(t, fixture.auditor.value, "rejected update effects: audit")
+			require.NotNil(t, fixture.attemptValue(t), "rejected update effects: audit")
 			require.NotNil(t, fixture.persistence.textUpdate, "rejected update effects: audit")
 			require.Empty(t, fixture.publisher.Calls(), "rejected update effects: audit")
-			require.Equal(t, test.want, fixture.auditor.failedCode, "rejected update effects: audit")
+			require.Equal(t, test.want, fixture.failedCode(t), "rejected update effects: audit")
 		})
 	}
 }
@@ -120,10 +121,10 @@ func TestEditDraftTextArchivedNoOpStillRejectsAsArchived(t *testing.T) {
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.archived", fault.Code())
-	require.NotNil(t, fixture.auditor.value, "archived no-op effects: audit")
+	require.NotNil(t, fixture.attemptValue(t), "archived no-op effects: audit")
 	require.NotNil(t, fixture.persistence.textUpdate, "archived no-op effects: audit")
 	require.Empty(t, fixture.publisher.Calls(), "archived no-op effects: audit")
-	require.Equal(t, "exam.archived", fixture.auditor.failedCode, "archived no-op effects: audit")
+	require.Equal(t, "exam.archived", fixture.failedCode(t), "archived no-op effects: audit")
 }
 
 func TestEditDraftTextReplayDoesNotRepublish(t *testing.T) {
@@ -150,10 +151,10 @@ func TestEditDraftTextUsesExplicitOverrideWithoutManagerMembership(t *testing.T)
 		IdempotencyKey: "test-key",
 	})
 	require.NoError(t, err)
-	require.Equal(t, model.ActionExamManageOverride, fixture.authorizer.action, "override action/update")
+	require.Equal(t, []string{decided(model.ActionExamManageOverride, fixture.examResource(), model.AuditStatusSuccess)}, fixture.decisions(), "override action/update")
 	require.NotNil(t, fixture.persistence.textUpdate, "override action/update")
 	require.True(t, fixture.persistence.textUpdate.ManagerOverride, "override action/update")
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect. No membership is consulted for an override.
-	require.Equal(t, []string{"store.access", "authorize", "store.get", "audit.begin", "store.update_text", "effect.updated"}, *fixture.order)
+	require.Equal(t, []string{"store.access", "grants", "decision:exam.manage.override:success", "store.get", "audit-begin:exam.manage.override", "store.update_text", "effect.updated"}, *fixture.order)
 }

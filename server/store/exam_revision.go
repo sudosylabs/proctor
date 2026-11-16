@@ -15,13 +15,13 @@ import (
 )
 
 type ExamRevisionPublication struct {
-	// InstitutionOrigin is installation configuration supplied by the application, never request data.
+	// InstitutionOrigin comes from installation configuration, never from the
+	// request.
 	InstitutionOrigin string
-	// ExecutionEnabled is installation configuration: whether Exams may
-	// publish with an execution environment. Publishing a Draft whose
-	// execution policy is enabled while it is false conflicts with
-	// execution_disabled; an enabled policy must also name a usable
-	// environment profile (environment_profile_unusable).
+	// ExecutionEnabled comes from installation configuration. When false, a
+	// draft with execution enabled conflicts with execution_disabled; an
+	// enabled policy must also name a usable profile
+	// (environment_profile_unusable).
 	ExecutionEnabled      bool
 	RevisionID            model.ExamRevisionID
 	ExamID                model.ExamID
@@ -41,9 +41,9 @@ type ExamRevisionPublicationResult struct {
 	Replayed      bool
 }
 
-// ExamRevisionSummary is the bounded public-authoring projection. It excludes
-// instructions, canonical policy bytes, resource metadata, Starter Workspace
-// paths and every opaque content identity.
+// ExamRevisionSummary is the revision view authoring callers may see. It
+// excludes instructions, policy bytes, resource metadata, starter workspace
+// paths and every content identity.
 type ExamRevisionSummary struct {
 	ID                      model.ExamRevisionID
 	ExamID                  model.ExamID
@@ -65,11 +65,8 @@ type ExamRevisionSummary struct {
 	Kind                    model.ExamRevisionPublicationKind
 }
 
-// ConsistentWith reports whether the summary is the Exam Revision that was
-// asked for, belongs to the given Exam, and carries a title.
-//
-// It is part of the Store contract: the conformance suite asserts it on
-// every real result.
+// ConsistentWith reports whether the summary is the revision asked for, of
+// the given exam, with a title.
 func (s *ExamRevisionSummary) ConsistentWith(revisionID model.ExamRevisionID, examID model.ExamID) bool {
 	return !(s == nil ||
 		s.ID != revisionID ||
@@ -84,14 +81,13 @@ type ExamRevisionListOptions struct {
 	Limit            int
 }
 
-// ExamRevisionStore owns immutable publication. Publish resolves a committed
-// command before every stale/archive/no-change decision. Otherwise one
-// transaction locks Exam and Draft, rechecks current manager authority,
-// materializes and validates all active resources and Starter Workspace state,
-// canonically freezes them, writes immutable history, selects the new default,
-// rebases and advances the Draft, advances Exam revision, completes audit and
-// records the small idempotent outcome. GetSnapshot is an internal exact
-// read; public callers use GetSummary/List and receive no authored content.
+// ExamRevisionStore publishes immutable exam revisions. Publish resolves a
+// replay before any stale, archived or no-change decision; otherwise one
+// transaction locks the exam and draft, rechecks manager authority, validates
+// and freezes the resources and starter workspace, writes the revision, makes
+// it the default, rebases the draft and completes the audit. GetSnapshot is
+// internal; public callers use GetSummary and List, which carry no authored
+// content.
 type ExamRevisionStore interface {
 	Publish(context.Context, *ExamRevisionPublication, *CommandIdempotency) (*ExamRevisionPublicationResult, error)
 	GetSummary(context.Context, model.ExamID, model.ExamRevisionID) (*ExamRevisionSummary, error)

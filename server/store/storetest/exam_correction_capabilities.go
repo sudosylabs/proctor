@@ -160,7 +160,7 @@ func testCorrectionPublicationWorkspaceRace(t *testing.T, ss store.Store) {
 		requireConflictConstraint(t, outcome.err, "exam_correction_acknowledgement_required")
 	}
 	// Once publication returns, both a new write and an exact previously
-	// accepted replay must see the current Workspace gate.
+	// accepted replay must see the current workspace gate.
 	write.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
 	_, err := ss.ExamAttemptWorkspace().ApplyBatch(ctx, write, writeKey)
 	requireConflictConstraint(t, err, "exam_correction_acknowledgement_required")

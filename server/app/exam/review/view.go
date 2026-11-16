@@ -36,8 +36,8 @@ type ListDiscrepanciesQuery struct {
 	Limit              int
 }
 
-// GetExamIntegrityReview returns the Submission Review snapshot of a
-// Submission to a caller authorized to view it.
+// GetExamIntegrityReview returns a submission's review snapshot to a caller
+// allowed to view it.
 func (s *Service) GetExamIntegrityReview(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -62,8 +62,7 @@ func (s *Service) GetExamIntegrityReview(
 	return cloneSnapshot(snapshot), nil
 }
 
-// ListExamIntegrityFlags returns one page of a Submission's Integrity Flags
-// to a caller authorized to view its Submission Review.
+// ListExamIntegrityFlags returns one page of a submission's integrity flags.
 func (s *Service) ListExamIntegrityFlags(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -100,9 +99,8 @@ func (s *Service) ListExamIntegrityFlags(
 	return clone, nil
 }
 
-// ListExamIntegrityEvidence returns one page of Integrity Evidence for one
-// Integrity Flag of a Submission to a caller authorized to view its
-// Submission Review.
+// ListExamIntegrityEvidence returns one page of evidence for one integrity
+// flag of a submission.
 func (s *Service) ListExamIntegrityEvidence(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -143,8 +141,8 @@ func (s *Service) ListExamIntegrityEvidence(
 	return clone, nil
 }
 
-// ListExamIntegrityDiscrepancies returns one page of a Submission's integrity
-// discrepancies to a caller authorized to view its Submission Review.
+// ListExamIntegrityDiscrepancies returns one page of a submission's
+// integrity discrepancies.
 func (s *Service) ListExamIntegrityDiscrepancies(
 	ctx context.Context,
 	inv invocation.Invocation,

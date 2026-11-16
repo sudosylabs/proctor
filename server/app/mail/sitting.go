@@ -19,14 +19,14 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// FanoutBundleSealingPurpose binds a sealed Sitting bundle to its mail
+// FanoutBundleSealingPurpose binds a sealed sitting bundle to its mail
 // occurrence, so a bundle copied onto another fan-out fails to open.
 const (
 	FanoutBundleSealingPurpose = "mail.fanout_bundle"
 )
 
-// SittingScheduleDetails are the Sitting facts a schedule message shows.
-// Prepare fills a zero StartsAt and EndsAt from the Sitting itself.
+// SittingScheduleDetails are the sitting facts a schedule message shows.
+// Prepare fills a zero StartsAt and EndsAt from the sitting itself.
 type SittingScheduleDetails struct {
 	ExamTitle             string
 	ClassDisplayName      string
@@ -37,43 +37,32 @@ type SittingScheduleDetails struct {
 
 func (SittingScheduleDetails) mailPresentation() {}
 
-// SittingRenderer is a Renderer that also reports its default and supported
-// locales, so a bundle can be frozen in every locale before recipients are
-// known.
-type SittingRenderer interface {
-	Renderer
-	SittingLocales() (string, []string)
-}
-
-// FrozenSittingBundle freezes every supported locale for one template
-// release. Expansion selects a recipient locale without consulting mutable
-// runtime assets.
+// FrozenSittingBundle holds every supported locale for one template release,
+// so expansion picks a recipient locale without consulting mutable assets.
 type FrozenSittingBundle struct {
 	From          Address                                            `json:"from"`
 	DefaultLocale string                                             `json:"default_locale"`
 	Messages      map[string]map[model.MailTemplateKey]FrozenContent `json:"messages"`
 }
 
-// SittingComposerDependencies are the collaborators of SittingComposer;
-// NewSittingComposer validates them once and SittingComposer keeps them in deps.
+// SittingComposerDependencies are the collaborators of SittingComposer,
+// validated once by NewSittingComposer.
 type SittingComposerDependencies struct {
-	Renderer SittingRenderer
+	Renderer *TemplateRenderer
 	Sender   Sender
 	Sealer   *secretseal.Sealer
 	Now      func() time.Time
-	// Institution returns the current institution display name for message
-	// copy. It is optional.
+	// Institution is optional.
 	Institution func() string
 }
 
-// SittingComposer prepares the fan-out for a Sitting schedule change and later
-// expands its sealed bundle into per-recipient deliveries.
+// SittingComposer prepares the fan-out for a sitting schedule change and
+// later expands its sealed bundle into per-recipient deliveries.
 type SittingComposer struct {
 	deps SittingComposerDependencies
 }
 
-// NewSittingComposer validates deps once and constructs the Sitting mail
-// fan-out composer.
+// NewSittingComposer refuses invalid deps.
 func NewSittingComposer(deps SittingComposerDependencies) (*SittingComposer, error) {
 	if deps.Renderer == nil || deps.Sender == nil || deps.Now == nil || deps.Sender.Enabled() && deps.Sealer == nil {
 		return nil, errors.New("sitting mail composer dependencies are invalid")
@@ -81,12 +70,10 @@ func NewSittingComposer(deps SittingComposerDependencies) (*SittingComposer, err
 	return &SittingComposer{deps: deps}, nil
 }
 
-// Prepare builds the mail fan-out for one Sitting schedule change: the mail
-// occurrence, the Job that later expands it into per-recipient deliveries, and
-// a sealed bundle of every Sitting schedule template rendered in every
-// supported locale. It selects no recipients. When mail sending is disabled
-// the fan-out has no bundle and its expansion Job already has cancellation
-// requested.
+// Prepare builds the fan-out for one schedule change: the occurrence, the job
+// that later expands it, and a sealed bundle of every schedule template in
+// every supported locale. It selects no recipients. When sending is disabled
+// the fan-out has no bundle and its job already has cancellation requested.
 func (p *SittingComposer) Prepare(
 	actorID model.UserID,
 	sitting *model.ExamSitting,
@@ -240,7 +227,7 @@ func (p *SittingComposer) Prepare(
 	return prepared, nil
 }
 
-// OpenBundle opens and validates one sealed Sitting fan-out bundle.
+// OpenBundle opens and validates one sealed sitting fan-out bundle.
 func (p *SittingComposer) OpenBundle(bundle *model.MailFanoutBundle) (FrozenSittingBundle, error) {
 	var result FrozenSittingBundle
 	if p == nil || p.deps.Sealer == nil || bundle == nil || bundle.Validate() != nil {
@@ -260,17 +247,15 @@ func (p *SittingComposer) OpenBundle(bundle *model.MailFanoutBundle) (FrozenSitt
 	return result, nil
 }
 
-// ErrSittingMailRecipientInvalid reports that one recipient's own account
-// cannot be addressed, so retrying the same recipient cannot succeed. Fan-out
-// skips that recipient rather than stopping mail to everyone after it.
+// ErrSittingMailRecipientInvalid reports that a recipient's own account
+// cannot be addressed, so retrying cannot succeed. Fan-out skips that
+// recipient rather than stopping mail to everyone after it.
 var ErrSittingMailRecipientInvalid = errors.New("sitting mail recipient is invalid")
 
-// PrepareRecipient builds the queued delivery and its delivery Job for one
-// recipient of a Sitting mail fan-out. It takes the bundle content for key in
-// the recipient's locale, falling back to the base language and then the
-// default locale, and dates the delivery at the occurrence's creation time
-// with the fan-out's deadline. It returns ErrSittingMailRecipientInvalid when
-// the recipient's account cannot be addressed.
+// PrepareRecipient builds one recipient's queued delivery and its job. It
+// takes the bundle content in the recipient's locale, falling back to the
+// base language and then the default locale, and dates the delivery at the
+// occurrence's creation with the fan-out's deadline.
 func (p *SittingComposer) PrepareRecipient(
 	fanout *store.ExamSittingMailFanoutSnapshot,
 	recipient *model.User,

@@ -23,7 +23,7 @@ type WorkspaceJournalQuery struct {
 	Limit       int
 }
 
-// WorkspaceJournalPage is one page of journal entries up to CurrentCursor.
+// WorkspaceJournalPage is one page of entries up to CurrentCursor.
 // RefreshRequired tells the client to reload the manifest instead of applying
 // entries.
 type WorkspaceJournalPage struct {
@@ -34,10 +34,9 @@ type WorkspaceJournalPage struct {
 	RefreshRequired bool
 }
 
-// ListCandidateExamWorkspaceJournal returns the Attempt Workspace journal
-// entries strictly after AfterCursor, in contiguous cursor order. When
-// RefreshRequired is set the page carries no entries and the client must
-// reload the manifest.
+// ListCandidateExamWorkspaceJournal returns entries strictly after
+// AfterCursor in contiguous cursor order. When RefreshRequired is set the page
+// carries no entries.
 func (s *Service) ListCandidateExamWorkspaceJournal(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -52,8 +51,6 @@ func (s *Service) ListCandidateExamWorkspaceJournal(
 	return s.listWorkspaceJournal(ctx, candidateAccess, query.AfterCursor, query.Limit)
 }
 
-// listWorkspaceJournal reads journal entries through a candidate's or an
-// environment's read access.
 func (s *Service) listWorkspaceJournal(
 	ctx context.Context,
 	readAccess store.ExamAttemptWorkspaceReadAccess,

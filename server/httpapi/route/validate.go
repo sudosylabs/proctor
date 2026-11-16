@@ -16,12 +16,10 @@ import (
 	"strings"
 )
 
-// validProtocolName is the kebab-case name a protocol or upgrade route carries.
 var validProtocolName = regexp.MustCompile(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)
 
-// The one Upgrade endpoint the catalog admits is the WebSocket handshake: a
-// resource with this name declaring this protocol name at this path, as a GET
-// that requires a Session.
+// The WebSocket handshake is the one JSON upgrade the catalog admits: this
+// resource, protocol name and path, as a GET that requires a session.
 const (
 	WebSocketResourceName = "websocket"
 	WebSocketProtocolName = "websocket-upgrade"
@@ -34,7 +32,7 @@ const BinarySocketProtocolSuffix = "-socket"
 
 // reservedUpgrade reports whether an upgrade endpoint is one the catalog
 // admits: the WebSocket handshake, or a binary socket. Both are a GET that
-// requires a Session.
+// requires a session.
 func reservedUpgrade(apiPrefix, resourceName string, route Endpoint, path string) bool {
 	if route.Auth != AuthSessionRequired || route.Method != http.MethodGet {
 		return false
@@ -151,9 +149,8 @@ func validateCatalog(apiPrefix string, resources []Resource) error {
 	return nil
 }
 
-// validateDeclaredKernelCodes rejects resource error tables that repeat a code
-// the kernel already adds for the route's authentication requirement and
-// method, so each table states only what its operation can return.
+// validateDeclaredKernelCodes keeps each error table to what its operation
+// can return.
 func validateDeclaredKernelCodes(resources []Resource) error {
 	var problems []string
 	for _, resource := range resources {

@@ -26,7 +26,7 @@ import (
 
 // SQLMailStore implements store.MailStore over mail_deliveries,
 // mail_occurrences and mail_payload_keys; queuing a delivery also enqueues its
-// Job.
+// job.
 type SQLMailStore struct{ *SQLStore }
 
 type mailDeliveryRow struct {
@@ -158,7 +158,7 @@ func requireMailPayloadPrimary(ctx context.Context, tx *sqlxTxWrapper, payloadKe
 }
 
 // insertPreparedMailJob persists either claimable mail work or the exact
-// terminal canceled Job paired with a disabled, ciphertext-free delivery.
+// terminal canceled job paired with a disabled, ciphertext-free delivery.
 func insertPreparedMailJob(ctx context.Context, executor sqlxExecutor, job *model.Job) error {
 	if job.Status == model.JobStatusQueued {
 		_, err := insertQueuedJob(ctx, executor, job, false)
@@ -338,7 +338,7 @@ func (s SQLMailStore) CountDeliveries(ctx context.Context, options store.MailDel
 }
 
 // mailDeliveryListConditions validates and builds every ListDeliveries filter
-// but the keyset: states, templates, recipient User, and the creation range. ListDeliveries
+// but the keyset: states, templates, recipient user, and the creation range. ListDeliveries
 // and CountDeliveries share it so a total always counts the listed rows.
 func mailDeliveryListConditions(options store.MailDeliveryListOptions) ([]string, []any, error) {
 	if len(options.States) > 6 ||
@@ -487,7 +487,7 @@ func startMailDelivery(ctx context.Context, tx *sqlxTxWrapper, input *store.Mail
 }
 
 // lockMailDeliveryStartRoute reads the delivery's immutable routing fields
-// and takes the token purpose, Invitation, Sitting and retention locks they
+// and takes the token purpose, invitation, sitting and retention locks they
 // call for.
 func lockMailDeliveryStartRoute(ctx context.Context, tx *sqlxTxWrapper, id model.MailDeliveryID) (mailDeliveryRouteFences, error) {
 	var start mailDeliveryRouteFences
@@ -564,7 +564,7 @@ func lockMailDeliveryStartRoute(ctx context.Context, tx *sqlxTxWrapper, id model
 }
 
 // suppressIrrelevantMailDeliveryStart suppresses the delivery as obsolete when
-// its retention notice, recovery token, Invitation or Sitting schedule is no
+// its retention notice, recovery token, invitation or sitting schedule is no
 // longer current, returning nil when the delivery may start.
 func suppressIrrelevantMailDeliveryStart(
 	ctx context.Context,
@@ -675,9 +675,9 @@ func recoveryTokenPurpose(key model.MailTemplateKey) (model.UserTokenPurpose, bo
 }
 
 // suppressInvitationCredentialMail terminates recoverable credential delivery
-// work while the caller still owns the transaction that made the Invitation
-// irrelevant. The Invitation mutation, ciphertext destruction, payload-key
-// reference decrement, and Job cancellation therefore commit atomically.
+// work while the caller still owns the transaction that made the invitation
+// irrelevant. The invitation mutation, ciphertext destruction, payload-key
+// reference decrement, and job cancellation therefore commit atomically.
 func suppressInvitationCredentialMail(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -830,10 +830,10 @@ func lockActiveInvitationMail(ctx context.Context, executor sqlxExecutor, invita
 	}
 
 	// Invitation acceptance takes these locks in the same order. Academic Unit
-	// hierarchy changes share the advisory lock, while Role updates/archival
+	// hierarchy changes share the advisory lock, while role updates/archival
 	// take an exclusive row lock. Holding the exact package lineage through the
 	// delivery transition prevents a credential from starting against a stale
-	// Unit or permission snapshot.
+	// unit or permission snapshot.
 	packageActive := true
 	if expectedPurpose == model.InvitationPurposeInstitutionRole {
 		if err := executor.Get(
@@ -1053,7 +1053,7 @@ func (s SQLMailStore) mutateOperatorDelivery(
 }
 
 // applyOperatorMailDeliveryTransition locks the delivery's purpose fences,
-// row, attempted audit and Job, applies the operator transition at
+// row, attempted audit and job, applies the operator transition at
 // PostgreSQL time, and completes the audit.
 func applyOperatorMailDeliveryTransition(
 	ctx context.Context,
@@ -1125,8 +1125,8 @@ func applyOperatorMailDeliveryTransition(
 }
 
 // lockOperatorMailDeliveryRoute reads the delivery's immutable routing fields
-// and takes the token purpose and Invitation locks they call for, plus the
-// Sitting fence for a retry.
+// and takes the token purpose and invitation locks they call for, plus the
+// sitting fence for a retry.
 func lockOperatorMailDeliveryRoute(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -1189,7 +1189,7 @@ func lockOperatorMailDeliveryRoute(
 }
 
 // requireRelevantOperatorMailDelivery rejects a retry whose recovery token,
-// Invitation or Sitting schedule is no longer current.
+// invitation or sitting schedule is no longer current.
 func requireRelevantOperatorMailDelivery(
 	ctx context.Context,
 	tx *sqlxTxWrapper,

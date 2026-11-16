@@ -14,19 +14,21 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// AcademicUnitCommandResult and AcademicPeriodCommandResult report whether a
-// named mutation executed or returned its previously committed outcome.
+// AcademicUnitCommandResult is a unit command's result; Replayed means an
+// earlier committed outcome was returned.
 type AcademicUnitCommandResult struct {
 	Value    *model.AcademicUnit
 	Replayed bool
 }
 
+// AcademicPeriodCommandResult is a period command's result; Replayed means an
+// earlier committed outcome was returned.
 type AcademicPeriodCommandResult struct {
 	Value    *model.AcademicPeriod
 	Replayed bool
 }
 
-// InstitutionStore persists the institution represented by this installation.
+// InstitutionStore persists the installation's one institution.
 type InstitutionStore interface {
 	Save(context.Context, *model.Institution) (*model.Institution, error)
 	Get(context.Context, model.InstitutionID) (*model.Institution, error)
@@ -41,8 +43,8 @@ type InstitutionUpdate struct {
 	AuditAt      time.Time
 }
 
-// AcademicUnitCreation is the complete durable input for creating an Academic
-// Unit and completing its already-persisted mutation audit in one transaction.
+// AcademicUnitCreation creates a unit and completes its recorded audit attempt
+// in one transaction.
 type AcademicUnitCreation struct {
 	Unit         *model.AcademicUnit
 	AuditEventID model.AuditEventID
@@ -56,7 +58,7 @@ type AcademicUnitUpdate struct {
 }
 
 type AcademicUnitArchive struct {
-	// ExpectedRevision is optional for compatibility; positive values fence stale callers.
+	// ExpectedRevision zero skips the revision fence.
 	ExpectedRevision int64
 	ID               model.AcademicUnitID
 	ArchiveAt        time.Time
@@ -64,12 +66,10 @@ type AcademicUnitArchive struct {
 	AuditAt          time.Time
 }
 
-// AcademicNameListOptions selects one page of an academic listing ordered by
-// name then identity. Term matches the name or display name as a literal,
-// case-insensitive substring; empty matches every row. AfterName and AfterID
-// are the exclusive continuation, both set or both empty. Limit is 1..201 so
-// the caller can probe one row past a full page. Descending reverses the
-// order; the continuation then moves toward smaller names.
+// AcademicNameListOptions pages a listing by name then ID. Term is a literal,
+// case-insensitive substring of the name or display name; empty matches all.
+// AfterName and AfterID are both set or both empty. Limit (1..201) includes
+// the one-row look-ahead.
 type AcademicNameListOptions struct {
 	Term       string
 	Descending bool
@@ -78,9 +78,8 @@ type AcademicNameListOptions struct {
 	Limit      int
 }
 
-// AcademicPeriodListOptions selects one page of Academic Periods ordered by
-// start, name, then identity, with the same Term, continuation, and Limit
-// rules as AcademicNameListOptions.
+// AcademicPeriodListOptions pages periods by start, name, then ID, with the
+// Term, continuation and Limit rules of AcademicNameListOptions.
 type AcademicPeriodListOptions struct {
 	Term         string
 	AfterStartAt time.Time
@@ -115,7 +114,7 @@ type ProgrammeUpdate struct {
 }
 
 type ProgrammeArchive struct {
-	// ExpectedRevision is optional for compatibility; positive values fence stale callers.
+	// ExpectedRevision zero skips the revision fence.
 	ExpectedRevision int64
 	ID               model.ProgrammeID
 	ArchiveAt        time.Time
@@ -132,11 +131,12 @@ type ProgrammeStore interface {
 	GetByName(context.Context, model.AcademicUnitID, string) (*model.Programme, error)
 	ListByAcademicUnit(context.Context, model.AcademicUnitID) ([]*model.Programme, error)
 	SearchByAcademicUnit(context.Context, model.AcademicUnitID, AcademicNameListOptions) ([]*model.Programme, error)
-	// CountByAcademicUnit counts the Programmes SearchByAcademicUnit would
-	// return across every page for the same Term, ignoring the continuation,
-	// order, and limit, and stops at maximum (see MaximumListCount).
+	// CountByAcademicUnit counts what SearchByAcademicUnit would return across
+	// every page, ignoring the continuation, order and limit, capped at
+	// maximum (see MaximumListCount).
 	CountByAcademicUnit(ctx context.Context, academicUnitID model.AcademicUnitID, options AcademicNameListOptions, maximum int) (int, error)
-	// SeedUpdate is an unaudited fixture write; production code never calls it.
+	// SeedUpdate is an unaudited test fixture write; production code never
+	// calls it.
 	SeedUpdate(context.Context, *model.Programme) (*model.Programme, error)
 }
 
@@ -153,7 +153,7 @@ type ProgrammeLevelUpdate struct {
 }
 
 type ProgrammeLevelArchive struct {
-	// ExpectedRevision is optional for compatibility; positive values fence stale callers.
+	// ExpectedRevision zero skips the revision fence.
 	ExpectedRevision int64
 	ID               model.ProgrammeLevelID
 	ArchiveAt        time.Time
@@ -170,16 +170,17 @@ type ProgrammeLevelStore interface {
 	GetByName(context.Context, model.ProgrammeID, string) (*model.ProgrammeLevel, error)
 	ListByProgramme(context.Context, model.ProgrammeID) ([]*model.ProgrammeLevel, error)
 	SearchByProgramme(context.Context, model.ProgrammeID, AcademicNameListOptions) ([]*model.ProgrammeLevel, error)
-	// CountByProgramme counts the Programme Levels SearchByProgramme would
-	// return across every page for the same Term, ignoring the continuation,
-	// order, and limit, and stops at maximum (see MaximumListCount).
+	// CountByProgramme counts what SearchByProgramme would return across
+	// every page, ignoring the continuation, order and limit, capped at
+	// maximum (see MaximumListCount).
 	CountByProgramme(ctx context.Context, programmeID model.ProgrammeID, options AcademicNameListOptions, maximum int) (int, error)
-	// SeedUpdate is an unaudited fixture write; production code never calls it.
+	// SeedUpdate is an unaudited test fixture write; production code never
+	// calls it.
 	SeedUpdate(context.Context, *model.ProgrammeLevel) (*model.ProgrammeLevel, error)
 }
 
-// AcademicPeriodVisibilityScope constrains list/search to institution-owned
-// periods plus unit-owned periods visible through authorized subtree roots.
+// AcademicPeriodVisibilityScope limits a listing to institution periods plus
+// the periods of units inside the authorized subtrees.
 type AcademicPeriodVisibilityScope struct {
 	InstitutionID       model.InstitutionID
 	InstitutionWide     bool
@@ -199,7 +200,7 @@ type AcademicPeriodUpdate struct {
 }
 
 type AcademicPeriodArchive struct {
-	// ExpectedRevision is optional for compatibility; positive values fence stale callers.
+	// ExpectedRevision zero skips the revision fence.
 	ExpectedRevision int64
 	ID               model.AcademicPeriodID
 	ArchiveAt        time.Time
@@ -207,8 +208,8 @@ type AcademicPeriodArchive struct {
 	AuditAt          time.Time
 }
 
-// AcademicPeriodStore persists institution- or Academic-Unit-owned enrollment
-// periods.
+// AcademicPeriodStore persists enrollment periods, owned by the institution or
+// by an academic unit.
 type AcademicPeriodStore interface {
 	Create(context.Context, *AcademicPeriodCreation) (*model.AcademicPeriod, error)
 	CreateIdempotently(context.Context, *AcademicPeriodCreation, *CommandIdempotency) (*AcademicPeriodCommandResult, error)
@@ -242,19 +243,17 @@ type ClassArchive struct {
 	AuditAt                time.Time
 }
 
-// ClassVisibilityScope is the persistence-ready class.view authority of a
-// cross-scope Class search: every Class Institution-wide, the Classes under
-// the named Academic Unit subtrees, and the named Classes.
+// ClassVisibilityScope is the caller's class.view authority: institution-wide,
+// the classes under AcademicUnitRootIDs, and ClassIDs.
 type ClassVisibilityScope struct {
 	InstitutionWide     bool
 	AcademicUnitRootIDs []model.AcademicUnitID
 	ClassIDs            []model.ClassID
 }
 
-// ClassSearchOptions selects up to Limit (1..201) unarchived Classes under
-// unarchived Programme Levels and Programmes whose name or display name
-// contains Term as a literal, case-insensitive substring, restricted to
-// Visibility and ordered by name then identity. An empty Visibility matches
+// ClassSearchOptions selects up to Limit (1..201) unarchived classes, under
+// unarchived levels and programmes, whose name or display name contains Term
+// (literal, case-insensitive), by name then ID. An empty Visibility matches
 // nothing.
 type ClassSearchOptions struct {
 	Term       string
@@ -262,7 +261,7 @@ type ClassSearchOptions struct {
 	Visibility ClassVisibilityScope
 }
 
-// ClassStore persists concrete programme-level rosters for academic periods.
+// ClassStore persists classes: one programme level's roster in one period.
 type ClassStore interface {
 	Create(context.Context, *ClassCreation) (*model.Class, error)
 	Update(context.Context, *ClassUpdate) (*model.Class, error)
@@ -272,10 +271,9 @@ type ClassStore interface {
 	ListByProgrammeLevel(context.Context, model.ProgrammeLevelID, AcademicNameListOptions) ([]*model.Class, error)
 	ListByAcademicPeriod(context.Context, model.AcademicPeriodID) ([]*model.Class, error)
 	SearchByAcademicUnit(context.Context, model.AcademicUnitID, AcademicNameListOptions) ([]*model.Class, error)
-	// CountByProgrammeLevel and CountByAcademicUnit count the Classes the
-	// matching listing would return across every page for the same Term,
-	// ignoring the continuation, order, and limit, and stop at maximum (see
-	// MaximumListCount).
+	// CountByProgrammeLevel and CountByAcademicUnit count what the matching
+	// listing would return across every page, ignoring the continuation, order
+	// and limit, capped at maximum (see MaximumListCount).
 	CountByProgrammeLevel(ctx context.Context, programmeLevelID model.ProgrammeLevelID, options AcademicNameListOptions, maximum int) (int, error)
 	CountByAcademicUnit(ctx context.Context, academicUnitID model.AcademicUnitID, options AcademicNameListOptions, maximum int) (int, error)
 	SearchVisible(context.Context, ClassSearchOptions) ([]*model.Class, error)

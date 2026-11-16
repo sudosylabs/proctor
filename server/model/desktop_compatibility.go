@@ -33,8 +33,8 @@ var (
 	validSHA256Fingerprint                        = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
-// DesktopPlatform is the closed platform vocabulary accepted from Proctor
-// Desktop. It is compatibility metadata and never proof of the running binary.
+// DesktopPlatform is the closed platform vocabulary Proctor Desktop reports. It
+// is compatibility metadata, never proof of the running binary.
 type DesktopPlatform string
 
 const (
@@ -51,8 +51,8 @@ const (
 	DesktopArchitectureX64   DesktopArchitecture = "x64"
 )
 
-// DesktopAvailability is the operator-controlled public availability state
-// used by Desktop ping and authorization admission.
+// DesktopAvailability is the operator-controlled availability that desktop
+// ping and authorization admission report.
 type DesktopAvailability string
 
 const (
@@ -64,8 +64,8 @@ func (a DesktopAvailability) IsValid() bool {
 	return a == DesktopAvailabilityReady || a == DesktopAvailabilityMaintenance
 }
 
-// DesktopCompatibilityPolicy is the Institution-owned revisioned policy that
-// can narrow the build catalog embedded in this server release.
+// DesktopCompatibilityPolicy is the institution's revisioned policy that can
+// narrow the build catalog embedded in this server release, never widen it.
 type DesktopCompatibilityPolicy struct {
 	InstitutionID          InstitutionID
 	Revision               int64
@@ -78,7 +78,7 @@ type DesktopCompatibilityPolicy struct {
 	UpdatedAt              time.Time
 }
 
-// DesktopCompatibilityPolicySettings is the complete replaceable policy.
+// DesktopCompatibilityPolicySettings is the whole replaceable policy.
 type DesktopCompatibilityPolicySettings struct {
 	MinimumDesktopRelease  string
 	RevokedDesktopBuildIDs []string
@@ -87,8 +87,8 @@ type DesktopCompatibilityPolicySettings struct {
 	RetryAt                OptionalTime
 }
 
-// NewInitialDesktopCompatibilityPolicy returns the non-narrowing policy
-// created atomically with the Institution during bootstrap.
+// NewInitialDesktopCompatibilityPolicy returns the policy that narrows nothing,
+// created with the institution during bootstrap.
 func NewInitialDesktopCompatibilityPolicy(institutionID InstitutionID, at time.Time) *DesktopCompatibilityPolicy {
 	at = TimeUTC(at)
 	return &DesktopCompatibilityPolicy{
@@ -101,7 +101,7 @@ func NewInitialDesktopCompatibilityPolicy(institutionID InstitutionID, at time.T
 	}
 }
 
-// Validate checks persisted policy state without normalizing malformed data.
+// Validate checks stored policy state without normalizing malformed data.
 func (p *DesktopCompatibilityPolicy) Validate() error {
 	if p == nil ||
 		!p.InstitutionID.IsValid() ||
@@ -116,7 +116,7 @@ func (p *DesktopCompatibilityPolicy) Validate() error {
 	return p.Settings().Validate()
 }
 
-// Settings returns a defensive copy of the complete replaceable policy.
+// Settings returns a copy that shares no slices with p.
 func (p *DesktopCompatibilityPolicy) Settings() DesktopCompatibilityPolicySettings {
 	if p == nil {
 		return DesktopCompatibilityPolicySettings{
@@ -133,8 +133,8 @@ func (p *DesktopCompatibilityPolicy) Settings() DesktopCompatibilityPolicySettin
 	}
 }
 
-// Validate checks policy input. Collections are canonical so fingerprints,
-// idempotency documents, and persistence do not depend on caller ordering.
+// Validate checks policy input. Collections must be canonical so fingerprints,
+// idempotency documents and storage do not depend on caller ordering.
 func (s DesktopCompatibilityPolicySettings) Validate() error {
 	if !s.Availability.IsValid() ||
 		(s.Availability == DesktopAvailabilityReady && s.RetryAt.Valid) ||
@@ -175,8 +175,8 @@ func (s DesktopCompatibilityPolicySettings) Validate() error {
 	return nil
 }
 
-// Replace applies a complete optimistic replacement. An exact no-op preserves
-// the current revision.
+// Replace applies a complete replacement fenced on the expected revision. An
+// exact no-op keeps the current revision.
 func (p *DesktopCompatibilityPolicy) Replace(
 	expectedRevision int64,
 	settings DesktopCompatibilityPolicySettings,
@@ -204,7 +204,7 @@ func (p *DesktopCompatibilityPolicy) Replace(
 	}
 
 	p.MinimumDesktopRelease = settings.MinimumDesktopRelease
-	// An empty set has one persisted/wire representation: an array, never null.
+	// An empty set is always stored and sent as an array, never null.
 	p.RevokedDesktopBuildIDs = append([]string{}, settings.RevokedDesktopBuildIDs...)
 	p.AdministratorMessage = settings.AdministratorMessage
 	p.Availability = settings.Availability
@@ -214,7 +214,7 @@ func (p *DesktopCompatibilityPolicy) Replace(
 	return p.Validate()
 }
 
-// Clone returns a defensive policy copy.
+// Clone returns a copy that shares no slices with p.
 func (p *DesktopCompatibilityPolicy) Clone() *DesktopCompatibilityPolicy {
 	if p == nil {
 		return nil
@@ -242,7 +242,7 @@ func (p *DesktopCompatibilityPolicy) Auditable() map[string]any {
 }
 
 // DesktopBuildTuple is one verified target and capability-matrix identity
-// embedded into a server release. It is not supplied by Institution policy.
+// embedded in a server release. Institution policy never supplies it.
 type DesktopBuildTuple struct {
 	DesktopRelease                          string
 	DesktopBuildID                          string
@@ -257,7 +257,7 @@ type DesktopBuildTuple struct {
 	NativeAgreement                         *DesktopNativeAgreement
 }
 
-// Validate checks one immutable build-catalog entry.
+// Validate checks one build-catalog entry.
 func (t DesktopBuildTuple) Validate() error {
 	if !IsValidDesktopRelease(t.DesktopRelease) ||
 		!IsValidDesktopBuildID(t.DesktopBuildID) ||
@@ -280,13 +280,13 @@ func (t DesktopBuildTuple) Validate() error {
 	return nil
 }
 
-// TargetTuple returns the exact packaged executable target identity.
+// TargetTuple returns the packaged executable's exact target identity.
 func (t DesktopBuildTuple) TargetTuple() string {
 	return t.DesktopTarget
 }
 
 // IsValidRegistryFingerprint recognizes the packaged FNV-1a registry selector.
-// It is not a cryptographic digest or proof of an admitted Desktop build.
+// It is not a cryptographic digest or proof of an admitted build.
 func IsValidRegistryFingerprint(value string) bool {
 	const prefix = "fnv1a64:"
 	if len(value) != len(prefix)+16 || !strings.HasPrefix(value, prefix) {
@@ -300,12 +300,12 @@ func IsValidRegistryFingerprint(value string) bool {
 	return true
 }
 
-// IsValid reports whether the platform is recognized by this protocol.
+// IsValid reports whether the platform is one this protocol knows.
 func (p DesktopPlatform) IsValid() bool {
 	return p == DesktopPlatformDarwin || p == DesktopPlatformWindows || p == DesktopPlatformLinux
 }
 
-// IsValid reports whether the architecture is recognized by this protocol.
+// IsValid reports whether the architecture is one this protocol knows.
 func (a DesktopArchitecture) IsValid() bool {
 	return a == DesktopArchitectureARM64 || a == DesktopArchitectureX64
 }
@@ -320,7 +320,8 @@ func IsValidDesktopRelease(value string) bool {
 	return valid
 }
 
-// CompareDesktopReleases compares two already-canonical Desktop releases.
+// CompareDesktopReleases compares two canonical releases like cmp.Compare; a
+// non-canonical input is an error.
 func CompareDesktopReleases(left, right string) (int, error) {
 	leftRelease, leftValid := parseDesktopRelease(left)
 	rightRelease, rightValid := parseDesktopRelease(right)

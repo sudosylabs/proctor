@@ -16,8 +16,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// AdministratorRecoveryCommand is the narrow module-root contract consumed by
-// the host CLI. Password must come from a private input channel, never argv.
+// AdministratorRecoveryCommand is what the host CLI passes in. Password must
+// come from a private input, never argv.
 type AdministratorRecoveryCommand struct {
 	InstitutionID    string
 	UserID           string
@@ -30,10 +30,9 @@ type AdministratorRecoveryResult struct {
 	PasswordRotated   bool
 }
 
-// RecoverAdministratorAccess constructs an inert server graph, invokes its
-// host-only recovery capability, and closes every acquired resource without
-// ever starting workers, listeners, or transports. It never migrates and
-// refuses a schema that differs from this build.
+// RecoverAdministratorAccess builds an inert node, runs the recovery and
+// closes it without starting workers, listeners or transports. It never
+// migrates and refuses a schema that differs from this build.
 func RecoverAdministratorAccess(
 	ctx context.Context,
 	configPath string,
@@ -53,8 +52,8 @@ func RecoverAdministratorAccess(
 	return node.RecoverAdministratorAccess(ctx, command)
 }
 
-// RecoverAdministratorAccess runs only while the constructed node remains
-// inert. Running the node permanently closes this host-only capability.
+// RecoverAdministratorAccess works only on an inert Server and is gone for
+// good once Run starts.
 func (s *Server) RecoverAdministratorAccess(
 	ctx context.Context,
 	command AdministratorRecoveryCommand,

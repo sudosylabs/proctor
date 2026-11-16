@@ -13,52 +13,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-type academicUnitAuthorizerFunc func(
-	context.Context,
-	invocation.Invocation,
-	model.Action,
-	model.Resource,
-) error
-
-type academicUnitAuthorizerStub struct {
-	Authorizer
-	authorize             academicUnitAuthorizerFunc
-	installation          func(context.Context) (model.Resource, error)
-	authorizeInstallation func(context.Context, invocation.Invocation, model.Action) (model.Resource, error)
-}
-
-func (s academicUnitAuthorizerStub) Authorize(
-	ctx context.Context,
-	inv invocation.Invocation,
-	action model.Action,
-	resource model.Resource,
-) error {
-	return s.authorize(ctx, inv, action, resource)
-}
-
-func (s academicUnitAuthorizerStub) InstitutionResource(
-	ctx context.Context,
-) (model.Resource, error) {
-	if s.installation != nil {
-		return s.installation(ctx)
-	}
-	panic("unexpected Installation")
-}
-
-func (s academicUnitAuthorizerStub) AuthorizeInstitution(
-	ctx context.Context,
-	inv invocation.Invocation,
-	action model.Action,
-) (model.Resource, error) {
-	return s.authorizeInstallation(ctx, inv, action)
-}
 
 type academicUnitReadStore struct {
 	store.AcademicUnitStore
@@ -94,20 +54,22 @@ func (s *academicUnitReadStore) Search(_ context.Context, _ model.InstitutionID,
 	return s.searchResults, s.err
 }
 
+// academicUnitAccess builds the real authorizer over the grants, knowing
+// the listed units as well as every unit a grant names.
+func academicUnitAccess(t *testing.T, events *[]string, units []*model.AcademicUnit, grants ...accesstest.Grant) *accesstest.Fixture {
+	t.Helper()
+	return accessWith(t, events, accesstest.Options{Grants: grants, Units: units})
+}
+
 func TestAcademicUnitGetDenialDoesNotReadPersistence(t *testing.T) {
 	t.Parallel()
 
+	unitID := model.NewAcademicUnitID()
+	_, caller := newCaller()
+	access := academicUnitAccess(t, nil, []*model.AcademicUnit{{ID: unitID, Name: "unit"}})
 	units := &academicUnitReadStore{}
-	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: units}, Authorizer: academicUnitAuthorizerStub{authorize: academicUnitAuthorizerFunc(func(
-		context.Context, invocation.Invocation, model.Action, model.Resource,
-	) error {
-		return apperror.New("authorization.denied")
-	})}})
-	_, err := service.GetAcademicUnit(
-		context.Background(),
-		invocation.New(model.Principal{}, model.RequestMetadata{}),
-		model.NewAcademicUnitID(),
-	)
+	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: units}, Authorizer: access.Authorizer, Auditor: access.Auditor})
+	_, err := service.GetAcademicUnit(context.Background(), caller, unitID)
 	require.True(t, apperror.Is(err, "authorization.denied"), "Get() error = %v, want authorization.denied", err)
 	require.Equal(t, 0, units.getCalls, "persistence reads after denial")
 }
@@ -115,69 +77,41 @@ func TestAcademicUnitGetDenialDoesNotReadPersistence(t *testing.T) {
 func TestAcademicUnitGetUsesUnitViewScope(t *testing.T) {
 	t.Parallel()
 
-	unit := &model.AcademicUnit{ID: model.AcademicUnitID(model.NewID()), InstitutionID: model.InstitutionID(model.NewID())}
+	principal, caller := newCaller()
+	unitID := model.NewAcademicUnitID()
+	access := academicUnitAccess(t, nil, nil, unitGrant(principal.UserID, unitID, model.ActionAcademicUnitView))
+	unit := &model.AcademicUnit{ID: unitID, InstitutionID: access.Institution.ID}
 	units := &academicUnitReadStore{unit: unit}
-	var gotAction model.Action
-	var gotResource model.Resource
-	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: units}, Authorizer: academicUnitAuthorizerStub{authorize: academicUnitAuthorizerFunc(func(
-		_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource,
-	) error {
-		gotAction, gotResource = action, resource
-		return nil
-	})}})
-	got, err := service.GetAcademicUnit(
-		context.Background(), invocation.Invocation{}, unit.ID,
-	)
+	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: units}, Authorizer: access.Authorizer, Auditor: access.Auditor})
+	got, err := service.GetAcademicUnit(context.Background(), caller, unit.ID)
 	require.NoError(t, err)
 	require.Same(t, unit, got, "Get()")
-	require.Equal(t, model.ActionAcademicUnitView, gotAction, "authorization")
-	require.Equal(t, model.Resource{Type: model.ResourceAcademicUnit, ID: unit.ID.String()}, gotResource, "authorization")
+	require.Equal(t, []string{"academic_unit.view academic_unit:" + unit.ID.String() + " success"}, decisions(access), "authorization")
 }
 
 func TestAcademicUnitRootListUsesInstitutionScopedAcademicUnitViewAndReturnsEmptyArray(t *testing.T) {
 	t.Parallel()
 
-	institution := &model.Institution{ID: model.InstitutionID(model.NewID())}
+	principal, caller := newCaller()
+	access := academicUnitAccess(t, nil, nil, institutionGrant(principal.UserID, model.ActionAcademicUnitView))
 	units := &academicUnitReadStore{}
-	var gotAction model.Action
-	var gotResource model.Resource
-	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: units}, Authorizer: academicUnitAuthorizerStub{
-		authorize: func(context.Context, invocation.Invocation, model.Action, model.Resource) error {
-			panic("unexpected Authorize")
-		},
-		authorizeInstallation: func(
-			_ context.Context, _ invocation.Invocation, action model.Action,
-		) (model.Resource, error) {
-			gotAction = action
-			gotResource = model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
-			return gotResource, nil
-		},
-	}})
-	got, err := service.ListAcademicUnits(context.Background(), invocation.Invocation{}, ListAcademicUnitsQuery{})
+	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: units}, Authorizer: access.Authorizer, Auditor: access.Auditor})
+	got, err := service.ListAcademicUnits(context.Background(), caller, ListAcademicUnitsQuery{})
 	require.NoError(t, err)
 	require.NotNil(t, got.Items, "List()")
 	require.Empty(t, got.Items, "List()")
-	require.Equal(t, model.ActionAcademicUnitView, gotAction, "authorization")
-	require.Equal(t, model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}, gotResource, "authorization")
+	require.Equal(t, []string{"academic_unit.view institution:" + access.Institution.ID.String() + " success"}, decisions(access), "authorization")
 }
 
 func TestAcademicUnitSearchNormalizesInput(t *testing.T) {
 	t.Parallel()
 
-	institution := &model.Institution{ID: model.InstitutionID(model.NewID())}
+	principal, caller := newCaller()
+	access := academicUnitAccess(t, nil, nil, institutionGrant(principal.UserID, model.ActionAcademicUnitView))
 	units := &academicUnitReadStore{}
-	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: units}, Authorizer: academicUnitAuthorizerStub{
-		authorize: func(context.Context, invocation.Invocation, model.Action, model.Resource) error {
-			panic("unexpected Authorize")
-		},
-		authorizeInstallation: func(
-			context.Context, invocation.Invocation, model.Action,
-		) (model.Resource, error) {
-			return model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}, nil
-		},
-	}})
+	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: units}, Authorizer: access.Authorizer, Auditor: access.Auditor})
 	got, err := service.SearchAcademicUnits(
-		context.Background(), invocation.Invocation{},
+		context.Background(), caller,
 		SearchAcademicUnitsQuery{Query: "  computing  "},
 	)
 	require.NoError(t, err)
@@ -189,18 +123,12 @@ func TestAcademicUnitSearchNormalizesInput(t *testing.T) {
 func TestAcademicUnitRootListDenialDoesNotReadQueryStore(t *testing.T) {
 	t.Parallel()
 
+	principal, caller := newCaller()
+	// A grant in one unit does not reach the Institution's root units.
+	access := academicUnitAccess(t, nil, nil, unitGrant(principal.UserID, model.NewAcademicUnitID(), model.ActionAcademicUnitView))
 	units := &academicUnitReadStore{}
-	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: units}, Authorizer: academicUnitAuthorizerStub{
-		authorize: func(context.Context, invocation.Invocation, model.Action, model.Resource) error {
-			panic("unexpected Authorize")
-		},
-		authorizeInstallation: func(
-			context.Context, invocation.Invocation, model.Action,
-		) (model.Resource, error) {
-			return model.Resource{}, apperror.New("authorization.denied")
-		},
-	}})
-	_, err := service.ListAcademicUnits(context.Background(), invocation.Invocation{}, ListAcademicUnitsQuery{})
+	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: units}, Authorizer: access.Authorizer, Auditor: access.Auditor})
+	_, err := service.ListAcademicUnits(context.Background(), caller, ListAcademicUnitsQuery{})
 	require.True(t, apperror.Is(err, "authorization.denied"), "List() error = %v, want authorization.denied", err)
 	require.Equal(t, 0, units.listCalls)
 }
@@ -208,18 +136,11 @@ func TestAcademicUnitRootListDenialDoesNotReadQueryStore(t *testing.T) {
 func TestAcademicUnitSearchDenialDoesNotReadQueryStore(t *testing.T) {
 	t.Parallel()
 
+	principal, caller := newCaller()
+	access := academicUnitAccess(t, nil, nil, unitGrant(principal.UserID, model.NewAcademicUnitID(), model.ActionAcademicUnitView))
 	units := &academicUnitReadStore{}
-	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: units}, Authorizer: academicUnitAuthorizerStub{
-		authorize: func(context.Context, invocation.Invocation, model.Action, model.Resource) error {
-			panic("unexpected Authorize")
-		},
-		authorizeInstallation: func(
-			context.Context, invocation.Invocation, model.Action,
-		) (model.Resource, error) {
-			return model.Resource{}, apperror.New("authorization.denied")
-		},
-	}})
-	_, err := service.SearchAcademicUnits(context.Background(), invocation.Invocation{}, SearchAcademicUnitsQuery{})
+	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: units}, Authorizer: access.Authorizer, Auditor: access.Auditor})
+	_, err := service.SearchAcademicUnits(context.Background(), caller, SearchAcademicUnitsQuery{})
 	require.True(t, apperror.Is(err, "authorization.denied"), "Search() error = %v, want authorization.denied", err)
 	require.Equal(t, 0, units.searchCalls)
 }

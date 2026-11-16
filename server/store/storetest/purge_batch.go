@@ -36,7 +36,7 @@ type PurgeBatchProbe[K comparable] struct {
 }
 
 // TestPurgeBatchProgress applies the same named batch contract to retained
-// Workspace objects and expired Examination Export artifacts on every adapter.
+// workspace objects and expired examination export artifacts on every adapter.
 func TestPurgeBatchProgress[K comparable](t *testing.T, probe PurgeBatchProbe[K]) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)

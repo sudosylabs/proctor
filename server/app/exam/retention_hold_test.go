@@ -30,7 +30,7 @@ func TestRecordsHoldReleaseRequiresStrongRecentProof(t *testing.T) {
 		{"fresh strong proof", true, true, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			f, records, persistence, _ := newRecordsFixture(t)
+			f, records, persistence := newRecordsFixture(t)
 			principal := f.inv.Principal()
 			principal.AuthenticationStrength = model.AuthenticationSingleFactor
 			if tc.strong {

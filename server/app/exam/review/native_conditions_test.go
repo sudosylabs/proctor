@@ -18,13 +18,15 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// nativeReviewAuthorizer is the Sitting area's view decision, which the real
+// SittingManagerAuthorizer asks once it has resolved the Submission.
 type nativeReviewAuthorizer struct {
-	Authorizer
+	SittingAuthorizer
 	err   error
 	calls int
 }
 
-func (a *nativeReviewAuthorizer) AuthorizeSubmissionView(context.Context, invocation.Invocation, model.SubmissionID) error {
+func (a *nativeReviewAuthorizer) AuthorizeSubmissionView(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) error {
 	a.calls++
 	return a.err
 }
@@ -41,9 +43,9 @@ func (s *nativeReviewStore) ListNativeConditions(context.Context, store.NativeCo
 func TestNativeConditionsRequireCurrentDetailedReviewAuthority(t *testing.T) {
 	f := newReviewFixture(t)
 	denied := errors.New("review denied")
-	auth := &nativeReviewAuthorizer{Authorizer: f.authorizer, err: denied}
+	auth := &nativeReviewAuthorizer{SittingAuthorizer: f.authorizer, err: denied}
 	p := &nativeReviewStore{ExamIntegrityReviewStore: f.persistence}
-	f.service.authorizer = auth
+	f.service.authorizer.Sittings = auth
 	f.service.reviews = p
 	query := store.NativeConditionListOptions{SubmissionID: f.submissionID, Limit: 100}
 	_, err := f.service.ListNativeConditions(context.Background(), f.inv, query)

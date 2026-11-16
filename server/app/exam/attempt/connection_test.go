@@ -49,16 +49,16 @@ func TestConnectDelegatesAtomicAdmissionAndPassesOnlyCredentialHash(t *testing.T
 	require.Equal(t, f.configuration.Digest, result.RuntimeCapabilities.AttemptConfiguration.Digest)
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
 	// and the write commits before its effect.
-	require.Equal(t, []string{"sitting", "audit", "connect", "effects"}, f.order)
+	require.Equal(t, []string{"sitting", "audit-begin:exam.sitting.participate", "connect", "effects"}, f.order)
 	require.NotContains(t, strings.ToLower(fmt.Sprintf("%#v", result.Participation)), "credential")
 	require.NotContains(t, fmt.Sprintf("%#v", result.Participation), credential)
 	require.NotContains(t, fmt.Sprintf("%#v", result.Participation), model.HashToken(credential))
-	require.Nil(t, f.audit.values["continuity_credential"])
-	require.Nil(t, f.audit.values["credential_hash"])
+	require.Nil(t, f.audit().values["continuity_credential"])
+	require.Nil(t, f.audit().values["credential_hash"])
 	wantIdempotency, prepareErr := prepareConnectIdempotency(f.inv, command)
 	require.NoError(t, prepareErr)
 	require.Equal(t, wantIdempotency, f.persistence.idempotency)
-	auditCapture := fmt.Sprintf("%#v", f.audit.values)
+	auditCapture := fmt.Sprintf("%#v", f.audit().values)
 	require.NotContains(t, auditCapture, credential)
 	require.NotContains(t, auditCapture, model.HashToken(credential))
 }
@@ -102,7 +102,7 @@ func TestConnectReplayAfterCorrectionAndPauseSuppressesTransientOpenEvent(t *tes
 	require.True(t, result.Replayed, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
 	require.Empty(t, f.publisher.Calls(), "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
 	// Contract (guardrail 8): the audit begins before the durable write.
-	require.Equal(t, []string{"sitting", "audit", "connect"}, f.order)
+	require.Equal(t, []string{"sitting", "audit-begin:exam.sitting.participate", "connect"}, f.order)
 }
 
 func TestReconnectThatOpensANewConnectionPublishesOneOpenEffect(t *testing.T) {
@@ -176,13 +176,13 @@ func TestConnectFailureCompletesAuditAndPublishesNoEffect(t *testing.T) {
 	f.persistence.connectErr = store.NewErrConflict("exam_sitting", "exam_sitting_state", nil)
 	_, err := f.service.ConnectExamAttempt(context.Background(), f.inv, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
 	var fault *apperror.Error
-	require.ErrorAs(t, err, &fault, "error=%v audit=%q effects=%#v order=%v", err, f.audit.failedCode, f.publisher.Calls(), f.order)
-	require.Equal(t, "exam.attempt.sitting_not_open", fault.Code(), "error=%v audit=%q effects=%#v order=%v", err, f.audit.failedCode, f.publisher.Calls(), f.order)
-	require.Equal(t, fault.Code(), f.audit.failedCode, "error=%v audit=%q effects=%#v order=%v", err, f.audit.failedCode, f.publisher.Calls(), f.order)
-	require.Empty(t, f.publisher.Calls(), "error=%v audit=%q effects=%#v order=%v", err, f.audit.failedCode, f.publisher.Calls(), f.order)
+	require.ErrorAs(t, err, &fault, "error=%v audit=%q effects=%#v order=%v", err, f.audit().failedCode, f.publisher.Calls(), f.order)
+	require.Equal(t, "exam.attempt.sitting_not_open", fault.Code(), "error=%v audit=%q effects=%#v order=%v", err, f.audit().failedCode, f.publisher.Calls(), f.order)
+	require.Equal(t, fault.Code(), f.audit().failedCode, "error=%v audit=%q effects=%#v order=%v", err, f.audit().failedCode, f.publisher.Calls(), f.order)
+	require.Empty(t, f.publisher.Calls(), "error=%v audit=%q effects=%#v order=%v", err, f.audit().failedCode, f.publisher.Calls(), f.order)
 	// Contract (guardrail 8): the audit begins before the durable write and
 	// records the rejected commit.
-	require.Equal(t, []string{"sitting", "audit", "connect", "audit.fail"}, f.order)
+	require.Equal(t, []string{"sitting", "audit-begin:exam.sitting.participate", "connect", "audit-fail"}, f.order)
 }
 
 func TestExpiredReplayReturnsCandidateSafeConnectionLoss(t *testing.T) {
@@ -212,7 +212,7 @@ func TestTrustedCloseCommitsBeforeManagerEffectAndSuppressesNoop(t *testing.T) {
 	require.True(t, closed.Changed, "closed=%#v error=%v order=%v", closed, err, f.order)
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
 	// and the write commits before its effect.
-	require.Equal(t, []string{"audit", "close", "effects"}, f.order)
+	require.Equal(t, []string{"audit-begin:exam.sitting.participate", "close", "effects"}, f.order)
 	f.order = nil
 	f.persistence.closeChanged = false
 	_, err = f.service.CloseExamAttemptConnection(context.Background(), f.inv, CloseConnectionCommand{

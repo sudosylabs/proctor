@@ -155,7 +155,11 @@ func TestLateRenewalUsesExactExpiryTransitionAndReturnsSafeConnectionLoss(t *tes
 	require.Equal(t, expiryCalls(t, expiryOf(f.persistence.expireResult), true), f.publisher.Calls(), "error=%v effects=%#v order=%v", err, f.publisher.Calls(), f.order)
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
 	// and the write commits before its effect.
-	require.Equal(t, []string{"renew", "expiry.resolve", "system.audit", "expiry.commit", "effects"}, f.order)
+	require.Equal(t, []string{"renew", "expiry.resolve", "audit-begin:exam.sitting.manage", "expiry.commit", "effects"}, f.order)
+	// The expiry is the system's own decision, so its attempt names no actor.
+	attempts := f.control.Audits.Attempts()
+	require.Len(t, attempts, 1)
+	require.Empty(t, attempts[0].ActorID, "the expiry audit names an actor")
 }
 
 func TestLateRenewalConcealsScannerWinningBeforeTargetResolution(t *testing.T) {
@@ -172,6 +176,6 @@ func TestLateRenewalConcealsScannerWinningBeforeTargetResolution(t *testing.T) {
 	require.Equal(t, "exam.attempt.connection_lost", fault.Code(), "error=%v effects=%#v order=%v", err, f.publisher.Calls(), f.order)
 	require.Empty(t, f.publisher.Calls(), "error=%v effects=%#v order=%v", err, f.publisher.Calls(), f.order)
 	// An already ended Participation is neither audited nor expired again.
-	require.Nil(t, f.systemAudit.values, "an ended Participation was audited")
+	require.Nil(t, f.systemAudit().values, "an ended Participation was audited")
 	require.Nil(t, f.persistence.expireInput, "an ended Participation was expired again")
 }

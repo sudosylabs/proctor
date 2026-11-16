@@ -36,9 +36,10 @@ func TestSaveDecisionAuthorizesAuditsAtomicallyAndSuppressesPrivateRationale(t *
 	require.False(t, f.persistence.decision.ManagerOverride, "authorization=%#v mutation=%#v", f.authorizer, f.persistence.decision)
 	require.Equal(t, f.userID, f.persistence.decision.ActorUserID, "authorization=%#v mutation=%#v", f.authorizer, f.persistence.decision)
 	require.NotEmpty(t, f.persistence.decision.AuditEventID, "authorization=%#v mutation=%#v", f.authorizer, f.persistence.decision)
+	audited := f.auditedValue(t)
 	for _, forbidden := range []string{"private_rationale", "manager_notes", "student_remarks_markdown"} {
-		_, exists := f.auditor.value[forbidden]
-		require.False(t, exists, "private field %q in audit %#v", forbidden, f.auditor.value)
+		_, exists := audited[forbidden]
+		require.False(t, exists, "private field %q in audit %#v", forbidden, audited)
 	}
 	wantIdempotency, prepareErr := prepareDecisionIdempotency(f.inv, SaveDecisionCommand{
 		SubmissionID: f.submissionID, FlagID: f.flagID, ExpectedReviewRevision: 0,

@@ -59,18 +59,18 @@ func TestEnvironmentBatchWritesAsTheCandidateThroughTheSameBatch(t *testing.T) {
 	require.Equal(t, wantIdempotency, f.workspace.idempotency)
 	require.Equal(t, f.userID, f.workspace.idempotency.UserID)
 	require.Equal(t, store.ExamAttemptWorkspaceBatchOperation, f.workspace.idempotency.Operation)
-	require.Equal(t, f.userID, f.systemAudit.actor, "audit names the candidate as actor")
-	require.Equal(t, model.ActionExamSittingParticipate, f.systemAudit.action)
-	require.Equal(t, model.Resource{Type: model.ResourceExamSitting, ID: f.sitting.ID.String()}, f.systemAudit.resource)
-	require.Equal(t, model.RoleScopeClass, f.systemAudit.scopeType)
-	require.Equal(t, f.sitting.ClassID.String(), f.systemAudit.scopeID)
-	require.Equal(t, store.ExamAttemptWorkspaceBatchOperation, f.systemAudit.operation)
-	require.Equal(t, map[string]any{"exam_attempt_id": f.attemptID.String(), "mutation_count": 1, "author_kind": "environment",
+	require.Equal(t, f.userID, f.systemAudit().actor, "audit names the candidate as actor")
+	require.Equal(t, model.ActionExamSittingParticipate, f.systemAudit().action)
+	require.Equal(t, model.Resource{Type: model.ResourceExamSitting, ID: f.sitting.ID.String()}, f.systemAudit().resource)
+	require.Equal(t, model.RoleScopeClass, f.systemAudit().scopeType)
+	require.Equal(t, f.sitting.ClassID.String(), f.systemAudit().scopeID)
+	require.Equal(t, store.ExamAttemptWorkspaceBatchOperation, f.systemAudit().operation)
+	require.Equal(t, map[string]any{"exam_attempt_id": f.attemptID.String(), "mutation_count": float64(1), "author_kind": "environment",
 		"author_ref":              model.NewEnvironmentWorkspaceAuthor(owner.Incarnation, "terminal:1").Ref,
-		"environment_lease_fence": owner.Fence, "system_task": "execution"}, f.systemAudit.values)
-	require.Nil(t, f.audit.values, "no Principal-bearing audit is begun for an environment")
+		"environment_lease_fence": float64(owner.Fence), "system_task": "execution"}, f.systemAudit().values)
+	require.Nil(t, f.audit().values, "no Principal-bearing audit is begun for an environment")
 	require.Equal(t, []string{"workspace.reserve", "content.next", "content.stage", "workspace.ready",
-		"system.audit.on_behalf", "workspace.apply", "effects"}, f.order)
+		"audit-begin:exam.sitting.participate", "workspace.apply", "effects"}, f.order)
 
 	require.Equal(t, workspaceID, result.WorkspaceID)
 	require.Equal(t, f.userID, result.CandidateUserID)
@@ -143,7 +143,7 @@ func TestEnvironmentBatchMapsAStaleOwnerToAClosedConnection(t *testing.T) {
 		Owner: environmentOwnerFixture(f), Resources: environmentResourcesFixture, Mutations: []WorkspaceBatchMutation{createDirectory("src")},
 		IdempotencyKey: "harvest"})
 	requireBatchFault(t, err, "exam.attempt.connection_closed", "", "")
-	require.Nil(t, f.systemAudit.values, "a refused writer begins no audit")
+	require.Nil(t, f.systemAudit().values, "a refused writer begins no audit")
 }
 
 func TestEnvironmentReadsUseTheOwnerAsReadAccess(t *testing.T) {

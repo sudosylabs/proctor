@@ -128,20 +128,20 @@ func TestWorkspaceBatchRevalidatesMutationAccessAuditsAndPublishesSafeChange(t *
 	require.Equal(t, workspaceChangedCalls(t, result), f.publisher.Calls())
 	requireEventDataOmits(t, f.publisher.Calls(), "src", f.workspace.proposedEntryID.String())
 
-	require.Equal(t, store.ExamAttemptWorkspaceBatchOperation, f.audit.operation)
-	require.Equal(t, model.ActionExamSittingParticipate, f.audit.action)
-	require.Equal(t, model.Resource{Type: model.ResourceExamSitting, ID: f.sitting.ID.String()}, f.audit.resource)
-	require.Equal(t, model.RoleScopeClass, f.audit.scopeType)
-	require.Equal(t, f.sitting.ClassID.String(), f.audit.scopeID)
-	require.Equal(t, map[string]any{"exam_attempt_id": f.attemptID.String(), "mutation_count": 1, "author_kind": "candidate",
-		"author_ref": f.connectionID.String()}, f.audit.values)
-	auditCapture := fmt.Sprintf("%#v", f.audit.values)
+	require.Equal(t, store.ExamAttemptWorkspaceBatchOperation, f.audit().operation)
+	require.Equal(t, model.ActionExamSittingParticipate, f.audit().action)
+	require.Equal(t, model.Resource{Type: model.ResourceExamSitting, ID: f.sitting.ID.String()}, f.audit().resource)
+	require.Equal(t, model.RoleScopeClass, f.audit().scopeType)
+	require.Equal(t, f.sitting.ClassID.String(), f.audit().scopeID)
+	require.Equal(t, map[string]any{"exam_attempt_id": f.attemptID.String(), "mutation_count": float64(1), "author_kind": "candidate",
+		"author_ref": f.connectionID.String()}, f.audit().values)
+	auditCapture := fmt.Sprintf("%#v", f.audit().values)
 	require.NotContains(t, auditCapture, credential)
 	require.NotContains(t, auditCapture, model.HashToken(credential))
 	require.NotContains(t, auditCapture, participationID.String())
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
 	// and the write commits before its effect.
-	require.Equal(t, []string{"workspace.reserve", "audit", "workspace.apply", "effects"}, f.order)
+	require.Equal(t, []string{"workspace.reserve", "audit-begin:exam.sitting.participate", "workspace.apply", "effects"}, f.order)
 	wantIdempotency, prepareErr := prepareWorkspaceBatchIdempotency(f.userID, model.AttemptWorkspaceAuthorCandidate, "test-key", f.attemptID, mutations, nil)
 	require.NoError(t, prepareErr)
 	require.Equal(t, wantIdempotency, f.workspace.idempotency)
@@ -178,7 +178,7 @@ func TestWorkspaceBatchCreateFileStagesBeforeAtomicApplyAndSuppressesPrivateEffe
 	require.Equal(t, f.workspace.proposedVersion, result.Changes[0].ContentVersion)
 	require.Equal(t, workspaceChangedCalls(t, result), f.publisher.Calls())
 	require.Empty(t, f.workspace.reclaimable, "a consumed object is not reclaimed")
-	capture := fmt.Sprintf("%#v", f.audit.values)
+	capture := fmt.Sprintf("%#v", f.audit().values)
 	require.NotContains(t, capture, "main.go")
 	require.NotContains(t, capture, checksum)
 	require.NotContains(t, capture, credential)
@@ -186,7 +186,7 @@ func TestWorkspaceBatchCreateFileStagesBeforeAtomicApplyAndSuppressesPrivateEffe
 	// Contract: bytes are staged only inside a reserved object, the audit begins
 	// before the durable apply (guardrail 8), and the apply commits before its
 	// effect (guardrail 14).
-	require.Equal(t, []string{"workspace.reserve", "content.next", "content.stage", "workspace.ready", "audit", "workspace.apply", "effects"}, f.order)
+	require.Equal(t, []string{"workspace.reserve", "content.next", "content.stage", "workspace.ready", "audit-begin:exam.sitting.participate", "workspace.apply", "effects"}, f.order)
 	want, prepareErr := prepareWorkspaceBatchIdempotency(f.userID, model.AttemptWorkspaceAuthorCandidate, "test-key", f.attemptID, mutations, nil)
 	require.NoError(t, prepareErr)
 	require.Equal(t, want, f.workspace.idempotency)
@@ -280,7 +280,7 @@ func TestWorkspaceBatchReclamationDistinguishesStableAndUnknownApplyOutcomes(t *
 			f.content.attemptContent = &model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: 1, SHA256: checksum}
 			_, err := applyBatch(f, batchContent(f, "x", "y"), nil, createFile("work.txt", checksum, 1), createFile("more.txt", checksum, 1))
 			requireBatchFault(t, err, test.wantCode, "", test.wantItem)
-			require.Equal(t, test.wantCode, f.audit.failedCode, "the begun audit records the failure")
+			require.Equal(t, test.wantCode, f.audit().failedCode, "the begun audit records the failure")
 			require.Empty(t, f.publisher.Calls())
 			if test.wantReclaim {
 				require.ElementsMatch(t, f.workspace.reservedObjectIDs(), f.workspace.reclaimable)
@@ -355,7 +355,7 @@ func TestWorkspaceBatchStreamsEveryFileInOrderThroughOneReservation(t *testing.T
 		"content.next", "content.stage",
 		"content.next", "content.stage",
 		"content.next", "content.stage",
-		"workspace.ready", "audit", "workspace.apply", "effects",
+		"workspace.ready", "audit-begin:exam.sitting.participate", "workspace.apply", "effects",
 	}, f.order, "every body is staged in batch order between one reservation and one readiness")
 
 	require.Len(t, f.workspace.reservations, 1, "every object is reserved in one call")
@@ -396,7 +396,7 @@ func TestWorkspaceBatchStreamsEveryFileInOrderThroughOneReservation(t *testing.T
 	require.Contains(t, string(calls[0].Event.Data), `"first_workspace_cursor":21`)
 	require.Contains(t, string(calls[0].Event.Data), `"workspace_cursor":25`)
 	requireEventDataOmits(t, calls, "src", "notes", "docs", checksum)
-	require.Equal(t, 5, f.audit.values["mutation_count"])
+	require.EqualValues(t, 5, f.audit().values["mutation_count"])
 }
 
 func TestWorkspaceBatchWithoutFilesNeedsNoContentAndMarksNothingReady(t *testing.T) {
@@ -416,7 +416,7 @@ func TestWorkspaceBatchWithoutFilesNeedsNoContentAndMarksNothingReady(t *testing
 	require.Empty(t, f.workspace.reservations[0].ObjectIDs)
 	require.Empty(t, f.workspace.readied, "MarkObjectsReady is never called without files")
 	require.Zero(t, f.workspace.reclaimCalls)
-	require.Equal(t, []string{"workspace.reserve", "audit", "workspace.apply", "effects"}, f.order)
+	require.Equal(t, []string{"workspace.reserve", "audit-begin:exam.sitting.participate", "workspace.apply", "effects"}, f.order)
 }
 
 func TestWorkspaceBatchDigestMismatchNamesItemAndReclaimsEveryReservedObject(t *testing.T) {
@@ -495,9 +495,9 @@ func TestWorkspaceBatchStoreFailureNamesTheRefusingMutation(t *testing.T) {
 				WorkspaceBatchMutation{Operation: model.AttemptWorkspaceMutationMoveEntry, EntryID: model.NewAttemptWorkspaceEntryID(),
 					ExpectedPath: "old", DestinationPath: "a/new"})
 			requireBatchFault(t, err, test.wantCode, "", test.wantItem)
-			require.Equal(t, test.wantCode, f.audit.failedCode)
+			require.Equal(t, test.wantCode, f.audit().failedCode)
 			require.Empty(t, f.publisher.Calls())
-			require.Equal(t, []string{"workspace.reserve", "audit", "workspace.apply", "audit.fail"}, f.order)
+			require.Equal(t, []string{"workspace.reserve", "audit-begin:exam.sitting.participate", "workspace.apply", "audit-fail"}, f.order)
 		})
 	}
 }

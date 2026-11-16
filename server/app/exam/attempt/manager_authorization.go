@@ -19,8 +19,7 @@ import (
 
 // SittingAuthorizer is the current Exam Manager decision the Sitting area
 // makes for a Sitting or one of its Submissions. *sitting.Service satisfies
-// it; this package cannot import the Sitting area, and tests substitute a
-// fake.
+// it; the import policy keeps the Sitting area out of this package.
 type SittingAuthorizer interface {
 	AuthorizeSittingView(context.Context, invocation.Invocation, model.ExamSittingID) error
 	AuthorizeSittingManage(context.Context, invocation.Invocation, model.ExamSittingID) (access.ManagerAuthorization, error)
@@ -29,30 +28,14 @@ type SittingAuthorizer interface {
 	AuthorizeSubmissionReview(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) (access.ManagerAuthorization, error)
 }
 
-// DecisionRecorder durably records an authorization decision this package
-// makes without asking Access Control. *access.Auditor satisfies it and tests
-// substitute a recorder.
-type DecisionRecorder interface {
-	RecordAuthorizationDecision(
-		context.Context,
-		model.Principal,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		model.RequestMetadata,
-		bool,
-	) error
-}
-
-// SittingManagerAuthorizer is the ManagerAuthorizer the application runs. A
-// Sitting decision is the Sitting area's own. A Submission decision first
-// resolves the canonical Submission, because a caller names a Submission
-// without the Exam the Sitting area decides against.
+// SittingManagerAuthorizer is the manager authorization the Attempt use
+// cases ask. A Sitting decision is the Sitting area's own. A Submission
+// decision first resolves the canonical Submission, because a caller names a
+// Submission without the Exam the Sitting area decides against.
 type SittingManagerAuthorizer struct {
 	Sittings    SittingAuthorizer
 	Submissions store.ExamSubmissionStore
-	Audit       DecisionRecorder
+	Audit       *access.Auditor
 }
 
 // AuthorizeSittingView authorizes a manager's read of a Sitting's Attempts.

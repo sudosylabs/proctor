@@ -9,6 +9,7 @@ package review
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
@@ -24,14 +26,22 @@ import (
 )
 
 type reviewFixture struct {
-	service      *Service
-	inv          invocation.Invocation
-	persistence  *reviewStoreFake
-	authorizer   *reviewAuthorizerFake
-	auditor      *reviewAuditorFake
-	publisher    *realtimetest.Publisher
-	mail         *reviewMailFake
-	userID       model.UserID
+	service     *Service
+	inv         invocation.Invocation
+	persistence *reviewStoreFake
+	// authorizer stands in for the Sitting area's Exam Manager decisions;
+	// the real SittingManagerAuthorizer asks it after resolving the
+	// Submission.
+	authorizer *reviewSittingDecisionsFake
+	// control is the real auditor, which records the mutation attempts and
+	// any self-denial.
+	control   *accesstest.Fixture
+	publisher *realtimetest.Publisher
+	mail      *reviewMailFake
+	userID    model.UserID
+	// candidateID made the Submission; the caller is another User, so the
+	// real authorizer does not deny them as its candidate.
+	candidateID  model.UserID
 	submissionID model.SubmissionID
 	reviewID     model.SubmissionReviewID
 	flagID       model.IntegrityFlagID
@@ -41,15 +51,17 @@ type reviewFixture struct {
 
 func newReviewFixture(t *testing.T) *reviewFixture {
 	t.Helper()
-	f := &reviewFixture{userID: model.NewUserID(), submissionID: model.NewSubmissionID(), reviewID: model.NewSubmissionReviewID(),
+	f := &reviewFixture{userID: model.NewUserID(), candidateID: model.NewUserID(), submissionID: model.NewSubmissionID(), reviewID: model.NewSubmissionReviewID(),
 		flagID: model.NewIntegrityFlagID(), attemptID: model.NewExamAttemptID(), at: time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)}
 	f.persistence = &reviewStoreFake{f: f}
-	f.authorizer = &reviewAuthorizerFake{}
-	f.auditor = &reviewAuditorFake{}
+	f.authorizer = &reviewSittingDecisionsFake{}
+	f.control = accesstest.New(t, accesstest.Options{})
 	f.publisher = &realtimetest.Publisher{}
 	f.mail = &reviewMailFake{f: f}
-	service, err := New(Dependencies{Persistence: f.persistence, Authorizer: f.authorizer, Auditor: f.auditor,
-		Publisher: f.publisher, Mail: f.mail, Now: func() time.Time { return f.at },
+	service, err := New(Dependencies{Persistence: f.persistence,
+		Authorizer: SittingManagerAuthorizer{Reviews: f.persistence, Sittings: f.authorizer, Audit: f.control.Auditor},
+		Auditor:    f.control.Auditor,
+		Publisher:  f.publisher, Mail: f.mail, Now: func() time.Time { return f.at },
 		NewReviewID: model.NewSubmissionReviewID, NewDecisionID: model.NewIntegrityReviewDecisionID})
 	require.NoError(t, err)
 	f.service = service
@@ -79,7 +91,7 @@ func (f *reviewStoreFake) PrepareRelease(ctx context.Context, input *store.ExamI
 }
 
 func (f *reviewStoreFake) Resolve(context.Context, model.SubmissionID) (*store.ExamIntegrityReviewAuthorization, error) {
-	return &store.ExamIntegrityReviewAuthorization{SubmissionID: f.f.submissionID, ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), AttemptID: f.f.attemptID, CandidateUserID: f.f.userID, AcademicUnitID: model.NewAcademicUnitID()}, nil
+	return &store.ExamIntegrityReviewAuthorization{SubmissionID: f.f.submissionID, ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), AttemptID: f.f.attemptID, CandidateUserID: f.f.candidateID, AcademicUnitID: model.NewAcademicUnitID()}, nil
 }
 func (f *reviewStoreFake) Get(context.Context, model.SubmissionID) (*store.ExamSubmissionReviewSnapshot, error) {
 	return nil, errors.New("unused")
@@ -135,38 +147,37 @@ func mustReviewAuthorization(fake *reviewStoreFake) *store.ExamIntegrityReviewAu
 	return authorization
 }
 
-type reviewAuthorizerFake struct {
+// reviewSittingDecisionsFake is the Sitting area's decision for one
+// Submission, which this package reaches only through SittingAuthorizer.
+type reviewSittingDecisionsFake struct {
 	reviewSubmission model.SubmissionID
 	reviewCalls      int
 	releaseCalls     int
 }
 
-func (*reviewAuthorizerFake) AuthorizeSubmissionView(context.Context, invocation.Invocation, model.SubmissionID) error {
+func (*reviewSittingDecisionsFake) AuthorizeSubmissionView(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) error {
 	return nil
 }
-func (f *reviewAuthorizerFake) AuthorizeSubmissionReview(_ context.Context, _ invocation.Invocation, id model.SubmissionID) (access.ManagerAuthorization, error) {
+func (f *reviewSittingDecisionsFake) AuthorizeSubmissionReview(_ context.Context, _ invocation.Invocation, _ model.ExamID, id model.SubmissionID) (access.ManagerAuthorization, error) {
 	f.reviewSubmission, f.reviewCalls = id, f.reviewCalls+1
 	return access.ManagerAuthorization{}, nil
 }
-func (f *reviewAuthorizerFake) AuthorizeSubmissionRelease(_ context.Context, _ invocation.Invocation, _ model.SubmissionID) (access.ManagerAuthorization, error) {
+func (f *reviewSittingDecisionsFake) AuthorizeSubmissionRelease(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) (access.ManagerAuthorization, error) {
 	f.releaseCalls++
 	return access.ManagerAuthorization{}, nil
 }
 
-type reviewAuditorFake struct {
-	value      map[string]any
-	begun      int
-	failedCode string
-}
-
-func (f *reviewAuditorFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
-	f.value = attempt.Value
-	f.begun++
-	return model.NewAuditEventID(), nil
-}
-func (f *reviewAuditorFake) Fail(_ context.Context, _ model.AuditEventID, code string) error {
-	f.failedCode = code
-	return nil
+// auditedValue is the value of the one mutation attempt the real auditor
+// kept, as it was stored.
+func (f *reviewFixture) auditedValue(t *testing.T) map[string]any {
+	t.Helper()
+	attempts := f.control.Audits.Attempts()
+	require.Len(t, attempts, 1, "mutation attempts")
+	var parameters struct {
+		Value map[string]any `json:"value"`
+	}
+	require.NoError(t, json.Unmarshal(attempts[0].Parameters, &parameters))
+	return parameters.Value
 }
 
 // reviewFact is the bounded fact a Review event carries for result.

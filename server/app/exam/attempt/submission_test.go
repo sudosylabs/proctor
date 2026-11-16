@@ -73,12 +73,12 @@ func TestSubmitSealsExactAcknowledgedStateBeforePublishingEffects(t *testing.T) 
 	require.Equal(t, receiptCode, result.ReceiptCode, "the sealed receipt code reaches the candidate")
 	require.Equal(t, receiptCode, f.mail.request.ReceiptCode, "the receipt mail carries the proposed code")
 	require.Equal(t, submittedCalls(t, sealedSubmission(*f.submissions.sealResult, model.ExamSubmissionCandidateSubmitted), false), f.publisher.Calls(), "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
-	audit := fmt.Sprintf("%#v", f.audit.values)
+	audit := fmt.Sprintf("%#v", f.audit().values)
 	for _, private := range []string{credential, model.HashToken(credential), participationID.String()} {
 		require.NotContains(t, audit, private)
 	}
-	require.Len(t, f.audit.values, 1)
-	require.Equal(t, f.attemptID.String(), f.audit.values["exam_attempt_id"])
+	require.Len(t, f.audit().values, 1)
+	require.Equal(t, f.attemptID.String(), f.audit().values["exam_attempt_id"])
 	wantIdempotency, prepareErr := prepareSubmissionIdempotency(f.inv, "test-key", f.attemptID, revisionID, 11, 7)
 	require.NoError(t, prepareErr)
 	require.Equal(t, wantIdempotency, f.submissions.idempotency)
@@ -93,7 +93,7 @@ func TestSubmitSealsExactAcknowledgedStateBeforePublishingEffects(t *testing.T) 
 	require.True(t, model.TimeUTC(f.at).Equal(f.submissions.seal.AuditAt), "mail request=%#v seal=%#v", f.mail.request, f.submissions.seal)
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
 	// and the write commits before its effect.
-	require.Equal(t, []string{"submission.resolve", "audit", "submission.mail", "submission.seal", "effects"}, f.order)
+	require.Equal(t, []string{"submission.resolve", "audit-begin:exam.sitting.participate", "submission.mail", "submission.seal", "effects"}, f.order)
 }
 
 func TestSubmitReplayReturnsRetainedReceiptAndSuppressesEffects(t *testing.T) {
@@ -141,7 +141,7 @@ func TestManagedSubmissionNestedOwnershipMismatchIsConcealed(t *testing.T) {
 	require.True(t, apperror.Is(err, "resource.not_found"), "error=%v order=%v", err, f.order)
 	require.True(t, chainHasCode(err, "exam.attempt.not_found"), "error=%v order=%v", err, f.order)
 	// A concealed ownership mismatch never reads the Submission.
-	require.Equal(t, []string{"submission.authorize", "submission.resolve_owner"}, f.order)
+	require.Equal(t, []string{"submission.resolve_owner", "submission.authorize", "submission.resolve_owner"}, f.order)
 }
 
 func TestOpenSubmissionFileAuthorizesThenStreamsRetainedStarterBytes(t *testing.T) {
@@ -267,7 +267,7 @@ func TestGetSubmissionAuthorizesCanonicalResourceBeforeProtectedRead(t *testing.
 	require.Equal(t, submission.ID, got.Submission.ID, "got=%#v authorized", got)
 	require.Equal(t, submission.ID, f.submissionAuthorizationID, "got=%#v authorized", got)
 	// Contract: authorization precedes reading the Submission.
-	require.Equal(t, []string{"submission.authorize", "submission.resolve_owner", "submission.get"}, f.order)
+	require.Equal(t, []string{"submission.resolve_owner", "submission.authorize", "submission.resolve_owner", "submission.get"}, f.order)
 }
 
 func submissionFixture(t *testing.T, f *fixture, cursor int64) *model.ExamSubmission {

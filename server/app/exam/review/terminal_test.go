@@ -65,7 +65,7 @@ func TestFinalizeAndReleaseUseDistinctAuthorizationAndEffects(t *testing.T) {
 		"test-key", f.submissionID, f.reviewID, 3)
 	require.NoError(t, prepareErr)
 	require.Equal(t, wantRelease, f.persistence.idempotency)
-	require.Equal(t, f.userID, f.mail.request.CandidateUserID, "mail=%#v release", f.mail.request)
+	require.Equal(t, f.candidateID, f.mail.request.CandidateUserID, "mail=%#v release", f.mail.request)
 	require.Equal(t, f.reviewID, f.mail.request.ReviewID, "mail=%#v release", f.mail.request)
 	require.Equal(t, int64(3), f.mail.request.ExpectedReviewRevision, "mail=%#v release", f.mail.request)
 	require.True(t, f.mail.request.ReleasedAt.Equal(f.at.Add(time.Minute)), "mail=%#v release", f.mail.request)
@@ -86,10 +86,12 @@ func TestReleasePreparationFailureIsAuditedAsAttempt(t *testing.T) {
 	require.Equal(t, "exam.integrity_review.state_conflict", fault.Code())
 	// The release-time reservation is a durable write, so its attempt must be
 	// audited before it runs and completed as failed when it is refused.
-	require.Equal(t, 1, f.auditor.begun, "audit=%#v mail=%d release", f.auditor, f.mail.calls)
-	require.Equal(t, fault.Code(), f.auditor.failedCode, "audit=%#v mail=%d release", f.auditor, f.mail.calls)
-	require.Equal(t, 0, f.mail.calls, "audit=%#v mail=%d release", f.auditor, f.mail.calls)
-	require.Nil(t, f.persistence.release, "audit=%#v mail=%d release", f.auditor, f.mail.calls)
+	attempts := f.control.Audits.Attempts()
+	require.Len(t, attempts, 1, "audit=%#v mail=%d release", attempts, f.mail.calls)
+	require.Equal(t, model.AuditStatusFail, attempts[0].Status, "audit=%#v mail=%d release", attempts[0], f.mail.calls)
+	require.Equal(t, fault.Code(), attempts[0].ErrorCode, "audit=%#v mail=%d release", attempts[0], f.mail.calls)
+	require.Equal(t, 0, f.mail.calls, "audit=%#v mail=%d release", attempts, f.mail.calls)
+	require.Nil(t, f.persistence.release, "audit=%#v mail=%d release", attempts, f.mail.calls)
 }
 
 func TestReleaseReplayReturnsRetainedResultWithoutPreparingMail(t *testing.T) {

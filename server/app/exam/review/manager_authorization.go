@@ -26,16 +26,17 @@ type SittingAuthorizer interface {
 	AuthorizeSubmissionRelease(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) (access.ManagerAuthorization, error)
 }
 
-// SittingManagerAuthorizer is the Authorizer the application runs. Every
-// decision first resolves the canonical Submission, because a caller names a
-// Submission without the Exam the Sitting area decides against. The candidate
-// who made the Submission never reviews it: that denial is recorded at the
-// Submission's Academic Unit and concealed as not found, whatever Role the
-// candidate holds, before the current Exam Manager decision is asked.
+// SittingManagerAuthorizer is the Submission authorization the Integrity
+// review use cases ask. Every decision first resolves the canonical
+// Submission, because a caller names a Submission without the Exam the
+// Sitting area decides against. The candidate who made the Submission never
+// reviews it: that denial is recorded at the Submission's Academic Unit and
+// concealed as not found, whatever Role the candidate holds, before the
+// current Exam Manager decision is asked.
 type SittingManagerAuthorizer struct {
 	Reviews  store.ExamIntegrityReviewStore
 	Sittings SittingAuthorizer
-	Audit    access.DecisionAudit
+	Audit    *access.Auditor
 }
 
 // AuthorizeSubmissionView authorizes reading a Submission's flags, evidence

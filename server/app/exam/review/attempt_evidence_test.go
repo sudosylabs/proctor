@@ -44,11 +44,11 @@ func testAttemptEvidence(t *testing.T) model.AttemptEvidence {
 func TestAttemptEvidenceRequiresCurrentDetailedReviewAuthority(t *testing.T) {
 	f := newReviewFixture(t)
 	denied := errors.New("review denied")
-	auth := &nativeReviewAuthorizer{Authorizer: f.authorizer, err: denied}
+	auth := &nativeReviewAuthorizer{SittingAuthorizer: f.authorizer, err: denied}
 	record := testAttemptEvidence(t)
 	p := &capabilityReviewStore{ExamIntegrityReviewStore: f.persistence,
 		page: &store.AttemptEvidencePage{Items: []model.AttemptEvidence{record}}}
-	f.service.authorizer = auth
+	f.service.authorizer.Sittings = auth
 	f.service.reviews = p
 	query := store.AttemptEvidenceListOptions{SubmissionID: f.submissionID, Limit: 100}
 

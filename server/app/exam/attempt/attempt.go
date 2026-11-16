@@ -14,58 +14,10 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-// ManagerAuthorizer is the manager authorization the Attempt use cases ask.
-// SittingManagerAuthorizer satisfies it and tests substitute a fake.
-type ManagerAuthorizer interface {
-	AuthorizeSittingView(context.Context, invocation.Invocation, model.ExamSittingID) error
-	AuthorizeSittingManage(context.Context, invocation.Invocation, model.ExamSittingID) (access.ManagerAuthorization, error)
-	AuthorizeSubmissionView(context.Context, invocation.Invocation, model.SubmissionID) error
-	AuthorizeBrowserActivityView(context.Context, invocation.Invocation, model.ExamSittingID) (access.BrowserActivityAuthorization, error)
-	AuthorizeScreenClipView(
-		context.Context, invocation.Invocation, model.ExamSittingID, model.ExamAttemptID,
-	) (ScreenClipViewAuthorization, error)
-}
-
-// Auditor is the part of *access.Auditor the Attempt use cases call. Begin
-// and Fail bracket an audited mutation, Complete closes an audited read, and
-// PrepareAtScope builds the event a Store operation inserts with its change,
-// after RecordAuthorizationDecision has recorded the decision.
-type Auditor interface {
-	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
-	PrepareAtScope(
-		context.Context,
-		invocation.Invocation,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		string,
-		map[string]any,
-	) (*model.AuditEvent, error)
-	RecordAuthorizationDecision(context.Context, invocation.Invocation, model.Action, model.Resource, model.RoleScopeType, string, bool) error
-	Fail(context.Context, model.AuditEventID, string) error
-	Complete(context.Context, model.AuditEventID, map[string]any) error
-}
-
-// SystemAuditor creates audit attempts for trusted core work that has no
-// Principal. Begin is actor-less, for periodic continuity enforcement: a
-// runtime scanner must never manufacture a User Principal merely to persist
-// this system decision. BeginOnBehalf names the User whose work it is, for an
-// execution environment writing the candidate's Workspace on their behalf.
-// access.SystemAuditAdapter satisfies it and tests substitute a fake.
-type SystemAuditor interface {
-	Begin(context.Context, model.Action, model.Resource, model.RoleScopeType, string, string, map[string]any) (model.AuditEventID, error)
-	BeginOnBehalf(
-		context.Context, model.UserID, model.Action, model.Resource, model.RoleScopeType, string, string, map[string]any,
-	) (model.AuditEventID, error)
-	Fail(context.Context, model.AuditEventID, string) error
-}
 
 // Content opens and stages the bytes behind Exam Resources, Starter
 // Workspace objects and Attempt Workspace objects. The Store decides which
@@ -150,9 +102,8 @@ type Dependencies struct {
 	Workspace           store.ExamAttemptWorkspaceStore
 	Submissions         store.ExamSubmissionStore
 	Sittings            store.ExamSittingStore
-	Managers            ManagerAuthorizer
-	Auditor             Auditor
-	SystemAuditor       SystemAuditor
+	Managers            SittingManagerAuthorizer
+	Auditor             *access.Auditor
 	Publisher           realtime.Publisher
 	Content             Content
 	Mail                SubmissionMailPreparer
@@ -229,10 +180,16 @@ type Service struct {
 	workspaces        store.ExamAttemptWorkspaceStore
 	submissions       store.ExamSubmissionStore
 
-	sittings      store.ExamSittingStore
-	managers      ManagerAuthorizer
-	auditor       Auditor
-	systemAuditor SystemAuditor
+	sittings store.ExamSittingStore
+	managers SittingManagerAuthorizer
+	// auditor brackets each audited mutation and read a Principal makes,
+	// and builds the event a Store operation inserts with its change.
+	auditor access.MutationAuditAdapter
+	// systemAuditor audits trusted core work that has no Principal: periodic
+	// continuity enforcement records no actor, and an execution environment
+	// writing a candidate's Workspace names that candidate. Neither
+	// manufactures a User Principal.
+	systemAuditor access.SystemAuditAdapter
 	publisher     realtime.Publisher
 	content       Content
 	mail          SubmissionMailPreparer
@@ -278,9 +235,8 @@ func New(deps Dependencies) (*Service, error) {
 		deps.Workspace == nil ||
 		deps.Submissions == nil ||
 		deps.Sittings == nil ||
-		deps.Managers == nil ||
+		deps.Managers.Sittings == nil ||
 		deps.Auditor == nil ||
-		deps.SystemAuditor == nil ||
 		deps.Publisher == nil ||
 		deps.Content == nil ||
 		deps.Mail == nil ||
@@ -316,8 +272,8 @@ func New(deps Dependencies) (*Service, error) {
 		submissions:          deps.Submissions,
 		sittings:             deps.Sittings,
 		managers:             deps.Managers,
-		auditor:              deps.Auditor,
-		systemAuditor:        deps.SystemAuditor,
+		auditor:              deps.Auditor.MutationAudit(),
+		systemAuditor:        deps.Auditor.SystemAudit(),
 		publisher:            deps.Publisher,
 		content:              deps.Content,
 		mail:                 deps.Mail,

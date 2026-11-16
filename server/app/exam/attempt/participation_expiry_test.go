@@ -45,12 +45,13 @@ func TestScanExpiredParticipationsCommitsAuditedAggregateBeforeSafeEffect(t *tes
 	require.Equal(t, expiryCalls(t, expiryOf(f.persistence.expireResult), true), f.publisher.Calls(), "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.publisher.Calls())
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
 	// and the write commits before its effect.
-	require.Equal(t, []string{"expiry.list", "system.audit", "expiry.commit", "effects"}, f.order)
-	require.Nil(t, f.systemAudit.values["continuity_credential"])
-	require.Nil(t, f.systemAudit.values["credential_hash"])
-	require.Nil(t, f.systemAudit.values["private_reason"])
+	require.Equal(t, []string{"expiry.list", "audit-begin:exam.sitting.manage", "expiry.commit", "effects"}, f.order)
+	require.Empty(t, f.systemAudit().actor, "a periodic expiry names no actor")
+	require.Nil(t, f.systemAudit().values["continuity_credential"])
+	require.Nil(t, f.systemAudit().values["credential_hash"])
+	require.Nil(t, f.systemAudit().values["private_reason"])
 	for _, forbidden := range []string{"continuity_credential", "credential_hash", "private_reason"} {
-		require.NotContains(t, strings.ToLower(fmt.Sprintf("%#v", f.systemAudit.values)), forbidden, "expiry audit capture contains %q: %#v", forbidden, f.systemAudit.values)
+		require.NotContains(t, strings.ToLower(fmt.Sprintf("%#v", f.systemAudit().values)), forbidden, "expiry audit capture contains %q: %#v", forbidden, f.systemAudit().values)
 	}
 }
 
@@ -94,13 +95,13 @@ func TestScanExpiredParticipationsFailsAuditAndPublishesNothingOnCommitFailure(t
 	f.persistence.expireErr = store.NewErrConflict("attempt_participation", "attempt_participation_generation", nil)
 	_, err := f.service.ScanExpiredParticipations(context.Background(), expiryScanSystem, 10)
 	var fault *apperror.Error
-	require.ErrorAs(t, err, &fault, "error=%v audit=%#v effects=%#v order=%v", err, f.systemAudit, f.publisher.Calls(), f.order)
-	require.Equal(t, "exam.attempt.connection_closed", fault.Code(), "error=%v audit=%#v effects=%#v order=%v", err, f.systemAudit, f.publisher.Calls(), f.order)
-	require.Equal(t, fault.Code(), f.systemAudit.failedCode, "error=%v audit=%#v effects=%#v order=%v", err, f.systemAudit, f.publisher.Calls(), f.order)
-	require.Empty(t, f.publisher.Calls(), "error=%v audit=%#v effects=%#v order=%v", err, f.systemAudit, f.publisher.Calls(), f.order)
+	require.ErrorAs(t, err, &fault, "error=%v audit=%#v effects=%#v order=%v", err, f.systemAudit(), f.publisher.Calls(), f.order)
+	require.Equal(t, "exam.attempt.connection_closed", fault.Code(), "error=%v audit=%#v effects=%#v order=%v", err, f.systemAudit(), f.publisher.Calls(), f.order)
+	require.Equal(t, fault.Code(), f.systemAudit().failedCode, "error=%v audit=%#v effects=%#v order=%v", err, f.systemAudit(), f.publisher.Calls(), f.order)
+	require.Empty(t, f.publisher.Calls(), "error=%v audit=%#v effects=%#v order=%v", err, f.systemAudit(), f.publisher.Calls(), f.order)
 	// Contract (guardrail 8): the audit begins before the durable write and
 	// records the failed commit; no effect follows.
-	require.Equal(t, []string{"expiry.list", "system.audit", "expiry.commit", "system.audit.fail"}, f.order)
+	require.Equal(t, []string{"expiry.list", "audit-begin:exam.sitting.manage", "expiry.commit", "audit-fail"}, f.order)
 }
 
 func expiryDueFixture(f *fixture) store.ExamAttemptParticipationExpiryDue {

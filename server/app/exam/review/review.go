@@ -13,26 +13,10 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-// Authorizer is the Submission authorization the Integrity review use cases
-// ask. SittingManagerAuthorizer satisfies it and tests substitute a fake.
-type Authorizer interface {
-	AuthorizeSubmissionView(context.Context, invocation.Invocation, model.SubmissionID) error
-	AuthorizeSubmissionReview(context.Context, invocation.Invocation, model.SubmissionID) (access.ManagerAuthorization, error)
-	AuthorizeSubmissionRelease(context.Context, invocation.Invocation, model.SubmissionID) (access.ManagerAuthorization, error)
-}
-
-// Auditor records the attempt and failure of each audited Review mutation;
-// the Store completes the audit event with the change it commits.
-type Auditor interface {
-	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
-	Fail(context.Context, model.AuditEventID, string) error
-}
 
 // ResultReleaseMailPreparation is the safe identity of one result release;
 // the preparer resolves the recipient and what the notice shows.
@@ -64,8 +48,8 @@ type ResultReleaseMailPreparer interface {
 // the Service.
 type Dependencies struct {
 	Persistence   store.ExamIntegrityReviewStore
-	Authorizer    Authorizer
-	Auditor       Auditor
+	Authorizer    SittingManagerAuthorizer
+	Auditor       *access.Auditor
 	Publisher     realtime.Publisher
 	Mail          ResultReleaseMailPreparer
 	Now           func() time.Time
@@ -79,8 +63,10 @@ type Dependencies struct {
 type Service struct {
 	reviews store.ExamIntegrityReviewStore
 
-	authorizer    Authorizer
-	auditor       Auditor
+	authorizer SittingManagerAuthorizer
+	// auditor records the attempt and failure of each audited Review
+	// mutation; the Store completes the attempt with the change it commits.
+	auditor       access.MutationAuditAdapter
 	publisher     realtime.Publisher
 	mail          ResultReleaseMailPreparer
 	now           func() time.Time
@@ -91,7 +77,7 @@ type Service struct {
 // New builds the Service, or fails when a collaborator is missing.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Persistence == nil ||
-		deps.Authorizer == nil ||
+		deps.Authorizer.Sittings == nil ||
 		deps.Auditor == nil ||
 		deps.Publisher == nil ||
 		deps.Mail == nil ||
@@ -104,7 +90,7 @@ func New(deps Dependencies) (*Service, error) {
 	return &Service{
 		reviews:       deps.Persistence,
 		authorizer:    deps.Authorizer,
-		auditor:       deps.Auditor,
+		auditor:       deps.Auditor.MutationAudit(),
 		publisher:     deps.Publisher,
 		mail:          deps.Mail,
 		now:           deps.Now,

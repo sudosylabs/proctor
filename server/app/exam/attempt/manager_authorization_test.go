@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -29,7 +30,7 @@ func TestExamAttemptSubmissionAuthorizationResolvesCanonicalExamBeforeCurrentMan
 	sittings := &submissionAuthorizationSittingFake{}
 	adapter := SittingManagerAuthorizer{
 		Sittings: sittings,
-		Audit:    &submissionAuthorizationAuditFake{},
+		Audit:    accesstest.New(t, accesstest.Options{}).Auditor,
 		Submissions: &submissionAuthorizationStoreFake{authorization: &store.ExamSubmissionAuthorization{
 			SubmissionID: submissionID, ExamID: examID, SittingID: model.NewExamSittingID(),
 			AttemptID: model.NewExamAttemptID(), CandidateUserID: model.NewUserID(), AcademicUnitID: model.NewAcademicUnitID(),
@@ -43,26 +44,6 @@ func TestExamAttemptSubmissionAuthorizationResolvesCanonicalExamBeforeCurrentMan
 	require.Equal(t, principal.UserID, sittings.inv.Principal().UserID, "authorization call = exam")
 }
 
-type submissionAuthorizationAuditFake struct {
-	principal model.Principal
-	action    model.Action
-	resource  model.Resource
-	scopeType model.RoleScopeType
-	scopeID   string
-	metadata  model.RequestMetadata
-	allowed   bool
-	err       error
-}
-
-func (f *submissionAuthorizationAuditFake) RecordAuthorizationDecision(_ context.Context, principal model.Principal,
-	action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID string,
-	metadata model.RequestMetadata, allowed bool,
-) error {
-	f.principal, f.action, f.resource = principal, action, resource
-	f.scopeType, f.scopeID, f.metadata, f.allowed = scopeType, scopeID, metadata, allowed
-	return f.err
-}
-
 func TestExamAttemptSubmissionAuthorizationAuditsSelfDenialFailClosed(t *testing.T) {
 	t.Parallel()
 	principal := examAttemptPrincipal()
@@ -74,42 +55,46 @@ func TestExamAttemptSubmissionAuthorizationAuditsSelfDenialFailClosed(t *testing
 	metadata := model.RequestMetadata{RequestID: "self-submission-view"}
 	t.Run("records denial before concealment", func(t *testing.T) {
 		t.Parallel()
-		audit := &submissionAuthorizationAuditFake{}
+		audit := accesstest.New(t, accesstest.Options{})
 		adapter := SittingManagerAuthorizer{Sittings: &submissionAuthorizationSittingFake{},
-			Submissions: &submissionAuthorizationStoreFake{authorization: authorization}, Audit: audit}
+			Submissions: &submissionAuthorizationStoreFake{authorization: authorization}, Audit: audit.Auditor}
 		err := adapter.AuthorizeSubmissionView(context.Background(), invocation.New(principal, metadata), submissionID)
 		var fault *apperror.Error
 		require.ErrorAs(t, err, &fault, "AuthorizeSubmissionView() error")
 		require.Equal(t, "exam.attempt.not_found", fault.Code(), "AuthorizeSubmissionView() error")
-		require.Equal(t, principal.UserID, audit.principal.UserID)
-		require.Equal(t, model.ActionSubmissionView, audit.action)
-		require.Equal(t, model.Resource{Type: model.ResourceSubmission, ID: submissionID.String()}, audit.resource)
-		require.Equal(t, model.RoleScopeAcademicUnit, audit.scopeType)
-		require.Equal(t, unitID.String(), audit.scopeID)
-		require.Equal(t, metadata.RequestID, audit.metadata.RequestID)
-		require.False(t, audit.allowed)
+		decisions := audit.Audits.Decisions()
+		require.Len(t, decisions, 1, "recorded decisions")
+		require.Equal(t, principal.UserID, decisions[0].ActorID)
+		require.Equal(t, string(model.ActionSubmissionView), decisions[0].Action)
+		require.Equal(t, model.Resource{Type: model.ResourceSubmission, ID: submissionID.String()}, decisions[0].Resource)
+		require.Equal(t, model.RoleScopeAcademicUnit, decisions[0].ScopeType)
+		require.Equal(t, unitID.String(), decisions[0].ScopeID)
+		require.Equal(t, metadata.RequestID, decisions[0].RequestID)
+		require.Equal(t, model.AuditStatusFail, decisions[0].Status, "the decision is a denial")
 	})
 	t.Run("audit failure fails closed", func(t *testing.T) {
 		t.Parallel()
 		auditErr := errors.New("audit unavailable")
+		audit := accesstest.New(t, accesstest.Options{})
+		audit.Audits.FailDecisions(auditErr)
 		adapter := SittingManagerAuthorizer{Sittings: &submissionAuthorizationSittingFake{},
 			Submissions: &submissionAuthorizationStoreFake{authorization: authorization},
-			Audit:       &submissionAuthorizationAuditFake{err: auditErr}}
+			Audit:       audit.Auditor}
 		require.ErrorIs(t, adapter.AuthorizeSubmissionView(context.Background(), invocation.New(principal, metadata), submissionID), auditErr, "AuthorizeSubmissionView() error")
 	})
 	t.Run("projection of another Submission is refused before self-denial", func(t *testing.T) {
 		t.Parallel()
 		other := *authorization
 		other.SubmissionID = model.NewSubmissionID()
-		audit := &submissionAuthorizationAuditFake{}
+		audit := accesstest.New(t, accesstest.Options{})
 		sittings := &submissionAuthorizationSittingFake{}
 		adapter := SittingManagerAuthorizer{Sittings: sittings,
-			Submissions: &submissionAuthorizationStoreFake{authorization: &other}, Audit: audit}
+			Submissions: &submissionAuthorizationStoreFake{authorization: &other}, Audit: audit.Auditor}
 		err := adapter.AuthorizeSubmissionView(context.Background(), invocation.New(principal, metadata), submissionID)
 		var fault *apperror.Error
 		require.ErrorAs(t, err, &fault, "AuthorizeSubmissionView() error")
 		require.Equal(t, "exam.attempt.unavailable", fault.Code(), "AuthorizeSubmissionView() error")
-		require.Empty(t, audit.action, "a decision was recorded on another Submission's projection")
+		require.Empty(t, audit.Audits.Decisions(), "a decision was recorded on another Submission's projection")
 		require.True(t, sittings.submissionID.IsZero(), "the Manager decision was asked on another Submission's projection")
 	})
 }

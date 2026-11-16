@@ -9,6 +9,7 @@ package attempt
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/access/accesstest"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
@@ -81,7 +83,7 @@ func TestManagerAttemptOperationsAuthorizeBeforeReadingAttempts(t *testing.T) {
 				require.ErrorAs(t, err, &fault, "existing=%t error", existing)
 				codes = append(codes, fault.Code())
 				require.Equal(t, []string{operation.authorization}, f.order, "existing=%t denied caller reached Attempt state", existing)
-				require.Nil(t, f.audit.values, "existing=%t denied caller reached Attempt state: order=%v audit", existing, f.order)
+				require.Nil(t, f.audit().values, "existing=%t denied caller reached Attempt state: order=%v audit", existing, f.order)
 			}
 			require.Equal(t, codes[1], codes[0])
 			require.Equal(t, "resource.not_found", codes[0])
@@ -111,26 +113,29 @@ func TestContentSelectorsPreserveCandidateAccessErrors(t *testing.T) {
 }
 
 type fixture struct {
-	settler                   *settlerFake
-	service                   *Service
-	inv                       invocation.Invocation
-	userID                    model.UserID
-	attemptID                 model.ExamAttemptID
-	connectionID              model.AttemptConnectionID
-	at                        time.Time
-	sitting                   *model.ExamSitting
-	revision                  *model.ExamRevision
-	order                     []string
-	persistence               *attemptStoreFake
-	workspace                 *attemptWorkspaceStoreFake
-	submissions               *submissionStoreFake
-	mail                      *submissionMailFake
-	audit                     *auditFake
-	systemAudit               *systemAuditFake
+	t            testing.TB
+	settler      *settlerFake
+	service      *Service
+	inv          invocation.Invocation
+	userID       model.UserID
+	attemptID    model.ExamAttemptID
+	connectionID model.AttemptConnectionID
+	at           time.Time
+	sitting      *model.ExamSitting
+	revision     *model.ExamRevision
+	order        []string
+	persistence  *attemptStoreFake
+	workspace    *attemptWorkspaceStoreFake
+	submissions  *submissionStoreFake
+	mail         *submissionMailFake
+	// control is the real auditor. What it records joins order as
+	// "audit-begin:<action>", "audit-<status>" and
+	// "decision:<action>:<status>".
+	control                   *accesstest.Fixture
 	publisher                 *realtimetest.Publisher
 	content                   *contentFake
 	managerOverride           bool
-	clipViewer                *ScreenClipViewAuthorization
+	clipReviewer              bool
 	managerErr                error
 	focusSignalID             model.FocusLossSignalID
 	focusFlagID               model.IntegrityFlagID
@@ -144,7 +149,7 @@ type fixture struct {
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
-	f := &fixture{userID: model.NewUserID(), attemptID: model.NewExamAttemptID(), connectionID: model.NewAttemptConnectionID(),
+	f := &fixture{t: t, userID: model.NewUserID(), attemptID: model.NewExamAttemptID(), connectionID: model.NewAttemptConnectionID(),
 		at: time.Date(2026, time.August, 17, 9, 0, 0, 0, time.UTC), settler: &settlerFake{}}
 	f.sitting = &model.ExamSitting{ID: model.NewExamSittingID(), ExamID: model.NewExamID(), ExamRevisionID: model.NewExamRevisionID(),
 		ClassID: model.NewClassID(), State: model.ExamSittingOpen, ScheduledStartAt: f.at.Add(-time.Hour), ScheduledEndAt: f.at.Add(time.Hour),
@@ -158,8 +163,8 @@ func newFixture(t *testing.T) *fixture {
 	f.workspace = &attemptWorkspaceStoreFake{f: f}
 	f.submissions = &submissionStoreFake{f: f}
 	f.mail = &submissionMailFake{f: f}
-	f.audit = &auditFake{f: f}
-	f.systemAudit = &systemAuditFake{f: f}
+	f.control = accesstest.New(t, accesstest.Options{Now: func() time.Time { return f.at },
+		Observe: func(event string) { f.order = append(f.order, event) }})
 	f.publisher = publisherIn(&f.order)
 	f.content = &contentFake{f: f}
 	f.desktopBuild = model.DesktopBuildTuple{DesktopRelease: "1.0.0", DesktopBuildID: "attempt-test",
@@ -173,8 +178,9 @@ func newFixture(t *testing.T) *fixture {
 	require.NoError(t, configurationErr)
 	service, err := New(Dependencies{
 		Persistence: f.persistence, FocusLoss: f.persistence, SecurityPreflight: f.persistence, NativeDelivery: f.persistence,
-		BrowserDelivery: f.persistence, DeliveryBudget: f.persistence, Workspace: f.workspace, Submissions: f.submissions, Sittings: &sittingFake{f: f}, Managers: &managerFake{f: f},
-		Auditor: f.audit, SystemAuditor: f.systemAudit, Publisher: f.publisher, Content: f.content, Mail: f.mail,
+		BrowserDelivery: f.persistence, DeliveryBudget: f.persistence, Workspace: f.workspace, Submissions: f.submissions, Sittings: &sittingFake{f: f},
+		Managers: SittingManagerAuthorizer{Sittings: &managerFake{f: f}, Submissions: f.submissions, Audit: f.control.Auditor},
+		Auditor:  f.control.Auditor, Publisher: f.publisher, Content: f.content, Mail: f.mail,
 		DesktopBuilds: &desktopBuildResolverFake{f: f},
 		Now:           func() time.Time { return f.at }, NewAttemptID: model.NewExamAttemptID, NewWorkspaceID: model.NewExamAttemptWorkspaceID,
 		NewParticipation: model.NewAttemptParticipationID, NewConnection: model.NewAttemptConnectionID,
@@ -291,6 +297,11 @@ func (f *sittingFake) Resolve(context.Context, model.ExamSittingID) (*store.Exam
 	return &store.ExamSittingSnapshot{Sitting: f.f.sitting}, nil
 }
 
+// managerFake is the Sitting area's Exam Manager decision, which this
+// package reaches only through SittingAuthorizer. managerErr refuses the
+// Sitting and review decisions; clipReviewer refuses only the Sitting
+// management decision, so the caller sees an Attempt's clips as a reviewer
+// of its Submission.
 type managerFake struct{ f *fixture }
 
 func (f *managerFake) AuthorizeSittingView(context.Context, invocation.Invocation, model.ExamSittingID) error {
@@ -299,46 +310,27 @@ func (f *managerFake) AuthorizeSittingView(context.Context, invocation.Invocatio
 }
 func (f *managerFake) AuthorizeSittingManage(context.Context, invocation.Invocation, model.ExamSittingID) (access.ManagerAuthorization, error) {
 	f.f.order = append(f.f.order, "manager.manage")
+	if f.f.clipReviewer && f.f.managerErr == nil {
+		return access.ManagerAuthorization{}, apperror.New("authorization.denied")
+	}
 	return access.ManagerAuthorization{Override: f.f.managerOverride}, f.f.managerErr
 }
-func (f *managerFake) AuthorizeSubmissionView(_ context.Context, _ invocation.Invocation, submissionID model.SubmissionID) error {
+func (f *managerFake) AuthorizeSubmissionView(_ context.Context, _ invocation.Invocation, _ model.ExamID, submissionID model.SubmissionID) error {
 	f.f.order = append(f.f.order, "submission.authorize")
 	f.f.submissionAuthorizationID = submissionID
 	return nil
 }
-func (f *managerFake) AuthorizeScreenClipView(_ context.Context, _ invocation.Invocation, sittingID model.ExamSittingID,
-	_ model.ExamAttemptID,
-) (ScreenClipViewAuthorization, error) {
-	f.f.order = append(f.f.order, "manager.clip_view")
-	if f.f.managerErr != nil {
-		return ScreenClipViewAuthorization{}, f.f.managerErr
-	}
-	if f.f.clipViewer != nil {
-		return *f.f.clipViewer, nil
-	}
-	return ScreenClipViewAuthorization{Action: model.ActionExamSittingManage,
-		Resource:  model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
-		ScopeType: model.RoleScopeClass}, nil
+func (f *managerFake) AuthorizeSubmissionReview(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) (access.ManagerAuthorization, error) {
+	f.f.order = append(f.f.order, "submission.review")
+	return access.ManagerAuthorization{}, f.f.managerErr
 }
 func (f *managerFake) AuthorizeBrowserActivityView(context.Context, invocation.Invocation, model.ExamSittingID) (access.BrowserActivityAuthorization, error) {
 	f.f.order = append(f.f.order, "browser.authorize")
 	return access.BrowserActivityAuthorization{AcademicUnitID: model.NewAcademicUnitID()}, f.f.managerErr
 }
 
-type auditFake struct {
-	f          *fixture
-	values     map[string]any
-	failedCode string
-	action     model.Action
-	resource   model.Resource
-	scopeType  model.RoleScopeType
-	scopeID    string
-	operation  string
-	failErr    error
-}
-
-type systemAuditFake struct {
-	f          *fixture
+// auditRecord is a mutation attempt as the real auditor stored it.
+type auditRecord struct {
 	values     map[string]any
 	failedCode string
 	actor      model.UserID
@@ -349,55 +341,45 @@ type systemAuditFake struct {
 	operation  string
 }
 
-func (f *systemAuditFake) BeginOnBehalf(_ context.Context, actor model.UserID, action model.Action, resource model.Resource,
-	scopeType model.RoleScopeType, scopeID, operation string, values map[string]any,
-) (model.AuditEventID, error) {
-	f.f.order = append(f.f.order, "system.audit.on_behalf")
-	f.actor, f.action, f.resource, f.scopeType, f.scopeID, f.operation, f.values =
-		actor, action, resource, scopeType, scopeID, operation, values
-	return model.NewAuditEventID(), nil
+// audit is the last attempt a Principal began, or the zero record when none
+// was begun.
+func (f *fixture) audit() auditRecord {
+	return f.lastAttempt(func(event *model.AuditEvent) bool { return event.SessionID != "" })
 }
 
-func (f *systemAuditFake) Begin(_ context.Context, _ model.Action, _ model.Resource, _ model.RoleScopeType, _, _ string, values map[string]any) (model.AuditEventID, error) {
-	f.f.order = append(f.f.order, "system.audit")
-	f.values = values
-	return model.NewAuditEventID(), nil
-}
-func (f *systemAuditFake) Fail(_ context.Context, _ model.AuditEventID, code string) error {
-	f.f.order = append(f.f.order, "system.audit.fail")
-	f.failedCode = code
-	return nil
+// systemAudit is the last attempt trusted core work began without a
+// Principal, or the zero record when none was begun.
+func (f *fixture) systemAudit() auditRecord {
+	return f.lastAttempt(func(event *model.AuditEvent) bool { return event.SessionID == "" })
 }
 
-func (f *auditFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
-	f.f.order = append(f.f.order, "audit")
-	f.values = attempt.Value
-	f.action, f.resource, f.scopeType, f.scopeID, f.operation = attempt.Action, attempt.Resource, attempt.ScopeType, attempt.ScopeID, attempt.Operation
-	return model.NewAuditEventID(), nil
+func (f *fixture) lastAttempt(match func(*model.AuditEvent) bool) auditRecord {
+	attempts := f.control.Audits.Attempts()
+	for index := len(attempts) - 1; index >= 0; index-- {
+		event := attempts[index]
+		if !match(event) {
+			continue
+		}
+		return decodeAuditRecord(f.t, event)
+	}
+	return auditRecord{}
 }
-func (f *auditFake) PrepareAtScope(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource,
-	scopeType model.RoleScopeType, scopeID, operation string, values map[string]any,
-) (*model.AuditEvent, error) {
-	f.f.order = append(f.f.order, "audit.prepare")
-	f.values = values
-	f.action, f.resource, f.scopeType, f.scopeID, f.operation = action, resource, scopeType, scopeID, operation
-	return &model.AuditEvent{Action: string(action), Resource: resource, ScopeType: scopeType, ScopeID: scopeID,
-		Status: model.AuditStatusAttempt, NodeID: "test", Parameters: []byte(`{"operation":"` + operation + `"}`)}, nil
-}
-func (f *auditFake) RecordAuthorizationDecision(_ context.Context, _ invocation.Invocation, _ model.Action, _ model.Resource,
-	_ model.RoleScopeType, _ string, _ bool,
-) error {
-	f.f.order = append(f.f.order, "audit.authorization")
-	return nil
-}
-func (f *auditFake) Fail(_ context.Context, _ model.AuditEventID, code string) error {
-	f.f.order = append(f.f.order, "audit.fail")
-	f.failedCode = code
-	return f.failErr
-}
-func (f *auditFake) Complete(_ context.Context, _ model.AuditEventID, _ map[string]any) error {
-	f.f.order = append(f.f.order, "audit.complete")
-	return nil
+
+// decodeAuditRecord reads an event's stored parameters back, so assertions
+// see the value exactly as it was persisted.
+func decodeAuditRecord(t testing.TB, event *model.AuditEvent) auditRecord {
+	t.Helper()
+	var parameters struct {
+		Operation string         `json:"operation"`
+		Value     map[string]any `json:"value"`
+	}
+	require.NoError(t, json.Unmarshal(event.Parameters, &parameters))
+	record := auditRecord{values: parameters.Value, actor: event.ActorID, action: model.Action(event.Action),
+		resource: event.Resource, scopeType: event.ScopeType, scopeID: event.ScopeID, operation: parameters.Operation}
+	if event.Status == model.AuditStatusFail {
+		record.failedCode = event.ErrorCode
+	}
+	return record
 }
 
 type contentFake struct {

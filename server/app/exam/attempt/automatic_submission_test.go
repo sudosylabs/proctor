@@ -64,9 +64,9 @@ func TestAutomaticSealUsesBoundedSystemAuditAndPublishesOnlyFreshResult(t *testi
 	require.Equal(t, int64(2), f.submissions.automaticInput.ExpectedRecipientRevision, "automatic mail request=%#v input=%#v", f.mail.request, f.submissions.automaticInput)
 	require.True(t, f.submissions.automaticInput.DomainEventID.IsValid(), "the proposed domain event reaches the automatic seal")
 	require.True(t, f.submissions.automaticInput.DomainEventJobID.IsValid(), "the proposed dispatch Job reaches the automatic seal")
-	require.Equal(t, jobID.String(), f.systemAudit.values["job_id"])
-	require.Equal(t, jobAttemptID.String(), f.systemAudit.values["job_attempt_id"])
-	require.Equal(t, target.AttemptID.String(), f.systemAudit.values["exam_attempt_id"])
+	require.Equal(t, jobID.String(), f.systemAudit().values["job_id"])
+	require.Equal(t, jobAttemptID.String(), f.systemAudit().values["job_attempt_id"])
+	require.Equal(t, target.AttemptID.String(), f.systemAudit().values["exam_attempt_id"])
 	require.Equal(t, []model.ExamAttemptID{target.AttemptID}, f.settler.awaited, "the seal waits for the settle the closing Sitting asked")
 	require.Empty(t, f.settler.settled, "the automatic seal asks for no new settle")
 	f.submissions.automaticResult.Replayed = true
